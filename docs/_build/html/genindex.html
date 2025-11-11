@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en"
+      data-content_root="./"
+      x-data="{ darkMode: localStorage.getItem('darkMode') || localStorage.setItem('darkMode', 'system'), activeSection: '' }"
+      x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val))"
+      class="scroll-smooth"
+      :class="{'dark': darkMode === 'dark' || (darkMode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)}"
+>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="white" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="black" />
+  
+    <title>Index | session_py</title>
+    <meta property="og:title" content="Index | session_py" />
+    <meta name="twitter:title" content="Index | session_py" />
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=e72c8e07" />
+      <link rel="stylesheet" type="text/css" href="_static/theme.css?v=42baaae4" />
+      <link rel="stylesheet" type="text/css" href="_static/hide-paragraphs.css?v=42f8cb04" />
+        <link rel="search" title="Search" href="search.html" />
+        <link rel="index" title="Index" href="#" />
+
+    <script>
+    <!-- Prevent Flash of wrong theme -->
+      const userPreference = localStorage.getItem('darkMode');
+      let mode;
+      if (userPreference === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        mode = 'dark';
+        document.documentElement.classList.add('dark');
+      } else {
+        mode = 'light';
+      }
+      if (!userPreference) {localStorage.setItem('darkMode', mode)}
+    </script>
+</head>
+  <body x-data="{ showSidebar: false, showScrollTop: false }" class="min-h-screen font-sans antialiased bg-background text-foreground" :class="{ 'overflow-hidden': showSidebar }">
+    <div x-cloak x-show="showSidebar" class="fixed inset-0 z-50 overflow-hidden bg-background/80 backdrop-blur-sm md:hidden" @click.self="showSidebar = false"></div><div id="page" class="relative flex flex-col min-h-screen"><a href="#content" class="absolute top-0 left-0 z-[100] block bg-background p-4 text-xl transition -translate-x-full opacity-0 focus:translate-x-0 focus:opacity-100">
+      Skip to content
+    </a><header
+  class="sticky top-0 z-40 w-full border-b shadow-sm border-border supports-backdrop-blur:bg-background/60 bg-background/95 backdrop-blur"><div class="container flex items-center h-14">
+    <div class="hidden mr-4 md:flex">
+      <a href="index.html" class="flex items-center mr-6"><span class="hidden font-bold sm:inline-block text-clip whitespace-nowrap">session_py</span>
+      </a></div><button
+      class="inline-flex items-center justify-center h-10 px-0 py-2 mr-2 text-base font-medium transition-colors rounded-md hover:text-accent-foreground hover:bg-transparent md:hidden"
+      type="button" @click="showSidebar = true">
+      <svg xmlns="http://www.w3.org/2000/svg" height="24" width="24" viewBox="0 96 960 960" aria-hidden="true"
+        fill="currentColor">
+        <path
+          d="M152.587 825.087q-19.152 0-32.326-13.174t-13.174-32.326q0-19.152 13.174-32.326t32.326-13.174h440q19.152 0 32.326 13.174t13.174 32.326q0 19.152-13.174 32.326t-32.326 13.174h-440Zm0-203.587q-19.152 0-32.326-13.174T107.087 576q0-19.152 13.174-32.326t32.326-13.174h320q19.152 0 32.326 13.174T518.087 576q0 19.152-13.174 32.326T472.587 621.5h-320Zm0-203.587q-19.152 0-32.326-13.174t-13.174-32.326q0-19.152 13.174-32.326t32.326-13.174h440q19.152 0 32.326 13.174t13.174 32.326q0 19.152-13.174 32.326t-32.326 13.174h-440ZM708.913 576l112.174 112.174q12.674 12.674 12.674 31.826t-12.674 31.826Q808.413 764.5 789.261 764.5t-31.826-12.674l-144-144Q600 594.391 600 576t13.435-31.826l144-144q12.674-12.674 31.826-12.674t31.826 12.674q12.674 12.674 12.674 31.826t-12.674 31.826L708.913 576Z" />
+      </svg>
+      <span class="sr-only">Toggle navigation menu</span>
+    </button>
+    <div class="flex items-center justify-between flex-1 space-x-2 sm:space-x-4 md:justify-end">
+      <div class="flex-1 w-full md:w-auto md:flex-none"><form id="searchbox"
+      action="search.html"
+      method="get"
+      class="relative flex items-center group"
+      @keydown.k.window.meta="$refs.search.focus()">
+  <input x-ref="search"
+          name="q"
+          id="search-input"
+          type="search"
+          aria-label="Search the docs"
+          placeholder="Search ..."
+          class="inline-flex items-center font-medium transition-colors bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background border border-input hover:bg-accent focus:bg-accent hover:text-accent-foreground focus:text-accent-foreground hover:placeholder-accent-foreground py-2 px-4 relative h-9 w-full justify-start rounded-[0.5rem] text-sm text-muted-foreground sm:pr-12 md:w-40 lg:w-64" />
+  <kbd class="pointer-events-none absolute right-1.5 top-2 hidden h-5 select-none text-muted-foreground items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex group-hover:bg-accent group-hover:text-accent-foreground">
+    <span class="text-xs">⌘</span>
+    K
+  </kbd>
+</form>
+      </div>
+      <nav class="flex items-center space-x-1">
+        <button @click="darkMode = darkMode === 'light' ? 'dark' : 'light'"
+          class="relative inline-flex items-center justify-center px-0 text-sm font-medium transition-colors rounded-md hover:bg-accent hover:text-accent-foreground h-9 w-9"
+          type="button"
+          aria-label="Color theme switcher">
+          <svg xmlns="http://www.w3.org/2000/svg" height="24" width="24" viewBox="0 96 960 960" fill="currentColor"
+            class="absolute transition-all scale-100 rotate-0 dark:-rotate-90 dark:scale-0">
+            <path
+              d="M480 685q45.456 0 77.228-31.772Q589 621.456 589 576q0-45.456-31.772-77.228Q525.456 467 480 467q-45.456 0-77.228 31.772Q371 530.544 371 576q0 45.456 31.772 77.228Q434.544 685 480 685Zm0 91q-83 0-141.5-58.5T280 576q0-83 58.5-141.5T480 376q83 0 141.5 58.5T680 576q0 83-58.5 141.5T480 776ZM80 621.5q-19.152 0-32.326-13.174T34.5 576q0-19.152 13.174-32.326T80 530.5h80q19.152 0 32.326 13.174T205.5 576q0 19.152-13.174 32.326T160 621.5H80Zm720 0q-19.152 0-32.326-13.174T754.5 576q0-19.152 13.174-32.326T800 530.5h80q19.152 0 32.326 13.174T925.5 576q0 19.152-13.174 32.326T880 621.5h-80Zm-320-320q-19.152 0-32.326-13.174T434.5 256v-80q0-19.152 13.174-32.326T480 130.5q19.152 0 32.326 13.174T525.5 176v80q0 19.152-13.174 32.326T480 301.5Zm0 720q-19.152 0-32.326-13.17Q434.5 995.152 434.5 976v-80q0-19.152 13.174-32.326T480 850.5q19.152 0 32.326 13.174T525.5 896v80q0 19.152-13.174 32.33-13.174 13.17-32.326 13.17ZM222.174 382.065l-43-42Q165.5 327.391 166 308.239t13.174-33.065q13.435-13.674 32.587-13.674t32.065 13.674l42.239 43q12.674 13.435 12.555 31.706-.12 18.272-12.555 31.946-12.674 13.674-31.445 13.413-18.772-.261-32.446-13.174Zm494 494.761-42.239-43q-12.674-13.435-12.674-32.087t12.674-31.565Q686.609 756.5 705.38 757q18.772.5 32.446 13.174l43 41.761Q794.5 824.609 794 843.761t-13.174 33.065Q767.391 890.5 748.239 890.5t-32.065-13.674Zm-42-494.761Q660.5 369.391 661 350.62q.5-18.772 13.174-32.446l41.761-43Q728.609 261.5 747.761 262t33.065 13.174q13.674 13.435 13.674 32.587t-13.674 32.065l-43 42.239q-13.435 12.674-31.706 12.555-18.272-.12-31.946-12.555Zm-495 494.761Q165.5 863.391 165.5 844.239t13.674-32.065l43-42.239q13.435-12.674 32.087-12.674t31.565 12.674Q299.5 782.609 299 801.38q-.5 18.772-13.174 32.446l-41.761 43Q231.391 890.5 212.239 890t-33.065-13.174ZM480 576Z" />
+          </svg>
+          <svg xmlns="http://www.w3.org/2000/svg" height="24" width="24" viewBox="0 96 960 960" fill="currentColor"
+            class="absolute transition-all scale-0 rotate-90 dark:rotate-0 dark:scale-100">
+            <path
+              d="M480 936q-151 0-255.5-104.5T120 576q0-138 90-239.5T440 218q25-3 39 18t-1 44q-17 26-25.5 55t-8.5 61q0 90 63 153t153 63q31 0 61.5-9t54.5-25q21-14 43-1.5t19 39.5q-14 138-117.5 229T480 936Zm0-80q88 0 158-48.5T740 681q-20 5-40 8t-40 3q-123 0-209.5-86.5T364 396q0-20 3-40t8-40q-78 32-126.5 102T200 576q0 116 82 198t198 82Zm-10-270Z" />
+          </svg>
+        </button>
+      </nav>
+    </div>
+  </div>
+</header>
+
+    <div class="flex-1"><div class="container flex-1 items-start md:grid md:grid-cols-[220px_minmax(0,1fr)] md:gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10"><aside id="left-sidebar"
+  class="fixed inset-y-0 left-0 md:top-14 z-50 md:z-30 bg-background md:bg-transparent transition-all duration-100 -translate-x-full md:translate-x-0 ml-0 p-6 md:p-0 md:-ml-2 md:h-[calc(100vh-3.5rem)] w-5/6 md:w-full shrink-0 overflow-y-auto border-r border-border md:sticky"
+  :aria-hidden="!showSidebar" :class="{ 'translate-x-0': showSidebar }">
+
+    <a href="index.html" class="!justify-start text-sm md:!hidden bg-background"><span class="font-bold text-clip whitespace-nowrap">session_py</span>
+    </a>
+
+    <div class="relative overflow-hidden md:overflow-auto my-4 md:my-0 h-[calc(100vh-8rem)] md:h-auto">
+      <div class="overflow-y-auto h-full w-full relative pr-6"><nav class="table w-full min-w-full my-6 lg:my-8">
+  <ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+</nav>
+      </div>
+    </div>
+    <button type="button" @click="showSidebar = false"
+      class="absolute md:hidden right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100">
+      <svg xmlns="http://www.w3.org/2000/svg" height="24" width="24" viewBox="0 96 960 960" fill="currentColor"
+        stroke="none" class="h-4 w-4">
+        <path
+          d="M480 632 284 828q-11 11-28 11t-28-11q-11-11-11-28t11-28l196-196-196-196q-11-11-11-28t11-28q11-11 28-11t28 11l196 196 196-196q11-11 28-11t28 11q11 11 11 28t-11 28L536 576l196 196q11 11 11 28t-11 28q-11 11-28 11t-28-11L480 632Z" />
+      </svg>
+    </button>
+  </aside>
+        <main class="relative py-6 lg:gap-10 lg:py-8 xl:grid xl:grid-cols-[1fr_300px]">
+<div class="w-full min-w-0 mx-auto">
+<nav aria-label="breadcrumbs"
+     class="flex items-center mb-4 space-x-1 text-sm text-muted-foreground">
+  <a class="overflow-hidden text-ellipsis whitespace-nowrap hover:text-foreground"
+     href="index.html">
+    <span class="hidden md:inline">session_py</span>
+    <svg xmlns="http://www.w3.org/2000/svg"
+         height="18"
+         width="18"
+         viewBox="0 96 960 960"
+         aria-label="Home"
+         fill="currentColor"
+         stroke="none"
+         class="md:hidden">
+      <path d="M240 856h120V616h240v240h120V496L480 316 240 496v360Zm-80 80V456l320-240 320 240v480H520V696h-80v240H160Zm320-350Z" />
+    </svg>
+  </a>
+  
+<div class="mr-1">/</div><span aria-current="page"
+        class="font-medium text-foreground overflow-hidden text-ellipsis whitespace-nowrap">Index</span>
+</nav>
+
+<div id="content" role="main">
+
+  <h1 id="index">Index</h1>
+  <h2 id="_">_</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.arrow.Arrow.__init__">__init__() (session_py.arrow.Arrow method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.boundingbox.BoundingBox.__init__">(session_py.boundingbox.BoundingBox method)</a>
+</li>
+        <li><a href="api.html#session_py.color.Color.__init__">(session_py.color.Color method)</a>
+</li>
+        <li><a href="api.html#session_py.cylinder.Cylinder.__init__">(session_py.cylinder.Cylinder method)</a>
+</li>
+        <li><a href="api.html#session_py.edge.Edge.__init__">(session_py.edge.Edge method)</a>
+</li>
+        <li><a href="api.html#session_py.graph.Graph.__init__">(session_py.graph.Graph method)</a>
+</li>
+        <li><a href="api.html#session_py.line.Line.__init__">(session_py.line.Line method)</a>
+</li>
+        <li><a href="api.html#session_py.mesh.Mesh.__init__">(session_py.mesh.Mesh method)</a>
+</li>
+        <li><a href="api.html#session_py.mesh.VertexData.__init__">(session_py.mesh.VertexData method)</a>
+</li>
+        <li><a href="api.html#session_py.objects.Objects.__init__">(session_py.objects.Objects method)</a>
+</li>
+        <li><a href="api.html#session_py.plane.Plane.__init__">(session_py.plane.Plane method)</a>
+</li>
+        <li><a href="api.html#session_py.pointcloud.PointCloud.__init__">(session_py.pointcloud.PointCloud method)</a>
+</li>
+        <li><a href="api.html#session_py.polyline.Polyline.__init__">(session_py.polyline.Polyline method)</a>
+</li>
+        <li><a href="api.html#session_py.quaternion.Quaternion.__init__">(session_py.quaternion.Quaternion method)</a>
+</li>
+        <li><a href="api.html#session_py.tolerance.Tolerance.__init__">(session_py.tolerance.Tolerance method)</a>
+</li>
+        <li><a href="api.html#session_py.tree.Tree.__init__">(session_py.tree.Tree method)</a>
+</li>
+        <li><a href="api.html#session_py.treenode.TreeNode.__init__">(session_py.treenode.TreeNode method)</a>
+</li>
+        <li><a href="api.html#session_py.vector.Vector.__init__">(session_py.vector.Vector method)</a>
+</li>
+        <li><a href="api.html#session_py.vertex.Vertex.__init__">(session_py.vertex.Vertex method)</a>
+</li>
+        <li><a href="api.html#session_py.xform.Xform.__init__">(session_py.xform.Xform method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="A">A</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.a">a (session_py.color.Color attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.plane.Plane.a">(session_py.plane.Plane attribute)</a>
+</li>
+        <li><a href="api.html#id7">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.ABSOLUTE">ABSOLUTE (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.absolute">absolute (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.add">add() (session_py.tree.Tree method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.treenode.TreeNode.add">(session_py.treenode.TreeNode method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.tree.Tree.add_child_by_guid">add_child_by_guid() (session_py.tree.Tree method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.add_edge">add_edge() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.add_face">add_face() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.add_node">add_node() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.add_point">add_point() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.add_vertex">add_vertex() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode.ancestors">ancestors (session_py.treenode.TreeNode property)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.NormalWeighting.ANGLE">ANGLE (session_py.mesh.NormalWeighting attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.vector.Vector.angle">angle() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.angle_between_vector_xy_components">angle_between_vector_xy_components() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.ANGLE_TOLERANCE_DEGREES">ANGLE_TOLERANCE_DEGREES (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.ANGULAR">ANGULAR (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.angular">angular (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.ANGULARDEFLECTION">ANGULARDEFLECTION (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.angulardeflection">angulardeflection (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.APPROXIMATION">APPROXIMATION (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.approximation">approximation (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.NormalWeighting.AREA">AREA (session_py.mesh.NormalWeighting attribute)</a>
+</li>
+      <li><a href="api.html#session_py.arrow.Arrow">Arrow (class in session_py.arrow)</a>
+</li>
+      <li><a href="api.html#session_py.objects.Objects.arrows">arrows (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.vertex.Vertex.attribute">attribute (session_py.vertex.Vertex attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.VertexData.attributes">attributes (session_py.mesh.VertexData attribute)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.axis_rotation">axis_rotation() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.azure">azure() (session_py.color.Color class method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="B">B</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.b">b (session_py.color.Color attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.plane.Plane.b">(session_py.plane.Plane attribute)</a>
+</li>
+        <li><a href="api.html#id8">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.objects.Objects.bboxes">bboxes (session_py.objects.Objects attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.black">black() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.blue">blue() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox">BoundingBox (class in session_py.boundingbox)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.brown">brown() (session_py.color.Color class method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="C">C</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.plane.Plane.c">c (session_py.plane.Plane attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id9">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.polyline.Polyline.center">center() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.center_vec">center_vec() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.change_basis">change_basis() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.change_basis_alt">change_basis_alt() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode.children">children (session_py.treenode.TreeNode attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id13">(session_py.treenode.TreeNode property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.graph.Graph.clear">clear() (session_py.graph.Graph method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.mesh.Mesh.clear">(session_py.mesh.Mesh method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.polyline.Polyline.closest_distance_and_point">closest_distance_and_point() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.closest_point_to_line">closest_point_to_line() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.collides_with">collides_with() (session_py.boundingbox.BoundingBox method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color">Color (class in session_py.color)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.VertexData.color">color() (session_py.mesh.VertexData method)</a>
+</li>
+      <li><a href="api.html#session_py.pointcloud.PointCloud.colors">colors (session_py.pointcloud.PointCloud attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.compare">compare() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.compute_length">compute_length() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.quaternion.Quaternion.conjugate">conjugate() (session_py.quaternion.Quaternion method)</a>
+</li>
+      <li><a href="api.html#session_py.edge.Edge.connects">connects() (session_py.edge.Edge method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.coordinate_direction_2angles">coordinate_direction_2angles() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.coordinate_direction_3angles">coordinate_direction_3angles() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.corners">corners() (session_py.boundingbox.BoundingBox method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.cosine_law">cosine_law() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.cross">cross() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.cyan">cyan() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.cylinder.Cylinder">Cylinder (class in session_py.cylinder)</a>
+</li>
+      <li><a href="api.html#session_py.objects.Objects.cylinders">cylinders (session_py.objects.Objects attribute)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="D">D</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.plane.Plane.d">d (session_py.plane.Plane attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id10">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.mesh.Mesh.default_edge_attributes">default_edge_attributes (session_py.mesh.Mesh attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.Mesh.default_face_attributes">default_face_attributes (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.default_vertex_attributes">default_vertex_attributes (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode.descendants">descendants (session_py.treenode.TreeNode property)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.dot">dot() (session_py.vector.Vector method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="E">E</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.edge.Edge">Edge (class in session_py.edge)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.edge_attribute">edge_attribute() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.edgedata">edgedata (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.end">end() (session_py.line.Line method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.Mesh.euler">euler() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.extend_line">extend_line() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.extend_segment">extend_segment() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.extend_segment_equally">extend_segment_equally() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.extend_segment_equally_static">extend_segment_equally_static() (session_py.polyline.Polyline static method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="F">F</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.Mesh.face">face (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.face_area">face_area() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.face_normal">face_normal() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.face_normals">face_normals() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.face_vertices">face_vertices() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.facecolors">facecolors (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.facedata">facedata (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.flip">flip() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.format_number">format_number() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_arrow">from_arrow() (session_py.boundingbox.BoundingBox class method)</a>
+</li>
+      <li><a href="api.html#session_py.quaternion.Quaternion.from_axis_angle">from_axis_angle() (session_py.quaternion.Quaternion static method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_cylinder">from_cylinder() (session_py.boundingbox.BoundingBox class method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.from_float">from_float() (session_py.color.Color class method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_line">from_line() (session_py.boundingbox.BoundingBox class method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.from_matrix">from_matrix() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_mesh">from_mesh() (session_py.boundingbox.BoundingBox class method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_plane">from_plane() (session_py.boundingbox.BoundingBox class method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_point">from_point() (session_py.boundingbox.BoundingBox class method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.from_point_normal">from_point_normal() (session_py.plane.Plane static method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_points">from_points() (session_py.boundingbox.BoundingBox class method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.line.Line.from_points">(session_py.line.Line class method)</a>
+</li>
+        <li><a href="api.html#session_py.plane.Plane.from_points">(session_py.plane.Plane static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.mesh.Mesh.from_polygons">from_polygons() (session_py.mesh.Mesh static method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.from_polyline">from_polyline() (session_py.boundingbox.BoundingBox class method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.from_start_and_end">from_start_and_end() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.quaternion.Quaternion.from_sv">from_sv() (session_py.quaternion.Quaternion static method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.from_two_points">from_two_points() (session_py.plane.Plane static method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="G">G</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.g">g (session_py.color.Color attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.geometric_key">geometric_key() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.geometric_key_xy">geometric_key_xy() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.get_average_plane">get_average_plane() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.get_children_guids">get_children_guids() (session_py.tree.Tree method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.get_convex_corners">get_convex_corners() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.get_edges">get_edges() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.get_fast_plane">get_fast_plane() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.get_leveled_vector">get_leveled_vector() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.get_middle_line">get_middle_line() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.get_node_by_name">get_node_by_name() (session_py.tree.Tree method)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.get_nodes_by_name">get_nodes_by_name() (session_py.tree.Tree method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.get_point">get_point() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.get_vertices">get_vertices() (session_py.graph.Graph method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.graph.Graph">Graph (class in session_py.graph)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.green">green() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.grey">grey() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.arrow.Arrow.guid">guid (session_py.arrow.Arrow attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.color.Color.guid">(session_py.color.Color attribute)</a>
+</li>
+        <li><a href="api.html#session_py.cylinder.Cylinder.guid">(session_py.cylinder.Cylinder attribute)</a>
+</li>
+        <li><a href="api.html#session_py.line.Line.guid">(session_py.line.Line attribute)</a>
+</li>
+        <li><a href="api.html#session_py.mesh.Mesh.guid">(session_py.mesh.Mesh attribute)</a>
+</li>
+        <li><a href="api.html#session_py.objects.Objects.guid">(session_py.objects.Objects attribute)</a>
+</li>
+        <li><a href="api.html#session_py.plane.Plane.guid">(session_py.plane.Plane attribute)</a>
+</li>
+        <li><a href="api.html#session_py.pointcloud.PointCloud.guid">(session_py.pointcloud.PointCloud attribute)</a>
+</li>
+        <li><a href="api.html#session_py.tree.Tree.guid">(session_py.tree.Tree attribute)</a>
+</li>
+        <li><a href="api.html#session_py.treenode.TreeNode.guid">(session_py.treenode.TreeNode attribute)</a>
+</li>
+        <li><a href="api.html#session_py.vector.Vector.guid">(session_py.vector.Vector attribute)</a>
+</li>
+        <li><a href="api.html#session_py.vertex.Vertex.guid">(session_py.vertex.Vertex attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="H">H</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.Mesh.halfedge">halfedge (session_py.mesh.Mesh attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.graph.Graph.has_edge">has_edge() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.has_node">has_node() (session_py.graph.Graph method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="I">I</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.quaternion.Quaternion.identity">identity() (session_py.quaternion.Quaternion static method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.xform.Xform.identity">(session_py.xform.Xform static method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.vertex.Vertex.index">index (session_py.vertex.Vertex attribute)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.inflate">inflate() (session_py.boundingbox.BoundingBox method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.insert_point">insert_point() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.inverse">inverse() (session_py.xform.Xform method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_allclose">is_allclose() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_angle_zero">is_angle_zero() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_angles_close">is_angles_close() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_between">is_between() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode.is_branch">is_branch (session_py.treenode.TreeNode property)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.is_clockwise">is_clockwise() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_close">is_close() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.is_closed">is_closed() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.is_coplanar">is_coplanar() (session_py.plane.Plane static method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.Mesh.is_empty">is_empty() (session_py.mesh.Mesh method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.pointcloud.PointCloud.is_empty">(session_py.pointcloud.PointCloud method)</a>
+</li>
+        <li><a href="api.html#session_py.polyline.Polyline.is_empty">(session_py.polyline.Polyline method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.tolerance.is_finite">is_finite() (in module session_py.tolerance)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.is_identity">is_identity() (session_py.xform.Xform method)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode.is_leaf">is_leaf (session_py.treenode.TreeNode property)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_negative">is_negative() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.is_parallel_to">is_parallel_to() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_positive">is_positive() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.is_right_hand">is_right_hand() (session_py.plane.Plane method)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode.is_root">is_root (session_py.treenode.TreeNode property)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.is_same_direction">is_same_direction() (session_py.plane.Plane static method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.is_same_position">is_same_position() (session_py.plane.Plane static method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.is_vertex_on_boundary">is_vertex_on_boundary() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.is_zero">is_zero() (session_py.tolerance.Tolerance method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="L">L</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.tree.Tree.leaves">leaves (session_py.tree.Tree property)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.length">length() (session_py.line.Line method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.polyline.Polyline.length">(session_py.polyline.Polyline method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.polyline.Polyline.length_squared">length_squared() (session_py.polyline.Polyline method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.vector.Vector.length_squared">(session_py.vector.Vector method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.color.Color.lime">lime() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line">Line (class in session_py.line)</a>
+</li>
+      <li><a href="api.html#session_py.arrow.Arrow.line">line (session_py.arrow.Arrow attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.cylinder.Cylinder.line">(session_py.cylinder.Cylinder attribute)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.polyline.Polyline.line_from_projected_points">line_from_projected_points() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.line_line_average">line_line_average() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.line_line_overlap">line_line_overlap() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.line_line_overlap_average">line_line_overlap_average() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.LINEARDEFLECTION">LINEARDEFLECTION (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.lineardeflection">lineardeflection (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.linecolor">linecolor (session_py.line.Line attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.linecolors">linecolors (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.objects.Objects.lines">lines (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.look_at_rh">look_at_rh() (session_py.xform.Xform static method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="M">M</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.magenta">magenta() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.quaternion.Quaternion.magnitude">magnitude() (session_py.quaternion.Quaternion method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.vector.Vector.magnitude">(session_py.vector.Vector method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.color.Color.maroon">maroon() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.max_point">max_point() (session_py.boundingbox.BoundingBox method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh">Mesh (class in session_py.mesh)</a>
+</li>
+      <li><a href="api.html#session_py.arrow.Arrow.mesh">mesh (session_py.arrow.Arrow attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.cylinder.Cylinder.mesh">(session_py.cylinder.Cylinder attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.objects.Objects.meshes">meshes (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.min_point">min_point() (session_py.boundingbox.BoundingBox method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.mint">mint() (session_py.color.Color class method)</a>
+</li>
+      <li>
+    module
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.arrow">session_py.arrow</a>
+</li>
+        <li><a href="api.html#module-session_py.boundingbox">session_py.boundingbox</a>
+</li>
+        <li><a href="api.html#module-session_py.color">session_py.color</a>
+</li>
+        <li><a href="api.html#module-session_py.cylinder">session_py.cylinder</a>
+</li>
+        <li><a href="api.html#module-session_py.edge">session_py.edge</a>
+</li>
+        <li><a href="api.html#module-session_py.graph">session_py.graph</a>
+</li>
+        <li><a href="api.html#module-session_py.line">session_py.line</a>
+</li>
+        <li><a href="api.html#module-session_py.mesh">session_py.mesh</a>
+</li>
+        <li><a href="api.html#module-session_py.objects">session_py.objects</a>
+</li>
+        <li><a href="api.html#module-session_py.plane">session_py.plane</a>
+</li>
+        <li><a href="api.html#module-session_py.pointcloud">session_py.pointcloud</a>
+</li>
+        <li><a href="api.html#module-session_py.polyline">session_py.polyline</a>
+</li>
+        <li><a href="api.html#module-session_py.quaternion">session_py.quaternion</a>
+</li>
+        <li><a href="api.html#module-session_py.tolerance">session_py.tolerance</a>
+</li>
+        <li><a href="api.html#module-session_py.tree">session_py.tree</a>
+</li>
+        <li><a href="api.html#module-session_py.treenode">session_py.treenode</a>
+</li>
+        <li><a href="api.html#module-session_py.vector">session_py.vector</a>
+</li>
+        <li><a href="api.html#module-session_py.vertex">session_py.vertex</a>
+</li>
+        <li><a href="api.html#module-session_py.xform">session_py.xform</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.polyline.Polyline.move_by">move_by() (session_py.polyline.Polyline method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="N">N</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.arrow.Arrow.name">name (session_py.arrow.Arrow attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.color.Color.name">(session_py.color.Color attribute)</a>
+</li>
+        <li><a href="api.html#session_py.cylinder.Cylinder.name">(session_py.cylinder.Cylinder attribute)</a>
+</li>
+        <li><a href="api.html#session_py.line.Line.name">(session_py.line.Line attribute)</a>
+</li>
+        <li><a href="api.html#session_py.mesh.Mesh.name">(session_py.mesh.Mesh attribute)</a>
+</li>
+        <li><a href="api.html#session_py.objects.Objects.name">(session_py.objects.Objects attribute)</a>
+</li>
+        <li><a href="api.html#session_py.plane.Plane.name">(session_py.plane.Plane attribute)</a>
+</li>
+        <li><a href="api.html#session_py.pointcloud.PointCloud.name">(session_py.pointcloud.PointCloud attribute)</a>
+</li>
+        <li><a href="api.html#session_py.tree.Tree.name">(session_py.tree.Tree attribute)</a>
+</li>
+        <li><a href="api.html#session_py.treenode.TreeNode.name">(session_py.treenode.TreeNode attribute)</a>
+</li>
+        <li><a href="api.html#session_py.vector.Vector.name">(session_py.vector.Vector attribute)</a>
+</li>
+        <li><a href="api.html#session_py.vertex.Vertex.name">(session_py.vertex.Vertex attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.color.Color.navy">navy() (session_py.color.Color class method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.graph.Graph.neighbors">neighbors() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.node_attribute">node_attribute() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.nodes">nodes (session_py.tree.Tree property)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.VertexData.normal">normal() (session_py.mesh.VertexData method)</a>
+</li>
+      <li><a href="api.html#session_py.quaternion.Quaternion.normalize">normalize() (session_py.quaternion.Quaternion method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.vector.Vector.normalize">(session_py.vector.Vector method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.vector.Vector.normalize_self">normalize_self() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.pointcloud.PointCloud.normals">normals (session_py.pointcloud.PointCloud attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.NormalWeighting">NormalWeighting (class in session_py.mesh)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.number_of_edges">number_of_edges() (session_py.graph.Graph method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.mesh.Mesh.number_of_edges">(session_py.mesh.Mesh method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.mesh.Mesh.number_of_faces">number_of_faces() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.number_of_vertices">number_of_vertices() (session_py.graph.Graph method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.mesh.Mesh.number_of_vertices">(session_py.mesh.Mesh method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="O">O</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.objects.Objects">Objects (class in session_py.objects)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.olive">olive() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.orange">orange() (session_py.color.Color class method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.plane.Plane.origin">origin (session_py.plane.Plane attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id3">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.edge.Edge.other_vertex">other_vertex() (session_py.edge.Edge method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="P">P</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.treenode.TreeNode.parent">parent (session_py.treenode.TreeNode attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id12">(session_py.treenode.TreeNode property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.vector.Vector.perpendicular_to">perpendicular_to() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.pink">pink() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane">Plane (class in session_py.plane)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.plane_to_plane">plane_to_plane() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.plane_to_xy">plane_to_xy() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.objects.Objects.planes">planes (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.point_at">point_at() (session_py.boundingbox.BoundingBox method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.line.Line.point_at">(session_py.line.Line method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.polyline.Polyline.point_at_parameter">point_at_parameter() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.pointcloud.PointCloud">PointCloud (class in session_py.pointcloud)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.objects.Objects.pointclouds">pointclouds (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.pointcolors">pointcolors (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.objects.Objects.points">points (session_py.objects.Objects attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.pointcloud.PointCloud.points">(session_py.pointcloud.PointCloud attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.polyline.Polyline">Polyline (class in session_py.polyline)</a>
+</li>
+      <li><a href="api.html#session_py.objects.Objects.polylines">polylines (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.VertexData.position">position() (session_py.mesh.VertexData method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.PRECISION">PRECISION (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.precision">precision (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.precision_from_tolerance">precision_from_tolerance() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.print_hierarchy">print_hierarchy() (session_py.tree.Tree method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.projection">projection() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.purple">purple() (session_py.color.Color class method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="Q">Q</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.quaternion.Quaternion">Quaternion (class in session_py.quaternion)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="R">R</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.r">r (session_py.color.Color attribute)</a>
+</li>
+      <li><a href="api.html#session_py.arrow.Arrow.radius">radius (session_py.arrow.Arrow attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.cylinder.Cylinder.radius">(session_py.cylinder.Cylinder attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.color.Color.red">red() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.RELATIVE">RELATIVE (session_py.tolerance.Tolerance attribute)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.relative">relative (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.remove">remove() (session_py.tree.Tree method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.treenode.TreeNode.remove">(session_py.treenode.TreeNode method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.graph.Graph.remove_edge">remove_edge() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.graph.Graph.remove_node">remove_node() (session_py.graph.Graph method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.remove_point">remove_point() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.reset">reset() (session_py.tolerance.Tolerance method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.plane.Plane.reverse">reverse() (session_py.plane.Plane method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.polyline.Polyline.reverse">(session_py.polyline.Polyline method)</a>
+</li>
+        <li><a href="api.html#session_py.vector.Vector.reverse">(session_py.vector.Vector method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.polyline.Polyline.reversed">reversed() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.root">root (session_py.tree.Tree attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id11">(session_py.tree.Tree property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.plane.Plane.rotate">rotate() (session_py.plane.Plane method)</a>
+</li>
+      <li><a href="api.html#session_py.quaternion.Quaternion.rotate_vector">rotate_vector() (session_py.quaternion.Quaternion method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.rotation">rotation() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.rotation_x">rotation_x() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.rotation_y">rotation_y() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.rotation_z">rotation_z() (session_py.xform.Xform static method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="S">S</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.polyline.Polyline.scale_line">scale_line() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.scale_non_uniform">scale_non_uniform() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.scale_uniform">scale_uniform() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.scale_xyz">scale_xyz() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.scaling">scaling() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.segment_count">segment_count() (session_py.polyline.Polyline method)</a>
+</li>
+      <li>
+    session_py.arrow
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.arrow">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.boundingbox
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.boundingbox">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.color
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.color">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.cylinder
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.cylinder">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.edge
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.edge">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.graph
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.graph">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.line
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.line">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.mesh
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.mesh">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.objects
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.objects">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.plane
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.plane">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.pointcloud
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.pointcloud">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.polyline
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.polyline">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li>
+    session_py.quaternion
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.quaternion">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.tolerance
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.tolerance">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.tree
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.tree">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.treenode
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.treenode">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.vector
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.vector">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.vertex
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.vertex">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.xform
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.xform">module</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.mesh.VertexData.set_color">set_color() (session_py.mesh.VertexData method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.set_edge_color">set_edge_color() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.set_edge_width">set_edge_width() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.set_face_color">set_face_color() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.VertexData.set_normal">set_normal() (session_py.mesh.VertexData method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.VertexData.set_position">set_position() (session_py.mesh.VertexData method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.set_vertex_color">set_vertex_color() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.shift">shift() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.silver">silver() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.sine_law_angle">sine_law_angle() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.sine_law_length">sine_law_length() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.pointcloud.PointCloud.size">size() (session_py.pointcloud.PointCloud method)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.squared_length">squared_length() (session_py.line.Line method)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.start">start() (session_py.line.Line method)</a>
+</li>
+      <li><a href="api.html#session_py.vector.Vector.sum_of_vectors">sum_of_vectors() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.SUPPORTED_UNITS">SUPPORTED_UNITS (session_py.tolerance.Tolerance attribute)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="T">T</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.teal">teal() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.to_float_array">to_float_array() (session_py.color.Color method)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.to_vector">to_vector() (session_py.line.Line method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.to_vertices_and_faces">to_vertices_and_faces() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance">Tolerance (class in session_py.tolerance)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.tolerance">tolerance() (session_py.tolerance.Tolerance method)</a>
+</li>
+      <li><a href="api.html#session_py.arrow.Arrow.transform">transform() (session_py.arrow.Arrow method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.boundingbox.BoundingBox.transform">(session_py.boundingbox.BoundingBox method)</a>
+</li>
+        <li><a href="api.html#session_py.cylinder.Cylinder.transform">(session_py.cylinder.Cylinder method)</a>
+</li>
+        <li><a href="api.html#session_py.line.Line.transform">(session_py.line.Line method)</a>
+</li>
+        <li><a href="api.html#session_py.mesh.Mesh.transform">(session_py.mesh.Mesh method)</a>
+</li>
+        <li><a href="api.html#session_py.plane.Plane.transform">(session_py.plane.Plane method)</a>
+</li>
+        <li><a href="api.html#session_py.pointcloud.PointCloud.transform">(session_py.pointcloud.PointCloud method)</a>
+</li>
+        <li><a href="api.html#session_py.polyline.Polyline.transform">(session_py.polyline.Polyline method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.xform.Xform.transform_point">transform_point() (session_py.xform.Xform method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.transform_vector">transform_vector() (session_py.xform.Xform method)</a>
+</li>
+      <li><a href="api.html#session_py.arrow.Arrow.transformed">transformed() (session_py.arrow.Arrow method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.boundingbox.BoundingBox.transformed">(session_py.boundingbox.BoundingBox method)</a>
+</li>
+        <li><a href="api.html#session_py.cylinder.Cylinder.transformed">(session_py.cylinder.Cylinder method)</a>
+</li>
+        <li><a href="api.html#session_py.line.Line.transformed">(session_py.line.Line method)</a>
+</li>
+        <li><a href="api.html#session_py.mesh.Mesh.transformed">(session_py.mesh.Mesh method)</a>
+</li>
+        <li><a href="api.html#session_py.plane.Plane.transformed">(session_py.plane.Plane method)</a>
+</li>
+        <li><a href="api.html#session_py.pointcloud.PointCloud.transformed">(session_py.pointcloud.PointCloud method)</a>
+</li>
+        <li><a href="api.html#session_py.polyline.Polyline.transformed">(session_py.polyline.Polyline method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.xform.Xform.transformed_point">transformed_point() (session_py.xform.Xform method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.transformed_vector">transformed_vector() (session_py.xform.Xform method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.translate_by_normal">translate_by_normal() (session_py.plane.Plane method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.translation">translation() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.tree.Tree.traverse">traverse() (session_py.tree.Tree method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.treenode.TreeNode.traverse">(session_py.treenode.TreeNode method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.tree.Tree">Tree (class in session_py.tree)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode.tree">tree (session_py.treenode.TreeNode property)</a>
+</li>
+      <li><a href="api.html#session_py.treenode.TreeNode">TreeNode (class in session_py.treenode)</a>
+</li>
+      <li><a href="api.html#session_py.polyline.Polyline.tween_two_polylines">tween_two_polylines() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.boundingbox.BoundingBox.two_rectangles">two_rectangles() (session_py.boundingbox.BoundingBox method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="U">U</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.NormalWeighting.UNIFORM">UNIFORM (session_py.mesh.NormalWeighting attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.tolerance.Tolerance.unit">unit (session_py.tolerance.Tolerance property)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.units">units (session_py.tolerance.Tolerance property)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="V">V</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.vector.Vector">Vector (class in session_py.vector)</a>
+</li>
+      <li><a href="api.html#session_py.vertex.Vertex">Vertex (class in session_py.vertex)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex">vertex (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_angle_in_face">vertex_angle_in_face() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_faces">vertex_faces() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_index">vertex_index() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_neighbors">vertex_neighbors() (session_py.mesh.Mesh method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_normal">vertex_normal() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_normal_weighted">vertex_normal_weighted() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_normals">vertex_normals() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_normals_weighted">vertex_normals_weighted() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.Mesh.vertex_position">vertex_position() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.mesh.VertexData">VertexData (class in session_py.mesh)</a>
+</li>
+      <li><a href="api.html#session_py.edge.Edge.vertices">vertices (session_py.edge.Edge property)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.violet">violet() (session_py.color.Color class method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="W">W</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.white">white() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.width">width (session_py.line.Line attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.Mesh.widths">widths (session_py.mesh.Mesh attribute)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.with_name">with_name() (session_py.line.Line class method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="X">X</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.VertexData.x">x (session_py.mesh.VertexData attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.vector.Vector.x">(session_py.vector.Vector attribute)</a>
+</li>
+        <li><a href="api.html#id0">(session_py.vector.Vector property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.line.Line.x0">x0 (session_py.line.Line property)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.x1">x1 (session_py.line.Line property)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.x_axis">x_axis (session_py.plane.Plane attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id4">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.vector.Vector.x_axis">x_axis() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform">Xform (class in session_py.xform)</a>
+</li>
+      <li><a href="api.html#session_py.pointcloud.PointCloud.xform">xform (session_py.pointcloud.PointCloud attribute)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.xy_plane">xy_plane() (session_py.plane.Plane static method)</a>
+</li>
+      <li><a href="api.html#session_py.xform.Xform.xy_to_plane">xy_to_plane() (session_py.xform.Xform static method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.xz_plane">xz_plane() (session_py.plane.Plane static method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="Y">Y</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.VertexData.y">y (session_py.mesh.VertexData attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.vector.Vector.y">(session_py.vector.Vector attribute)</a>
+</li>
+        <li><a href="api.html#id1">(session_py.vector.Vector property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.line.Line.y0">y0 (session_py.line.Line property)</a>
+</li>
+      <li><a href="api.html#session_py.line.Line.y1">y1 (session_py.line.Line property)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.plane.Plane.y_axis">y_axis (session_py.plane.Plane attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id5">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.vector.Vector.y_axis">y_axis() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.color.Color.yellow">yellow() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.yz_plane">yz_plane() (session_py.plane.Plane static method)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+  <h2 id="Z">Z</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.mesh.VertexData.z">z (session_py.mesh.VertexData attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.vector.Vector.z">(session_py.vector.Vector attribute)</a>
+</li>
+        <li><a href="api.html#id2">(session_py.vector.Vector property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.line.Line.z0">z0 (session_py.line.Line property)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.line.Line.z1">z1 (session_py.line.Line property)</a>
+</li>
+      <li><a href="api.html#session_py.plane.Plane.z_axis">z_axis (session_py.plane.Plane attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#id6">(session_py.plane.Plane property)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.vector.Vector.z_axis">z_axis() (session_py.vector.Vector static method)</a>
+</li>
+      <li><a href="api.html#session_py.tolerance.Tolerance.ZERO_TOLERANCE">ZERO_TOLERANCE (session_py.tolerance.Tolerance attribute)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
+
+</div></div>
+<aside id="right-sidebar" class="hidden text-sm xl:block">
+<div class="sticky top-16 -mt-10 max-h-[calc(var(--vh)-4rem)] overflow-y-auto pt-6 space-y-2">
+<a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#_">_</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#A">A</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#B">B</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#C">C</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#D">D</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#E">E</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#F">F</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#G">G</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#H">H</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#I">I</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#L">L</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#M">M</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#N">N</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#O">O</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#P">P</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Q">Q</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#R">R</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#S">S</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#T">T</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#U">U</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#V">V</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#W">W</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#X">X</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Y">Y</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Z">Z</a>
+</div>
+</aside>
+        </main>
+      </div>
+    </div><footer class="py-6 border-t border-border md:py-0">
+    <div class="container flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row">
+      <div class="flex flex-col items-center gap-4 px-8 md:flex-row md:gap-2 md:px-0">
+        <p class="text-sm leading-loose text-center text-muted-foreground md:text-left"></p>
+</div>
+</div>
+</footer>
+  </div>
+  
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script defer="defer" src="_static/theme.js?v=073f68d9"></script>
+  
+</body>
+</html>
