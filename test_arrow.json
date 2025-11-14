@@ -1,11 +1,11 @@
 {
     "type": "Arrow",
-    "guid": "3e52b0dc-ae49-4aab-bfcd-12adda730a55",
+    "guid": "cf78f596-d649-4431-9fb7-9e112c24ce03",
     "name": "test_arrow",
     "radius": 1.0,
     "line": {
         "type": "Line",
-        "guid": "26675498-a6f6-48b2-89e1-441df353049b",
+        "guid": "d48a65e7-8462-4a9a-b8e2-68fafcf8dfdb",
         "name": "my_line",
         "x0": 0.0,
         "y0": 0.0,
@@ -16,7 +16,7 @@
         "width": 1.0,
         "linecolor": {
             "type": "Color",
-            "guid": "ed331710-6e26-4a74-bd18-24c9c0fe6b22",
+            "guid": "ef580612-91e2-49e5-a916-f14aa3814c5c",
             "name": "white",
             "r": 255,
             "g": 255,
@@ -26,7 +26,7 @@
     },
     "mesh": {
         "type": "Mesh",
-        "guid": "bc477d67-ea3d-4234-a72f-845d5a82a9b2",
+        "guid": "c0c38883-984a-4b74-bf2a-2788be1c6ef8",
         "name": "my_mesh",
         "halfedge": {
             "1": {

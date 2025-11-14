@@ -465,7 +465,10 @@ class NurbsCurve:
     #############################################################################
     
     def make_clamped_uniform_knot_vector(self, delta: float = 1.0) -> bool:
-        """Make knot vector a clamped uniform knot vector"""
+        """Make knot vector a clamped uniform knot vector.
+        
+        Implementation matches OpenNURBS ON_MakeClampedUniformKnotVector.
+        """
         if delta <= 0.0:
             return False
         if self.m_order < 2 or self.m_cv_count < self.m_order:
@@ -474,20 +477,23 @@ class NurbsCurve:
         knot_count = self.m_order + self.m_cv_count - 2
         self.m_knot = np.zeros(knot_count, dtype=np.float64)
         
-        # First 'order' knots = 0
-        for i in range(self.m_order):
-            self.m_knot[i] = 0.0
+        # Fill interior knots with uniform spacing
+        # Start from index (order-2) up to (cv_count-1)
+        k = 0.0
+        for i in range(self.m_order - 2, self.m_cv_count):
+            self.m_knot[i] = k
+            k += delta
         
-        # Interior knots
-        num_interior = self.m_cv_count - self.m_order
-        for i in range(num_interior):
-            self.m_knot[self.m_order + i] = (i + 1) * delta
+        # Clamp both ends: sets first (order-2) and last (order-2) knots
+        # Left clamp: knot[0..order-3] = knot[order-2]
+        i0 = self.m_order - 2
+        for i in range(i0):
+            self.m_knot[i] = self.m_knot[i0]
         
-        # Last 'order' knots = max
-        max_val = (num_interior + 1) * delta
-        start_idx = knot_count - self.m_order
-        for i in range(self.m_order):
-            self.m_knot[start_idx + i] = max_val
+        # Right clamp: knot[cv_count..knot_count-1] = knot[cv_count-1]
+        i0 = self.m_cv_count - 1
+        for i in range(i0 + 1, knot_count):
+            self.m_knot[i] = self.m_knot[i0]
         
         return True
     
@@ -512,23 +518,19 @@ class NurbsCurve:
     #############################################################################
     
     def point_at(self, t: float) -> Point:
-        """Evaluate point at parameter t"""
+        """Evaluate point at parameter t.
+        
+        Implementation matches OpenNURBS evaluation approach.
+        """
         if not self.is_valid():
             return Point(0, 0, 0)
         
-        # Special case: exactly at domain endpoints (for clamped curves)
-        t0, t1 = self.domain()
-        if abs(t - t0) < 1e-14:
-            return self.get_cv(0)
-        if abs(t - t1) < 1e-14:
-            return self.get_cv(self.m_cv_count - 1)
-        
-        # Find span
+        # Find span (returns index relative to shifted knot array)
         span = self._find_span(t)
         if span < 0:
             return Point(0, 0, 0)
         
-        # Evaluate using de Boor's algorithm
+        # Evaluate using Cox-de Boor algorithm
         N = self._basis_functions(span, t)
         
         # Compute point
@@ -537,10 +539,12 @@ class NurbsCurve:
         if self.m_is_rat:
             # Rational curve
             w = 0.0
+            # In OpenNURBS, span index directly corresponds to CV starting index
             for i in range(self.m_order):
-                idx = (span - self.m_order + 1 + i) * self.m_cv_stride
-                if idx < 0 or idx >= len(self.m_cv) // self.m_cv_stride:
+                cv_idx = span + i
+                if cv_idx < 0 or cv_idx >= self.m_cv_count:
                     continue
+                idx = cv_idx * self.m_cv_stride
                 weight = self.m_cv[idx + self.m_dim]
                 w += N[i] * weight
                 for j in range(self.m_dim):
@@ -550,10 +554,12 @@ class NurbsCurve:
                 pt /= w
         else:
             # Non-rational curve
+            # In OpenNURBS, span index directly corresponds to CV starting index
             for i in range(self.m_order):
-                idx = (span - self.m_order + 1 + i) * self.m_cv_stride
-                if idx < 0 or idx >= len(self.m_cv) // self.m_cv_stride:
+                cv_idx = span + i
+                if cv_idx < 0 or cv_idx >= self.m_cv_count:
                     continue
+                idx = cv_idx * self.m_cv_stride
                 for j in range(self.m_dim):
                     pt[j] += N[i] * self.m_cv[idx + j]
         
@@ -588,51 +594,51 @@ class NurbsCurve:
     def _find_span(self, t: float) -> int:
         """Find knot span index for parameter t using binary search.
         
-        Based on Algorithm A2.1 from "The NURBS Book" by Piegl & Tiller.
+        Implementation matches OpenNURBS ON_NurbsSpanIndex.
+        OpenNURBS shifts knot pointer by (order-2) to work with compressed format.
+        Domain is knot[order-2] to knot[cv_count-1].
         
         Returns
         -------
         int
-            Span index i such that knot[i] <= t < knot[i+1]
-            Range: order-1 <= i <= cv_count-1
+            Span index relative to shifted knot array (0-based from domain start)
         """
         if not self.is_valid():
             return -1
         
-        n = self.m_cv_count - 1  # Last CV index
-        p = self.m_order - 1      # Degree
+        # OpenNURBS shifts knot pointer by (order-2) to work with compressed format
+        # Domain is knot[order-2] to knot[cv_count-1]
+        offset = self.m_order - 2
+        knot_len = self.m_cv_count - self.m_order + 2
         
-        # Special case: t at or beyond last knot
-        if t >= self.m_knot[n + 1]:
-            return n  # Last valid span
-        
-        # Special case: t at or before first knot
-        if t <= self.m_knot[p]:
-            return p
+        # Check bounds
+        if t <= self.m_knot[offset]:
+            return 0
+        if t >= self.m_knot[offset + knot_len - 1]:
+            return knot_len - 2
         
         # Binary search
-        low = p
-        high = n + 1
-        mid = (low + high) // 2
+        low = 0
+        high = knot_len - 1
         
-        while t < self.m_knot[mid] or t >= self.m_knot[mid + 1]:
-            if t < self.m_knot[mid]:
+        while high > low + 1:
+            mid = (low + high) // 2
+            if t < self.m_knot[offset + mid]:
                 high = mid
             else:
                 low = mid
-            mid = (low + high) // 2
         
-        return mid
+        return low
     
     def _basis_functions(self, span: int, t: float) -> np.ndarray:
         """Compute non-zero basis functions at parameter t.
         
-        Based on Algorithm A2.2 from "The NURBS Book" by Piegl & Tiller.
+        Implementation matches OpenNURBS Cox-de Boor algorithm.
         
         Parameters
         ----------
         span : int
-            Knot span index from _find_span().
+            Knot span index from _find_span() (relative to shifted array).
         t : float
             Parameter value.
             
@@ -645,29 +651,18 @@ class NurbsCurve:
         left = np.zeros(self.m_order)
         right = np.zeros(self.m_order)
         
+        # Offset knot pointer like OpenNURBS does
+        offset = self.m_order - 2 + span
+        
         N[0] = 1.0
         
         for j in range(1, self.m_order):
-            # Bounds check for compressed knot vector
-            left_idx = span + 1 - j
-            right_idx = span + j
-            
-            # Clamp indices to valid range
-            left_idx = max(0, min(len(self.m_knot) - 1, left_idx))
-            right_idx = max(0, min(len(self.m_knot) - 1, right_idx))
-            
-            left[j] = t - self.m_knot[left_idx]
-            right[j] = self.m_knot[right_idx] - t
+            left[j] = t - self.m_knot[offset + 1 - j]
+            right[j] = self.m_knot[offset + j] - t
             saved = 0.0
             
             for r in range(j):
-                # Handle repeated knots (division by zero)
-                denom = right[r + 1] + left[j - r]
-                if abs(denom) < 1e-14:  # Repeated knot
-                    temp = 0.0
-                else:
-                    temp = N[r] / denom
-                
+                temp = N[r] / (right[r + 1] + left[j - r])
                 N[r] = saved + right[r + 1] * temp
                 saved = left[j - r] * temp
             
@@ -805,7 +800,10 @@ class NurbsCurve:
     #############################################################################
     
     def intersect_plane(self, plane: Plane, tolerance: float = None) -> List[float]:
-        """Find all intersections between curve and plane (standard method)"""
+        """Find all intersections between curve and plane (standard method).
+        
+        Implementation matches C++ version with endpoint checking.
+        """
         if tolerance is None:
             tolerance = Tolerance.ZERO_TOLERANCE
         
@@ -818,38 +816,59 @@ class NurbsCurve:
             return v.dot(plane.z_axis)
         
         results = []
-        t0, t1 = self.domain()
+        t_start, t_end = self.domain()
         
-        # Sample curve and find sign changes
-        num_samples = max(50, self.degree() * 10)
-        dt = (t1 - t0) / num_samples
+        # Get span parameters for better subdivision
+        span_params = self.get_span_vector()
         
-        t_prev = t0
-        d_prev = signed_distance(self.point_at(t_prev))
-        
-        for i in range(1, num_samples + 1):
-            t_curr = t0 + i * dt
-            d_curr = signed_distance(self.point_at(t_curr))
+        # Check each span for intersections
+        for i in range(len(span_params) - 1):
+            t0 = span_params[i]
+            t1 = span_params[i + 1]
             
-            # Check for sign change
-            if d_prev * d_curr < 0:
-                # Bisection
-                ta, tb = t_prev, t_curr
+            # Skip zero-length spans
+            if abs(t1 - t0) < tolerance:
+                continue
+            
+            # Check for sign change (intersection) in this span
+            d0 = signed_distance(self.point_at(t0))
+            d1 = signed_distance(self.point_at(t1))
+            
+            # Check if span crosses plane
+            if d0 * d1 < 0:
+                # Sign change - there's an intersection
+                # Use bisection to find it
+                ta, tb = t0, t1
                 for _ in range(50):
                     tm = (ta + tb) * 0.5
                     dm = signed_distance(self.point_at(tm))
                     if abs(dm) < tolerance:
                         break
-                    if dm * d_prev < 0:
+                    if dm * d0 < 0:
                         tb = tm
                     else:
                         ta = tm
-                        d_prev = dm
-                
                 results.append(tm)
-            
-            t_prev = t_curr
-            d_prev = d_curr
+            elif abs(d0) < tolerance:
+                # Start point is on plane
+                # Avoid duplicates
+                if not results or abs(results[-1] - t0) >= tolerance:
+                    results.append(t0)
+        
+        # Check end point explicitly
+        d_end = signed_distance(self.point_at(t_end))
+        if abs(d_end) < tolerance:
+            if not results or abs(results[-1] - t_end) >= tolerance:
+                results.append(t_end)
+        
+        # Sort and remove any remaining duplicates
+        results.sort()
+        if len(results) > 1:
+            unique_results = [results[0]]
+            for i in range(1, len(results)):
+                if abs(results[i] - unique_results[-1]) >= tolerance * 2.0:
+                    unique_results.append(results[i])
+            results = unique_results
         
         return results
     

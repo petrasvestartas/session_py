@@ -547,3 +547,32 @@ def ray_mesh_bvh(
         return [p for _, p in hits]
     else:
         return [hits[0][1]]
+
+
+#==========================================================================================
+# NURBS Curve Intersection Functions
+#==========================================================================================
+
+def curve_plane(curve, plane, tolerance=None):
+    """Find all intersections between NURBS curve and plane."""
+    return curve.intersect_plane(plane, tolerance)
+
+def curve_plane_points(curve, plane, tolerance=None):
+    """Find all intersection points between NURBS curve and plane."""
+    return curve.intersect_plane_points(plane, tolerance)
+
+def curve_plane_bezier_clipping(curve, plane, tolerance=None):
+    """Curve-plane intersection using Bézier clipping (advanced method)."""
+    return curve.intersect_plane_bezier_clipping(plane, tolerance)
+
+def curve_plane_algebraic(curve, plane, tolerance=None):
+    """Curve-plane intersection using algebraic/hodograph method."""
+    return curve.intersect_plane_algebraic(plane, tolerance)
+
+def curve_plane_production(curve, plane, tolerance=None):
+    """Curve-plane intersection using production CAD kernel method."""
+    return curve.intersect_plane_production(plane, tolerance)
+
+def curve_closest_point(curve, test_point, t0=0.0, t1=0.0):
+    """Find closest point on NURBS curve to test point."""
+    return curve.closest_point_to(test_point, t0, t1)

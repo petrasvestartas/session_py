@@ -18,6 +18,7 @@ from src.session_py.boundingbox import BoundingBox
 from src.session_py.bvh import BVH
 from src.session_py import intersection
 from src.session_py.tolerance import Tolerance
+from src.session_py.nurbscurve import NurbsCurve
 
 def main():
     print("=== Intersection Examples (Python) ===\n")
@@ -491,6 +492,78 @@ def main():
         print(f"Pure BVH:         {bvh_ms:.3f}ms ({len(candidate_ids)} candidates)")
     except Exception as e:
         print(f"Performance test error: {e}")
+    
+    print("\n=== NURBS Curve Test (Python) ===")
+    
+    try:
+        from src.session_py.nurbscurve import NurbsCurve
+        
+        # Create NURBS curve from 3 points with degree 2
+        # Note: degree 3 would require at least 4 control points (order = degree + 1)
+        p0 = Point(0.0, 0.0, -453.0)
+        p1 = Point(1500.0, 0.0, -147.0)
+        p2 = Point(3000.0, 0.0, -147.0)
+        
+        points = [p0, p1, p2]
+        degree = 2  # Changed from 3 to 2 (requires minimum 3 points)
+        
+        # Create a clamped NURBS curve
+        curve = NurbsCurve.create(periodic=False, degree=degree, points=points)
+        
+        print(f"Created NURBS curve: degree={curve.degree()}, cv_count={curve.cv_count()}")
+        print(f"Control points:")
+        for i in range(curve.cv_count()):
+            cv = curve.get_cv(i)
+            if cv:
+                print(f"  CV{i}: ({cv.x:.2f}, {cv.y:.2f}, {cv.z:.2f})")
+        
+        # Divide curve into 6 points
+        divided_points, params = curve.divide_by_count(6, include_endpoints=True)
+        
+        print(f"\nDivided into {len(divided_points)} points:")
+        for i, (pt, t) in enumerate(zip(divided_points, params)):
+            print(f"  Point{i} (t={t:.4f}): ({pt.x:.2f}, {pt.y:.2f}, {pt.z:.2f})")
+    except Exception as e:
+        print(f"NURBS curve test error: {e}")
+        import traceback
+    print("\n=== NURBS Curve-Plane Intersection Test (Python) ===")
+    
+    try:
+        # Create NURBS curve from 3 points with degree 2
+        points = [
+            Point(0.0, 0.0, -453.0),
+            Point(1500.0, 0.0, -147.0),
+            Point(3000.0, 0.0, -147.0)
+        ]
+        
+        degree = 2
+        curve = NurbsCurve.create(periodic=False, degree=degree, points=points)
+        
+        print(f"Created NURBS curve: degree={curve.degree()}, cv_count={curve.cv_count()}")
+        
+        # Create planes perpendicular to X-axis at regular intervals
+        planes = []
+        for i in range(7):
+            planes.append(Plane.from_point_normal(Point(i*500, 0, 0), Vector(1, 0, 0)))
+        
+        print(f"\nIntersecting curve with {len(planes)} planes:")
+        
+        # Intersect curve with each plane using intersection module
+        sampled_points = []
+        for plane in planes:
+            intersection_points = intersection.curve_plane_points(curve, plane)
+            if intersection_points:
+                sampled_points.append(intersection_points[0])
+                pt = intersection_points[0]
+                print(f"  Plane at x={plane.origin.x}: ({pt.x:.2f}, {pt.y:.2f}, {pt.z:.2f})")
+            else:
+                print(f"  Plane at x={plane.origin.x}: No intersection")
+        
+        print(f"\nTotal sampled points: {len(sampled_points)}")
+    except Exception as e:
+        print(f"Curve-plane intersection test error: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()

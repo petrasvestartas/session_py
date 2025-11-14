@@ -27,6 +27,8 @@ from .tolerance import Tolerance
 from . import encoders
 from .obj import load_obj, save_obj
 from . import intersection
+from .nurbscurve import NurbsCurve
+from .ray_box_intersection import ray_box
 
 __all__ = [
     "Color",
@@ -57,4 +59,6 @@ __all__ = [
     "load_obj",
     "save_obj",
     "intersection",
+    "NurbsCurve",
+    "ray_box",
 ]
