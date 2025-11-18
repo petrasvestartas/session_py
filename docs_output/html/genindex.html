@@ -150,11 +150,17 @@
       <ul style="list-style-type:none">
         <li><a href="api.html#session_py.boundingbox.BoundingBox.__init__">(session_py.boundingbox.BoundingBox method)</a>
 </li>
+        <li><a href="api.html#session_py.bvh.BVH.__init__">(session_py.bvh.BVH method)</a>
+</li>
+        <li><a href="api.html#session_py.bvh.BVHNode.__init__">(session_py.bvh.BVHNode method)</a>
+</li>
         <li><a href="api.html#session_py.color.Color.__init__">(session_py.color.Color method)</a>
 </li>
         <li><a href="api.html#session_py.cylinder.Cylinder.__init__">(session_py.cylinder.Cylinder method)</a>
 </li>
         <li><a href="api.html#session_py.edge.Edge.__init__">(session_py.edge.Edge method)</a>
+</li>
+        <li><a href="api.html#session_py.encoders.GeometryDecoder.__init__">(session_py.encoders.GeometryDecoder method)</a>
 </li>
         <li><a href="api.html#session_py.graph.Graph.__init__">(session_py.graph.Graph method)</a>
 </li>
@@ -168,11 +174,15 @@
 </li>
         <li><a href="api.html#session_py.plane.Plane.__init__">(session_py.plane.Plane method)</a>
 </li>
+        <li><a href="api.html#session_py.point.Point.__init__">(session_py.point.Point method)</a>
+</li>
         <li><a href="api.html#session_py.pointcloud.PointCloud.__init__">(session_py.pointcloud.PointCloud method)</a>
 </li>
         <li><a href="api.html#session_py.polyline.Polyline.__init__">(session_py.polyline.Polyline method)</a>
 </li>
         <li><a href="api.html#session_py.quaternion.Quaternion.__init__">(session_py.quaternion.Quaternion method)</a>
+</li>
+        <li><a href="api.html#session_py.session.Session.__init__">(session_py.session.Session method)</a>
 </li>
         <li><a href="api.html#session_py.tolerance.Tolerance.__init__">(session_py.tolerance.Tolerance method)</a>
 </li>
@@ -199,28 +209,64 @@
       <ul style="list-style-type:none">
         <li><a href="api.html#session_py.plane.Plane.a">(session_py.plane.Plane attribute)</a>
 </li>
-        <li><a href="api.html#id7">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id10">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#session_py.bvh.BVHNode.aabb">aabb (session_py.bvh.BVHNode attribute)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVH.aabb_intersect">aabb_intersect() (session_py.bvh.BVH method)</a>
+</li>
       <li><a href="api.html#session_py.tolerance.Tolerance.ABSOLUTE">ABSOLUTE (session_py.tolerance.Tolerance attribute)</a>
 </li>
       <li><a href="api.html#session_py.tolerance.Tolerance.absolute">absolute (session_py.tolerance.Tolerance property)</a>
 </li>
-      <li><a href="api.html#session_py.tree.Tree.add">add() (session_py.tree.Tree method)</a>
+      <li><a href="api.html#session_py.session.Session.add">add() (session_py.session.Session method)</a>
 
       <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.tree.Tree.add">(session_py.tree.Tree method)</a>
+</li>
         <li><a href="api.html#session_py.treenode.TreeNode.add">(session_py.treenode.TreeNode method)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#session_py.session.Session.add_arrow">add_arrow() (session_py.session.Session method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.add_bbox">add_bbox() (session_py.session.Session method)</a>
+</li>
       <li><a href="api.html#session_py.tree.Tree.add_child_by_guid">add_child_by_guid() (session_py.tree.Tree method)</a>
 </li>
-      <li><a href="api.html#session_py.graph.Graph.add_edge">add_edge() (session_py.graph.Graph method)</a>
+      <li><a href="api.html#session_py.session.Session.add_cylinder">add_cylinder() (session_py.session.Session method)</a>
 </li>
+      <li><a href="api.html#session_py.graph.Graph.add_edge">add_edge() (session_py.graph.Graph method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.session.Session.add_edge">(session_py.session.Session method)</a>
+</li>
+      </ul></li>
       <li><a href="api.html#session_py.mesh.Mesh.add_face">add_face() (session_py.mesh.Mesh method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.add_hierarchy">add_hierarchy() (session_py.session.Session method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.add_line">add_line() (session_py.session.Session method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.add_mesh">add_mesh() (session_py.session.Session method)</a>
 </li>
       <li><a href="api.html#session_py.graph.Graph.add_node">add_node() (session_py.graph.Graph method)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session.add_plane">add_plane() (session_py.session.Session method)</a>
+</li>
       <li><a href="api.html#session_py.polyline.Polyline.add_point">add_point() (session_py.polyline.Polyline method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.session.Session.add_point">(session_py.session.Session method)</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.session.Session.add_pointcloud">add_pointcloud() (session_py.session.Session method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.add_polyline">add_polyline() (session_py.session.Session method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.add_relationship">add_relationship() (session_py.session.Session method)</a>
 </li>
       <li><a href="api.html#session_py.mesh.Mesh.add_vertex">add_vertex() (session_py.mesh.Mesh method)</a>
 </li>
@@ -228,8 +274,6 @@
 </li>
       <li><a href="api.html#session_py.mesh.NormalWeighting.ANGLE">ANGLE (session_py.mesh.NormalWeighting attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.vector.Vector.angle">angle() (session_py.vector.Vector method)</a>
 </li>
       <li><a href="api.html#session_py.vector.Vector.angle_between_vector_xy_components">angle_between_vector_xy_components() (session_py.vector.Vector static method)</a>
@@ -249,6 +293,8 @@
       <li><a href="api.html#session_py.tolerance.Tolerance.approximation">approximation (session_py.tolerance.Tolerance property)</a>
 </li>
       <li><a href="api.html#session_py.mesh.NormalWeighting.AREA">AREA (session_py.mesh.NormalWeighting attribute)</a>
+</li>
+      <li><a href="api.html#session_py.point.Point.area">area() (session_py.point.Point static method)</a>
 </li>
       <li><a href="api.html#session_py.arrow.Arrow">Arrow (class in session_py.arrow)</a>
 </li>
@@ -274,20 +320,30 @@
       <ul style="list-style-type:none">
         <li><a href="api.html#session_py.plane.Plane.b">(session_py.plane.Plane attribute)</a>
 </li>
-        <li><a href="api.html#id8">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id11">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.objects.Objects.bboxes">bboxes (session_py.objects.Objects attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.color.Color.black">black() (session_py.color.Color class method)</a>
 </li>
       <li><a href="api.html#session_py.color.Color.blue">blue() (session_py.color.Color class method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.boundingbox.BoundingBox">BoundingBox (class in session_py.boundingbox)</a>
 </li>
       <li><a href="api.html#session_py.color.Color.brown">brown() (session_py.color.Color class method)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVH.build">build() (session_py.bvh.BVH method)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVH.build_with_guids">build_with_guids() (session_py.bvh.BVH method)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVH">BVH (class in session_py.bvh)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BvhAABB">BvhAABB (class in session_py.bvh)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVHNode">BVHNode (class in session_py.bvh)</a>
 </li>
   </ul></td>
   </tr>
@@ -299,21 +355,31 @@
       <li><a href="api.html#session_py.plane.Plane.c">c (session_py.plane.Plane attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id9">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id12">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#session_py.bvh.calculate_morton_code">calculate_morton_code() (in module session_py.bvh)</a>
+</li>
+      <li><a href="api.html#session_py.point.Point.ccw">ccw() (session_py.point.Point static method)</a>
+</li>
       <li><a href="api.html#session_py.polyline.Polyline.center">center() (session_py.polyline.Polyline method)</a>
 </li>
       <li><a href="api.html#session_py.polyline.Polyline.center_vec">center_vec() (session_py.polyline.Polyline method)</a>
+</li>
+      <li><a href="api.html#session_py.point.Point.centroid_quad">centroid_quad() (session_py.point.Point static method)</a>
 </li>
       <li><a href="api.html#session_py.xform.Xform.change_basis">change_basis() (session_py.xform.Xform static method)</a>
 </li>
       <li><a href="api.html#session_py.xform.Xform.change_basis_alt">change_basis_alt() (session_py.xform.Xform static method)</a>
 </li>
+      <li><a href="api.html#session_py.bvh.BVH.check_all_collisions">check_all_collisions() (session_py.bvh.BVH method)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVH.check_all_collisions_guids">check_all_collisions_guids() (session_py.bvh.BVH method)</a>
+</li>
       <li><a href="api.html#session_py.treenode.TreeNode.children">children (session_py.treenode.TreeNode attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id13">(session_py.treenode.TreeNode property)</a>
+        <li><a href="api.html#id16">(session_py.treenode.TreeNode property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.graph.Graph.clear">clear() (session_py.graph.Graph method)</a>
@@ -328,10 +394,10 @@
 </li>
       <li><a href="api.html#session_py.boundingbox.BoundingBox.collides_with">collides_with() (session_py.boundingbox.BoundingBox method)</a>
 </li>
-      <li><a href="api.html#session_py.color.Color">Color (class in session_py.color)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color">Color (class in session_py.color)</a>
+</li>
       <li><a href="api.html#session_py.mesh.VertexData.color">color() (session_py.mesh.VertexData method)</a>
 </li>
       <li><a href="api.html#session_py.pointcloud.PointCloud.colors">colors (session_py.pointcloud.PointCloud attribute)</a>
@@ -339,6 +405,8 @@
       <li><a href="api.html#session_py.tolerance.Tolerance.compare">compare() (session_py.tolerance.Tolerance method)</a>
 </li>
       <li><a href="api.html#session_py.vector.Vector.compute_length">compute_length() (session_py.vector.Vector method)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVH.compute_world_size">compute_world_size() (session_py.bvh.BVH static method)</a>
 </li>
       <li><a href="api.html#session_py.quaternion.Quaternion.conjugate">conjugate() (session_py.quaternion.Quaternion method)</a>
 </li>
@@ -354,11 +422,17 @@
 </li>
       <li><a href="api.html#session_py.vector.Vector.cross">cross() (session_py.vector.Vector method)</a>
 </li>
+      <li><a href="api.html#session_py.bvh.BvhAABB.cx">cx (session_py.bvh.BvhAABB attribute)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BvhAABB.cy">cy (session_py.bvh.BvhAABB attribute)</a>
+</li>
       <li><a href="api.html#session_py.color.Color.cyan">cyan() (session_py.color.Color class method)</a>
 </li>
       <li><a href="api.html#session_py.cylinder.Cylinder">Cylinder (class in session_py.cylinder)</a>
 </li>
       <li><a href="api.html#session_py.objects.Objects.cylinders">cylinders (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BvhAABB.cz">cz (session_py.bvh.BvhAABB attribute)</a>
 </li>
   </ul></td>
   </tr>
@@ -370,9 +444,13 @@
       <li><a href="api.html#session_py.plane.Plane.d">d (session_py.plane.Plane attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id10">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id13">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#session_py.encoders.decode_node">decode_node() (in module session_py.encoders)</a>
+</li>
+      <li><a href="api.html#session_py.encoders.GeometryEncoder.default">default() (session_py.encoders.GeometryEncoder method)</a>
+</li>
       <li><a href="api.html#session_py.mesh.Mesh.default_edge_attributes">default_edge_attributes (session_py.mesh.Mesh attribute)</a>
 </li>
   </ul></td>
@@ -382,6 +460,10 @@
       <li><a href="api.html#session_py.mesh.Mesh.default_vertex_attributes">default_vertex_attributes (session_py.mesh.Mesh attribute)</a>
 </li>
       <li><a href="api.html#session_py.treenode.TreeNode.descendants">descendants (session_py.treenode.TreeNode property)</a>
+</li>
+      <li><a href="api.html#session_py.session.RayHit.distance">distance (session_py.session.RayHit attribute)</a>
+</li>
+      <li><a href="api.html#session_py.point.Point.distance">distance() (session_py.point.Point method)</a>
 </li>
       <li><a href="api.html#session_py.vector.Vector.dot">dot() (session_py.vector.Vector method)</a>
 </li>
@@ -400,9 +482,11 @@
 </li>
       <li><a href="api.html#session_py.line.Line.end">end() (session_py.line.Line method)</a>
 </li>
+      <li><a href="api.html#session_py.mesh.Mesh.euler">euler() (session_py.mesh.Mesh method)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
-      <li><a href="api.html#session_py.mesh.Mesh.euler">euler() (session_py.mesh.Mesh method)</a>
+      <li><a href="api.html#session_py.bvh.expand_bits">expand_bits() (in module session_py.bvh)</a>
 </li>
       <li><a href="api.html#session_py.polyline.Polyline.extend_line">extend_line() (session_py.polyline.Polyline static method)</a>
 </li>
@@ -440,6 +524,8 @@
       <li><a href="api.html#session_py.boundingbox.BoundingBox.from_arrow">from_arrow() (session_py.boundingbox.BoundingBox class method)</a>
 </li>
       <li><a href="api.html#session_py.quaternion.Quaternion.from_axis_angle">from_axis_angle() (session_py.quaternion.Quaternion static method)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVH.from_boxes">from_boxes() (session_py.bvh.BVH class method)</a>
 </li>
       <li><a href="api.html#session_py.boundingbox.BoundingBox.from_cylinder">from_cylinder() (session_py.boundingbox.BoundingBox class method)</a>
 </li>
@@ -490,9 +576,17 @@
 </li>
       <li><a href="api.html#session_py.tolerance.Tolerance.geometric_key_xy">geometric_key_xy() (session_py.tolerance.Tolerance method)</a>
 </li>
+      <li><a href="api.html#session_py.encoders.GeometryDecoder">GeometryDecoder (class in session_py.encoders)</a>
+</li>
+      <li><a href="api.html#session_py.encoders.GeometryEncoder">GeometryEncoder (class in session_py.encoders)</a>
+</li>
       <li><a href="api.html#session_py.polyline.Polyline.get_average_plane">get_average_plane() (session_py.polyline.Polyline method)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session.get_children">get_children() (session_py.session.Session method)</a>
+</li>
       <li><a href="api.html#session_py.tree.Tree.get_children_guids">get_children_guids() (session_py.tree.Tree method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.get_collisions">get_collisions() (session_py.session.Session method)</a>
 </li>
       <li><a href="api.html#session_py.polyline.Polyline.get_convex_corners">get_convex_corners() (session_py.polyline.Polyline method)</a>
 </li>
@@ -500,21 +594,29 @@
 </li>
       <li><a href="api.html#session_py.polyline.Polyline.get_fast_plane">get_fast_plane() (session_py.polyline.Polyline method)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session.get_geometry">get_geometry() (session_py.session.Session method)</a>
+</li>
       <li><a href="api.html#session_py.vector.Vector.get_leveled_vector">get_leveled_vector() (session_py.vector.Vector method)</a>
 </li>
       <li><a href="api.html#session_py.polyline.Polyline.get_middle_line">get_middle_line() (session_py.polyline.Polyline static method)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.get_neighbours">get_neighbours() (session_py.session.Session method)</a>
 </li>
       <li><a href="api.html#session_py.tree.Tree.get_node_by_name">get_node_by_name() (session_py.tree.Tree method)</a>
 </li>
       <li><a href="api.html#session_py.tree.Tree.get_nodes_by_name">get_nodes_by_name() (session_py.tree.Tree method)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session.get_object">get_object() (session_py.session.Session method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.polyline.Polyline.get_point">get_point() (session_py.polyline.Polyline method)</a>
 </li>
       <li><a href="api.html#session_py.graph.Graph.get_vertices">get_vertices() (session_py.graph.Graph method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.graph.Graph">Graph (class in session_py.graph)</a>
+</li>
+      <li><a href="api.html#session_py.session.Session.graph">graph (session_py.session.Session attribute)</a>
 </li>
       <li><a href="api.html#session_py.color.Color.green">green() (session_py.color.Color class method)</a>
 </li>
@@ -535,7 +637,11 @@
 </li>
         <li><a href="api.html#session_py.plane.Plane.guid">(session_py.plane.Plane attribute)</a>
 </li>
+        <li><a href="api.html#session_py.point.Point.guid">(session_py.point.Point attribute)</a>
+</li>
         <li><a href="api.html#session_py.pointcloud.PointCloud.guid">(session_py.pointcloud.PointCloud attribute)</a>
+</li>
+        <li><a href="api.html#session_py.session.RayHit.guid">(session_py.session.RayHit attribute)</a>
 </li>
         <li><a href="api.html#session_py.tree.Tree.guid">(session_py.tree.Tree attribute)</a>
 </li>
@@ -555,11 +661,17 @@
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.mesh.Mesh.halfedge">halfedge (session_py.mesh.Mesh attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.graph.Graph.has_edge">has_edge() (session_py.graph.Graph method)</a>
 </li>
       <li><a href="api.html#session_py.graph.Graph.has_node">has_node() (session_py.graph.Graph method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.bvh.BvhAABB.hx">hx (session_py.bvh.BvhAABB attribute)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BvhAABB.hy">hy (session_py.bvh.BvhAABB attribute)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BvhAABB.hz">hz (session_py.bvh.BvhAABB attribute)</a>
 </li>
   </ul></td>
   </tr>
@@ -616,6 +728,8 @@
 </li>
       <li><a href="api.html#session_py.treenode.TreeNode.is_leaf">is_leaf (session_py.treenode.TreeNode property)</a>
 </li>
+      <li><a href="api.html#session_py.bvh.BVHNode.is_leaf">is_leaf() (session_py.bvh.BVHNode method)</a>
+</li>
       <li><a href="api.html#session_py.tolerance.Tolerance.is_negative">is_negative() (session_py.tolerance.Tolerance method)</a>
 </li>
       <li><a href="api.html#session_py.vector.Vector.is_parallel_to">is_parallel_to() (session_py.vector.Vector method)</a>
@@ -638,10 +752,29 @@
   </tr>
       </table>
   
+  <h2 id="J">J</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.encoders.json_dump">json_dump() (in module session_py.encoders)</a>
+</li>
+      <li><a href="api.html#session_py.encoders.json_dumps">json_dumps() (in module session_py.encoders)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.encoders.json_load">json_load() (in module session_py.encoders)</a>
+</li>
+      <li><a href="api.html#session_py.encoders.json_loads">json_loads() (in module session_py.encoders)</a>
+</li>
+  </ul></td>
+  </tr>
+      </table>
+  
   <h2 id="L">L</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.tree.Tree.leaves">leaves (session_py.tree.Tree property)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVHNode.left">left (session_py.bvh.BVHNode attribute)</a>
 </li>
       <li><a href="api.html#session_py.line.Line.length">length() (session_py.line.Line method)</a>
 
@@ -687,6 +820,8 @@
 </li>
       <li><a href="api.html#session_py.xform.Xform.look_at_rh">look_at_rh() (session_py.xform.Xform static method)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session.lookup">lookup (session_py.session.Session attribute)</a>
+</li>
   </ul></td>
   </tr>
       </table>
@@ -706,6 +841,8 @@
 </li>
       <li><a href="api.html#session_py.boundingbox.BoundingBox.max_point">max_point() (session_py.boundingbox.BoundingBox method)</a>
 </li>
+      <li><a href="api.html#session_py.bvh.BVH.merge_aabb">merge_aabb() (session_py.bvh.BVH method)</a>
+</li>
       <li><a href="api.html#session_py.mesh.Mesh">Mesh (class in session_py.mesh)</a>
 </li>
       <li><a href="api.html#session_py.arrow.Arrow.mesh">mesh (session_py.arrow.Arrow attribute)</a>
@@ -715,6 +852,8 @@
 </li>
       </ul></li>
       <li><a href="api.html#session_py.objects.Objects.meshes">meshes (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.point.Point.mid_point">mid_point() (session_py.point.Point method)</a>
 </li>
       <li><a href="api.html#session_py.boundingbox.BoundingBox.min_point">min_point() (session_py.boundingbox.BoundingBox method)</a>
 </li>
@@ -728,11 +867,15 @@
 </li>
         <li><a href="api.html#module-session_py.boundingbox">session_py.boundingbox</a>
 </li>
+        <li><a href="api.html#module-session_py.bvh">session_py.bvh</a>
+</li>
         <li><a href="api.html#module-session_py.color">session_py.color</a>
 </li>
         <li><a href="api.html#module-session_py.cylinder">session_py.cylinder</a>
 </li>
         <li><a href="api.html#module-session_py.edge">session_py.edge</a>
+</li>
+        <li><a href="api.html#module-session_py.encoders">session_py.encoders</a>
 </li>
         <li><a href="api.html#module-session_py.graph">session_py.graph</a>
 </li>
@@ -744,11 +887,15 @@
 </li>
         <li><a href="api.html#module-session_py.plane">session_py.plane</a>
 </li>
+        <li><a href="api.html#module-session_py.point">session_py.point</a>
+</li>
         <li><a href="api.html#module-session_py.pointcloud">session_py.pointcloud</a>
 </li>
         <li><a href="api.html#module-session_py.polyline">session_py.polyline</a>
 </li>
         <li><a href="api.html#module-session_py.quaternion">session_py.quaternion</a>
+</li>
+        <li><a href="api.html#module-session_py.session">session_py.session</a>
 </li>
         <li><a href="api.html#module-session_py.tolerance">session_py.tolerance</a>
 </li>
@@ -789,7 +936,11 @@
 </li>
         <li><a href="api.html#session_py.plane.Plane.name">(session_py.plane.Plane attribute)</a>
 </li>
+        <li><a href="api.html#session_py.point.Point.name">(session_py.point.Point attribute)</a>
+</li>
         <li><a href="api.html#session_py.pointcloud.PointCloud.name">(session_py.pointcloud.PointCloud attribute)</a>
+</li>
+        <li><a href="api.html#session_py.session.Session.name">(session_py.session.Session attribute)</a>
 </li>
         <li><a href="api.html#session_py.tree.Tree.name">(session_py.tree.Tree attribute)</a>
 </li>
@@ -800,10 +951,10 @@
         <li><a href="api.html#session_py.vertex.Vertex.name">(session_py.vertex.Vertex attribute)</a>
 </li>
       </ul></li>
-      <li><a href="api.html#session_py.color.Color.navy">navy() (session_py.color.Color class method)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.color.Color.navy">navy() (session_py.color.Color class method)</a>
+</li>
       <li><a href="api.html#session_py.graph.Graph.neighbors">neighbors() (session_py.graph.Graph method)</a>
 </li>
       <li><a href="api.html#session_py.graph.Graph.node_attribute">node_attribute() (session_py.graph.Graph method)</a>
@@ -845,18 +996,24 @@
   <h2 id="O">O</h2>
   <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.encoders.GeometryDecoder.object_hook">object_hook() (session_py.encoders.GeometryDecoder method)</a>
+</li>
+      <li><a href="api.html#session_py.bvh.BVHNode.object_id">object_id (session_py.bvh.BVHNode attribute)</a>
+</li>
       <li><a href="api.html#session_py.objects.Objects">Objects (class in session_py.objects)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session.objects">objects (session_py.session.Session attribute)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.color.Color.olive">olive() (session_py.color.Color class method)</a>
 </li>
       <li><a href="api.html#session_py.color.Color.orange">orange() (session_py.color.Color class method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.plane.Plane.origin">origin (session_py.plane.Plane attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id3">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id6">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.edge.Edge.other_vertex">other_vertex() (session_py.edge.Edge method)</a>
@@ -871,7 +1028,7 @@
       <li><a href="api.html#session_py.treenode.TreeNode.parent">parent (session_py.treenode.TreeNode attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id12">(session_py.treenode.TreeNode property)</a>
+        <li><a href="api.html#id15">(session_py.treenode.TreeNode property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.vector.Vector.perpendicular_to">perpendicular_to() (session_py.vector.Vector method)</a>
@@ -886,6 +1043,10 @@
 </li>
       <li><a href="api.html#session_py.objects.Objects.planes">planes (session_py.objects.Objects attribute)</a>
 </li>
+      <li><a href="api.html#session_py.point.Point">Point (class in session_py.point)</a>
+</li>
+      <li><a href="api.html#session_py.session.RayHit.point">point (session_py.session.RayHit attribute)</a>
+</li>
       <li><a href="api.html#session_py.boundingbox.BoundingBox.point_at">point_at() (session_py.boundingbox.BoundingBox method)</a>
 
       <ul style="list-style-type:none">
@@ -899,6 +1060,8 @@
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.objects.Objects.pointclouds">pointclouds (session_py.objects.Objects attribute)</a>
+</li>
+      <li><a href="api.html#session_py.point.Point.pointcolor">pointcolor (session_py.point.Point attribute)</a>
 </li>
       <li><a href="api.html#session_py.mesh.Mesh.pointcolors">pointcolors (session_py.mesh.Mesh attribute)</a>
 </li>
@@ -950,6 +1113,14 @@
         <li><a href="api.html#session_py.cylinder.Cylinder.radius">(session_py.cylinder.Cylinder attribute)</a>
 </li>
       </ul></li>
+      <li><a href="api.html#session_py.bvh.BVH.ray_cast">ray_cast() (session_py.bvh.BVH method)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.session.Session.ray_cast">(session_py.session.Session method)</a>
+</li>
+      </ul></li>
+      <li><a href="api.html#session_py.session.RayHit">RayHit (class in session_py.session)</a>
+</li>
       <li><a href="api.html#session_py.color.Color.red">red() (session_py.color.Color class method)</a>
 </li>
       <li><a href="api.html#session_py.tolerance.Tolerance.RELATIVE">RELATIVE (session_py.tolerance.Tolerance attribute)</a>
@@ -966,12 +1137,14 @@
 </li>
       <li><a href="api.html#session_py.graph.Graph.remove_node">remove_node() (session_py.graph.Graph method)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session.remove_object">remove_object() (session_py.session.Session method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.polyline.Polyline.remove_point">remove_point() (session_py.polyline.Polyline method)</a>
 </li>
       <li><a href="api.html#session_py.tolerance.Tolerance.reset">reset() (session_py.tolerance.Tolerance method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.plane.Plane.reverse">reverse() (session_py.plane.Plane method)</a>
 
       <ul style="list-style-type:none">
@@ -982,10 +1155,12 @@
       </ul></li>
       <li><a href="api.html#session_py.polyline.Polyline.reversed">reversed() (session_py.polyline.Polyline method)</a>
 </li>
+      <li><a href="api.html#session_py.bvh.BVHNode.right">right (session_py.bvh.BVHNode attribute)</a>
+</li>
       <li><a href="api.html#session_py.tree.Tree.root">root (session_py.tree.Tree attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id11">(session_py.tree.Tree property)</a>
+        <li><a href="api.html#id14">(session_py.tree.Tree property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.plane.Plane.rotate">rotate() (session_py.plane.Plane method)</a>
@@ -1019,6 +1194,8 @@
 </li>
       <li><a href="api.html#session_py.polyline.Polyline.segment_count">segment_count() (session_py.polyline.Polyline method)</a>
 </li>
+      <li><a href="api.html#session_py.session.Session">Session (class in session_py.session)</a>
+</li>
       <li>
     session_py.arrow
 
@@ -1031,6 +1208,13 @@
 
       <ul style="list-style-type:none">
         <li><a href="api.html#module-session_py.boundingbox">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.bvh
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.bvh">module</a>
 </li>
       </ul></li>
       <li>
@@ -1052,6 +1236,13 @@
 
       <ul style="list-style-type:none">
         <li><a href="api.html#module-session_py.edge">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.encoders
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.encoders">module</a>
 </li>
       </ul></li>
       <li>
@@ -1090,12 +1281,21 @@
 </li>
       </ul></li>
       <li>
+    session_py.point
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.point">module</a>
+</li>
+      </ul></li>
+      <li>
     session_py.pointcloud
 
       <ul style="list-style-type:none">
         <li><a href="api.html#module-session_py.pointcloud">module</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li>
     session_py.polyline
 
@@ -1103,13 +1303,18 @@
         <li><a href="api.html#module-session_py.polyline">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li>
     session_py.quaternion
 
       <ul style="list-style-type:none">
         <li><a href="api.html#module-session_py.quaternion">module</a>
+</li>
+      </ul></li>
+      <li>
+    session_py.session
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#module-session_py.session">module</a>
 </li>
       </ul></li>
       <li>
@@ -1218,6 +1423,8 @@
 </li>
         <li><a href="api.html#session_py.plane.Plane.transform">(session_py.plane.Plane method)</a>
 </li>
+        <li><a href="api.html#session_py.point.Point.transform">(session_py.point.Point method)</a>
+</li>
         <li><a href="api.html#session_py.pointcloud.PointCloud.transform">(session_py.pointcloud.PointCloud method)</a>
 </li>
         <li><a href="api.html#session_py.polyline.Polyline.transform">(session_py.polyline.Polyline method)</a>
@@ -1239,6 +1446,8 @@
         <li><a href="api.html#session_py.mesh.Mesh.transformed">(session_py.mesh.Mesh method)</a>
 </li>
         <li><a href="api.html#session_py.plane.Plane.transformed">(session_py.plane.Plane method)</a>
+</li>
+        <li><a href="api.html#session_py.point.Point.transformed">(session_py.point.Point method)</a>
 </li>
         <li><a href="api.html#session_py.pointcloud.PointCloud.transformed">(session_py.pointcloud.PointCloud method)</a>
 </li>
@@ -1263,8 +1472,12 @@
       </ul></li>
       <li><a href="api.html#session_py.tree.Tree">Tree (class in session_py.tree)</a>
 </li>
-      <li><a href="api.html#session_py.treenode.TreeNode.tree">tree (session_py.treenode.TreeNode property)</a>
+      <li><a href="api.html#session_py.session.Session.tree">tree (session_py.session.Session attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.treenode.TreeNode.tree">(session_py.treenode.TreeNode property)</a>
 </li>
+      </ul></li>
       <li><a href="api.html#session_py.treenode.TreeNode">TreeNode (class in session_py.treenode)</a>
 </li>
       <li><a href="api.html#session_py.polyline.Polyline.tween_two_polylines">tween_two_polylines() (session_py.polyline.Polyline static method)</a>
@@ -1335,7 +1548,11 @@
       <li><a href="api.html#session_py.color.Color.white">white() (session_py.color.Color class method)</a>
 </li>
       <li><a href="api.html#session_py.line.Line.width">width (session_py.line.Line attribute)</a>
+
+      <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.point.Point.width">(session_py.point.Point attribute)</a>
 </li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.mesh.Mesh.widths">widths (session_py.mesh.Mesh attribute)</a>
@@ -1352,23 +1569,27 @@
       <li><a href="api.html#session_py.mesh.VertexData.x">x (session_py.mesh.VertexData attribute)</a>
 
       <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.point.Point.x">(session_py.point.Point attribute)</a>
+</li>
+        <li><a href="api.html#id0">(session_py.point.Point property)</a>
+</li>
         <li><a href="api.html#session_py.vector.Vector.x">(session_py.vector.Vector attribute)</a>
 </li>
-        <li><a href="api.html#id0">(session_py.vector.Vector property)</a>
+        <li><a href="api.html#id3">(session_py.vector.Vector property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.line.Line.x0">x0 (session_py.line.Line property)</a>
 </li>
       <li><a href="api.html#session_py.line.Line.x1">x1 (session_py.line.Line property)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.plane.Plane.x_axis">x_axis (session_py.plane.Plane attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id4">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id7">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
       <li><a href="api.html#session_py.vector.Vector.x_axis">x_axis() (session_py.vector.Vector static method)</a>
 </li>
       <li><a href="api.html#session_py.xform.Xform">Xform (class in session_py.xform)</a>
@@ -1391,21 +1612,25 @@
       <li><a href="api.html#session_py.mesh.VertexData.y">y (session_py.mesh.VertexData attribute)</a>
 
       <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.point.Point.y">(session_py.point.Point attribute)</a>
+</li>
+        <li><a href="api.html#id1">(session_py.point.Point property)</a>
+</li>
         <li><a href="api.html#session_py.vector.Vector.y">(session_py.vector.Vector attribute)</a>
 </li>
-        <li><a href="api.html#id1">(session_py.vector.Vector property)</a>
+        <li><a href="api.html#id4">(session_py.vector.Vector property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.line.Line.y0">y0 (session_py.line.Line property)</a>
 </li>
-      <li><a href="api.html#session_py.line.Line.y1">y1 (session_py.line.Line property)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.line.Line.y1">y1 (session_py.line.Line property)</a>
+</li>
       <li><a href="api.html#session_py.plane.Plane.y_axis">y_axis (session_py.plane.Plane attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id5">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id8">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.vector.Vector.y_axis">y_axis() (session_py.vector.Vector static method)</a>
@@ -1424,21 +1649,25 @@
       <li><a href="api.html#session_py.mesh.VertexData.z">z (session_py.mesh.VertexData attribute)</a>
 
       <ul style="list-style-type:none">
+        <li><a href="api.html#session_py.point.Point.z">(session_py.point.Point attribute)</a>
+</li>
+        <li><a href="api.html#id2">(session_py.point.Point property)</a>
+</li>
         <li><a href="api.html#session_py.vector.Vector.z">(session_py.vector.Vector attribute)</a>
 </li>
-        <li><a href="api.html#id2">(session_py.vector.Vector property)</a>
+        <li><a href="api.html#id5">(session_py.vector.Vector property)</a>
 </li>
       </ul></li>
-      <li><a href="api.html#session_py.line.Line.z0">z0 (session_py.line.Line property)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul style="margin-left:0;list-style-type:none">
+      <li><a href="api.html#session_py.line.Line.z0">z0 (session_py.line.Line property)</a>
+</li>
       <li><a href="api.html#session_py.line.Line.z1">z1 (session_py.line.Line property)</a>
 </li>
       <li><a href="api.html#session_py.plane.Plane.z_axis">z_axis (session_py.plane.Plane attribute)</a>
 
       <ul style="list-style-type:none">
-        <li><a href="api.html#id6">(session_py.plane.Plane property)</a>
+        <li><a href="api.html#id9">(session_py.plane.Plane property)</a>
 </li>
       </ul></li>
       <li><a href="api.html#session_py.vector.Vector.z_axis">z_axis() (session_py.vector.Vector static method)</a>
@@ -1453,7 +1682,7 @@
 </div></div>
 <aside id="right-sidebar" class="hidden text-sm xl:block">
 <div class="sticky top-16 -mt-10 max-h-[calc(var(--vh)-4rem)] overflow-y-auto pt-6 space-y-2">
-<a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#_">_</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#A">A</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#B">B</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#C">C</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#D">D</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#E">E</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#F">F</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#G">G</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#H">H</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#I">I</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#L">L</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#M">M</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#N">N</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#O">O</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#P">P</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Q">Q</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#R">R</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#S">S</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#T">T</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#U">U</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#V">V</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#W">W</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#X">X</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Y">Y</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Z">Z</a>
+<a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#_">_</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#A">A</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#B">B</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#C">C</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#D">D</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#E">E</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#F">F</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#G">G</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#H">H</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#I">I</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#J">J</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#L">L</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#M">M</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#N">N</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#O">O</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#P">P</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Q">Q</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#R">R</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#S">S</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#T">T</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#U">U</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#V">V</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#W">W</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#X">X</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Y">Y</a><a class="pt-2 block text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-offset-[-1px]" href="#Z">Z</a>
 </div>
 </aside>
         </main>

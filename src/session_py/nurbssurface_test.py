@@ -424,3 +424,50 @@ def test_nurbssurface_isocurve_extraction():
         assert round(pt.x, 3) == exp_x, f"Iso-u point {i} x: {round(pt.x, 3)} != {exp_x}"
         assert round(pt.y, 3) == exp_y, f"Iso-u point {i} y: {round(pt.y, 3)} != {exp_y}"
         assert round(pt.z, 3) == exp_z, f"Iso-u point {i} z: {round(pt.z, 3)} != {exp_z}"
+
+
+def test_nurbssurface_center_frame_numeric_3dec():
+    """Short test: center point value at (u_mid, v_mid) rounded to 3 decimals."""
+    srf = NurbsSurface(3, False, 4, 4, 5, 5)
+    srf.make_clamped_uniform_knot_vector(0, 1.0)
+    srf.make_clamped_uniform_knot_vector(1, 1.0)
+
+    srf.set_cv(0, 0, Point(0.0, 0.0, -2.5))
+    srf.set_cv(0, 1, Point(0.0, 1.0,  0.0))
+    srf.set_cv(0, 2, Point(0.0, 2.0,  0.0))
+    srf.set_cv(0, 3, Point(0.0, 3.0,  0.0))
+    srf.set_cv(0, 4, Point(0.0, 4.0, -2.5))
+
+    srf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
+    srf.set_cv(1, 1, Point(1.0, 1.0, 0.0))
+    srf.set_cv(1, 2, Point(1.0, 2.0, 5.0))
+    srf.set_cv(1, 3, Point(1.0, 3.0, 0.0))
+    srf.set_cv(1, 4, Point(1.0, 4.0, 0.0))
+
+    srf.set_cv(2, 0, Point(2.0, 0.0, 0.0))
+    srf.set_cv(2, 1, Point(2.0, 1.0, 0.0))
+    srf.set_cv(2, 2, Point(2.0, 2.0, 0.0))
+    srf.set_cv(2, 3, Point(2.0, 3.0, 0.0))
+    srf.set_cv(2, 4, Point(2.0, 4.0, 0.0))
+
+    srf.set_cv(3, 0, Point(3.0, 0.0, 0.0))
+    srf.set_cv(3, 1, Point(3.0, 1.0, 0.0))
+    srf.set_cv(3, 2, Point(3.0, 2.0, 0.0))
+    srf.set_cv(3, 3, Point(3.0, 3.0, 0.0))
+    srf.set_cv(3, 4, Point(3.0, 4.0, 0.0))
+
+    srf.set_cv(4, 0, Point(4.0, 0.0, -2.5))
+    srf.set_cv(4, 1, Point(4.0, 1.0, 0.0))
+    srf.set_cv(4, 2, Point(4.0, 2.0, 0.0))
+    srf.set_cv(4, 3, Point(4.0, 3.0, 0.0))
+    srf.set_cv(4, 4, Point(4.0, 4.0, -2.5))
+
+    u_min, u_max = srf.domain(0)
+    v_min, v_max = srf.domain(1)
+    u_mid = 0.5 * (u_min + u_max)
+    v_mid = 0.5 * (v_min + v_max)
+
+    pt = srf.point_at(u_mid, v_mid)
+    assert round(pt.x, 3) == 2.000
+    assert round(pt.y, 3) == 2.000
+    assert round(pt.z, 3) == 0.625

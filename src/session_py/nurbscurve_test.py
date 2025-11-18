@@ -149,3 +149,53 @@ def test_nurbscurve_string_representation():
     curve = NurbsCurve(3, False, 4, 5)
     s = str(curve)
     assert "NurbsCurve" in s
+
+
+def test_nurbscurve_frames_3d():
+    """Short test: compute normal and Frenet frames on a non-planar 3D curve."""
+    import math
+    # Build a clearly 3D curve (wavy helix)
+    ctrl = []
+    for k in range(8):
+        t = k / 7.0 * 2.0 * math.pi
+        r = 1.5 + 0.3 * math.cos(3.0 * t)
+        x = r * math.cos(t)
+        y = r * math.sin(t)
+        z = 0.6 * t
+        ctrl.append(Point(x, y, z))
+
+    crv = NurbsCurve.create(periodic=False, degree=3, points=ctrl)
+    t0, t1 = crv.domain()
+    t = 0.5 * (t0 + t1)
+
+    # Normal plane (plane normal = tangent)
+    T = crv.tangent_at(t)
+    assert abs(T.magnitude() - 1.0) < 1e-6
+    fallback = Vector(0, 0, 1) if abs(T.z) < 0.9 else Vector(0, 1, 0)
+    e1 = (T.cross(fallback)).normalize()
+    e2 = T.cross(e1)
+    assert abs(e1.magnitude() - 1.0) < 1e-6
+    assert abs(e2.magnitude() - 1.0) < 1e-6
+    assert abs(e1.dot(T)) < 1e-6
+    assert abs(e2.dot(T)) < 1e-6
+    assert abs(e1.dot(e2)) < 1e-6
+
+    # Frenet frame (T, N, B)
+    ders = crv.evaluate(t, 2)
+    d1 = ders[1]
+    d2 = ders[2]
+    T_f = d1.normalize()
+    proj = d2.dot(T_f)
+    N_raw = Vector(d2.x - T_f.x * proj, d2.y - T_f.y * proj, d2.z - T_f.z * proj)
+    assert N_raw.magnitude() > 1e-8
+    N = N_raw.normalize()
+    B = T_f.cross(N)
+    assert abs(T_f.magnitude() - 1.0) < 1e-6
+    assert abs(N.magnitude() - 1.0) < 1e-6
+    assert abs(B.magnitude() - 1.0) < 1e-6
+    assert abs(T_f.dot(N)) < 1e-6
+    assert abs(T_f.dot(B)) < 1e-6
+    assert abs(N.dot(B)) < 1e-6
+    # Right-handed check
+    rhs = T_f.cross(N)
+    assert rhs.dot(B) > 0.999
