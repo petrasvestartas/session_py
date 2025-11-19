@@ -1,15 +1,15 @@
 {
     "type": "Tree",
-    "guid": "eea5ccb7-009b-429b-ac44-afd8a20ce314",
+    "guid": "15a68d3d-e429-43f6-9e7c-f2a8d52a62c1",
     "name": "test_tree",
     "root": {
         "type": "TreeNode",
-        "guid": "4eafd76b-95c1-4588-80c6-87c06d717756",
+        "guid": "f545362d-ef50-409d-9974-06bf5d73a713",
         "name": "root",
         "children": [
             {
                 "type": "TreeNode",
-                "guid": "22c3c134-8919-4670-a07f-ebead6c55f0c",
+                "guid": "99dc36c3-7fb4-4f73-bc08-341155f7bc70",
                 "name": "child",
                 "children": []
             }

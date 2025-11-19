@@ -1,30 +1,54 @@
 from .point import Point
 from .vector import Vector
 from .color import Color
+from .mini_test import MINI_TEST, MINI_CHECK, run_all
+
+# /home/petras/code/code_session/uvsession/bin/python -m session_py.point_test
 
 
+@MINI_TEST("Point", "constructor")
 def test_point_constructor():
+    from .point import Point
     point = Point(1.0, 2.0, 3.0)
-    assert point.name == "my_point"
-    assert point.guid != ""
-    assert point.x == 1.0
-    assert point.y == 2.0
-    assert point.z == 3.0
-    assert point.width == 1.0
-    assert point.pointcolor == Color.white()
+    point[0] = 10.0
+    MINI_CHECK(point.name, "my_point")
+    MINI_CHECK(bool(point.guid), True)
+    MINI_CHECK(point.x, 10.0)
+    MINI_CHECK(point.y, 2.0)
+    MINI_CHECK(point.z, 3.0)
+    MINI_CHECK(point.width, 1.0)
+    MINI_CHECK(point.pointcolor, Color.white())
 
 
-def test_point_equality():
+@MINI_TEST("Point", "equality_equal")
+def test_point_equality_equal():
     p1 = Point(1.0, 2.0, 3.0)
     p2 = Point(1.0, 2.0, 3.0)
-    assert p1 == p2
-    assert not (p1 != p2)
 
+    # Timed code: perform equality and inequality checks
+    eq_result = (p1 == p2)
+    neq_result = (p1 != p2)
+
+    # Assertions at the end
+    MINI_CHECK(eq_result, True)
+    MINI_CHECK(neq_result, False)
+
+
+@MINI_TEST("Point", "equality_not_equal")
+def test_point_equality_not_equal():
     p3 = Point(1.0, 2.0, 3.0)
     p4 = Point(1.1, 2.0, 3.0)
-    assert not (p3 == p4)
-    assert p3 != p4
 
+    # Timed code: perform equality and inequality checks
+    eq_result = (p3 == p4)
+    neq_result = (p3 != p4)
+
+    # Assertions at the end
+    MINI_CHECK(eq_result, False)
+    MINI_CHECK(neq_result, True)
+
+if __name__ == "__main__":
+    run_all(language="python")
 
 ###########################################################################################
 # JSON
@@ -59,10 +83,20 @@ def test_point_json_roundtrip():
 
 
 def test_point_getitem():
+    import time
+    
     point = Point(1.0, 2.0, 3.0)
     assert point[0] == 1.0
     assert point[1] == 2.0
     assert point[2] == 3.0
+    
+    # Benchmark
+    iterations = 100_000
+    start = time.perf_counter()
+    for _ in range(iterations):
+        _ = point[0] + point[1] + point[2]
+    duration = time.perf_counter() - start
+    print(f"  Point indexing: {duration/iterations*1e6:.2f}µs per op ({iterations} iterations)")
 
 
 def test_point_setitem():
@@ -170,18 +204,38 @@ def test_point_ccw():
 
 
 def test_point_mid_point():
+    import time
+    
     p1 = Point(0.0, 0.0, 0.0)
     p2 = Point(1.0, 0.0, 0.0)
     mid = p1.mid_point(p2)
     assert round(mid.x, 6) == 0.5
     assert round(mid.y, 6) == 0.0
     assert round(mid.z, 6) == 0.0
+    
+    # Benchmark
+    iterations = 100_000
+    start = time.perf_counter()
+    for _ in range(iterations):
+        _ = p1.mid_point(p2)
+    duration = time.perf_counter() - start
+    print(f"  Point midpoint: {duration/iterations*1e6:.2f}µs per op ({iterations} iterations)")
 
 
 def test_point_distance():
+    import time
+    
     p1 = Point(0.0, 0.0, 0.0)
     p2 = Point(1.0, 0.0, 0.0)
     assert round(p1.distance(p2), 6) == 1.0
+    
+    # Benchmark
+    iterations = 100_000
+    start = time.perf_counter()
+    for _ in range(iterations):
+        _ = p1.distance(p2)
+    duration = time.perf_counter() - start
+    print(f"  Point distance: {duration/iterations*1e6:.2f}µs per op ({iterations} iterations)")
 
 
 def test_point_area():
@@ -200,3 +254,5 @@ def test_point_centroid_quad():
     assert round(centroid.x, 6) == 0.5
     assert round(centroid.y, 6) == 0.5
     assert round(centroid.z, 6) == 0.0
+
+
