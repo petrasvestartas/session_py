@@ -11,13 +11,13 @@ def test_point_constructor():
     from .point import Point
     point = Point(1.0, 2.0, 3.0)
     point[0] = 10.0
-    MINI_CHECK(point.name, "my_point")
-    MINI_CHECK(bool(point.guid), True)
-    MINI_CHECK(point.x, 10.0)
-    MINI_CHECK(point.y, 2.0)
-    MINI_CHECK(point.z, 3.0)
-    MINI_CHECK(point.width, 1.0)
-    MINI_CHECK(point.pointcolor, Color.white())
+    MINI_CHECK(point.name == "my_point")
+    MINI_CHECK(bool(point.guid))
+    MINI_CHECK(point.x == 10.0)
+    MINI_CHECK(point.y == 2.0)
+    MINI_CHECK(point.z == 3.0)
+    MINI_CHECK(point.width == 1.0)
+    MINI_CHECK(point.pointcolor == Color.white())
 
 
 @MINI_TEST("Point", "equality_equal")
@@ -30,8 +30,8 @@ def test_point_equality_equal():
     neq_result = (p1 != p2)
 
     # Assertions at the end
-    MINI_CHECK(eq_result, True)
-    MINI_CHECK(neq_result, False)
+    MINI_CHECK(eq_result == True)
+    MINI_CHECK(neq_result == False)
 
 
 @MINI_TEST("Point", "equality_not_equal")
@@ -44,8 +44,8 @@ def test_point_equality_not_equal():
     neq_result = (p3 != p4)
 
     # Assertions at the end
-    MINI_CHECK(eq_result, False)
-    MINI_CHECK(neq_result, True)
+    MINI_CHECK(eq_result == False)
+    MINI_CHECK(neq_result == True)
 
 if __name__ == "__main__":
     run_all(language="python")
