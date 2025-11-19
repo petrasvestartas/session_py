@@ -1,4 +1,40 @@
 from .color import Color
+from .mini_test import MINI_TEST, MINI_CHECK, run_all
+
+
+@MINI_TEST("Color", "constructor")
+def mini_color_constructor():
+    red = Color(255, 0, 0, 255, "red")
+    MINI_CHECK(red.name == "red")
+    MINI_CHECK(red.guid != "")
+    MINI_CHECK(red.r == 255)
+    MINI_CHECK(red.g == 0)
+    MINI_CHECK(red.b == 0)
+    MINI_CHECK(red.a == 255)
+
+
+@MINI_TEST("Color", "equality_equal")
+def mini_color_equality_equal():
+    c1 = Color(0, 100, 50, 200)
+    c2 = Color(0, 100, 50, 200)
+
+    eq_result = (c1 == c2)
+    neq_result = (c1 != c2)
+
+    MINI_CHECK(eq_result == True)
+    MINI_CHECK(neq_result == False)
+
+
+@MINI_TEST("Color", "equality_not_equal")
+def mini_color_equality_not_equal():
+    c3 = Color(0, 100, 50, 200)
+    c4 = Color(1, 100, 50, 200)
+
+    eq_result = (c3 == c4)
+    neq_result = (c3 != c4)
+
+    MINI_CHECK(eq_result == False)
+    MINI_CHECK(neq_result == True)
 
 
 def test_color_constructor():
@@ -116,3 +152,7 @@ def test_color_grey():
     assert grey.g == 128
     assert grey.b == 128
     assert grey.a == 255
+
+
+if __name__ == "__main__":
+    run_all(language="python")

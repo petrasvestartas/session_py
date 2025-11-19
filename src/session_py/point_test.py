@@ -25,11 +25,9 @@ def test_point_equality_equal():
     p1 = Point(1.0, 2.0, 3.0)
     p2 = Point(1.0, 2.0, 3.0)
 
-    # Timed code: perform equality and inequality checks
     eq_result = (p1 == p2)
     neq_result = (p1 != p2)
 
-    # Assertions at the end
     MINI_CHECK(eq_result == True)
     MINI_CHECK(neq_result == False)
 
@@ -39,11 +37,9 @@ def test_point_equality_not_equal():
     p3 = Point(1.0, 2.0, 3.0)
     p4 = Point(1.1, 2.0, 3.0)
 
-    # Timed code: perform equality and inequality checks
     eq_result = (p3 == p4)
     neq_result = (p3 != p4)
 
-    # Assertions at the end
     MINI_CHECK(eq_result == False)
     MINI_CHECK(neq_result == True)
 
