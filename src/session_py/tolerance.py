@@ -36,6 +36,7 @@ class Tolerance:
     ANGULARDEFLECTION = 1e-1
     ANGLE_TOLERANCE_DEGREES = 0.11
     ZERO_TOLERANCE = 1e-12
+    ROUNDING = 6
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:

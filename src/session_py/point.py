@@ -3,6 +3,8 @@ import math
 from .color import Color
 from .xform import Xform
 from .vector import Vector
+from .tolerance import Tolerance
+import copy
 
 
 class Point:
@@ -23,12 +25,6 @@ class Point:
         The name of the point.
     guid : str
         The unique identifier of the point.
-    x : float
-        The X coordinate of the point.
-    y : float
-        The Y coordinate of the point.
-    z : float
-        The Z coordinate of the point.
     pointcolor : :class:`Color`
         The color of the point.
     width : float
@@ -43,59 +39,117 @@ class Point:
         self._y = y
         self._z = z
         self.width = 1.0
-        self.pointcolor = Color.white()
+        self.pointcolor = Color.blue()
         self.xform = Xform.identity()
 
-    @property
-    def x(self):
-        """Get the X coordinate."""
-        return self._x
+    def __deepcopy__(self, memo):
 
-    @x.setter
-    def x(self, value):
-        """Set the X coordinate."""
-        self._x = value
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
 
-    @property
-    def y(self):
-        """Get the Y coordinate."""
-        return self._y
+        # New guid
+        result.guid = str(uuid.uuid4())
 
-    @y.setter
-    def y(self, value):
-        """Set the Y coordinate."""
-        self._y = value
-
-    @property
-    def z(self):
-        """Get the Z coordinate."""
-        return self._z
-
-    @z.setter
-    def z(self, value):
-        """Set the Z coordinate."""
-        self._z = value
+        # Copy remaining fields
+        result.name = copy.deepcopy(self.name, memo)
+        result._x = self._x
+        result._y = self._y
+        result._z = self._z
+        result.width = self.width
+        result.pointcolor = copy.deepcopy(self.pointcolor, memo)
+        result.xform = copy.deepcopy(self.xform, memo)
+        return result
 
     def __str__(self):
-        from .tolerance import TOL
-
-        return f"Point(x={TOL.format_number(self.x)}, y={TOL.format_number(self.y)}, z={TOL.format_number(self.z)})"
+        return f"{self[0]}, {self[1]}, {self[2]}"
 
     def __repr__(self):
-        return f"Point({self.x}, {self.y}, {self.z}, {self.guid}, {self.name}, {self.pointcolor}, {self.width})"
+        return f"Point({self.name}, {self[0]}, {self[1]}, {self[2]}, {self.pointcolor}, {self.width})"
 
     def __eq__(self, other):
         return (
             self.name == other.name
-            and round(self.x, 6) == round(other.x, 6)
-            and round(self.y, 6) == round(other.y, 6)
-            and round(self.z, 6) == round(other.z, 6)
-            and round(self.width, 6) == round(other.width, 6)
+            and round(self[0], Tolerance.ROUNDING) == round(other[0], Tolerance.ROUNDING)
+            and round(self[1], Tolerance.ROUNDING) == round(other[1], Tolerance.ROUNDING)
+            and round(self[2], Tolerance.ROUNDING) == round(other[2], Tolerance.ROUNDING)
+            and round(self.width, Tolerance.ROUNDING) == round(other.width, Tolerance.ROUNDING)
             and self.pointcolor == other.pointcolor
+            and self.xform == other.xform
         )
 
     def __ne__(self, other):
         return not self == other
+
+    ###########################################################################################
+    # No-copy Operators
+    ###########################################################################################
+
+    def __getitem__(self, index):
+        if index == 0:
+            return self._x
+        elif index == 1:
+            return self._y
+        elif index == 2:
+            return self._z
+        else:
+            raise IndexError("Index out of range")
+
+    def __setitem__(self, index, value):
+        if index == 0:
+            self._x = value
+        elif index == 1:
+            self._y = value
+        elif index == 2:
+            self._z = value
+        else:
+            raise IndexError("Index out of range")
+
+    def __imul__(self, other):
+        self._x *= other
+        self._y *= other
+        self._z *= other
+        return self
+
+    def __itruediv__(self, other):
+        self._x /= other
+        self._y /= other
+        self._z /= other
+        return self
+
+    def __iadd__(self, other):
+        if isinstance(other, Vector):
+            self._x += other.x
+            self._y += other.y
+            self._z += other.z
+        else:
+            raise TypeError("Point can only be added with Vector")
+        return self
+
+    def __isub__(self, other):
+        if isinstance(other, Vector):
+            self._x -= other.x
+            self._y -= other.y
+            self._z -= other.z
+        else:
+            raise TypeError("Point can only be subtracted with Vector")
+        return self
+
+    ###########################################################################################
+    # Copy Operators
+    ###########################################################################################
+
+    def __mul__(self, other):
+        return Point(self[0] * other, self[1] * other, self[2] * other)
+
+    def __truediv__(self, other):
+        return Point(self[0] / other, self[1] / other, self[2] / other)
+
+    def __add__(self, other):
+        return Point(self[0] + other[0], self[1] + other[1], self[2] + other[2])
+
+    def __sub__(self, other):
+        return Vector(self[0] - other[0], self[1] - other[1], self[2] - other[2])
 
     ###########################################################################################
     # Transformation
@@ -120,97 +174,18 @@ class Point:
         Point
             A new transformed point.
         """
-        import copy
 
         result = copy.deepcopy(self)
         result.transform()
         return result
 
     ###########################################################################################
-    # No-copy Operators
-    ###########################################################################################
-
-    def __getitem__(self, index):
-        if index == 0:
-            return self.x
-        elif index == 1:
-            return self.y
-        elif index == 2:
-            return self.z
-        else:
-            raise IndexError("Index out of range")
-
-    def __setitem__(self, index, value):
-        if index == 0:
-            self.x = value
-        elif index == 1:
-            self.y = value
-        elif index == 2:
-            self.z = value
-        else:
-            raise IndexError("Index out of range")
-
-    def __imul__(self, other):
-        self.x *= other
-        self.y *= other
-        self.z *= other
-        return self
-
-    def __itruediv__(self, other):
-        self.x /= other
-        self.y /= other
-        self.z /= other
-        return self
-
-    def __iadd__(self, other):
-        if isinstance(other, Vector):
-            self.x += other.x
-            self.y += other.y
-            self.z += other.z
-        else:
-            raise TypeError("Point can only be added with Vector")
-        return self
-
-    def __isub__(self, other):
-        if isinstance(other, Vector):
-            self.x -= other.x
-            self.y -= other.y
-            self.z -= other.z
-        else:
-            raise TypeError("Point can only be subtracted with Vector")
-        return self
-
-    ###########################################################################################
-    # Copy Operators
-    ###########################################################################################
-
-    def __mul__(self, other):
-        return Point(self.x * other, self.y * other, self.z * other)
-
-    def __truediv__(self, other):
-        return Point(self.x / other, self.y / other, self.z / other)
-
-    def __add__(self, other):
-        if isinstance(other, Vector):
-            return Point(self.x + other.x, self.y + other.y, self.z + other.z)
-        raise TypeError("Point can only be added with Vector")
-
-    def __sub__(self, other):
-        if isinstance(other, Point):
-            return Vector(self.x - other.x, self.y - other.y, self.z - other.z)
-        elif isinstance(other, Vector):
-            return Point(self.x - other.x, self.y - other.y, self.z - other.z)
-        raise TypeError(
-            "Point can be subtracted with Point (returns Vector) or Vector (returns Point)"
-        )
-
-    ###########################################################################################
     # Details
     ###########################################################################################
 
     @staticmethod
-    def ccw(a, b, c):
-        """Check if the points are in counter-clockwise order.
+    def is_ccw(a, b, c):
+        """Check if the points are in counter-clockwise order on xy plane.
 
         Parameters
         ----------
@@ -228,7 +203,7 @@ class Point:
 
         """
 
-        return (c.y - a.y) * (b.x - a.x) > (b.y - a.y) * (c.x - a.x)
+        return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
 
     def mid_point(self, p):
         """Calculate the mid point between this point and another point.
@@ -245,7 +220,7 @@ class Point:
 
         """
 
-        return Point((self.x + p.x) / 2, (self.y + p.y) / 2, (self.z + p.z) / 2)
+        return Point((self[0] + p[0]) / 2, (self[1] + p[1]) / 2, (self[2] + p[2]) / 2)
 
     def distance(self, p, double_min=1e-12):
         """Calculate the distance between this point and another point.
@@ -278,6 +253,7 @@ class Point:
             y /= x
             z /= x
             length = x * math.sqrt(1.0 + y * y + z * z)
+        # For "almost zero" distances you approximate:
         elif x > 0.0 and math.isfinite(x):
             length = x
         else:
@@ -285,9 +261,48 @@ class Point:
 
         return length
 
+    def squared_distance(self, p, double_min=1e-12):
+        """Calculate the squared distance between this point and another point.
+
+        Parameters
+        ----------
+        p : :class:`Point`
+            The other point.
+        double_min : float, optional
+            The minimum value for the distance. Defaults to 1e-12.
+
+        Returns
+        -------
+        float
+            The distance between this point and the other point.
+
+        """
+
+        x = abs(self[0] - p[0])
+        y = abs(self[1] - p[1])
+        z = abs(self[2] - p[2])
+        length = 0.0
+
+        if y >= x and y >= z:
+            length, x, y = x, y, x
+        elif z >= x and z >= y:
+            length, x, z = x, z, x
+
+        if x > double_min:
+            y /= x
+            z /= x
+            length = x * x * (1.0 + y * y + z * z)
+        # For "almost zero" distances you approximate:
+        elif x > 0.0 and math.isfinite(x):
+            length = x * x
+        else:
+            length = 0.0
+
+        return length
+
     @staticmethod
     def area(points):
-        """Calculate the area of a polygon.
+        """Calculate the area of a 2d polygon.
 
         Parameters
         ----------
@@ -370,9 +385,9 @@ class Point:
             "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
-            "x": self.x,
-            "y": self.y,
-            "z": self.z,
+            "x": self[0],
+            "y": self[1],
+            "z": self[2],
             "width": self.width,
             "pointcolor": self.pointcolor.__jsondump__(),
         }

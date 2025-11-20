@@ -1,254 +1,204 @@
-from .point import Point
-from .vector import Vector
-from .color import Color
 from .mini_test import MINI_TEST, MINI_CHECK, run_all
 
 # /home/petras/code/code_session/uvsession/bin/python -m session_py.point_test
 
 
-@MINI_TEST("Point", "constructor")
+@MINI_TEST("Point", "constructor, setters, getters, string, copy, operators")
 def test_point_constructor():
-    from .point import Point
-    point = Point(1.0, 2.0, 3.0)
-    point[0] = 10.0
-    MINI_CHECK(point.name == "my_point")
-    MINI_CHECK(bool(point.guid))
-    MINI_CHECK(point.x == 10.0)
-    MINI_CHECK(point.y == 2.0)
-    MINI_CHECK(point.z == 3.0)
-    MINI_CHECK(point.width == 1.0)
-    MINI_CHECK(point.pointcolor == Color.white())
+
+    from session_py.point import Point
+    from session_py.vector import Vector
+    from session_py.color import Color
+    import copy
+
+    # Constructor
+    p = Point(1.0, 2.0, 3.0)
+
+    # Setters
+    p[0] = 10.0
+    p[1] = 20.0
+    p[2] = 30.0
+
+    # Getters
+    x = p[0]
+    y = p[1]
+    z = p[2]
+
+    # String  representation
+    pstr = str(p)
+    prepr = repr(p)
+
+    # Copy (deepcopy duplicates everything except guid)
+    pcopy = copy.deepcopy(p)
+    pother = Point(1.0, 2.0, 3.0)
+
+    # No-copy operators
+    pmult = copy.deepcopy(p)
+    pmult *= 2.0
+    pdiv = copy.deepcopy(p)
+    pdiv /= 2.0
+    padd = copy.deepcopy(p)
+    padd += Vector(1.0, 1.0, 1.0)
+    psub = copy.deepcopy(p)
+    psub -= Vector(1.0, 1.0, 1.0)
+
+    # Copy operators
+    result_mul = p * 2.0
+    result_div = p / 2.0
+    result_add = p + Vector(1.0, 1.0, 1.0) # Works with point too
+    diff_point = p - Vector(1.0, 1.0, 1.0) # Works with point too
+
+    MINI_CHECK(p.name == "my_point" and p[0] == 10.0 and p[1] == 20.0 and p[2] == 30.0 and p.width == 1.0 and p.pointcolor == Color.blue() and p.guid)
+    
+    MINI_CHECK(x == 10.0 and y == 20.0 and z == 30.0)
+    
+    MINI_CHECK(pstr == "10.0, 20.0, 30.0")
+    MINI_CHECK(prepr == "Point(my_point, 10.0, 20.0, 30.0, Color(0, 0, 255, 255), 1.0)")
+    MINI_CHECK(pcopy == p and pcopy.guid != p.guid)
+    MINI_CHECK(pother != p)
+
+    MINI_CHECK(pmult[0] == 20.0 and pmult[1] == 40.0 and pmult[2] == 60.0)
+    MINI_CHECK(pdiv[0] == 5.0 and pdiv[1] == 10.0 and pdiv[2] == 15.0)
+    MINI_CHECK(padd[0] == 11.0 and padd[1] == 21.0 and padd[2] == 31.0)
+    MINI_CHECK(psub[0] == 9.0 and psub[1] == 19.0 and psub[2] == 29.0)
+
+    MINI_CHECK(result_mul[0] == 20.0 and result_mul[1] == 40.0 and result_mul[2] == 60.0)
+    MINI_CHECK(result_div[0] == 5.0 and result_div[1] == 10.0 and result_div[2] == 15.0)
+    MINI_CHECK(result_add[0] == 11.0 and result_add[1] == 21.0 and result_add[2] == 31.0)
+    MINI_CHECK(diff_point[0] == 9.0 and diff_point[1] == 19.0 and diff_point[2] == 29.0)
 
 
-@MINI_TEST("Point", "equality_equal")
-def test_point_equality_equal():
-    p1 = Point(1.0, 2.0, 3.0)
-    p2 = Point(1.0, 2.0, 3.0)
+@MINI_TEST("Point", "transformation")
+def test_transformation():
 
-    eq_result = (p1 == p2)
-    neq_result = (p1 != p2)
+    from session_py.point import Point
+    from session_py.xform import Xform
+    
+    p = Point(1.0, 2.0, 3.0)
+    p.xform = Xform.translation(1.0, 2.0, 3.0)
 
-    MINI_CHECK(eq_result == True)
-    MINI_CHECK(neq_result == False)
+    p_transformed = p.transformed() # Make a copy
+    p.transform() # After transform, xform is reset to identity
 
-
-@MINI_TEST("Point", "equality_not_equal")
-def test_point_equality_not_equal():
-    p3 = Point(1.0, 2.0, 3.0)
-    p4 = Point(1.1, 2.0, 3.0)
-
-    eq_result = (p3 == p4)
-    neq_result = (p3 != p4)
-
-    MINI_CHECK(eq_result == False)
-    MINI_CHECK(neq_result == True)
-
-if __name__ == "__main__":
-    run_all(language="python")
-
-###########################################################################################
-# JSON
-###########################################################################################
+    MINI_CHECK(p_transformed[0] == 2.0 and p_transformed[1] == 4.0 and p_transformed[2] == 6.0)
+    MINI_CHECK(p[0] == 2.0 and p[1] == 4.0 and p[2] == 6.0)
+    MINI_CHECK(p.xform == Xform.identity())
 
 
+@MINI_TEST("Point", "is_ccw")
+def test_is_ccw():
+
+    from session_py.point import Point
+    
+    p0 = Point(0.0, 0.0, 0.0)
+    p1 = Point(1.0, 0.0, 0.0)
+    p2 = Point(0.05, 1.0, 0.0)
+
+    # Points must be oriented to xy plane.
+    is_counter_clock_wise = Point.is_ccw(p0, p1, p2)
+    is_clock_wise = Point.is_ccw(p2, p1, p0)
+    
+    MINI_CHECK(is_counter_clock_wise)
+    MINI_CHECK(not is_clock_wise)
+
+
+@MINI_TEST("Point", "mid_point")
+def test_mid_point():
+
+    from session_py.point import Point
+    
+    p0 = Point(0.0, 2.0, 1.0)
+    p1 = Point(1.0, 5.0, 3.0)
+    mid = Point.mid_point(p0, p1)
+    
+    MINI_CHECK(mid[0] == 0.5 and mid[1] == 3.5 and mid[2] == 2.0)
+
+
+@MINI_TEST("Point", "distance")
+def test_distance():
+
+    from session_py.point import Point
+    from session_py.tolerance import Tolerance
+    
+    p0 = Point(0.0, 2.0, 1.0)
+    p1 = Point(1.0, 5.0, 3.0)
+    d = round(Point.distance(p0, p1), Tolerance.ROUNDING)
+    
+    MINI_CHECK(d == 3.741657)
+
+
+@MINI_TEST("Point", "squared_distance")
+def test_squared_distance():
+
+    from session_py.point import Point
+    from session_py.tolerance import Tolerance
+    
+    p0 = Point(0.0, 2.0, 1.0)
+    p1 = Point(1.0, 5.0, 3.0)
+    d = round(Point.squared_distance(p0, p1), Tolerance.ROUNDING)
+    
+    MINI_CHECK(d == 14.0)
+
+
+@MINI_TEST("Point", "area")
+def test_area():
+
+    from session_py.point import Point
+    
+    p0 = Point(0.0, 0.0, 0.0)
+    p1 = Point(2.0, 0.0, 0.0)
+    p2 = Point(2.0, 2.0, 0.0)
+    p3 = Point(0.0, 2.0, 0.0)
+    area = Point.area([p0, p1, p2, p3])
+    
+    MINI_CHECK(area == 4.0)
+
+
+@MINI_TEST("Point", "centroid_quad")
+def test_centroid_quad():
+
+    from session_py.point import Point
+    from session_py.tolerance import Tolerance
+    
+    p0 = Point(0.0, 0.0, 0.0)
+    p1 = Point(2.0, 0.0, 1.0)
+    p2 = Point(2.0, 2.0, 2.0)
+    p3 = Point(0.0, 2.0, 1.0)
+    centroid = Point.centroid_quad([p0, p1, p2, p3])
+    x = round(centroid[0], Tolerance.ROUNDING)
+    y = round(centroid[1], Tolerance.ROUNDING)
+    z = round(centroid[2], Tolerance.ROUNDING)
+    
+    MINI_CHECK(x == 1.0 and y == 1.0 and z == 1.0)
+
+
+@MINI_TEST("Point", "json_roundtrip")
 def test_point_json_roundtrip():
+
+    from session_py.point import Point
+    from session_py.color import Color
     from pathlib import Path
     from session_py.encoders import json_dump, json_load
 
-    point = Point(1.5, 2.5, 3.5)
-    point.name = "test_point"
-    point.width = 2.0
-    point.pointcolor = Color(255, 128, 64, 255)
+    p = Point(1.5, 2.5, 3.5)
+    p.name = "test_point"
+    p.width = 2.0
+    p.pointcolor = Color(255, 128, 64, 255)
 
     path = Path(__file__).resolve().parents[2] / "test_point.json"
-    json_dump(point, path)
+    json_dump(p, path)
     loaded = json_load(path)
 
-    assert isinstance(loaded, Point)
-    assert loaded.x == point.x
-    assert loaded.y == point.y
-    assert loaded.z == point.z
-    assert loaded.name == point.name
-    assert loaded.width == point.width
-    assert loaded.pointcolor.r == 255
+    MINI_CHECK(isinstance(loaded, Point))
+    MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded[0] == p[0])
+    MINI_CHECK(loaded[1] == p[1])
+    MINI_CHECK(loaded[2] == p[2])
+    MINI_CHECK(loaded.width == p.width)
+    MINI_CHECK(loaded.pointcolor.r == 255)
+    MINI_CHECK(loaded.pointcolor.g == 128)
+    MINI_CHECK(loaded.pointcolor.b == 64)
+    MINI_CHECK(loaded.pointcolor.a == 255)
 
-
-###########################################################################################
-# No-copy Operators
-###########################################################################################
-
-
-def test_point_getitem():
-    import time
-    
-    point = Point(1.0, 2.0, 3.0)
-    assert point[0] == 1.0
-    assert point[1] == 2.0
-    assert point[2] == 3.0
-    
-    # Benchmark
-    iterations = 100_000
-    start = time.perf_counter()
-    for _ in range(iterations):
-        _ = point[0] + point[1] + point[2]
-    duration = time.perf_counter() - start
-    print(f"  Point indexing: {duration/iterations*1e6:.2f}µs per op ({iterations} iterations)")
-
-
-def test_point_setitem():
-    point = Point(1.0, 2.0, 3.0)
-    point[0] = 4.0
-    point[1] = 5.0
-    point[2] = 6.0
-    assert point.x == 4.0
-    assert point.y == 5.0
-    assert point.z == 6.0
-
-
-def test_point_imul():
-    point = Point(1.0, 2.0, 3.0)
-    point *= 2.0
-    assert point.x == 2.0
-    assert point.y == 4.0
-    assert point.z == 6.0
-
-
-def test_point_itruediv():
-    point = Point(2.0, 4.0, 6.0)
-    point /= 2.0
-    assert point.x == 1.0
-    assert point.y == 2.0
-    assert point.z == 3.0
-
-
-def test_point_iadd():
-    point = Point(1.0, 2.0, 3.0)
-    vec = Vector(4.0, 5.0, 6.0)
-    point += vec
-    assert point.x == 5.0
-    assert point.y == 7.0
-    assert point.z == 9.0
-
-
-def test_point_isub():
-    point = Point(5.0, 7.0, 9.0)
-    vec = Vector(4.0, 5.0, 6.0)
-    point -= vec
-    assert point.x == 1.0
-    assert point.y == 2.0
-    assert point.z == 3.0
-
-
-###########################################################################################
-# Copy Operators
-###########################################################################################
-
-
-def test_point_mul():
-    point = Point(1.0, 2.0, 3.0)
-    result = point * 2.0
-    assert result.x == 2.0
-    assert result.y == 4.0
-    assert result.z == 6.0
-
-
-def test_point_truediv():
-    point = Point(2.0, 4.0, 6.0)
-    result = point / 2.0
-    assert result.x == 1.0
-    assert result.y == 2.0
-    assert result.z == 3.0
-
-
-def test_point_add():
-    point = Point(1.0, 2.0, 3.0)
-    vec = Vector(4.0, 5.0, 6.0)
-    result = point + vec
-    assert result.x == 5.0
-    assert result.y == 7.0
-    assert result.z == 9.0
-
-
-def test_point_sub():
-    p1 = Point(5.0, 7.0, 9.0)
-    p2 = Point(4.0, 5.0, 6.0)
-    result = p1 - p2
-    assert isinstance(result, Vector)
-    assert result.x == 1.0
-    assert result.y == 2.0
-    assert result.z == 3.0
-
-    vec = Vector(1.0, 1.0, 1.0)
-    result2 = p1 - vec
-    assert isinstance(result2, Point)
-    assert result2.x == 4.0
-    assert result2.y == 6.0
-    assert result2.z == 8.0
-
-
-###########################################################################################
-# Details
-###########################################################################################
-
-
-def test_point_ccw():
-    a = Point(0.0, 0.0, 0.0)
-    b = Point(1.0, 0.0, 0.0)
-    c = Point(0.0, 1.0, 0.0)
-    assert Point.ccw(a, b, c)
-    assert not Point.ccw(b, a, c)
-
-
-def test_point_mid_point():
-    import time
-    
-    p1 = Point(0.0, 0.0, 0.0)
-    p2 = Point(1.0, 0.0, 0.0)
-    mid = p1.mid_point(p2)
-    assert round(mid.x, 6) == 0.5
-    assert round(mid.y, 6) == 0.0
-    assert round(mid.z, 6) == 0.0
-    
-    # Benchmark
-    iterations = 100_000
-    start = time.perf_counter()
-    for _ in range(iterations):
-        _ = p1.mid_point(p2)
-    duration = time.perf_counter() - start
-    print(f"  Point midpoint: {duration/iterations*1e6:.2f}µs per op ({iterations} iterations)")
-
-
-def test_point_distance():
-    import time
-    
-    p1 = Point(0.0, 0.0, 0.0)
-    p2 = Point(1.0, 0.0, 0.0)
-    assert round(p1.distance(p2), 6) == 1.0
-    
-    # Benchmark
-    iterations = 100_000
-    start = time.perf_counter()
-    for _ in range(iterations):
-        _ = p1.distance(p2)
-    duration = time.perf_counter() - start
-    print(f"  Point distance: {duration/iterations*1e6:.2f}µs per op ({iterations} iterations)")
-
-
-def test_point_area():
-    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
-    assert Point.area(points) == 0.5
-
-
-def test_point_centroid_quad():
-    vertices = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-    ]
-    centroid = Point.centroid_quad(vertices)
-    assert round(centroid.x, 6) == 0.5
-    assert round(centroid.y, 6) == 0.5
-    assert round(centroid.z, 6) == 0.0
-
-
+if __name__ == "__main__":
+    run_all(language="python")

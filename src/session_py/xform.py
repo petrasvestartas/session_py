@@ -34,6 +34,11 @@ class Xform:
         else:
             self.m = list(m)
 
+    def __eq__(self, other):
+        if not isinstance(other, Xform):
+            return False
+        return self.m == other.m
+
     @staticmethod
     def identity():
         return Xform()
@@ -445,9 +450,9 @@ class Xform:
         )
 
     def transformed_vector(self, vector):
-        x = vector.x
-        y = vector.y
-        z = vector.z
+        x = vector[0]
+        y = vector[1]
+        z = vector[2]
         return Vector(
             self.m[0] * x + self.m[4] * y + self.m[8] * z,
             self.m[1] * x + self.m[5] * y + self.m[9] * z,
@@ -455,19 +460,19 @@ class Xform:
         )
 
     def transform_point(self, point):
-        x = point.x
-        y = point.y
-        z = point.z
+        x = point[0]
+        y = point[1]
+        z = point[2]
         w = self.m[3] * x + self.m[7] * y + self.m[11] * z + self.m[15]
         w_inv = 1.0 / w if abs(w) > 1e-10 else 1.0
-        point.x = (self.m[0] * x + self.m[4] * y + self.m[8] * z + self.m[12]) * w_inv
-        point.y = (self.m[1] * x + self.m[5] * y + self.m[9] * z + self.m[13]) * w_inv
-        point.z = (self.m[2] * x + self.m[6] * y + self.m[10] * z + self.m[14]) * w_inv
+        point[0] = (self.m[0] * x + self.m[4] * y + self.m[8] * z + self.m[12]) * w_inv
+        point[1] = (self.m[1] * x + self.m[5] * y + self.m[9] * z + self.m[13]) * w_inv
+        point[2] = (self.m[2] * x + self.m[6] * y + self.m[10] * z + self.m[14]) * w_inv
 
     def transform_vector(self, vector):
-        x = vector.x
-        y = vector.y
-        z = vector.z
+        x = vector[0]
+        y = vector[1]
+        z = vector[2]
         vector.x = self.m[0] * x + self.m[4] * y + self.m[8] * z
         vector.y = self.m[1] * x + self.m[5] * y + self.m[9] * z
         vector.z = self.m[2] * x + self.m[6] * y + self.m[10] * z
