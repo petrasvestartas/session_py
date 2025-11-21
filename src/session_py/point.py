@@ -61,7 +61,7 @@ class Point:
         result.xform = copy.deepcopy(self.xform, memo)
         return result
 
-    def deepcopy(self):
+    def duplicate(self):
         return copy.deepcopy(self)
 
     def __str__(self):

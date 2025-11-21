@@ -22,22 +22,22 @@ def test_point_constructor():
     y = p[1]
     z = p[2]
 
-    # String  representation
+    # Minimal and Full String Representation
     pstr = str(p)
-    prepr = repr(p)
+    prepr = repr(p) 
 
     # Copy (duplicates everything except guid)
-    pcopy = p.deepcopy()
+    pcopy = p.duplicate()
     pother = Point(1.0, 2.0, 3.0)
 
     # No-copy operators
-    pmult = p.deepcopy()
+    pmult = p.duplicate()
     pmult *= 2.0
-    pdiv = p.deepcopy()
+    pdiv = p.duplicate()
     pdiv /= 2.0
-    padd = p.deepcopy()
+    padd = p.duplicate()
     padd += Vector(1.0, 1.0, 1.0)
-    psub = p.deepcopy()
+    psub = p.duplicate()
     psub -= Vector(1.0, 1.0, 1.0)
 
     # Copy operators
@@ -75,14 +75,13 @@ def test_point_constructor():
 
 @MINI_TEST("Point", "transformation")
 def test_transformation():
-
-    from session_py import Point, Xform
+    from session_py import Point
+    from session_py import Xform
     
     p = Point(1.0, 2.0, 3.0)
     p.xform = Xform.translation(1.0, 2.0, 3.0)
-
     p_transformed = p.transformed() # Make a copy
-    p.transform() # After transform, xform is reset to identity
+    p.transform() # After the call, "xform" is reset
 
     MINI_CHECK(p_transformed[0] == 2.0 and p_transformed[1] == 4.0 and p_transformed[2] == 6.0)
     MINI_CHECK(p[0] == 2.0 and p[1] == 4.0 and p[2] == 6.0)
@@ -91,7 +90,6 @@ def test_transformation():
 
 @MINI_TEST("Point", "is_ccw")
 def test_is_ccw():
-
     from session_py import Point
     
     p0 = Point(0.0, 0.0, 0.0)
@@ -108,7 +106,6 @@ def test_is_ccw():
 
 @MINI_TEST("Point", "mid_point")
 def test_mid_point():
-
     from session_py import Point
     
     p0 = Point(0.0, 2.0, 1.0)
