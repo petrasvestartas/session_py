@@ -1,4 +1,4 @@
-from session_py.vertex import Vertex
+from session_py import Vertex
 
 
 def test_vertex_json_roundtrip():

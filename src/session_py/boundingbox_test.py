@@ -1,7 +1,4 @@
-from session_py.boundingbox import BoundingBox
-from session_py.point import Point
-from session_py.vector import Vector
-from session_py.plane import Plane
+from session_py import BoundingBox, Point, Vector, Plane
 
 
 def test_box_default_constructor():

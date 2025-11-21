@@ -61,6 +61,9 @@ class Point:
         result.xform = copy.deepcopy(self.xform, memo)
         return result
 
+    def deepcopy(self):
+        return copy.deepcopy(self)
+
     def __str__(self):
         return f"{self[0]}, {self[1]}, {self[2]}"
 

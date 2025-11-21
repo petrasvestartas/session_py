@@ -1,9 +1,6 @@
 """Tests for Polyline class."""
 
-from session_py.plane import Plane
-from session_py.point import Point
-from session_py.polyline import Polyline
-from session_py.vector import Vector
+from session_py import Plane, Point, Polyline, Vector
 
 
 def test_polyline_new():

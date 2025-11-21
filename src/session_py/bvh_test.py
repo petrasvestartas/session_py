@@ -8,9 +8,7 @@ from session_py.bvh import (
     expand_bits,
     calculate_morton_code,
 )
-from session_py.point import Point
-from session_py.vector import Vector
-from session_py.boundingbox import BoundingBox
+from session_py import Point, Vector, BoundingBox
 
 
 def test_expand_bits():

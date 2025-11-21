@@ -5,10 +5,9 @@ from .mini_test import MINI_TEST, MINI_CHECK, run_all
 
 @MINI_TEST("Point", "constructor")
 def test_point_constructor():
-    from session_py.point import Point
-    from session_py.vector import Vector
-    from session_py.color import Color
-    import copy
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Color
 
     # Constructor
     p = Point(1.0, 2.0, 3.0)
@@ -28,17 +27,17 @@ def test_point_constructor():
     prepr = repr(p)
 
     # Copy (duplicates everything except guid)
-    pcopy = copy.deepcopy(p)
+    pcopy = p.deepcopy()
     pother = Point(1.0, 2.0, 3.0)
 
     # No-copy operators
-    pmult = copy.deepcopy(p)
+    pmult = p.deepcopy()
     pmult *= 2.0
-    pdiv = copy.deepcopy(p)
+    pdiv = p.deepcopy()
     pdiv /= 2.0
-    padd = copy.deepcopy(p)
+    padd = p.deepcopy()
     padd += Vector(1.0, 1.0, 1.0)
-    psub = copy.deepcopy(p)
+    psub = p.deepcopy()
     psub -= Vector(1.0, 1.0, 1.0)
 
     # Copy operators
@@ -77,8 +76,7 @@ def test_point_constructor():
 @MINI_TEST("Point", "transformation")
 def test_transformation():
 
-    from session_py.point import Point
-    from session_py.xform import Xform
+    from session_py import Point, Xform
     
     p = Point(1.0, 2.0, 3.0)
     p.xform = Xform.translation(1.0, 2.0, 3.0)
@@ -94,7 +92,7 @@ def test_transformation():
 @MINI_TEST("Point", "is_ccw")
 def test_is_ccw():
 
-    from session_py.point import Point
+    from session_py import Point
     
     p0 = Point(0.0, 0.0, 0.0)
     p1 = Point(1.0, 0.0, 0.0)
@@ -111,7 +109,7 @@ def test_is_ccw():
 @MINI_TEST("Point", "mid_point")
 def test_mid_point():
 
-    from session_py.point import Point
+    from session_py import Point
     
     p0 = Point(0.0, 2.0, 1.0)
     p1 = Point(1.0, 5.0, 3.0)
@@ -123,8 +121,7 @@ def test_mid_point():
 @MINI_TEST("Point", "distance")
 def test_distance():
 
-    from session_py.point import Point
-    from session_py.tolerance import Tolerance
+    from session_py import Point, Tolerance
     
     p0 = Point(0.0, 2.0, 1.0)
     p1 = Point(1.0, 5.0, 3.0)
@@ -136,8 +133,7 @@ def test_distance():
 @MINI_TEST("Point", "squared_distance")
 def test_squared_distance():
 
-    from session_py.point import Point
-    from session_py.tolerance import Tolerance
+    from session_py import Point, Tolerance
     
     p0 = Point(0.0, 2.0, 1.0)
     p1 = Point(1.0, 5.0, 3.0)
@@ -149,7 +145,7 @@ def test_squared_distance():
 @MINI_TEST("Point", "area")
 def test_area():
 
-    from session_py.point import Point
+    from session_py import Point
     
     p0 = Point(0.0, 0.0, 0.0)
     p1 = Point(2.0, 0.0, 0.0)
@@ -163,8 +159,7 @@ def test_area():
 @MINI_TEST("Point", "centroid_quad")
 def test_centroid_quad():
 
-    from session_py.point import Point
-    from session_py.tolerance import Tolerance
+    from session_py import Point, Tolerance
     
     p0 = Point(0.0, 0.0, 0.0)
     p1 = Point(2.0, 0.0, 1.0)
@@ -181,8 +176,7 @@ def test_centroid_quad():
 @MINI_TEST("Point", "json_roundtrip")
 def test_point_json_roundtrip():
 
-    from session_py.point import Point
-    from session_py.color import Color
+    from session_py import Point, Color
     from pathlib import Path
     from session_py.encoders import json_dump, json_load
 

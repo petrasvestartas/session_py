@@ -1,4 +1,4 @@
-from session_py.edge import Edge
+from session_py import Edge
 
 
 def test_edge_json_roundtrip():

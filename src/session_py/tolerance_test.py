@@ -1,5 +1,5 @@
 from session_py.tolerance import TOL, Tolerance
-from session_py.point import Point
+from session_py import Point
 
 
 def test_tolerance_default_tolerance():
