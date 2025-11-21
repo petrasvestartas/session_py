@@ -3,7 +3,7 @@ from .mini_test import MINI_TEST, MINI_CHECK, run_all
 # /home/petras/code/code_session/uvsession/bin/python -m session_py.point_test
 
 
-@MINI_TEST("Point", "constructor, setters, getters, string, copy, operators")
+@MINI_TEST("Point", "constructor")
 def test_point_constructor():
     from session_py.point import Point
     from session_py.vector import Vector
