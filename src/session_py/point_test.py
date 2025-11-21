@@ -5,7 +5,6 @@ from .mini_test import MINI_TEST, MINI_CHECK, run_all
 
 @MINI_TEST("Point", "constructor, setters, getters, string, copy, operators")
 def test_point_constructor():
-
     from session_py.point import Point
     from session_py.vector import Vector
     from session_py.color import Color
@@ -28,7 +27,7 @@ def test_point_constructor():
     pstr = str(p)
     prepr = repr(p)
 
-    # Copy (deepcopy duplicates everything except guid)
+    # Copy (duplicates everything except guid)
     pcopy = copy.deepcopy(p)
     pother = Point(1.0, 2.0, 3.0)
 
@@ -48,7 +47,14 @@ def test_point_constructor():
     result_add = p + Vector(1.0, 1.0, 1.0) # Works with point too
     diff_point = p - Vector(1.0, 1.0, 1.0) # Works with point too
 
-    MINI_CHECK(p.name == "my_point" and p[0] == 10.0 and p[1] == 20.0 and p[2] == 30.0 and p.width == 1.0 and p.pointcolor == Color.blue() and p.guid)
+    MINI_CHECK(
+        p.name == "my_point" and
+        p[0] == 10.0 and 
+        p[1] == 20.0 and 
+        p[2] == 30.0 and
+        p.width == 1.0 and
+        p.pointcolor == Color.blue() and
+        p.guid)
     
     MINI_CHECK(x == 10.0 and y == 20.0 and z == 30.0)
     
