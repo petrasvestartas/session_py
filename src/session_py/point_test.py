@@ -118,24 +118,26 @@ def test_mid_point():
 @MINI_TEST("Point", "distance")
 def test_distance():
 
-    from session_py import Point, Tolerance
-    
+    from session_py import Point
+    from session_py import Tolerance
+
     p0 = Point(0.0, 2.0, 1.0)
     p1 = Point(1.0, 5.0, 3.0)
     d = round(Point.distance(p0, p1), Tolerance.ROUNDING)
-    
+
     MINI_CHECK(d == 3.741657)
 
 
 @MINI_TEST("Point", "squared_distance")
 def test_squared_distance():
 
-    from session_py import Point, Tolerance
-    
+    from session_py import Point
+    from session_py import Tolerance
+
     p0 = Point(0.0, 2.0, 1.0)
     p1 = Point(1.0, 5.0, 3.0)
     d = round(Point.squared_distance(p0, p1), Tolerance.ROUNDING)
-    
+
     MINI_CHECK(d == 14.0)
 
 
@@ -156,8 +158,9 @@ def test_area():
 @MINI_TEST("Point", "centroid_quad")
 def test_centroid_quad():
 
-    from session_py import Point, Tolerance
-    
+    from session_py import Point
+    from session_py import Tolerance
+
     p0 = Point(0.0, 0.0, 0.0)
     p1 = Point(2.0, 0.0, 1.0)
     p2 = Point(2.0, 2.0, 2.0)
@@ -166,16 +169,17 @@ def test_centroid_quad():
     x = round(centroid[0], Tolerance.ROUNDING)
     y = round(centroid[1], Tolerance.ROUNDING)
     z = round(centroid[2], Tolerance.ROUNDING)
-    
+
     MINI_CHECK(x == 1.0 and y == 1.0 and z == 1.0)
 
 
 @MINI_TEST("Point", "json_roundtrip")
 def test_point_json_roundtrip():
 
-    from session_py import Point, Color
-    from pathlib import Path
+    from session_py import Point
+    from session_py import Color
     from session_py.encoders import json_dump, json_load
+    from pathlib import Path
 
     p = Point(1.5, 2.5, 3.5)
     p.name = "test_point"
@@ -196,6 +200,35 @@ def test_point_json_roundtrip():
     MINI_CHECK(loaded.pointcolor.g == 128)
     MINI_CHECK(loaded.pointcolor.b == 64)
     MINI_CHECK(loaded.pointcolor.a == 255)
+
+
+@MINI_TEST("Point", "protobuf_roundtrip")
+def test_point_protobuf_roundtrip():
+
+    from session_py import Point
+    from session_py import Color
+    from pathlib import Path
+
+    p = Point(1.5, 2.5, 3.5)
+    p.name = "test_point"
+    p.width = 2.0
+    p.pointcolor = Color(255, 128, 64, 255)
+
+    path = Path(__file__).resolve().parents[2] / "test_point.bin"
+    p.protobuf_dump(path)
+    loaded = Point.protobuf_load(path)
+
+    MINI_CHECK(isinstance(loaded, Point))
+    MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded[0] == p[0])
+    MINI_CHECK(loaded[1] == p[1])
+    MINI_CHECK(loaded[2] == p[2])
+    MINI_CHECK(loaded.width == p.width)
+    MINI_CHECK(loaded.pointcolor.r == 255)
+    MINI_CHECK(loaded.pointcolor.g == 128)
+    MINI_CHECK(loaded.pointcolor.b == 64)
+    MINI_CHECK(loaded.pointcolor.a == 255)
+
 
 if __name__ == "__main__":
     run_all(language="python")

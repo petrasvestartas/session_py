@@ -393,6 +393,7 @@ class Point:
             "z": self[2],
             "width": self.width,
             "pointcolor": self.pointcolor.__jsondump__(),
+            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -414,3 +415,76 @@ class Point:
             pt.xform = decode_node(data["xform"])
 
         return pt
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format."""
+        from .proto import point_pb2
+        
+        proto = point_pb2.Point()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.x = self[0]
+        proto.y = self[1]
+        proto.z = self[2]
+        proto.width = self.width
+        
+        # Set color (no guid in proto schema)
+        proto.pointcolor.name = self.pointcolor.name
+        proto.pointcolor.r = self.pointcolor.r
+        proto.pointcolor.g = self.pointcolor.g
+        proto.pointcolor.b = self.pointcolor.b
+        proto.pointcolor.a = self.pointcolor.a
+        
+        # Set xform (uses 'matrix' not 'm', no guid in proto schema)
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+        
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data):
+        """Create Point from protobuf binary data."""
+        from .proto import point_pb2
+        from .color import Color
+        from .xform import Xform
+        
+        proto = point_pb2.Point()
+        proto.ParseFromString(data)
+        
+        pt = cls(proto.x, proto.y, proto.z)
+        pt.guid = proto.guid
+        pt.name = proto.name
+        pt.width = proto.width
+        
+        # Load color (no guid in proto schema)
+        pt.pointcolor = Color(
+            proto.pointcolor.r,
+            proto.pointcolor.g,
+            proto.pointcolor.b,
+            proto.pointcolor.a
+        )
+        pt.pointcolor.name = proto.pointcolor.name
+        
+        # Load xform (uses 'matrix' not 'm', no guid in proto schema)
+        pt.xform = Xform()
+        pt.xform.name = proto.xform.name
+        pt.xform.m = list(proto.xform.matrix)
+        
+        return pt
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file."""
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file."""
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)
