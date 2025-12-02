@@ -58,7 +58,7 @@ def test_point_constructor():
     MINI_CHECK(x == 10.0 and y == 20.0 and z == 30.0)
     
     MINI_CHECK(pstr == "10.0, 20.0, 30.0")
-    MINI_CHECK(prepr == "Point(my_point, 10.0, 20.0, 30.0, Color(0, 0, 255, 255), 1.0)")
+    MINI_CHECK(prepr == "Point(my_point, 10.0, 20.0, 30.0, Color(blue, 0, 0, 255, 255), 1.0)")
     MINI_CHECK(pcopy == p and pcopy.guid != p.guid)
     MINI_CHECK(pother != p)
 
@@ -196,10 +196,10 @@ def test_point_json_roundtrip():
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])
     MINI_CHECK(loaded.width == p.width)
-    MINI_CHECK(loaded.pointcolor.r == 255)
-    MINI_CHECK(loaded.pointcolor.g == 128)
-    MINI_CHECK(loaded.pointcolor.b == 64)
-    MINI_CHECK(loaded.pointcolor.a == 255)
+    MINI_CHECK(loaded.pointcolor[0] == 255)
+    MINI_CHECK(loaded.pointcolor[1] == 128)
+    MINI_CHECK(loaded.pointcolor[2] == 64)
+    MINI_CHECK(loaded.pointcolor[3] == 255)
 
 
 @MINI_TEST("Point", "protobuf_roundtrip")
@@ -224,10 +224,10 @@ def test_point_protobuf_roundtrip():
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])
     MINI_CHECK(loaded.width == p.width)
-    MINI_CHECK(loaded.pointcolor.r == 255)
-    MINI_CHECK(loaded.pointcolor.g == 128)
-    MINI_CHECK(loaded.pointcolor.b == 64)
-    MINI_CHECK(loaded.pointcolor.a == 255)
+    MINI_CHECK(loaded.pointcolor[0] == 255)
+    MINI_CHECK(loaded.pointcolor[1] == 128)
+    MINI_CHECK(loaded.pointcolor[2] == 64)
+    MINI_CHECK(loaded.pointcolor[3] == 255)
 
 
 if __name__ == "__main__":

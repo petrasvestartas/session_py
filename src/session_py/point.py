@@ -42,6 +42,10 @@ class Point:
         self.pointcolor = Color.blue()
         self.xform = Xform.identity()
 
+    ###########################################################################################
+    # Operators
+    ###########################################################################################
+
     def __deepcopy__(self, memo):
 
         cls = self.__class__
@@ -62,13 +66,14 @@ class Point:
         return result
 
     def duplicate(self):
+        """Duplicate the point."""
         return copy.deepcopy(self)
 
     def __str__(self):
         return f"{self[0]}, {self[1]}, {self[2]}"
 
     def __repr__(self):
-        return f"Point({self.name}, {self[0]}, {self[1]}, {self[2]}, {self.pointcolor}, {self.width})"
+        return f"Point({self.name}, {self[0]}, {self[1]}, {self[2]}, {repr(self.pointcolor)}, {self.width})"
 
     def __eq__(self, other):
         return (
@@ -372,7 +377,7 @@ class Point:
         return Point(result.x, result.y, result.z)
 
     ###########################################################################################
-    # Polymorphic JSON Serialization (COMPAS-style)
+    # JSON Serialization
     ###########################################################################################
 
     def __jsondump__(self):
@@ -434,10 +439,10 @@ class Point:
         
         # Set color (no guid in proto schema)
         proto.pointcolor.name = self.pointcolor.name
-        proto.pointcolor.r = self.pointcolor.r
-        proto.pointcolor.g = self.pointcolor.g
-        proto.pointcolor.b = self.pointcolor.b
-        proto.pointcolor.a = self.pointcolor.a
+        proto.pointcolor.r = self.pointcolor[0]
+        proto.pointcolor.g = self.pointcolor[1]
+        proto.pointcolor.b = self.pointcolor[2]
+        proto.pointcolor.a = self.pointcolor[3]
         
         # Set xform (uses 'matrix' not 'm', no guid in proto schema)
         proto.xform.name = self.xform.name

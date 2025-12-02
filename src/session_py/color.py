@@ -1,8 +1,8 @@
 import uuid
-
+import copy
 
 class Color:
-    """A color with RGBA values for cross-language compatibility.
+    """An index-based 0-255 color with RGBA values.
 
     Parameters
     ----------
@@ -23,48 +23,89 @@ class Color:
         The name of the color.
     guid : str
         The unique identifier of the color.
-    r : int
-        The red component of the color (0-255).
-    g : int
-        The green component of the color (0-255).
-    b : int
-        The blue component of the color (0-255).
-    a : int
-        The alpha component of the color (0-255).
-
     """
 
     def __init__(self, r: int, g: int, b: int, a: int, name: str = "my_color"):
         self.guid = str(uuid.uuid4())
         self.name = name
-        self.r = int(r)
-        self.g = int(g)
-        self.b = int(b)
-        self.a = int(a)
+        self._r = int(r)
+        self._g = int(g)
+        self._b = int(b)
+        self._a = int(a)
 
     ###########################################################################################
     # Operators
     ###########################################################################################
 
+    def __deepcopy__(self, memo):
+
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # New guid
+        result.guid = str(uuid.uuid4())
+
+        # Copy remaining fields
+        result.name = copy.deepcopy(self.name, memo)
+        result._r = self._r
+        result._g = self._g
+        result._b = self._b
+        result._a = self._a
+        return result
+
+    def duplicate(self) -> "Color":
+        """Duplicate the color."""
+        return copy.deepcopy(self)
+
     def __str__(self) -> str:
         """String representation."""
-        return f"Color({self.r}, {self.g}, {self.b}, {self.a})"
+        return f"{self[0]}, {self[1]}, {self[2]}, {self[3]}"
 
     def __repr__(self) -> str:
-        return (
-            f"Color({self.guid}, {self.name}, {self.r}, {self.g}, {self.b}, {self.a})"
-        )
+        return f"Color({self.name}, {self[0]}, {self[1]}, {self[2]}, {self[3]})"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Color):
             return False
         return (
             self.name == other.name
-            and self.r == other.r
-            and self.g == other.g
-            and self.b == other.b
-            and self.a == other.a
+            and self[0] == other[0]
+            and self[1] == other[1]
+            and self[2] == other[2]
+            and self[3] == other[3]
         )
+
+    def __ne__(self, other) -> bool:
+        return not self == other
+
+    ###########################################################################################
+    # No-copy Operators
+    ###########################################################################################
+
+    def __getitem__(self, index):
+        if index == 0:
+            return self._r
+        elif index == 1:
+            return self._g
+        elif index == 2:
+            return self._b
+        elif index == 3:
+            return self._a
+        else:
+            raise IndexError("Index out of range")
+
+    def __setitem__(self, index, value):
+        if index == 0:
+            self._r = value
+        elif index == 1:
+            self._g = value
+        elif index == 2:
+            self._b = value
+        elif index == 3:
+            self._a = value
+        else:
+            raise IndexError("Index out of range")
 
     ###########################################################################################
     # Details
@@ -72,7 +113,7 @@ class Color:
 
     def to_float_array(self) -> list[float]:
         """Convert to normalized float array [0-1] (matches Rust implementation)."""
-        return [self.r / 255.0, self.g / 255.0, self.b / 255.0, self.a / 255.0]
+        return [self[0] / 255.0, self[1] / 255.0, self[2] / 255.0, self[3] / 255.0]
 
     @classmethod
     def from_float(cls, r, g, b, a) -> "Color":
@@ -238,7 +279,7 @@ class Color:
         return color
 
     ###########################################################################################
-    # Polymorphic JSON Serialization (COMPAS-style)
+    # JSON Serialization
     ###########################################################################################
 
     def __jsondump__(self):
@@ -247,10 +288,10 @@ class Color:
             "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
-            "r": self.r,
-            "g": self.g,
-            "b": self.b,
-            "a": self.a,
+            "r": self[0],
+            "g": self[1],
+            "b": self[2],
+            "a": self[3],
         }
 
     @classmethod
@@ -260,3 +301,41 @@ class Color:
         color.guid = guid
         color.name = name
         return color
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format."""
+        from .proto import color_pb2
+        
+        proto = color_pb2.Color()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.r = self[0]
+        proto.g = self[1]
+        proto.b = self[2]
+        proto.a = self[3]
+        return proto
+
+    @classmethod
+    def from_protobuf(cls, proto):
+        """Create color from protobuf binary format."""
+        color = cls(proto.r, proto.g, proto.b, proto.a)
+        color.guid = proto.guid
+        color.name = proto.name
+        return color
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file."""
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file."""
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)
