@@ -317,11 +317,16 @@ class Color:
         proto.g = self[1]
         proto.b = self[2]
         proto.a = self[3]
-        return proto
+        return proto.SerializeToString()
 
     @classmethod
-    def from_protobuf(cls, proto):
-        """Create color from protobuf binary format."""
+    def from_protobuf(cls, data):
+        """Create color from protobuf binary data."""
+        from .proto import color_pb2
+        
+        proto = color_pb2.Color()
+        proto.ParseFromString(data)
+        
         color = cls(proto.r, proto.g, proto.b, proto.a)
         color.guid = proto.guid
         color.name = proto.name
