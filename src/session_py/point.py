@@ -32,9 +32,9 @@ class Point:
 
     """
 
-    def __init__(self, x=0.0, y=0.0, z=0.0):
+    def __init__(self, x=0.0, y=0.0, z=0.0, name="my_point"):
         self.guid = str(uuid.uuid4())
-        self.name = "my_point"
+        self.name = name
         self._x = x
         self._y = y
         self._z = z

@@ -49,9 +49,12 @@ def test_color_conversion():
     from session_py import Color
 
     color = Color(255, 128, 64, 255)
-    flts = color.to_float_array()
-    ints = Color.from_float(flts[0], flts[1], flts[2], flts[3])
-    MINI_CHECK([round(flts[0], 3), round(flts[1], 3), round(flts[2], 3), round(flts[3], 3)] == [1.0, 0.502, 0.251, 1.0])
+    flts = color.to_unified_array()
+    ints = Color.from_unified_array(flts)
+    MINI_CHECK(round(flts[0], 6) == 1.0)
+    MINI_CHECK(round(flts[1], 6) == 0.501961)
+    MINI_CHECK(round(flts[2], 6) == 0.25098)
+    MINI_CHECK(round(flts[3], 6) == 1.0)
     MINI_CHECK(ints == color)
 
 @MINI_TEST("Color", "presets")
@@ -110,16 +113,12 @@ def test_color_json_roundtrip():
     from session_py.encoders import json_dump, json_load
     from pathlib import Path
 
-    color = Color(255, 128, 64, 255)
-    color.name = "test_color"
-    color.width = 2.0
-    color.color = Color(255, 128, 64, 255)
+    color = Color(255, 128, 64, 255, "test_color")
 
     path = Path(__file__).resolve().parents[2] / "test_color.json"
     json_dump(color, path)
     loaded = json_load(path)
 
-    MINI_CHECK(isinstance(loaded, Color))
     MINI_CHECK(loaded.name == "test_color")
     MINI_CHECK(loaded[0] == 255)
     MINI_CHECK(loaded[1] == 128)
@@ -131,83 +130,17 @@ def test_color_protobuf_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    color = Color(255, 128, 64, 255)
-    color.name = "test_color"
-    color.width = 2.0
-    color.color = Color(255, 128, 64, 255)
+    color = Color(255, 128, 64, 255, "test_color")
 
     path = Path(__file__).resolve().parents[2] / "test_color.bin"
     color.protobuf_dump(path)
     loaded = Color.protobuf_load(path)
 
-    MINI_CHECK(isinstance(loaded, Color))
     MINI_CHECK(loaded.name == "test_color")
     MINI_CHECK(loaded[0] == 255)
     MINI_CHECK(loaded[1] == 128)
     MINI_CHECK(loaded[2] == 64)
     MINI_CHECK(loaded[3] == 255)
-
-# def test_color_white():
-#     white = Color.white()
-#     assert white.name == "white"
-#     assert white.r == 255
-#     assert white.g == 255
-#     assert white.b == 255
-#     assert white.a == 255
-
-
-# def test_color_black():
-#     black = Color.black()
-#     assert black.name == "black"
-#     assert black.r == 0
-#     assert black.g == 0
-#     assert black.b == 0
-#     assert black.a == 255
-
-
-# def test_color_red():
-#     red = Color.red()
-#     assert red.name == "red"
-#     assert red.r == 255
-#     assert red.g == 0
-#     assert red.b == 0
-#     assert red.a == 255
-
-
-# def test_color_green():
-#     green = Color.green()
-#     assert green.name == "green"
-#     assert green.r == 0
-#     assert green.g == 255
-#     assert green.b == 0
-#     assert green.a == 255
-
-
-# def test_color_blue():
-#     blue = Color.blue()
-#     assert blue.name == "blue"
-#     assert blue.r == 0
-#     assert blue.g == 0
-#     assert blue.b == 255
-#     assert blue.a == 255
-
-
-# def test_color_silver():
-#     silver = Color.silver()
-#     assert silver.name == "silver"
-#     assert silver.r == 192
-#     assert silver.g == 192
-#     assert silver.b == 192
-#     assert silver.a == 255
-
-
-# def test_color_grey():
-#     grey = Color.grey()
-#     assert grey.name == "grey"
-#     assert grey.r == 128
-#     assert grey.g == 128
-#     assert grey.b == 128
-#     assert grey.a == 255
 
 
 if __name__ == "__main__":

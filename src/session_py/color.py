@@ -1,6 +1,13 @@
 import uuid
 import copy
 
+# Import protobuf at module level for performance
+try:
+    from .proto import color_pb2
+    _HAS_PROTOBUF = True
+except ImportError:
+    _HAS_PROTOBUF = False
+
 class Color:
     """An index-based 0-255 color with RGBA values.
 
@@ -111,14 +118,14 @@ class Color:
     # Details
     ###########################################################################################
 
-    def to_float_array(self) -> list[float]:
+    def to_unified_array(self) -> list[float]:
         """Convert to normalized float array [0-1] (matches Rust implementation)."""
         return [self[0] / 255.0, self[1] / 255.0, self[2] / 255.0, self[3] / 255.0]
 
     @classmethod
-    def from_float(cls, r, g, b, a) -> "Color":
+    def from_unified_array(cls, arr) -> "Color":
         """Create color from normalized float values [0-1]."""
-        return cls(r * 255.0, g * 255.0, b * 255.0, a * 255.0)
+        return cls(int(arr[0] * 255.0 + 0.5), int(arr[1] * 255.0 + 0.5), int(arr[2] * 255.0 + 0.5), int(arr[3] * 255.0 + 0.5))
 
     ###########################################################################################
     # Presets
@@ -308,8 +315,8 @@ class Color:
 
     def to_protobuf(self):
         """Convert to protobuf binary format."""
-        from .proto import color_pb2
-        
+        if not _HAS_PROTOBUF:
+            raise ImportError("protobuf not available")
         proto = color_pb2.Color()
         proto.guid = self.guid
         proto.name = self.name
@@ -322,8 +329,8 @@ class Color:
     @classmethod
     def from_protobuf(cls, data):
         """Create color from protobuf binary data."""
-        from .proto import color_pb2
-        
+        if not _HAS_PROTOBUF:
+            raise ImportError("protobuf not available")
         proto = color_pb2.Color()
         proto.ParseFromString(data)
         

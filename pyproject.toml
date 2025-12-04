@@ -25,7 +25,7 @@ dependencies = [
     "numba>=0.56.0",
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "protobuf>=4.0.0",
+    "protobuf>=5.0.0",
 ]
 
 [dependency-groups]
