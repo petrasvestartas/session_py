@@ -389,9 +389,9 @@ class Session:
                 y_axis=geometry.y_axis,
                 z_axis=geometry.z_axis,
                 half_size=Vector(
-                    geometry.half_size.x + inflate,
-                    geometry.half_size.y + inflate,
-                    geometry.half_size.z + inflate,
+                    geometry.half_size[0] + inflate,
+                    geometry.half_size[1] + inflate,
+                    geometry.half_size[2] + inflate,
                 ),
             )
             return inflated
@@ -406,9 +406,9 @@ class Session:
             from .vector import Vector
 
             bbox.half_size = Vector(
-                bbox.half_size.x + geometry.radius,
-                bbox.half_size.y + geometry.radius,
-                bbox.half_size.z + geometry.radius,
+                bbox.half_size[0] + geometry.radius,
+                bbox.half_size[1] + geometry.radius,
+                bbox.half_size[2] + geometry.radius,
             )
             return bbox
         elif isinstance(geometry, Arrow):
@@ -419,9 +419,9 @@ class Session:
             from .vector import Vector
 
             bbox.half_size = Vector(
-                bbox.half_size.x + geometry.radius,
-                bbox.half_size.y + geometry.radius,
-                bbox.half_size.z + geometry.radius,
+                bbox.half_size[0] + geometry.radius,
+                bbox.half_size[1] + geometry.radius,
+                bbox.half_size[2] + geometry.radius,
             )
             return bbox
         else:
@@ -480,7 +480,7 @@ class Session:
         from .arrow import Arrow
         from .intersection import line_line, line_plane, ray_box, ray_mesh_bvh
 
-        dir_vec = Vector(direction.x, direction.y, direction.z)
+        dir_vec = Vector(direction[0], direction[1], direction[2])
         if dir_vec.magnitude() <= 0.0:
             return []
         dir_unit = dir_vec.normalize()

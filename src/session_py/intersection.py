@@ -142,9 +142,9 @@ def plane_plane(plane0, plane1) -> Optional[Line]:
         output_p.x,
         output_p.y,
         output_p.z,
-        output_p.x + d.x,
-        output_p.y + d.y,
-        output_p.z + d.z,
+        output_p.x + d[0],
+        output_p.y + d[1],
+        output_p.z + d[2],
     )
 
 
@@ -259,9 +259,9 @@ def ray_box(
     box_max = box.max_point()
 
     # Calculate inverse direction (avoid division by zero)
-    inv_dir_x = 1.0 / direction.x if direction.x != 0.0 else float("inf")
-    inv_dir_y = 1.0 / direction.y if direction.y != 0.0 else float("inf")
-    inv_dir_z = 1.0 / direction.z if direction.z != 0.0 else float("inf")
+    inv_dir_x = 1.0 / direction[0] if direction[0] != 0.0 else float("inf")
+    inv_dir_y = 1.0 / direction[1] if direction[1] != 0.0 else float("inf")
+    inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else float("inf")
 
     # Calculate intersections with X slabs
     tx1 = (box_min.x - origin.x) * inv_dir_x
@@ -294,15 +294,15 @@ def ray_box(
 
     # Calculate actual intersection points
     entry = Point(
-        origin.x + direction.x * tmin,
-        origin.y + direction.y * tmin,
-        origin.z + direction.z * tmin,
+        origin.x + direction[0] * tmin,
+        origin.y + direction[1] * tmin,
+        origin.z + direction[2] * tmin,
     )
 
     exit_point = Point(
-        origin.x + direction.x * tmax,
-        origin.y + direction.y * tmax,
-        origin.z + direction.z * tmax,
+        origin.x + direction[0] * tmax,
+        origin.y + direction[1] * tmax,
+        origin.z + direction[2] * tmax,
     )
 
     return [entry, exit_point]
@@ -331,11 +331,11 @@ def ray_sphere(line: Line, center: Point, radius: float) -> Optional[List[Point]
 
     # Quadratic equation coefficients
     a = (
-        direction.x * direction.x
-        + direction.y * direction.y
-        + direction.z * direction.z
+        direction[0] * direction[0]
+        + direction[1] * direction[1]
+        + direction[2] * direction[2]
     )
-    b = 2.0 * (direction.x * o_x + direction.y * o_y + direction.z * o_z)
+    b = 2.0 * (direction[0] * o_x + direction[1] * o_y + direction[2] * o_z)
     c = o_x * o_x + o_y * o_y + o_z * o_z - radius * radius
 
     # Discriminant
@@ -363,18 +363,18 @@ def ray_sphere(line: Line, center: Point, radius: float) -> Optional[List[Point]
 
     # First intersection
     p0 = Point(
-        origin.x + direction.x * t0,
-        origin.y + direction.y * t0,
-        origin.z + direction.z * t0,
+        origin.x + direction[0] * t0,
+        origin.y + direction[1] * t0,
+        origin.z + direction[2] * t0,
     )
     points.append(p0)
 
     # Second intersection (if different from first)
     if abs(t1 - t0) > 1e-10:
         p1 = Point(
-            origin.x + direction.x * t1,
-            origin.y + direction.y * t1,
-            origin.z + direction.z * t1,
+            origin.x + direction[0] * t1,
+            origin.y + direction[1] * t1,
+            origin.z + direction[2] * t1,
         )
         points.append(p1)
 
@@ -410,9 +410,9 @@ def ray_triangle(
     edge2_z = v2.z - v0.z
 
     # pvec = direction.cross(edge2)
-    pvec_x = direction.y * edge2_z - direction.z * edge2_y
-    pvec_y = direction.z * edge2_x - direction.x * edge2_z
-    pvec_z = direction.x * edge2_y - direction.y * edge2_x
+    pvec_x = direction[1] * edge2_z - direction[2] * edge2_y
+    pvec_y = direction[2] * edge2_x - direction[0] * edge2_z
+    pvec_z = direction[0] * edge2_y - direction[1] * edge2_x
 
     # det = edge1.dot(pvec)
     det = edge1_x * pvec_x + edge1_y * pvec_y + edge1_z * pvec_z
@@ -439,7 +439,7 @@ def ray_triangle(
     qvec_z = tvec_x * edge1_y - tvec_y * edge1_x
 
     # v = direction.dot(qvec) * inv_det
-    v = (direction.x * qvec_x + direction.y * qvec_y + direction.z * qvec_z) * inv_det
+    v = (direction[0] * qvec_x + direction[1] * qvec_y + direction[2] * qvec_z) * inv_det
 
     if v < -epsilon or u + v > 1.0 + epsilon:
         return None
@@ -449,9 +449,9 @@ def ray_triangle(
 
     # Calculate intersection point: origin + t * direction
     return Point(
-        origin.x + t * direction.x,
-        origin.y + t * direction.y,
-        origin.z + t * direction.z,
+        origin.x + t * direction[0],
+        origin.y + t * direction[1],
+        origin.z + t * direction[2],
     )
 
 
@@ -485,9 +485,9 @@ def ray_mesh(
         if p is None:
             continue
         t = (
-            (p.x - origin.x) * direction.x
-            + (p.y - origin.y) * direction.y
-            + (p.z - origin.z) * direction.z
+            (p.x - origin.x) * direction[0]
+            + (p.y - origin.y) * direction[1]
+            + (p.z - origin.z) * direction[2]
         )
         if t >= 0.0:
             hits.append((t, p))
@@ -532,9 +532,9 @@ def ray_mesh_bvh(
             if p is None:
                 continue
             t = (
-                (p.x - origin.x) * direction.x
-                + (p.y - origin.y) * direction.y
-                + (p.z - origin.z) * direction.z
+                (p.x - origin.x) * direction[0]
+                + (p.y - origin.y) * direction[1]
+                + (p.z - origin.z) * direction[2]
             )
             if t >= 0.0:
                 hits.append((t, p))

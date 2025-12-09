@@ -1,0 +1,33 @@
+{
+    "type": "TreeNode",
+    "guid": "9db120ec-b8a7-43dd-8287-b317ff1468bc",
+    "name": "project_root",
+    "children": [
+        {
+            "type": "TreeNode",
+            "guid": "f81328c7-8c40-4699-a9b3-bf6d8eac48c6",
+            "name": "src",
+            "children": [
+                {
+                    "type": "TreeNode",
+                    "guid": "7b4bba9a-2154-483d-be2b-141ea4af7018",
+                    "name": "main.py",
+                    "children": []
+                }
+            ]
+        },
+        {
+            "type": "TreeNode",
+            "guid": "4fc1a9e8-0a89-4324-8eac-be48f97edd5d",
+            "name": "docs",
+            "children": [
+                {
+                    "type": "TreeNode",
+                    "guid": "cb584201-c6fd-4b9a-bcc2-c8cd8dece036",
+                    "name": "README.md",
+                    "children": []
+                }
+            ]
+        }
+    ]
+}

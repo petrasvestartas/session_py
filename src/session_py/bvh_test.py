@@ -228,7 +228,7 @@ def test_bvh_merge_aabb():
     merged = bvh.merge_aabb(bbox1, bbox2)
 
     assert abs(merged.center.x - 2.5) < 0.001
-    assert abs(merged.half_size.x - 3.5) < 0.001
+    assert abs(merged.half_size[0] - 3.5) < 0.001
 
 
 def test_bvh_performance_many_boxes():

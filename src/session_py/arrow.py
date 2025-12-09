@@ -130,7 +130,7 @@ class Arrow:
         length = line.length()
 
         z_axis = line_vec.normalize()
-        if abs(z_axis.z) < 0.9:
+        if abs(z_axis[2]) < 0.9:
             x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalize()
         else:
             x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalize()
@@ -140,29 +140,29 @@ class Arrow:
         body_length = length * 0.8
 
         body_center = Point(
-            start.x + line_vec.x * 0.4,
-            start.y + line_vec.y * 0.4,
-            start.z + line_vec.z * 0.4,
+            start.x + line_vec[0] * 0.4,
+            start.y + line_vec[1] * 0.4,
+            start.z + line_vec[2] * 0.4,
         )
 
         cone_base_center = Point(
-            start.x + line_vec.x * 0.9,
-            start.y + line_vec.y * 0.9,
-            start.z + line_vec.z * 0.9,
+            start.x + line_vec[0] * 0.9,
+            start.y + line_vec[1] * 0.9,
+            start.z + line_vec[2] * 0.9,
         )
 
         # Create body transformation
         body_scale = Xform.scale_xyz(radius * 2.0, radius * 2.0, body_length)
         rotation = Xform()
-        rotation.m[0] = x_axis.x
-        rotation.m[1] = x_axis.y
-        rotation.m[2] = x_axis.z
-        rotation.m[4] = y_axis.x
-        rotation.m[5] = y_axis.y
-        rotation.m[6] = y_axis.z
-        rotation.m[8] = z_axis.x
-        rotation.m[9] = z_axis.y
-        rotation.m[10] = z_axis.z
+        rotation.m[0] = x_axis[0]
+        rotation.m[1] = x_axis[1]
+        rotation.m[2] = x_axis[2]
+        rotation.m[4] = y_axis[0]
+        rotation.m[5] = y_axis[1]
+        rotation.m[6] = y_axis[2]
+        rotation.m[8] = z_axis[0]
+        rotation.m[9] = z_axis[1]
+        rotation.m[10] = z_axis[2]
         body_translation = Xform.translation(
             body_center.x, body_center.y, body_center.z
         )

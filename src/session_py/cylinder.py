@@ -103,7 +103,7 @@ class Cylinder:
         length = line.length()
 
         z_axis = line_vec.normalize()
-        if abs(z_axis.z) < 0.9:
+        if abs(z_axis[2]) < 0.9:
             x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalize()
         else:
             x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalize()
@@ -113,15 +113,15 @@ class Cylinder:
 
         # Create rotation matrix from column vectors
         rotation = Xform()
-        rotation.m[0] = x_axis.x
-        rotation.m[1] = x_axis.y
-        rotation.m[2] = x_axis.z
-        rotation.m[4] = y_axis.x
-        rotation.m[5] = y_axis.y
-        rotation.m[6] = y_axis.z
-        rotation.m[8] = z_axis.x
-        rotation.m[9] = z_axis.y
-        rotation.m[10] = z_axis.z
+        rotation.m[0] = x_axis[0]
+        rotation.m[1] = x_axis[1]
+        rotation.m[2] = x_axis[2]
+        rotation.m[4] = y_axis[0]
+        rotation.m[5] = y_axis[1]
+        rotation.m[6] = y_axis[2]
+        rotation.m[8] = z_axis[0]
+        rotation.m[9] = z_axis[1]
+        rotation.m[10] = z_axis[2]
 
         center = Point(
             (start.x + end.x) * 0.5, (start.y + end.y) * 0.5, (start.z + end.z) * 0.5

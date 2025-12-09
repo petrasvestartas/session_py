@@ -118,9 +118,9 @@ def test_face_normal():
     normal = mesh.face_normal(f)
 
     assert normal is not None
-    assert abs(normal.z - 1.0) < 1e-10
-    assert abs(normal.x) < 1e-10
-    assert abs(normal.y) < 1e-10
+    assert abs(normal[2] - 1.0) < 1e-10
+    assert abs(normal[0]) < 1e-10
+    assert abs(normal[1]) < 1e-10
 
 
 def test_vertex_normal():
@@ -133,7 +133,7 @@ def test_vertex_normal():
     normal = mesh.vertex_normal(v0)
 
     assert normal is not None
-    assert abs(normal.z - 1.0) < 1e-10
+    assert abs(normal[2] - 1.0) < 1e-10
 
 
 def test_face_area():
@@ -172,9 +172,9 @@ def test_vertex_normal_weighted_area():
     normal = mesh.vertex_normal_weighted(v0, NormalWeighting.AREA)
 
     normal_default = mesh.vertex_normal(v0)
-    assert abs(normal.x - normal_default.x) < 1e-10
-    assert abs(normal.y - normal_default.y) < 1e-10
-    assert abs(normal.z - normal_default.z) < 1e-10
+    assert abs(normal[0] - normal_default.x) < 1e-10
+    assert abs(normal[1] - normal_default.y) < 1e-10
+    assert abs(normal[2] - normal_default.z) < 1e-10
 
 
 def test_vertex_normal_weighted_angle():
@@ -186,9 +186,9 @@ def test_vertex_normal_weighted_angle():
     mesh.add_face([v0, v1, v2])
     normal = mesh.vertex_normal_weighted(v0, NormalWeighting.ANGLE)
 
-    assert abs(normal.z - 1.0) < 1e-10
-    assert abs(normal.x) < 1e-10
-    assert abs(normal.y) < 1e-10
+    assert abs(normal[2] - 1.0) < 1e-10
+    assert abs(normal[0]) < 1e-10
+    assert abs(normal[1]) < 1e-10
 
 
 def test_vertex_normal_weighted_uniform():
@@ -200,9 +200,9 @@ def test_vertex_normal_weighted_uniform():
     mesh.add_face([v0, v1, v2])
     normal = mesh.vertex_normal_weighted(v0, NormalWeighting.UNIFORM)
 
-    assert abs(normal.z - 1.0) < 1e-10
-    assert abs(normal.x) < 1e-10
-    assert abs(normal.y) < 1e-10
+    assert abs(normal[2] - 1.0) < 1e-10
+    assert abs(normal[0]) < 1e-10
+    assert abs(normal[1]) < 1e-10
 
 
 def test_from_polygons_simple():

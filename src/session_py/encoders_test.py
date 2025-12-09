@@ -26,9 +26,9 @@ def test_json_dump_and_load():
     loaded = json_load(filepath)
 
     assert isinstance(loaded, Point)
-    assert loaded.x == point.x
-    assert loaded.y == point.y
-    assert loaded.z == point.z
+    assert loaded[0] == point[0]
+    assert loaded[1] == point[1]
+    assert loaded[2] == point[2]
     assert loaded.name == point.name
 
     filepath.unlink()
@@ -46,9 +46,9 @@ def test_json_dumps_and_loads():
     loaded = json_loads(json_str)
 
     assert isinstance(loaded, Vector)
-    assert loaded.x == vec.x
-    assert loaded.y == vec.y
-    assert loaded.z == vec.z
+    assert loaded[0] == vec[0]
+    assert loaded[1] == vec[1]
+    assert loaded[2] == vec[2]
     assert loaded.name == vec.name
 
 
@@ -67,9 +67,9 @@ def test_encode_collection():
     assert isinstance(loaded, list)
     assert len(loaded) == 3
     assert all(isinstance(p, Point) for p in loaded)
-    assert loaded[0].x == 1.0
-    assert loaded[1].y == 5.0
-    assert loaded[2].z == 9.0
+    assert loaded[0][0] == 1.0
+    assert loaded[1][1] == 5.0
+    assert loaded[2][2] == 9.0
 
 
 def test_decode_node_primitives():
@@ -124,7 +124,7 @@ def test_decode_node_dict():
     }
     result = decode_node(data)
     assert isinstance(result, Vector)
-    assert result.x == 1.0
+    assert result[0] == 1.0
 
 
 def test_nested_collections():
@@ -161,9 +161,9 @@ def test_roundtrip_with_file():
     assert isinstance(loaded, list)
     assert len(loaded) == 3
     assert all(isinstance(v, Vector) for v in loaded)
-    assert loaded[0].x == 1.0
-    assert loaded[1].y == 1.0
-    assert loaded[2].z == 1.0
+    assert loaded[0][0] == 1.0
+    assert loaded[1][1] == 1.0
+    assert loaded[2][2] == 1.0
 
     filepath.unlink()
 
@@ -187,7 +187,7 @@ def test_geometry_decoder():
     loaded = json.loads(json_str, cls=GeometryDecoder)
 
     assert isinstance(loaded, Point)
-    assert loaded.x == 1.0
+    assert loaded[0] == 1.0
 
 
 def test_pretty_vs_compact():
@@ -207,8 +207,8 @@ def test_pretty_vs_compact():
 
     assert isinstance(loaded_pretty, Point)
     assert isinstance(loaded_compact, Point)
-    assert loaded_pretty.x == 1.0
-    assert loaded_compact.x == 1.0
+    assert loaded_pretty[0] == 1.0
+    assert loaded_compact[0] == 1.0
 
 
 def test_list_in_list_in_list():
@@ -234,7 +234,7 @@ def test_dict_of_lists():
     assert loaded["letters"] == ["a", "b", "c"]
     assert len(loaded["points"]) == 2
     assert isinstance(loaded["points"][0], Point)
-    assert loaded["points"][0].x == 1.0
+    assert loaded["points"][0][0] == 1.0
 
 
 def test_list_of_dict():
@@ -250,7 +250,7 @@ def test_list_of_dict():
     assert loaded[0]["name"] == "point1"
     assert loaded[1]["value"] == 20
     assert isinstance(loaded[2]["geometry"], Point)
-    assert loaded[2]["geometry"].z == 3.0
+    assert loaded[2]["geometry"][2] == 3.0
 
 
 def test_dict_of_dicts():
@@ -265,5 +265,5 @@ def test_dict_of_dicts():
     assert loaded["config"]["scale"] == 1000
     assert isinstance(loaded["geometry"]["point"], Point)
     assert isinstance(loaded["geometry"]["vector"], Vector)
-    assert loaded["geometry"]["point"].x == 1.0
-    assert loaded["geometry"]["vector"].z == 1.0
+    assert loaded["geometry"]["point"][0] == 1.0
+    assert loaded["geometry"]["vector"][2] == 1.0

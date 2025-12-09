@@ -297,9 +297,9 @@ def _ray_aabb_intersect(
     def inv(v):
         return float("inf") if v == 0.0 else 1.0 / v
 
-    invx = inv(direction.x)
-    invy = inv(direction.y)
-    invz = inv(direction.z)
+    invx = inv(direction[0])
+    invy = inv(direction[1])
+    invz = inv(direction[2])
 
     tx1 = (min_x - origin.x) * invx
     tx2 = (max_x - origin.x) * invx
@@ -346,16 +346,16 @@ class BVH:
         max_extent = 0.0
         for bbox in bounding_boxes:
             x_extent = max(
-                abs(bbox.center.x + bbox.half_size.x),
-                abs(bbox.center.x - bbox.half_size.x),
+                abs(bbox.center.x + bbox.half_size[0]),
+                abs(bbox.center.x - bbox.half_size[0]),
             )
             y_extent = max(
-                abs(bbox.center.y + bbox.half_size.y),
-                abs(bbox.center.y - bbox.half_size.y),
+                abs(bbox.center.y + bbox.half_size[1]),
+                abs(bbox.center.y - bbox.half_size[1]),
             )
             z_extent = max(
-                abs(bbox.center.z + bbox.half_size.z),
-                abs(bbox.center.z - bbox.half_size.z),
+                abs(bbox.center.z + bbox.half_size[2]),
+                abs(bbox.center.z - bbox.half_size[2]),
             )
             max_extent = max(max_extent, x_extent, y_extent, z_extent)
 
@@ -403,9 +403,9 @@ class BVH:
                 bbox.center.x,
                 bbox.center.y,
                 bbox.center.z,
-                bbox.half_size.x,
-                bbox.half_size.y,
-                bbox.half_size.z,
+                bbox.half_size[0],
+                bbox.half_size[1],
+                bbox.half_size[2],
             )
             objects.append({"id": i, "morton_code": morton_code, "aabb": aabb})
 
@@ -594,23 +594,23 @@ class BVH:
     def merge_aabb(self, aabb1: BoundingBox, aabb2: BoundingBox) -> BoundingBox:
         """Merge two AABBs into a single encompassing AABB."""
         min_x = min(
-            aabb1.center.x - aabb1.half_size.x, aabb2.center.x - aabb2.half_size.x
+            aabb1.center.x - aabb1.half_size[0], aabb2.center.x - aabb2.half_size[0]
         )
         min_y = min(
-            aabb1.center.y - aabb1.half_size.y, aabb2.center.y - aabb2.half_size.y
+            aabb1.center.y - aabb1.half_size[1], aabb2.center.y - aabb2.half_size[1]
         )
         min_z = min(
-            aabb1.center.z - aabb1.half_size.z, aabb2.center.z - aabb2.half_size.z
+            aabb1.center.z - aabb1.half_size[2], aabb2.center.z - aabb2.half_size[2]
         )
 
         max_x = max(
-            aabb1.center.x + aabb1.half_size.x, aabb2.center.x + aabb2.half_size.x
+            aabb1.center.x + aabb1.half_size[0], aabb2.center.x + aabb2.half_size[0]
         )
         max_y = max(
-            aabb1.center.y + aabb1.half_size.y, aabb2.center.y + aabb2.half_size.y
+            aabb1.center.y + aabb1.half_size[1], aabb2.center.y + aabb2.half_size[1]
         )
         max_z = max(
-            aabb1.center.z + aabb1.half_size.z, aabb2.center.z + aabb2.half_size.z
+            aabb1.center.z + aabb1.half_size[2], aabb2.center.z + aabb2.half_size[2]
         )
 
         center = Point((min_x + max_x) / 2, (min_y + max_y) / 2, (min_z + max_z) / 2)
@@ -624,19 +624,19 @@ class BVH:
 
     def aabb_intersect(self, aabb1: BoundingBox, aabb2: BoundingBox) -> bool:
         """Check if two AABBs intersect."""
-        min1_x = aabb1.center.x - aabb1.half_size.x
-        max1_x = aabb1.center.x + aabb1.half_size.x
-        min1_y = aabb1.center.y - aabb1.half_size.y
-        max1_y = aabb1.center.y + aabb1.half_size.y
-        min1_z = aabb1.center.z - aabb1.half_size.z
-        max1_z = aabb1.center.z + aabb1.half_size.z
+        min1_x = aabb1.center.x - aabb1.half_size[0]
+        max1_x = aabb1.center.x + aabb1.half_size[0]
+        min1_y = aabb1.center.y - aabb1.half_size[1]
+        max1_y = aabb1.center.y + aabb1.half_size[1]
+        min1_z = aabb1.center.z - aabb1.half_size[2]
+        max1_z = aabb1.center.z + aabb1.half_size[2]
 
-        min2_x = aabb2.center.x - aabb2.half_size.x
-        max2_x = aabb2.center.x + aabb2.half_size.x
-        min2_y = aabb2.center.y - aabb2.half_size.y
-        max2_y = aabb2.center.y + aabb2.half_size.y
-        min2_z = aabb2.center.z - aabb2.half_size.z
-        max2_z = aabb2.center.z + aabb2.half_size.z
+        min2_x = aabb2.center.x - aabb2.half_size[0]
+        max2_x = aabb2.center.x + aabb2.half_size[0]
+        min2_y = aabb2.center.y - aabb2.half_size[1]
+        max2_y = aabb2.center.y + aabb2.half_size[1]
+        min2_z = aabb2.center.z - aabb2.half_size[2]
+        max2_z = aabb2.center.z + aabb2.half_size[2]
 
         return (
             min1_x <= max2_x

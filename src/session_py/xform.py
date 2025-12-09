@@ -103,20 +103,20 @@ class Xform:
         cos_angle = math.cos(angle_radians)
         sin_angle = math.sin(angle_radians)
         one_minus_cos = 1.0 - cos_angle
-        xx = axis.x * axis.x
-        xy = axis.x * axis.y
-        xz = axis.x * axis.z
-        yy = axis.y * axis.y
-        yz = axis.y * axis.z
-        zz = axis.z * axis.z
+        xx = axis[0] * axis[0]
+        xy = axis[0] * axis[1]
+        xz = axis[0] * axis[2]
+        yy = axis[1] * axis[1]
+        yz = axis[1] * axis[2]
+        zz = axis[2] * axis[2]
         xform.m[0] = cos_angle + xx * one_minus_cos
-        xform.m[1] = xy * one_minus_cos + axis.z * sin_angle
-        xform.m[2] = xz * one_minus_cos - axis.y * sin_angle
-        xform.m[4] = xy * one_minus_cos - axis.z * sin_angle
+        xform.m[1] = xy * one_minus_cos + axis[2] * sin_angle
+        xform.m[2] = xz * one_minus_cos - axis[1] * sin_angle
+        xform.m[4] = xy * one_minus_cos - axis[2] * sin_angle
         xform.m[5] = cos_angle + yy * one_minus_cos
-        xform.m[6] = yz * one_minus_cos + axis.x * sin_angle
-        xform.m[8] = xz * one_minus_cos + axis.y * sin_angle
-        xform.m[9] = yz * one_minus_cos - axis.x * sin_angle
+        xform.m[6] = yz * one_minus_cos + axis[0] * sin_angle
+        xform.m[8] = xz * one_minus_cos + axis[1] * sin_angle
+        xform.m[9] = yz * one_minus_cos - axis[0] * sin_angle
         xform.m[10] = cos_angle + zz * one_minus_cos
         return xform
 
@@ -126,18 +126,18 @@ class Xform:
         x_axis = x_axis.normalize()
         y_axis = y_axis.normalize()
         z_axis = z_axis.normalize()
-        xform.m[0] = x_axis.x
-        xform.m[1] = x_axis.y
-        xform.m[2] = x_axis.z
-        xform.m[4] = y_axis.x
-        xform.m[5] = y_axis.y
-        xform.m[6] = y_axis.z
-        xform.m[8] = z_axis.x
-        xform.m[9] = z_axis.y
-        xform.m[10] = z_axis.z
-        xform.m[12] = origin.x
-        xform.m[13] = origin.y
-        xform.m[14] = origin.z
+        xform.m[0] = x_axis[0]
+        xform.m[1] = x_axis[1]
+        xform.m[2] = x_axis[2]
+        xform.m[4] = y_axis[0]
+        xform.m[5] = y_axis[1]
+        xform.m[6] = y_axis[2]
+        xform.m[8] = z_axis[0]
+        xform.m[9] = z_axis[1]
+        xform.m[10] = z_axis[2]
+        xform.m[12] = origin[0]
+        xform.m[13] = origin[1]
+        xform.m[14] = origin[2]
         return xform
 
     @staticmethod
@@ -238,8 +238,8 @@ class Xform:
         m_xform.m[2] = r[2][3]
         m_xform.m[6] = r[2][4]
         m_xform.m[10] = r[2][5]
-        t0 = Xform.translation(-origin_1.x, -origin_1.y, -origin_1.z)
-        t2 = Xform.translation(origin_0.x, origin_0.y, origin_0.z)
+        t0 = Xform.translation(-origin_1[0], -origin_1[1], -origin_1[2])
+        t2 = Xform.translation(origin_0[0], origin_0[1], origin_0[2])
         return t2 * (m_xform * t0)
 
     @staticmethod
@@ -252,29 +252,29 @@ class Xform:
         x1 = x_axis_1.normalize()
         y1 = y_axis_1.normalize()
         z1 = z_axis_1.normalize()
-        t0 = Xform.translation(-origin_0.x, -origin_0.y, -origin_0.z)
+        t0 = Xform.translation(-origin_0[0], -origin_0[1], -origin_0[2])
         f0 = Xform()
-        f0.m[0] = x0.x
-        f0.m[1] = x0.y
-        f0.m[2] = x0.z
-        f0.m[4] = y0.x
-        f0.m[5] = y0.y
-        f0.m[6] = y0.z
-        f0.m[8] = z0.x
-        f0.m[9] = z0.y
-        f0.m[10] = z0.z
+        f0.m[0] = x0[0]
+        f0.m[1] = x0[1]
+        f0.m[2] = x0[2]
+        f0.m[4] = y0[0]
+        f0.m[5] = y0[1]
+        f0.m[6] = y0[2]
+        f0.m[8] = z0[0]
+        f0.m[9] = z0[1]
+        f0.m[10] = z0[2]
         f1 = Xform()
-        f1.m[0] = x1.x
-        f1.m[4] = x1.y
-        f1.m[8] = x1.z
-        f1.m[1] = y1.x
-        f1.m[5] = y1.y
-        f1.m[9] = y1.z
-        f1.m[2] = z1.x
-        f1.m[6] = z1.y
-        f1.m[10] = z1.z
+        f1.m[0] = x1[0]
+        f1.m[4] = x1[1]
+        f1.m[8] = x1[2]
+        f1.m[1] = y1[0]
+        f1.m[5] = y1[1]
+        f1.m[9] = y1[2]
+        f1.m[2] = z1[0]
+        f1.m[6] = z1[1]
+        f1.m[10] = z1[2]
         r = f1 * f0
-        t1 = Xform.translation(origin_1.x, origin_1.y, origin_1.z)
+        t1 = Xform.translation(origin_1[0], origin_1[1], origin_1[2])
         return t1 * (r * t0)
 
     @staticmethod
@@ -282,17 +282,17 @@ class Xform:
         x = x_axis.normalize()
         y = y_axis.normalize()
         z = z_axis.normalize()
-        t = Xform.translation(-origin.x, -origin.y, -origin.z)
+        t = Xform.translation(-origin[0], -origin[1], -origin[2])
         f = Xform()
-        f.m[0] = x.x
-        f.m[1] = x.y
-        f.m[2] = x.z
-        f.m[4] = y.x
-        f.m[5] = y.y
-        f.m[6] = y.z
-        f.m[8] = z.x
-        f.m[9] = z.y
-        f.m[10] = z.z
+        f.m[0] = x[0]
+        f.m[1] = x[1]
+        f.m[2] = x[2]
+        f.m[4] = y[0]
+        f.m[5] = y[1]
+        f.m[6] = y[2]
+        f.m[8] = z[0]
+        f.m[9] = z[1]
+        f.m[10] = z[2]
         return f * t
 
     @staticmethod
@@ -301,16 +301,16 @@ class Xform:
         y = y_axis.normalize()
         z = z_axis.normalize()
         f = Xform()
-        f.m[0] = x.x
-        f.m[4] = y.x
-        f.m[8] = z.x
-        f.m[1] = x.y
-        f.m[5] = y.y
-        f.m[9] = z.y
-        f.m[2] = x.z
-        f.m[6] = y.z
-        f.m[10] = z.z
-        t = Xform.translation(origin.x, origin.y, origin.z)
+        f.m[0] = x[0]
+        f.m[4] = y[0]
+        f.m[8] = z[0]
+        f.m[1] = x[1]
+        f.m[5] = y[1]
+        f.m[9] = z[1]
+        f.m[2] = x[2]
+        f.m[6] = y[2]
+        f.m[10] = z[2]
+        t = Xform.translation(origin[0], origin[1], origin[2])
         return t * f
 
     @staticmethod
@@ -323,25 +323,25 @@ class Xform:
 
     @staticmethod
     def scale_uniform(origin, scale_value):
-        t0 = Xform.translation(-origin.x, -origin.y, -origin.z)
+        t0 = Xform.translation(-origin[0], -origin[1], -origin[2])
         t1 = Xform.scaling(scale_value, scale_value, scale_value)
-        t2 = Xform.translation(origin.x, origin.y, origin.z)
+        t2 = Xform.translation(origin[0], origin[1], origin[2])
         return t2 * (t1 * t0)
 
     @staticmethod
     def scale_non_uniform(origin, scale_x, scale_y, scale_z):
-        t0 = Xform.translation(-origin.x, -origin.y, -origin.z)
+        t0 = Xform.translation(-origin[0], -origin[1], -origin[2])
         t1 = Xform.scale_xyz(scale_x, scale_y, scale_z)
-        t2 = Xform.translation(origin.x, origin.y, origin.z)
+        t2 = Xform.translation(origin[0], origin[1], origin[2])
         return t2 * (t1 * t0)
 
     @staticmethod
     def axis_rotation(angle, axis):
         c = math.cos(angle)
         s = math.sin(angle)
-        ux = axis.x
-        uy = axis.y
-        uz = axis.z
+        ux = axis[0]
+        uy = axis[1]
+        uz = axis[2]
         t = 1.0 - c
         xform = Xform()
         xform.m[0] = t * ux * ux + c
@@ -363,16 +363,16 @@ class Xform:
         s = f.cross(up.normalize()).normalize()
         u = s.cross(f)
         xform = Xform()
-        xform.m[0] = s.x
-        xform.m[4] = s.y
-        xform.m[8] = s.z
-        xform.m[1] = u.x
-        xform.m[5] = u.y
-        xform.m[9] = u.z
-        xform.m[2] = -f.x
-        xform.m[6] = -f.y
-        xform.m[10] = -f.z
-        eye_vec = Vector(eye.x, eye.y, eye.z)
+        xform.m[0] = s[0]
+        xform.m[4] = s[1]
+        xform.m[8] = s[2]
+        xform.m[1] = u[0]
+        xform.m[5] = u[1]
+        xform.m[9] = u[2]
+        xform.m[2] = -f[0]
+        xform.m[6] = -f[1]
+        xform.m[10] = -f[2]
+        eye_vec = Vector(eye[0], eye[1], eye[2])
         xform.m[12] = -s.dot(eye_vec)
         xform.m[13] = -u.dot(eye_vec)
         xform.m[14] = f.dot(eye_vec)
@@ -438,9 +438,9 @@ class Xform:
     def transformed_point(self, point):
         from .point import Point
 
-        x = point.x
-        y = point.y
-        z = point.z
+        x = point[0]
+        y = point[1]
+        z = point[2]
         w = self.m[3] * x + self.m[7] * y + self.m[11] * z + self.m[15]
         w_inv = 1.0 / w if abs(w) > 1e-10 else 1.0
         return Point(
@@ -473,9 +473,9 @@ class Xform:
         x = vector[0]
         y = vector[1]
         z = vector[2]
-        vector.x = self.m[0] * x + self.m[4] * y + self.m[8] * z
-        vector.y = self.m[1] * x + self.m[5] * y + self.m[9] * z
-        vector.z = self.m[2] * x + self.m[6] * y + self.m[10] * z
+        vector[0] = self.m[0] * x + self.m[4] * y + self.m[8] * z
+        vector[1] = self.m[1] * x + self.m[5] * y + self.m[9] * z
+        vector[2] = self.m[2] * x + self.m[6] * y + self.m[10] * z
 
     def __mul__(self, other):
         result = Xform()

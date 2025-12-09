@@ -1,0 +1,56 @@
+{
+    "type": "Objects",
+    "guid": "2f57dae7-4129-4f8d-992c-4e2f6e459db4",
+    "name": "test_objects",
+    "points": [
+        {
+            "type": "Point",
+            "guid": "e2bcfea6-d6e2-4ff5-9ecf-17b62589d39d",
+            "name": "my_point",
+            "x": 1.0,
+            "y": 2.0,
+            "z": 3.0,
+            "width": 1.0,
+            "pointcolor": {
+                "type": "Color",
+                "guid": "16c439ed-c762-49b6-a863-348c86749c7c",
+                "name": "blue",
+                "r": 0,
+                "g": 0,
+                "b": 255,
+                "a": 255
+            },
+            "xform": {
+                "type": "Xform",
+                "guid": "71d2bca7-746d-4315-b8f3-41fae86ed885",
+                "name": "my_xform",
+                "m": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            }
+        }
+    ],
+    "lines": [],
+    "planes": [],
+    "bboxes": [],
+    "polylines": [],
+    "pointclouds": [],
+    "meshes": [],
+    "cylinders": [],
+    "arrows": []
+}

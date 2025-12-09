@@ -66,7 +66,14 @@ class Point:
         return result
 
     def duplicate(self):
-        """Duplicate the point."""
+        """Create a deep copy of this point with a new GUID.
+
+        Returns
+        -------
+        :class:`Point`
+            A new Point with identical values but a different GUID.
+
+        """
         return copy.deepcopy(self)
 
     def __str__(self):
@@ -88,6 +95,40 @@ class Point:
 
     def __ne__(self, other):
         return not self == other
+
+    ###########################################################################################
+    # Coordinate Properties
+    ###########################################################################################
+
+    @property
+    def x(self):
+        """Get the X coordinate."""
+        return self._x
+
+    @x.setter
+    def x(self, value):
+        """Set the X coordinate."""
+        self._x = value
+
+    @property
+    def y(self):
+        """Get the Y coordinate."""
+        return self._y
+
+    @y.setter
+    def y(self, value):
+        """Set the Y coordinate."""
+        self._y = value
+
+    @property
+    def z(self):
+        """Get the Z coordinate."""
+        return self._z
+
+    @z.setter
+    def z(self, value):
+        """Set the Z coordinate."""
+        self._z = value
 
     ###########################################################################################
     # No-copy Operators
@@ -127,18 +168,18 @@ class Point:
 
     def __iadd__(self, other):
         if isinstance(other, Vector):
-            self._x += other.x
-            self._y += other.y
-            self._z += other.z
+            self._x += other[0]
+            self._y += other[1]
+            self._z += other[2]
         else:
             raise TypeError("Point can only be added with Vector")
         return self
 
     def __isub__(self, other):
         if isinstance(other, Vector):
-            self._x -= other.x
-            self._y -= other.y
-            self._z -= other.z
+            self._x -= other[0]
+            self._y -= other[1]
+            self._z -= other[2]
         else:
             raise TypeError("Point can only be subtracted with Vector")
         return self
@@ -374,7 +415,7 @@ class Point:
             centroid_sum += tri_centroid * tri_area
 
         result = centroid_sum / total_area
-        return Point(result.x, result.y, result.z)
+        return Point(result[0], result[1], result[2])
 
     ###########################################################################################
     # JSON Serialization
@@ -426,7 +467,14 @@ class Point:
     ###########################################################################################
 
     def to_protobuf(self):
-        """Convert to protobuf binary format."""
+        """Convert to protobuf binary format.
+
+        Returns
+        -------
+        bytes
+            Serialized protobuf data.
+
+        """
         from .proto import point_pb2
         
         proto = point_pb2.Point()
@@ -452,7 +500,19 @@ class Point:
 
     @classmethod
     def from_protobuf(cls, data):
-        """Create Point from protobuf binary data."""
+        """Create Point from protobuf binary data.
+
+        Parameters
+        ----------
+        data : bytes
+            Protobuf-encoded point data.
+
+        Returns
+        -------
+        :class:`Point`
+            The deserialized Point.
+
+        """
         from .proto import point_pb2
         from .color import Color
         from .xform import Xform
@@ -482,14 +542,33 @@ class Point:
         return pt
 
     def protobuf_dump(self, filepath):
-        """Write protobuf to file."""
+        """Write protobuf to file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the output file.
+
+        """
         data = self.to_protobuf()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
     def protobuf_load(cls, filepath):
-        """Read protobuf from file."""
+        """Read protobuf from file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the protobuf file.
+
+        Returns
+        -------
+        :class:`Point`
+            The deserialized Point.
+
+        """
         with open(filepath, 'rb') as f:
             data = f.read()
         return cls.from_protobuf(data)

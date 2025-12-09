@@ -328,7 +328,7 @@ def test_polyline_get_average_plane():
 
     origin, x_axis, y_axis, z_axis = polyline.get_average_plane()
 
-    assert abs(z_axis.z - 1.0) < 1e-5
+    assert abs(z_axis[2] - 1.0) < 1e-5
 
 
 def test_polyline_get_fast_plane():

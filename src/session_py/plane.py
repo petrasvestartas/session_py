@@ -72,9 +72,9 @@ class Plane:
 
     def _update_equation(self):
         """Update plane equation coefficients from z_axis and origin."""
-        self._a = self._z_axis.x
-        self._b = self._z_axis.y
-        self._c = self._z_axis.z
+        self._a = self._z_axis[0]
+        self._b = self._z_axis[1]
+        self._c = self._z_axis[2]
         self._d = -(
             self._a * self._origin.x
             + self._b * self._origin.y
@@ -141,7 +141,7 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
         plane._origin = point
-        plane._z_axis = Vector(normal.x, normal.y, normal.z)
+        plane._z_axis = Vector(normal[0], normal[1], normal[2])
         plane._z_axis.normalize_self()
         plane._x_axis = Vector()
         plane._x_axis.perpendicular_to(plane._z_axis)
@@ -362,9 +362,9 @@ class Plane:
             result.guid = self.guid
             result.name = self.name
             result._origin = self._origin + other
-            result._x_axis = Vector(self._x_axis.x, self._x_axis.y, self._x_axis.z)
-            result._y_axis = Vector(self._y_axis.x, self._y_axis.y, self._y_axis.z)
-            result._z_axis = Vector(self._z_axis.x, self._z_axis.y, self._z_axis.z)
+            result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
+            result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])
+            result._z_axis = Vector(self._z_axis[0], self._z_axis[1], self._z_axis[2])
             result._update_equation()
             return result
         return NotImplemented
@@ -376,9 +376,9 @@ class Plane:
             result.guid = self.guid
             result.name = self.name
             result._origin = self._origin - other
-            result._x_axis = Vector(self._x_axis.x, self._x_axis.y, self._x_axis.z)
-            result._y_axis = Vector(self._y_axis.x, self._y_axis.y, self._y_axis.z)
-            result._z_axis = Vector(self._z_axis.x, self._z_axis.y, self._z_axis.z)
+            result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
+            result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])
+            result._z_axis = Vector(self._z_axis[0], self._z_axis[1], self._z_axis[2])
             result._update_equation()
             return result
         return NotImplemented
@@ -521,7 +521,7 @@ class Plane:
         Plane
             New plane translated by the specified distance.
         """
-        normal = Vector(self._z_axis.x, self._z_axis.y, self._z_axis.z)
+        normal = Vector(self._z_axis[0], self._z_axis[1], self._z_axis[2])
         normal.normalize_self()
 
         new_origin = self._origin + (normal * distance)

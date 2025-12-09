@@ -57,9 +57,9 @@ def test_nurbssurface_cv_access():
     
     # Get it back
     cv = srf.get_cv(2, 2)
-    assert cv.x == 2.0
-    assert cv.y == 3.0
-    assert cv.z == 4.0
+    assert cv[0] == 2.0
+    assert cv[1] == 3.0
+    assert cv[2] == 4.0
 
 
 def test_nurbssurface_make_rational():

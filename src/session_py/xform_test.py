@@ -28,54 +28,54 @@ def test_xform_default():
 def test_xform_identity_transformed_point():
     p = Point(1.0, 2.0, 3.0)
     t = Xform.identity().transformed_point(p)
-    assert t.x == 1.0
-    assert t.y == 2.0
-    assert t.z == 3.0
+    assert t[0] == 1.0
+    assert t[1] == 2.0
+    assert t[2] == 3.0
 
 
 def test_xform_translation_point():
     t = Xform.translation(1.0, 2.0, 3.0)
     p = Point(4.0, 5.0, 6.0)
     tp = t.transformed_point(p)
-    assert tp.x == 5.0
-    assert tp.y == 7.0
-    assert tp.z == 9.0
+    assert tp[0] == 5.0
+    assert tp[1] == 7.0
+    assert tp[2] == 9.0
 
 
 def test_xform_translation_vector():
     t = Xform.translation(1.0, 2.0, 3.0)
     v = Vector(1.0, 2.0, 3.0)
     tv = t.transformed_vector(v)
-    assert tv.x == 1.0
-    assert tv.y == 2.0
-    assert tv.z == 3.0
+    assert tv[0] == 1.0
+    assert tv[1] == 2.0
+    assert tv[2] == 3.0
 
 
 def test_xform_scaling_point():
     s = Xform.scaling(2.0, 3.0, 4.0)
     p = Point(1.0, -2.0, 0.5)
     sp = s.transformed_point(p)
-    assert sp.x == 2.0
-    assert sp.y == -6.0
-    assert sp.z == 2.0
+    assert sp[0] == 2.0
+    assert sp[1] == -6.0
+    assert sp[2] == 2.0
 
 
 def test_xform_scaling_vector():
     s = Xform.scaling(2.0, 3.0, 4.0)
     v = Vector(1.0, -2.0, 0.5)
     sv = s.transformed_vector(v)
-    assert sv.x == 2.0
-    assert sv.y == -6.0
-    assert sv.z == 2.0
+    assert sv[0] == 2.0
+    assert sv[1] == -6.0
+    assert sv[2] == 2.0
 
 
 def test_xform_rotation_z():
     r = Xform.rotation_z(math.pi / 2.0)
     p = Point(1.0, 0.0, 0.0)
     rp = r.transformed_point(p)
-    assert approx_f32(rp.x, 0.0)
-    assert approx_f32(rp.y, 1.0)
-    assert approx_f32(rp.z, 0.0)
+    assert approx_f32(rp[0], 0.0)
+    assert approx_f32(rp[1], 1.0)
+    assert approx_f32(rp[2], 0.0)
 
 
 def test_xform_axis_rotation():
@@ -85,9 +85,9 @@ def test_xform_axis_rotation():
     p = Point(1.0, 0.0, 0.0)
     p1 = r1.transformed_point(p)
     p2 = r2.transformed_point(p)
-    assert approx_f32(p1.x, p2.x)
-    assert approx_f32(p1.y, p2.y)
-    assert approx_f32(p1.z, p2.z)
+    assert approx_f32(p1[0], p2[0])
+    assert approx_f32(p1[1], p2[1])
+    assert approx_f32(p1[2], p2[2])
 
 
 def test_xform_inverse():
@@ -299,36 +299,36 @@ def test_xform_transformed_point():
     t = Xform.translation(1.0, 2.0, 3.0)
     p = Point(0.0, 0.0, 0.0)
     tp = t.transformed_point(p)
-    assert tp.x == 1.0
-    assert tp.y == 2.0
-    assert tp.z == 3.0
+    assert tp[0] == 1.0
+    assert tp[1] == 2.0
+    assert tp[2] == 3.0
 
 
 def test_xform_transformed_vector():
     s = Xform.scaling(2.0, 3.0, 4.0)
     v = Vector(1.0, 1.0, 1.0)
     sv = s.transformed_vector(v)
-    assert sv.x == 2.0
-    assert sv.y == 3.0
-    assert sv.z == 4.0
+    assert sv[0] == 2.0
+    assert sv[1] == 3.0
+    assert sv[2] == 4.0
 
 
 def test_xform_transform_point():
     t = Xform.translation(1.0, 2.0, 3.0)
     p = Point(0.0, 0.0, 0.0)
     t.transform_point(p)
-    assert p.x == 1.0
-    assert p.y == 2.0
-    assert p.z == 3.0
+    assert p[0] == 1.0
+    assert p[1] == 2.0
+    assert p[2] == 3.0
 
 
 def test_xform_transform_vector():
     s = Xform.scaling(2.0, 3.0, 4.0)
     v = Vector(1.0, 1.0, 1.0)
     s.transform_vector(v)
-    assert v.x == 2.0
-    assert v.y == 3.0
-    assert v.z == 4.0
+    assert v[0] == 2.0
+    assert v[1] == 3.0
+    assert v[2] == 4.0
 
 
 def test_xform_getitem():

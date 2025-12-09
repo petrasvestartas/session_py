@@ -6,12 +6,12 @@ def test_box_default_constructor():
     assert boundingbox.center.x == 0.0
     assert boundingbox.center.y == 0.0
     assert boundingbox.center.z == 0.0
-    assert boundingbox.x_axis.x == 1.0
-    assert boundingbox.y_axis.y == 1.0
-    assert boundingbox.z_axis.z == 1.0
-    assert boundingbox.half_size.x == 0.5
-    assert boundingbox.half_size.y == 0.5
-    assert boundingbox.half_size.z == 0.5
+    assert boundingbox.x_axis[0] == 1.0
+    assert boundingbox.y_axis[1] == 1.0
+    assert boundingbox.z_axis[2] == 1.0
+    assert boundingbox.half_size[0] == 0.5
+    assert boundingbox.half_size[1] == 0.5
+    assert boundingbox.half_size[2] == 0.5
     assert boundingbox.guid is not None
 
 
@@ -27,9 +27,9 @@ def test_box_constructor_with_parameters():
     assert boundingbox.center.x == 1.0
     assert boundingbox.center.y == 2.0
     assert boundingbox.center.z == 3.0
-    assert boundingbox.half_size.x == 2.0
-    assert boundingbox.half_size.y == 3.0
-    assert boundingbox.half_size.z == 4.0
+    assert boundingbox.half_size[0] == 2.0
+    assert boundingbox.half_size[1] == 3.0
+    assert boundingbox.half_size[2] == 4.0
 
 
 def test_box_from_plane():
@@ -37,9 +37,9 @@ def test_box_from_plane():
     boundingbox = BoundingBox.from_plane(plane, 4.0, 6.0, 8.0)
 
     assert boundingbox.center.x == 0.0
-    assert boundingbox.half_size.x == 2.0
-    assert boundingbox.half_size.y == 3.0
-    assert boundingbox.half_size.z == 4.0
+    assert boundingbox.half_size[0] == 2.0
+    assert boundingbox.half_size[1] == 3.0
+    assert boundingbox.half_size[2] == 4.0
 
 
 def test_box_corners():
@@ -131,7 +131,7 @@ def test_boundingbox_json_roundtrip():
 
     assert isinstance(loaded, BoundingBox)
     assert loaded.center.x == bbox.center.x
-    assert loaded.half_size.z == bbox.half_size.z
+    assert loaded.half_size[2] == bbox.half_size[2]
     assert loaded.name == bbox.name
 
 
@@ -146,9 +146,9 @@ def test_box_inflate():
 
     boundingbox.inflate(0.5)
 
-    assert boundingbox.half_size.x == 1.5
-    assert boundingbox.half_size.y == 2.5
-    assert boundingbox.half_size.z == 3.5
+    assert boundingbox.half_size[0] == 1.5
+    assert boundingbox.half_size[1] == 2.5
+    assert boundingbox.half_size[2] == 3.5
 
 
 def test_box_from_point():
@@ -158,9 +158,9 @@ def test_box_from_point():
     assert boundingbox.center.x == 1.0
     assert boundingbox.center.y == 2.0
     assert boundingbox.center.z == 3.0
-    assert boundingbox.half_size.x == 0.0
-    assert boundingbox.half_size.y == 0.0
-    assert boundingbox.half_size.z == 0.0
+    assert boundingbox.half_size[0] == 0.0
+    assert boundingbox.half_size[1] == 0.0
+    assert boundingbox.half_size[2] == 0.0
 
 
 def test_box_from_point_with_inflate():
@@ -170,9 +170,9 @@ def test_box_from_point_with_inflate():
     assert boundingbox.center.x == 1.0
     assert boundingbox.center.y == 2.0
     assert boundingbox.center.z == 3.0
-    assert boundingbox.half_size.x == 0.5
-    assert boundingbox.half_size.y == 0.5
-    assert boundingbox.half_size.z == 0.5
+    assert boundingbox.half_size[0] == 0.5
+    assert boundingbox.half_size[1] == 0.5
+    assert boundingbox.half_size[2] == 0.5
 
 
 def test_box_from_points():
@@ -182,9 +182,9 @@ def test_box_from_points():
     assert boundingbox.center.x == 1.0
     assert boundingbox.center.y == 2.0
     assert boundingbox.center.z == 3.0
-    assert boundingbox.half_size.x == 1.0
-    assert boundingbox.half_size.y == 2.0
-    assert boundingbox.half_size.z == 3.0
+    assert boundingbox.half_size[0] == 1.0
+    assert boundingbox.half_size[1] == 2.0
+    assert boundingbox.half_size[2] == 3.0
 
 
 def test_box_from_points_with_inflate():
@@ -194,9 +194,9 @@ def test_box_from_points_with_inflate():
     assert boundingbox.center.x == 1.0
     assert boundingbox.center.y == 2.0
     assert boundingbox.center.z == 3.0
-    assert boundingbox.half_size.x == 1.5
-    assert boundingbox.half_size.y == 2.5
-    assert boundingbox.half_size.z == 3.5
+    assert boundingbox.half_size[0] == 1.5
+    assert boundingbox.half_size[1] == 2.5
+    assert boundingbox.half_size[2] == 3.5
 
 
 def test_box_from_line():
@@ -208,7 +208,7 @@ def test_box_from_line():
     assert boundingbox.center.x == 5.0
     assert boundingbox.center.y == 0.0
     assert boundingbox.center.z == 0.0
-    assert boundingbox.half_size.x == 5.0
+    assert boundingbox.half_size[0] == 5.0
 
 
 def test_box_from_line_with_inflate():
@@ -220,9 +220,9 @@ def test_box_from_line_with_inflate():
     assert boundingbox.center.x == 5.0
     assert boundingbox.center.y == 0.0
     assert boundingbox.center.z == 0.0
-    assert boundingbox.half_size.x == 6.0
-    assert boundingbox.half_size.y == 1.0
-    assert boundingbox.half_size.z == 1.0
+    assert boundingbox.half_size[0] == 6.0
+    assert boundingbox.half_size[1] == 1.0
+    assert boundingbox.half_size[2] == 1.0
 
 
 def test_box_from_polyline():
@@ -235,9 +235,9 @@ def test_box_from_polyline():
     assert boundingbox.center.x == 0.5
     assert boundingbox.center.y == 0.5
     assert boundingbox.center.z == 0.0
-    assert boundingbox.half_size.x == 0.5
-    assert boundingbox.half_size.y == 0.5
-    assert boundingbox.half_size.z == 0.0
+    assert boundingbox.half_size[0] == 0.5
+    assert boundingbox.half_size[1] == 0.5
+    assert boundingbox.half_size[2] == 0.0
 
 
 def test_box_from_polyline_with_inflate():
@@ -250,6 +250,6 @@ def test_box_from_polyline_with_inflate():
     assert boundingbox.center.x == 0.5
     assert boundingbox.center.y == 0.5
     assert boundingbox.center.z == 0.0
-    assert boundingbox.half_size.x == 1.0
-    assert boundingbox.half_size.y == 1.0
-    assert boundingbox.half_size.z == 0.5
+    assert boundingbox.half_size[0] == 1.0
+    assert boundingbox.half_size[1] == 1.0
+    assert boundingbox.half_size[2] == 0.5

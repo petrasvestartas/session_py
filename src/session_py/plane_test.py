@@ -31,7 +31,7 @@ def test_plane_from_point_normal():
     n = Vector(0.0, 0.0, 1.0)
     plane = Plane.from_point_normal(p, n)
     assert plane.origin == p
-    assert abs(plane.z_axis.z - 1.0) < 1e-5
+    assert abs(plane.z_axis[2] - 1.0) < 1e-5
     assert abs(plane.d + 5.0) < 1e-5
 
 
@@ -126,8 +126,8 @@ def test_plane_operator_sub_translation():
 
 def test_plane_reverse():
     plane = Plane.xy_plane()
-    orig_x = Vector(plane.x_axis.x, plane.x_axis.y, plane.x_axis.z)
-    orig_y = Vector(plane.y_axis.x, plane.y_axis.y, plane.y_axis.z)
+    orig_x = Vector(plane.x_axis[0], plane.x_axis[1], plane.x_axis[2])
+    orig_y = Vector(plane.y_axis[0], plane.y_axis[1], plane.y_axis[2])
     plane.reverse()
     assert plane.x_axis == orig_y
     assert plane.y_axis == orig_x
@@ -154,7 +154,7 @@ def test_plane_rotate():
     plane = Plane.xy_plane()
     angle = math.pi / 2.0
     plane.rotate(angle)
-    assert abs(plane.x_axis.y - 1.0) < 1e-5
+    assert abs(plane.x_axis[1] - 1.0) < 1e-5
 
 
 def test_plane_is_same_direction_parallel():
@@ -214,9 +214,9 @@ def test_plane_translate_by_normal():
     assert translated.origin.z == 5.0
 
     # Normal should remain the same
-    assert translated.z_axis.x == plane.z_axis.x
-    assert translated.z_axis.y == plane.z_axis.y
-    assert translated.z_axis.z == plane.z_axis.z
+    assert translated.z_axis[0] == plane.z_axis[0]
+    assert translated.z_axis[1] == plane.z_axis[1]
+    assert translated.z_axis[2] == plane.z_axis[2]
 
     # Translate along negative normal
     translated_neg = plane.translate_by_normal(-3.0)

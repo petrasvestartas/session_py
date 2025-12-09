@@ -106,8 +106,8 @@ def test_line_operator_div():
 def test_line_to_vector():
     line = Line(1.0, 2.0, 3.0, 4.0, 6.0, 9.0)
     v = line.to_vector()
-    assert v.x == 3.0
-    assert v.z == 6.0
+    assert v[0] == 3.0
+    assert v[2] == 6.0
 
 
 def test_line_length():
@@ -123,19 +123,19 @@ def test_line_squared_length():
 def test_line_point_at():
     line = Line(0.0, 0.0, 0.0, 10.0, 10.0, 10.0)
     p = line.point_at(0.5)
-    assert abs(p.x - 5.0) < 1e-5
+    assert abs(p[0] - 5.0) < 1e-5
 
 
 def test_line_start():
     line = Line(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
     p = line.start()
-    assert p.x == 1.0
+    assert p[0] == 1.0
 
 
 def test_line_end():
     line = Line(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
     p = line.end()
-    assert p.x == 4.0
+    assert p[0] == 4.0
 
 
 def test_line_json_roundtrip():

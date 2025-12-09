@@ -174,7 +174,7 @@ class BoundingBox:
 
             ux = axis
             # Create perpendicular axes
-            if abs(ux.z) < 0.9:
+            if abs(ux[2]) < 0.9:
                 uy = Vector(0.0, 0.0, 1.0).cross(ux).normalize()
             else:
                 uy = Vector(1.0, 0.0, 0.0).cross(ux).normalize()
@@ -235,7 +235,7 @@ class BoundingBox:
 
             ux = axis
             # Create perpendicular axes
-            if abs(ux.z) < 0.9:
+            if abs(ux[2]) < 0.9:
                 uy = Vector(0.0, 0.0, 1.0).cross(ux).normalize()
             else:
                 uy = Vector(1.0, 0.0, 0.0).cross(ux).normalize()
@@ -246,9 +246,9 @@ class BoundingBox:
 
     def point_at(self, x: float, y: float, z: float) -> Point:
         return Point(
-            self.center.x + x * self.x_axis.x + y * self.y_axis.x + z * self.z_axis.x,
-            self.center.y + x * self.x_axis.y + y * self.y_axis.y + z * self.z_axis.y,
-            self.center.z + x * self.x_axis.z + y * self.y_axis.z + z * self.z_axis.z,
+            self.center.x + x * self.x_axis[0] + y * self.y_axis[0] + z * self.z_axis[0],
+            self.center.y + x * self.x_axis[1] + y * self.y_axis[1] + z * self.z_axis[1],
+            self.center.z + x * self.x_axis[2] + y * self.y_axis[2] + z * self.z_axis[2],
         )
 
     def min_point(self) -> Point:
@@ -260,9 +260,9 @@ class BoundingBox:
             The point with minimum x, y, z coordinates.
         """
         return Point(
-            self.center.x - self.half_size.x,
-            self.center.y - self.half_size.y,
-            self.center.z - self.half_size.z,
+            self.center.x - self.half_size[0],
+            self.center.y - self.half_size[1],
+            self.center.z - self.half_size[2],
         )
 
     def max_point(self) -> Point:
@@ -274,9 +274,9 @@ class BoundingBox:
             The point with maximum x, y, z coordinates.
         """
         return Point(
-            self.center.x + self.half_size.x,
-            self.center.y + self.half_size.y,
-            self.center.z + self.half_size.z,
+            self.center.x + self.half_size[0],
+            self.center.y + self.half_size[1],
+            self.center.z + self.half_size[2],
         )
 
     def corners(self) -> List[Point]:
@@ -288,35 +288,35 @@ class BoundingBox:
             List of 8 corner points in a specific order.
         """
         return [
-            self.point_at(self.half_size.x, self.half_size.y, -self.half_size.z),
-            self.point_at(-self.half_size.x, self.half_size.y, -self.half_size.z),
-            self.point_at(-self.half_size.x, -self.half_size.y, -self.half_size.z),
-            self.point_at(self.half_size.x, -self.half_size.y, -self.half_size.z),
-            self.point_at(self.half_size.x, self.half_size.y, self.half_size.z),
-            self.point_at(-self.half_size.x, self.half_size.y, self.half_size.z),
-            self.point_at(-self.half_size.x, -self.half_size.y, self.half_size.z),
-            self.point_at(self.half_size.x, -self.half_size.y, self.half_size.z),
+            self.point_at(self.half_size[0], self.half_size[1], -self.half_size[2]),
+            self.point_at(-self.half_size[0], self.half_size[1], -self.half_size[2]),
+            self.point_at(-self.half_size[0], -self.half_size[1], -self.half_size[2]),
+            self.point_at(self.half_size[0], -self.half_size[1], -self.half_size[2]),
+            self.point_at(self.half_size[0], self.half_size[1], self.half_size[2]),
+            self.point_at(-self.half_size[0], self.half_size[1], self.half_size[2]),
+            self.point_at(-self.half_size[0], -self.half_size[1], self.half_size[2]),
+            self.point_at(self.half_size[0], -self.half_size[1], self.half_size[2]),
         ]
 
     def two_rectangles(self) -> List[Point]:
         return [
-            self.point_at(self.half_size.x, self.half_size.y, -self.half_size.z),
-            self.point_at(-self.half_size.x, self.half_size.y, -self.half_size.z),
-            self.point_at(-self.half_size.x, -self.half_size.y, -self.half_size.z),
-            self.point_at(self.half_size.x, -self.half_size.y, -self.half_size.z),
-            self.point_at(self.half_size.x, self.half_size.y, -self.half_size.z),
-            self.point_at(self.half_size.x, self.half_size.y, self.half_size.z),
-            self.point_at(-self.half_size.x, self.half_size.y, self.half_size.z),
-            self.point_at(-self.half_size.x, -self.half_size.y, self.half_size.z),
-            self.point_at(self.half_size.x, -self.half_size.y, self.half_size.z),
-            self.point_at(self.half_size.x, self.half_size.y, self.half_size.z),
+            self.point_at(self.half_size[0], self.half_size[1], -self.half_size[2]),
+            self.point_at(-self.half_size[0], self.half_size[1], -self.half_size[2]),
+            self.point_at(-self.half_size[0], -self.half_size[1], -self.half_size[2]),
+            self.point_at(self.half_size[0], -self.half_size[1], -self.half_size[2]),
+            self.point_at(self.half_size[0], self.half_size[1], -self.half_size[2]),
+            self.point_at(self.half_size[0], self.half_size[1], self.half_size[2]),
+            self.point_at(-self.half_size[0], self.half_size[1], self.half_size[2]),
+            self.point_at(-self.half_size[0], -self.half_size[1], self.half_size[2]),
+            self.point_at(self.half_size[0], -self.half_size[1], self.half_size[2]),
+            self.point_at(self.half_size[0], self.half_size[1], self.half_size[2]),
         ]
 
     def inflate(self, amount: float):
         self.half_size = Vector(
-            self.half_size.x + amount,
-            self.half_size.y + amount,
-            self.half_size.z + amount,
+            self.half_size[0] + amount,
+            self.half_size[1] + amount,
+            self.half_size[2] + amount,
         )
 
     @staticmethod
@@ -328,14 +328,14 @@ class BoundingBox:
     ) -> bool:
         dot_rp = abs(relative_position.dot(axis))
 
-        v1 = box1.x_axis * box1.half_size.x
-        v2 = box1.y_axis * box1.half_size.y
-        v3 = box1.z_axis * box1.half_size.z
+        v1 = box1.x_axis * box1.half_size[0]
+        v2 = box1.y_axis * box1.half_size[1]
+        v3 = box1.z_axis * box1.half_size[2]
         proj1 = abs(v1.dot(axis)) + abs(v2.dot(axis)) + abs(v3.dot(axis))
 
-        v4 = box2.x_axis * box2.half_size.x
-        v5 = box2.y_axis * box2.half_size.y
-        v6 = box2.z_axis * box2.half_size.z
+        v4 = box2.x_axis * box2.half_size[0]
+        v5 = box2.y_axis * box2.half_size[1]
+        v6 = box2.z_axis * box2.half_size[2]
         proj2 = abs(v4.dot(axis)) + abs(v5.dot(axis)) + abs(v6.dot(axis))
 
         return dot_rp > (proj1 + proj2)

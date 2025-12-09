@@ -1063,7 +1063,7 @@ class NurbsSurface:
         # For now, implement basic evaluation (point only)
         # Full derivative implementation would require basis_functions_derivatives
         pt = self.point_at(u, v)
-        result = [Vector(pt.x, pt.y, pt.z)]
+        result = [Vector(pt.x, pt.y, pt[2])]
         
         if num_derivs > 0:
             # Approximate derivatives with finite differences

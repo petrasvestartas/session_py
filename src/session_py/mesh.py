@@ -38,10 +38,32 @@ class VertexData:
     def __init__(self, point: Point = None):
         if point is None:
             point = Point(0.0, 0.0, 0.0)
-        self.x = point.x
-        self.y = point.y
-        self.z = point.z
+        self.x = point[0]
+        self.y = point[1]
+        self.z = point[2]
         self.attributes = {}
+
+    def __getitem__(self, index):
+        """Access coordinate by index (0=x, 1=y, 2=z)."""
+        if index == 0:
+            return self.x
+        elif index == 1:
+            return self.y
+        elif index == 2:
+            return self.z
+        else:
+            raise IndexError("Index out of range")
+
+    def __setitem__(self, index, value):
+        """Set coordinate by index (0=x, 1=y, 2=z)."""
+        if index == 0:
+            self.x = value
+        elif index == 1:
+            self.y = value
+        elif index == 2:
+            self.z = value
+        else:
+            raise IndexError("Index out of range")
 
     def position(self) -> Point:
         """Get the vertex position as a Point."""
@@ -49,9 +71,9 @@ class VertexData:
 
     def set_position(self, point: Point):
         """Set the vertex position from a Point."""
-        self.x = point.x
-        self.y = point.y
-        self.z = point.z
+        self.x = point[0]
+        self.y = point[1]
+        self.z = point[2]
 
     def color(self) -> List[float]:
         """Get the vertex color as [r, g, b]."""
@@ -348,7 +370,7 @@ class Mesh:
         length = normal.magnitude()
 
         if length > Tolerance.ZERO_TOLERANCE:
-            return Vector(normal.x / length, normal.y / length, normal.z / length)
+            return Vector(normal[0] / length, normal[1] / length, normal[2] / length)
 
         return None
 
@@ -378,14 +400,14 @@ class Mesh:
             else:  # UNIFORM
                 weight = 1.0
 
-            normal_acc.x += face_normal.x * weight
-            normal_acc.y += face_normal.y * weight
-            normal_acc.z += face_normal.z * weight
+            normal_acc[0] += face_normal[0] * weight
+            normal_acc[1] += face_normal[1] * weight
+            normal_acc[2] += face_normal[2] * weight
 
         length = normal_acc.magnitude()
         if length > Tolerance.ZERO_TOLERANCE:
             return Vector(
-                normal_acc.x / length, normal_acc.y / length, normal_acc.z / length
+                normal_acc[0] / length, normal_acc[1] / length, normal_acc[2] / length
             )
 
         return None
@@ -587,9 +609,9 @@ class Mesh:
         vertex_data = {}
         for key, vdata in self.vertex.items():
             vertex_data[str(key)] = {
-                "x": vdata.x,
-                "y": vdata.y,
-                "z": vdata.z,
+                "x": vdata[0],
+                "y": vdata[1],
+                "z": vdata[2],
                 "attributes": vdata.attributes,
             }
 
@@ -723,9 +745,9 @@ class Mesh:
         for vdata in self.vertex.values():
             pos = vdata.position()
             self.xform.transform_point(pos)
-            vdata.x = pos.x
-            vdata.y = pos.y
-            vdata.z = pos.z
+            vdata[0] = pos.x
+            vdata[1] = pos.y
+            vdata[2] = pos.z
         self.xform = Xform.identity()
 
     def transformed(self):

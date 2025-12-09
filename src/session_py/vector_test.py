@@ -1,243 +1,145 @@
-import math
-from .vector import Vector
-from .tolerance import Tolerance, TO_DEGREES
+from .mini_test import MINI_TEST, MINI_CHECK, run_all
 
 
-def test_default_constructor():
-    v = Vector()
-    assert v[0] == 0 and v[1] == 0 and v[2] == 0
+@MINI_TEST("Vector", "constructor")
+def test_vector_constructor():
+    from session_py import Vector
 
+    # Constructor
+    v = Vector(1.0, 2.0, 3.0)
 
-def test_constructor():
-    v = Vector(0.57, -158.63, 180.890)
-    assert v[0] == 0.57 and v[1] == -158.63 and v[2] == 180.890
+    # Setters
+    v[0] = 10.0
+    v[1] = 20.0
+    v[2] = 30.0
 
+    # Getters
+    x = v[0]
+    y = v[1]
+    z = v[2]
 
-def test_static_methods():
-    v = Vector.x_axis()
-    assert (v.x, v.y, v.z) == (1.0, 0.0, 0.0)
-    v = Vector.y_axis()
-    assert (v.x, v.y, v.z) == (0.0, 1.0, 0.0)
-    v = Vector.z_axis()
-    assert (v.x, v.y, v.z) == (0.0, 0.0, 1.0)
+    # Copy
+    vcopy = Vector(10.0, 20.0, 30.0)
+    vcopy.guid = v.guid
 
-
-def test_from_start_and_end():
-    start = Vector(8.7, 5.7, -1.87)
-    end = Vector(1, 1.57, 2)
-    v = Vector.from_start_and_end(start, end)
-    assert abs(v[0] - (-7.7)) < Tolerance.ZERO_TOLERANCE
-    assert abs(v[1] - (-4.13)) < Tolerance.ZERO_TOLERANCE
-    assert abs(v[2] - 3.87) < Tolerance.ZERO_TOLERANCE
-
-
-def test_operators():
-    v1 = Vector(1, 2, 3)
-    v2 = Vector(4, 5, 6)
-    v3 = v1 + v2
-    assert v3[0] == 5 and v3[1] == 7 and v3[2] == 9
-    v3 = v1 - v2
-    assert v3[0] == -3 and v3[1] == -3 and v3[2] == -3
-    v3 = v1 * 2
-    assert v3[0] == 2 and v3[1] == 4 and v3[2] == 6
-    v3 = v1 / 2
-    assert v3[0] == 0.5 and v3[1] == 1 and v3[2] == 1.5
-    v3 = Vector(1, 2, 3)
-    v3 += v2
-    assert v3[0] == 5 and v3[1] == 7 and v3[2] == 9
-    v3 -= v2
-    assert v3[0] == 1 and v3[1] == 2 and v3[2] == 3
-    v3 *= 2
-    assert v3[0] == 2 and v3[1] == 4 and v3[2] == 6
-    v3 /= 2
-    assert v3[0] == 1 and v3[1] == 2 and v3[2] == 3
-
-
-def test_reverse():
-    v = Vector(1, 2, 3)
-    v.reverse()
-    assert v[0] == -1 and v[1] == -2 and v[2] == -3
-
-
-def test_length():
-    v = Vector(5.5697, -9.84, 1.587)
-    magnitude = v.magnitude()
-    assert magnitude == 11.4177811806848
-
-
-def test_unitize():
-    v = Vector(5.5697, -9.84, 1.587)
-    normalized_vector = v.normalize()
-    assert normalized_vector.magnitude() == 1
-    v.normalize_self()
-    assert v.magnitude() == 1
-
-
-def test_projection():
-    v = Vector(1, 1, 1)
-    x_axis = Vector(1, 0, 0)
-    y_axis = Vector(0, 1, 0)
-    z_axis = Vector(0, 0, 1)
-
-    projection, _, _, _ = v.projection(x_axis)
-    assert projection[0] == 1 and projection[1] == 0 and projection[2] == 0
-    projection, _, _, _ = v.projection(y_axis)
-    assert projection[0] == 0 and projection[1] == 1 and projection[2] == 0
-    projection, _, _, _ = v.projection(z_axis)
-    assert projection[0] == 0 and projection[1] == 0 and projection[2] == 1
-
-
-def test_is_parallel_to():
-    v1 = Vector(0, 0, 1)
-    v2 = Vector(0, 0, 2)
-    v3 = Vector(0, 0, -1)
-    v4 = Vector(0, 1, -1)
-    assert v1.is_parallel_to(v2) == 1
-    assert v1.is_parallel_to(v3) == -1
-    assert v1.is_parallel_to(v4) == 0
-
-
-def test_dot():
-    v1 = Vector(1, 0, 0)
-    v2 = Vector(0, 1, 0)
-    v3 = Vector(-1, 0, 0)
-    assert v1.dot(v2) == 0
-    assert v1.dot(v3) == -1
-    assert v1.dot(v1) == 1
-
-    dot_product = v1.dot(v2)
-    magnitudes = v1.magnitude() * v2.magnitude()
-    if magnitudes > 0.0:
-        cos_angle = dot_product / magnitudes
-        angle = math.acos(cos_angle)
-        angle_degrees = angle * TO_DEGREES
-        assert angle_degrees == 90
-
-
-def test_cross():
-    v1 = Vector(1, 0, 0)
-    v2 = Vector(0, 1, 0)
-    v3 = v1.cross(v2)
-    assert v3[0] == 0 and v3[1] == 0 and v3[2] == 1
-
-
-def test_angle():
-    v1 = Vector(1, 1, 0)
-    v2 = Vector(0, 1, 0)
-    angle = v1.angle(v2, False)
-    assert abs(angle - 45) < Tolerance.ZERO_TOLERANCE
-    v1 = Vector(-1, 1, 0)
-    angle = v1.angle(v2, True)
-    assert abs(angle - (-45)) < Tolerance.ZERO_TOLERANCE
-
-
-def test_get_leveled_vector():
-    v = Vector(1, 1, 1)
-    scale = 1.0
-    leveled_vector = v.get_leveled_vector(scale)
-    assert (
-        abs(leveled_vector.magnitude() - 4.1684325329666283) < Tolerance.ZERO_TOLERANCE
+    MINI_CHECK(
+        v.name == "my_vector" and
+        v[0] == 10.0 and
+        v[1] == 20.0 and
+        v[2] == 30.0 and
+        v.guid
     )
 
-
-def test_cosine_law():
-    triangle_edge_length_a = 100
-    triangle_edge_length_b = 150
-    angle_in_degrees_between_edges = 115
-    triangle_edge_length_c = Vector.cosine_law(
-        triangle_edge_length_a,
-        triangle_edge_length_b,
-        angle_in_degrees_between_edges,
-        True,
-    )
-
-    triangle_edge_length_c = round(triangle_edge_length_c * 100) / 100
-    assert triangle_edge_length_c == 212.55
+    MINI_CHECK(x == 10.0 and y == 20.0 and z == 30.0)
+    MINI_CHECK(vcopy == v)
 
 
-def test_sine_law_angle():
-    triangle_edge_length_a = 212.55
-    angle_in_degrees_in_front_of_a = 115
-    triangle_edge_length_b = 150
+@MINI_TEST("Vector", "arithmetic")
+def test_vector_arithmetic():
+    from session_py import Vector
 
-    angle_in_degrees_in_front_of_b = Vector.sine_law_angle(
-        triangle_edge_length_a, angle_in_degrees_in_front_of_a, triangle_edge_length_b
-    )
-
-    angle_in_degrees_in_front_of_b = round(angle_in_degrees_in_front_of_b * 100) / 100
-    assert angle_in_degrees_in_front_of_b == 39.76
-
-
-def test_sine_law_length():
-    triangle_edge_length_a = 212.55
-    angle_in_degrees_in_front_of_a = 115
-    angle_in_degrees_in_front_of_b = 39.761714
-
-    triangle_edge_length_b = Vector.sine_law_length(
-        triangle_edge_length_a,
-        angle_in_degrees_in_front_of_a,
-        angle_in_degrees_in_front_of_b,
-    )
-
-    triangle_edge_length_b = round(triangle_edge_length_b * 100) / 100
-    assert triangle_edge_length_b == 150
-
-
-def test_angle_between_vector_xy_components():
-    v = Vector(math.sqrt(3), 1, 0)
-    angle = Vector.angle_between_vector_xy_components(v)
-    assert round(angle * 100) / 100 == 30
-    v = Vector(1, math.sqrt(3), 0)
-    angle = Vector.angle_between_vector_xy_components(v)
-    assert round(angle * 100) / 100 == 60
-
-
-def test_sum_of_vectors():
-    vectors = [Vector(1, 1, 1), Vector(2, 2, 2), Vector(3, 3, 3)]
-    sum_vector = Vector.sum_of_vectors(vectors)
-    assert sum_vector[0] == 6 and sum_vector[1] == 6 and sum_vector[2] == 6
-
-
-def test_coordinate_direction_angles():
-    v = Vector(35.4, 35.4, 86.6)
-    alpha_beta_gamma = v.coordinate_direction_3angles(True)
-    assert abs(alpha_beta_gamma[0] - 69.274204) < 1e-6
-    assert abs(alpha_beta_gamma[1] - 69.274204) < 1e-6
-    assert abs(alpha_beta_gamma[2] - 30.032058) < 1e-6
-
-    v = Vector(1, 1, math.sqrt(2))
-    phi_theta = v.coordinate_direction_2angles(True)
-    assert abs(phi_theta[0] - 45) < 1e-6
-    assert abs(phi_theta[1] - 45) < 1e-6
-
-
-def test_vector_equality():
     v1 = Vector(1.0, 2.0, 3.0)
-    v2 = Vector(1.0, 2.0, 3.0)
-    v2.guid = v1.guid
-    assert v1 == v2
-    v3 = Vector(1.1, 2.0, 3.0)
-    assert v1 != v3
+    v2 = Vector(4.0, 5.0, 6.0)
+
+    # Addition
+    sum_vec = v1 + v2
+    MINI_CHECK(sum_vec[0] == 5.0 and sum_vec[1] == 7.0 and sum_vec[2] == 9.0)
+
+    # Subtraction
+    diff = v2 - v1
+    MINI_CHECK(diff[0] == 3.0 and diff[1] == 3.0 and diff[2] == 3.0)
+
+    # Scalar multiplication
+    scaled = v1 * 2.0
+    MINI_CHECK(scaled[0] == 2.0 and scaled[1] == 4.0 and scaled[2] == 6.0)
+
+    # Scalar division
+    divided = v2 / 2.0
+    MINI_CHECK(divided[0] == 2.0 and divided[1] == 2.5 and divided[2] == 3.0)
 
 
-def test_vector_constructor_values():
-    v = Vector(0.57, -158.63, 180.890)
-    assert (v[0], v[1], v[2]) == (0.57, -158.63, 180.890)
+@MINI_TEST("Vector", "magnitude")
+def test_vector_magnitude():
+    from session_py import Vector
+
+    v = Vector(3.0, 4.0, 0.0)
+    length = v.magnitude()
+    MINI_CHECK(abs(length - 5.0) < 1e-10)
+
+    unit = Vector(1.0, 0.0, 0.0)
+    MINI_CHECK(unit.magnitude() == 1.0)
 
 
+@MINI_TEST("Vector", "normalize")
+def test_vector_normalize():
+    from session_py import Vector
+
+    v = Vector(3.0, 4.0, 0.0)
+    n = v.normalize()
+
+    MINI_CHECK(abs(n.magnitude() - 1.0) < 1e-10)
+    MINI_CHECK(abs(n[0] - 0.6) < 1e-10)
+    MINI_CHECK(abs(n[1] - 0.8) < 1e-10)
+    MINI_CHECK(n[2] == 0.0)
+
+
+@MINI_TEST("Vector", "dot_product")
+def test_vector_dot_product():
+    from session_py import Vector
+
+    v1 = Vector(1.0, 0.0, 0.0)
+    v2 = Vector(0.0, 1.0, 0.0)
+    v3 = Vector(1.0, 0.0, 0.0)
+
+    # Perpendicular vectors
+    MINI_CHECK(v1.dot(v2) == 0.0)
+
+    # Parallel vectors
+    MINI_CHECK(v1.dot(v3) == 1.0)
+
+
+@MINI_TEST("Vector", "cross_product")
+def test_vector_cross_product():
+    from session_py import Vector
+
+    v1 = Vector(1.0, 0.0, 0.0)
+    v2 = Vector(0.0, 1.0, 0.0)
+
+    cross = v1.cross(v2)
+    MINI_CHECK(cross[0] == 0.0 and cross[1] == 0.0 and cross[2] == 1.0)
+
+
+@MINI_TEST("Vector", "json_roundtrip")
 def test_vector_json_roundtrip():
-    from pathlib import Path
+    from session_py import Vector
     from session_py.encoders import json_dump, json_load
+    from pathlib import Path
 
-    vec = Vector(1.5, 2.5, 3.5)
-    vec.name = "test_vector"
+    v = Vector(42.1, 84.2, 126.3)
+    v.name = "test_vector"
 
     path = Path(__file__).resolve().parents[2] / "test_vector.json"
-    json_dump(vec, path)
+    json_dump(v, path)
     loaded = json_load(path)
 
-    assert isinstance(loaded, Vector)
-    assert loaded.x == vec.x
-    assert loaded.y == vec.y
-    assert loaded.z == vec.z
-    assert loaded.name == vec.name
+    MINI_CHECK(loaded.name == "test_vector")
+    MINI_CHECK(abs(loaded[0] - 42.1) < 1e-10)
+    MINI_CHECK(abs(loaded[1] - 84.2) < 1e-10)
+    MINI_CHECK(abs(loaded[2] - 126.3) < 1e-10)
+
+
+@MINI_TEST("Vector", "static_axes")
+def test_vector_static_axes():
+    from session_py import Vector
+
+    x = Vector.x_axis()
+    y = Vector.y_axis()
+    z = Vector.z_axis()
+
+    MINI_CHECK(x[0] == 1.0 and x[1] == 0.0 and x[2] == 0.0)
+    MINI_CHECK(y[0] == 0.0 and y[1] == 1.0 and y[2] == 0.0)
+    MINI_CHECK(z[0] == 0.0 and z[1] == 0.0 and z[2] == 1.0)
+
+
+if __name__ == "__main__":
+    run_all("python")

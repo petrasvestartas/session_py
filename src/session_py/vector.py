@@ -21,12 +21,12 @@ class Vector:
         The unique identifier of the vector.
     name : str
         The name of the vector.
-    x : float
-        The X coordinate of the vector.
-    y : float
-        The Y coordinate of the vector.
-    z : float
-        The Z coordinate of the vector.
+    _x : float
+        The X coordinate (access via [0]).
+    _y : float
+        The Y coordinate (access via [1]).
+    _z : float
+        The Z coordinate (access via [2]).
 
     """
 
@@ -39,51 +39,18 @@ class Vector:
         self._length = 0.0
         self._has_length = False
 
-    @property
-    def x(self):
-        """Get the X coordinate."""
-        return self._x
-
-    @x.setter
-    def x(self, value):
-        """Set the X coordinate and invalidate length cache."""
-        self._x = value
-        self._has_length = False
-
-    @property
-    def y(self):
-        """Get the Y coordinate."""
-        return self._y
-
-    @y.setter
-    def y(self, value):
-        """Set the Y coordinate and invalidate length cache."""
-        self._y = value
-        self._has_length = False
-
-    @property
-    def z(self):
-        """Get the Z coordinate."""
-        return self._z
-
-    @z.setter
-    def z(self, value):
-        """Set the Z coordinate and invalidate length cache."""
-        self._z = value
-        self._has_length = False
-
     def __str__(self):
-        return f"Vector({self.x}, {self.y}, {self.z})"
+        return f"Vector({self[0]}, {self[1]}, {self[2]})"
 
     def __repr__(self):
-        return f"Vector({self.guid}, {self.name}, {self.x}, {self.y}, {self.z})"
+        return f"Vector({self.guid}, {self.name}, {self[0]}, {self[1]}, {self[2]})"
 
     def __eq__(self, other):
         return (
             self.name == other.name
-            and round(self.x, 6) == round(other.x, 6)
-            and round(self.y, 6) == round(other.y, 6)
-            and round(self.z, 6) == round(other.z, 6)
+            and round(self[0], 6) == round(other[0], 6)
+            and round(self[1], 6) == round(other[1], 6)
+            and round(self[2], 6) == round(other[2], 6)
         )
 
     def __ne__(self, other):
@@ -94,22 +61,24 @@ class Vector:
     ###########################################################################################
 
     def __getitem__(self, index):
+        """Access coordinate by index (0=x, 1=y, 2=z)."""
         if index == 0:
-            return self.x
+            return self._x
         elif index == 1:
-            return self.y
+            return self._y
         elif index == 2:
-            return self.z
+            return self._z
         else:
             raise IndexError("Index out of range")
 
     def __setitem__(self, index, value):
+        """Set coordinate by index (0=x, 1=y, 2=z). Invalidates length cache."""
         if index == 0:
-            self.x = value
+            self._x = value
         elif index == 1:
-            self.y = value
+            self._y = value
         elif index == 2:
-            self.z = value
+            self._z = value
         else:
             raise IndexError("Index out of range")
         self._has_length = False
@@ -215,7 +184,7 @@ class Vector:
             The vector from start to end.
 
         """
-        return Vector(end.x - start.x, end.y - start.y, end.z - start.z)
+        return Vector(end[0] - start[0], end[1] - start[1], end[2] - start[2])
 
     ###########################################################################################
     # Details
@@ -480,9 +449,9 @@ class Vector:
             return Vector(0, 0, 0), 0.0, Vector(0, 0, 0), 0.0
 
         projection_vector_unit = Vector(
-            projection_vector.x / projection_vector_length,
-            projection_vector.y / projection_vector_length,
-            projection_vector.z / projection_vector_length,
+            projection_vector[0] / projection_vector_length,
+            projection_vector[1] / projection_vector_length,
+            projection_vector[2] / projection_vector_length,
         )
 
         projected_vector_length = self.dot(projection_vector_unit)
@@ -642,7 +611,7 @@ class Vector:
 
         """
         to_degrees = TO_DEGREES if degrees else 1.0
-        return math.atan(vector.y / vector.x) * to_degrees
+        return math.atan(vector[1] / vector[0]) * to_degrees
 
     @staticmethod
     def sum_of_vectors(vectors):
@@ -744,31 +713,31 @@ class Vector:
         """
         k = 2
 
-        if abs(v.y) > abs(v.x):
-            if abs(v.z) > abs(v.y):
+        if abs(v[1]) > abs(v[0]):
+            if abs(v[2]) > abs(v[1]):
                 # |v.z| > |v.y| > |v.x|
                 i, j, k = 2, 1, 0
-                a, b = v.z, -v.y
-            elif abs(v.z) >= abs(v.x):
+                a, b = v[2], -v[1]
+            elif abs(v[2]) >= abs(v[0]):
                 # |v.y| >= |v.z| >= |v.x|
                 i, j, k = 1, 2, 0
-                a, b = v.y, -v.z
+                a, b = v[1], -v[2]
             else:
                 # |v.y| > |v.x| > |v.z|
                 i, j, k = 1, 0, 2
-                a, b = v.y, -v.x
-        elif abs(v.z) > abs(v.x):
+                a, b = v[1], -v[0]
+        elif abs(v[2]) > abs(v[0]):
             # |v.z| > |v.x| >= |v.y|
             i, j, k = 2, 0, 1
-            a, b = v.z, -v.x
-        elif abs(v.z) > abs(v.y):
+            a, b = v[2], -v[0]
+        elif abs(v[2]) > abs(v[1]):
             # |v.x| >= |v.z| > |v.y|
             i, j, k = 0, 2, 1
-            a, b = v.x, -v.z
+            a, b = v[0], -v[2]
         else:
             # |v.x| >= |v.y| >= |v.z|
             i, j, k = 0, 1, 2
-            a, b = v.x, -v.y
+            a, b = v[0], -v[1]
 
         coords = [0, 0, 0]
         coords[i] = b
@@ -788,9 +757,9 @@ class Vector:
             "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
-            "x": self.x,
-            "y": self.y,
-            "z": self.z,
+            "x": self[0],
+            "y": self[1],
+            "z": self[2],
         }
 
     @classmethod

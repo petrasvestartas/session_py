@@ -62,7 +62,14 @@ class Color:
         return result
 
     def duplicate(self) -> "Color":
-        """Duplicate the color."""
+        """Create a deep copy of this color with a new GUID.
+
+        Returns
+        -------
+        :class:`Color`
+            A new Color with identical RGBA values but a different GUID.
+
+        """
         return copy.deepcopy(self)
 
     def __str__(self) -> str:
@@ -119,12 +126,31 @@ class Color:
     ###########################################################################################
 
     def to_unified_array(self) -> list[float]:
-        """Convert to normalized float array [0-1] (matches Rust implementation)."""
+        """Convert to normalized float array [0-1].
+
+        Returns
+        -------
+        list[float]
+            Array [r, g, b, a] with values normalized to [0.0, 1.0].
+
+        """
         return [self[0] / 255.0, self[1] / 255.0, self[2] / 255.0, self[3] / 255.0]
 
     @classmethod
     def from_unified_array(cls, arr) -> "Color":
-        """Create color from normalized float values [0-1]."""
+        """Create color from normalized float values [0-1].
+
+        Parameters
+        ----------
+        arr : list[float]
+            Array [r, g, b, a] with values in [0.0, 1.0] range.
+
+        Returns
+        -------
+        :class:`Color`
+            A new Color with values converted to 0-255 range.
+
+        """
         return cls(int(arr[0] * 255.0 + 0.5), int(arr[1] * 255.0 + 0.5), int(arr[2] * 255.0 + 0.5), int(arr[3] * 255.0 + 0.5))
 
     ###########################################################################################
@@ -314,7 +340,19 @@ class Color:
     ###########################################################################################
 
     def to_protobuf(self):
-        """Convert to protobuf binary format."""
+        """Convert to protobuf binary format.
+
+        Returns
+        -------
+        bytes
+            Serialized protobuf data.
+
+        Raises
+        ------
+        ImportError
+            If protobuf module is not available.
+
+        """
         if not _HAS_PROTOBUF:
             raise ImportError("protobuf not available")
         proto = color_pb2.Color()
@@ -328,7 +366,24 @@ class Color:
 
     @classmethod
     def from_protobuf(cls, data):
-        """Create color from protobuf binary data."""
+        """Create color from protobuf binary data.
+
+        Parameters
+        ----------
+        data : bytes
+            Protobuf-encoded color data.
+
+        Returns
+        -------
+        :class:`Color`
+            The deserialized Color.
+
+        Raises
+        ------
+        ImportError
+            If protobuf module is not available.
+
+        """
         if not _HAS_PROTOBUF:
             raise ImportError("protobuf not available")
         proto = color_pb2.Color()
@@ -340,14 +395,33 @@ class Color:
         return color
 
     def protobuf_dump(self, filepath):
-        """Write protobuf to file."""
+        """Write protobuf to file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the output file.
+
+        """
         data = self.to_protobuf()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
     def protobuf_load(cls, filepath):
-        """Read protobuf from file."""
+        """Read protobuf from file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the protobuf file.
+
+        Returns
+        -------
+        :class:`Color`
+            The deserialized Color.
+
+        """
         with open(filepath, 'rb') as f:
             data = f.read()
         return cls.from_protobuf(data)

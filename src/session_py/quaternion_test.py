@@ -11,18 +11,18 @@ def approx_f32(a, b, tol=1e-5):
 
 def vectors_close(a, b, tol=1e-5):
     return (
-        approx_f32(a.x, b.x, tol)
-        and approx_f32(a.y, b.y, tol)
-        and approx_f32(a.z, b.z, tol)
+        approx_f32(a[0], b[0], tol)
+        and approx_f32(a[1], b[1], tol)
+        and approx_f32(a[2], b[2], tol)
     )
 
 
 def test_quaternion_identity():
     q = Quaternion.identity()
     assert q.s == 1.0
-    assert q.v.x == 0.0
-    assert q.v.y == 0.0
-    assert q.v.z == 0.0
+    assert q.v[0] == 0.0
+    assert q.v[1] == 0.0
+    assert q.v[2] == 0.0
 
 
 def test_quaternion_from_axis_angle_90deg_z():
@@ -31,7 +31,7 @@ def test_quaternion_from_axis_angle_90deg_z():
     q = Quaternion.from_axis_angle(axis, angle)
 
     assert approx_f32(q.s, math.cos(PI / 4.0))
-    assert approx_f32(q.v.z, math.sin(PI / 4.0))
+    assert approx_f32(q.v[2], math.sin(PI / 4.0))
 
 
 def test_quaternion_rotate_vector_90deg_z():
@@ -91,9 +91,9 @@ def test_quaternion_conjugate():
     conj = q.conjugate()
 
     assert conj.s == 0.5
-    assert conj.v.x == -0.5
-    assert conj.v.y == -0.5
-    assert conj.v.z == -0.5
+    assert conj.v[0] == -0.5
+    assert conj.v[1] == -0.5
+    assert conj.v[2] == -0.5
 
 
 def test_quaternion_magnitude():

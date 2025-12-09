@@ -27,9 +27,9 @@ def ray_box(
     box_max = box.max_point()
 
     # Calculate inverse direction (avoid division by zero)
-    inv_dir_x = 1.0 / direction.x if direction.x != 0.0 else float("inf")
-    inv_dir_y = 1.0 / direction.y if direction.y != 0.0 else float("inf")
-    inv_dir_z = 1.0 / direction.z if direction.z != 0.0 else float("inf")
+    inv_dir_x = 1.0 / direction[0] if direction[0] != 0.0 else float("inf")
+    inv_dir_y = 1.0 / direction[1] if direction[1] != 0.0 else float("inf")
+    inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else float("inf")
 
     # Calculate intersections with X slabs
     tx1 = (box_min.x - origin.x) * inv_dir_x
@@ -62,15 +62,15 @@ def ray_box(
 
     # Calculate actual intersection points
     entry = Point(
-        origin.x + direction.x * tmin,
-        origin.y + direction.y * tmin,
-        origin.z + direction.z * tmin,
+        origin.x + direction[0] * tmin,
+        origin.y + direction[1] * tmin,
+        origin.z + direction[2] * tmin,
     )
 
     exit_point = Point(
-        origin.x + direction.x * tmax,
-        origin.y + direction.y * tmax,
-        origin.z + direction.z * tmax,
+        origin.x + direction[0] * tmax,
+        origin.y + direction[1] * tmax,
+        origin.z + direction[2] * tmax,
     )
 
     return [entry, exit_point]

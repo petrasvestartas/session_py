@@ -36,9 +36,9 @@ class Quaternion:
     def magnitude(self):
         return math.sqrt(
             self.s * self.s
-            + self.v.x * self.v.x
-            + self.v.y * self.v.y
-            + self.v.z * self.v.z
+            + self.v[0] * self.v[0]
+            + self.v[1] * self.v[1]
+            + self.v[2] * self.v[2]
         )
 
     def normalize(self):
@@ -80,9 +80,9 @@ class Quaternion:
             "guid": self.guid,
             "name": self.name,
             "s": self.s,
-            "x": self.v.x,
-            "y": self.v.y,
-            "z": self.v.z,
+            "x": self.v[0],
+            "y": self.v[1],
+            "z": self.v[2],
         }
 
     @classmethod

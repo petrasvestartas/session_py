@@ -297,27 +297,27 @@ def test_session_tree_transformation_hierarchy():
     assert len(m1.vertex) == 8
     for i in range(8):
         v = m1.vertex[i]
-        assert abs(v.x - expected_box1[i][0]) < 1e-4
-        assert abs(v.y - expected_box1[i][1]) < 1e-4
-        assert abs(v.z - expected_box1[i][2]) < 1e-4
+        assert abs(v[0] - expected_box1[i][0]) < 1e-4
+        assert abs(v[1] - expected_box1[i][1]) < 1e-4
+        assert abs(v[2] - expected_box1[i][2]) < 1e-4
 
     # Validate box_2
     m2 = transformed.meshes[1]
     assert len(m2.vertex) == 8
     for i in range(8):
         v = m2.vertex[i]
-        assert abs(v.x - expected_box2[i][0]) < 1e-4
-        assert abs(v.y - expected_box2[i][1]) < 1e-4
-        assert abs(v.z - expected_box2[i][2]) < 1e-4
+        assert abs(v[0] - expected_box2[i][0]) < 1e-4
+        assert abs(v[1] - expected_box2[i][1]) < 1e-4
+        assert abs(v[2] - expected_box2[i][2]) < 1e-4
 
     # Validate box_3
     m3 = transformed.meshes[2]
     assert len(m3.vertex) == 8
     for i in range(8):
         v = m3.vertex[i]
-        assert abs(v.x - expected_box3[i][0]) < 1e-4
-        assert abs(v.y - expected_box3[i][1]) < 1e-4
-        assert abs(v.z - expected_box3[i][2]) < 1e-4
+        assert abs(v[0] - expected_box3[i][0]) < 1e-4
+        assert abs(v[1] - expected_box3[i][1]) < 1e-4
+        assert abs(v[2] - expected_box3[i][2]) < 1e-4
 
     # Validate faces (all boxes have same topology)
     for mesh in [m1, m2, m3]:
