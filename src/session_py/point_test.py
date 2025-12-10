@@ -43,8 +43,14 @@ def test_point_constructor():
     # Copy operators
     result_mul = p * 2.0
     result_div = p / 2.0
-    result_add = p + Vector(1.0, 1.0, 1.0) # Works with point too
-    diff_point = p - Vector(1.0, 1.0, 1.0) # Works with point too
+    result_add = p + Vector(1.0, 1.0, 1.0)
+    diff_point = p - Vector(1.0, 1.0, 1.0)
+
+    # Static sum and sub methods
+    p1 = Point(1.0, 2.0, 3.0)
+    p2 = Point(4.0, 5.0, 6.0)
+    psum = Point.sum(p1, p2)
+    pdif = Point.sub(p2, p1)
 
     MINI_CHECK(
         p.name == "my_point" and
@@ -54,23 +60,21 @@ def test_point_constructor():
         p.width == 1.0 and
         p.pointcolor == Color.blue() and
         p.guid)
-    
     MINI_CHECK(x == 10.0 and y == 20.0 and z == 30.0)
-    
     MINI_CHECK(pstr == "10.0, 20.0, 30.0")
     MINI_CHECK(prepr == "Point(my_point, 10.0, 20.0, 30.0, Color(blue, 0, 0, 255, 255), 1.0)")
     MINI_CHECK(pcopy == p and pcopy.guid != p.guid)
     MINI_CHECK(pother != p)
-
     MINI_CHECK(pmult[0] == 20.0 and pmult[1] == 40.0 and pmult[2] == 60.0)
     MINI_CHECK(pdiv[0] == 5.0 and pdiv[1] == 10.0 and pdiv[2] == 15.0)
     MINI_CHECK(padd[0] == 11.0 and padd[1] == 21.0 and padd[2] == 31.0)
     MINI_CHECK(psub[0] == 9.0 and psub[1] == 19.0 and psub[2] == 29.0)
-
     MINI_CHECK(result_mul[0] == 20.0 and result_mul[1] == 40.0 and result_mul[2] == 60.0)
     MINI_CHECK(result_div[0] == 5.0 and result_div[1] == 10.0 and result_div[2] == 15.0)
     MINI_CHECK(result_add[0] == 11.0 and result_add[1] == 21.0 and result_add[2] == 31.0)
     MINI_CHECK(diff_point[0] == 9.0 and diff_point[1] == 19.0 and diff_point[2] == 29.0)
+    MINI_CHECK(psum[0] == 5.0 and psum[1] == 7.0 and psum[2] == 9.0)
+    MINI_CHECK(pdif[0] == 3.0 and pdif[1] == 3.0 and pdif[2] == 3.0)
 
 
 @MINI_TEST("Point", "transformation")

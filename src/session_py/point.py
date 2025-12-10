@@ -76,6 +76,44 @@ class Point:
         """
         return copy.deepcopy(self)
 
+    @staticmethod
+    def sum(p0, p1):
+        """Returns a new point that is the sum of two points.
+
+        Parameters
+        ----------
+        p0 : :class:`Point`
+            First point.
+        p1 : :class:`Point`
+            Second point.
+
+        Returns
+        -------
+        :class:`Point`
+            A new Point with coordinates (p0.x + p1.x, p0.y + p1.y, p0.z + p1.z).
+
+        """
+        return Point(p0[0] + p1[0], p0[1] + p1[1], p0[2] + p1[2])
+
+    @staticmethod
+    def sub(p0, p1):
+        """Returns a new point that is the difference of two points.
+
+        Parameters
+        ----------
+        p0 : :class:`Point`
+            First point.
+        p1 : :class:`Point`
+            Second point.
+
+        Returns
+        -------
+        :class:`Point`
+            A new Point with coordinates (p0.x - p1.x, p0.y - p1.y, p0.z - p1.z).
+
+        """
+        return Point(p0[0] - p1[0], p0[1] - p1[1], p0[2] - p1[2])
+
     def __str__(self):
         return f"{self[0]}, {self[1]}, {self[2]}"
 

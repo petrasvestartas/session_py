@@ -343,7 +343,7 @@ class BoundingBox:
     def collides_with(self, other: "BoundingBox") -> bool:
         center_vec = Vector(self.center.x, self.center.y, self.center.z)
         other_center_vec = Vector(other.center.x, other.center.y, other.center.z)
-        relative_position = Vector.from_start_and_end(center_vec, other_center_vec)
+        relative_position = Vector.from_points(center_vec, other_center_vec)
 
         return not (
             self._separating_plane_exists(relative_position, self.x_axis, self, other)

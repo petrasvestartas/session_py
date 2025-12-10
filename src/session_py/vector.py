@@ -36,14 +36,54 @@ class Vector:
         self._x = x
         self._y = y
         self._z = z
-        self._length = 0.0
-        self._has_length = False
+        self._magnitude = 0.0
+        self._has_magnitude = False
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # New guid
+        result.guid = str(uuid.uuid4())
+
+        # Copy remaining fields
+        result.name = self.name
+        result._x = self._x
+        result._y = self._y
+        result._z = self._z
+        result._magnitude = self._magnitude
+        result._has_magnitude = self._has_magnitude
+        return result
+
+    def duplicate(self):
+        """Create a deep copy of this vector with a new GUID.
+
+        Returns
+        -------
+        :class:`Vector`
+            A new Vector with identical values but a different GUID.
+
+        """
+        import copy
+        return copy.deepcopy(self)
 
     def __str__(self):
         return f"Vector({self[0]}, {self[1]}, {self[2]})"
 
     def __repr__(self):
         return f"Vector({self.guid}, {self.name}, {self[0]}, {self[1]}, {self[2]})"
+
+    def str(self):
+        """Simple string form: just coordinates formatted to 6 decimals."""
+        from .tolerance import Tolerance
+        return f"{round(self[0], Tolerance.ROUNDING):.6f}, {round(self[1], Tolerance.ROUNDING):.6f}, {round(self[2], Tolerance.ROUNDING):.6f}"
+
+    def repr(self):
+        """Detailed representation with name, coordinates, and magnitude."""
+        from .tolerance import Tolerance
+        mag = self.magnitude()
+        return f"Vector({self.name}, {round(self[0], Tolerance.ROUNDING):.6f}, {round(self[1], Tolerance.ROUNDING):.6f}, {round(self[2], Tolerance.ROUNDING):.6f}, {round(mag, Tolerance.ROUNDING):.6f})"
 
     def __eq__(self, other):
         return (
@@ -81,34 +121,34 @@ class Vector:
             self._z = value
         else:
             raise IndexError("Index out of range")
-        self._has_length = False
+        self._has_magnitude = False
 
     def __imul__(self, other):
         self._x *= other
         self._y *= other
         self._z *= other
-        self._has_length = False
+        self._has_magnitude = False
         return self
 
     def __itruediv__(self, other):
         self._x /= other
         self._y /= other
         self._z /= other
-        self._has_length = False
+        self._has_magnitude = False
         return self
 
     def __iadd__(self, other):
         self._x += other._x
         self._y += other._y
         self._z += other._z
-        self._has_length = False
+        self._has_magnitude = False
         return self
 
     def __isub__(self, other):
         self._x -= other._x
         self._y -= other._y
         self._z -= other._z
-        self._has_length = False
+        self._has_magnitude = False
         return self
 
     ###########################################################################################
@@ -130,6 +170,18 @@ class Vector:
     ###########################################################################################
     # Static Methods
     ###########################################################################################
+
+    @staticmethod
+    def zero():
+        """Get a zero vector (0, 0, 0).
+
+        Returns
+        -------
+        :class:`Vector`
+            Zero vector (0, 0, 0).
+
+        """
+        return Vector(0.0, 0.0, 0.0)
 
     @staticmethod
     def x_axis():
@@ -168,27 +220,51 @@ class Vector:
         return Vector(0.0, 0.0, 1.0)
 
     @staticmethod
-    def from_start_and_end(start, end):
-        """Vector from start to end (end - start).
+    def from_points(p0, p1):
+        """Vector from p0 to p1 (p1 - p0).
 
         Parameters
         ----------
-        start : :class:`Vector`
-            Start vector.
-        end : :class:`Vector`
-            End vector.
+        p0 : :class:`Point`
+            Start point.
+        p1 : :class:`Point`
+            End point.
 
         Returns
         -------
         :class:`Vector`
-            The vector from start to end.
+            The vector from p0 to p1.
 
         """
-        return Vector(end[0] - start[0], end[1] - start[1], end[2] - start[2])
+        return Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
 
     ###########################################################################################
     # Details
     ###########################################################################################
+
+    def scale(self, factor):
+        """Scale the vector by a factor.
+
+        Parameters
+        ----------
+        factor : float
+            The scaling factor to apply to all components.
+
+        """
+        self._x *= factor
+        self._y *= factor
+        self._z *= factor
+        self._has_magnitude = False
+
+    def scale_up(self):
+        """Scale the vector up by the global scale factor (SCALE)."""
+        from .tolerance import SCALE
+        self.scale(SCALE)
+
+    def scale_down(self):
+        """Scale the vector down by the global scale factor (1/SCALE)."""
+        from .tolerance import SCALE
+        self.scale(1.0 / SCALE)
 
     def reverse(self):
         """Reverse the vector (negate all components).
@@ -202,18 +278,15 @@ class Vector:
         self._x = -self._x
         self._y = -self._y
         self._z = -self._z
-        self._has_length = False
+        self._has_magnitude = False
         return self
 
-    def compute_length(self):
-        """Compute the length of the vector using optimized algorithm.
+    def _compute_magnitude(self):
+        """Compute the magnitude of the vector without caching.
 
-        Returns
-        -------
-        float
-            The length of the vector.
+        Use magnitude() for cached version.
         """
-        length = 0.0
+        mag = 0.0
 
         x = abs(self._x)
         y = abs(self._y)
@@ -225,43 +298,43 @@ class Vector:
         z_zero = z < Tolerance.ZERO_TOLERANCE
 
         if x_zero and y_zero and z_zero:
-            length = 0.0
-            return length
+            mag = 0.0
+            return mag
         elif x_zero and y_zero:
-            length = z
-            return length
+            mag = z
+            return mag
         elif x_zero and z_zero:
-            length = y
-            return length
+            mag = y
+            return mag
         elif y_zero and z_zero:
-            length = x
-            return length
+            mag = x
+            return mag
 
         # Handle one or none zero case:
         # Sort so that x is the largest component
         if y >= x and y >= z:
-            length = x
+            mag = x
             x = y
-            y = length
+            y = mag
         elif z >= x and z >= y:
-            length = x
+            mag = x
             x = z
-            z = length
+            z = mag
 
         # For small denormalized doubles (positive but smaller
         # than DOUBLE_MIN), some compilers/FPUs set 1.0/x to +INF.
         # Without the DOUBLE_MIN test we end up with
-        # microscopic vectors that have infinite length!
+        # microscopic vectors that have infinite magnitude!
         if x > 2.22507385850720200e-308:
             y /= x
             z /= x
-            length = x * math.sqrt(1.0 + y * y + z * z)
+            mag = x * math.sqrt(1.0 + y * y + z * z)
         elif x > 0.0 and math.isfinite(x):
-            length = x
+            mag = x
         else:
-            length = 0.0
+            mag = 0.0
 
-        return length
+        return mag
 
     def magnitude(self):
         """Get the cached magnitude of the vector, computing it if necessary.
@@ -269,39 +342,39 @@ class Vector:
         Returns
         -------
         float
-            The magnitude (length) of the vector.
+            The magnitude of the vector.
         """
-        if not self._has_length:
-            self._length = self.compute_length()
-            self._has_length = True
+        if not self._has_magnitude:
+            self._magnitude = self._compute_magnitude()
+            self._has_magnitude = True
 
-        return self._length
+        return self._magnitude
 
-    def length_squared(self):
-        """Get the squared length of the vector (avoids sqrt for performance).
+    def magnitude_squared(self):
+        """Get the squared magnitude of the vector (avoids sqrt for performance).
 
         Returns
         -------
         float
-            The squared length of the vector.
+            The squared magnitude of the vector.
         """
         return self._x * self._x + self._y * self._y + self._z * self._z
 
     def normalize_self(self):
-        """Normalize the vector in place (make it unit length).
+        """Normalize the vector in place (make it unit magnitude).
 
         Returns
         -------
         bool
-            True if successful, False if vector has zero length.
+            True if successful, False if vector has zero magnitude.
         """
         d = self.magnitude()
         if d > 0.0:
             self._x /= d
             self._y /= d
             self._z /= d
-            self._length = 1.0
-            self._has_length = True
+            self._magnitude = 1.0
+            self._has_magnitude = True
             return True
         return False
 
@@ -635,6 +708,54 @@ class Vector:
             z += vector._z
         return Vector(x, y, z)
 
+    @staticmethod
+    def average(vectors):
+        """Compute the average of a list of vectors.
+
+        Parameters
+        ----------
+        vectors : list[:class:`Vector`]
+            Vectors to average.
+
+        Returns
+        -------
+        :class:`Vector`
+            The component-wise average, or zero vector if empty.
+
+        """
+        if not vectors:
+            return Vector.zero()
+        s = Vector.sum_of_vectors(vectors)
+        count = len(vectors)
+        return Vector(s._x / count, s._y / count, s._z / count)
+
+    def is_perpendicular_to(self, other):
+        """Check if this vector is perpendicular to another.
+
+        Parameters
+        ----------
+        other : :class:`Vector`
+            The other vector.
+
+        Returns
+        -------
+        bool
+            True if perpendicular (dot product within tolerance of zero).
+
+        """
+        return abs(self.dot(other)) < Tolerance.ZERO_TOLERANCE
+
+    def is_zero(self):
+        """Check if this vector is a zero vector.
+
+        Returns
+        -------
+        bool
+            True if length is within tolerance of zero.
+
+        """
+        return self._compute_magnitude() < Tolerance.ZERO_TOLERANCE
+
     def coordinate_direction_3angles(self, degrees=True):
         """Compute coordinate direction angles (alpha, beta, gamma).
 
@@ -745,7 +866,7 @@ class Vector:
         coords[k] = 0.0
 
         self._x, self._y, self._z = coords
-        self._has_length = False
+        self._has_magnitude = False
 
     ###########################################################################################
     # Polymorphic JSON Serialization (COMPAS-style)
@@ -769,3 +890,83 @@ class Vector:
         vec.guid = guid
         vec.name = name
         return vec
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format.
+
+        Returns
+        -------
+        bytes
+            Serialized protobuf data.
+
+        """
+        from .proto import vector_pb2
+        
+        proto = vector_pb2.Vector()
+        proto.x = self._x
+        proto.y = self._y
+        proto.z = self._z
+        proto.name = self.name
+        
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data):
+        """Create Vector from protobuf binary data.
+
+        Parameters
+        ----------
+        data : bytes
+            Protobuf-encoded vector data.
+
+        Returns
+        -------
+        :class:`Vector`
+            The deserialized Vector.
+
+        """
+        from .proto import vector_pb2
+        
+        proto = vector_pb2.Vector()
+        proto.ParseFromString(data)
+        
+        v = cls(proto.x, proto.y, proto.z)
+        v.name = proto.name
+        
+        return v
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the output file.
+
+        """
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the protobuf file.
+
+        Returns
+        -------
+        :class:`Vector`
+            The deserialized Vector.
+
+        """
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)

@@ -184,13 +184,13 @@ def test_polyline_shift():
     assert polyline.points[2].x == 0.0
 
 
-def test_polyline_length_squared():
+def test_polyline_magnitude_squared():
     polyline = Polyline(
         [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
     )
 
-    length_sq = polyline.length_squared()
-    assert abs(length_sq - 2.0) < 1e-5
+    mag_sq = polyline.magnitude_squared()
+    assert abs(mag_sq - 2.0) < 1e-5
 
 
 def test_polyline_point_at_parameter():

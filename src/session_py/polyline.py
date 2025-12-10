@@ -176,13 +176,13 @@ class Polyline:
         shift_amount = times % n
         self.points = self.points[shift_amount:] + self.points[:shift_amount]
 
-    def length_squared(self) -> float:
-        """Calculate squared length of polyline (faster, no sqrt)."""
-        length = 0.0
+    def magnitude_squared(self) -> float:
+        """Calculate squared magnitude of polyline (faster, no sqrt)."""
+        mag = 0.0
         for i in range(self.segment_count()):
             segment = self.points[i + 1] - self.points[i]
-            length += segment.length_squared()
-        return length
+            mag += segment.magnitude_squared()
+        return mag
 
     @staticmethod
     def point_at_parameter(start: Point, end: Point, t: float) -> Point:
@@ -200,12 +200,12 @@ class Polyline:
     ) -> float:
         """Find closest point on line segment to given point, returns parameter t."""
         d = line_end - line_start
-        dod = d.length_squared()
+        dod = d.magnitude_squared()
 
         if dod > 0.0:
-            if (point - line_start).length_squared() <= (
+            if (point - line_start).magnitude_squared() <= (
                 point - line_end
-            ).length_squared():
+            ).magnitude_squared():
                 t = (point - line_start).dot(d) / dod
             else:
                 t = 1.0 + (point - line_end).dot(d) / dod
@@ -301,7 +301,7 @@ class Polyline:
             mid0_vec = mid_line0_end - mid_line0_start
             mid1_vec = mid_line1_end - mid_line1_start
 
-            if mid0_vec.length_squared() > mid1_vec.length_squared():
+            if mid0_vec.magnitude_squared() > mid1_vec.magnitude_squared():
                 return mid_line0_start, mid_line0_end
             else:
                 return mid_line1_start, mid_line1_end
