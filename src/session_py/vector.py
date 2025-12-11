@@ -558,10 +558,11 @@ class Vector:
 
         if copy.normalize_self():
             reference_vector = Vector(0, 0, 1)
-            angle = copy.angle(
-                reference_vector, sign_by_cross_product=True, degrees=True
+            angle_deg = copy.angle(
+                reference_vector, sign_by_cross_product=False, degrees=True
             )
-            inclined_offset = vertical_height / math.cos(angle)
+            angle_rad = math.radians(angle_deg)
+            inclined_offset = vertical_height / math.cos(angle_rad)
             copy *= inclined_offset
 
         return copy
@@ -667,8 +668,83 @@ class Vector:
         ) / math.sin(angle_in_front_of_a * to_radians)
 
     @staticmethod
+    def angle_from_cosine_law(
+        triangle_edge_length_a,
+        triangle_edge_length_b,
+        triangle_edge_length_c,
+        degrees=True,
+    ):
+        """Calculate angle opposite to side c using the cosine law.
+
+        Parameters
+        ----------
+        triangle_edge_length_a : float
+            Length of side a (adjacent to angle C).
+        triangle_edge_length_b : float
+            Length of side b (adjacent to angle C).
+        triangle_edge_length_c : float
+            Length of side c (opposite to angle C).
+        degrees : bool, optional
+            If True, return degrees; otherwise radians.
+
+        Returns
+        -------
+        float
+            Angle opposite to side c.
+
+        """
+        a = triangle_edge_length_a
+        b = triangle_edge_length_b
+        c = triangle_edge_length_c
+
+        # cos(C) = (a² + b² - c²) / (2ab)
+        cos_c = (a**2 + b**2 - c**2) / (2.0 * a * b)
+        angle_rad = math.acos(cos_c)
+
+        if degrees:
+            return angle_rad * TO_DEGREES
+        else:
+            return angle_rad
+
+    @staticmethod
+    def side_from_sine_law(
+        angle_in_front_of_result_side,
+        angle_in_front_of_known_side,
+        known_side_length,
+        degrees=True,
+    ):
+        """Calculate side length using the sine law.
+
+        Given two angles and the side opposite to one of them, calculates
+        the side opposite to the other angle: a/sin(A) = b/sin(B)
+
+        Parameters
+        ----------
+        angle_in_front_of_result_side : float
+            Angle opposite to the side we want to find.
+        angle_in_front_of_known_side : float
+            Angle opposite to the known side.
+        known_side_length : float
+            Length of the known side.
+        degrees : bool, optional
+            If True, angles are in degrees; otherwise radians.
+
+        Returns
+        -------
+        float
+            Length of the side opposite to the first angle.
+
+        """
+        to_radians = TO_RADIANS if degrees else 1.0
+        angle_a = angle_in_front_of_result_side * to_radians
+        angle_b = angle_in_front_of_known_side * to_radians
+
+        # a = b·sin(A)/sin(B)
+        return (known_side_length * math.sin(angle_a)) / math.sin(angle_b)
+
+    @staticmethod
     def angle_between_vector_xy_components(vector, degrees=True):
-        """Angle between the vector's XY components.
+        """Angle of vector's XY projection from +X axis (atan2).
 
         Parameters
         ----------
@@ -684,7 +760,7 @@ class Vector:
 
         """
         to_degrees = TO_DEGREES if degrees else 1.0
-        return math.atan(vector[1] / vector[0]) * to_degrees
+        return math.atan2(vector[1], vector[0]) * to_degrees
 
     @staticmethod
     def sum_of_vectors(vectors):

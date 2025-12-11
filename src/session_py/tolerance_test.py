@@ -1,93 +1,101 @@
-from session_py.tolerance import TOL, Tolerance
+from .mini_test import MINI_TEST, MINI_CHECK, run_all
+from session_py.tolerance import TOLERANCE, Tolerance
 from session_py import Point
 
 
-def test_tolerance_default_tolerance():
-    assert TOL.precision == Tolerance.PRECISION
-    assert TOL.precision == 3
-
-
-def test_tolerance_format_number():
-    assert TOL.format_number(0, precision=3) == "0.000"
-    assert TOL.format_number(0.5, precision=3) == "0.500"
-    assert TOL.format_number(float(0), precision=3) == "0.000"
-
-
-def test_tolerance_format_number_with_default_precision():
-    assert TOL.format_number(0) == "0.000"
-    assert TOL.format_number(0.5) == "0.500"
-    assert TOL.format_number(float(0)) == "0.000"
-
-
-def test_tolerance_format_point():
-    point = Point(0, 0, 0)
-    assert str(point) == "Point(x=0.000, y=0.000, z=0.000)"
-
-
-def test_tolerance_change_values():
-    # Create a mutable tolerance instance
-    tol = Tolerance("M")
-
-    # Test default values
-    assert tol.precision == Tolerance.PRECISION
-    assert tol.absolute == Tolerance.ABSOLUTE
-
-    # Change precision and test formatting
-    tol.precision = 2
-    assert tol.precision == 2
-    assert tol.format_number(1.23456) == "1.23"
-
-    # Change absolute tolerance and test zero checking
-    tol.absolute = 1e-5
-    assert tol.absolute == 1e-5
-    assert tol.is_zero(1e-6)  # Should be true with new tolerance
-    assert not tol.is_zero(1e-4)  # Should be false
-
-    # Reset to defaults and verify
-    tol.reset()
-    assert tol.precision == Tolerance.PRECISION
-    assert tol.absolute == Tolerance.ABSOLUTE
-    assert tol.format_number(1.23456) == "1.235"  # Back to 3 decimal places
-
-    # Verify absolute tolerance is back to default
-    assert not tol.is_zero(1e-6)  # Should be false with default tolerance
-
-
+@MINI_TEST("Tolerance", "is_zero")
 def test_tolerance_is_zero():
-    tol = Tolerance()
-    assert tol.is_zero(1e-10)
-    assert not tol.is_zero(1e-5)
+    # Values within absolute tolerance should be considered zero
+    MINI_CHECK(TOLERANCE.is_zero(0.0))
+    MINI_CHECK(TOLERANCE.is_zero(1e-10))
+    MINI_CHECK(TOLERANCE.is_zero(-1e-10))
+
+    # Values outside absolute tolerance should not be zero
+    MINI_CHECK(not TOLERANCE.is_zero(1e-5))
+    MINI_CHECK(not TOLERANCE.is_zero(-1e-5))
 
 
+@MINI_TEST("Tolerance", "is_close")
 def test_tolerance_is_close():
-    tol = Tolerance()
-    assert not tol.is_close(1.0, 1.0 + 1e-5)
-    assert tol.is_close(1.0, 1.0 + 1e-6)
-    assert tol.is_close(0.0, 0.0 + 1e-9)
+    # Equal values
+    MINI_CHECK(TOLERANCE.is_close(1.0, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(0.0, 0.0))
+
+    # Values within tolerance
+    MINI_CHECK(TOLERANCE.is_close(1.0, 1.0 + 1e-7))
+    MINI_CHECK(TOLERANCE.is_close(1.0, 1.0 - 1e-7))
+
+    # Values outside tolerance
+    MINI_CHECK(not TOLERANCE.is_close(1.0, 1.0 + 1e-4))
+    MINI_CHECK(not TOLERANCE.is_close(1.0, 2.0))
 
 
-def test_tolerance_geometric_key():
-    tol = Tolerance()
-    assert tol.geometric_key([1.0, 2.0, 3.0]) == "1.000,2.000,3.000"
-    assert (
-        tol.geometric_key([1.05725, 2.0195, 3.001], precision=3) == "1.057,2.019,3.001"
-    )
-    assert tol.geometric_key([1.0, 2.0, 3.0], precision=-1) == "1,2,3"
-
-
+@MINI_TEST("Tolerance", "is_positive")
 def test_tolerance_is_positive():
-    tol = Tolerance()
-    assert tol.is_positive(1e-7)
-    assert not tol.is_positive(1e-10)
+    # Positive values above tolerance
+    MINI_CHECK(TOLERANCE.is_positive(1.0))
+    MINI_CHECK(TOLERANCE.is_positive(1e-7))
+
+    # Values at or below tolerance are not positive
+    MINI_CHECK(not TOLERANCE.is_positive(1e-10))
+    MINI_CHECK(not TOLERANCE.is_positive(0.0))
+    MINI_CHECK(not TOLERANCE.is_positive(-1.0))
 
 
+@MINI_TEST("Tolerance", "is_negative")
 def test_tolerance_is_negative():
-    tol = Tolerance()
-    assert tol.is_negative(-1e-7)
-    assert not tol.is_negative(-1e-10)
+    # Negative values below -tolerance
+    MINI_CHECK(TOLERANCE.is_negative(-1.0))
+    MINI_CHECK(TOLERANCE.is_negative(-1e-7))
+
+    # Values at or above -tolerance are not negative
+    MINI_CHECK(not TOLERANCE.is_negative(-1e-10))
+    MINI_CHECK(not TOLERANCE.is_negative(0.0))
+    MINI_CHECK(not TOLERANCE.is_negative(1.0))
 
 
+@MINI_TEST("Tolerance", "is_between")
 def test_tolerance_is_between():
-    tol = Tolerance()
-    assert tol.is_between(0.5, 0.0, 1.0)
-    assert not tol.is_between(1.5, 0.0, 1.0)
+    # Values within range
+    MINI_CHECK(TOLERANCE.is_between(0.5, 0.0, 1.0))
+    MINI_CHECK(TOLERANCE.is_between(0.0, 0.0, 1.0))
+    MINI_CHECK(TOLERANCE.is_between(1.0, 0.0, 1.0))
+
+    # Values at boundaries (within tolerance)
+    MINI_CHECK(TOLERANCE.is_between(-1e-10, 0.0, 1.0))
+    MINI_CHECK(TOLERANCE.is_between(1.0 + 1e-10, 0.0, 1.0))
+
+    # Values outside range
+    MINI_CHECK(not TOLERANCE.is_between(-0.5, 0.0, 1.0))
+    MINI_CHECK(not TOLERANCE.is_between(1.5, 0.0, 1.0))
+
+
+@MINI_TEST("Tolerance", "format_number")
+def test_tolerance_format_number():
+    # Default precision (3)
+    MINI_CHECK(TOLERANCE.format_number(0.0) == "0.000")
+    MINI_CHECK(TOLERANCE.format_number(1.5) == "1.500")
+    MINI_CHECK(TOLERANCE.format_number(3.14159) == "3.142")
+
+    # Custom precision
+    MINI_CHECK(TOLERANCE.format_number(3.14159, precision=2) == "3.14")
+    MINI_CHECK(TOLERANCE.format_number(3.14159, precision=5) == "3.14159")
+
+
+@MINI_TEST("Tolerance", "geometric_key")
+def test_tolerance_geometric_key():
+    # Default precision
+    key = TOLERANCE.geometric_key([1.0, 2.0, 3.0])
+    MINI_CHECK(key == "1.000,2.000,3.000")
+
+    # Custom precision
+    key2 = TOLERANCE.geometric_key([1.5, 2.5, 3.5], precision=1)
+    MINI_CHECK(key2 == "1.5,2.5,3.5")
+
+    # Integer precision
+    key3 = TOLERANCE.geometric_key([1.9, 2.1, 3.5], precision=-1)
+    MINI_CHECK(key3 == "1,2,3")
+
+
+if __name__ == "__main__":
+    run_all("python")

@@ -196,54 +196,47 @@ class Tolerance:
         """Compare two values."""
         return abs(a - b) <= self.tolerance(b, rtol, atol)
 
-    def is_zero(self, a, tol=None):
+    def is_zero(self, a):
         """Check if a value is close enough to zero to be considered zero."""
-        tol = tol if tol is not None else self.absolute
-        return abs(a) <= tol
+        return abs(a) <= self.absolute
 
-    def is_positive(self, a, tol=None):
+    def is_positive(self, a):
         """Check if a value can be considered a strictly positive number."""
-        tol = tol if tol is not None else self.absolute
-        return a > tol
+        return a > self.absolute
 
-    def is_negative(self, a, tol=None):
+    def is_negative(self, a):
         """Check if a value can be considered a strictly negative number."""
-        tol = tol if tol is not None else self.absolute
-        return a < -tol
+        return a < -self.absolute
 
-    def is_between(self, value, minval, maxval, atol=None):
+    def is_between(self, value, minval, maxval):
         """Check if a value is between two other values."""
-        atol = atol if atol is not None else self.absolute
+        atol = self.absolute
         return minval - atol <= value <= maxval + atol
 
-    def is_close(self, a, b, rtol=None, atol=None):
+    def is_close(self, a, b):
         """Check if two values are close enough to be considered equal."""
-        rtol = rtol if rtol is not None else self.relative
-        atol = atol if atol is not None else self.absolute
-        return self.compare(a, b, rtol, atol)
+        return self.compare(a, b, self.relative, self.absolute)
 
-    def is_allclose(self, A, B, rtol=None, atol=None):
+    def is_allclose(self, A, B):
         """Check if two lists of values are element-wise close enough to be considered equal."""
-        rtol = rtol if rtol is not None else self.relative
-        atol = atol if atol is not None else self.absolute
+        rtol = self.relative
+        atol = self.absolute
         return all(
             (
-                self.is_allclose(a, b, rtol, atol)
+                self.is_allclose(a, b)
                 if hasattr(a, "__iter__")
                 else self.compare(a, b, rtol, atol)
             )
             for a, b in zip(A, B)
         )
 
-    def is_angle_zero(self, a, tol=None):
+    def is_angle_zero(self, a):
         """Check if an angle is close enough to zero to be considered zero."""
-        tol = tol if tol is not None else self.angular
-        return abs(a) <= tol
+        return abs(a) <= self.angular
 
-    def is_angles_close(self, a, b, tol=None):
+    def is_angles_close(self, a, b):
         """Check if two angles are close enough to be considered equal."""
-        tol = tol if tol is not None else self.angular
-        return abs(a - b) <= tol
+        return abs(a - b) <= self.angular
 
     def geometric_key(self, xyz, precision=None, sanitize=True):
         """Compute the geometric key of a point."""
@@ -335,4 +328,4 @@ def is_finite(x):
 
 
 # Global tolerance instance
-TOL = Tolerance()
+TOLERANCE = Tolerance()
