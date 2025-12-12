@@ -1,5 +1,6 @@
 from .color import Color
 from .mini_test import MINI_TEST, MINI_CHECK, run_all
+from .tolerance import TOLERANCE
 
 
 @MINI_TEST("Color", "constructor")
@@ -51,10 +52,11 @@ def test_color_conversion():
     color = Color(255, 128, 64, 255)
     flts = color.to_unified_array()
     ints = Color.from_unified_array(flts)
-    MINI_CHECK(round(flts[0], 6) == 1.0)
-    MINI_CHECK(round(flts[1], 6) == 0.501961)
-    MINI_CHECK(round(flts[2], 6) == 0.25098)
-    MINI_CHECK(round(flts[3], 6) == 1.0)
+
+    MINI_CHECK(TOLERANCE.is_close(flts[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(flts[1], 0.501961))
+    MINI_CHECK(TOLERANCE.is_close(flts[2], 0.25098))
+    MINI_CHECK(TOLERANCE.is_close(flts[3], 1.0))
     MINI_CHECK(ints == color)
 
 @MINI_TEST("Color", "presets")

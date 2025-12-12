@@ -268,7 +268,8 @@ def test_vector_get_leveled_vector():
 
     # Scale vector along its direction so its Z-component equals vertical_height.
     v = Vector(1.0, 1.0, 1.0)
-    v_leveled = v.get_leveled_vector(1.0)
+    vertical_height = 1.0
+    v_leveled = v.get_leveled_vector(vertical_height)
 
     MINI_CHECK(TOLERANCE.is_close(v_leveled.magnitude(), math.sqrt(3.0)))
 
@@ -377,14 +378,15 @@ def test_vector_is_zero():
 def test_vector_json_roundtrip():
     from session_py import Vector
     from session_py.encoders import json_dump, json_load
+    from pathlib import Path
 
     v = Vector(42.1, 84.2, 126.3)
     v.name = "test_vector"
 
     # json_dump(obj, filename) / json_load(filename) - file-based serialization
-    filename = "test_vector.json"
-    json_dump(v, filename)
-    loaded = json_load(filename)
+    path = Path(__file__).resolve().parents[2] / "test_vector.json"
+    json_dump(v, path)
+    loaded = json_load(path)
 
     MINI_CHECK(loaded.name == "test_vector")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))
@@ -395,14 +397,15 @@ def test_vector_json_roundtrip():
 @MINI_TEST("Vector", "protobuf_roundtrip")
 def test_vector_protobuf_roundtrip():
     from session_py import Vector
+    from pathlib import Path
 
     v = Vector(42.1, 84.2, 126.3)
     v.name = "test_vector"
 
     # protobuf_dump(filename) / protobuf_load(filename) - file-based serialization
-    filename = "test_vector.bin"
-    v.protobuf_dump(filename)
-    loaded = Vector.protobuf_load(filename)
+    path = Path(__file__).resolve().parents[2] / "test_vector.bin"
+    v.protobuf_dump(path)
+    loaded = Vector.protobuf_load(path)
 
     MINI_CHECK(loaded.name == "test_vector")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))

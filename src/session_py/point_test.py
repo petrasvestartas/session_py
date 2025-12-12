@@ -1,4 +1,5 @@
 from .mini_test import MINI_TEST, MINI_CHECK, run_all
+from .tolerance import TOLERANCE
 
 # /home/petras/code/code_session/uvsession/bin/python -m session_py.point_test
 
@@ -121,33 +122,28 @@ def test_mid_point():
 
 @MINI_TEST("Point", "distance")
 def test_distance():
-
     from session_py import Point
-    from session_py import Tolerance
 
     p0 = Point(0.0, 2.0, 1.0)
     p1 = Point(1.0, 5.0, 3.0)
-    d = round(Point.distance(p0, p1), Tolerance.ROUNDING)
+    d = Point.distance(p0, p1)
 
-    MINI_CHECK(d == 3.741657)
+    MINI_CHECK(TOLERANCE.is_close(d, 3.741657))
 
 
 @MINI_TEST("Point", "squared_distance")
 def test_squared_distance():
-
     from session_py import Point
-    from session_py import Tolerance
 
     p0 = Point(0.0, 2.0, 1.0)
     p1 = Point(1.0, 5.0, 3.0)
-    d = round(Point.squared_distance(p0, p1), Tolerance.ROUNDING)
+    d = Point.squared_distance(p0, p1)
 
-    MINI_CHECK(d == 14.0)
+    MINI_CHECK(TOLERANCE.is_close(d, 14.0))
 
 
 @MINI_TEST("Point", "area")
 def test_area():
-
     from session_py import Point
     
     p0 = Point(0.0, 0.0, 0.0)
@@ -161,25 +157,21 @@ def test_area():
 
 @MINI_TEST("Point", "centroid_quad")
 def test_centroid_quad():
-
     from session_py import Point
-    from session_py import Tolerance
 
     p0 = Point(0.0, 0.0, 0.0)
     p1 = Point(2.0, 0.0, 1.0)
     p2 = Point(2.0, 2.0, 2.0)
     p3 = Point(0.0, 2.0, 1.0)
     centroid = Point.centroid_quad([p0, p1, p2, p3])
-    x = round(centroid[0], Tolerance.ROUNDING)
-    y = round(centroid[1], Tolerance.ROUNDING)
-    z = round(centroid[2], Tolerance.ROUNDING)
 
-    MINI_CHECK(x == 1.0 and y == 1.0 and z == 1.0)
+    MINI_CHECK(TOLERANCE.is_close(centroid[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(centroid[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(centroid[2], 1.0))
 
 
 @MINI_TEST("Point", "json_roundtrip")
 def test_point_json_roundtrip():
-
     from session_py import Point
     from session_py import Color
     from session_py.encoders import json_dump, json_load
@@ -208,7 +200,6 @@ def test_point_json_roundtrip():
 
 @MINI_TEST("Point", "protobuf_roundtrip")
 def test_point_protobuf_roundtrip():
-
     from session_py import Point
     from session_py import Color
     from pathlib import Path

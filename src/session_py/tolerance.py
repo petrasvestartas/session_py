@@ -238,7 +238,7 @@ class Tolerance:
         """Check if two angles are close enough to be considered equal."""
         return abs(a - b) <= self.angular
 
-    def geometric_key(self, xyz, precision=None, sanitize=True):
+    def key(self, xyz, precision=None, sanitize=True):
         """Compute the geometric key of a point."""
         x, y, z = xyz
         if not precision:
@@ -266,7 +266,7 @@ class Tolerance:
 
         return f"{x:.{precision}f},{y:.{precision}f},{z:.{precision}f}"
 
-    def geometric_key_xy(self, xy, precision=None, sanitize=True):
+    def key_xy(self, xy, precision=None, sanitize=True):
         """Compute the geometric key of a point in the XY plane."""
         x, y = xy
         if not precision:
