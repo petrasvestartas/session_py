@@ -377,16 +377,15 @@ def test_vector_is_zero():
 @MINI_TEST("Vector", "json_roundtrip")
 def test_vector_json_roundtrip():
     from session_py import Vector
-    from session_py.encoders import json_dump, json_load
     from pathlib import Path
 
     v = Vector(42.1, 84.2, 126.3)
     v.name = "test_vector"
 
-    # json_dump(obj, filename) / json_load(filename) - file-based serialization
-    path = Path(__file__).resolve().parents[2] / "test_vector.json"
-    json_dump(v, path)
-    loaded = json_load(path)
+    # json_dump(fname) / json_load(fname) - file-based serialization
+    fname = Path(__file__).resolve().parents[2] / "test_vector.json"
+    v.json_dump(fname)
+    loaded = Vector.json_load(fname)
 
     MINI_CHECK(loaded.name == "test_vector")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))

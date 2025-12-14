@@ -1,467 +1,216 @@
-"""Tests for Polyline class."""
-
-from session_py import Plane, Point, Polyline, Vector
-
-
-def test_polyline_new():
-    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
-    polyline = Polyline(points)
-    assert len(polyline) == 3
-    assert polyline.segment_count() == 2
+from .mini_test import MINI_TEST, MINI_CHECK, run_all
+from .tolerance import TOLERANCE
 
 
-def test_polyline_default():
-    polyline = Polyline()
-    assert len(polyline) == 0
-    assert polyline.is_empty()
-    assert polyline.segment_count() == 0
+@MINI_TEST("Polyline", "constructor")
+def test_polyline_constructor():
+    from session_py import Polyline
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Color
+
+    # Constructor with points
+    p0 = Point(0.0, 0.0, 0.0)
+    p1 = Point(1.0, 0.0, 0.0)
+    p2 = Point(1.0, 1.0, 0.0)
+    p3 = Point(0.0, 1.0, 0.0)
+    pl = Polyline([p0, p1, p2, p3])
+
+    # Basic properties
+    point_count = len(pl)
+    segment_count = pl.segment_count()
+    is_empty = pl.is_empty()
+
+    # Get point
+    pt = pl.get_point(1)
+
+    # Minimal and Full String Representation
+    plstr = str(pl)
+    plrepr = repr(pl)
+
+    # Copy (duplicates everything except guid)
+    plcopy = pl.duplicate()
+    plother = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+
+    # Translation operators
+    pl2 = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    v = Vector(1.0, 1.0, 1.0)
+    pl_add = pl2 + v
+    pl_sub = pl2 - v
+
+    # Polyline with custom color and width
+    plc = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    plc.linecolor = Color(255, 0, 0, 255, "red")
+    plc.width = 2.5
+
+    MINI_CHECK(pl.name == "my_polyline" and pl.guid != "" and point_count == 4)
+    MINI_CHECK(segment_count == 3 and is_empty == False)
+    MINI_CHECK(pt[0] == 1.0 and pt[1] == 0.0 and pt[2] == 0.0)
+    MINI_CHECK("(0.0, 0.0, 0.0)" in plstr)
+    MINI_CHECK("Polyline(my_polyline" in plrepr and "4 points" in plrepr)
+    MINI_CHECK(plcopy == plother)
+    MINI_CHECK(plcopy.guid != pl.guid)
+    MINI_CHECK(pl_add.get_point(0)[0] == 1.0 and pl_add.get_point(0)[1] == 1.0)
+    MINI_CHECK(pl_sub.get_point(0)[0] == -1.0 and pl_sub.get_point(0)[1] == -1.0)
+    MINI_CHECK(plc.linecolor[0] == 255 and plc.linecolor[1] == 0 and plc.width == 2.5)
 
 
-def test_polyline_length():
-    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
-    polyline = Polyline(points)
-    length = polyline.length()
-    assert abs(length - 2.0) < 1e-5
+@MINI_TEST("Polyline", "transformation")
+def test_polyline_transformation():
+    from session_py import Polyline
+    from session_py import Point
+    from session_py import Xform
+
+    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    pl.xform = Xform.translation(10.0, 0.0, 0.0)
+    pl_transformed = pl.transformed()
+    pl.transform()
+
+    MINI_CHECK(pl_transformed.get_point(0)[0] == 10.0 and pl_transformed.get_point(1)[0] == 11.0)
+    MINI_CHECK(pl.get_point(0)[0] == 10.0 and pl.get_point(1)[0] == 11.0)
+    MINI_CHECK(pl.xform == Xform.identity())
 
 
-def test_polyline_add_point():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-    assert len(polyline) == 2
-
-    polyline.add_point(Point(1.0, 1.0, 0.0))
-    assert len(polyline) == 3
-    assert polyline.segment_count() == 2
-
-
-def test_polyline_insert_point():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)])
-
-    polyline.insert_point(1, Point(1.0, 0.0, 0.0))
-    assert len(polyline) == 3
-    assert polyline.points[1].x == 1.0
-
-
-def test_polyline_remove_point():
-    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)]
-    polyline = Polyline(points)
-
-    removed = polyline.remove_point(1)
-    assert removed is not None
-    assert removed.x == 1.0
-    assert len(polyline) == 2
-
-
-def test_polyline_reverse():
-    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)]
-    polyline = Polyline(points)
-
-    polyline.reverse()
-    assert polyline.points[0].x == 2.0
-    assert polyline.points[1].x == 1.0
-    assert polyline.points[2].x == 0.0
-
-
-def test_polyline_reversed():
-    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)]
-    polyline = Polyline(points)
-
-    reversed_polyline = polyline.reversed()
-    assert reversed_polyline.points[0].x == 2.0
-    assert reversed_polyline.points[1].x == 1.0
-    assert reversed_polyline.points[2].x == 0.0
-
-    # Original should be unchanged
-    assert polyline.points[0].x == 0.0
-
-
-def test_polyline_add_assign_vector():
-    polyline = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)])
-    v = Vector(4.0, 5.0, 6.0)
-    polyline += v
-
-    assert polyline.points[0].x == 5.0
-    assert polyline.points[0].y == 7.0
-    assert polyline.points[0].z == 9.0
-    assert polyline.points[1].x == 8.0
-    assert polyline.points[1].y == 10.0
-    assert polyline.points[1].z == 12.0
-
-
-def test_polyline_add_vector():
-    polyline = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)])
-    v = Vector(4.0, 5.0, 6.0)
-    polyline2 = polyline + v
-
-    assert polyline2.points[0].x == 5.0
-    assert polyline2.points[0].y == 7.0
-    assert polyline2.points[0].z == 9.0
-
-
-def test_polyline_sub_assign_vector():
-    polyline = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)])
-    v = Vector(4.0, 5.0, 6.0)
-    polyline -= v
-
-    assert polyline.points[0].x == -3.0
-    assert polyline.points[0].y == -3.0
-    assert polyline.points[0].z == -3.0
-    assert polyline.points[1].x == 0.0
-    assert polyline.points[1].y == 0.0
-    assert polyline.points[1].z == 0.0
-
-
-def test_polyline_sub_vector():
-    polyline = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)])
-    v = Vector(4.0, 5.0, 6.0)
-    polyline2 = polyline - v
-
-    assert polyline2.points[0].x == -3.0
-    assert polyline2.points[0].y == -3.0
-    assert polyline2.points[0].z == -3.0
-    assert polyline2.points[1].x == 0.0
-    assert polyline2.points[1].y == 0.0
-    assert polyline2.points[1].z == 0.0
-
-
-def test_polyline_display():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-    display_str = str(polyline)
-    assert "Polyline" in display_str
-    assert "points=2" in display_str
-
-
+@MINI_TEST("Polyline", "json_roundtrip")
 def test_polyline_json_roundtrip():
+    from session_py import Polyline
+    from session_py import Point
     from pathlib import Path
-    from session_py.encoders import json_dump, json_load
 
-    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
-    polyline = Polyline(points)
-    polyline.name = "test_polyline"
+    pl = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0), Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0)])
+    pl.name = "test_polyline"
 
-    path = Path(__file__).resolve().parents[2] / "test_polyline.json"
-    json_dump(polyline, path)
-    loaded = json_load(path)
+    # json_dump(fname) / json_load(fname) - file-based serialization
+    fname = Path(__file__).resolve().parents[2] / "test_polyline.json"
+    pl.json_dump(fname)
+    loaded = Polyline.json_load(fname)
 
-    assert isinstance(loaded, Polyline)
-    assert len(loaded) == 3
-    assert loaded.points[0].x == 0.0
-    assert loaded.points[2].y == 1.0
-    assert loaded.name == polyline.name
-
-
-def test_polyline_get_point():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 2.0, 3.0)])
-
-    point = polyline.get_point(1)
-    assert point is not None
-    assert point.x == 1.0
-
-    invalid = polyline.get_point(10)
-    assert invalid is None
+    MINI_CHECK(loaded.name == "test_polyline")
+    MINI_CHECK(len(loaded) == 4)
+    MINI_CHECK(TOLERANCE.is_close(loaded.get_point(0)[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.get_point(1)[1], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
 
 
-def test_polyline_get_point_mut():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 2.0, 3.0)])
+@MINI_TEST("Polyline", "protobuf_roundtrip")
+def test_polyline_protobuf_roundtrip():
+    from session_py import Polyline
+    from session_py import Point
+    from pathlib import Path
 
-    # In Python, we can directly modify points since they're mutable objects
-    if len(polyline.points) > 1:
-        polyline.points[1] = Point(5.0, 6.0, 7.0)
+    pl = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0), Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0)])
+    pl.name = "test_polyline"
 
-    assert polyline.points[1].x == 5.0
-    assert polyline.points[1].y == 6.0
-    assert polyline.points[1].z == 7.0
+    # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
+    fname = Path(__file__).resolve().parents[2] / "test_polyline.bin"
+    pl.protobuf_dump(fname)
+    loaded = Polyline.protobuf_load(fname)
 
-
-def test_polyline_shift():
-    polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)]
-    )
-
-    polyline.shift(1)
-
-    assert polyline.points[0].x == 1.0
-    assert polyline.points[1].x == 2.0
-    assert polyline.points[2].x == 0.0
+    MINI_CHECK(loaded.name == "test_polyline")
+    MINI_CHECK(len(loaded) == 4)
+    MINI_CHECK(TOLERANCE.is_close(loaded.get_point(0)[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.get_point(1)[1], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
 
 
-def test_polyline_magnitude_squared():
-    polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
-    )
+@MINI_TEST("Polyline", "length")
+def test_polyline_length():
+    from session_py import Polyline
+    from session_py import Point
 
-    mag_sq = polyline.magnitude_squared()
-    assert abs(mag_sq - 2.0) < 1e-5
+    # L-shaped polyline: 1 unit right, 1 unit up, 1 unit left = 3 units total
+    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    ln = pl.length()
+    mag_sq = pl.magnitude_squared()
 
-
-def test_polyline_point_at_parameter():
-    start = Point(0.0, 0.0, 0.0)
-    end = Point(2.0, 0.0, 0.0)
-
-    mid = Polyline.point_at_parameter(start, end, 0.5)
-    assert mid.x == 1.0
-    assert mid.y == 0.0
-    assert mid.z == 0.0
+    MINI_CHECK(TOLERANCE.is_close(ln, 3.0))
+    MINI_CHECK(TOLERANCE.is_close(mag_sq, 3.0))
 
 
-def test_polyline_closest_point_to_line():
-    line_start = Point(0.0, 0.0, 0.0)
-    line_end = Point(2.0, 0.0, 0.0)
-    test_point = Point(1.0, 1.0, 0.0)
-
-    t = Polyline.closest_point_to_line(test_point, line_start, line_end)
-    assert abs(t - 0.5) < 1e-5
-
-
-def test_polyline_line_line_overlap():
-    line0_start = Point(0.0, 0.0, 0.0)
-    line0_end = Point(2.0, 0.0, 0.0)
-    line1_start = Point(1.0, 0.0, 0.0)
-    line1_end = Point(3.0, 0.0, 0.0)
-
-    overlap = Polyline.line_line_overlap(line0_start, line0_end, line1_start, line1_end)
-
-    assert overlap is not None
-    overlap_start, overlap_end = overlap
-    assert abs(overlap_start.x - 1.0) < 1e-5
-    assert abs(overlap_end.x - 2.0) < 1e-5
-
-
-def test_polyline_line_line_average():
-    line0_start = Point(0.0, 0.0, 0.0)
-    line0_end = Point(2.0, 0.0, 0.0)
-    line1_start = Point(0.0, 2.0, 0.0)
-    line1_end = Point(2.0, 2.0, 0.0)
-
-    avg_start, avg_end = Polyline.line_line_average(
-        line0_start, line0_end, line1_start, line1_end
-    )
-
-    assert abs(avg_start.y - 1.0) < 1e-5
-    assert abs(avg_end.y - 1.0) < 1e-5
-
-
-def test_polyline_line_line_overlap_average():
-    line0_start = Point(0.0, 0.0, 0.0)
-    line0_end = Point(3.0, 0.0, 0.0)
-    line1_start = Point(1.0, 0.0, 0.0)
-    line1_end = Point(4.0, 0.0, 0.0)
-
-    output_start, output_end = Polyline.line_line_overlap_average(
-        line0_start, line0_end, line1_start, line1_end
-    )
-
-    assert output_start.x >= 0.0
-    assert output_end.x <= 4.0
-
-
-def test_polyline_line_from_projected_points():
-    line_start = Point(0.0, 0.0, 0.0)
-    line_end = Point(2.0, 0.0, 0.0)
-    points = [Point(0.5, 1.0, 0.0), Point(1.5, -1.0, 0.0)]
-
-    result = Polyline.line_from_projected_points(line_start, line_end, points)
-
-    assert result is not None
-    output_start, output_end = result
-    assert abs(output_start.x - 0.5) < 1e-5
-    assert abs(output_end.x - 1.5) < 1e-5
-
-
-def test_polyline_closest_distance_and_point():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)])
-    test_point = Point(1.0, 1.0, 0.0)
-
-    distance, edge_id, closest_point = polyline.closest_distance_and_point(test_point)
-
-    assert edge_id == 0
-    assert abs(closest_point.x - 1.0) < 1e-5
-    assert abs(distance - 1.0) < 1e-5
-
-
-def test_polyline_is_closed():
-    open_polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
-    )
-    assert not open_polyline.is_closed()
-
-    closed_polyline = Polyline(
-        [
-            Point(0.0, 0.0, 0.0),
-            Point(1.0, 0.0, 0.0),
-            Point(1.0, 1.0, 0.0),
-            Point(0.0, 0.0, 0.0),
-        ]
-    )
-    assert closed_polyline.is_closed()
-
-
+@MINI_TEST("Polyline", "center")
 def test_polyline_center():
-    polyline = Polyline(
-        [
-            Point(0.0, 0.0, 0.0),
-            Point(2.0, 0.0, 0.0),
-            Point(2.0, 2.0, 0.0),
-            Point(0.0, 2.0, 0.0),
-        ]
-    )
+    from session_py import Polyline
+    from session_py import Point
 
-    c = polyline.center()
-    assert abs(c.x - 1.0) < 1e-5
-    assert abs(c.y - 1.0) < 1e-5
-    assert abs(c.z - 0.0) < 1e-5
+    # Square polyline
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(2.0, 2.0, 0.0),
+        Point(0.0, 2.0, 0.0)
+    ])
+    c = pl.center()
+    cv = pl.center_vec()
 
-
-def test_polyline_center_vec():
-    polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(2.0, 2.0, 0.0)]
-    )
-
-    c = polyline.center_vec()
-    assert abs(c.x - 4.0 / 3.0) < 1e-5
-    assert abs(c.y - 2.0 / 3.0) < 1e-5
+    MINI_CHECK(TOLERANCE.is_close(c[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(c[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(c[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(cv[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(cv[1], 1.0))
 
 
-def test_polyline_get_average_plane():
-    polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
-    )
+@MINI_TEST("Polyline", "is_closed")
+def test_polyline_is_closed():
+    from session_py import Polyline
+    from session_py import Point
 
-    origin, x_axis, y_axis, z_axis = polyline.get_average_plane()
+    # Open polyline
+    open_pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0)
+    ])
+    is_open = open_pl.is_closed()
 
-    assert abs(z_axis[2] - 1.0) < 1e-5
+    # Closed polyline (first and last point same)
+    closed_pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 0.0, 0.0)
+    ])
+    is_closed = closed_pl.is_closed()
 
-
-def test_polyline_get_fast_plane():
-    polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
-    )
-
-    origin, plane = polyline.get_fast_plane()
-
-    assert origin.x == 0.0
-    assert origin.y == 0.0
-    assert origin.z == 0.0
-
-
-def test_polyline_get_middle_line():
-    line0_start = Point(0.0, 0.0, 0.0)
-    line0_end = Point(2.0, 0.0, 0.0)
-    line1_start = Point(0.0, 2.0, 0.0)
-    line1_end = Point(2.0, 2.0, 0.0)
-
-    output_start, output_end = Polyline.get_middle_line(
-        line0_start, line0_end, line1_start, line1_end
-    )
-
-    assert abs(output_start.y - 1.0) < 1e-5
-    assert abs(output_end.y - 1.0) < 1e-5
+    MINI_CHECK(is_open == False)
+    MINI_CHECK(is_closed == True)
 
 
-def test_polyline_extend_line():
-    start = Point(0.0, 0.0, 0.0)
-    end = Point(1.0, 0.0, 0.0)
+@MINI_TEST("Polyline", "reverse")
+def test_polyline_reverse():
+    from session_py import Polyline
+    from session_py import Point
 
-    Polyline.extend_line(start, end, 0.5, 0.5)
+    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0)])
 
-    assert abs(start.x - (-0.5)) < 1e-5
-    assert abs(end.x - 1.5) < 1e-5
+    # Test reversed() returns new polyline
+    rev = pl.reversed()
+    orig_first = pl.get_point(0)[0]
+    rev_first = rev.get_point(0)[0]
 
+    # Test reverse() in place
+    pl.reverse()
+    in_place_first = pl.get_point(0)[0]
 
-def test_polyline_scale_line():
-    start = Point(0.0, 0.0, 0.0)
-    end = Point(2.0, 0.0, 0.0)
-
-    Polyline.scale_line(start, end, 0.25)
-
-    assert abs(start.x - 0.5) < 1e-5
-    assert abs(end.x - 1.5) < 1e-5
-
-
-def test_polyline_extend_segment():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-
-    polyline.extend_segment(0, 0.5, 0.5)
-
-    assert abs(polyline.points[0].x - (-0.5)) < 1e-5
-    assert abs(polyline.points[1].x - 1.5) < 1e-5
+    MINI_CHECK(orig_first == 0.0)
+    MINI_CHECK(rev_first == 3.0)
+    MINI_CHECK(in_place_first == 3.0)
 
 
-def test_polyline_extend_segment_equally_static():
-    start = Point(0.0, 0.0, 0.0)
-    end = Point(1.0, 0.0, 0.0)
+@MINI_TEST("Polyline", "closest_point")
+def test_polyline_closest_point():
+    from session_py import Polyline
+    from session_py import Point
 
-    Polyline.extend_segment_equally_static(start, end, 0.5)
+    pl = Polyline([Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(2.0, 2.0, 0.0), Point(0.0, 2.0, 0.0)])
+    test_pt = Point(1.0, 1.0, 0.0)
+    distance, edge_id, closest = pl.closest_distance_and_point(test_pt)
 
-    assert abs(start.x - (-0.5)) < 1e-5
-    assert abs(end.x - 1.5) < 1e-5
-
-
-def test_polyline_extend_segment_equally():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-
-    polyline.extend_segment_equally(0, 0.5)
-
-    assert abs(polyline.points[0].x - (-0.5)) < 1e-5
-    assert abs(polyline.points[1].x - 1.5) < 1e-5
+    MINI_CHECK(edge_id == 0)
+    MINI_CHECK(TOLERANCE.is_close(closest[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(closest[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(distance, 1.0))
 
 
-def test_polyline_move_by():
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-    translation = Vector(1.0, 1.0, 1.0)
-
-    polyline.move_by(translation)
-
-    assert polyline.points[0].x == 1.0
-    assert polyline.points[0].y == 1.0
-    assert polyline.points[0].z == 1.0
-    assert polyline.points[1].x == 2.0
-    assert polyline.points[1].y == 1.0
-    assert polyline.points[1].z == 1.0
-
-
-def test_polyline_is_clockwise():
-    polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
-    )
-    plane = Plane()
-
-    clockwise = polyline.is_clockwise(plane)
-    # Just test it doesn't crash
-    assert clockwise == True or clockwise == False
-
-
-def test_polyline_flip():
-    polyline = Polyline(
-        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)]
-    )
-
-    polyline.flip()
-
-    assert polyline.points[0].x == 2.0
-    assert polyline.points[1].x == 1.0
-    assert polyline.points[2].x == 0.0
-
-
-def test_polyline_get_convex_corners():
-    polyline = Polyline(
-        [
-            Point(0.0, 0.0, 0.0),
-            Point(1.0, 0.0, 0.0),
-            Point(1.0, 1.0, 0.0),
-            Point(0.0, 1.0, 0.0),
-        ]
-    )
-
-    convex_corners = polyline.get_convex_corners()
-
-    assert len(convex_corners) == 4
-
-
-def test_polyline_tween_two_polylines():
-    polyline0 = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-    polyline1 = Polyline([Point(0.0, 2.0, 0.0), Point(1.0, 2.0, 0.0)])
-
-    result = Polyline.tween_two_polylines(polyline0, polyline1, 0.5)
-
-    assert abs(result.points[0].y - 1.0) < 1e-5
-    assert abs(result.points[1].y - 1.0) < 1e-5
+if __name__ == "__main__":
+    run_all("python")

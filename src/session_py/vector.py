@@ -963,9 +963,42 @@ class Vector:
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from polymorphic JSON format."""
         vec = cls(data["x"], data["y"], data["z"])
-        vec.guid = guid
-        vec.name = name
+        vec.guid = guid if guid is not None else data.get("guid", vec.guid)
+        vec.name = name if name is not None else data.get("name", vec.name)
         return vec
+
+    def json_dump(self, filepath):
+        """Write JSON to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the JSON file.
+
+        Returns
+        -------
+        :class:`Vector`
+            The deserialized Vector.
+
+        """
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
 
     ###########################################################################################
     # Protobuf Serialization

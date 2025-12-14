@@ -1,5 +1,6 @@
 import uuid
-from typing import List, Optional, Tuple
+import copy
+from typing import List, Optional, Tuple, Union
 
 from .color import Color
 from .xform import Xform
@@ -10,97 +11,189 @@ from .vector import Vector
 
 
 class Polyline:
-    """A polyline defined by a collection of points with an associated plane."""
+    """A polyline defined by a collection of coordinates with an associated plane.
+
+    Internally stores coordinates as a flat array [x0, y0, z0, x1, y1, z1, ...] for
+    efficient serialization. Provides Point-based API for compatibility.
+    """
 
     def __init__(self, points: Optional[List[Point]] = None):
         """Creates a new Polyline with default guid and name.
 
         Args:
-            points: The collection of points.
+            points: The collection of points (converted to flat coords internally).
         """
         self.guid = str(uuid.uuid4())
         self.name = "my_polyline"
-        self.points = points if points is not None else []
         self.width = 1.0
         self.linecolor = Color.white()
         self.xform = Xform.identity()
 
+        # Store coordinates as flat array [x0, y0, z0, x1, y1, z1, ...]
+        self._coords: List[float] = []
+        if points is not None:
+            for p in points:
+                self._coords.extend([p[0], p[1], p[2]])
+
         # Delegate plane computation to Plane.from_points
-        if len(self.points) >= 3:
-            self.plane = Plane.from_points(self.points)
+        if self.point_count() >= 3:
+            self.plane = Plane.from_points(self.get_points())
         else:
             self.plane = Plane()
 
+    @classmethod
+    def from_coords(cls, coords: List[float]) -> "Polyline":
+        """Create a Polyline from a flat coordinate array.
+
+        Args:
+            coords: Flat array [x0, y0, z0, x1, y1, z1, ...]
+
+        Returns:
+            New Polyline instance.
+        """
+        pl = cls()
+        pl._coords = list(coords)
+        if pl.point_count() >= 3:
+            pl.plane = Plane.from_points(pl.get_points())
+        return pl
+
+    ###########################################################################################
+    # Point Access (compatibility layer)
+    ###########################################################################################
+
+    def point_count(self) -> int:
+        """Returns the number of points."""
+        return len(self._coords) // 3
+
+    def get_points(self) -> List[Point]:
+        """Returns all points as Point objects."""
+        points = []
+        for i in range(self.point_count()):
+            idx = i * 3
+            points.append(Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2]))
+        return points
+
+    @property
+    def points(self) -> List[Point]:
+        """Property for backward compatibility - returns list of Point objects."""
+        return self.get_points()
+
+    @points.setter
+    def points(self, value: List[Point]) -> None:
+        """Set points from a list of Point objects."""
+        self._coords = []
+        for p in value:
+            self._coords.extend([p[0], p[1], p[2]])
+
     def __len__(self) -> int:
         """Returns the number of points in the polyline."""
-        return len(self.points)
+        return self.point_count()
 
     def is_empty(self) -> bool:
         """Returns true if the polyline has no points."""
-        return len(self.points) == 0
+        return self.point_count() == 0
 
     def segment_count(self) -> int:
         """Returns the number of segments (n-1 for n points)."""
-        return len(self.points) - 1 if len(self.points) > 1 else 0
+        n = self.point_count()
+        return n - 1 if n > 1 else 0
 
     def length(self) -> float:
         """Calculates the total length of the polyline."""
         total_length = 0.0
         for i in range(self.segment_count()):
-            segment_vector = self.points[i + 1] - self.points[i]
-            total_length += segment_vector.magnitude()
+            idx0 = i * 3
+            idx1 = (i + 1) * 3
+            dx = self._coords[idx1] - self._coords[idx0]
+            dy = self._coords[idx1 + 1] - self._coords[idx0 + 1]
+            dz = self._coords[idx1 + 2] - self._coords[idx0 + 2]
+            total_length += (dx * dx + dy * dy + dz * dz) ** 0.5
         return total_length
 
     def get_point(self, index: int) -> Optional[Point]:
         """Returns the point at the given index, or None if out of bounds."""
-        if 0 <= index < len(self.points):
-            return self.points[index]
+        if 0 <= index < self.point_count():
+            idx = index * 3
+            return Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
         return None
+
+    def set_point(self, index: int, point: Point) -> None:
+        """Sets the point at the given index."""
+        if 0 <= index < self.point_count():
+            idx = index * 3
+            self._coords[idx] = point[0]
+            self._coords[idx + 1] = point[1]
+            self._coords[idx + 2] = point[2]
 
     def add_point(self, point: Point) -> None:
         """Adds a point to the end of the polyline."""
-        self.points.append(point)
-        if len(self.points) == 3:
+        self._coords.extend([point[0], point[1], point[2]])
+        if self.point_count() == 3:
             self._recompute_plane()
 
     def insert_point(self, index: int, point: Point) -> None:
         """Inserts a point at the specified index."""
-        self.points.insert(index, point)
-        if len(self.points) == 3:
+        idx = index * 3
+        self._coords[idx:idx] = [point[0], point[1], point[2]]
+        if self.point_count() == 3:
             self._recompute_plane()
 
     def remove_point(self, index: int) -> Optional[Point]:
         """Removes and returns the point at the specified index."""
-        if 0 <= index < len(self.points):
-            point = self.points.pop(index)
-            if len(self.points) == 3:
+        if 0 <= index < self.point_count():
+            idx = index * 3
+            point = Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+            del self._coords[idx:idx + 3]
+            if self.point_count() == 3:
                 self._recompute_plane()
             return point
         return None
 
     def reverse(self) -> None:
         """Reverses the order of points in the polyline."""
-        self.points.reverse()
+        # Reverse coords in groups of 3
+        n = self.point_count()
+        new_coords = []
+        for i in range(n - 1, -1, -1):
+            idx = i * 3
+            new_coords.extend([self._coords[idx], self._coords[idx + 1], self._coords[idx + 2]])
+        self._coords = new_coords
         self.plane.reverse()
 
     def reversed(self) -> "Polyline":
         """Returns a new polyline with reversed point order."""
-        result = Polyline(self.points[:])
+        result = Polyline.from_coords(self._coords[:])
         result.guid = self.guid
         result.name = self.name
-        result.plane = self.plane
+        result.width = self.width
+        result.linecolor = copy.deepcopy(self.linecolor)
+        result.xform = copy.deepcopy(self.xform)
+        result.plane = copy.deepcopy(self.plane)
         result.reverse()
         return result
 
     def _recompute_plane(self) -> None:
         """Helper to recompute plane when points change."""
-        if len(self.points) >= 3:
-            self.plane = Plane.from_points(self.points)
+        if self.point_count() >= 3:
+            self.plane = Plane.from_points(self.get_points())
+
+    ###########################################################################################
+    # Core Methods
+    ###########################################################################################
+
+    def duplicate(self) -> "Polyline":
+        """Create a deep copy with a new GUID."""
+        result = copy.deepcopy(self)
+        result.guid = str(uuid.uuid4())
+        return result
 
     def __iadd__(self, vector: Vector) -> "Polyline":
         """Translates all points in the polyline by a vector (+=)."""
-        for point in self.points:
-            point += vector
+        for i in range(self.point_count()):
+            idx = i * 3
+            self._coords[idx] += vector[0]
+            self._coords[idx + 1] += vector[1]
+            self._coords[idx + 2] += vector[2]
         # Update plane origin
         self.plane = Plane(
             self.plane.origin + vector, self.plane.x_axis, self.plane.y_axis
@@ -109,17 +202,23 @@ class Polyline:
 
     def __add__(self, vector: Vector) -> "Polyline":
         """Translates the polyline by a vector and returns a new polyline (+)."""
-        result = Polyline([Point(p.x, p.y, p.z) for p in self.points])
+        result = Polyline.from_coords(self._coords[:])
         result.guid = self.guid
         result.name = self.name
-        result.plane = self.plane
+        result.width = self.width
+        result.linecolor = copy.deepcopy(self.linecolor)
+        result.xform = copy.deepcopy(self.xform)
+        result.plane = copy.deepcopy(self.plane)
         result += vector
         return result
 
     def __isub__(self, vector: Vector) -> "Polyline":
         """Translates all points by the negative of a vector (-=)."""
-        for point in self.points:
-            point -= vector
+        for i in range(self.point_count()):
+            idx = i * 3
+            self._coords[idx] -= vector[0]
+            self._coords[idx + 1] -= vector[1]
+            self._coords[idx + 2] -= vector[2]
         # Update plane origin
         self.plane = Plane(
             self.plane.origin - vector, self.plane.x_axis, self.plane.y_axis
@@ -128,10 +227,13 @@ class Polyline:
 
     def __sub__(self, vector: Vector) -> "Polyline":
         """Translates the polyline by the negative of a vector and returns a new polyline (-)."""
-        result = Polyline([Point(p.x, p.y, p.z) for p in self.points])
+        result = Polyline.from_coords(self._coords[:])
         result.guid = self.guid
         result.name = self.name
-        result.plane = self.plane
+        result.width = self.width
+        result.linecolor = copy.deepcopy(self.linecolor)
+        result.xform = copy.deepcopy(self.xform)
+        result.plane = copy.deepcopy(self.plane)
         result -= vector
         return result
 
@@ -140,29 +242,20 @@ class Polyline:
 
         Transforms all points in-place and resets xform to identity.
         """
-        from .xform import Xform
-
-        for pt in self.points:
+        for i in range(self.point_count()):
+            idx = i * 3
+            pt = Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
             self.xform.transform_point(pt)
+            self._coords[idx] = pt[0]
+            self._coords[idx + 1] = pt[1]
+            self._coords[idx + 2] = pt[2]
         self.xform = Xform.identity()
 
     def transformed(self):
         """Return a transformed copy of the polyline."""
-        import copy
-
         result = copy.deepcopy(self)
         result.transform()
         return result
-
-    def __str__(self) -> str:
-        """Returns a string representation of the polyline."""
-        return (
-            f"Polyline(guid={self.guid}, name={self.name}, points={len(self.points)})"
-        )
-
-    def __repr__(self) -> str:
-        """Returns a detailed string representation."""
-        return self.__str__()
 
     # ===========================================================================================
     # Geometric Utilities
@@ -610,6 +703,8 @@ class Polyline:
     def __jsondump__(self):
         """Serialize to polymorphic JSON format with type field.
 
+        Uses compact coords array format: [x0, y0, z0, x1, y1, z1, ...]
+
         Returns
         -------
         dict
@@ -620,15 +715,17 @@ class Polyline:
             "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
-            "points": [p.__jsondump__() for p in self.points],
-            "plane": self.plane.__jsondump__() if self.plane else None,
+            "coords": self._coords,
             "width": self.width,
             "linecolor": self.linecolor.__jsondump__(),
+            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from polymorphic JSON format.
+
+        Supports both compact coords format and legacy points format.
 
         Parameters
         ----------
@@ -647,20 +744,194 @@ class Polyline:
         """
         from .encoders import decode_node
 
-        points = [decode_node(p) for p in data["points"]]
-        plane = decode_node(data["plane"]) if data.get("plane") else None
+        # Support both new coords format and legacy points format
+        if "coords" in data:
+            polyline = cls.from_coords(data["coords"])
+        else:
+            # Legacy format with full Point objects
+            points = [decode_node(p) for p in data["points"]]
+            polyline = cls(points)
 
-        polyline = cls(points)
-        polyline.plane = plane
-        polyline.guid = guid
-        polyline.name = name
+        polyline.guid = guid if guid is not None else data.get("guid", polyline.guid)
+        polyline.name = name if name is not None else data.get("name", polyline.name)
 
         if "width" in data:
             polyline.width = data["width"]
         if "linecolor" in data:
             polyline.linecolor = decode_node(data["linecolor"])
-
         if "xform" in data:
             polyline.xform = decode_node(data["xform"])
 
         return polyline
+
+    def json_dump(self, filepath):
+        """Write JSON to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the JSON file.
+
+        Returns
+        -------
+        :class:`Polyline`
+            The deserialized Polyline.
+
+        """
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format.
+
+        Returns
+        -------
+        bytes
+            Serialized protobuf data.
+
+        """
+        from .proto import polyline_pb2
+
+        proto = polyline_pb2.Polyline()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.coords.extend(self._coords)
+        proto.width = self.width
+
+        # Set linecolor
+        proto.linecolor.name = self.linecolor.name
+        proto.linecolor.r = self.linecolor[0]
+        proto.linecolor.g = self.linecolor[1]
+        proto.linecolor.b = self.linecolor[2]
+        proto.linecolor.a = self.linecolor[3]
+
+        # Set xform
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data):
+        """Create Polyline from protobuf binary data.
+
+        Parameters
+        ----------
+        data : bytes
+            Protobuf-encoded polyline data.
+
+        Returns
+        -------
+        :class:`Polyline`
+            The deserialized Polyline.
+
+        """
+        from .proto import polyline_pb2
+
+        proto = polyline_pb2.Polyline()
+        proto.ParseFromString(data)
+
+        polyline = cls.from_coords(list(proto.coords))
+        polyline.guid = proto.guid
+        polyline.name = proto.name
+        polyline.width = proto.width
+
+        # Load linecolor
+        polyline.linecolor = Color(
+            proto.linecolor.r,
+            proto.linecolor.g,
+            proto.linecolor.b,
+            proto.linecolor.a
+        )
+        polyline.linecolor.name = proto.linecolor.name
+
+        # Load xform
+        polyline.xform = Xform()
+        polyline.xform.name = proto.xform.name
+        polyline.xform.m = list(proto.xform.matrix)
+
+        return polyline
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the output file.
+
+        """
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the protobuf file.
+
+        Returns
+        -------
+        :class:`Polyline`
+            The deserialized Polyline.
+
+        """
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)
+
+    def __str__(self) -> str:
+        """Returns a minimal string representation of the polyline."""
+        pts = []
+        for i in range(self.point_count()):
+            idx = i * 3
+            pts.append(f"({self._coords[idx]}, {self._coords[idx + 1]}, {self._coords[idx + 2]})")
+        return "[" + ", ".join(pts) + "]"
+
+    def __repr__(self) -> str:
+        """Returns a detailed string representation."""
+        return f"Polyline({self.name}, {self.point_count()} points)"
+
+    def __eq__(self, other) -> bool:
+        """Compare polylines by value (ignoring GUIDs)."""
+        if not isinstance(other, Polyline):
+            return False
+        if self.name != other.name:
+            return False
+        if self.point_count() != other.point_count():
+            return False
+        for i in range(len(self._coords)):
+            if round(self._coords[i], Tolerance.ROUNDING) != round(other._coords[i], Tolerance.ROUNDING):
+                return False
+        if round(self.width, Tolerance.ROUNDING) != round(other.width, Tolerance.ROUNDING):
+            return False
+        if self.linecolor != other.linecolor:
+            return False
+        return True
+
+    def __ne__(self, other) -> bool:
+        return not self == other

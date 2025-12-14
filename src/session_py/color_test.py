@@ -45,6 +45,43 @@ def test_color_constructor():
     MINI_CHECK(ccopy.guid != red.guid)
 
 
+@MINI_TEST("Color", "json_roundtrip")
+def test_color_json_roundtrip():
+    from session_py import Color
+    from pathlib import Path
+
+    c = Color(255, 128, 64, 255, "test_color")
+
+    # json_dump(fname) / json_load(fname) - file-based serialization
+    fname = Path(__file__).resolve().parents[2] / "test_color.json"
+    c.json_dump(fname)
+    loaded = Color.json_load(fname)
+
+    MINI_CHECK(loaded.name == "test_color")
+    MINI_CHECK(loaded[0] == 255)
+    MINI_CHECK(loaded[1] == 128)
+    MINI_CHECK(loaded[2] == 64)
+    MINI_CHECK(loaded[3] == 255)
+
+
+@MINI_TEST("Color", "protobuf_roundtrip")
+def test_color_protobuf_roundtrip():
+    from session_py import Color
+    from pathlib import Path
+
+    color = Color(255, 128, 64, 255, "test_color")
+
+    path = Path(__file__).resolve().parents[2] / "test_color.bin"
+    color.protobuf_dump(path)
+    loaded = Color.protobuf_load(path)
+
+    MINI_CHECK(loaded.name == "test_color")
+    MINI_CHECK(loaded[0] == 255)
+    MINI_CHECK(loaded[1] == 128)
+    MINI_CHECK(loaded[2] == 64)
+    MINI_CHECK(loaded[3] == 255)
+
+
 @MINI_TEST("Color", "conversion")
 def test_color_conversion():
     from session_py import Color
@@ -54,8 +91,8 @@ def test_color_conversion():
     ints = Color.from_unified_array(flts)
 
     MINI_CHECK(TOLERANCE.is_close(flts[0], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(flts[1], 0.501961))
-    MINI_CHECK(TOLERANCE.is_close(flts[2], 0.25098))
+    MINI_CHECK(TOLERANCE.is_close(flts[1], 0.50196078))
+    MINI_CHECK(TOLERANCE.is_close(flts[2], 0.25098039))
     MINI_CHECK(TOLERANCE.is_close(flts[3], 1.0))
     MINI_CHECK(ints == color)
 
@@ -107,42 +144,6 @@ def test_color_presets():
     MINI_CHECK(navy == Color(0, 0, 128, 255, "navy"))
     MINI_CHECK(purple == Color(128, 0, 128, 255, "purple"))
     MINI_CHECK(silver == Color(192, 192, 192, 255, "silver"))
-
-
-@MINI_TEST("Color", "json_roundtrip")
-def test_color_json_roundtrip():
-    from session_py import Color
-    from session_py.encoders import json_dump, json_load
-    from pathlib import Path
-
-    color = Color(255, 128, 64, 255, "test_color")
-
-    path = Path(__file__).resolve().parents[2] / "test_color.json"
-    json_dump(color, path)
-    loaded = json_load(path)
-
-    MINI_CHECK(loaded.name == "test_color")
-    MINI_CHECK(loaded[0] == 255)
-    MINI_CHECK(loaded[1] == 128)
-    MINI_CHECK(loaded[2] == 64)
-    MINI_CHECK(loaded[3] == 255)
-
-@MINI_TEST("Color", "protobuf_roundtrip")
-def test_color_protobuf_roundtrip():
-    from session_py import Color
-    from pathlib import Path
-
-    color = Color(255, 128, 64, 255, "test_color")
-
-    path = Path(__file__).resolve().parents[2] / "test_color.bin"
-    color.protobuf_dump(path)
-    loaded = Color.protobuf_load(path)
-
-    MINI_CHECK(loaded.name == "test_color")
-    MINI_CHECK(loaded[0] == 255)
-    MINI_CHECK(loaded[1] == 128)
-    MINI_CHECK(loaded[2] == 64)
-    MINI_CHECK(loaded[3] == 255)
 
 
 if __name__ == "__main__":

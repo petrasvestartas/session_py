@@ -93,6 +93,61 @@ def test_transformation():
     MINI_CHECK(p.xform == Xform.identity())
 
 
+@MINI_TEST("Point", "json_roundtrip")
+def test_point_json_roundtrip():
+    from session_py import Point
+    from session_py import Color
+    from pathlib import Path
+
+    p = Point(1.5, 2.5, 3.5)
+    p.name = "test_point"
+    p.width = 2.0
+    p.pointcolor = Color(255, 128, 64, 255)
+
+    # json_dump(fname) / json_load(fname) - file-based serialization
+    fname = Path(__file__).resolve().parents[2] / "test_point.json"
+    p.json_dump(fname)
+    loaded = Point.json_load(fname)
+
+    MINI_CHECK(isinstance(loaded, Point))
+    MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded[0] == p[0])
+    MINI_CHECK(loaded[1] == p[1])
+    MINI_CHECK(loaded[2] == p[2])
+    MINI_CHECK(loaded.width == p.width)
+    MINI_CHECK(loaded.pointcolor[0] == 255)
+    MINI_CHECK(loaded.pointcolor[1] == 128)
+    MINI_CHECK(loaded.pointcolor[2] == 64)
+    MINI_CHECK(loaded.pointcolor[3] == 255)
+
+
+@MINI_TEST("Point", "protobuf_roundtrip")
+def test_point_protobuf_roundtrip():
+    from session_py import Point
+    from session_py import Color
+    from pathlib import Path
+
+    p = Point(1.5, 2.5, 3.5)
+    p.name = "test_point"
+    p.width = 2.0
+    p.pointcolor = Color(255, 128, 64, 255)
+
+    path = Path(__file__).resolve().parents[2] / "test_point.bin"
+    p.protobuf_dump(path)
+    loaded = Point.protobuf_load(path)
+
+    MINI_CHECK(isinstance(loaded, Point))
+    MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded[0] == p[0])
+    MINI_CHECK(loaded[1] == p[1])
+    MINI_CHECK(loaded[2] == p[2])
+    MINI_CHECK(loaded.width == p.width)
+    MINI_CHECK(loaded.pointcolor[0] == 255)
+    MINI_CHECK(loaded.pointcolor[1] == 128)
+    MINI_CHECK(loaded.pointcolor[2] == 64)
+    MINI_CHECK(loaded.pointcolor[3] == 255)
+
+
 @MINI_TEST("Point", "is_ccw")
 def test_is_ccw():
     from session_py import Point
@@ -168,61 +223,6 @@ def test_centroid_quad():
     MINI_CHECK(TOLERANCE.is_close(centroid[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(centroid[1], 1.0))
     MINI_CHECK(TOLERANCE.is_close(centroid[2], 1.0))
-
-
-@MINI_TEST("Point", "json_roundtrip")
-def test_point_json_roundtrip():
-    from session_py import Point
-    from session_py import Color
-    from session_py.encoders import json_dump, json_load
-    from pathlib import Path
-
-    p = Point(1.5, 2.5, 3.5)
-    p.name = "test_point"
-    p.width = 2.0
-    p.pointcolor = Color(255, 128, 64, 255)
-
-    path = Path(__file__).resolve().parents[2] / "test_point.json"
-    json_dump(p, path)
-    loaded = json_load(path)
-
-    MINI_CHECK(isinstance(loaded, Point))
-    MINI_CHECK(loaded.name == p.name)
-    MINI_CHECK(loaded[0] == p[0])
-    MINI_CHECK(loaded[1] == p[1])
-    MINI_CHECK(loaded[2] == p[2])
-    MINI_CHECK(loaded.width == p.width)
-    MINI_CHECK(loaded.pointcolor[0] == 255)
-    MINI_CHECK(loaded.pointcolor[1] == 128)
-    MINI_CHECK(loaded.pointcolor[2] == 64)
-    MINI_CHECK(loaded.pointcolor[3] == 255)
-
-
-@MINI_TEST("Point", "protobuf_roundtrip")
-def test_point_protobuf_roundtrip():
-    from session_py import Point
-    from session_py import Color
-    from pathlib import Path
-
-    p = Point(1.5, 2.5, 3.5)
-    p.name = "test_point"
-    p.width = 2.0
-    p.pointcolor = Color(255, 128, 64, 255)
-
-    path = Path(__file__).resolve().parents[2] / "test_point.bin"
-    p.protobuf_dump(path)
-    loaded = Point.protobuf_load(path)
-
-    MINI_CHECK(isinstance(loaded, Point))
-    MINI_CHECK(loaded.name == p.name)
-    MINI_CHECK(loaded[0] == p[0])
-    MINI_CHECK(loaded[1] == p[1])
-    MINI_CHECK(loaded[2] == p[2])
-    MINI_CHECK(loaded.width == p.width)
-    MINI_CHECK(loaded.pointcolor[0] == 255)
-    MINI_CHECK(loaded.pointcolor[1] == 128)
-    MINI_CHECK(loaded.pointcolor[2] == 64)
-    MINI_CHECK(loaded.pointcolor[3] == 255)
 
 
 if __name__ == "__main__":

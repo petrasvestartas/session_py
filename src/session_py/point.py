@@ -114,26 +114,6 @@ class Point:
         """
         return Point(p0[0] - p1[0], p0[1] - p1[1], p0[2] - p1[2])
 
-    def __str__(self):
-        return f"{self[0]}, {self[1]}, {self[2]}"
-
-    def __repr__(self):
-        return f"Point({self.name}, {self[0]}, {self[1]}, {self[2]}, {repr(self.pointcolor)}, {self.width})"
-
-    def __eq__(self, other):
-        return (
-            self.name == other.name
-            and round(self[0], Tolerance.ROUNDING) == round(other[0], Tolerance.ROUNDING)
-            and round(self[1], Tolerance.ROUNDING) == round(other[1], Tolerance.ROUNDING)
-            and round(self[2], Tolerance.ROUNDING) == round(other[2], Tolerance.ROUNDING)
-            and round(self.width, Tolerance.ROUNDING) == round(other.width, Tolerance.ROUNDING)
-            and self.pointcolor == other.pointcolor
-            and self.xform == other.xform
-        )
-
-    def __ne__(self, other):
-        return not self == other
-
     ###########################################################################################
     # Coordinate Properties
     ###########################################################################################
@@ -492,13 +472,46 @@ class Point:
         pt.pointcolor = decode_node(data.get("pointcolor"))
 
         # Always assign metadata (per project convention)
-        pt.guid = guid
-        pt.name = name
+        pt.guid = guid if guid is not None else data.get("guid", pt.guid)
+        pt.name = name if name is not None else data.get("name", pt.name)
 
         if "xform" in data:
             pt.xform = decode_node(data["xform"])
 
         return pt
+
+    def json_dump(self, filepath):
+        """Write JSON to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the JSON file.
+
+        Returns
+        -------
+        :class:`Point`
+            The deserialized Point.
+
+        """
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
 
     ###########################################################################################
     # Protobuf Serialization
@@ -610,3 +623,23 @@ class Point:
         with open(filepath, 'rb') as f:
             data = f.read()
         return cls.from_protobuf(data)
+
+    def __str__(self):
+        return f"{self[0]}, {self[1]}, {self[2]}"
+
+    def __repr__(self):
+        return f"Point({self.name}, {self[0]}, {self[1]}, {self[2]}, {repr(self.pointcolor)}, {self.width})"
+
+    def __eq__(self, other):
+        return (
+            self.name == other.name
+            and round(self[0], Tolerance.ROUNDING) == round(other[0], Tolerance.ROUNDING)
+            and round(self[1], Tolerance.ROUNDING) == round(other[1], Tolerance.ROUNDING)
+            and round(self[2], Tolerance.ROUNDING) == round(other[2], Tolerance.ROUNDING)
+            and round(self.width, Tolerance.ROUNDING) == round(other.width, Tolerance.ROUNDING)
+            and self.pointcolor == other.pointcolor
+            and self.xform == other.xform
+        )
+
+    def __ne__(self, other):
+        return not self == other

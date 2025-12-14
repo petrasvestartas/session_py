@@ -76,9 +76,9 @@ class Plane:
         self._b = self._z_axis[1]
         self._c = self._z_axis[2]
         self._d = -(
-            self._a * self._origin.x
-            + self._b * self._origin.y
-            + self._c * self._origin.z
+            self._a * self._origin[0]
+            + self._b * self._origin[1]
+            + self._c * self._origin[2]
         )
 
     @property
@@ -178,7 +178,7 @@ class Plane:
         plane._z_axis = v1.cross(v2)
         plane._z_axis.normalize_self()
 
-        plane._x_axis = Vector(v1.x, v1.y, v1.z)
+        plane._x_axis = Vector(v1[0], v1[1], v1[2])
         plane._x_axis.normalize_self()
         plane._y_axis = plane._z_axis.cross(plane._x_axis)
         plane._y_axis.normalize_self()
@@ -470,16 +470,16 @@ class Plane:
             True if origins are very close.
         """
         dist0 = abs(
-            plane0._a * plane1._origin.x
-            + plane0._b * plane1._origin.y
-            + plane0._c * plane1._origin.z
+            plane0._a * plane1._origin[0]
+            + plane0._b * plane1._origin[1]
+            + plane0._c * plane1._origin[2]
             + plane0._d
         )
 
         dist1 = abs(
-            plane1._a * plane0._origin.x
-            + plane1._b * plane0._origin.y
-            + plane1._c * plane0._origin.z
+            plane1._a * plane0._origin[0]
+            + plane1._b * plane0._origin[1]
+            + plane1._c * plane0._origin[2]
             + plane1._d
         )
 

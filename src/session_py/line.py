@@ -48,65 +48,107 @@ class Line:
         self.linecolor = Color.white()
         self.xform = Xform.identity()
 
-    @property
-    def x0(self):
-        """Get the X coordinate of start point."""
-        return self._x0
+    def duplicate(self):
+        """Create a deep copy of this line with a new GUID.
 
-    @x0.setter
-    def x0(self, value):
-        """Set the X coordinate of start point."""
-        self._x0 = value
+        Returns
+        -------
+        :class:`Line`
+            A new Line with identical values but a different GUID.
 
-    @property
-    def y0(self):
-        """Get the Y coordinate of start point."""
-        return self._y0
+        """
+        import copy
+        import uuid
+        result = copy.deepcopy(self)
+        result.guid = str(uuid.uuid4())
+        return result
 
-    @y0.setter
-    def y0(self, value):
-        """Set the Y coordinate of start point."""
-        self._y0 = value
+    @classmethod
+    def fit_points(cls, points, length=None):
+        """Fit a line to a set of points using least squares (PCA).
 
-    @property
-    def z0(self):
-        """Get the Z coordinate of start point."""
-        return self._z0
+        Uses Principal Component Analysis to find the best-fit line
+        that minimizes perpendicular distances to all points.
 
-    @z0.setter
-    def z0(self, value):
-        """Set the Z coordinate of start point."""
-        self._z0 = value
+        Parameters
+        ----------
+        points : list of Point
+            List of points to fit (minimum 2 points required).
+        length : float, optional
+            Length of the resulting line. If None, uses the extent
+            of points projected onto the line direction.
 
-    @property
-    def x1(self):
-        """Get the X coordinate of end point."""
-        return self._x1
+        Returns
+        -------
+        Line
+            Best-fit line through the points.
 
-    @x1.setter
-    def x1(self, value):
-        """Set the X coordinate of end point."""
-        self._x1 = value
+        Raises
+        ------
+        ValueError
+            If fewer than 2 points are provided.
+        """
+        if len(points) < 2:
+            raise ValueError("At least 2 points are required for line fitting")
 
-    @property
-    def y1(self):
-        """Get the Y coordinate of end point."""
-        return self._y1
+        n = len(points)
 
-    @y1.setter
-    def y1(self, value):
-        """Set the Y coordinate of end point."""
-        self._y1 = value
+        # Compute centroid
+        cx = sum(p[0] for p in points) / n
+        cy = sum(p[1] for p in points) / n
+        cz = sum(p[2] for p in points) / n
 
-    @property
-    def z1(self):
-        """Get the Z coordinate of end point."""
-        return self._z1
+        # Compute covariance matrix elements
+        cxx = cyy = czz = cxy = cxz = cyz = 0.0
+        for p in points:
+            dx = p[0] - cx
+            dy = p[1] - cy
+            dz = p[2] - cz
+            cxx += dx * dx
+            cyy += dy * dy
+            czz += dz * dz
+            cxy += dx * dy
+            cxz += dx * dz
+            cyz += dy * dz
 
-    @z1.setter
-    def z1(self, value):
-        """Set the Z coordinate of end point."""
-        self._z1 = value
+        # Use numpy for eigenvalue decomposition
+        import numpy as np
+        cov = np.array([
+            [cxx, cxy, cxz],
+            [cxy, cyy, cyz],
+            [cxz, cyz, czz]
+        ])
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+
+        # Eigenvector with largest eigenvalue is the line direction
+        idx = np.argmax(eigenvalues)
+        direction = eigenvectors[:, idx]
+
+        # Determine line extent from projected points
+        if length is None:
+            t_min = t_max = 0.0
+            for p in points:
+                dx = p[0] - cx
+                dy = p[1] - cy
+                dz = p[2] - cz
+                t = dx * direction[0] + dy * direction[1] + dz * direction[2]
+                t_min = min(t_min, t)
+                t_max = max(t_max, t)
+            half_len = max(abs(t_min), abs(t_max))
+            if half_len < 1e-10:
+                half_len = 0.5  # Default if all points are coincident
+        else:
+            half_len = length / 2.0
+
+        # Create line from centroid +/- direction * half_len
+        x0 = cx - direction[0] * half_len
+        y0 = cy - direction[1] * half_len
+        z0 = cz - direction[2] * half_len
+        x1 = cx + direction[0] * half_len
+        y1 = cy + direction[1] * half_len
+        z1 = cz + direction[2] * half_len
+
+        return cls(x0, y0, z0, x1, y1, z1)
 
     @classmethod
     def from_points(cls, p1, p2):
@@ -124,7 +166,52 @@ class Line:
         Line
             New line from p1 to p2.
         """
-        return cls(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z)
+        return cls(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2])
+
+    @classmethod
+    def from_point_and_vector(cls, point, vector):
+        """Create a line from a point and a vector.
+
+        Parameters
+        ----------
+        point : Point
+            Start point of the line.
+        vector : Vector
+            Direction and length of the line.
+
+        Returns
+        -------
+        Line
+            New line from point to point + vector.
+        """
+        return cls(
+            point[0], point[1], point[2],
+            point[0] + vector[0], point[1] + vector[1], point[2] + vector[2]
+        )
+
+    @classmethod
+    def from_point_direction_length(cls, point, direction, length):
+        """Create a line from a point, direction, and length.
+
+        Parameters
+        ----------
+        point : Point
+            Start point of the line.
+        direction : Vector
+            Direction of the line (will be normalized).
+        length : float
+            Length of the line.
+
+        Returns
+        -------
+        Line
+            New line from point in direction with given length.
+        """
+        d = direction.normalize()
+        return cls(
+            point[0], point[1], point[2],
+            point[0] + d[0] * length, point[1] + d[1] * length, point[2] + d[2] * length
+        )
 
     @classmethod
     def with_name(cls, name, x0, y0, z0, x1, y1, z1):
@@ -184,6 +271,16 @@ class Line:
         """
         return Vector(self._x1 - self._x0, self._y1 - self._y0, self._z1 - self._z0)
 
+    def to_direction(self):
+        """Convert line to unit direction vector.
+
+        Returns
+        -------
+        Vector
+            Normalized direction vector from start to end.
+        """
+        return self.to_vector().normalize()
+
     def point_at(self, t):
         """Get point at parameter t along the line.
 
@@ -204,6 +301,48 @@ class Line:
             s * self._z0 + t * self._z1,
         )
 
+    def subdivide(self, n):
+        """Subdivide line into n points.
+
+        Parameters
+        ----------
+        n : int
+            Number of points (must be >= 2).
+
+        Returns
+        -------
+        list of Point
+            List of n points along the line, including start and end.
+        """
+        if n < 2:
+            raise ValueError("n must be at least 2")
+        points = []
+        for i in range(n):
+            t = i / (n - 1)
+            points.append(self.point_at(t))
+        return points
+
+    def subdivide_by_distance(self, distance):
+        """Subdivide line by approximate distance between points.
+
+        Parameters
+        ----------
+        distance : float
+            Target distance between consecutive points.
+
+        Returns
+        -------
+        list of Point
+            List of points along the line, including start and end.
+        """
+        if distance <= 0:
+            raise ValueError("distance must be positive")
+        length = self.length()
+        if length < 1e-10:
+            return [self.start(), self.end()]
+        n = max(2, int(length / distance + 0.5) + 1)
+        return self.subdivide(n)
+
     def start(self):
         """Get start point.
 
@@ -223,6 +362,43 @@ class Line:
             End point of the line.
         """
         return Point(self._x1, self._y1, self._z1)
+
+    def center(self):
+        """Get center point (average of start and end).
+
+        Returns
+        -------
+        Point
+            Center point of the line.
+        """
+        return Point(
+            (self._x0 + self._x1) * 0.5,
+            (self._y0 + self._y1) * 0.5,
+            (self._z0 + self._z1) * 0.5,
+        )
+
+    def closest_point(self, point):
+        """Find the closest point on the line to a given point.
+
+        Parameters
+        ----------
+        point : Point
+            The point to find the closest point to.
+
+        Returns
+        -------
+        Point
+            The closest point on the line segment.
+        """
+        dx = self._x1 - self._x0
+        dy = self._y1 - self._y0
+        dz = self._z1 - self._z0
+        len_sq = dx * dx + dy * dy + dz * dz
+        if len_sq < 1e-20:
+            return self.start()
+        t = ((point[0] - self._x0) * dx + (point[1] - self._y0) * dy + (point[2] - self._z0) * dz) / len_sq
+        t = max(0.0, min(1.0, t))
+        return self.point_at(t)
 
     def __getitem__(self, index):
         """Get coordinate by index (0-5)."""
@@ -249,23 +425,23 @@ class Line:
     def __iadd__(self, other):
         """Add vector to line in place."""
         if isinstance(other, Vector):
-            self._x0 += other.x
-            self._y0 += other.y
-            self._z0 += other.z
-            self._x1 += other.x
-            self._y1 += other.y
-            self._z1 += other.z
+            self._x0 += other[0]
+            self._y0 += other[1]
+            self._z0 += other[2]
+            self._x1 += other[0]
+            self._y1 += other[1]
+            self._z1 += other[2]
         return self
 
     def __isub__(self, other):
         """Subtract vector from line in place."""
         if isinstance(other, Vector):
-            self._x0 -= other.x
-            self._y0 -= other.y
-            self._z0 -= other.z
-            self._x1 -= other.x
-            self._y1 -= other.y
-            self._z1 -= other.z
+            self._x0 -= other[0]
+            self._y0 -= other[1]
+            self._z0 -= other[2]
+            self._x1 -= other[0]
+            self._y1 -= other[1]
+            self._z1 -= other[2]
         return self
 
     def __imul__(self, factor):
@@ -292,12 +468,12 @@ class Line:
         """Add vector to line."""
         if isinstance(other, Vector):
             return Line(
-                self._x0 + other.x,
-                self._y0 + other.y,
-                self._z0 + other.z,
-                self._x1 + other.x,
-                self._y1 + other.y,
-                self._z1 + other.z,
+                self._x0 + other[0],
+                self._y0 + other[1],
+                self._z0 + other[2],
+                self._x1 + other[0],
+                self._y1 + other[1],
+                self._z1 + other[2],
             )
         return NotImplemented
 
@@ -305,12 +481,12 @@ class Line:
         """Subtract vector from line."""
         if isinstance(other, Vector):
             return Line(
-                self._x0 - other.x,
-                self._y0 - other.y,
-                self._z0 - other.z,
-                self._x1 - other.x,
-                self._y1 - other.y,
-                self._z1 - other.z,
+                self._x0 - other[0],
+                self._y0 - other[1],
+                self._z0 - other[2],
+                self._x1 - other[0],
+                self._y1 - other[1],
+                self._z1 - other[2],
             )
         return NotImplemented
 
@@ -336,6 +512,10 @@ class Line:
             self._z1 / factor,
         )
 
+    def __neg__(self):
+        """Negate line (flip direction)."""
+        return Line(self._x1, self._y1, self._z1, self._x0, self._y0, self._z0)
+
     def transform(self):
         """Apply the stored xform transformation to the line coordinates.
 
@@ -347,12 +527,12 @@ class Line:
         self.xform.transform_point(start)
         self.xform.transform_point(end)
 
-        self._x0 = start.x
-        self._y0 = start.y
-        self._z0 = start.z
-        self._x1 = end.x
-        self._y1 = end.y
-        self._z1 = end.z
+        self._x0 = start[0]
+        self._y0 = start[1]
+        self._z0 = start[2]
+        self._x1 = end[0]
+        self._y1 = end[1]
+        self._z1 = end[2]
         self.xform = Xform.identity()
 
     def transformed(self):
@@ -371,14 +551,6 @@ class Line:
         result = copy.deepcopy(self)
         result.transform()
         return result
-
-    def __str__(self):
-        """String representation."""
-        return f"Line({self._x0}, {self._y0}, {self._z0}, {self._x1}, {self._y1}, {self._z1})"
-
-    def __repr__(self):
-        """Detailed representation."""
-        return self.__str__()
 
     ###########################################################################################
     # Polymorphic JSON Serialization
@@ -405,7 +577,41 @@ class Line:
             "z1": self._z1,
             "width": self.width,
             "linecolor": self.linecolor.__jsondump__(),
+            "xform": self.xform.__jsondump__(),
         }
+
+    def json_dump(self, filepath):
+        """Write JSON to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the JSON file.
+
+        Returns
+        -------
+        :class:`Line`
+            The deserialized Line.
+
+        """
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
 
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
@@ -443,3 +649,120 @@ class Line:
             line.xform = decode_node(data["xform"])
 
         return line
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format.
+
+        Returns
+        -------
+        bytes
+            Serialized protobuf data.
+
+        """
+        from .proto import line_pb2
+        from .proto import point_pb2
+
+        proto = line_pb2.Line()
+        proto.guid = self.guid
+        proto.name = self.name
+
+        # Set start point
+        proto.start.x = self._x0
+        proto.start.y = self._y0
+        proto.start.z = self._z0
+        proto.start.guid = ""
+        proto.start.name = ""
+        proto.start.width = 1.0
+
+        # Set end point
+        proto.end.x = self._x1
+        proto.end.y = self._y1
+        proto.end.z = self._z1
+        proto.end.guid = ""
+        proto.end.name = ""
+        proto.end.width = 1.0
+
+        # Set xform
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data):
+        """Create Line from protobuf binary data.
+
+        Parameters
+        ----------
+        data : bytes
+            Protobuf-encoded line data.
+
+        Returns
+        -------
+        :class:`Line`
+            The deserialized Line.
+
+        """
+        from .proto import line_pb2
+
+        proto = line_pb2.Line()
+        proto.ParseFromString(data)
+
+        line = cls(
+            proto.start.x, proto.start.y, proto.start.z,
+            proto.end.x, proto.end.y, proto.end.z
+        )
+        line.guid = proto.guid
+        line.name = proto.name
+
+        # Load xform if present
+        if proto.HasField('xform'):
+            line.xform = Xform()
+            line.xform.name = proto.xform.name
+            line.xform.m = list(proto.xform.matrix)
+
+        return line
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the protobuf file.
+
+        Returns
+        -------
+        :class:`Line`
+            The deserialized Line.
+
+        """
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)
+
+    def __str__(self):
+        """String representation."""
+        return f"Line({self._x0}, {self._y0}, {self._z0}, {self._x1}, {self._y1}, {self._z1})"
+
+    def __repr__(self):
+        """Detailed representation."""
+        return f"Line({self.name}, {self._x0}, {self._y0}, {self._z0}, {self._x1}, {self._y1}, {self._z1}, {repr(self.linecolor)}, {self.width})"

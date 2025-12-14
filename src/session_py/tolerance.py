@@ -85,9 +85,6 @@ class Tolerance:
         if angulardeflection is not None:
             self.angulardeflection = angulardeflection
 
-    def __repr__(self):
-        return f"Tolerance(unit='{self.unit}', absolute={self.absolute}, relative={self.relative}, angular={self.angular}, approximation={self.approximation}, precision={self.precision}, lineardeflection={self.lineardeflection}, angulardeflection={self.angulardeflection})"
-
     def reset(self):
         """Reset all precision settings to their default values."""
         self._absolute = None
@@ -320,6 +317,9 @@ class Tolerance:
 
             return abs(int(decimal.Decimal(str(tol)).as_tuple().exponent))
         raise NotImplementedError
+
+    def __repr__(self):
+        return f"Tolerance(unit='{self.unit}', absolute={self.absolute}, relative={self.relative}, angular={self.angular}, approximation={self.approximation}, precision={self.precision}, lineardeflection={self.lineardeflection}, angulardeflection={self.angulardeflection})"
 
 
 def is_finite(x):

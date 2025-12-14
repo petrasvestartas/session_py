@@ -72,27 +72,6 @@ class Color:
         """
         return copy.deepcopy(self)
 
-    def __str__(self) -> str:
-        """String representation."""
-        return f"{self[0]}, {self[1]}, {self[2]}, {self[3]}"
-
-    def __repr__(self) -> str:
-        return f"Color({self.name}, {self[0]}, {self[1]}, {self[2]}, {self[3]})"
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, Color):
-            return False
-        return (
-            self.name == other.name
-            and self[0] == other[0]
-            and self[1] == other[1]
-            and self[2] == other[2]
-            and self[3] == other[3]
-        )
-
-    def __ne__(self, other) -> bool:
-        return not self == other
-
     ###########################################################################################
     # No-copy Operators
     ###########################################################################################
@@ -331,9 +310,42 @@ class Color:
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from polymorphic JSON format."""
         color = cls(data["r"], data["g"], data["b"], data.get("a", 255))
-        color.guid = guid
-        color.name = name
+        color.guid = guid if guid is not None else data.get("guid", color.guid)
+        color.name = name if name is not None else data.get("name", color.name)
         return color
+
+    def json_dump(self, filepath):
+        """Write JSON to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the JSON file.
+
+        Returns
+        -------
+        :class:`Color`
+            The deserialized Color.
+
+        """
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
 
     ###########################################################################################
     # Protobuf Serialization
@@ -425,3 +437,24 @@ class Color:
         with open(filepath, 'rb') as f:
             data = f.read()
         return cls.from_protobuf(data)
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self[0]}, {self[1]}, {self[2]}, {self[3]}"
+
+    def __repr__(self) -> str:
+        return f"Color({self.name}, {self[0]}, {self[1]}, {self[2]}, {self[3]})"
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Color):
+            return False
+        return (
+            self.name == other.name
+            and self[0] == other[0]
+            and self[1] == other[1]
+            and self[2] == other[2]
+            and self[3] == other[3]
+        )
+
+    def __ne__(self, other) -> bool:
+        return not self == other
