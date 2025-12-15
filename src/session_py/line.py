@@ -400,6 +400,27 @@ class Line:
         t = max(0.0, min(1.0, t))
         return self.point_at(t)
 
+    @staticmethod
+    def get_middle_line(line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point):
+        """Calculate middle line between two line segments.
+
+        Returns
+        -------
+        tuple
+            (start_point, end_point) of the middle line.
+        """
+        p0 = Point(
+            (line0_start.x + line1_start.x) * 0.5,
+            (line0_start.y + line1_start.y) * 0.5,
+            (line0_start.z + line1_start.z) * 0.5,
+        )
+        p1 = Point(
+            (line0_end.x + line1_end.x) * 0.5,
+            (line0_end.y + line1_end.y) * 0.5,
+            (line0_end.z + line1_end.z) * 0.5,
+        )
+        return p0, p1
+
     def __getitem__(self, index):
         """Get coordinate by index (0-5)."""
         coords = [self._x0, self._y0, self._z0, self._x1, self._y1, self._z1]

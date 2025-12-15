@@ -1,74 +1,43 @@
 {
-    "type": "Plane",
-    "guid": "0e9afd2a-a852-43cb-8ff3-f3e944dbc711",
-    "name": "test_plane",
-    "origin": {
-        "type": "Point",
-        "guid": "39c98eb7-39b1-4e0f-adfd-954058dc38bd",
-        "name": "my_point",
-        "x": 0.0,
-        "y": 0.0,
-        "z": 0.0,
-        "width": 1.0,
-        "pointcolor": {
-            "type": "Color",
-            "guid": "0bbf4c5d-d015-4bb4-b8b8-78aff679242b",
-            "name": "blue",
-            "r": 0,
-            "g": 0,
-            "b": 255,
-            "a": 255
-        },
-        "xform": {
-            "type": "Xform",
-            "guid": "4cc5ee98-833c-4218-b4d0-6443fda5b67b",
-            "name": "my_xform",
-            "m": [
-                1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0
-            ]
-        }
-    },
-    "x_axis": {
-        "type": "Vector",
-        "guid": "b2afd007-1980-4026-9016-079c2914fb9a",
-        "name": "my_vector",
-        "x": 1.0,
-        "y": 0.0,
-        "z": 0.0
-    },
-    "y_axis": {
-        "type": "Vector",
-        "guid": "0a53a21b-c657-4a78-b704-d5ad3e0d174c",
-        "name": "my_vector",
-        "x": 0.0,
-        "y": 1.0,
-        "z": 0.0
-    },
-    "z_axis": {
-        "type": "Vector",
-        "guid": "b76e695b-4098-49fe-a812-b630b1aa9127",
-        "name": "my_vector",
-        "x": 0.0,
-        "y": 0.0,
-        "z": 1.0
-    },
-    "a": 0.0,
-    "b": 0.0,
-    "c": 1.0,
-    "d": 0.0
+  "type": "Plane",
+  "guid": "e7c2a306-07b8-4739-91a2-a41618d41a8b",
+  "name": "test_plane",
+  "frame": [
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "width": 1.0,
+  "xform": {
+    "type": "Xform",
+    "guid": "793867be-afc1-468f-b762-8d80a9b887f6",
+    "name": "my_xform",
+    "m": [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  }
 }

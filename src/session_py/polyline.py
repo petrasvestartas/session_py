@@ -237,6 +237,42 @@ class Polyline:
         result -= vector
         return result
 
+    def __imul__(self, factor: float) -> "Polyline":
+        """Multiply all coordinates by scalar in place (*=)."""
+        for i in range(len(self._coords)):
+            self._coords[i] *= factor
+        return self
+
+    def __mul__(self, factor: float) -> "Polyline":
+        """Multiply polyline by scalar and return new polyline (*)."""
+        result = Polyline.from_coords([c * factor for c in self._coords])
+        result.name = self.name
+        result.width = self.width
+        result.linecolor = copy.deepcopy(self.linecolor)
+        result.xform = copy.deepcopy(self.xform)
+        result.plane = copy.deepcopy(self.plane)
+        return result
+
+    def __itruediv__(self, factor: float) -> "Polyline":
+        """Divide all coordinates by scalar in place (/=)."""
+        for i in range(len(self._coords)):
+            self._coords[i] /= factor
+        return self
+
+    def __truediv__(self, factor: float) -> "Polyline":
+        """Divide polyline by scalar and return new polyline (/)."""
+        result = Polyline.from_coords([c / factor for c in self._coords])
+        result.name = self.name
+        result.width = self.width
+        result.linecolor = copy.deepcopy(self.linecolor)
+        result.xform = copy.deepcopy(self.xform)
+        result.plane = copy.deepcopy(self.plane)
+        return result
+
+    def __neg__(self) -> "Polyline":
+        """Negate polyline (reverse point order)."""
+        return self.reversed()
+
     def transform(self):
         """Apply the stored xform transformation to the polyline.
 
@@ -278,7 +314,7 @@ class Polyline:
         return mag
 
     @staticmethod
-    def point_at_parameter(start: Point, end: Point, t: float) -> Point:
+    def point_at(start: Point, end: Point, t: float) -> Point:
         """Get point at parameter t along a line segment (t=0 is start, t=1 is end)."""
         s = 1.0 - t
         return Point(
@@ -325,8 +361,8 @@ class Polyline:
 
         if do_overlap and overlap_valid:
             return (
-                Polyline.point_at_parameter(line0_start, line0_end, t[1]),
-                Polyline.point_at_parameter(line0_start, line0_end, t[2]),
+                Polyline.point_at(line0_start, line0_end, t[1]),
+                Polyline.point_at(line0_start, line0_end, t[2]),
             )
         else:
             return None
@@ -418,8 +454,8 @@ class Polyline:
         ]
         t_values.sort()
 
-        output_start = Polyline.point_at_parameter(line_start, line_end, t_values[0])
-        output_end = Polyline.point_at_parameter(line_start, line_end, t_values[-1])
+        output_start = Polyline.point_at(line_start, line_end, t_values[0])
+        output_end = Polyline.point_at(line_start, line_end, t_values[-1])
 
         if abs(t_values[0] - t_values[-1]) > Tolerance.ZERO_TOLERANCE:
             return output_start, output_end
@@ -434,7 +470,7 @@ class Polyline:
 
         for i in range(self.segment_count()):
             t = self.closest_point_to_line(point, self.points[i], self.points[i + 1])
-            point_on_segment = self.point_at_parameter(
+            point_on_segment = Polyline.point_at(
                 self.points[i], self.points[i + 1], t
             )
             distance = point.distance(point_on_segment)
@@ -447,7 +483,7 @@ class Polyline:
             if closest_distance < Tolerance.ZERO_TOLERANCE:
                 break
 
-        closest_point = self.point_at_parameter(
+        closest_point = Polyline.point_at(
             self.points[edge_id], self.points[edge_id + 1], best_t
         )
         return closest_distance, edge_id, closest_point
@@ -475,11 +511,6 @@ class Polyline:
 
         return Point(sum_x / n, sum_y / n, sum_z / n)
 
-    def center_vec(self) -> Vector:
-        """Calculate center as vector."""
-        center = self.center()
-        return Vector(center.x, center.y, center.z)
-
     def get_average_plane(self) -> Tuple[Point, Vector, Vector, Vector]:
         """Get average plane from polyline points."""
         origin = self.center()
@@ -501,42 +532,6 @@ class Polyline:
         plane = Plane.from_point_normal(origin, average_normal)
         return origin, plane
 
-    @staticmethod
-    def get_middle_line(
-        line0_start: Point,
-        line0_end: Point,
-        line1_start: Point,
-        line1_end: Point,
-    ) -> Tuple[Point, Point]:
-        """Calculate middle line between two line segments."""
-        p0 = Point(
-            (line0_start.x + line1_start.x) * 0.5,
-            (line0_start.y + line1_start.y) * 0.5,
-            (line0_start.z + line1_start.z) * 0.5,
-        )
-        p1 = Point(
-            (line0_end.x + line1_end.x) * 0.5,
-            (line0_end.y + line1_end.y) * 0.5,
-            (line0_end.z + line1_end.z) * 0.5,
-        )
-        return p0, p1
-
-    @staticmethod
-    def extend_line(
-        line_start: Point, line_end: Point, distance0: float, distance1: float
-    ) -> None:
-        """Extend line segment by specified distances at both ends."""
-        v = (line_end - line_start).normalize()
-        line_start -= v * distance0
-        line_end += v * distance1
-
-    @staticmethod
-    def scale_line(line_start: Point, line_end: Point, distance: float) -> None:
-        """Scale line segment inward by specified distance."""
-        v = line_end - line_start
-        line_start += v * distance
-        line_end -= v * distance
-
     def extend_segment(
         self,
         segment_id: int,
@@ -549,8 +544,8 @@ class Polyline:
         if segment_id < 0 or segment_id >= self.segment_count():
             return
 
-        p0 = self.points[segment_id]
-        p1 = self.points[segment_id + 1]
+        p0 = self.get_point(segment_id)
+        p1 = self.get_point(segment_id + 1)
         v = p1 - p0
 
         if proportion0 != 0.0 or proportion1 != 0.0:
@@ -561,14 +556,14 @@ class Polyline:
             p0 -= v_norm * dist0
             p1 += v_norm * dist1
 
-        self.points[segment_id] = p0
-        self.points[segment_id + 1] = p1
+        self.set_point(segment_id, p0)
+        self.set_point(segment_id + 1, p1)
 
         if self.is_closed():
             if segment_id == 0:
-                self.points[-1] = self.points[0]
-            elif segment_id + 1 == len(self.points) - 1:
-                self.points[0] = self.points[-1]
+                self.set_point(self.point_count() - 1, self.get_point(0))
+            elif segment_id + 1 == self.point_count() - 1:
+                self.set_point(0, self.get_point(self.point_count() - 1))
 
     @staticmethod
     def extend_segment_equally_static(
@@ -595,22 +590,17 @@ class Polyline:
         if segment_id < 0 or segment_id >= self.segment_count():
             return
 
-        start = self.points[segment_id]
-        end = self.points[segment_id + 1]
+        start = self.get_point(segment_id)
+        end = self.get_point(segment_id + 1)
         self.extend_segment_equally_static(start, end, dist, proportion)
-        self.points[segment_id] = start
-        self.points[segment_id + 1] = end
+        self.set_point(segment_id, start)
+        self.set_point(segment_id + 1, end)
 
-        if len(self.points) > 2 and self.is_closed():
+        if self.point_count() > 2 and self.is_closed():
             if segment_id == 0:
-                self.points[-1] = self.points[0]
-            elif segment_id + 1 == len(self.points) - 1:
-                self.points[0] = self.points[-1]
-
-    def move_by(self, direction: Vector) -> None:
-        """Move polyline by direction vector."""
-        for point in self.points:
-            point += direction
+                self.set_point(self.point_count() - 1, self.get_point(0))
+            elif segment_id + 1 == self.point_count() - 1:
+                self.set_point(0, self.get_point(self.point_count() - 1))
 
     def is_clockwise(self, plane: Plane) -> bool:
         """Check if polyline is clockwise oriented."""
@@ -626,10 +616,6 @@ class Polyline:
             sum_val += (next_pt.x - current.x) * (next_pt.y + current.y)
 
         return sum_val > 0.0
-
-    def flip(self) -> None:
-        """Flip polyline direction (reverse point order)."""
-        self.points.reverse()
 
     def get_convex_corners(self) -> List[bool]:
         """Get convex/concave corners of polyline."""

@@ -44,9 +44,11 @@ class Plane:
         Plane equation coefficient (distance from origin).
     """
 
-    def __init__(self, origin=None, x_axis=None, y_axis=None, name="my_plane"):
+    def __init__(self, origin=None, x_axis=None, y_axis=None, name="my_plane", width=1.0):
         self.guid = str(uuid.uuid4())
         self.name = name
+        self.width = width
+        self.xform = Xform.identity()
 
         if origin is None:
             self._origin = Point(0.0, 0.0, 0.0)
@@ -140,6 +142,8 @@ class Plane:
         plane = Plane.__new__(Plane)
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
+        plane.width = 1.0
+        plane.xform = Xform.identity()
         plane._origin = point
         plane._z_axis = Vector(normal[0], normal[1], normal[2])
         plane._z_axis.normalize_self()
@@ -171,6 +175,8 @@ class Plane:
         plane = Plane.__new__(Plane)
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
+        plane.width = 1.0
+        plane.xform = Xform.identity()
         plane._origin = points[0]
 
         v1 = points[1] - points[0]
@@ -205,6 +211,8 @@ class Plane:
         plane = Plane.__new__(Plane)
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
+        plane.width = 1.0
+        plane.xform = Xform.identity()
         plane._origin = point1
 
         direction = point2 - point1
@@ -232,6 +240,8 @@ class Plane:
         plane = Plane.__new__(Plane)
         plane.guid = str(uuid.uuid4())
         plane.name = "xy_plane"
+        plane.width = 1.0
+        plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.x_axis()
         plane._y_axis = Vector.y_axis()
@@ -254,6 +264,8 @@ class Plane:
         plane = Plane.__new__(Plane)
         plane.guid = str(uuid.uuid4())
         plane.name = "yz_plane"
+        plane.width = 1.0
+        plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.y_axis()
         plane._y_axis = Vector.z_axis()
@@ -276,6 +288,8 @@ class Plane:
         plane = Plane.__new__(Plane)
         plane.guid = str(uuid.uuid4())
         plane.name = "xz_plane"
+        plane.width = 1.0
+        plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.x_axis()
         plane._y_axis = Vector(0.0, 0.0, -1.0)
@@ -309,15 +323,35 @@ class Plane:
         result.transform()
         return result
 
+    def duplicate(self):
+        """Create a deep copy with a new GUID."""
+        import copy
+
+        result = copy.deepcopy(self)
+        result.guid = str(uuid.uuid4())
+        return result
+
+    def str(self):
+        """Return minimal string representation."""
+        return f"{self._origin[0]}, {self._origin[1]}, {self._origin[2]}"
+
+    def repr(self):
+        """Return full string representation."""
+        return f"Plane({self.name}, {self._origin[0]}, {self._origin[1]}, {self._origin[2]}, {self._z_axis[0]}, {self._z_axis[1]}, {self._z_axis[2]})"
+
     def __str__(self):
-        return f"Plane(origin={self._origin}, x_axis={self._x_axis}, y_axis={self._y_axis}, z_axis={self._z_axis}, guid={self.guid}, name={self.name})"
+        return self.str()
 
     def __repr__(self):
-        return self.__str__()
+        return self.repr()
 
     def __eq__(self, other):
-        if isinstance(other, Point):
-            return self._origin == other
+        if isinstance(other, Plane):
+            return (self.name == other.name and
+                    self._origin == other._origin and
+                    self._x_axis == other._x_axis and
+                    self._y_axis == other._y_axis and
+                    self._z_axis == other._z_axis)
         return False
 
     def __ne__(self, other):
@@ -361,6 +395,8 @@ class Plane:
             result = Plane.__new__(Plane)
             result.guid = self.guid
             result.name = self.name
+            result.width = self.width
+            result.xform = Xform.identity()
             result._origin = self._origin + other
             result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
             result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])
@@ -375,6 +411,8 @@ class Plane:
             result = Plane.__new__(Plane)
             result.guid = self.guid
             result.name = self.name
+            result.width = self.width
+            result.xform = Xform.identity()
             result._origin = self._origin - other
             result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
             result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])
@@ -539,20 +577,23 @@ class Plane:
         -------
         dict
             Dictionary with 'type', 'guid', 'name', and object fields.
+            Uses single flat array of 12 numbers for frame:
+            [ox, oy, oz, xx, xy, xz, yx, yy, yz, zx, zy, zz]
+            Plane equation coefficients (a, b, c, d) are computed on load.
 
         """
         return {
             "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
-            "origin": self.origin.__jsondump__(),
-            "x_axis": self.x_axis.__jsondump__(),
-            "y_axis": self.y_axis.__jsondump__(),
-            "z_axis": self.z_axis.__jsondump__(),
-            "a": self.a,
-            "b": self.b,
-            "c": self.c,
-            "d": self.d,
+            "frame": [
+                self._origin[0], self._origin[1], self._origin[2],
+                self._x_axis[0], self._x_axis[1], self._x_axis[2],
+                self._y_axis[0], self._y_axis[1], self._y_axis[2],
+                self._z_axis[0], self._z_axis[1], self._z_axis[2],
+            ],
+            "width": self.width,
+            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -576,20 +617,160 @@ class Plane:
         """
         from .encoders import decode_node
 
-        origin = decode_node(data["origin"])
-        x_axis = decode_node(data["x_axis"])
-        y_axis = decode_node(data["y_axis"])
+        # Load frame as flat array of 12 numbers:
+        # [ox, oy, oz, xx, xy, xz, yx, yy, yz, zx, zy, zz]
+        frame = data["frame"]
 
-        plane = cls(origin, x_axis, y_axis)
+        origin = Point(frame[0], frame[1], frame[2])
+        x_axis = Vector(frame[3], frame[4], frame[5])
+        y_axis = Vector(frame[6], frame[7], frame[8])
+
+        width = data.get("width", 1.0)
+
+        plane = cls(origin, x_axis, y_axis, width=width)
         plane.guid = guid if guid is not None else data.get("guid", plane.guid)
         plane.name = name if name is not None else data.get("name", plane.name)
 
-        # z_axis, a, b, c, d are computed automatically, but verify if provided
-        if "z_axis" in data:
-            z_axis_loaded = decode_node(data["z_axis"])
-            # z_axis is already computed from cross product, just verify consistency
-
+        # Load xform if present
         if "xform" in data:
             plane.xform = decode_node(data["xform"])
 
         return plane
+
+    def json_dump(self, filepath):
+        """Write JSON to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the JSON file.
+
+        Returns
+        -------
+        :class:`Plane`
+            The deserialized Plane.
+
+        """
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format.
+
+        Returns
+        -------
+        bytes
+            Serialized protobuf data.
+
+        """
+        from .proto import plane_pb2
+
+        proto = plane_pb2.Plane()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.width = self.width
+
+        # Set frame as flat array of 12 numbers:
+        # [ox, oy, oz, xx, xy, xz, yx, yy, yz, zx, zy, zz]
+        proto.frame.extend([
+            self._origin[0], self._origin[1], self._origin[2],
+            self._x_axis[0], self._x_axis[1], self._x_axis[2],
+            self._y_axis[0], self._y_axis[1], self._y_axis[2],
+            self._z_axis[0], self._z_axis[1], self._z_axis[2],
+        ])
+
+        # Set xform
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data):
+        """Create Plane from protobuf binary data.
+
+        Parameters
+        ----------
+        data : bytes
+            Protobuf-encoded plane data.
+
+        Returns
+        -------
+        :class:`Plane`
+            The deserialized Plane.
+
+        """
+        from .proto import plane_pb2
+
+        proto = plane_pb2.Plane()
+        proto.ParseFromString(data)
+
+        # Load frame as flat array of 12 numbers
+        frame = list(proto.frame)
+        origin = Point(frame[0], frame[1], frame[2])
+        x_axis = Vector(frame[3], frame[4], frame[5])
+        y_axis = Vector(frame[6], frame[7], frame[8])
+
+        plane = cls(origin, x_axis, y_axis, width=proto.width if proto.width > 0 else 1.0)
+        plane.guid = proto.guid
+        plane.name = proto.name
+
+        # Load xform if present
+        if proto.HasField('xform'):
+            plane.xform = Xform()
+            plane.xform.name = proto.xform.name
+            plane.xform.m = list(proto.xform.matrix)
+
+        return plane
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the protobuf file.
+
+        Returns
+        -------
+        :class:`Plane`
+            The deserialized Plane.
+
+        """
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)

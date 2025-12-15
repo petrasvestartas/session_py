@@ -22,18 +22,16 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-from . import point_pb2 as point__pb2
-from . import vector_pb2 as vector__pb2
 from . import xform_pb2 as xform__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bplane.proto\x12\rsession_proto\x1a\x0bpoint.proto\x1a\x0cvector.proto\x1a\x0bxform.proto\"\xe3\x01\n\x05Plane\x12$\n\x06origin\x18\x01 \x01(\x0b\x32\x14.session_proto.Point\x12%\n\x06x_axis\x18\x02 \x01(\x0b\x32\x15.session_proto.Vector\x12%\n\x06y_axis\x18\x03 \x01(\x0b\x32\x15.session_proto.Vector\x12%\n\x06z_axis\x18\x04 \x01(\x0b\x32\x15.session_proto.Vector\x12\x0c\n\x04guid\x18\x05 \x01(\t\x12\x0c\n\x04name\x18\x06 \x01(\t\x12#\n\x05xform\x18\x07 \x01(\x0b\x32\x14.session_proto.Xformb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bplane.proto\x12\rsession_proto\x1a\x0bxform.proto\"f\n\x05Plane\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\r\n\x05\x66rame\x18\x03 \x03(\x01\x12\r\n\x05width\x18\x04 \x01(\x01\x12#\n\x05xform\x18\x05 \x01(\x0b\x32\x14.session_proto.Xformb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'plane_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_PLANE']._serialized_start=71
-  _globals['_PLANE']._serialized_end=298
+  _globals['_PLANE']._serialized_start=43
+  _globals['_PLANE']._serialized_end=145
 # @@protoc_insertion_point(module_scope)
