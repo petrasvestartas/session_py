@@ -1,4 +1,6 @@
 import uuid
+import copy
+from typing import List, Optional
 
 from .color import Color
 from .point import Point
@@ -7,227 +9,427 @@ from .xform import Xform
 
 
 class PointCloud:
-    """A point cloud with points, normals, colors, and transformation.
+    """A point cloud with coordinates, normals, and colors stored as flat arrays.
 
-    Parameters
-    ----------
-    points : List[Point], optional
-        Collection of points.
-    normals : List[Vector], optional
-        Collection of normals.
-    colors : List[Color], optional
-        Collection of colors.
-
-    Attributes
-    ----------
-    guid : str
-        Unique identifier.
-    name : str
-        Name of the point cloud.
-    points : List[Point]
-        Collection of points.
-    normals : List[Vector]
-        Collection of normals.
-    colors : List[Color]
-        Collection of colors.
-    xform : Xform
-        Transformation matrix.
+    Internally stores data as flat arrays for efficient serialization:
+    - coords: [x0, y0, z0, x1, y1, z1, ...]
+    - colors: [r0, g0, b0, a0, r1, g1, b1, a1, ...]
+    - normals: [nx0, ny0, nz0, nx1, ny1, nz1, ...]
     """
 
-    def __init__(self, points=None, normals=None, colors=None):
+    def __init__(self, points: Optional[List[Point]] = None,
+                 normals: Optional[List[Vector]] = None,
+                 colors: Optional[List[Color]] = None):
+        """Creates a new PointCloud with default guid and name.
+
+        Args:
+            points: Collection of points (converted to flat coords internally).
+            normals: Collection of normals (converted to flat array internally).
+            colors: Collection of colors (converted to flat array internally).
+        """
         self.guid = str(uuid.uuid4())
         self.name = "my_pointcloud"
-        self.points = points if points is not None else []
-        self.normals = normals if normals is not None else []
-        self.colors = colors if colors is not None else []
-        self.xform = Xform()
-
-    ###########################################################################################
-    # Operators
-    ###########################################################################################
-
-    def transform(self):
-        """Apply the stored xform transformation to the point cloud.
-
-        Transforms all points and normals in-place and resets xform to identity.
-        """
-        from .xform import Xform
-
-        for pt in self.points:
-            self.xform.transform_point(pt)
-        for n in self.normals:
-            self.xform.transform_vector(n)
+        self.point_size = 1.0
         self.xform = Xform.identity()
 
-    def transformed(self):
-        """Return a transformed copy of the point cloud."""
-        import copy
+        # Store as flat arrays
+        self._coords: List[float] = []
+        self._colors: List[int] = []
+        self._normals: List[float] = []
 
+        if points is not None:
+            for p in points:
+                self._coords.extend([p[0], p[1], p[2]])
+
+        if colors is not None:
+            for c in colors:
+                self._colors.extend([c[0], c[1], c[2], c[3]])
+
+        if normals is not None:
+            for n in normals:
+                self._normals.extend([n[0], n[1], n[2]])
+
+    @classmethod
+    def from_coords(cls, coords: List[float],
+                    colors: Optional[List[int]] = None,
+                    normals: Optional[List[float]] = None) -> "PointCloud":
+        """Create a PointCloud from flat arrays.
+
+        Args:
+            coords: Flat array [x0, y0, z0, x1, y1, z1, ...]
+            colors: Flat array [r0, g0, b0, a0, r1, g1, b1, a1, ...]
+            normals: Flat array [nx0, ny0, nz0, nx1, ny1, nz1, ...]
+
+        Returns:
+            New PointCloud instance.
+        """
+        pc = cls()
+        pc._coords = list(coords)
+        if colors is not None:
+            pc._colors = list(colors)
+        if normals is not None:
+            pc._normals = list(normals)
+        return pc
+
+    ###########################################################################################
+    # Point Access (compatibility layer)
+    ###########################################################################################
+
+    def point_count(self) -> int:
+        """Returns the number of points."""
+        return len(self._coords) // 3
+
+    def __len__(self) -> int:
+        """Returns the number of points."""
+        return self.point_count()
+
+    def is_empty(self) -> bool:
+        """Returns true if the point cloud has no points."""
+        return self.point_count() == 0
+
+    def get_point(self, index: int) -> Point:
+        """Get point at index as Point object."""
+        idx = index * 3
+        return Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+
+    def set_point(self, index: int, point: Point) -> None:
+        """Set point at index from Point object."""
+        idx = index * 3
+        self._coords[idx] = point[0]
+        self._coords[idx + 1] = point[1]
+        self._coords[idx + 2] = point[2]
+
+    def add_point(self, point: Point) -> None:
+        """Add a point to the cloud."""
+        self._coords.extend([point[0], point[1], point[2]])
+
+    def get_points(self) -> List[Point]:
+        """Returns all points as Point objects."""
+        points = []
+        for i in range(self.point_count()):
+            idx = i * 3
+            points.append(Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2]))
+        return points
+
+    @property
+    def points(self) -> List[Point]:
+        """Property for backward compatibility - returns list of Point objects."""
+        return self.get_points()
+
+    @points.setter
+    def points(self, value: List[Point]) -> None:
+        """Set points from a list of Point objects."""
+        self._coords = []
+        for p in value:
+            self._coords.extend([p[0], p[1], p[2]])
+
+    ###########################################################################################
+    # Color Access
+    ###########################################################################################
+
+    def color_count(self) -> int:
+        """Returns the number of colors."""
+        return len(self._colors) // 4
+
+    def get_color(self, index: int) -> Color:
+        """Get color at index as Color object."""
+        idx = index * 4
+        return Color(self._colors[idx], self._colors[idx + 1],
+                     self._colors[idx + 2], self._colors[idx + 3])
+
+    def set_color(self, index: int, color: Color) -> None:
+        """Set color at index from Color object."""
+        idx = index * 4
+        self._colors[idx] = color[0]
+        self._colors[idx + 1] = color[1]
+        self._colors[idx + 2] = color[2]
+        self._colors[idx + 3] = color[3]
+
+    def add_color(self, color: Color) -> None:
+        """Add a color to the cloud."""
+        self._colors.extend([color[0], color[1], color[2], color[3]])
+
+    def get_colors(self) -> List[Color]:
+        """Returns all colors as Color objects."""
+        colors = []
+        for i in range(self.color_count()):
+            idx = i * 4
+            colors.append(Color(self._colors[idx], self._colors[idx + 1],
+                                self._colors[idx + 2], self._colors[idx + 3]))
+        return colors
+
+    @property
+    def colors(self) -> List[Color]:
+        """Property for backward compatibility."""
+        return self.get_colors()
+
+    @colors.setter
+    def colors(self, value: List[Color]) -> None:
+        """Set colors from a list of Color objects."""
+        self._colors = []
+        for c in value:
+            self._colors.extend([c.r, c.g, c.b, c.a])
+
+    ###########################################################################################
+    # Normal Access
+    ###########################################################################################
+
+    def normal_count(self) -> int:
+        """Returns the number of normals."""
+        return len(self._normals) // 3
+
+    def get_normal(self, index: int) -> Vector:
+        """Get normal at index as Vector object."""
+        idx = index * 3
+        return Vector(self._normals[idx], self._normals[idx + 1], self._normals[idx + 2])
+
+    def set_normal(self, index: int, normal: Vector) -> None:
+        """Set normal at index from Vector object."""
+        idx = index * 3
+        self._normals[idx] = normal[0]
+        self._normals[idx + 1] = normal[1]
+        self._normals[idx + 2] = normal[2]
+
+    def add_normal(self, normal: Vector) -> None:
+        """Add a normal to the cloud."""
+        self._normals.extend([normal[0], normal[1], normal[2]])
+
+    def get_normals(self) -> List[Vector]:
+        """Returns all normals as Vector objects."""
+        normals = []
+        for i in range(self.normal_count()):
+            idx = i * 3
+            normals.append(Vector(self._normals[idx], self._normals[idx + 1], self._normals[idx + 2]))
+        return normals
+
+    @property
+    def normals(self) -> List[Vector]:
+        """Property for backward compatibility."""
+        return self.get_normals()
+
+    @normals.setter
+    def normals(self, value: List[Vector]) -> None:
+        """Set normals from a list of Vector objects."""
+        self._normals = []
+        for n in value:
+            self._normals.extend([n[0], n[1], n[2]])
+
+    ###########################################################################################
+    # String Representations
+    ###########################################################################################
+
+    def __str__(self) -> str:
+        """Minimal string representation."""
+        return f"{self.point_count()} points"
+
+    def __repr__(self) -> str:
+        """Full string representation."""
+        return f"PointCloud({self.name}, {self.point_count()} points, {self.color_count()} colors, {self.normal_count()} normals)"
+
+    def str(self) -> str:
+        """Minimal string representation."""
+        return self.__str__()
+
+    def repr(self) -> str:
+        """Full string representation."""
+        return self.__repr__()
+
+    ###########################################################################################
+    # Duplicate and Equality
+    ###########################################################################################
+
+    def duplicate(self) -> "PointCloud":
+        """Create a deep copy with a new GUID."""
+        result = copy.deepcopy(self)
+        result.guid = str(uuid.uuid4())
+        return result
+
+    def __eq__(self, other) -> bool:
+        """Equality comparison (ignores guid)."""
+        if not isinstance(other, PointCloud):
+            return False
+        return (self.name == other.name and
+                self._coords == other._coords and
+                self._colors == other._colors and
+                self._normals == other._normals)
+
+    ###########################################################################################
+    # Transform
+    ###########################################################################################
+
+    def transform(self) -> None:
+        """Apply the stored xform transformation to the point cloud in-place."""
+        for i in range(self.point_count()):
+            idx = i * 3
+            pt = Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+            self.xform.transform_point(pt)
+            self._coords[idx] = pt[0]
+            self._coords[idx + 1] = pt[1]
+            self._coords[idx + 2] = pt[2]
+
+        for i in range(self.normal_count()):
+            idx = i * 3
+            n = Vector(self._normals[idx], self._normals[idx + 1], self._normals[idx + 2])
+            self.xform.transform_vector(n)
+            self._normals[idx] = n[0]
+            self._normals[idx + 1] = n[1]
+            self._normals[idx + 2] = n[2]
+
+        self.xform = Xform.identity()
+
+    def transformed(self) -> "PointCloud":
+        """Return a transformed copy of the point cloud."""
         result = copy.deepcopy(self)
         result.transform()
         return result
-
-    def __str__(self):
-        return f"PointCloud(points={len(self.points)}, normals={len(self.normals)}, colors={len(self.colors)}, guid={self.guid}, name={self.name})"
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __len__(self):
-        return len(self.points)
-
-    ###########################################################################################
-    # JSON
-    ###########################################################################################
-
-    def __jsondump__(self):
-        """Serialize to polymorphic JSON format with type field.
-
-        Returns
-        -------
-        dict
-            Dictionary with 'type', 'guid', 'name', and object fields.
-
-        """
-        # Flatten points to [x, y, z, x, y, z, ...]
-        points_flat = []
-        for p in self.points:
-            points_flat.extend([p.x, p.y, p.z])
-
-        # Flatten normals to [x, y, z, x, y, z, ...]
-        normals_flat = []
-        for n in self.normals:
-            normals_flat.extend([n.x, n.y, n.z])
-
-        # Flatten colors to [r, g, b, r, g, b, ...] (no alpha)
-        colors_flat = []
-        for c in self.colors:
-            colors_flat.extend([c.r, c.g, c.b])
-
-        return {
-            "type": f"{self.__class__.__name__}",
-            "guid": self.guid,
-            "name": self.name,
-            "points": points_flat,
-            "normals": normals_flat,
-            "colors": colors_flat,
-            "xform": self.xform.__jsondump__(),
-        }
-
-    @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
-        """Deserialize from polymorphic JSON format.
-
-        Parameters
-        ----------
-        data : dict
-            Dictionary containing pointcloud data.
-        guid : str, optional
-            GUID for the pointcloud.
-        name : str, optional
-            Name for the pointcloud.
-
-        Returns
-        -------
-        :class:`PointCloud`
-            Reconstructed pointcloud instance.
-
-        """
-        from .encoders import decode_node
-
-        cloud = cls()
-        cloud.guid = guid
-        cloud.name = name
-
-        # Reconstruct points from flat array
-        points_flat = data["points"]
-        cloud.points = [
-            Point(points_flat[i], points_flat[i + 1], points_flat[i + 2])
-            for i in range(0, len(points_flat), 3)
-        ]
-
-        # Reconstruct normals from flat array
-        normals_flat = data["normals"]
-        cloud.normals = [
-            Vector(normals_flat[i], normals_flat[i + 1], normals_flat[i + 2])
-            for i in range(0, len(normals_flat), 3)
-        ]
-
-        # Reconstruct colors from flat array (RGB only, alpha always 255)
-        colors_flat = data["colors"]
-        cloud.colors = [
-            Color(colors_flat[i], colors_flat[i + 1], colors_flat[i + 2], 255)
-            for i in range(0, len(colors_flat), 3)
-        ]
-
-        cloud.xform = decode_node(data["xform"])
-
-        return cloud
 
     ###########################################################################################
     # No-copy Operators
     ###########################################################################################
 
-    def __iadd__(self, other):
+    def __iadd__(self, other: Vector) -> "PointCloud":
         """Translate point cloud by vector (in-place)."""
-        if isinstance(other, Vector):
-            for p in self.points:
-                p.x += other.x
-                p.y += other.y
-                p.z += other.z
+        for i in range(self.point_count()):
+            idx = i * 3
+            self._coords[idx] += other[0]
+            self._coords[idx + 1] += other[1]
+            self._coords[idx + 2] += other[2]
         return self
 
-    def __isub__(self, other):
+    def __isub__(self, other: Vector) -> "PointCloud":
         """Translate point cloud by negative vector (in-place)."""
-        if isinstance(other, Vector):
-            for p in self.points:
-                p.x -= other.x
-                p.y -= other.y
-                p.z -= other.z
+        for i in range(self.point_count()):
+            idx = i * 3
+            self._coords[idx] -= other[0]
+            self._coords[idx + 1] -= other[1]
+            self._coords[idx + 2] -= other[2]
         return self
 
     ###########################################################################################
     # Copy Operators
     ###########################################################################################
 
-    def __add__(self, other):
+    def __add__(self, other: Vector) -> "PointCloud":
         """Translate point cloud by vector (copy)."""
-        if isinstance(other, Vector):
-            cloud = PointCloud(
-                [Point(p.x, p.y, p.z) for p in self.points],
-                [Vector(n.x, n.y, n.z) for n in self.normals],
-                [Color(c.r, c.g, c.b, c.a) for c in self.colors],
-            )
-            cloud.guid = self.guid
-            cloud.name = self.name
-            cloud.xform = self.xform
-            cloud += other
-            return cloud
-        return NotImplemented
+        result = self.duplicate()
+        result.guid = self.guid  # Keep same guid for copy operators
+        result += other
+        return result
 
-    def __sub__(self, other):
+    def __sub__(self, other: Vector) -> "PointCloud":
         """Translate point cloud by negative vector (copy)."""
-        if isinstance(other, Vector):
-            cloud = PointCloud(
-                [Point(p.x, p.y, p.z) for p in self.points],
-                [Vector(n.x, n.y, n.z) for n in self.normals],
-                [Color(c.r, c.g, c.b, c.a) for c in self.colors],
-            )
-            cloud.guid = self.guid
-            cloud.name = self.name
-            cloud.xform = self.xform
-            cloud -= other
-            return cloud
-        return NotImplemented
+        result = self.duplicate()
+        result.guid = self.guid  # Keep same guid for copy operators
+        result -= other
+        return result
 
     ###########################################################################################
-    # Details
+    # JSON Serialization
     ###########################################################################################
 
-    def size(self) -> int:
-        """Get number of points."""
-        return len(self.points)
+    def __jsondump__(self):
+        """Serialize to polymorphic JSON format with type field."""
+        return {
+            "type": f"{self.__class__.__name__}",
+            "guid": self.guid,
+            "name": self.name,
+            "coords": self._coords,
+            "colors": self._colors,
+            "normals": self._normals,
+            "point_size": self.point_size,
+            "xform": self.xform.__jsondump__(),
+        }
 
-    def is_empty(self) -> bool:
-        """Check if point cloud is empty."""
-        return len(self.points) == 0
+    @classmethod
+    def __jsonload__(cls, data, guid=None, name=None):
+        """Deserialize from polymorphic JSON format."""
+        from .encoders import decode_node
+
+        pc = cls.from_coords(
+            data.get("coords", []),
+            data.get("colors", []),
+            data.get("normals", [])
+        )
+        pc.guid = guid if guid is not None else data.get("guid", pc.guid)
+        pc.name = name if name is not None else data.get("name", pc.name)
+
+        if "point_size" in data:
+            pc.point_size = data["point_size"]
+        if "xform" in data:
+            pc.xform = decode_node(data["xform"])
+
+        return pc
+
+    def json_dump(self, filepath) -> None:
+        """Write JSON to file."""
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath) -> "PointCloud":
+        """Read JSON from file."""
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self) -> bytes:
+        """Convert to protobuf binary format."""
+        from .proto import pointcloud_pb2
+
+        proto = pointcloud_pb2.PointCloud()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.coords.extend(self._coords)
+        proto.colors.extend(self._colors)
+        proto.normals.extend(self._normals)
+        proto.point_size = self.point_size
+
+        # Serialize xform
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data: bytes) -> "PointCloud":
+        """Create from protobuf binary format."""
+        from .proto import pointcloud_pb2
+
+        proto = pointcloud_pb2.PointCloud()
+        proto.ParseFromString(data)
+
+        pc = cls.from_coords(
+            list(proto.coords),
+            list(proto.colors),
+            list(proto.normals)
+        )
+        pc.guid = proto.guid
+        pc.name = proto.name
+        pc.point_size = proto.point_size if proto.point_size > 0 else 1.0
+
+        # Deserialize xform
+        if proto.HasField("xform"):
+            pc.xform.name = proto.xform.name
+            for i, val in enumerate(proto.xform.matrix):
+                if i < 16:
+                    pc.xform.m[i] = val
+
+        return pc
+
+    def protobuf_dump(self, filepath) -> None:
+        """Write protobuf to file."""
+        with open(filepath, 'wb') as f:
+            f.write(self.to_protobuf())
+
+    @classmethod
+    def protobuf_load(cls, filepath) -> "PointCloud":
+        """Read protobuf from file."""
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)

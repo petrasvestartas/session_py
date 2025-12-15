@@ -22,17 +22,16 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-from . import point_pb2 as point__pb2
 from . import xform_pb2 as xform__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10pointcloud.proto\x12\rsession_proto\x1a\x0bpoint.proto\x1a\x0bxform.proto\"s\n\nPointCloud\x12$\n\x06points\x18\x01 \x03(\x0b\x32\x14.session_proto.Point\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12#\n\x05xform\x18\x04 \x01(\x0b\x32\x14.session_proto.Xformb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10pointcloud.proto\x12\rsession_proto\x1a\x0bxform.proto\"\x92\x01\n\nPointCloud\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0e\n\x06\x63oords\x18\x03 \x03(\x01\x12\x0e\n\x06\x63olors\x18\x04 \x03(\r\x12\x0f\n\x07normals\x18\x05 \x03(\x01\x12\x12\n\npoint_size\x18\x06 \x01(\x01\x12#\n\x05xform\x18\x07 \x01(\x0b\x32\x14.session_proto.Xformb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'pointcloud_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_POINTCLOUD']._serialized_start=61
-  _globals['_POINTCLOUD']._serialized_end=176
+  _globals['_POINTCLOUD']._serialized_start=49
+  _globals['_POINTCLOUD']._serialized_end=195
 # @@protoc_insertion_point(module_scope)
