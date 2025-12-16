@@ -126,18 +126,21 @@ class Xform:
         x_axis = x_axis.normalize()
         y_axis = y_axis.normalize()
         z_axis = z_axis.normalize()
+        # World-to-local transform: transpose of rotation matrix
+        # Row 0 = x_axis, Row 1 = y_axis, Row 2 = z_axis
         xform.m[0] = x_axis[0]
-        xform.m[1] = x_axis[1]
-        xform.m[2] = x_axis[2]
-        xform.m[4] = y_axis[0]
+        xform.m[4] = x_axis[1]
+        xform.m[8] = x_axis[2]
+        xform.m[1] = y_axis[0]
         xform.m[5] = y_axis[1]
-        xform.m[6] = y_axis[2]
-        xform.m[8] = z_axis[0]
-        xform.m[9] = z_axis[1]
+        xform.m[9] = y_axis[2]
+        xform.m[2] = z_axis[0]
+        xform.m[6] = z_axis[1]
         xform.m[10] = z_axis[2]
-        xform.m[12] = origin[0]
-        xform.m[13] = origin[1]
-        xform.m[14] = origin[2]
+        # Translation = -R^T * origin
+        xform.m[12] = -(x_axis[0] * origin[0] + x_axis[1] * origin[1] + x_axis[2] * origin[2])
+        xform.m[13] = -(y_axis[0] * origin[0] + y_axis[1] * origin[1] + y_axis[2] * origin[2])
+        xform.m[14] = -(z_axis[0] * origin[0] + z_axis[1] * origin[1] + z_axis[2] * origin[2])
         return xform
 
     @staticmethod
@@ -553,3 +556,36 @@ class Xform:
         xform.guid = guid
         xform.name = name
         return xform
+
+    def json_dump(self, filepath):
+        """Write JSON to file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the output file.
+
+        """
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the JSON file.
+
+        Returns
+        -------
+        :class:`Xform`
+            The deserialized Xform.
+
+        """
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data, data.get("guid"), data.get("name"))

@@ -138,5 +138,153 @@ def test_xform_transform_vector():
     MINI_CHECK(TOLERANCE.is_close(sv[0], 2.0) and TOLERANCE.is_close(sv[1], 3.0) and TOLERANCE.is_close(sv[2], 4.0))
 
 
+@MINI_TEST("Xform", "rotation_x")
+def test_xform_rotation_x():
+    from session_py import Xform
+    from session_py import Point
+
+    # Rotation around X axis by 90 degrees
+    r = Xform.rotation_x(PI / 2.0)
+
+    # Apply to point (0,1,0) -> (0,0,1)
+    p = Point(0.0, 1.0, 0.0)
+    rp = r.transformed_point(p)
+
+    MINI_CHECK(TOLERANCE.is_close(rp[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[2], 1.0))
+
+
+@MINI_TEST("Xform", "rotation_y")
+def test_xform_rotation_y():
+    from session_py import Xform
+    from session_py import Point
+
+    # Rotation around Y axis by 90 degrees
+    r = Xform.rotation_y(PI / 2.0)
+
+    # Apply to point (0,0,1) -> (1,0,0)
+    p = Point(0.0, 0.0, 1.0)
+    rp = r.transformed_point(p)
+
+    MINI_CHECK(TOLERANCE.is_close(rp[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[2], 0.0))
+
+
+@MINI_TEST("Xform", "rotation")
+def test_xform_rotation():
+    from session_py import Xform
+    from session_py import Point
+    from session_py import Vector
+
+    # Rotation around arbitrary axis (1,1,1) by 120 degrees
+    # This cycles x->y->z->x
+    axis = Vector(1.0, 1.0, 1.0)
+    r = Xform.rotation(axis, 2.0 * PI / 3.0)
+
+    # Apply to point (1,0,0) -> (0,1,0)
+    p = Point(1.0, 0.0, 0.0)
+    rp = r.transformed_point(p)
+
+    MINI_CHECK(TOLERANCE.is_close(rp[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[2], 0.0))
+
+
+@MINI_TEST("Xform", "change_basis")
+def test_xform_change_basis():
+    from session_py import Xform
+    from session_py import Point
+    from session_py import Vector
+
+    # Create a coordinate system at origin with rotated axes
+    origin = Point(10.0, 20.0, 30.0)
+    x_axis = Vector(1.0, 0.0, 0.0)
+    y_axis = Vector(0.0, 1.0, 0.0)
+    z_axis = Vector(0.0, 0.0, 1.0)
+
+    # Change basis transform
+    xform = Xform.change_basis(origin, x_axis, y_axis, z_axis)
+
+    # Point at local origin should map to world origin
+    p = Point(10.0, 20.0, 30.0)
+    tp = xform.transformed_point(p)
+
+    MINI_CHECK(TOLERANCE.is_close(tp[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[2], 0.0))
+
+
+@MINI_TEST("Xform", "plane_to_plane")
+def test_xform_plane_to_plane():
+    from session_py import Xform
+    from session_py import Point
+    from session_py import Vector
+
+    # Source plane at origin, XY plane
+    origin_0 = Point(0.0, 0.0, 0.0)
+    x_axis_0 = Vector(1.0, 0.0, 0.0)
+    y_axis_0 = Vector(0.0, 1.0, 0.0)
+    z_axis_0 = Vector(0.0, 0.0, 1.0)
+
+    # Target plane translated and rotated
+    origin_1 = Point(10.0, 0.0, 0.0)
+    x_axis_1 = Vector(0.0, 1.0, 0.0)
+    y_axis_1 = Vector(-1.0, 0.0, 0.0)
+    z_axis_1 = Vector(0.0, 0.0, 1.0)
+
+    xform = Xform.plane_to_plane(origin_0, x_axis_0, y_axis_0, z_axis_0, origin_1, x_axis_1, y_axis_1, z_axis_1)
+
+    # Origin of source should map to origin of target
+    p = Point(0.0, 0.0, 0.0)
+    tp = xform.transformed_point(p)
+
+    MINI_CHECK(TOLERANCE.is_close(tp[0], 10.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[2], 0.0))
+
+
+@MINI_TEST("Xform", "look_at_rh")
+def test_xform_look_at_rh():
+    from session_py import Xform
+    from session_py import Point
+    from session_py import Vector
+
+    # Camera at (0,0,10) looking at origin
+    eye = Point(0.0, 0.0, 10.0)
+    target = Point(0.0, 0.0, 0.0)
+    up = Vector(0.0, 1.0, 0.0)
+
+    xform = Xform.look_at_rh(eye, target, up)
+
+    # The target point should be on the negative Z axis in view space
+    tp = xform.transformed_point(target)
+
+    MINI_CHECK(TOLERANCE.is_close(tp[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[2], -10.0))
+
+
+@MINI_TEST("Xform", "json_roundtrip")
+def test_xform_json_roundtrip():
+    from session_py import Xform
+    from pathlib import Path
+
+    # Create a non-identity xform
+    xform = Xform.translation(1.0, 2.0, 3.0)
+    xform.name = "test_xform"
+
+    # json_dump(fname) / json_load(fname) - file-based serialization
+    fname = Path(__file__).resolve().parents[2] / "test_xform.json"
+    xform.json_dump(fname)
+    loaded = Xform.json_load(fname)
+
+    MINI_CHECK(loaded.name == "test_xform")
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[12], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[13], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[14], 3.0))
+
+
 if __name__ == "__main__":
     run_all("python")
