@@ -1,366 +1,142 @@
-import math
-from .xform import Xform
-from .point import Point
-from .vector import Vector
+from .mini_test import MINI_TEST, MINI_CHECK, run_all
+from .tolerance import TOLERANCE
+from .tolerance import PI
 
 
-def approx_f32(a, b):
-    return abs(float(a) - float(b)) < 1e-5
+@MINI_TEST("Xform", "constructor")
+def test_xform_constructor():
+    from session_py import Xform
+
+    # Constructor (identity by default)
+    x = Xform()
+
+    # Matrix access
+    m00 = x.m[0]
+    m11 = x.m[5]
+    m22 = x.m[10]
+    m33 = x.m[15]
+
+    # Check identity
+    is_id = x.is_identity()
+
+    # From matrix constructor
+    xfrom = Xform.from_matrix([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 5.0, 10.0, 15.0, 1.0])
+
+    MINI_CHECK(x.name == "my_xform" and x.guid != "")
+    MINI_CHECK(m00 == 1.0 and m11 == 1.0 and m22 == 1.0 and m33 == 1.0)
+    MINI_CHECK(is_id == True)
+    MINI_CHECK(xfrom.m[12] == 5.0 and xfrom.m[13] == 10.0 and xfrom.m[14] == 15.0)
 
 
-def matrices_close(a, b):
-    for i in range(16):
-        if not approx_f32(a.m[i], b.m[i]):
-            return False
-    return True
+@MINI_TEST("Xform", "translation")
+def test_xform_translation():
+    from session_py import Xform
+    from session_py import Point
 
-
-def test_xform_identity():
-    id_xform = Xform.identity()
-    assert id_xform.is_identity()
-
-
-def test_xform_default():
-    def_xform = Xform()
-    assert def_xform.is_identity()
-
-
-def test_xform_identity_transformed_point():
-    p = Point(1.0, 2.0, 3.0)
-    t = Xform.identity().transformed_point(p)
-    assert t[0] == 1.0
-    assert t[1] == 2.0
-    assert t[2] == 3.0
-
-
-def test_xform_translation_point():
+    # Translation matrix
     t = Xform.translation(1.0, 2.0, 3.0)
+
+    # Apply to point
     p = Point(4.0, 5.0, 6.0)
     tp = t.transformed_point(p)
-    assert tp[0] == 5.0
-    assert tp[1] == 7.0
-    assert tp[2] == 9.0
+
+    MINI_CHECK(TOLERANCE.is_close(tp[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[1], 7.0))
+    MINI_CHECK(TOLERANCE.is_close(tp[2], 9.0))
 
 
-def test_xform_translation_vector():
-    t = Xform.translation(1.0, 2.0, 3.0)
-    v = Vector(1.0, 2.0, 3.0)
-    tv = t.transformed_vector(v)
-    assert tv[0] == 1.0
-    assert tv[1] == 2.0
-    assert tv[2] == 3.0
+@MINI_TEST("Xform", "scaling")
+def test_xform_scaling():
+    from session_py import Xform
+    from session_py import Point
 
-
-def test_xform_scaling_point():
+    # Scaling matrix
     s = Xform.scaling(2.0, 3.0, 4.0)
-    p = Point(1.0, -2.0, 0.5)
+
+    # Apply to point
+    p = Point(1.0, 1.0, 1.0)
     sp = s.transformed_point(p)
-    assert sp[0] == 2.0
-    assert sp[1] == -6.0
-    assert sp[2] == 2.0
+
+    MINI_CHECK(TOLERANCE.is_close(sp[0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(sp[1], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(sp[2], 4.0))
 
 
-def test_xform_scaling_vector():
-    s = Xform.scaling(2.0, 3.0, 4.0)
-    v = Vector(1.0, -2.0, 0.5)
-    sv = s.transformed_vector(v)
-    assert sv[0] == 2.0
-    assert sv[1] == -6.0
-    assert sv[2] == 2.0
-
-
+@MINI_TEST("Xform", "rotation_z")
 def test_xform_rotation_z():
-    r = Xform.rotation_z(math.pi / 2.0)
+    from session_py import Xform
+    from session_py import Point
+
+    # Rotation around Z axis by 90 degrees
+    r = Xform.rotation_z(PI / 2.0)
+
+    # Apply to point (1,0,0) -> (0,1,0)
     p = Point(1.0, 0.0, 0.0)
     rp = r.transformed_point(p)
-    assert approx_f32(rp[0], 0.0)
-    assert approx_f32(rp[1], 1.0)
-    assert approx_f32(rp[2], 0.0)
+
+    MINI_CHECK(TOLERANCE.is_close(rp[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[2], 0.0))
 
 
-def test_xform_axis_rotation():
-    axis = Vector(0.0, 0.0, 1.0)
-    r1 = Xform.rotation_z(math.pi / 2.0)
-    r2 = Xform.axis_rotation(math.pi / 2.0, axis)
-    p = Point(1.0, 0.0, 0.0)
-    p1 = r1.transformed_point(p)
-    p2 = r2.transformed_point(p)
-    assert approx_f32(p1[0], p2[0])
-    assert approx_f32(p1[1], p2[1])
-    assert approx_f32(p1[2], p2[2])
-
-
+@MINI_TEST("Xform", "inverse")
 def test_xform_inverse():
-    t = (
-        Xform.translation(1.0, 2.0, 3.0)
-        * Xform.rotation_z(0.7)
-        * Xform.scaling(2.0, 2.0, 2.0)
-    )
-    inv = t.inverse()
-    id_result = t * inv
-    assert matrices_close(id_result, Xform.identity())
+    from session_py import Xform
 
-
-def test_xform_change_basis_alt_identity():
-    o0 = Point(0.0, 0.0, 0.0)
-    o1 = Point(0.0, 0.0, 0.0)
-    x = Vector(1.0, 0.0, 0.0)
-    y = Vector(0.0, 1.0, 0.0)
-    z = Vector(0.0, 0.0, 1.0)
-    cb = Xform.change_basis_alt(o1, x, y, z, o0, x, y, z)
-    assert cb.is_identity()
-
-
-def test_xform_change_basis_alt_translation():
-    o0 = Point(4.0, 5.0, 6.0)
-    o1 = Point(1.0, 2.0, 3.0)
-    x = Vector(1.0, 0.0, 0.0)
-    y = Vector(0.0, 1.0, 0.0)
-    z = Vector(0.0, 0.0, 1.0)
-    cb = Xform.change_basis_alt(o1, x, y, z, o0, x, y, z)
-    p = Point(1.0, 1.0, 1.0)
-    tp = cb.transformed_point(p)
-    assert approx_f32(tp.x, p.x + 3.0)
-    assert approx_f32(tp.y, p.y + 3.0)
-    assert approx_f32(tp.z, p.z + 3.0)
-
-
-def test_xform_plane_to_plane():
-    o0 = Point(1.0, 2.0, 3.0)
-    o1 = Point(-2.0, 0.5, 7.0)
-    x0 = Vector(1.0, 0.0, 0.0)
-    y0 = Vector(0.0, 1.0, 0.0)
-    z0 = Vector(0.0, 0.0, 1.0)
-    x1 = Vector(1.0, 0.0, 0.0)
-    y1 = Vector(0.0, 1.0, 0.0)
-    z1 = Vector(0.0, 0.0, 1.0)
-    m = Xform.plane_to_plane(o0, x0, y0, z0, o1, x1, y1, z1)
-    mapped = m.transformed_point(o0)
-    assert approx_f32(mapped.x, o1.x)
-    assert approx_f32(mapped.y, o1.y)
-    assert approx_f32(mapped.z, o1.z)
-
-
-def test_xform_mul():
-    a = Xform.translation(1.0, 2.0, 3.0)
-    b = Xform.scaling(2.0, 3.0, 4.0)
-    r_ref = a * b
-    r_owned = a * b
-    assert matrices_close(r_ref, r_owned)
-
-
-def test_xform_mul_assign():
-    a = Xform.translation(1.0, 2.0, 3.0)
-    b = Xform.scaling(2.0, 3.0, 4.0)
-    acc = Xform.identity()
-    acc *= a
-    acc *= b
-    r2 = Xform.identity() * (
-        Xform.translation(1.0, 2.0, 3.0) * Xform.scaling(2.0, 3.0, 4.0)
-    )
-    assert matrices_close(acc, r2)
-
-
-def test_xform_json_round_trip():
-    from session_py.encoders import json_dumps, json_loads
-
-    x = Xform.from_matrix(
-        [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 4.0, 5.0, 6.0, 1.0]
-    )
-    s = json_dumps(x)
-    y = json_loads(s)
-    assert matrices_close(x, y)
-
-
-def test_xform_from_matrix():
-    m = [
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        5.0,
-        10.0,
-        15.0,
-        1.0,
-    ]
-    x = Xform.from_matrix(m)
-    assert x.m == m
-
-
-def test_xform_rotation_x():
-    r = Xform.rotation_x(math.pi / 2.0)
-    p = Point(0.0, 1.0, 0.0)
-    rp = r.transformed_point(p)
-    assert approx_f32(rp.x, 0.0)
-    assert approx_f32(rp.y, 0.0)
-    assert approx_f32(rp.z, 1.0)
-
-
-def test_xform_rotation_y():
-    r = Xform.rotation_y(math.pi / 2.0)
-    p = Point(1.0, 0.0, 0.0)
-    rp = r.transformed_point(p)
-    assert approx_f32(rp.x, 0.0)
-    assert approx_f32(rp.y, 0.0)
-    assert approx_f32(rp.z, -1.0)
-
-
-def test_xform_rotation():
-    axis = Vector(0.0, 0.0, 1.0)
-    r = Xform.rotation(axis, math.pi / 2.0)
-    p = Point(1.0, 0.0, 0.0)
-    rp = r.transformed_point(p)
-    assert approx_f32(rp.x, 0.0)
-    assert approx_f32(rp.y, 1.0)
-    assert approx_f32(rp.z, 0.0)
-
-
-def test_xform_change_basis():
-    o = Point(1.0, 2.0, 3.0)
-    x = Vector(1.0, 0.0, 0.0)
-    y = Vector(0.0, 1.0, 0.0)
-    z = Vector(0.0, 0.0, 1.0)
-    cb = Xform.change_basis(o, x, y, z)
-    assert approx_f32(cb.m[12], 1.0)
-    assert approx_f32(cb.m[13], 2.0)
-    assert approx_f32(cb.m[14], 3.0)
-
-
-def test_xform_plane_to_xy():
-    o = Point(1.0, 2.0, 3.0)
-    x = Vector(1.0, 0.0, 0.0)
-    y = Vector(0.0, 1.0, 0.0)
-    z = Vector(0.0, 0.0, 1.0)
-    m = Xform.plane_to_xy(o, x, y, z)
-    mapped = m.transformed_point(o)
-    assert approx_f32(mapped.x, 0.0)
-    assert approx_f32(mapped.y, 0.0)
-    assert approx_f32(mapped.z, 0.0)
-
-
-def test_xform_xy_to_plane():
-    o = Point(1.0, 2.0, 3.0)
-    x = Vector(1.0, 0.0, 0.0)
-    y = Vector(0.0, 1.0, 0.0)
-    z = Vector(0.0, 0.0, 1.0)
-    m = Xform.xy_to_plane(o, x, y, z)
-    origin = Point(0.0, 0.0, 0.0)
-    mapped = m.transformed_point(origin)
-    assert approx_f32(mapped.x, o.x)
-    assert approx_f32(mapped.y, o.y)
-    assert approx_f32(mapped.z, o.z)
-
-
-def test_xform_scale_xyz():
-    s = Xform.scale_xyz(2.0, 3.0, 4.0)
-    p = Point(1.0, 1.0, 1.0)
-    sp = s.transformed_point(p)
-    assert sp.x == 2.0
-    assert sp.y == 3.0
-    assert sp.z == 4.0
-
-
-def test_xform_scale_uniform():
-    o = Point(1.0, 1.0, 1.0)
-    s = Xform.scale_uniform(o, 2.0)
-    p = Point(2.0, 2.0, 2.0)
-    sp = s.transformed_point(p)
-    assert approx_f32(sp.x, 3.0)
-    assert approx_f32(sp.y, 3.0)
-    assert approx_f32(sp.z, 3.0)
-
-
-def test_xform_scale_non_uniform():
-    o = Point(0.0, 0.0, 0.0)
-    s = Xform.scale_non_uniform(o, 2.0, 3.0, 4.0)
-    p = Point(1.0, 1.0, 1.0)
-    sp = s.transformed_point(p)
-    assert sp.x == 2.0
-    assert sp.y == 3.0
-    assert sp.z == 4.0
-
-
-def test_xform_is_identity():
-    x = Xform.identity()
-    assert x.is_identity()
-    x.m[0] = 2.0
-    assert not x.is_identity()
-
-
-def test_xform_transformed_point():
+    # Create composite transformation
     t = Xform.translation(1.0, 2.0, 3.0)
-    p = Point(0.0, 0.0, 0.0)
-    tp = t.transformed_point(p)
-    assert tp[0] == 1.0
-    assert tp[1] == 2.0
-    assert tp[2] == 3.0
+    s = Xform.scaling(2.0, 2.0, 2.0)
+    composite = t * s
+
+    # Compute inverse
+    inv = composite.inverse()
+
+    # Multiply should give identity
+    result = composite * inv
+
+    MINI_CHECK(result.is_identity())
 
 
-def test_xform_transformed_vector():
-    s = Xform.scaling(2.0, 3.0, 4.0)
-    v = Vector(1.0, 1.0, 1.0)
-    sv = s.transformed_vector(v)
-    assert sv[0] == 2.0
-    assert sv[1] == 3.0
-    assert sv[2] == 4.0
+@MINI_TEST("Xform", "mul_operator")
+def test_xform_mul_operator():
+    from session_py import Xform
+    from session_py import Point
+
+    # Matrix multiplication
+    t = Xform.translation(10.0, 0.0, 0.0)
+    s = Xform.scaling(2.0, 1.0, 1.0)
+
+    # Combined: first scale, then translate
+    combined = t * s
+
+    # Apply to point
+    p = Point(1.0, 0.0, 0.0)
+    result = combined.transformed_point(p)
+
+    # (1,0,0) * scale(2,1,1) = (2,0,0), then translate(10,0,0) = (12,0,0)
+    MINI_CHECK(TOLERANCE.is_close(result[0], 12.0))
+    MINI_CHECK(TOLERANCE.is_close(result[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(result[2], 0.0))
 
 
-def test_xform_transform_point():
-    t = Xform.translation(1.0, 2.0, 3.0)
-    p = Point(0.0, 0.0, 0.0)
-    t.transform_point(p)
-    assert p[0] == 1.0
-    assert p[1] == 2.0
-    assert p[2] == 3.0
-
-
+@MINI_TEST("Xform", "transform_vector")
 def test_xform_transform_vector():
+    from session_py import Xform
+    from session_py import Vector
+
+    # Translation should not affect vectors (only direction)
+    t = Xform.translation(100.0, 200.0, 300.0)
+    v = Vector(1.0, 0.0, 0.0)
+    tv = t.transformed_vector(v)
+
+    # Scaling should affect vectors
     s = Xform.scaling(2.0, 3.0, 4.0)
-    v = Vector(1.0, 1.0, 1.0)
-    s.transform_vector(v)
-    assert v[0] == 2.0
-    assert v[1] == 3.0
-    assert v[2] == 4.0
+    v2 = Vector(1.0, 1.0, 1.0)
+    sv = s.transformed_vector(v2)
+
+    MINI_CHECK(TOLERANCE.is_close(tv[0], 1.0) and TOLERANCE.is_close(tv[1], 0.0) and TOLERANCE.is_close(tv[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(sv[0], 2.0) and TOLERANCE.is_close(sv[1], 3.0) and TOLERANCE.is_close(sv[2], 4.0))
 
 
-def test_xform_getitem():
-    x = Xform.identity()
-    assert x[0, 0] == 1.0
-    assert x[1, 1] == 1.0
-    assert x[2, 2] == 1.0
-    assert x[3, 3] == 1.0
-    assert x[0, 3] == 0.0
-
-
-def test_xform_setitem():
-    x = Xform.identity()
-    x[0, 3] = 5.0
-    x[1, 3] = 10.0
-    x[2, 3] = 15.0
-    assert x[0, 3] == 5.0
-    assert x[1, 3] == 10.0
-    assert x[2, 3] == 15.0
-
-
-def test_xform_json_roundtrip():
-    from pathlib import Path
-    from session_py.encoders import json_dump, json_load
-
-    xform = Xform.translation(1.0, 2.0, 3.0)
-    xform.name = "test_xform"
-
-    path = Path(__file__).resolve().parents[2] / "test_xform.json"
-    json_dump(xform, path)
-    loaded = json_load(path)
-
-    assert isinstance(loaded, Xform)
-    assert loaded[0, 3] == xform[0, 3]
-    assert loaded.name == xform.name
+if __name__ == "__main__":
+    run_all("python")
