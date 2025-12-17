@@ -39,6 +39,25 @@ class Xform:
             return False
         return self.m == other.m
 
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __str__(self):
+        rows = []
+        for i in range(4):
+            row = [self.m[j * 4 + i] for j in range(4)]
+            rows.append(f"[{row[0]:.6f}, {row[1]:.6f}, {row[2]:.6f}, {row[3]:.6f}]")
+        return "\n".join(rows)
+
+    def __repr__(self):
+        return f"Xform({self.name}, {self.guid[:8]})"
+
+    def duplicate(self):
+        """Create a copy with a new GUID."""
+        copy = Xform(self.m)
+        copy.name = self.name
+        return copy
+
     @staticmethod
     def identity():
         return Xform()
@@ -121,30 +140,7 @@ class Xform:
         return xform
 
     @staticmethod
-    def change_basis(origin, x_axis, y_axis, z_axis):
-        xform = Xform()
-        x_axis = x_axis.normalize()
-        y_axis = y_axis.normalize()
-        z_axis = z_axis.normalize()
-        # World-to-local transform: transpose of rotation matrix
-        # Row 0 = x_axis, Row 1 = y_axis, Row 2 = z_axis
-        xform.m[0] = x_axis[0]
-        xform.m[4] = x_axis[1]
-        xform.m[8] = x_axis[2]
-        xform.m[1] = y_axis[0]
-        xform.m[5] = y_axis[1]
-        xform.m[9] = y_axis[2]
-        xform.m[2] = z_axis[0]
-        xform.m[6] = z_axis[1]
-        xform.m[10] = z_axis[2]
-        # Translation = -R^T * origin
-        xform.m[12] = -(x_axis[0] * origin[0] + x_axis[1] * origin[1] + x_axis[2] * origin[2])
-        xform.m[13] = -(y_axis[0] * origin[0] + y_axis[1] * origin[1] + y_axis[2] * origin[2])
-        xform.m[14] = -(z_axis[0] * origin[0] + z_axis[1] * origin[1] + z_axis[2] * origin[2])
-        return xform
-
-    @staticmethod
-    def change_basis_alt(
+    def change_basis(
         origin_1, x_axis_1, y_axis_1, z_axis_1, origin_0, x_axis_0, y_axis_0, z_axis_0
     ):
         a = x_axis_1.dot(y_axis_1)
@@ -246,15 +242,29 @@ class Xform:
         return t2 * (m_xform * t0)
 
     @staticmethod
-    def plane_to_plane(
-        origin_0, x_axis_0, y_axis_0, z_axis_0, origin_1, x_axis_1, y_axis_1, z_axis_1
-    ):
-        x0 = x_axis_0.normalize()
-        y0 = y_axis_0.normalize()
-        z0 = z_axis_0.normalize()
-        x1 = x_axis_1.normalize()
-        y1 = y_axis_1.normalize()
-        z1 = z_axis_1.normalize()
+    def plane_to_plane(plane_from, plane_to):
+        """Create transformation from one plane to another.
+
+        Parameters
+        ----------
+        plane_from : Plane
+            Source plane.
+        plane_to : Plane
+            Target plane.
+
+        Returns
+        -------
+        :class:`Xform`
+            Transformation matrix.
+        """
+        x0 = plane_from.x_axis.normalize()
+        y0 = plane_from.y_axis.normalize()
+        z0 = plane_from.z_axis.normalize()
+        x1 = plane_to.x_axis.normalize()
+        y1 = plane_to.y_axis.normalize()
+        z1 = plane_to.z_axis.normalize()
+        origin_0 = plane_from.origin
+        origin_1 = plane_to.origin
         t0 = Xform.translation(-origin_0[0], -origin_0[1], -origin_0[2])
         f0 = Xform()
         f0.m[0] = x0[0]
@@ -589,3 +599,80 @@ class Xform:
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data, data.get("guid"), data.get("name"))
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format.
+
+        Returns
+        -------
+        bytes
+            Serialized protobuf data.
+
+        """
+        from .proto import xform_pb2
+
+        proto = xform_pb2.Xform()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.matrix.extend(self.m)
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data):
+        """Create Xform from protobuf binary data.
+
+        Parameters
+        ----------
+        data : bytes
+            Protobuf-encoded xform data.
+
+        Returns
+        -------
+        :class:`Xform`
+            The deserialized Xform.
+
+        """
+        from .proto import xform_pb2
+
+        proto = xform_pb2.Xform()
+        proto.ParseFromString(data)
+        xform = cls.from_matrix(list(proto.matrix))
+        xform.guid = proto.guid
+        xform.name = proto.name
+        return xform
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the output file.
+
+        """
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the protobuf file.
+
+        Returns
+        -------
+        :class:`Xform`
+            The deserialized Xform.
+
+        """
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)

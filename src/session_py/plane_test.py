@@ -1,6 +1,6 @@
 from .mini_test import MINI_TEST, MINI_CHECK, run_all
 from .tolerance import TOLERANCE
-import math
+from .tolerance import PI
 
 
 @MINI_TEST("Plane", "constructor")
@@ -112,7 +112,7 @@ def test_plane_rotate():
 
     # Rotate plane 90 degrees around its normal
     pl = Plane.xy_plane()
-    pl.rotate(math.pi / 2.0)
+    pl.rotate(PI / 2.0)
 
     MINI_CHECK(TOLERANCE.is_close(pl.x_axis[1], 1.0))
 
@@ -137,7 +137,7 @@ def test_plane_is_right_hand():
     reversed_rh = default_pl.is_right_hand()
 
     # After rotate, should still be right-handed
-    default_pl.rotate(math.pi / 4.0)
+    default_pl.rotate(PI / 4.0)
     rotated_rh = default_pl.is_right_hand()
 
     MINI_CHECK(xy_rh == True)

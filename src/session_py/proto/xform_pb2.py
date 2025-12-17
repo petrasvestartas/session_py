@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bxform.proto\x12\rsession_proto\"%\n\x05Xform\x12\x0e\n\x06matrix\x18\x01 \x03(\x01\x12\x0c\n\x04name\x18\x02 \x01(\tb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bxform.proto\x12\rsession_proto\"3\n\x05Xform\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0e\n\x06matrix\x18\x03 \x03(\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,5 +32,5 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'xform_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_XFORM']._serialized_start=30
-  _globals['_XFORM']._serialized_end=67
+  _globals['_XFORM']._serialized_end=81
 # @@protoc_insertion_point(module_scope)
