@@ -448,16 +448,17 @@ class Point:
             Dictionary with 'type', 'guid', 'name', and object fields.
 
         """
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
+            "pointcolor": self.pointcolor.__jsondump__(),
+            "type": f"{self.__class__.__name__}",
+            "width": self.width,
             "x": self[0],
+            "xform": self.xform.__jsondump__(),
             "y": self[1],
             "z": self[2],
-            "width": self.width,
-            "pointcolor": self.pointcolor.__jsondump__(),
-            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod

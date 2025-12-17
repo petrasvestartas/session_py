@@ -536,11 +536,12 @@ class Xform:
             Dictionary with 'type', 'guid', 'name', and object fields.
 
         """
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
             "guid": self.guid,
-            "name": self.name,
             "m": self.m,
+            "name": self.name,
+            "type": f"{self.__class__.__name__}",
         }
 
     @classmethod

@@ -1,7 +1,4 @@
 {
-  "type": "Plane",
-  "guid": "d9a8e1cf-a6bb-4689-be59-1afef580d58e",
-  "name": "test_plane",
   "frame": [
     0.0,
     0.0,
@@ -16,11 +13,12 @@
     0.0,
     1.0
   ],
+  "guid": "e0845a2c-585e-49fc-8405-1408914ea44a",
+  "name": "test_plane",
+  "type": "Plane",
   "width": 1.0,
   "xform": {
-    "type": "Xform",
-    "guid": "567d77fd-5c82-4438-8fae-7e18b7bd9a9d",
-    "name": "my_xform",
+    "guid": "8f2eeb1b-b287-4309-a46c-35fca40ee454",
     "m": [
       1.0,
       0.0,
@@ -38,6 +36,8 @@
       0.0,
       0.0,
       1.0
-    ]
+    ],
+    "name": "my_xform",
+    "type": "Xform"
   }
 }

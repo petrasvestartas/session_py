@@ -586,19 +586,20 @@ class Line:
             Dictionary with 'type', 'guid', 'name', and object fields.
 
         """
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
             "guid": self.guid,
-            "name": self.name,
-            "x0": self._x0,
-            "y0": self._y0,
-            "z0": self._z0,
-            "x1": self._x1,
-            "y1": self._y1,
-            "z1": self._z1,
-            "width": self.width,
             "linecolor": self.linecolor.__jsondump__(),
+            "name": self.name,
+            "type": f"{self.__class__.__name__}",
+            "width": self.width,
+            "x0": self._x0,
+            "x1": self._x1,
             "xform": self.xform.__jsondump__(),
+            "y0": self._y0,
+            "y1": self._y1,
+            "z0": self._z0,
+            "z1": self._z1,
         }
 
     def json_dump(self, filepath):

@@ -595,7 +595,7 @@ class Mesh:
         Returns
         -------
         dict
-            Dictionary with 'type', 'guid', 'name', and object fields.
+            Dictionary with fields in alphabetical order (matching Rust).
 
         """
         # Halfedge connectivity
@@ -605,14 +605,14 @@ class Mesh:
                 str(v): face_key for v, face_key in neighbors.items()
             }
 
-        # Vertex data
+        # Vertex data (alphabetical: attributes, x, y, z)
         vertex_data = {}
         for key, vdata in self.vertex.items():
             vertex_data[str(key)] = {
+                "attributes": vdata.attributes,
                 "x": vdata[0],
                 "y": vdata[1],
                 "z": vdata[2],
-                "attributes": vdata.attributes,
             }
 
         # Face data
@@ -630,20 +630,38 @@ class Mesh:
         for (u, v), attrs in self.edgedata.items():
             edgedata_json[f"{u},{v}"] = attrs
 
+        # Colors as flat RGB arrays (matching Rust format)
+        pointcolors_flat = []
+        for c in self.pointcolors:
+            pointcolors_flat.extend([c[0], c[1], c[2]])
+
+        facecolors_flat = []
+        for c in self.facecolors:
+            facecolors_flat.extend([c[0], c[1], c[2]])
+
+        linecolors_flat = []
+        for c in self.linecolors:
+            linecolors_flat.extend([c[0], c[1], c[2]])
+
+        # Return fields in alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
-            "guid": self.guid,
-            "name": self.name,
-            "halfedge": halfedge_data,
-            "vertex": vertex_data,
-            "face": face_data,
-            "facedata": facedata_json,
-            "edgedata": edgedata_json,
-            "default_vertex_attributes": self.default_vertex_attributes,
-            "default_face_attributes": self.default_face_attributes,
             "default_edge_attributes": self.default_edge_attributes,
-            "max_vertex": self._max_vertex,
+            "default_face_attributes": self.default_face_attributes,
+            "default_vertex_attributes": self.default_vertex_attributes,
+            "edgedata": edgedata_json,
+            "face": face_data,
+            "facecolors": facecolors_flat,
+            "facedata": facedata_json,
+            "guid": self.guid,
+            "halfedge": halfedge_data,
+            "linecolors": linecolors_flat,
             "max_face": self._max_face,
+            "max_vertex": self._max_vertex,
+            "name": self.name,
+            "pointcolors": pointcolors_flat,
+            "type": f"{self.__class__.__name__}",
+            "vertex": vertex_data,
+            "widths": self.widths,
         }
 
     @classmethod
@@ -729,7 +747,43 @@ class Mesh:
         if "xform" in data:
             mesh.xform = decode_node(data["xform"])
 
+        # Load colors from flat RGB arrays
+        if "pointcolors" in data:
+            rgb_values = data["pointcolors"]
+            mesh.pointcolors = []
+            for i in range(0, len(rgb_values) - 2, 3):
+                mesh.pointcolors.append(Color(rgb_values[i], rgb_values[i+1], rgb_values[i+2], 255))
+
+        if "facecolors" in data:
+            rgb_values = data["facecolors"]
+            mesh.facecolors = []
+            for i in range(0, len(rgb_values) - 2, 3):
+                mesh.facecolors.append(Color(rgb_values[i], rgb_values[i+1], rgb_values[i+2], 255))
+
+        if "linecolors" in data:
+            rgb_values = data["linecolors"]
+            mesh.linecolors = []
+            for i in range(0, len(rgb_values) - 2, 3):
+                mesh.linecolors.append(Color(rgb_values[i], rgb_values[i+1], rgb_values[i+2], 255))
+
+        if "widths" in data:
+            mesh.widths = data["widths"]
+
         return mesh
+
+    def json_dump(self, filepath):
+        """Write JSON to file."""
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file."""
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
 
     ###########################################################################################
     # Transformation
@@ -781,3 +835,195 @@ class Mesh:
         """Set width for a specific edge."""
         if 0 <= index < len(self.widths):
             self.widths[index] = width
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def to_protobuf(self):
+        """Convert to protobuf binary format."""
+        from .proto import mesh_pb2
+
+        proto = mesh_pb2.Mesh()
+        proto.guid = self.guid
+        proto.name = self.name
+
+        # Vertices
+        for vkey, vdata in self.vertex.items():
+            vertex_proto = proto.vertices[vkey]
+            vertex_proto.x = vdata.x
+            vertex_proto.y = vdata.y
+            vertex_proto.z = vdata.z
+            for k, v in vdata.attributes.items():
+                vertex_proto.attributes[k] = v
+
+        # Faces
+        for fkey, fverts in self.face.items():
+            face_proto = proto.faces[fkey]
+            face_proto.vertices.extend(fverts)
+            if fkey in self.facedata:
+                for k, v in self.facedata[fkey].items():
+                    face_proto.attributes[k] = v
+
+        # Halfedges
+        for u, neighbors in self.halfedge.items():
+            hmap = proto.halfedges[u]
+            for v, fkey_opt in neighbors.items():
+                hmap.neighbors[v] = fkey_opt if fkey_opt is not None else 0xFFFFFFFFFFFFFFFF
+
+        # Edge data
+        for (v1, v2), attrs in self.edgedata.items():
+            edge_proto = mesh_pb2.EdgeData()
+            edge_proto.vertex1 = v1
+            edge_proto.vertex2 = v2
+            for k, v in attrs.items():
+                edge_proto.attributes[k] = v
+            proto.edge_data.append(edge_proto)
+
+        # Default attributes
+        for k, v in self.default_vertex_attributes.items():
+            proto.default_vertex_attributes[k] = v
+        for k, v in self.default_face_attributes.items():
+            proto.default_face_attributes[k] = v
+        for k, v in self.default_edge_attributes.items():
+            proto.default_edge_attributes[k] = v
+
+        # Colors
+        from .proto import color_pb2
+        for c in self.pointcolors:
+            color_proto = color_pb2.Color()
+            color_proto.guid = c.guid
+            color_proto.name = c.name
+            color_proto.r = c[0]
+            color_proto.g = c[1]
+            color_proto.b = c[2]
+            color_proto.a = c[3]
+            proto.pointcolors.append(color_proto)
+
+        for c in self.facecolors:
+            color_proto = color_pb2.Color()
+            color_proto.guid = c.guid
+            color_proto.name = c.name
+            color_proto.r = c[0]
+            color_proto.g = c[1]
+            color_proto.b = c[2]
+            color_proto.a = c[3]
+            proto.facecolors.append(color_proto)
+
+        for c in self.linecolors:
+            color_proto = color_pb2.Color()
+            color_proto.guid = c.guid
+            color_proto.name = c.name
+            color_proto.r = c[0]
+            color_proto.g = c[1]
+            color_proto.b = c[2]
+            color_proto.a = c[3]
+            proto.linecolors.append(color_proto)
+
+        # Widths
+        proto.widths.extend(self.widths)
+
+        # Xform
+        from .proto import xform_pb2
+        proto.xform.guid = self.xform.guid
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
+        return proto.SerializeToString()
+
+    @classmethod
+    def from_protobuf(cls, data):
+        """Create Mesh from protobuf binary data."""
+        from .proto import mesh_pb2
+        from .color import Color
+        from .xform import Xform
+
+        proto = mesh_pb2.Mesh()
+        proto.ParseFromString(data)
+
+        mesh = cls()
+        mesh.guid = proto.guid
+        mesh.name = proto.name
+
+        # Vertices
+        for vkey, vdata in proto.vertices.items():
+            attrs = dict(vdata.attributes)
+            mesh.vertex[vkey] = VertexData(Point(vdata.x, vdata.y, vdata.z))
+            mesh.vertex[vkey].attributes = attrs
+            if vkey not in mesh.halfedge:
+                mesh.halfedge[vkey] = {}
+
+        # Faces
+        for fkey, fdata in proto.faces.items():
+            mesh.face[fkey] = list(fdata.vertices)
+            if fdata.attributes:
+                mesh.facedata[fkey] = dict(fdata.attributes)
+
+        # Halfedges
+        for u, hmap in proto.halfedges.items():
+            neighbors = {}
+            for v, fkey in hmap.neighbors.items():
+                neighbors[v] = None if fkey == 0xFFFFFFFFFFFFFFFF else fkey
+            mesh.halfedge[u] = neighbors
+
+        # Edge data
+        for edata in proto.edge_data:
+            key = (edata.vertex1, edata.vertex2)
+            mesh.edgedata[key] = dict(edata.attributes)
+
+        # Default attributes
+        mesh.default_vertex_attributes = dict(proto.default_vertex_attributes)
+        mesh.default_face_attributes = dict(proto.default_face_attributes)
+        mesh.default_edge_attributes = dict(proto.default_edge_attributes)
+
+        # Colors
+        mesh.pointcolors = []
+        for c in proto.pointcolors:
+            color = Color(c.r, c.g, c.b, c.a)
+            color.guid = c.guid
+            color.name = c.name
+            mesh.pointcolors.append(color)
+
+        mesh.facecolors = []
+        for c in proto.facecolors:
+            color = Color(c.r, c.g, c.b, c.a)
+            color.guid = c.guid
+            color.name = c.name
+            mesh.facecolors.append(color)
+
+        mesh.linecolors = []
+        for c in proto.linecolors:
+            color = Color(c.r, c.g, c.b, c.a)
+            color.guid = c.guid
+            color.name = c.name
+            mesh.linecolors.append(color)
+
+        # Widths
+        mesh.widths = list(proto.widths)
+
+        # Xform
+        mesh.xform = Xform()
+        mesh.xform.guid = proto.xform.guid
+        mesh.xform.name = proto.xform.name
+        mesh.xform.m = list(proto.xform.matrix)
+
+        # Update max counters
+        if mesh.vertex:
+            mesh._max_vertex = max(mesh.vertex.keys()) + 1
+        if mesh.face:
+            mesh._max_face = max(mesh.face.keys()) + 1
+
+        return mesh
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf to file."""
+        data = self.to_protobuf()
+        with open(filepath, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf from file."""
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        return cls.from_protobuf(data)

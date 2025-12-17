@@ -1,27 +1,21 @@
 {
-  "type": "Line",
-  "guid": "ffd8794d-4431-47a0-ab0a-e6164b733279",
-  "name": "test_line",
-  "x0": 42.1,
-  "y0": 84.2,
-  "z0": 126.3,
-  "x1": 168.4,
-  "y1": 210.5,
-  "z1": 252.6,
-  "width": 1.0,
+  "guid": "3231546e-6472-41e7-86bc-ff124ff51560",
   "linecolor": {
-    "type": "Color",
-    "guid": "69644616-f8b5-4c0a-afa0-5952c5770f1c",
+    "a": 255,
+    "b": 255,
+    "g": 255,
+    "guid": "b3377f72-46f7-4787-b2d6-c062ef9436dd",
     "name": "white",
     "r": 255,
-    "g": 255,
-    "b": 255,
-    "a": 255
+    "type": "Color"
   },
+  "name": "test_line",
+  "type": "Line",
+  "width": 1.0,
+  "x0": 42.1,
+  "x1": 168.4,
   "xform": {
-    "type": "Xform",
-    "guid": "c9aca7f7-3fd4-4a08-a077-57ce7a2872af",
-    "name": "my_xform",
+    "guid": "da8ee2b5-9397-4ee5-8ef7-0040f6be5048",
     "m": [
       1.0,
       0.0,
@@ -39,6 +33,12 @@
       0.0,
       0.0,
       1.0
-    ]
-  }
+    ],
+    "name": "my_xform",
+    "type": "Xform"
+  },
+  "y0": 84.2,
+  "y1": 210.5,
+  "z0": 126.3,
+  "z1": 252.6
 }

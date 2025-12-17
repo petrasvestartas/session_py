@@ -582,16 +582,17 @@ class Plane:
             Plane equation coefficients (a, b, c, d) are computed on load.
 
         """
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
-            "guid": self.guid,
-            "name": self.name,
             "frame": [
                 self._origin[0], self._origin[1], self._origin[2],
                 self._x_axis[0], self._x_axis[1], self._x_axis[2],
                 self._y_axis[0], self._y_axis[1], self._y_axis[2],
                 self._z_axis[0], self._z_axis[1], self._z_axis[2],
             ],
+            "guid": self.guid,
+            "name": self.name,
+            "type": f"{self.__class__.__name__}",
             "width": self.width,
             "xform": self.xform.__jsondump__(),
         }

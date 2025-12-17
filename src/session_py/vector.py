@@ -950,10 +950,11 @@ class Vector:
 
     def __jsondump__(self):
         """Serialize to polymorphic JSON format with type field."""
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
+            "type": f"{self.__class__.__name__}",
             "x": self[0],
             "y": self[1],
             "z": self[2],

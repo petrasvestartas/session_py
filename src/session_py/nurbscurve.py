@@ -1394,7 +1394,7 @@ class NurbsCurve:
             
             if c2 > Tolerance.ZERO_TOLERANCE:
                 b = c1 / c2
-                pb = Point(p_start.x + b * v.x, p_start.y + b * v.y, p_start.z + b * v.z)
+                pb = Point(p_start.x + b * v[0], p_start.y + b * v[1], p_start.z + b * v[2])
                 dist = p.distance(pb)
                 if dist > tolerance:
                     return False
@@ -2958,3 +2958,95 @@ class NurbsCurve:
             subdivide_and_solve(span_t0, span_t1, 0)
         
         return sorted(results)
+
+    ###########################################################################################
+    # JSON Serialization
+    ###########################################################################################
+
+    def __jsondump__(self):
+        """Return a JSON-serializable dictionary representation."""
+        return {
+            "guid": self.guid,
+            "name": self.name,
+            "m_dim": int(self.m_dim),
+            "m_is_rat": int(self.m_is_rat),
+            "m_order": int(self.m_order),
+            "m_cv_count": int(self.m_cv_count),
+            "m_cv_stride": int(self.m_cv_stride),
+            "m_knot": self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot),
+            "m_cv": self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv),
+        }
+
+    @classmethod
+    def __jsonload__(cls, data):
+        """Create NurbsCurve from JSON dictionary."""
+        curve = cls()
+        curve.guid = data.get("guid", curve.guid)
+        curve.name = data.get("name", curve.name)
+        curve.m_dim = data.get("m_dim", 0)
+        curve.m_is_rat = data.get("m_is_rat", 0)
+        curve.m_order = data.get("m_order", 0)
+        curve.m_cv_count = data.get("m_cv_count", 0)
+        curve.m_cv_stride = data.get("m_cv_stride", 0)
+        curve.m_knot = np.array(data.get("m_knot", []), dtype=np.float64)
+        curve.m_cv = np.array(data.get("m_cv", []), dtype=np.float64)
+        return curve
+
+    def json_dump(self, filepath):
+        """Write JSON to file."""
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        """Read JSON from file."""
+        import json
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
+
+    ###########################################################################################
+    # Protobuf Serialization
+    ###########################################################################################
+
+    def protobuf_dump(self, filepath):
+        """Write protobuf binary to file."""
+        try:
+            from .proto import nurbscurve_pb2
+            proto = nurbscurve_pb2.NurbsCurve()
+            proto.guid = self.guid
+            proto.name = self.name
+            proto.dimension = int(self.m_dim)
+            proto.is_rational = bool(self.m_is_rat)
+            proto.order = int(self.m_order)
+            proto.cv_count = int(self.m_cv_count)
+            proto.cv_stride = int(self.m_cv_stride)
+            proto.knots.extend(self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot))
+            proto.cvs.extend(self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv))
+            with open(filepath, 'wb') as f:
+                f.write(proto.SerializeToString())
+        except ImportError:
+            raise ImportError("protobuf not available - run ./protobuf.sh to install")
+
+    @classmethod
+    def protobuf_load(cls, filepath):
+        """Read protobuf binary from file."""
+        try:
+            from .proto import nurbscurve_pb2
+            proto = nurbscurve_pb2.NurbsCurve()
+            with open(filepath, 'rb') as f:
+                proto.ParseFromString(f.read())
+            curve = cls()
+            curve.guid = proto.guid
+            curve.name = proto.name
+            curve.m_dim = proto.dimension
+            curve.m_is_rat = 1 if proto.is_rational else 0
+            curve.m_order = proto.order
+            curve.m_cv_count = proto.cv_count
+            curve.m_cv_stride = proto.cv_stride
+            curve.m_knot = np.array(list(proto.knots), dtype=np.float64)
+            curve.m_cv = np.array(list(proto.cvs), dtype=np.float64)
+            return curve
+        except ImportError:
+            raise ImportError("protobuf not available - run ./protobuf.sh to install")

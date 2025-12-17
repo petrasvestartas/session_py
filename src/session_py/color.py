@@ -296,14 +296,15 @@ class Color:
 
     def __jsondump__(self):
         """Serialize to polymorphic JSON format with type field."""
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
+            "a": self[3],
+            "b": self[2],
+            "g": self[1],
             "guid": self.guid,
             "name": self.name,
             "r": self[0],
-            "g": self[1],
-            "b": self[2],
-            "a": self[3],
+            "type": f"{self.__class__.__name__}",
         }
 
     @classmethod

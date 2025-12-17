@@ -697,13 +697,14 @@ class Polyline:
             Dictionary with 'type', 'guid', 'name', and object fields.
 
         """
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
-            "guid": self.guid,
-            "name": self.name,
             "coords": self._coords,
-            "width": self.width,
+            "guid": self.guid,
             "linecolor": self.linecolor.__jsondump__(),
+            "name": self.name,
+            "type": f"{self.__class__.__name__}",
+            "width": self.width,
             "xform": self.xform.__jsondump__(),
         }
 

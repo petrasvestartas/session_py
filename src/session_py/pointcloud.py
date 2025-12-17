@@ -329,14 +329,15 @@ class PointCloud:
 
     def __jsondump__(self):
         """Serialize to polymorphic JSON format with type field."""
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
+            "colors": self._colors,
+            "coords": self._coords,
             "guid": self.guid,
             "name": self.name,
-            "coords": self._coords,
-            "colors": self._colors,
             "normals": self._normals,
             "point_size": self.point_size,
+            "type": f"{self.__class__.__name__}",
             "xform": self.xform.__jsondump__(),
         }
 
