@@ -284,7 +284,7 @@ def test_xform_json_roundtrip():
     xform.name = "test_xform"
 
     # json_dump(fname) / json_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_xform.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.json"
     xform.json_dump(fname)
     loaded = Xform.json_load(fname)
 
@@ -304,7 +304,7 @@ def test_xform_protobuf_roundtrip():
     xform.name = "test_xform_proto"
 
     # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_xform.bin"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.bin"
     xform.protobuf_dump(fname)
     loaded = Xform.protobuf_load(fname)
 

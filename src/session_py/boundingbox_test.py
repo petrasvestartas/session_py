@@ -125,7 +125,7 @@ def test_boundingbox_json_roundtrip():
     )
     bbox.name = "test_bbox"
 
-    path = Path(__file__).resolve().parents[2] / "test_boundingbox.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_boundingbox.json"
     json_dump(bbox, path)
     loaded = json_load(path)
 

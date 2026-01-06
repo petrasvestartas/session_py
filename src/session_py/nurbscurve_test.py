@@ -16,10 +16,24 @@ def test_nurbscurve_constructor():
 
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
 
+    # Minimal and Full String Representation
+    cstr = str(curve)
+    crepr = repr(curve)
+
+    # Copy (duplicates everything except guid)
+    ccopy = curve.duplicate()
+    cother = NurbsCurve.create(periodic=False, degree=2, points=points)
+
     MINI_CHECK(curve.is_valid() == True)
     MINI_CHECK(curve.cv_count() == 3)
     MINI_CHECK(curve.degree() == 2)
     MINI_CHECK(curve.order() == 3)
+    MINI_CHECK(curve.name == "nurbscurve")
+    MINI_CHECK(curve.guid)
+    MINI_CHECK(cstr == "degree=2, cvs=3")
+    MINI_CHECK(crepr == "NurbsCurve(nurbscurve, dim=3, order=3, cvs=3, rational=false)")
+    MINI_CHECK(ccopy.cv_count() == curve.cv_count())
+    MINI_CHECK(ccopy.guid != curve.guid)
 
 
 @MINI_TEST("NurbsCurve", "is_valid")
@@ -347,7 +361,7 @@ def test_nurbscurve_json_roundtrip():
 
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
 
-    fname = Path(__file__).resolve().parents[2] / "test_nurbscurve.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
     curve.json_dump(fname)
     loaded = NurbsCurve.json_load(fname)
 
@@ -371,7 +385,7 @@ def test_nurbscurve_protobuf_roundtrip():
 
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
 
-    path = Path(__file__).resolve().parents[2] / "test_nurbscurve.bin"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
     curve.protobuf_dump(path)
     loaded = NurbsCurve.protobuf_load(path)
 

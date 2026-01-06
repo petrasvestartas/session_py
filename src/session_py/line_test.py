@@ -122,7 +122,7 @@ def test_line_json_roundtrip():
     l.name = "test_line"
 
     # json_dump(fname) / json_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_line.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.json"
     l.json_dump(fname)
     loaded = Line.json_load(fname)
 
@@ -144,7 +144,7 @@ def test_line_protobuf_roundtrip():
     l.name = "test_line"
 
     # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_line.bin"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.bin"
     l.protobuf_dump(fname)
     loaded = Line.protobuf_load(fname)
 

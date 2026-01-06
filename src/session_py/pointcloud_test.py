@@ -127,7 +127,7 @@ def test_pointcloud_json_roundtrip():
     )
     pc.name = "test_pointcloud"
 
-    fname = Path(__file__).resolve().parents[2] / "test_pointcloud.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.json"
     pc.json_dump(fname)
     loaded = PointCloud.json_load(fname)
 
@@ -153,7 +153,7 @@ def test_pointcloud_protobuf_roundtrip():
     )
     pc.name = "test_pointcloud"
 
-    fname = Path(__file__).resolve().parents[2] / "test_pointcloud.bin"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.bin"
     pc.protobuf_dump(fname)
     loaded = PointCloud.protobuf_load(fname)
 

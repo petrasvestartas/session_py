@@ -200,7 +200,7 @@ def test_nurbssurface_clamp_end():
 #         for j in range(5):
 #             srf.set_cv(i, j, Point(i * 0.5, j * 0.5, 0))
 #     
-#     path = Path(__file__).resolve().parents[2] / "test_nurbssurface.json"
+#     path = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
 #     json_dump(srf, path)
 #     loaded = json_load(path)
 #     

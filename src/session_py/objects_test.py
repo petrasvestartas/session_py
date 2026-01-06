@@ -17,7 +17,7 @@ def test_objects_json_roundtrip():
     objects.points.append(Point(1.0, 2.0, 3.0))
     objects.name = "test_objects"
 
-    path = Path(__file__).resolve().parents[2] / "test_objects.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_objects.json"
     json_dump(objects, path)
     loaded = json_load(path)
 

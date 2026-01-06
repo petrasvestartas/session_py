@@ -34,7 +34,7 @@ def test_tree_json_roundtrip():
     root.add(child)
     original.add(root)
 
-    path = Path(__file__).resolve().parents[2] / "test_tree.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_tree.json"
     json_dump(original, path)
     loaded = json_load(path)
 

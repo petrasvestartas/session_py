@@ -7,7 +7,7 @@ def test_edge_json_roundtrip():
 
     edge = Edge("v0", "v1", "attribute")
 
-    path = Path(__file__).resolve().parents[2] / "test_edge.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_edge.json"
     json_dump(edge, path)
     loaded = json_load(path)
 

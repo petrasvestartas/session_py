@@ -32,7 +32,7 @@ def test_arrow_json_roundtrip():
     arrow = Arrow(line, 1.0)
     arrow.name = "test_arrow"
 
-    path = Path(__file__).resolve().parents[2] / "test_arrow.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_arrow.json"
     json_dump(arrow, path)
     loaded = json_load(path)
 

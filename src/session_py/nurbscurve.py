@@ -63,7 +63,27 @@ class NurbsCurve:
         # Data arrays
         self.m_knot = np.array([], dtype=np.float64)
         self.m_cv = np.array([], dtype=np.float64)
-    
+
+    def duplicate(self) -> 'NurbsCurve':
+        """Create a deep copy of this curve with a new GUID.
+
+        Returns
+        -------
+        NurbsCurve
+            A new NurbsCurve with identical data but a different GUID.
+        """
+        curve = NurbsCurve()
+        curve.guid = str(uuid.uuid4())
+        curve.name = self.name
+        curve.m_dim = self.m_dim
+        curve.m_is_rat = self.m_is_rat
+        curve.m_order = self.m_order
+        curve.m_cv_count = self.m_cv_count
+        curve.m_cv_stride = self.m_cv_stride
+        curve.m_knot = self.m_knot.copy()
+        curve.m_cv = self.m_cv.copy()
+        return curve
+
     #############################################################################
     # STATIC FACTORY METHODS
     #############################################################################
@@ -2268,25 +2288,18 @@ class NurbsCurve:
         """
         return 1
     
-    def to_string(self) -> str:
-        """Convert curve to string representation.
-        
-        Returns
-        -------
-        str
-            String description of the curve.
-        """
-        return (f"NurbsCurve(dim={self.m_dim}, rational={bool(self.m_is_rat)}, "
-                f"order={self.m_order}, cvs={self.m_cv_count}, "
-                f"knots={self.knot_count()}, valid={self.is_valid()})")
-    
     def __str__(self) -> str:
-        """String representation."""
-        return self.to_string()
-    
+        """Simple string representation."""
+        return f"degree={self.degree()}, cvs={self.m_cv_count}"
+
     def __repr__(self) -> str:
-        """Representation string."""
-        return self.to_string()
+        """Detailed representation."""
+        rational_str = "true" if self.m_is_rat else "false"
+        return f"NurbsCurve({self.name}, dim={self.m_dim}, order={self.m_order}, cvs={self.m_cv_count}, rational={rational_str})"
+
+    def to_string(self) -> str:
+        """Alias for repr() - for compatibility."""
+        return repr(self)
     
     def is_arc(self, tolerance: float = None) -> bool:
         """Check if curve is an arc.

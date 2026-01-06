@@ -7,7 +7,7 @@ def test_vertex_json_roundtrip():
 
     vertex = Vertex("v0", "attribute")
 
-    path = Path(__file__).resolve().parents[2] / "test_vertex.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_vertex.json"
     json_dump(vertex, path)
     loaded = json_load(path)
 

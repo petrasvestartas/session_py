@@ -20,7 +20,7 @@ def test_json_dump_and_load():
     point = Point(1.5, 2.5, 3.5)
     point.name = "test_point"
 
-    filepath = Path(__file__).resolve().parents[2] / "test_encoders_point.json"
+    filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_encoders_point.json"
     json_dump(point, filepath)
 
     loaded = json_load(filepath)
@@ -153,7 +153,7 @@ def test_roundtrip_with_file():
         Vector(0.0, 0.0, 1.0),
     ]
 
-    filepath = Path(__file__).resolve().parents[2] / "test_encoders_collection.json"
+    filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_encoders_collection.json"
     json_dump(vectors, filepath)
 
     loaded = json_load(filepath)

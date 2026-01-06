@@ -107,7 +107,7 @@ def test_point_json_roundtrip():
     p.pointcolor = Color(255, 128, 64, 255)
 
     # json_dump(fname) / json_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_point.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_point.json"
     p.json_dump(fname)
     loaded = Point.json_load(fname)
 
@@ -134,7 +134,7 @@ def test_point_protobuf_roundtrip():
     p.width = 2.0
     p.pointcolor = Color(255, 128, 64, 255)
 
-    path = Path(__file__).resolve().parents[2] / "test_point.bin"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_point.bin"
     p.protobuf_dump(path)
     loaded = Point.protobuf_load(path)
 

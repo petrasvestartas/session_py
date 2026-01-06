@@ -55,7 +55,7 @@ def test_color_json_roundtrip():
     c = Color(255, 128, 64, 255, "test_color")
 
     # json_dump(fname) / json_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_color.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_color.json"
     c.json_dump(fname)
     loaded = Color.json_load(fname)
 
@@ -73,7 +73,7 @@ def test_color_protobuf_roundtrip():
 
     color = Color(255, 128, 64, 255, "test_color")
 
-    path = Path(__file__).resolve().parents[2] / "test_color.bin"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_color.bin"
     color.protobuf_dump(path)
     loaded = Color.protobuf_load(path)
 

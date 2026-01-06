@@ -135,7 +135,7 @@ def test_quaternion_json_roundtrip():
     q = Quaternion.from_axis_angle(Vector(0, 0, 1), 1.57)
     q.name = "test_quat"
 
-    path = Path(__file__).resolve().parents[2] / "test_quaternion.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_quaternion.json"
     json_dump(q, path)
     loaded = json_load(path)
 

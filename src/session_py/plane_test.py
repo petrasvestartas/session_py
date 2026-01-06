@@ -219,7 +219,7 @@ def test_plane_json_roundtrip():
     pl = Plane.xy_plane()
     pl.name = "test_plane"
 
-    fname = Path(__file__).resolve().parents[2] / "test_plane.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.json"
     pl.json_dump(fname)
     loaded = Plane.json_load(fname)
 
@@ -237,7 +237,7 @@ def test_plane_protobuf_roundtrip():
     pl.name = "test_plane"
 
     # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_plane.bin"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.bin"
     pl.protobuf_dump(fname)
     loaded = Plane.protobuf_load(fname)
 

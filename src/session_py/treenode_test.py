@@ -47,7 +47,7 @@ def test_treenode_json_roundtrip():
     folder1.add(file1)
     folder2.add(file2)
 
-    path = Path(__file__).resolve().parents[2] / "test_treenode.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_treenode.json"
     json_dump(root, path)
     loaded = json_load(path)
 

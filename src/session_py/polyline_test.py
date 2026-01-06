@@ -104,7 +104,7 @@ def test_polyline_json_roundtrip():
     pl.name = "test_polyline"
 
     # json_dump(fname) / json_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_polyline.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_polyline.json"
     pl.json_dump(fname)
     loaded = Polyline.json_load(fname)
 
@@ -125,7 +125,7 @@ def test_polyline_protobuf_roundtrip():
     pl.name = "test_polyline"
 
     # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_polyline.bin"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_polyline.bin"
     pl.protobuf_dump(fname)
     loaded = Polyline.protobuf_load(fname)
 

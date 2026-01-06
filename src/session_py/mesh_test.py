@@ -268,7 +268,7 @@ def test_mesh_json_roundtrip():
     v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
     mesh.add_face([v0, v1, v2])
 
-    filename = Path(__file__).resolve().parents[2] / "test_mesh.json"
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.json"
     mesh.json_dump(filename)
     loaded = Mesh.json_load(filename)
 
@@ -290,7 +290,7 @@ def test_mesh_protobuf_roundtrip():
     v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
     mesh.add_face([v0, v1, v2])
 
-    filename = Path(__file__).resolve().parents[2] / "test_mesh.bin"
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.bin"
     mesh.protobuf_dump(filename)
     loaded = Mesh.protobuf_load(filename)
 

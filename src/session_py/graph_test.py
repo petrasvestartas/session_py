@@ -121,7 +121,7 @@ def test_graph_json_roundtrip():
     graph.add_edge("A", "B", "edge_AB")
     graph.add_edge("B", "C", "edge_BC")
 
-    path = Path(__file__).resolve().parents[2] / "test_graph.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_graph.json"
     json_dump(graph, path)
     loaded = json_load(path)
 

@@ -21,7 +21,7 @@ def test_cylinder_json_roundtrip():
     cylinder = Cylinder(line, 1.0)
     cylinder.name = "test_cylinder"
 
-    path = Path(__file__).resolve().parents[2] / "test_cylinder.json"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_cylinder.json"
     json_dump(cylinder, path)
     loaded = json_load(path)
 

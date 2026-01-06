@@ -385,7 +385,7 @@ def test_vector_json_roundtrip():
     v.name = "test_vector"
 
     # json_dump(fname) / json_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "test_vector.json"
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_vector.json"
     v.json_dump(fname)
     loaded = Vector.json_load(fname)
 
@@ -404,7 +404,7 @@ def test_vector_protobuf_roundtrip():
     v.name = "test_vector"
 
     # protobuf_dump(filename) / protobuf_load(filename) - file-based serialization
-    path = Path(__file__).resolve().parents[2] / "test_vector.bin"
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_vector.bin"
     v.protobuf_dump(path)
     loaded = Vector.protobuf_load(path)
 

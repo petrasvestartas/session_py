@@ -80,7 +80,7 @@ def test_session_serialization_with_all_geometry_types():
     original_tree_nodes = list(my_session.tree.nodes)
     assert len(original_tree_nodes) == 13
 
-    filepath = Path(__file__).resolve().parents[2] / "test_session.json"
+    filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
     json_dump(my_session, filepath)
     loaded = json_load(filepath)
 
