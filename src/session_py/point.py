@@ -74,7 +74,9 @@ class Point:
             A new Point with identical values but a different GUID.
 
         """
-        return copy.deepcopy(self)
+        result = copy.deepcopy(self)
+        result.guid = str(uuid.uuid4())
+        return result
 
     @staticmethod
     def sum(p0, p1):

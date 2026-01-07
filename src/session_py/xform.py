@@ -43,14 +43,18 @@ class Xform:
         return not self.__eq__(other)
 
     def __str__(self):
+        """Compact matrix representation as 4x4 rows."""
+        # Format as 4 rows for readability
         rows = []
         for i in range(4):
-            row = [self.m[j * 4 + i] for j in range(4)]
-            rows.append(f"[{row[0]:.6f}, {row[1]:.6f}, {row[2]:.6f}, {row[3]:.6f}]")
-        return "\n".join(rows)
+            row_vals = [f"{self.m[i*4 + j]:f}" for j in range(4)]
+            rows.append(f"[{', '.join(row_vals)}]")
+        return '\n'.join(rows)
 
     def __repr__(self):
-        return f"Xform({self.name}, {self.guid[:8]})"
+        """Full representation with all 16 matrix values."""
+        vals = [f"{v:.3f}" for v in self.m]
+        return f"Xform(name='{self.name}', matrix=[{', '.join(vals)}])"
 
     def duplicate(self):
         """Create a copy with a new GUID."""

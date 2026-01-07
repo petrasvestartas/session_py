@@ -10,6 +10,7 @@ from .tolerance import Tolerance
 from .boundingbox import BoundingBox
 from .xform import Xform
 from .color import Color
+from . import knot
 
 
 class NurbsCurve:
@@ -63,27 +64,7 @@ class NurbsCurve:
         # Data arrays
         self.m_knot = np.array([], dtype=np.float64)
         self.m_cv = np.array([], dtype=np.float64)
-
-    def duplicate(self) -> 'NurbsCurve':
-        """Create a deep copy of this curve with a new GUID.
-
-        Returns
-        -------
-        NurbsCurve
-            A new NurbsCurve with identical data but a different GUID.
-        """
-        curve = NurbsCurve()
-        curve.guid = str(uuid.uuid4())
-        curve.name = self.name
-        curve.m_dim = self.m_dim
-        curve.m_is_rat = self.m_is_rat
-        curve.m_order = self.m_order
-        curve.m_cv_count = self.m_cv_count
-        curve.m_cv_stride = self.m_cv_stride
-        curve.m_knot = self.m_knot.copy()
-        curve.m_cv = self.m_cv.copy()
-        return curve
-
+    
     #############################################################################
     # STATIC FACTORY METHODS
     #############################################################################
@@ -494,27 +475,11 @@ class NurbsCurve:
         if self.m_order < 2 or self.m_cv_count < self.m_order:
             return False
         
-        knot_count = self.m_order + self.m_cv_count - 2
-        self.m_knot = np.zeros(knot_count, dtype=np.float64)
-        
-        # Fill interior knots with uniform spacing
-        # Start from index (order-2) up to (cv_count-1)
-        k = 0.0
-        for i in range(self.m_order - 2, self.m_cv_count):
-            self.m_knot[i] = k
-            k += delta
-        
-        # Clamp both ends: sets first (order-2) and last (order-2) knots
-        # Left clamp: knot[0..order-3] = knot[order-2]
-        i0 = self.m_order - 2
-        for i in range(i0):
-            self.m_knot[i] = self.m_knot[i0]
-        
-        # Right clamp: knot[cv_count..knot_count-1] = knot[cv_count-1]
-        i0 = self.m_cv_count - 1
-        for i in range(i0 + 1, knot_count):
-            self.m_knot[i] = self.m_knot[i0]
-        
+        # Use knot module function
+        result = knot.make_clamped_uniform(self.m_order, self.m_cv_count, delta)
+        if result is None:
+            return False
+        self.m_knot = result
         return True
     
     def make_periodic_uniform_knot_vector(self, delta: float = 1.0) -> bool:
@@ -524,13 +489,11 @@ class NurbsCurve:
         if self.m_order < 2 or self.m_cv_count < self.m_order:
             return False
         
-        knot_count = self.m_order + self.m_cv_count - 2
-        self.m_knot = np.zeros(knot_count, dtype=np.float64)
-        
-        # All knots equally spaced
-        for i in range(knot_count):
-            self.m_knot[i] = i * delta
-        
+        # Use knot module function
+        result = knot.make_periodic_uniform(self.m_order, self.m_cv_count, delta)
+        if result is None:
+            return False
+        self.m_knot = result
         return True
     
     #############################################################################
@@ -615,8 +578,6 @@ class NurbsCurve:
         """Find knot span index for parameter t using binary search.
         
         Implementation matches OpenNURBS ON_NurbsSpanIndex.
-        OpenNURBS shifts knot pointer by (order-2) to work with compressed format.
-        Domain is knot[order-2] to knot[cv_count-1].
         
         Returns
         -------
@@ -626,29 +587,8 @@ class NurbsCurve:
         if not self.is_valid():
             return -1
         
-        # OpenNURBS shifts knot pointer by (order-2) to work with compressed format
-        # Domain is knot[order-2] to knot[cv_count-1]
-        offset = self.m_order - 2
-        knot_len = self.m_cv_count - self.m_order + 2
-        
-        # Check bounds
-        if t <= self.m_knot[offset]:
-            return 0
-        if t >= self.m_knot[offset + knot_len - 1]:
-            return knot_len - 2
-        
-        # Binary search
-        low = 0
-        high = knot_len - 1
-        
-        while high > low + 1:
-            mid = (low + high) // 2
-            if t < self.m_knot[offset + mid]:
-                high = mid
-            else:
-                low = mid
-        
-        return low
+        # Use knot module function
+        return knot.find_span(self.m_order, self.m_cv_count, self.m_knot, t)
     
     def _basis_functions(self, span: int, t: float) -> np.ndarray:
         """Compute non-zero basis functions at parameter t.
@@ -1303,22 +1243,8 @@ class NurbsCurve:
         if not self.is_valid():
             return False
         
-        check_start = (end == 0 or end == 2)
-        check_end = (end == 1 or end == 2)
-        
-        if check_start:
-            first_knot = self.m_knot[0]
-            for i in range(1, self.m_order):
-                if abs(self.m_knot[i] - first_knot) > Tolerance.ZERO_TOLERANCE:
-                    return False
-        
-        if check_end:
-            last_knot = self.m_knot[-1]
-            for i in range(len(self.m_knot) - self.m_order, len(self.m_knot) - 1):
-                if abs(self.m_knot[i] - last_knot) > Tolerance.ZERO_TOLERANCE:
-                    return False
-        
-        return True
+        # Use knot module function
+        return knot.is_clamped(self.m_order, self.m_cv_count, self.m_knot, end)
     
     def control_polygon_length(self) -> float:
         """Get the length of the control polygon.
@@ -2288,19 +2214,41 @@ class NurbsCurve:
         """
         return 1
     
+    def to_string(self) -> str:
+        """Convert curve to string representation.
+        
+        Returns
+        -------
+        str
+            String description of the curve.
+        """
+        return (f"NurbsCurve(dim={self.m_dim}, rational={bool(self.m_is_rat)}, "
+                f"order={self.m_order}, cvs={self.m_cv_count}, "
+                f"knots={self.knot_count()}, valid={self.is_valid()})")
+    
     def __str__(self) -> str:
-        """Simple string representation."""
+        """String representation."""
         return f"degree={self.degree()}, cvs={self.m_cv_count}"
 
     def __repr__(self) -> str:
-        """Detailed representation."""
+        """Representation string."""
         rational_str = "true" if self.m_is_rat else "false"
         return f"NurbsCurve({self.name}, dim={self.m_dim}, order={self.m_order}, cvs={self.m_cv_count}, rational={rational_str})"
 
-    def to_string(self) -> str:
-        """Alias for repr() - for compatibility."""
-        return repr(self)
-    
+    def duplicate(self) -> "NurbsCurve":
+        """Create a duplicate with a new GUID.
+
+        Returns
+        -------
+        NurbsCurve
+            A copy of the curve with a new GUID.
+        """
+        import copy
+        import uuid
+        new_curve = copy.deepcopy(self)
+        new_curve.guid = str(uuid.uuid4())
+        return new_curve
+
     def is_arc(self, tolerance: float = None) -> bool:
         """Check if curve is an arc.
         

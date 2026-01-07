@@ -66,7 +66,10 @@ class Vector:
 
         """
         import copy
-        return copy.deepcopy(self)
+        import uuid
+        result = copy.deepcopy(self)
+        result.guid = str(uuid.uuid4())
+        return result
 
     def __str__(self):
         return f"Vector({self[0]}, {self[1]}, {self[2]})"

@@ -26,7 +26,6 @@ def test_line_line_parameters():
     t0, t1 = result
     assert 0.0 <= t0 <= 1.0
     assert 0.0 <= t1 <= 1.0
-    print(f"✓ Python line_line_parameters: t0={t0}, t1={t1}")
 
 
 def test_line_line_with_approximation_tolerance():
@@ -73,10 +72,6 @@ def test_plane_plane_intersection():
     assert abs(end.y - 496.1218) < 0.01
     assert abs(end.z - (-9.888727)) < 0.01
 
-    print(
-        f"✓ Python plane_plane: {start.x}, {start.y}, {start.z} -> {end.x}, {end.y}, {end.z}"
-    )
-
 
 def test_plane_plane_plane_intersection():
     """Test plane-plane-plane intersection with real-world values"""
@@ -105,8 +100,6 @@ def test_plane_plane_plane_intersection():
     assert abs(ppp.x - 300.5) < 0.1
     assert abs(ppp.y - 565.5) < 0.1
     assert abs(ppp.z - 0.0) < 0.1
-
-    print(f"✓ Python plane_plane_plane: {ppp.x}, {ppp.y}, {ppp.z}")
 
 
 def test_line_plane_intersection():

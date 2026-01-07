@@ -70,7 +70,9 @@ class Color:
             A new Color with identical RGBA values but a different GUID.
 
         """
-        return copy.deepcopy(self)
+        result = copy.deepcopy(self)
+        result.guid = str(uuid.uuid4())
+        return result
 
     ###########################################################################################
     # No-copy Operators

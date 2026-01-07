@@ -100,9 +100,28 @@ def _record_check(passed: bool, label: str | None = None) -> None:
                 expr_chars.append(ch)
             args_str = "".join(expr_chars).strip()
             if args_str:
-                parts = [p.strip() for p in args_str.split(",")]
-                if len(parts) >= 2:
-                    code_line = f"{parts[0]} == {parts[1]}"
+                # Only split for check_equal(actual, expected) - use top-level comma split
+                # For MINI_CHECK(expr), just use the whole expression
+                if name == "check_equal(":
+                    # Split at top-level comma (not inside parentheses)
+                    parts = []
+                    current = []
+                    paren_depth = 0
+                    for ch in args_str:
+                        if ch == '(':
+                            paren_depth += 1
+                        elif ch == ')':
+                            paren_depth -= 1
+                        elif ch == ',' and paren_depth == 0:
+                            parts.append("".join(current).strip())
+                            current = []
+                            continue
+                        current.append(ch)
+                    parts.append("".join(current).strip())
+                    if len(parts) >= 2:
+                        code_line = f"{parts[0]} == {parts[1]}"
+                    else:
+                        code_line = args_str
                 else:
                     code_line = args_str
             break
@@ -117,7 +136,7 @@ def _record_check(passed: bool, label: str | None = None) -> None:
 
 
 def _extract_timed_code(source_lines: list[str]) -> str:
-    """Extract the timed body of a test function.
+    """Extract the timed body of a test function, excluding MINI_CHECK calls.
 
     Parameters
     ----------
@@ -127,11 +146,13 @@ def _extract_timed_code(source_lines: list[str]) -> str:
     Returns
     -------
     str
-        Concatenated body lines before the first ``check_equal`` call.
+        Concatenated body lines excluding ``check_equal`` and ``MINI_CHECK`` calls.
     """
 
     body_lines: list[str] = []
     in_body = False
+    in_check = False  # Track if we're inside a multi-line MINI_CHECK
+    paren_depth = 0   # Track parenthesis depth for multi-line calls
 
     for line in source_lines:
         stripped = line.lstrip()
@@ -142,9 +163,31 @@ def _extract_timed_code(source_lines: list[str]) -> str:
                 in_body = True
             continue
 
-        # Stop before the first assertion call (Python or C++-style naming)
+        # Check if this line starts a MINI_CHECK or check_equal call
         if "check_equal(" in stripped or "MINI_CHECK(" in stripped:
-            break
+            in_check = True
+            paren_depth = 0
+            # Count parentheses to track multi-line calls
+            for ch in line:
+                if ch == '(':
+                    paren_depth += 1
+                elif ch == ')':
+                    paren_depth -= 1
+            # If parentheses are balanced, we're done with this check
+            if paren_depth <= 0:
+                in_check = False
+            continue
+
+        # If we're in a multi-line check, skip and track parentheses
+        if in_check:
+            for ch in line:
+                if ch == '(':
+                    paren_depth += 1
+                elif ch == ')':
+                    paren_depth -= 1
+            if paren_depth <= 0:
+                in_check = False
+            continue
 
         body_lines.append(line)
 
