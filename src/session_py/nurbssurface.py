@@ -59,8 +59,6 @@ class NurbsSurface:
         self.m_order = [0, 0]
         self.m_cv_count = [0, 0]
         self.m_cv_stride = [0, 0]
-        self.m_knot_capacity = [0, 0]
-        self.m_cv_capacity = 0
 
         # Data arrays
         self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
@@ -98,9 +96,7 @@ class NurbsSurface:
         self.m_order = [0, 0]
         self.m_cv_count = [0, 0]
         self.m_cv_stride = [0, 0]
-        self.m_knot_capacity = [0, 0]
-        self.m_cv_capacity = 0
-        
+
         self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
     
@@ -205,14 +201,12 @@ class NurbsSurface:
         
         self.m_knot[0] = np.zeros(knot_count0, dtype=np.float64)
         self.m_knot[1] = np.zeros(knot_count1, dtype=np.float64)
-        self.m_knot_capacity = [knot_count0, knot_count1]
-        
+
         # Allocate CV array
         total_cvs = cv_count0 * cv_count1
         cv_array_size = total_cvs * cv_size_val
         self.m_cv = np.zeros(cv_array_size, dtype=np.float64)
-        self.m_cv_capacity = cv_array_size
-        
+
         # Initialize weights to 1 if rational
         if is_rational:
             for i in range(cv_count0):
@@ -444,15 +438,7 @@ class NurbsSurface:
         if dir < 0 or dir >= 2:
             return 0
         return self.m_cv_count[dir] - self.m_order[dir] + 1
-    
-    def cv_capacity(self) -> int:
-        """Get CV capacity."""
-        return self.m_cv_capacity
-    
-    def knot_capacity(self, dir: int) -> int:
-        """Get knot capacity in specified direction."""
-        return self.m_knot_capacity[dir] if 0 <= dir < 2 else 0
-    
+
     ###########################################################################
     # CONTROL VERTEX ACCESS
     ###########################################################################
@@ -1227,8 +1213,6 @@ class NurbsSurface:
         copy.m_order = self.m_order.copy()
         copy.m_cv_count = self.m_cv_count.copy()
         copy.m_cv_stride = self.m_cv_stride.copy()
-        copy.m_knot_capacity = self.m_knot_capacity.copy()
-        copy.m_cv_capacity = self.m_cv_capacity
         copy.m_knot = [self.m_knot[0].copy(), self.m_knot[1].copy()]
         copy.m_cv = self.m_cv.copy()
         copy.guid = self.guid
@@ -1315,11 +1299,10 @@ class NurbsSurface:
         # Swap orders and counts
         self.m_order[0], self.m_order[1] = self.m_order[1], self.m_order[0]
         self.m_cv_count[0], self.m_cv_count[1] = self.m_cv_count[1], self.m_cv_count[0]
-        
+
         # Swap knot vectors
         self.m_knot[0], self.m_knot[1] = self.m_knot[1], self.m_knot[0]
-        self.m_knot_capacity[0], self.m_knot_capacity[1] = self.m_knot_capacity[1], self.m_knot_capacity[0]
-        
+
         # Rebuild CV array with transposed indices
         cv_size_val = self.cv_size()
         new_cv = np.zeros(len(self.m_cv))
@@ -1395,10 +1378,9 @@ class NurbsSurface:
         self.m_is_rat = 1
         self.m_cv_stride[1] = new_cv_size
         self.m_cv_stride[0] = new_cv_size * self.m_cv_count[1]
-        self.m_cv_capacity = len(new_cv)
-        
+
         return True
-    
+
     def make_non_rational(self) -> bool:
         """Convert surface to non-rational (OpenNURBS implementation).
         
@@ -1494,10 +1476,9 @@ class NurbsSurface:
         self.m_dim = new_dim
         self.m_cv_stride[1] = new_cv_size
         self.m_cv_stride[0] = new_cv_size * self.m_cv_count[1]
-        self.m_cv_capacity = len(new_cv)
-        
+
         return True
-    
+
     ###########################################################################
     # GEOMETRIC OPERATIONS
     ###########################################################################
@@ -2099,10 +2080,9 @@ class NurbsSurface:
         self.m_is_rat = 0
         self.m_cv_stride[1] = new_cv_size
         self.m_cv_stride[0] = new_cv_size * self.m_cv_count[1]
-        self.m_cv_capacity = len(new_cv)
-        
+
         return True
-    
+
     def clamp_end(self, dir: int, end: int) -> bool:
         """Clamp knot vector end(s) (OpenNURBS implementation).
         

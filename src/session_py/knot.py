@@ -8,7 +8,19 @@ or called by NurbsCurve and NurbsSurface classes.
 """
 
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
+from enum import IntEnum
+import math
+
+
+class CurveKnotStyle(IntEnum):
+    """Knot spacing style for interpolated curves (matches Rhino's CurveKnotStyle)."""
+    Uniform = 0              # Parameter spacing = 1.0
+    Chord = 1                # Chord-length parameterization
+    ChordSquareRoot = 2      # Centripetal (sqrt chord) parameterization
+    UniformPeriodic = 3      # Periodic + uniform
+    ChordPeriodic = 4        # Periodic + chord
+    ChordSquareRootPeriodic = 5  # Periodic + centripetal
 
 
 def knot_count(order: int, cv_count: int) -> int:
@@ -767,15 +779,152 @@ def get_greville_abcissae(order: int, cv_count: int, knot: np.ndarray,
         return np.array([])
     
     d = order - 1  # degree
-    
+
     if periodic:
         count = cv_count - order + 1
     else:
         count = cv_count
-    
+
     g = np.zeros(count, dtype=np.float64)
-    
+
     for i in range(count):
         g[i] = sum(knot[i:i + d]) / d
-    
+
     return g
+
+
+def solve_tridiagonal(dim: int, n: int, lower: List[float], diag: List[float],
+                      upper: List[float], rhs: List[float]) -> Optional[List[float]]:
+    """Solve tridiagonal linear system using Thomas algorithm.
+
+    Parameters
+    ----------
+    dim : int
+        Dimension of each variable (e.g., 3 for 3D points).
+    n : int
+        Number of equations.
+    lower : list
+        Lower diagonal coefficients (length n, first element unused).
+    diag : list
+        Main diagonal coefficients (length n).
+    upper : list
+        Upper diagonal coefficients (length n, last element unused).
+    rhs : list
+        Right-hand side values (length n * dim).
+
+    Returns
+    -------
+    list or None
+        Solution vector (length n * dim), or None if singular.
+    """
+    if n < 1 or dim < 1:
+        return None
+
+    eps = 1e-14
+    c_star = [0.0] * n
+    d_star = [0.0] * (n * dim)
+    solution = [0.0] * (n * dim)
+
+    if abs(diag[0]) < eps:
+        return None
+
+    c_star[0] = upper[0] / diag[0]
+    for d in range(dim):
+        d_star[d] = rhs[d] / diag[0]
+
+    for i in range(1, n):
+        denom = diag[i] - lower[i] * c_star[i-1]
+        if abs(denom) < eps:
+            return None
+
+        c_star[i] = upper[i] / denom if i < n-1 else 0.0
+        for d in range(dim):
+            d_star[i * dim + d] = (rhs[i * dim + d] - lower[i] * d_star[(i-1) * dim + d]) / denom
+
+    for d in range(dim):
+        solution[(n-1) * dim + d] = d_star[(n-1) * dim + d]
+
+    for i in range(n - 2, -1, -1):
+        for d in range(dim):
+            solution[i * dim + d] = d_star[i * dim + d] - c_star[i] * solution[(i+1) * dim + d]
+
+    return solution
+
+
+def compute_parameters(points: np.ndarray, style: CurveKnotStyle) -> np.ndarray:
+    """Compute parameters for interpolation based on knot style.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        Input points, shape (n, dim).
+    style : CurveKnotStyle
+        Knot style (Uniform, Chord, or ChordSquareRoot).
+
+    Returns
+    -------
+    np.ndarray
+        Parameter values for each point.
+    """
+    n = len(points)
+    params = np.zeros(n)
+    if n < 2:
+        return params
+
+    base_style = int(style) % 3  # 0=Uniform, 1=Chord, 2=ChordSquareRoot
+
+    for i in range(1, n):
+        diff = points[i] - points[i-1]
+        dist = math.sqrt(np.dot(diff, diff))
+
+        if base_style == 0:  # Uniform
+            delta = 1.0
+        elif base_style == 1:  # Chord
+            delta = dist
+        else:  # ChordSquareRoot (centripetal)
+            delta = math.sqrt(dist)
+
+        params[i] = params[i-1] + delta
+
+    return params
+
+
+def build_interp_knots(params: np.ndarray, degree: int) -> np.ndarray:
+    """Build clamped knot vector from parameters for interpolation.
+
+    Parameters
+    ----------
+    params : np.ndarray
+        Parameter values for each input point.
+    degree : int
+        Curve degree.
+
+    Returns
+    -------
+    np.ndarray
+        Knot vector for interpolated curve.
+    """
+    n = len(params)
+    if n < 2 or degree < 1:
+        return np.array([])
+
+    order = degree + 1
+    cv_count = n + 2  # Natural end conditions add 2 CVs
+    kc = knot_count(order, cv_count)
+
+    knots = np.zeros(kc)
+    t_max = params[-1]
+
+    # Clamped start: first (order-1) knots = 0
+    for i in range(order - 1):
+        knots[i] = 0.0
+
+    # Interior knots from parameters (skip first and last)
+    for i in range(1, n - 1):
+        knots[order - 2 + i] = params[i]
+
+    # Clamped end: last (order-1) knots = t_max
+    for i in range(order - 1):
+        knots[kc - 1 - i] = t_max
+
+    return knots

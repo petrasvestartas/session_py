@@ -523,19 +523,11 @@ def test_advanced_accessors():
                 break
         first_knot_mult = count
 
-    # Test cv_capacity and knot_capacity
-    cv_cap = surf.cv_capacity()
-    knot_cap_u = surf.knot_capacity(0)
-    knot_cap_v = surf.knot_capacity(1)
-
     MINI_CHECK(surf is not None)
     MINI_CHECK(surf.is_rational())
     MINI_CHECK(pt[0] == x and pt[1] == y and pt[2] == z)
     MINI_CHECK(retrieved_w == w)
     MINI_CHECK(first_knot_mult > 0)
-    MINI_CHECK(cv_cap > 0)
-    MINI_CHECK(knot_cap_u > 0)
-    MINI_CHECK(knot_cap_v > 0)
 
 
 @MINI_TEST("NurbsSurface", "clamp_operations")

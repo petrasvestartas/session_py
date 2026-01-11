@@ -27,7 +27,7 @@ class Tolerance:
     SUPPORTED_UNITS = ["M", "MM"]
 
     # Default tolerance values (f32 only)
-    ABSOLUTE = 1e-9
+    ABSOLUTE = 1e-6
     RELATIVE = 1e-6
     ANGULAR = 1e-6
     APPROXIMATION = 1e-3
