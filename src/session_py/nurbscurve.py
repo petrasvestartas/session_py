@@ -50,21 +50,21 @@ class NurbsCurve:
         Control vertex data array (homogeneous if rational).
     """
     
-    def __init__(self, dimension: int = 3, is_rational: bool = False, 
+    def __init__(self, dimension: int = 3, is_rational: bool = False,
                  order: int = 4, cv_count: int = 0):
         self.guid = str(uuid.uuid4())
         self.name = "nurbscurve"
-        
-        # Core NURBS data
+
         self.m_dim = dimension
         self.m_is_rat = 1 if is_rational else 0
         self.m_order = order
         self.m_cv_count = cv_count
         self.m_cv_stride = (dimension + 1) if is_rational else dimension
-        
-        # Data arrays
+
         self.m_knot = np.array([], dtype=np.float64)
         self.m_cv = np.array([], dtype=np.float64)
+
+        self._rmf_cache = None
     
     #############################################################################
     # STATIC FACTORY METHODS
@@ -481,7 +481,7 @@ class NurbsCurve:
         """Set control point at index from Point"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return False
-        
+
         idx = cv_index * self.m_cv_stride
         if self.m_dim > 0:
             self.m_cv[idx] = point.x
@@ -489,8 +489,7 @@ class NurbsCurve:
             self.m_cv[idx + 1] = point.y
         if self.m_dim > 2:
             self.m_cv[idx + 2] = point.z
-        
-        # Keep weight unchanged if rational
+
         if self.m_is_rat:
             w = self.m_cv[idx + self.m_dim]
             if self.m_dim > 0:
@@ -499,7 +498,8 @@ class NurbsCurve:
                 self.m_cv[idx + 1] *= w
             if self.m_dim > 2:
                 self.m_cv[idx + 2] *= w
-        
+
+        self._invalidate_rmf_cache()
         return True
     
     def get_cv_4d(self, cv_index: int) -> Optional[Tuple[float, float, float, float]]:
@@ -519,7 +519,7 @@ class NurbsCurve:
         """Set control point from homogeneous coordinates"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return False
-        
+
         idx = cv_index * self.m_cv_stride
         if self.m_dim > 0:
             self.m_cv[idx] = x
@@ -529,7 +529,8 @@ class NurbsCurve:
             self.m_cv[idx + 2] = z
         if self.m_is_rat:
             self.m_cv[idx + self.m_dim] = w
-        
+
+        self._invalidate_rmf_cache()
         return True
     
     def weight(self, cv_index: int) -> float:
@@ -547,24 +548,23 @@ class NurbsCurve:
         """Set weight at control vertex index"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return False
-        
+
         if not self.m_is_rat:
-            # Convert to rational if setting non-1 weight
             if abs(weight - 1.0) > Tolerance.ZERO_TOLERANCE:
                 self.make_rational()
-        
+
         if self.m_is_rat:
             idx = cv_index * self.m_cv_stride
             old_w = self.m_cv[idx + self.m_dim]
-            
-            # Scale CVs by weight ratio
+
             if abs(old_w) > Tolerance.ZERO_TOLERANCE:
                 ratio = weight / old_w
                 for i in range(self.m_dim):
                     self.m_cv[idx + i] *= ratio
-            
+
             self.m_cv[idx + self.m_dim] = weight
-        
+
+        self._invalidate_rmf_cache()
         return True
     
     #############################################################################
@@ -582,6 +582,7 @@ class NurbsCurve:
         if knot_index < 0 or knot_index >= len(self.m_knot):
             return False
         self.m_knot[knot_index] = knot_value
+        self._invalidate_rmf_cache()
         return True
     
     def knot_multiplicity(self, knot_index: int) -> int:
@@ -647,16 +648,16 @@ class NurbsCurve:
             return False
         if t0 >= t1:
             return False
-        
+
         old_t0, old_t1 = self.domain()
         if abs(old_t1 - old_t0) < Tolerance.ZERO_TOLERANCE:
             return False
-        
-        # Linear remap of knots
+
         scale = (t1 - t0) / (old_t1 - old_t0)
         for i in range(len(self.m_knot)):
             self.m_knot[i] = t0 + (self.m_knot[i] - old_t0) * scale
-        
+
+        self._invalidate_rmf_cache()
         return True
     
     def get_span_vector(self) -> List[float]:
@@ -772,18 +773,245 @@ class NurbsCurve:
         """Evaluate tangent vector at parameter t"""
         if not self.is_valid():
             return Vector(0, 0, 0)
-        
-        # Use finite differences for simplicity
+
         eps = 1e-8
         p1 = self.point_at(t - eps)
         p2 = self.point_at(t + eps)
-        
+
         return Vector(
             (p2.x - p1.x) / (2 * eps),
             (p2.y - p1.y) / (2 * eps),
             (p2.z - p1.z) / (2 * eps)
         )
-    
+
+    def frame_at(self, t: float, normalized: bool = True) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
+        """Get Frenet frame at parameter t (tangent, normal, binormal)"""
+        if not self.is_valid():
+            return None
+
+        t0, t1 = self.domain()
+        param = t0 + t * (t1 - t0) if normalized else t
+        if normalized and (t < 0.0 or t > 1.0):
+            return None
+        if not normalized and (t < t0 or t > t1):
+            return None
+
+        origin = self.point_at(param)
+        d1 = self.tangent_at(param)
+        d1_mag = d1.magnitude()
+        if d1_mag < 1e-14:
+            return None
+
+        tangent = d1.normalized()
+
+        eps = (t1 - t0) * 1e-8
+        pa = self.point_at(max(param - eps, t0))
+        pb = self.point_at(min(param + eps, t1))
+        pc = self.point_at(param)
+
+        d2 = Vector(
+            (pb.x - 2*pc.x + pa.x) / (eps * eps),
+            (pb.y - 2*pc.y + pa.y) / (eps * eps),
+            (pb.z - 2*pc.z + pa.z) / (eps * eps)
+        )
+
+        d2_dot_t = d2.dot(tangent)
+        normal = Vector(d2.x - d2_dot_t * tangent.x, d2.y - d2_dot_t * tangent.y, d2.z - d2_dot_t * tangent.z)
+
+        if normal.magnitude() < 1e-14:
+            world_z = Vector(0, 0, 1)
+            normal = tangent.cross(world_z)
+            if normal.magnitude() < 1e-14:
+                world_y = Vector(0, 1, 0)
+                normal = tangent.cross(world_y)
+
+        normal = normal.normalized()
+        binormal = tangent.cross(normal).normalized()
+
+        return (origin, tangent, normal, binormal)
+
+    def _invalidate_rmf_cache(self):
+        self._rmf_cache = None
+
+    def _ensure_rmf_cache(self):
+        if self._rmf_cache is not None:
+            return
+
+        num_samples = max(20, self.span_count() * 4)
+        t0, t1 = self.domain()
+        dt = (t1 - t0) / (num_samples - 1)
+
+        params = []
+        quaternions = []
+        origins = []
+
+        for i in range(num_samples):
+            t = t0 + i * dt
+            params.append(t)
+
+            result = self._perpendicular_frame_at_internal(t, False)
+            if result:
+                o, r, s, tangent = result
+                origins.append(o)
+                quaternions.append(self._frame_to_quaternion(r, s, tangent))
+            else:
+                origins.append(Point(0, 0, 0))
+                quaternions.append([1.0, 0.0, 0.0, 0.0])
+
+        self._rmf_cache = {'params': params, 'quaternions': quaternions, 'origins': origins}
+
+    @staticmethod
+    def _frame_to_quaternion(r: Vector, s: Vector, t: Vector) -> List[float]:
+        trace = r.x + s.y + t.z
+
+        if trace > 0:
+            big_s = math.sqrt(trace + 1.0) * 2
+            return [0.25 * big_s, (s.z - t.y) / big_s, (t.x - r.z) / big_s, (r.y - s.x) / big_s]
+        elif r.x > s.y and r.x > t.z:
+            big_s = math.sqrt(1.0 + r.x - s.y - t.z) * 2
+            return [(s.z - t.y) / big_s, 0.25 * big_s, (s.x + r.y) / big_s, (t.x + r.z) / big_s]
+        elif s.y > t.z:
+            big_s = math.sqrt(1.0 + s.y - r.x - t.z) * 2
+            return [(t.x - r.z) / big_s, (s.x + r.y) / big_s, 0.25 * big_s, (t.y + s.z) / big_s]
+        else:
+            big_s = math.sqrt(1.0 + t.z - r.x - s.y) * 2
+            return [(r.y - s.x) / big_s, (t.x + r.z) / big_s, (t.y + s.z) / big_s, 0.25 * big_s]
+
+    @staticmethod
+    def _quaternion_to_frame(q: List[float]) -> Tuple[Vector, Vector, Vector]:
+        w, x, y, z = q
+        r = Vector(1 - 2*(y*y + z*z), 2*(x*y + w*z), 2*(x*z - w*y))
+        s = Vector(2*(x*y - w*z), 1 - 2*(x*x + z*z), 2*(y*z + w*x))
+        t = Vector(2*(x*z + w*y), 2*(y*z - w*x), 1 - 2*(x*x + y*y))
+        return (r, s, t)
+
+    @staticmethod
+    def _slerp(q0: List[float], q1: List[float], u: float) -> List[float]:
+        dot = q0[0]*q1[0] + q0[1]*q1[1] + q0[2]*q1[2] + q0[3]*q1[3]
+
+        q1_adj = q1
+        if dot < 0:
+            dot = -dot
+            q1_adj = [-q1[0], -q1[1], -q1[2], -q1[3]]
+
+        if dot > 0.9995:
+            result = [
+                q0[0] + u * (q1_adj[0] - q0[0]),
+                q0[1] + u * (q1_adj[1] - q0[1]),
+                q0[2] + u * (q1_adj[2] - q0[2]),
+                q0[3] + u * (q1_adj[3] - q0[3])
+            ]
+            norm = math.sqrt(sum(r*r for r in result))
+            return [r / norm for r in result]
+
+        theta = math.acos(dot)
+        sin_theta = math.sin(theta)
+        w0 = math.sin((1 - u) * theta) / sin_theta
+        w1 = math.sin(u * theta) / sin_theta
+
+        return [
+            w0*q0[0] + w1*q1_adj[0],
+            w0*q0[1] + w1*q1_adj[1],
+            w0*q0[2] + w1*q1_adj[2],
+            w0*q0[3] + w1*q1_adj[3]
+        ]
+
+    def _perpendicular_frame_at_internal(self, t: float, normalized: bool) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
+        """Internal: compute RMF using Double Reflection method (O(n))"""
+        if not self.is_valid():
+            return None
+
+        t0, t1 = self.domain()
+        param = t0 + t * (t1 - t0) if normalized else t
+        if normalized and (t < 0.0 or t > 1.0):
+            return None
+        if not normalized and (t < t0 or t > t1):
+            return None
+
+        origin = self.point_at(param)
+
+        tangent0 = self.tangent_at(t0)
+        if tangent0.magnitude() < 1e-14:
+            return None
+        tangent0 = tangent0.normalized()
+
+        world_z = Vector(0, 0, 1)
+        r0 = world_z.cross(tangent0)
+        if r0.magnitude() < 1e-14:
+            world_y = Vector(0, 1, 0)
+            r0 = world_y.cross(tangent0)
+        r0 = r0.normalized()
+
+        if abs(param - t0) < 1e-14:
+            s0 = tangent0.cross(r0).normalized()
+            return (origin, r0, s0, tangent0)
+
+        num_steps = max(10, int((param - t0) / (t1 - t0) * 100))
+        dt = (param - t0) / num_steps
+
+        ri = r0
+        ti = t0
+        xi = self.point_at(ti)
+        tangent_i = tangent0
+
+        for _ in range(num_steps):
+            if ti >= param - 1e-14:
+                break
+            ti_next = min(ti + dt, param)
+            xi_next = self.point_at(ti_next)
+            tangent_next = self.tangent_at(ti_next).normalized()
+
+            v1 = Vector(xi_next.x - xi.x, xi_next.y - xi.y, xi_next.z - xi.z)
+            c1 = v1.dot(v1)
+            if c1 < 1e-28:
+                ti, xi, tangent_i = ti_next, xi_next, tangent_next
+                continue
+
+            ri_dot_v1 = ri.dot(v1)
+            r_l = Vector(
+                ri.x - 2.0 * ri_dot_v1 / c1 * v1.x,
+                ri.y - 2.0 * ri_dot_v1 / c1 * v1.y,
+                ri.z - 2.0 * ri_dot_v1 / c1 * v1.z
+            )
+
+            ti_dot_v1 = tangent_i.dot(v1)
+            t_l = Vector(
+                tangent_i.x - 2.0 * ti_dot_v1 / c1 * v1.x,
+                tangent_i.y - 2.0 * ti_dot_v1 / c1 * v1.y,
+                tangent_i.z - 2.0 * ti_dot_v1 / c1 * v1.z
+            )
+
+            v2 = Vector(tangent_next.x - t_l.x, tangent_next.y - t_l.y, tangent_next.z - t_l.z)
+            c2 = v2.dot(v2)
+            if c2 < 1e-28:
+                ri = r_l
+            else:
+                rl_dot_v2 = r_l.dot(v2)
+                ri = Vector(
+                    r_l.x - 2.0 * rl_dot_v2 / c2 * v2.x,
+                    r_l.y - 2.0 * rl_dot_v2 / c2 * v2.y,
+                    r_l.z - 2.0 * rl_dot_v2 / c2 * v2.z
+                )
+
+            ri = ri.normalized()
+            ti, xi, tangent_i = ti_next, xi_next, tangent_next
+
+        tangent = self.tangent_at(param).normalized()
+        ri_dot_t = ri.dot(tangent)
+        ri = Vector(ri.x - ri_dot_t * tangent.x, ri.y - ri_dot_t * tangent.y, ri.z - ri_dot_t * tangent.z).normalized()
+        s = tangent.cross(ri).normalized()
+
+        return (origin, ri, s, tangent)
+
+    def perpendicular_frame_at(self, t: float, normalized: bool = True) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
+        """Get rotation minimizing perpendicular frame at parameter t
+        Uses the exact Double Reflection algorithm for accuracy"""
+        return self._perpendicular_frame_at_internal(t, normalized)
+
+    def get_perpendicular_frames(self, params: List[float]) -> List[Tuple[Point, Vector, Vector, Vector]]:
+        """Get multiple perpendicular frames along the curve"""
+        return [f for t in params if (f := self.perpendicular_frame_at(t, True)) is not None]
+
     def _find_span(self, t: float) -> int:
         """Find knot span index for parameter t using binary search.
         
@@ -947,14 +1175,12 @@ class NurbsCurve:
         """Reverse curve direction"""
         if not self.is_valid():
             return False
-        
-        # Reverse knots
+
         t0, t1 = self.domain()
         for i in range(len(self.m_knot)):
             self.m_knot[i] = t0 + t1 - self.m_knot[i]
         self.m_knot = np.flip(self.m_knot).copy()
-        
-        # Reverse CVs
+
         cvs = self.cv_size()
         for i in range(self.m_cv_count // 2):
             j = self.m_cv_count - 1 - i
@@ -962,7 +1188,8 @@ class NurbsCurve:
                 temp = self.m_cv[i * cvs + k]
                 self.m_cv[i * cvs + k] = self.m_cv[j * cvs + k]
                 self.m_cv[j * cvs + k] = temp
-        
+
+        self._invalidate_rmf_cache()
         return True
     
     #############################################################################
