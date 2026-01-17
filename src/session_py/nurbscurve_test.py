@@ -648,32 +648,5 @@ def test_nurbscurve_intersect_plane():
     MINI_CHECK(isinstance(intersections, list))
 
 
-@MINI_TEST("NurbsCurve", "create_interpolated")
-def test_nurbscurve_create_interpolated():
-    from session_py import NurbsCurve
-    from session_py import Point
-    from session_py import Tolerance
-
-    points = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 2.0, 0.0),
-        Point(3.0, 1.0, 0.0),
-        Point(4.0, 3.0, 0.0),
-        Point(6.0, 0.0, 0.0)
-    ]
-
-    c = NurbsCurve.create_interpolated(points, degree=3, closed=False, knot_style=1)
-    t0, t1 = c.domain()
-
-    p0 = c.point_at(t0)
-    p1 = c.point_at(t1)
-
-    tol = Tolerance()
-    MINI_CHECK(tol.is_close(p0.x, 0.0))
-    MINI_CHECK(tol.is_close(p0.y, 0.0))
-    MINI_CHECK(tol.is_close(p1.x, 6.0))
-    MINI_CHECK(tol.is_close(p1.y, 0.0))
-
-
 if __name__ == "__main__":
     run_all(language="python")

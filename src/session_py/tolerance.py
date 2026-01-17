@@ -27,7 +27,7 @@ class Tolerance:
     SUPPORTED_UNITS = ["M", "MM"]
 
     # Default tolerance values (f32 only)
-    ABSOLUTE = 1e-6
+    ABSOLUTE = 1e-9
     RELATIVE = 1e-6
     ANGULAR = 1e-6
     APPROXIMATION = 1e-3
@@ -234,6 +234,13 @@ class Tolerance:
     def is_angles_close(self, a, b):
         """Check if two angles are close enough to be considered equal."""
         return abs(a - b) <= self.angular
+
+    def is_point_close(self, a, b):
+        """Check if two 3D points are equal within absolute tolerance."""
+        dx = b.x - a.x
+        dy = b.y - a.y
+        dz = b.z - a.z
+        return (dx * dx + dy * dy + dz * dz) <= self.absolute * self.absolute
 
     def key(self, xyz, precision=None, sanitize=True):
         """Compute the geometric key of a point."""
