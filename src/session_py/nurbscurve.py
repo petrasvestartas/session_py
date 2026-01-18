@@ -53,7 +53,7 @@ class NurbsCurve:
     def __init__(self, dimension: int = 3, is_rational: bool = False,
                  order: int = 4, cv_count: int = 0):
         self.guid = str(uuid.uuid4())
-        self.name = "nurbscurve"
+        self.name = "my_nurbscurve"
 
         self.m_dim = dimension
         self.m_is_rat = 1 if is_rational else 0
@@ -261,7 +261,14 @@ class NurbsCurve:
                 self.m_cv[idx + 1] if self.m_dim > 1 else 0,
                 self.m_cv[idx + 2] if self.m_dim > 2 else 0
             )
-    
+
+    def cv(self, cv_index: int) -> Optional[List[float]]:
+        """Get raw CV data at index (like C++ double* cv(int))"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return None
+        idx = cv_index * self.m_cv_stride
+        return list(self.m_cv[idx:idx + self.m_cv_stride])
+
     def set_cv(self, cv_index: int, point: Point) -> bool:
         """Set control point at index from Point"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
@@ -305,6 +312,10 @@ class NurbsCurve:
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return False
 
+        # Make rational if w != 1.0 (matches C++ implementation)
+        if not self.m_is_rat and w != 1.0:
+            self.make_rational()
+
         idx = cv_index * self.m_cv_stride
         if self.m_dim > 0:
             self.m_cv[idx] = x
@@ -340,13 +351,6 @@ class NurbsCurve:
 
         if self.m_is_rat:
             idx = cv_index * self.m_cv_stride
-            old_w = self.m_cv[idx + self.m_dim]
-
-            if abs(old_w) > Tolerance.ZERO_TOLERANCE:
-                ratio = weight / old_w
-                for i in range(self.m_dim):
-                    self.m_cv[idx + i] *= ratio
-
             self.m_cv[idx + self.m_dim] = weight
 
         self._invalidate_rmf_cache()
@@ -426,7 +430,22 @@ class NurbsCurve:
         if not self.is_valid():
             return (0.0, 0.0)
         return (self.m_knot[self.m_order - 2], self.m_knot[self.m_cv_count - 1])
-    
+
+    def domain_start(self) -> float:
+        """Get start of domain"""
+        t0, _ = self.domain()
+        return t0
+
+    def domain_end(self) -> float:
+        """Get end of domain"""
+        _, t1 = self.domain()
+        return t1
+
+    def domain_middle(self) -> float:
+        """Get middle of domain"""
+        t0, t1 = self.domain()
+        return (t0 + t1) * 0.5
+
     def set_domain(self, t0: float, t1: float) -> bool:
         """Set curve domain"""
         if not self.is_valid():
@@ -575,45 +594,80 @@ class NurbsCurve:
             return None
 
         t0, t1 = self.domain()
-        param = t0 + t * (t1 - t0) if normalized else t
-        if normalized and (t < 0.0 or t > 1.0):
-            return None
-        if not normalized and (t < t0 or t > t1):
-            return None
+        if normalized:
+            if t < 0.0 or t > 1.0:
+                return None
+            param = t0 + t * (t1 - t0)
+        else:
+            if t < t0 or t > t1:
+                return None
+            param = t
 
+        h = (t1 - t0) * 1e-5
         origin = self.point_at(param)
-        d1 = self.tangent_at(param)
+
+        # Handle endpoints with one-sided differences
+        if param <= t0 + h:
+            p0 = self.point_at(t0)
+            pp = self.point_at(t0 + h)
+            pp2 = self.point_at(t0 + 2 * h)
+            d1 = Vector(pp[0] - p0[0], pp[1] - p0[1], pp[2] - p0[2])
+            d2 = Vector(
+                (pp2[0] - 2 * pp[0] + p0[0]) / (h * h),
+                (pp2[1] - 2 * pp[1] + p0[1]) / (h * h),
+                (pp2[2] - 2 * pp[2] + p0[2]) / (h * h)
+            )
+        elif param >= t1 - h:
+            pm = self.point_at(t1 - h)
+            p0 = self.point_at(t1)
+            pm2 = self.point_at(t1 - 2 * h)
+            d1 = Vector(p0[0] - pm[0], p0[1] - pm[1], p0[2] - pm[2])
+            d2 = Vector(
+                (p0[0] - 2 * pm[0] + pm2[0]) / (h * h),
+                (p0[1] - 2 * pm[1] + pm2[1]) / (h * h),
+                (p0[2] - 2 * pm[2] + pm2[2]) / (h * h)
+            )
+        else:
+            # Central difference for interior points
+            pm = self.point_at(param - h)
+            p0 = self.point_at(param)
+            pp = self.point_at(param + h)
+            d1 = Vector(
+                (pp[0] - pm[0]) / (2 * h),
+                (pp[1] - pm[1]) / (2 * h),
+                (pp[2] - pm[2]) / (2 * h)
+            )
+            d2 = Vector(
+                (pp[0] - 2 * p0[0] + pm[0]) / (h * h),
+                (pp[1] - 2 * p0[1] + pm[1]) / (h * h),
+                (pp[2] - 2 * p0[2] + pm[2]) / (h * h)
+            )
+
         d1_mag = d1.magnitude()
         if d1_mag < 1e-14:
             return None
 
-        tangent = d1.normalized()
+        T = d1.normalized()
 
-        eps = (t1 - t0) * 1e-8
-        pa = self.point_at(max(param - eps, t0))
-        pb = self.point_at(min(param + eps, t1))
-        pc = self.point_at(param)
+        d2_dot_T = d2.dot(T)
+        N = Vector(d2[0] - d2_dot_T * T[0], d2[1] - d2_dot_T * T[1], d2[2] - d2_dot_T * T[2])
+        n_mag = N.magnitude()
 
-        d2 = Vector(
-            (pb.x - 2*pc.x + pa.x) / (eps * eps),
-            (pb.y - 2*pc.y + pa.y) / (eps * eps),
-            (pb.z - 2*pc.z + pa.z) / (eps * eps)
-        )
-
-        d2_dot_t = d2.dot(tangent)
-        normal = Vector(d2.x - d2_dot_t * tangent.x, d2.y - d2_dot_t * tangent.y, d2.z - d2_dot_t * tangent.z)
-
-        if normal.magnitude() < 1e-14:
+        if n_mag < 1e-14:
             world_z = Vector(0, 0, 1)
-            normal = tangent.cross(world_z)
-            if normal.magnitude() < 1e-14:
+            N = T.cross(world_z)
+            n_mag = N.magnitude()
+            if n_mag < 1e-14:
                 world_y = Vector(0, 1, 0)
-                normal = tangent.cross(world_y)
+                N = T.cross(world_y)
+                n_mag = N.magnitude()
 
-        normal = normal.normalized()
-        binormal = tangent.cross(normal).normalized()
+        if n_mag > 1e-14:
+            N = N.normalized()
 
-        return (origin, tangent, normal, binormal)
+        B = T.cross(N).normalized()
+
+        return (origin, T, N, B)
 
     def _invalidate_rmf_cache(self):
         self._rmf_cache = None
@@ -852,7 +906,109 @@ class NurbsCurve:
             N[j] = saved
         
         return N
-    
+
+    def _basis_functions_derivatives(self, span: int, t: float, deriv_order: int) -> np.ndarray:
+        """Compute basis function derivatives at parameter t.
+
+        Algorithm A2.3 from "The NURBS Book" (Piegl & Tiller).
+
+        Parameters
+        ----------
+        span : int
+            Knot span index from _find_span().
+        t : float
+            Parameter value.
+        deriv_order : int
+            Maximum derivative order.
+
+        Returns
+        -------
+        np.ndarray
+            2D array [deriv_order+1, m_order] of basis function derivatives.
+        """
+        p = self.degree()
+        n_der = min(deriv_order, p)
+
+        ders = np.zeros((n_der + 1, p + 1))
+        left = np.zeros(p + 1)
+        right = np.zeros(p + 1)
+        ndu = np.zeros((p + 1, p + 1))
+
+        # Offset knot pointer like OpenNURBS
+        offset = self.m_order - 2 + span
+
+        ndu[0, 0] = 1.0
+        for j in range(1, p + 1):
+            left[j] = t - self.m_knot[offset + 1 - j]
+            right[j] = self.m_knot[offset + j] - t
+            saved = 0.0
+            for r in range(j):
+                denom = right[r + 1] + left[j - r]
+                if abs(denom) < 1e-14:
+                    temp = 0.0
+                else:
+                    temp = ndu[r, j - 1] / denom
+                ndu[r, j] = saved + right[r + 1] * temp
+                saved = left[j - r] * temp
+            ndu[j, j] = saved
+
+        # Load basis functions
+        for j in range(p + 1):
+            ders[0, j] = ndu[j, p]
+
+        # Compute derivatives
+        a = np.zeros((2, p + 1))
+        for r in range(p + 1):
+            s1 = 0
+            s2 = 1
+            a[0, 0] = 1.0
+
+            for k in range(1, n_der + 1):
+                d = 0.0
+                rk = r - k
+                pk = p - k
+
+                if r >= k:
+                    denom = right[rk + 1] + left[k]
+                    if abs(denom) > 1e-14:
+                        a[s2, 0] = a[s1, 0] / denom
+                        d = a[s2, 0] * ndu[rk, pk]
+                    else:
+                        a[s2, 0] = 0.0
+                else:
+                    a[s2, 0] = 0.0
+
+                j1 = 1 if rk >= -1 else -rk
+                j2 = k - 1 if r - 1 <= pk else p - r
+
+                for j in range(j1, j2 + 1):
+                    denom = right[rk + j + 1] + left[k - j]
+                    if abs(denom) > 1e-14:
+                        a[s2, j] = (a[s1, j] - a[s1, j - 1]) / denom
+                        d += a[s2, j] * ndu[rk + j, pk]
+                    else:
+                        a[s2, j] = 0.0
+
+                if r <= pk:
+                    denom = right[r + 1] + left[pk - r]
+                    if abs(denom) > 1e-14:
+                        a[s2, k] = -a[s1, k - 1] / denom
+                        d += a[s2, k] * ndu[r, pk]
+                    else:
+                        a[s2, k] = 0.0
+
+                ders[k, r] = d
+                s1, s2 = s2, s1
+
+        # Multiply derivatives by factorial terms
+        factorial = 1.0
+        for k in range(1, n_der + 1):
+            factorial *= k
+            for j in range(p + 1):
+                ders[k, j] *= factorial
+
+        return ders
+
     #############################################################################
     # GEOMETRIC QUERIES
     #############################################################################
@@ -1367,15 +1523,15 @@ class NurbsCurve:
     #############################################################################
     
     def divide_by_count(self, count: int, include_endpoints: bool = True) -> Tuple[List[Point], List[float]]:
-        """Divide curve into uniform number of points.
-        
+        """Divide curve into uniform arc-length segments.
+
         Parameters
         ----------
         count : int
             Number of points to generate (must be >= 2).
         include_endpoints : bool, optional
             If True, includes curve endpoints in the result. Defaults to True.
-            
+
         Returns
         -------
         tuple of (list of Point, list of float)
@@ -1383,22 +1539,117 @@ class NurbsCurve:
         """
         points = []
         params = []
-        
+
         if not self.is_valid() or count < 2:
             return points, params
-        
+
         t0, t1 = self.domain()
-        dt = (t1 - t0) / (count - 1 if include_endpoints else count + 1)
-        
+        dom_len = t1 - t0
+        h = dom_len * 1e-8
+
+        # Gauss-Legendre 5-point nodes and weights for [-1, 1]
+        GL_NODES = [-0.9061798459386640, -0.5384693101056831, 0.0, 0.5384693101056831, 0.9061798459386640]
+        GL_WEIGHTS = [0.2369268850561891, 0.4786286704993665, 0.5688888888888889, 0.4786286704993665, 0.2369268850561891]
+
+        def derivative_at(t):
+            if t <= t0 + h:
+                p1 = self.point_at(t0)
+                p2 = self.point_at(t0 + h)
+                dt = h
+            elif t >= t1 - h:
+                p1 = self.point_at(t1 - h)
+                p2 = self.point_at(t1)
+                dt = h
+            else:
+                p1 = self.point_at(t - h)
+                p2 = self.point_at(t + h)
+                dt = 2.0 * h
+            return Vector((p2[0] - p1[0]) / dt, (p2[1] - p1[1]) / dt, (p2[2] - p1[2]) / dt)
+
+        def arc_length_gauss(ta, tb):
+            mid = (ta + tb) * 0.5
+            half = (tb - ta) * 0.5
+            total = 0.0
+            for i in range(5):
+                t = mid + half * GL_NODES[i]
+                total += GL_WEIGHTS[i] * derivative_at(t).magnitude()
+            return half * total
+
+        # Build arc-length table with high resolution
+        n_samples = max(1000, count * 100)
+        dt = (t1 - t0) / n_samples
+
+        t_vals = [t0 + i * dt for i in range(n_samples + 1)]
+        s_vals = [0.0]
+
+        for i in range(1, n_samples + 1):
+            s_vals.append(s_vals[i - 1] + arc_length_gauss(t_vals[i - 1], t_vals[i]))
+
+        total_len = s_vals[n_samples]
+        n_segs = (count - 1) if include_endpoints else (count + 1)
+        seg_len = total_len / n_segs
+
+        def find_t_at_s(s_target):
+            if s_target <= 0.0:
+                return t0
+            if s_target >= total_len:
+                return t1
+
+            # Binary search for bracket
+            lo, hi = 0, n_samples
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                if s_vals[mid] < s_target:
+                    lo = mid
+                else:
+                    hi = mid
+
+            # Linear interpolation for initial guess
+            frac = (s_target - s_vals[lo]) / (s_vals[hi] - s_vals[lo])
+            t = t_vals[lo] + frac * (t_vals[hi] - t_vals[lo])
+
+            # Newton-Raphson refinement
+            t_lo, t_hi = t_vals[lo], t_vals[hi]
+            for _ in range(20):
+                s_cur = s_vals[lo] + arc_length_gauss(t_vals[lo], t)
+                error = s_cur - s_target
+
+                if abs(error) < 1e-12:
+                    break
+
+                speed = derivative_at(t).magnitude()
+                if speed < 1e-14:
+                    if error > 0:
+                        t_hi = t
+                        t = (t_lo + t_hi) * 0.5
+                    else:
+                        t_lo = t
+                        t = (t_lo + t_hi) * 0.5
+                    continue
+
+                t_new = t - error / speed
+                if t_new <= t_lo or t_new >= t_hi:
+                    if error > 0:
+                        t_hi = t
+                        t = (t_lo + t_hi) * 0.5
+                    else:
+                        t_lo = t
+                        t = (t_lo + t_hi) * 0.5
+                else:
+                    t = t_new
+
+            return t
+
         for i in range(count):
             if include_endpoints:
-                t = t0 + i * dt
+                s_target = seg_len * i
             else:
-                t = t0 + (i + 1) * dt
-            
+                s_target = seg_len * (i + 1)
+
+            t = find_t_at_s(s_target)
             points.append(self.point_at(t))
             params.append(t)
-        
+
         return points, params
     
     def get_bounding_box(self) -> Optional[BoundingBox]:
@@ -1812,56 +2063,135 @@ class NurbsCurve:
         return True
     
     def divide_by_length(self, segment_length: float) -> Tuple[List[Point], List[float]]:
-        """Divide curve by approximate arc length.
-        
+        """Divide curve by arc length using Gauss-Legendre quadrature.
+
         Parameters
         ----------
         segment_length : float
             Target length between points.
-            
+
         Returns
         -------
         tuple of (list of Point, list of float)
-            Points and parameters approximately spaced by segment_length.
+            Points and parameters spaced by segment_length.
         """
         points = []
         params = []
-        
+
         if not self.is_valid() or segment_length <= 0.0:
             return points, params
-        
-        curve_len = self.length()
-        approx_count = int(np.ceil(curve_len / segment_length)) + 1
-        
+
         t0, t1 = self.domain()
-        
-        points.append(self.point_at(t0))
-        params.append(t0)
-        
-        accumulated_length = 0.0
-        p_current = self.point_at(t0)
-        
-        num_samples = max(100, approx_count * 10)
-        dt = (t1 - t0) / num_samples
-        
-        for i in range(1, num_samples + 1):
-            t_next = t0 + i * dt
-            p_next = self.point_at(t_next)
-            seg_len = p_current.distance(p_next)
-            
-            accumulated_length += seg_len
-            
-            if accumulated_length >= segment_length:
-                points.append(p_next)
-                params.append(t_next)
-                accumulated_length = 0.0
-            
-            p_current = p_next
-        
-        if points[-1].distance(self.point_at(t1)) > segment_length * 0.1:
-            points.append(self.point_at(t1))
-            params.append(t1)
-        
+        dom_len = t1 - t0
+        h = dom_len * 1e-8
+
+        # Compute derivative (un-normalized) at parameter t
+        def derivative_at(t: float) -> Vector:
+            if t <= t0 + h:
+                p1 = self.point_at(t0)
+                p2 = self.point_at(t0 + h)
+                dt = h
+            elif t >= t1 - h:
+                p1 = self.point_at(t1 - h)
+                p2 = self.point_at(t1)
+                dt = h
+            else:
+                p1 = self.point_at(t - h)
+                p2 = self.point_at(t + h)
+                dt = 2.0 * h
+            return Vector((p2.x - p1.x) / dt, (p2.y - p1.y) / dt, (p2.z - p1.z) / dt)
+
+        # 5-point Gauss-Legendre nodes and weights for [-1, 1]
+        GL_NODES = [-0.9061798459386640, -0.5384693101056831, 0.0, 0.5384693101056831, 0.9061798459386640]
+        GL_WEIGHTS = [0.2369268850561891, 0.4786286704993665, 0.5688888888888889, 0.4786286704993665, 0.2369268850561891]
+
+        # Arc length via Gauss-Legendre quadrature
+        def arc_length_gauss(ta: float, tb: float) -> float:
+            mid = (ta + tb) * 0.5
+            half = (tb - ta) * 0.5
+            total = 0.0
+            for i in range(5):
+                t = mid + half * GL_NODES[i]
+                total += GL_WEIGHTS[i] * derivative_at(t).magnitude()
+            return half * total
+
+        # Build arc-length table with high resolution
+        curve_len = self.length()
+        n_samples = max(1000, int(curve_len / segment_length) * 100)
+        dt = (t1 - t0) / n_samples
+
+        t_vals = [0.0] * (n_samples + 1)
+        s_vals = [0.0] * (n_samples + 1)
+
+        t_vals[0] = t0
+        s_vals[0] = 0.0
+
+        for i in range(1, n_samples + 1):
+            t_vals[i] = t0 + i * dt
+            s_vals[i] = s_vals[i-1] + arc_length_gauss(t_vals[i-1], t_vals[i])
+
+        total_len = s_vals[n_samples]
+
+        # Find parameter at target arc length with Newton-Raphson refinement
+        def find_t_at_s(s_target: float) -> float:
+            if s_target <= 0.0:
+                return t0
+            if s_target >= total_len:
+                return t1
+
+            # Binary search for bracket
+            lo, hi = 0, n_samples
+            while hi - lo > 1:
+                mid = (lo + hi) // 2
+                if s_vals[mid] < s_target:
+                    lo = mid
+                else:
+                    hi = mid
+
+            # Initial guess: linear interpolation
+            frac = (s_target - s_vals[lo]) / (s_vals[hi] - s_vals[lo])
+            t = t_vals[lo] + frac * (t_vals[hi] - t_vals[lo])
+
+            # Newton-Raphson refinement
+            t_lo, t_hi = t_vals[lo], t_vals[hi]
+            for _ in range(20):
+                s_cur = s_vals[lo] + arc_length_gauss(t_vals[lo], t)
+                error = s_cur - s_target
+
+                if abs(error) < 1e-12:
+                    break
+
+                speed = derivative_at(t).magnitude()
+                if speed < 1e-14:
+                    if error > 0:
+                        t_hi = t
+                        t = (t_lo + t_hi) * 0.5
+                    else:
+                        t_lo = t
+                        t = (t_lo + t_hi) * 0.5
+                    continue
+
+                t_new = t - error / speed
+                if t_new <= t_lo or t_new >= t_hi:
+                    if error > 0:
+                        t_hi = t
+                        t = (t_lo + t_hi) * 0.5
+                    else:
+                        t_lo = t
+                        t = (t_lo + t_hi) * 0.5
+                else:
+                    t = t_new
+
+            return t
+
+        # Add points at each segment_length interval
+        s = 0.0
+        while s <= total_len + 1e-10:
+            t = find_t_at_s(s)
+            points.append(self.point_at(t))
+            params.append(t)
+            s += segment_length
+
         return points, params
     
     def split(self, t: float) -> Tuple[Optional['NurbsCurve'], Optional['NurbsCurve']]:
@@ -2095,12 +2425,12 @@ class NurbsCurve:
     
     def superfluous_knot(self, end: int) -> float:
         """Get superfluous knot value at end.
-        
+
         Parameters
         ----------
         end : int
             0 for start, 1 for end.
-            
+
         Returns
         -------
         float
@@ -2108,17 +2438,14 @@ class NurbsCurve:
         """
         if not self.is_valid():
             return 0.0
-        
+
+        kc = self.knot_count()
         if end == 0:
-            # Start: return knot[order-2] - (knot[order-1] - knot[order-2])
-            if self.m_order >= 2:
-                return 2.0 * self.m_knot[self.m_order - 2] - self.m_knot[self.m_order - 1]
+            # First superfluous knot: reflect first knot across knot[order-2]
+            return 2.0 * self.m_knot[0] - self.m_knot[self.m_order - 2]
         else:
-            # End: return knot[cv_count-1] + (knot[cv_count-1] - knot[cv_count-2])
-            if self.m_cv_count >= 2:
-                return 2.0 * self.m_knot[self.m_cv_count - 1] - self.m_knot[self.m_cv_count - 2]
-        
-        return 0.0
+            # Last superfluous knot: reflect last knot across knot[cv_count-order]
+            return 2.0 * self.m_knot[kc - 1] - self.m_knot[self.m_cv_count - self.m_order]
     
     def is_in_plane(self, test_plane: Plane, tolerance: float = None) -> bool:
         """Check if curve lies in a specific plane.
@@ -2337,47 +2664,96 @@ class NurbsCurve:
     
     def evaluate(self, t: float, derivative_count: int = 0) -> List[Vector]:
         """Evaluate point and derivatives on curve at parameter t.
-        
+
         Parameters
         ----------
         t : float
             Parameter value.
         derivative_count : int, optional
             Number of derivatives to compute. Defaults to 0 (point only).
-            
+
         Returns
         -------
         list of Vector
             [point, 1st_derivative, 2nd_derivative, ...].
         """
+        result = []
+
         if not self.is_valid():
-            return []
-        
-        results = []
-        
-        # Point (0th derivative)
-        pt = self.point_at(t)
-        results.append(Vector(pt.x, pt.y, pt.z))
-        
-        # First derivative (tangent)
-        if derivative_count >= 1:
-            tan = self.tangent_at(t)
-            results.append(tan)
-        
-        # Second derivative (curvature direction)
-        if derivative_count >= 2:
-            # Numerical approximation
-            eps = 1e-6
-            tan1 = self.tangent_at(t - eps)
-            tan2 = self.tangent_at(t + eps)
-            d2 = Vector(
-                (tan2.x - tan1.x) / (2 * eps),
-                (tan2.y - tan1.y) / (2 * eps),
-                (tan2.z - tan1.z) / (2 * eps)
-            )
-            results.append(d2)
-        
-        return results
+            result.append(Vector(0, 0, 0))
+            return result
+
+        # Clamp derivative order to degree
+        max_derivs = min(derivative_count, self.degree())
+
+        span = self._find_span(t)
+        ders = self._basis_functions_derivatives(span, t, max_derivs)
+
+        # Evaluate non-rational or homogeneous coordinates and derivatives
+        p = self.degree()
+        Aders = [[0.0, 0.0, 0.0, 0.0] for _ in range(max_derivs + 1)]
+
+        for k in range(max_derivs + 1):
+            for j in range(p + 1):
+                cv_idx = span + j
+                if cv_idx < 0 or cv_idx >= self.m_cv_count:
+                    continue
+                idx = cv_idx * self.m_cv_stride
+
+                Nx = ders[k, j]
+                cx = self.m_cv[idx]
+                cy = self.m_cv[idx + 1] if self.m_dim > 1 else 0.0
+                cz = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
+                wv = self.m_cv[idx + self.m_dim] if self.m_is_rat else 1.0
+
+                Aders[k][0] += Nx * cx
+                Aders[k][1] += Nx * cy
+                Aders[k][2] += Nx * cz
+                Aders[k][3] += Nx * wv
+
+        # Convert from homogeneous derivatives (Aders) to Cartesian derivatives
+        Cders = [[0.0, 0.0, 0.0] for _ in range(max_derivs + 1)]
+
+        if not self.m_is_rat:
+            # Non-rational: derivatives are directly Aders (w == 1)
+            for k in range(max_derivs + 1):
+                Cders[k] = [Aders[k][0], Aders[k][1], Aders[k][2]]
+        else:
+            # Rational: use standard formula (Piegl & Tiller, Eq. 2.28)
+            for k in range(max_derivs + 1):
+                w = Aders[0][3]
+                inv_w = 1.0 / w if w != 0.0 else 0.0
+
+                # Initialize derivative to homogeneous derivative
+                Ck_x = Aders[k][0]
+                Ck_y = Aders[k][1]
+                Ck_z = Aders[k][2]
+
+                # Subtract contributions of weight derivatives
+                for j_idx in range(1, k + 1):
+                    # Binomial coefficient: k! / (j! * (k-j)!)
+                    coeff = 1.0
+                    for ii in range(1, j_idx + 1):
+                        coeff = coeff * (k - ii + 1) / ii
+                    wj = Aders[j_idx][3]
+                    Ck_x -= coeff * wj * Cders[k - j_idx][0]
+                    Ck_y -= coeff * wj * Cders[k - j_idx][1]
+                    Ck_z -= coeff * wj * Cders[k - j_idx][2]
+
+                Ck_x *= inv_w
+                Ck_y *= inv_w
+                Ck_z *= inv_w
+                Cders[k] = [Ck_x, Ck_y, Ck_z]
+
+        # Fill result vectors (0th derivative = point)
+        for k in range(max_derivs + 1):
+            result.append(Vector(Cders[k][0], Cders[k][1], Cders[k][2]))
+
+        # If caller requested more derivatives than degree, pad with zeros
+        for k in range(max_derivs + 1, derivative_count + 1):
+            result.append(Vector(0.0, 0.0, 0.0))
+
+        return result
     
     def closest_point_to(self, test_point: Point, t0: float = None, t1: float = None) -> Tuple[float, float]:
         """Find closest point with parameter bounds.
@@ -2496,12 +2872,12 @@ class NurbsCurve:
     
     def is_natural(self, end: int = 2) -> bool:
         """Test if curve has natural end (zero 2nd derivative).
-        
+
         Parameters
         ----------
         end : int, optional
             0 for start, 1 for end, 2 for both. Defaults to 2.
-            
+
         Returns
         -------
         bool
@@ -2509,27 +2885,38 @@ class NurbsCurve:
         """
         if not self.is_valid():
             return False
-        
+
+        tol_factor = 1e-8
         t0, t1 = self.domain()
-        
-        check_start = (end == 0 or end == 2)
-        check_end = (end == 1 or end == 2)
-        
-        # Check second derivative at ends
-        if check_start:
-            derivs = self.evaluate(t0, 2)
-            if len(derivs) >= 3:
-                d2 = derivs[2]
-                if d2.magnitude() > Tolerance.ZERO_TOLERANCE:
-                    return False
-        
-        if check_end:
-            derivs = self.evaluate(t1, 2)
-            if len(derivs) >= 3:
-                d2 = derivs[2]
-                if d2.magnitude() > Tolerance.ZERO_TOLERANCE:
-                    return False
-        
+
+        # Check start (pass=0) and/or end (pass=1)
+        start_pass = 0 if (end == 0 or end == 2) else 1
+        end_pass = 2 if (end == 1 or end == 2) else 1
+
+        for pass_idx in range(start_pass, end_pass):
+            t = t0 if pass_idx == 0 else t1
+
+            # Evaluate 2nd derivative
+            derivs = self.evaluate(t, 2)
+            if len(derivs) < 3:
+                return False
+
+            d2 = derivs[2]
+            d2_len = d2.magnitude()
+
+            # Get control polygon length for tolerance
+            if pass_idx == 0:
+                cv0 = self.get_cv(0)
+                cv2 = self.get_cv(min(2, self.m_cv_count - 1))
+            else:
+                cv0 = self.get_cv(self.m_cv_count - 1)
+                cv2 = self.get_cv(max(0, self.m_cv_count - 3))
+
+            tol = cv0.distance(cv2) * tol_factor
+
+            if d2_len > tol:
+                return False
+
         return True
     
     def is_polyline(self) -> Tuple[bool, List[Point], List[float]]:
@@ -2556,16 +2943,16 @@ class NurbsCurve:
                             min_edge_length: float = 0.0,
                             max_edge_length: float = 0.0) -> Tuple[List[Point], List[float]]:
         """Convert curve to polyline with adaptive sampling (curvature-based).
-        
+
         Parameters
         ----------
         angle_tolerance : float, optional
             Maximum angle between segments in radians. Defaults to 0.1.
         min_edge_length : float, optional
-            Minimum distance between points. Defaults to 0.0.
+            Minimum distance between points. Defaults to 0.0 (auto).
         max_edge_length : float, optional
-            Maximum distance between points. Defaults to 0.0 (no limit).
-            
+            Maximum distance between points. Defaults to 0.0 (auto).
+
         Returns
         -------
         tuple of (list of Point, list of float)
@@ -2573,63 +2960,73 @@ class NurbsCurve:
         """
         if not self.is_valid():
             return [], []
-        
-        points = []
-        params = []
-        
+
+        if angle_tolerance <= 0.0:
+            angle_tolerance = 0.1
+
         t0, t1 = self.domain()
-        
-        # Start with coarse sampling
-        num_initial = max(10, self.m_cv_count * 2)
-        dt = (t1 - t0) / num_initial
-        
-        points.append(self.point_at(t0))
-        params.append(t0)
-        
-        t_current = t0
-        while t_current < t1:
-            # Adaptive step based on curvature
-            t_next = min(t_current + dt, t1)
-            
-            p_current = self.point_at(t_current)
-            p_next = self.point_at(t_next)
-            
-            edge_length = p_current.distance(p_next)
-            
-            # Check edge length constraints
-            if max_edge_length > 0 and edge_length > max_edge_length:
-                # Too long, reduce step
-                dt *= 0.5
+        curve_len = self.length()
+
+        # Set default edge lengths if not specified (matches C++ implementation)
+        if max_edge_length <= 0.0:
+            max_edge_length = curve_len / 10.0
+        if min_edge_length <= 0.0:
+            min_edge_length = curve_len / 1000.0
+        if min_edge_length > max_edge_length:
+            min_edge_length = max_edge_length * 0.1
+
+        # Collect (param, point) pairs using binary subdivision
+        samples = [(t0, self.point_at(t0)), (t1, self.point_at(t1))]
+
+        # Work queue: segments to potentially subdivide (ta, tb)
+        work_queue = [(t0, t1)]
+
+        max_iterations = 10000
+        iterations = 0
+
+        while work_queue and iterations < max_iterations:
+            iterations += 1
+            ta, tb = work_queue.pop()
+
+            pa = self.point_at(ta)
+            pb = self.point_at(tb)
+            chord_length = pa.distance(pb)
+
+            if chord_length < min_edge_length:
                 continue
-            
-            if min_edge_length > 0 and edge_length < min_edge_length and t_next < t1:
-                # Too short, increase step
-                dt *= 1.5
-                t_current = t_next
-                continue
-            
-            # Check angle
-            if len(points) >= 2:
-                v1 = Vector(points[-1].x - points[-2].x, points[-1].y - points[-2].y, points[-1].z - points[-2].z)
-                v2 = Vector(p_next.x - points[-1].x, p_next.y - points[-1].y, p_next.z - points[-1].z)
-                
-                v1_mag = v1.magnitude()
-                v2_mag = v2.magnitude()
-                
-                if v1_mag > Tolerance.ZERO_TOLERANCE and v2_mag > Tolerance.ZERO_TOLERANCE:
-                    cos_angle = v1.dot(v2) / (v1_mag * v2_mag)
-                    cos_angle = max(-1.0, min(1.0, cos_angle))
-                    angle = math.acos(cos_angle)
-                    
-                    if angle > angle_tolerance:
-                        # Angle too large, reduce step
-                        dt *= 0.5
-                        continue
-            
-            points.append(p_next)
-            params.append(t_next)
-            t_current = t_next
-        
+
+            tm = (ta + tb) * 0.5
+            pm = self.point_at(tm)
+
+            # Check deviation: distance from midpoint to chord
+            chord = Vector(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z)
+            to_mid = Vector(pm.x - pa.x, pm.y - pa.y, pm.z - pa.z)
+            chord_len_sq = chord.dot(chord)
+            deviation = 0.0
+
+            if chord_len_sq > 1e-20:
+                proj = to_mid.dot(chord) / chord_len_sq
+                projected = Point(pa.x + proj * chord.x, pa.y + proj * chord.y, pa.z + proj * chord.z)
+                deviation = pm.distance(projected)
+
+            # Convert angle tolerance to approximate deviation tolerance
+            # For small angles: deviation ≈ chord_length * sin(angle/2) ≈ chord_length * angle/2
+            deviation_tolerance = chord_length * angle_tolerance * 0.5
+
+            need_subdivide = (deviation > deviation_tolerance) or (chord_length > max_edge_length)
+
+            if need_subdivide:
+                samples.append((tm, pm))
+                work_queue.append((ta, tm))
+                work_queue.append((tm, tb))
+
+        # Sort by parameter
+        samples.sort(key=lambda x: x[0])
+
+        # Extract results
+        points = [p for _, p in samples]
+        params = [t for t, _ in samples]
+
         return points, params
     
     def span_is_linear(self, span_index: int, min_length: float = 0.0, 

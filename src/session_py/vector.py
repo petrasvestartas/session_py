@@ -39,6 +39,39 @@ class Vector:
         self._magnitude = 0.0
         self._has_magnitude = False
 
+    @property
+    def x(self):
+        """Get X coordinate."""
+        return self._x
+
+    @x.setter
+    def x(self, value):
+        """Set X coordinate."""
+        self._x = value
+        self._has_magnitude = False
+
+    @property
+    def y(self):
+        """Get Y coordinate."""
+        return self._y
+
+    @y.setter
+    def y(self, value):
+        """Set Y coordinate."""
+        self._y = value
+        self._has_magnitude = False
+
+    @property
+    def z(self):
+        """Get Z coordinate."""
+        return self._z
+
+    @z.setter
+    def z(self, value):
+        """Set Z coordinate."""
+        self._z = value
+        self._has_magnitude = False
+
     def __deepcopy__(self, memo):
         cls = self.__class__
         result = cls.__new__(cls)
@@ -392,6 +425,16 @@ class Vector:
         normalized_vector = Vector(self._x, self._y, self._z)
         normalized_vector.normalize_self()
         return normalized_vector
+
+    def normalized(self):
+        """Alias for normalize() - Return a normalized copy of the vector.
+
+        Returns
+        -------
+        Vector
+            A new vector that is the unit vector of this vector.
+        """
+        return self.normalize()
 
     def dot(self, other):
         """Calculate dot product with another vector.
