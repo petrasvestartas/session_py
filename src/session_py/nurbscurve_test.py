@@ -5,9 +5,6 @@ from .mini_test import run_all
 
 @MINI_TEST("NurbsCurve", "constructor")
 def test_nurbscurve_constructor():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
-    # uncomment from session_py import Vector
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -51,9 +48,6 @@ def test_nurbscurve_constructor():
 
 @MINI_TEST("NurbsCurve", "attributes")
 def test_nurbscurve_attributes():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
-    # uncomment from session_py import Plane
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Plane
@@ -252,9 +246,6 @@ def test_nurbscurve_attributes():
 
 @MINI_TEST("NurbsCurve", "Conversions")
 def test_nurbscurve_conversions():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
-    # uncomment from session_py import Vector
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Tolerance
@@ -339,9 +330,6 @@ def test_nurbscurve_conversions():
 
 @MINI_TEST("NurbsCurve", "frame_at")
 def test_nurbscurve_frame_at():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
-    # uncomment from session_py import Vector
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Tolerance
@@ -381,9 +369,6 @@ def test_nurbscurve_frame_at():
 
 @MINI_TEST("NurbsCurve", "perpendicular_frame_at")
 def test_nurbscurve_perpendicular_frame_at():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
-    # uncomment from session_py import Vector
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Tolerance
@@ -423,9 +408,6 @@ def test_nurbscurve_perpendicular_frame_at():
 
 @MINI_TEST("NurbsCurve", "is_valid")
 def test_nurbscurve_is_valid():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
-    # uncomment from session_py import Vector
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -446,10 +428,6 @@ def test_nurbscurve_is_valid():
 
 @MINI_TEST("NurbsCurve", "control vertices")
 def test_nurbscurve_control_vertices():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
-    # uncomment from session_py import Vector
-    # uncomment import vector
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -479,8 +457,6 @@ def test_nurbscurve_control_vertices():
 
 @MINI_TEST("NurbsCurve", "set_cv")
 def test_nurbscurve_set_cv():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -502,8 +478,6 @@ def test_nurbscurve_set_cv():
 
 @MINI_TEST("NurbsCurve", "point_at")
 def test_nurbscurve_point_at():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -526,8 +500,6 @@ def test_nurbscurve_point_at():
 
 @MINI_TEST("NurbsCurve", "point_at_start")
 def test_nurbscurve_point_at_start():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -548,8 +520,6 @@ def test_nurbscurve_point_at_start():
 
 @MINI_TEST("NurbsCurve", "point_at_end")
 def test_nurbscurve_point_at_end():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -570,8 +540,6 @@ def test_nurbscurve_point_at_end():
 
 @MINI_TEST("NurbsCurve", "domain")
 def test_nurbscurve_domain():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -591,8 +559,6 @@ def test_nurbscurve_domain():
 
 @MINI_TEST("NurbsCurve", "is_closed")
 def test_nurbscurve_is_closed():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -618,8 +584,6 @@ def test_nurbscurve_is_closed():
 
 @MINI_TEST("NurbsCurve", "length")
 def test_nurbscurve_length():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -636,8 +600,6 @@ def test_nurbscurve_length():
 
 @MINI_TEST("NurbsCurve", "reverse")
 def test_nurbscurve_reverse():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -662,8 +624,6 @@ def test_nurbscurve_reverse():
 
 @MINI_TEST("NurbsCurve", "make_rational")
 def test_nurbscurve_make_rational():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -684,8 +644,6 @@ def test_nurbscurve_make_rational():
 
 @MINI_TEST("NurbsCurve", "tangent_at")
 def test_nurbscurve_tangent_at():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
     import math
@@ -709,8 +667,6 @@ def test_nurbscurve_tangent_at():
 
 @MINI_TEST("NurbsCurve", "knot_count")
 def test_nurbscurve_knot_count():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -730,8 +686,6 @@ def test_nurbscurve_knot_count():
 
 @MINI_TEST("NurbsCurve", "cv_size")
 def test_nurbscurve_cv_size():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -752,8 +706,6 @@ def test_nurbscurve_cv_size():
 
 @MINI_TEST("NurbsCurve", "weight")
 def test_nurbscurve_weight():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -777,8 +729,6 @@ def test_nurbscurve_weight():
 
 @MINI_TEST("NurbsCurve", "is_linear")
 def test_nurbscurve_is_linear():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -801,8 +751,6 @@ def test_nurbscurve_is_linear():
 
 @MINI_TEST("NurbsCurve", "json_roundtrip")
 def test_nurbscurve_json_roundtrip():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -828,8 +776,6 @@ def test_nurbscurve_json_roundtrip():
 
 @MINI_TEST("NurbsCurve", "protobuf_roundtrip")
 def test_nurbscurve_protobuf_roundtrip():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -855,8 +801,6 @@ def test_nurbscurve_protobuf_roundtrip():
 
 @MINI_TEST("NurbsCurve", "degree")
 def test_nurbscurve_degree():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -877,8 +821,6 @@ def test_nurbscurve_degree():
 
 @MINI_TEST("NurbsCurve", "is_rational")
 def test_nurbscurve_is_rational():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -899,8 +841,6 @@ def test_nurbscurve_is_rational():
 
 @MINI_TEST("NurbsCurve", "set_weight")
 def test_nurbscurve_set_weight():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -922,8 +862,6 @@ def test_nurbscurve_set_weight():
 
 @MINI_TEST("NurbsCurve", "knot")
 def test_nurbscurve_knot():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -945,8 +883,6 @@ def test_nurbscurve_knot():
 
 @MINI_TEST("NurbsCurve", "set_knot")
 def test_nurbscurve_set_knot():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -967,8 +903,6 @@ def test_nurbscurve_set_knot():
 
 @MINI_TEST("NurbsCurve", "set_domain")
 def test_nurbscurve_set_domain():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -991,8 +925,6 @@ def test_nurbscurve_set_domain():
 
 @MINI_TEST("NurbsCurve", "span_count")
 def test_nurbscurve_span_count():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -1012,8 +944,6 @@ def test_nurbscurve_span_count():
 
 @MINI_TEST("NurbsCurve", "get_span_vector")
 def test_nurbscurve_get_span_vector():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -1034,8 +964,6 @@ def test_nurbscurve_get_span_vector():
 
 @MINI_TEST("NurbsCurve", "evaluate")
 def test_nurbscurve_evaluate():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -1057,8 +985,6 @@ def test_nurbscurve_evaluate():
 
 @MINI_TEST("NurbsCurve", "is_periodic")
 def test_nurbscurve_is_periodic():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -1077,8 +1003,6 @@ def test_nurbscurve_is_periodic():
 
 @MINI_TEST("NurbsCurve", "make_non_rational")
 def test_nurbscurve_make_non_rational():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -1100,8 +1024,6 @@ def test_nurbscurve_make_non_rational():
 
 @MINI_TEST("NurbsCurve", "divide_by_count")
 def test_nurbscurve_divide_by_count():
-    # uncomment from session_py import NurbsCurve
-    # uncomment from session_py import Point
     from session_py import NurbsCurve
     from session_py import Point
 
