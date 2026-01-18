@@ -391,13 +391,12 @@ def test_nurbscurve_perpendicular_frame_at():
 
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
 
+    # RMF with Frenet initialization (matches Rhino)
     o, t, n, b = curve.perpendicular_frame_at(0.5, normalized=True)
-
-
-    MINI_CHECK(TOLERANCE.is_close(o[0], 3.156927375000000) and TOLERANCE.is_close(o[1], 1.335111500000000) and TOLERANCE.is_close(o[2], 0.130488875000000))
-    MINI_CHECK(TOLERANCE.is_close(t[0], -0.530889276962602) and TOLERANCE.is_close(t[1], 0.647586483405068) and TOLERANCE.is_close(t[2], -0.546615332859574))
-    MINI_CHECK(TOLERANCE.is_close(n[0], -0.474999702128807) and TOLERANCE.is_close(n[1], 0.306778027114924) and TOLERANCE.is_close(n[2], 0.824780288960047))
-    MINI_CHECK(TOLERANCE.is_close(b[0], 0.701806140314880) and TOLERANCE.is_close(b[1], 0.697509131546342) and TOLERANCE.is_close(b[2], 0.144738221716994))
+    MINI_CHECK(TOLERANCE.is_point_close(o, Point(3.156927, 1.335111, 0.130489)))
+    MINI_CHECK(TOLERANCE.is_close(t[0], 0.632708) and TOLERANCE.is_close(t[1], -0.703687) and TOLERANCE.is_close(t[2], 0.323272))
+    MINI_CHECK(TOLERANCE.is_close(n[0], 0.327335) and TOLERANCE.is_close(n[1], -0.135297) and TOLERANCE.is_close(n[2], -0.935172))
+    MINI_CHECK(TOLERANCE.is_close(b[0], 0.701806) and TOLERANCE.is_close(b[1], 0.697509) and TOLERANCE.is_close(b[2], 0.144738))
     MINI_CHECK(curve.perpendicular_frame_at(-0.1, normalized=True) is None)
     MINI_CHECK(curve.perpendicular_frame_at(1.1, normalized=True) is None)
     MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start(), normalized=False) is not None)

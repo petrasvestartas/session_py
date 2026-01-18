@@ -756,7 +756,7 @@ class NurbsCurve:
         ]
 
     def _perpendicular_frame_at_internal(self, t: float, normalized: bool) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
-        """Internal: compute RMF using Double Reflection method (O(n))"""
+        """Internal: compute RMF with Frenet initialization (matches Rhino)"""
         if not self.is_valid():
             return None
 
@@ -767,24 +767,45 @@ class NurbsCurve:
         if not normalized and (t < t0 or t > t1):
             return None
 
+        # Get initial frame at t0 using Frenet (curvature-based)
+        derivs0 = self.evaluate(t0, 2)
+        D1_0 = Vector(derivs0[1].x, derivs0[1].y, derivs0[1].z)
+        D2_0 = Vector(derivs0[2].x, derivs0[2].y, derivs0[2].z)
+
+        D1_0_mag = D1_0.magnitude()
+        if D1_0_mag < 1e-14:
+            return None
+
+        tangent0 = D1_0 / D1_0_mag
+
+        # Initial normal from curvature (Frenet)
+        D2_dot_D1 = D2_0.dot(D1_0)
+        D1_0_mag_sq = D1_0_mag * D1_0_mag
+        N0_unnorm = Vector(
+            D2_0.x - (D2_dot_D1 / D1_0_mag_sq) * D1_0.x,
+            D2_0.y - (D2_dot_D1 / D1_0_mag_sq) * D1_0.y,
+            D2_0.z - (D2_dot_D1 / D1_0_mag_sq) * D1_0.z
+        )
+
+        N0_mag = N0_unnorm.magnitude()
+        if N0_mag < 1e-14:
+            world_z = Vector(0, 0, 1)
+            N0_unnorm = world_z.cross(tangent0)
+            N0_mag = N0_unnorm.magnitude()
+            if N0_mag < 1e-14:
+                world_y = Vector(0, 1, 0)
+                N0_unnorm = world_y.cross(tangent0)
+                N0_mag = N0_unnorm.magnitude()
+        r0 = N0_unnorm / N0_mag
+
         origin = self.point_at(param)
 
-        tangent0 = self.tangent_at(t0)
-        if tangent0.magnitude() < 1e-14:
-            return None
-        tangent0 = tangent0.normalized()
-
-        world_z = Vector(0, 0, 1)
-        r0 = world_z.cross(tangent0)
-        if r0.magnitude() < 1e-14:
-            world_y = Vector(0, 1, 0)
-            r0 = world_y.cross(tangent0)
-        r0 = r0.normalized()
-
+        # If at start, return Frenet frame directly
         if abs(param - t0) < 1e-14:
             s0 = tangent0.cross(r0).normalized()
             return (origin, r0, s0, tangent0)
 
+        # Propagate frame using Double Reflection (RMF) algorithm
         num_steps = max(10, int((param - t0) / (t1 - t0) * 100))
         dt = (param - t0) / num_steps
 
@@ -911,6 +932,7 @@ class NurbsCurve:
         """Compute basis function derivatives at parameter t.
 
         Algorithm A2.3 from "The NURBS Book" (Piegl & Tiller).
+        Matches OpenNURBS/Rhino implementation.
 
         Parameters
         ----------
@@ -943,11 +965,9 @@ class NurbsCurve:
             right[j] = self.m_knot[offset + j] - t
             saved = 0.0
             for r in range(j):
-                denom = right[r + 1] + left[j - r]
-                if abs(denom) < 1e-14:
-                    temp = 0.0
-                else:
-                    temp = ndu[r, j - 1] / denom
+                # Store knot differences in ndu[j, r] for derivative computation
+                ndu[j, r] = right[r + 1] + left[j - r]
+                temp = ndu[r, j - 1] / ndu[j, r] if abs(ndu[j, r]) > 1e-14 else 0.0
                 ndu[r, j] = saved + right[r + 1] * temp
                 saved = left[j - r] * temp
             ndu[j, j] = saved
@@ -956,7 +976,7 @@ class NurbsCurve:
         for j in range(p + 1):
             ders[0, j] = ndu[j, p]
 
-        # Compute derivatives
+        # Compute derivatives using Eq. 2.10 from The NURBS Book
         a = np.zeros((2, p + 1))
         for r in range(p + 1):
             s1 = 0
@@ -969,43 +989,29 @@ class NurbsCurve:
                 pk = p - k
 
                 if r >= k:
-                    denom = right[rk + 1] + left[k]
-                    if abs(denom) > 1e-14:
-                        a[s2, 0] = a[s1, 0] / denom
-                        d = a[s2, 0] * ndu[rk, pk]
-                    else:
-                        a[s2, 0] = 0.0
-                else:
-                    a[s2, 0] = 0.0
+                    a[s2, 0] = a[s1, 0] / ndu[pk + 1, rk]
+                    d = a[s2, 0] * ndu[rk, pk]
 
                 j1 = 1 if rk >= -1 else -rk
                 j2 = k - 1 if r - 1 <= pk else p - r
 
                 for j in range(j1, j2 + 1):
-                    denom = right[rk + j + 1] + left[k - j]
-                    if abs(denom) > 1e-14:
-                        a[s2, j] = (a[s1, j] - a[s1, j - 1]) / denom
-                        d += a[s2, j] * ndu[rk + j, pk]
-                    else:
-                        a[s2, j] = 0.0
+                    a[s2, j] = (a[s1, j] - a[s1, j - 1]) / ndu[pk + 1, rk + j]
+                    d += a[s2, j] * ndu[rk + j, pk]
 
                 if r <= pk:
-                    denom = right[r + 1] + left[pk - r]
-                    if abs(denom) > 1e-14:
-                        a[s2, k] = -a[s1, k - 1] / denom
-                        d += a[s2, k] * ndu[r, pk]
-                    else:
-                        a[s2, k] = 0.0
+                    a[s2, k] = -a[s1, k - 1] / ndu[pk + 1, r]
+                    d += a[s2, k] * ndu[r, pk]
 
                 ders[k, r] = d
                 s1, s2 = s2, s1
 
-        # Multiply derivatives by factorial terms
-        factorial = 1.0
+        # Apply factorial scaling: p!/(p-k)! (falling factorial)
+        factor = float(p)
         for k in range(1, n_der + 1):
-            factorial *= k
             for j in range(p + 1):
-                ders[k, j] *= factorial
+                ders[k, j] *= factor
+            factor *= (p - k)
 
         return ders
 
