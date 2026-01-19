@@ -331,6 +331,31 @@ class Xform:
         return t * f
 
     @staticmethod
+    def to_frame(frame):
+        """Transform from world XY to target frame/plane (same as COMPAS from_frame).
+
+        Parameters
+        ----------
+        frame : Plane
+            Target frame/plane.
+
+        Returns
+        -------
+        :class:`Xform`
+            Transformation matrix.
+        """
+        x = frame.x_axis.normalize()
+        y = frame.y_axis.normalize()
+        z = frame.z_axis.normalize()
+        o = frame.origin
+        xf = Xform()
+        xf.m[0] = x[0]; xf.m[4] = y[0]; xf.m[8]  = z[0]; xf.m[12] = o[0]
+        xf.m[1] = x[1]; xf.m[5] = y[1]; xf.m[9]  = z[1]; xf.m[13] = o[1]
+        xf.m[2] = x[2]; xf.m[6] = y[2]; xf.m[10] = z[2]; xf.m[14] = o[2]
+        xf.m[3] = 0.0;  xf.m[7] = 0.0;  xf.m[11] = 0.0;  xf.m[15] = 1.0
+        return xf
+
+    @staticmethod
     def scale_xyz(scale_x, scale_y, scale_z):
         xform = Xform()
         xform.m[0] = scale_x
