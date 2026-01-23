@@ -241,25 +241,15 @@ class NurbsCurve:
     #############################################################################
     
     def get_cv(self, cv_index: int) -> Optional[Point]:
-        """Get control point at index as Point"""
+        """Get control point at index as Point (Euclidean coordinates)"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return None
-        
+
         idx = cv_index * self.m_cv_stride
-        if self.m_is_rat:
-            w = self.m_cv[idx + self.m_dim]
-            if abs(w) < Tolerance.ZERO_TOLERANCE:
-                return Point(0, 0, 0)
-            return Point(
-                self.m_cv[idx] / w if self.m_dim > 0 else 0,
-                self.m_cv[idx + 1] / w if self.m_dim > 1 else 0,
-                self.m_cv[idx + 2] / w if self.m_dim > 2 else 0
-            )
-        else:
-            return Point(
-                self.m_cv[idx] if self.m_dim > 0 else 0,
-                self.m_cv[idx + 1] if self.m_dim > 1 else 0,
-                self.m_cv[idx + 2] if self.m_dim > 2 else 0
+        return Point(
+            self.m_cv[idx] if self.m_dim > 0 else 0,
+            self.m_cv[idx + 1] if self.m_dim > 1 else 0,
+            self.m_cv[idx + 2] if self.m_dim > 2 else 0
             )
 
     def cv(self, cv_index: int) -> Optional[List[float]]:
@@ -535,9 +525,8 @@ class NurbsCurve:
         pt = np.zeros(self.m_dim)
         
         if self.m_is_rat:
-            # Rational curve
+            # Rational curve: C(t) = Σ(Ni * wi * Pi) / Σ(Ni * wi)
             w = 0.0
-            # In OpenNURBS, span index directly corresponds to CV starting index
             for i in range(self.m_order):
                 cv_idx = span + i
                 if cv_idx < 0 or cv_idx >= self.m_cv_count:
@@ -546,8 +535,8 @@ class NurbsCurve:
                 weight = self.m_cv[idx + self.m_dim]
                 w += N[i] * weight
                 for j in range(self.m_dim):
-                    pt[j] += N[i] * self.m_cv[idx + j]
-            
+                    pt[j] += N[i] * self.m_cv[idx + j] * weight
+
             if abs(w) > 1e-10:
                 pt /= w
         else:
@@ -572,21 +561,34 @@ class NurbsCurve:
         """Evaluate point at curve end"""
         _, t1 = self.domain()
         return self.point_at(t1)
-    
+
+    def point_at_middle(self) -> Point:
+        """Evaluate point at curve middle"""
+        return self.point_at(self.domain_middle())
+
     def tangent_at(self, t: float) -> Vector:
-        """Evaluate tangent vector at parameter t"""
+        """Evaluate tangent vector at parameter t (normalized)"""
         if not self.is_valid():
             return Vector(0, 0, 0)
 
-        eps = 1e-8
-        p1 = self.point_at(t - eps)
-        p2 = self.point_at(t + eps)
+        t0, t1 = self.domain()
+        h = (t1 - t0) * 1e-7
 
-        return Vector(
-            (p2.x - p1.x) / (2 * eps),
-            (p2.y - p1.y) / (2 * eps),
-            (p2.z - p1.z) / (2 * eps)
-        )
+        if t <= t0 + h:
+            p1 = self.point_at(t0)
+            p2 = self.point_at(t0 + h)
+        elif t >= t1 - h:
+            p1 = self.point_at(t1 - h)
+            p2 = self.point_at(t1)
+        else:
+            p1 = self.point_at(t - h)
+            p2 = self.point_at(t + h)
+
+        tan = Vector(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z)
+        mag = tan.magnitude()
+        if mag > 1e-14:
+            tan.normalize_self()
+        return tan
 
     def frame_at(self, t: float, normalized: bool = True) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
         """Get Frenet frame at parameter t (tangent, normal, binormal)"""
@@ -1092,30 +1094,38 @@ class NurbsCurve:
         
         return True
     
-    def make_non_rational(self) -> bool:
-        """Convert to non-rational curve"""
+    def make_non_rational(self, force: bool = False) -> bool:
+        """Convert to non-rational curve.
+
+        If force=False (default), fails when weights differ.
+        If force=True, sets all weights to 1.0 (changes geometry!).
+        """
         if not self.m_is_rat:
             return True
-        
+
+        if force:
+            for i in range(self.m_cv_count):
+                idx = i * self.m_cv_stride
+                self.m_cv[idx + self.m_dim] = 1.0
+        else:
+            w0 = self.weight(0)
+            for i in range(1, self.m_cv_count):
+                if abs(self.weight(i) - w0) > Tolerance.ZERO_TOLERANCE:
+                    return False
+
         new_stride = self.m_dim
         new_cv = np.zeros(self.m_cv_count * new_stride)
-        
+
         for i in range(self.m_cv_count):
             old_idx = i * self.m_cv_stride
             new_idx = i * new_stride
-            w = self.m_cv[old_idx + self.m_dim]
-            
-            if abs(w) > Tolerance.ZERO_TOLERANCE:
-                for j in range(self.m_dim):
-                    new_cv[new_idx + j] = self.m_cv[old_idx + j] / w
-            else:
-                for j in range(self.m_dim):
-                    new_cv[new_idx + j] = self.m_cv[old_idx + j]
-        
+            for j in range(self.m_dim):
+                new_cv[new_idx + j] = self.m_cv[old_idx + j]
+
         self.m_is_rat = 0
         self.m_cv_stride = new_stride
         self.m_cv = new_cv
-        
+
         return True
     
     def reverse(self) -> bool:
@@ -2240,75 +2250,72 @@ class NurbsCurve:
     
     def extend(self, t0: float, t1: float) -> bool:
         """Extend curve to include domain [t0, t1].
-        
+
+        Uses de Boor extrapolation matching C++ implementation.
+
         Parameters
         ----------
         t0 : float
             New start parameter (can be before current start).
         t1 : float
             New end parameter (can be after current end).
-            
+
         Returns
         -------
         bool
             True if successful.
         """
-        if not self.is_valid():
+        if not self.is_valid() or self.is_closed():
             return False
-        
+
         domain_t0, domain_t1 = self.domain()
-        
-        # Simple implementation: linear extension
+        cv_dim = self.cv_size()
+        changed = False
+
+        # Extend start (t0 < current domain start)
         if t0 < domain_t0:
-            # Extend at start
-            tan_start = self.tangent_at(domain_t0)
-            p_start = self.point_at_start()
-            
-            num_points = max(5, int((domain_t0 - t0) * 10))
-            dt = (domain_t0 - t0) / num_points
-            
-            new_points = []
-            for i in range(num_points, 0, -1):
-                new_points.append(Point(
-                    p_start.x - i * dt * tan_start.x,
-                    p_start.y - i * dt * tan_start.y,
-                    p_start.z - i * dt * tan_start.z
-                ))
-            
-            # Add existing curve points
-            t_samples = max(20, self.m_cv_count)
-            dt_curve = (domain_t1 - domain_t0) / (t_samples - 1)
-            for i in range(t_samples):
-                new_points.append(self.point_at(domain_t0 + i * dt_curve))
-            
-            self.create_clamped_uniform(self.m_dim, self.m_order, new_points, 1.0)
-            self.set_domain(t0, domain_t1)
-        
+            self.clamp_end(0)
+            # Extrapolate using de Boor algorithm
+            self._evaluate_nurbs_de_boor_inplace(cv_dim, self.m_order, 0, 1, t0)
+            for i in range(self.m_order - 1):
+                self.m_knot[i] = t0
+            changed = True
+
+        # Extend end (t1 > current domain end)
         if t1 > domain_t1:
-            # Extend at end
-            tan_end = self.tangent_at(domain_t1)
-            p_end = self.point_at_end()
-            
-            num_points = max(5, int((t1 - domain_t1) * 10))
-            dt = (t1 - domain_t1) / num_points
-            
-            # Get existing curve points
-            t_samples = max(20, self.m_cv_count)
-            dt_curve = (domain_t1 - t0 if t0 < domain_t0 else domain_t1 - domain_t0) / (t_samples - 1)
-            new_points = [self.point_at(t0 if t0 < domain_t0 else domain_t0 + i * dt_curve) for i in range(t_samples)]
-            
-            # Add extended points
-            for i in range(1, num_points + 1):
-                new_points.append(Point(
-                    p_end.x + i * dt * tan_end.x,
-                    p_end.y + i * dt * tan_end.y,
-                    p_end.z + i * dt * tan_end.z
-                ))
-            
-            self.create_clamped_uniform(self.m_dim, self.m_order, new_points, 1.0)
-            self.set_domain(t0 if t0 < domain_t0 else domain_t0, t1)
-        
-        return True
+            self.clamp_end(1)
+            # Extrapolate using de Boor algorithm
+            i0 = self.m_cv_count - self.m_order
+            self._evaluate_nurbs_de_boor_inplace(cv_dim, self.m_order, i0, -1, t1)
+            kc = self.knot_count()
+            for i in range(self.m_cv_count - 1, kc):
+                self.m_knot[i] = t1
+            changed = True
+
+        return changed
+
+    def _evaluate_nurbs_de_boor_inplace(self, cvdim: int, order: int, cv_start: int, direction: int, t: float):
+        """Internal de Boor evaluation for curve extension (modifies CVs in place)."""
+        if order < 2:
+            return
+
+        stride = self.m_cv_stride
+        for i in range(1, order):
+            k0 = cv_start + i - 1 if direction > 0 else cv_start + order - i
+            k1 = k0 + direction
+
+            a = self.m_knot[cv_start + (order - 1 if direction > 0 else 0)]
+            b = self.m_knot[cv_start + (i if direction > 0 else order - 1 - i)]
+
+            if abs(b - a) < 1e-14:
+                continue
+
+            s = (t - a) / (b - a)
+
+            for j in range(cvdim):
+                cv0_val = self.m_cv[k0 * stride + j]
+                cv1_val = self.m_cv[k1 * stride + j]
+                self.m_cv[k0 * stride + j] = cv0_val + s * (cv0_val - cv1_val)
     
     def swap_coordinates(self, axis_i: int, axis_j: int) -> bool:
         """Swap two coordinate axes.
@@ -2712,9 +2719,9 @@ class NurbsCurve:
                 cz = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
                 wv = self.m_cv[idx + self.m_dim] if self.m_is_rat else 1.0
 
-                Aders[k][0] += Nx * cx
-                Aders[k][1] += Nx * cy
-                Aders[k][2] += Nx * cz
+                Aders[k][0] += Nx * cx * wv
+                Aders[k][1] += Nx * cy * wv
+                Aders[k][2] += Nx * cz * wv
                 Aders[k][3] += Nx * wv
 
         # Convert from homogeneous derivatives (Aders) to Cartesian derivatives
