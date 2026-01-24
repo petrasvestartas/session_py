@@ -30,6 +30,7 @@ from . import intersection
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .ray_box_intersection import ray_box
+from .closest import Closest
 
 __all__ = [
     "Color",
@@ -63,4 +64,5 @@ __all__ = [
     "NurbsCurve",
     "NurbsSurface",
     "ray_box",
+    "Closest",
 ]

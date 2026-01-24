@@ -242,6 +242,13 @@ class Tolerance:
         dz = b.z - a.z
         return (dx * dx + dy * dy + dz * dz) <= self.absolute * self.absolute
 
+    def is_vector_close(self, a, b):
+        """Check if two 3D vectors are equal within absolute tolerance."""
+        dx = b.x - a.x
+        dy = b.y - a.y
+        dz = b.z - a.z
+        return (dx * dx + dy * dy + dz * dz) <= self.absolute * self.absolute
+
     def key(self, xyz, precision=None, sanitize=True):
         """Compute the geometric key of a point."""
         x, y, z = xyz

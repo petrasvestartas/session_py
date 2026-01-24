@@ -11,6 +11,7 @@ from .point import Point
 from .boundingbox import BoundingBox
 from .mesh import Mesh
 from .bvh import BVH
+from .closest import Closest
 
 
 def line_line_parameters(
@@ -553,26 +554,387 @@ def ray_mesh_bvh(
 # NURBS Curve Intersection Functions
 #==========================================================================================
 
+from .vector import Vector
+from .tolerance import Tolerance
+
+
+def _curve_signed_distance_to_plane(pt, plane):
+    """Signed distance from point to plane."""
+    v = Vector(pt.x - plane.origin.x, pt.y - plane.origin.y, pt.z - plane.origin.z)
+    return v.dot(plane.z_axis)
+
+
 def curve_plane(curve, plane, tolerance=None):
     """Find all intersections between NURBS curve and plane."""
-    return curve.intersect_plane(plane, tolerance)
+    if tolerance is None:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    if not curve.is_valid():
+        return []
+
+    results = []
+    t_start, t_end = curve.domain()
+    span_params = curve.get_span_vector()
+
+    for i in range(len(span_params) - 1):
+        t0 = span_params[i]
+        t1 = span_params[i + 1]
+
+        if abs(t1 - t0) < tolerance:
+            continue
+
+        d0 = _curve_signed_distance_to_plane(curve.point_at(t0), plane)
+        d1 = _curve_signed_distance_to_plane(curve.point_at(t1), plane)
+
+        if d0 * d1 < 0:
+            ta, tb = t0, t1
+            tm = (ta + tb) * 0.5
+            for _ in range(50):
+                tm = (ta + tb) * 0.5
+                dm = _curve_signed_distance_to_plane(curve.point_at(tm), plane)
+                if abs(dm) < tolerance:
+                    break
+                if dm * d0 < 0:
+                    tb = tm
+                else:
+                    ta = tm
+            results.append(tm)
+        elif abs(d0) < tolerance:
+            if not results or abs(results[-1] - t0) >= tolerance:
+                results.append(t0)
+
+    d_end = _curve_signed_distance_to_plane(curve.point_at(t_end), plane)
+    if abs(d_end) < tolerance:
+        if not results or abs(results[-1] - t_end) >= tolerance:
+            results.append(t_end)
+
+    results.sort()
+    if len(results) > 1:
+        unique_results = [results[0]]
+        for i in range(1, len(results)):
+            if abs(results[i] - unique_results[-1]) >= tolerance * 2.0:
+                unique_results.append(results[i])
+        results = unique_results
+
+    return results
+
 
 def curve_plane_points(curve, plane, tolerance=None):
     """Find all intersection points between NURBS curve and plane."""
-    return curve.intersect_plane_points(plane, tolerance)
+    params = curve_plane(curve, plane, tolerance)
+    return [curve.point_at(t) for t in params]
+
 
 def curve_plane_bezier_clipping(curve, plane, tolerance=None):
     """Curve-plane intersection using Bézier clipping (advanced method)."""
-    return curve.intersect_plane_bezier_clipping(plane, tolerance)
+    if tolerance is None:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    if not curve.is_valid():
+        return []
+
+    results = []
+    t0, t1 = curve.domain()
+
+    def clip_recursive(ta, tb, depth):
+        if depth > 50:
+            tm = (ta + tb) * 0.5
+            pm = curve.point_at(tm)
+            dist = _curve_signed_distance_to_plane(pm, plane)
+            if abs(dist) < tolerance:
+                results.append(tm)
+            return
+
+        if abs(tb - ta) < tolerance * 0.01:
+            tm = (ta + tb) * 0.5
+            pm = curve.point_at(tm)
+            dist = _curve_signed_distance_to_plane(pm, plane)
+
+            if abs(dist) < tolerance:
+                t = tm
+                for _ in range(10):
+                    pt = curve.point_at(t)
+                    tan = curve.tangent_at(t)
+                    f = _curve_signed_distance_to_plane(pt, plane)
+                    df = tan.dot(plane.z_axis)
+                    if abs(df) < 1e-12:
+                        break
+                    dt = -f / df
+                    t += dt
+                    if abs(dt) < tolerance * 0.01:
+                        break
+                    if t < ta or t > tb:
+                        t = tm
+                        break
+
+                pt_final = curve.point_at(t)
+                if abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance and ta <= t <= tb:
+                    results.append(t)
+            return
+
+        num_samples = min(curve.order() + 1, 10)
+        distances = []
+        params = []
+
+        dt = (tb - ta) / (num_samples - 1)
+        for i in range(num_samples):
+            t = ta + i * dt
+            p = curve.point_at(t)
+            distances.append(_curve_signed_distance_to_plane(p, plane))
+            params.append(t)
+
+        d_min = min(distances)
+        d_max = max(distances)
+
+        if d_min > tolerance or d_max < -tolerance:
+            return
+
+        t_min = ta
+        t_max = tb
+
+        for i in range(len(distances) - 1):
+            if distances[i] * distances[i + 1] < 0:
+                d0 = distances[i]
+                d1 = distances[i + 1]
+                t_clip = params[i] - d0 * (params[i + 1] - params[i]) / (d1 - d0)
+                if d0 > 0:
+                    t_max = min(t_max, t_clip + (tb - ta) * 0.1)
+                else:
+                    t_min = max(t_min, t_clip - (tb - ta) * 0.1)
+
+        if t_min >= t_max:
+            t_min = ta
+            t_max = tb
+
+        t_min = max(ta, t_min)
+        t_max = min(tb, t_max)
+
+        reduction = (t_max - t_min) / (tb - ta)
+
+        if reduction > 0.8 or (t_max - t_min) < tolerance * 0.1:
+            tm = (ta + tb) * 0.5
+            clip_recursive(ta, tm, depth + 1)
+            clip_recursive(tm, tb, depth + 1)
+        else:
+            clip_recursive(t_min, t_max, depth + 1)
+
+    clip_recursive(t0, t1, 0)
+
+    results.sort()
+    if len(results) > 1:
+        unique_results = [results[0]]
+        for i in range(1, len(results)):
+            if abs(results[i] - results[i-1]) > tolerance * 2.0:
+                unique_results.append(results[i])
+        results = unique_results
+
+    return results
+
 
 def curve_plane_algebraic(curve, plane, tolerance=None):
     """Curve-plane intersection using algebraic/hodograph method."""
-    return curve.intersect_plane_algebraic(plane, tolerance)
+    if tolerance is None:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    if not curve.is_valid():
+        return []
+
+    results = []
+    spans = curve.get_span_vector()
+
+    for span_idx in range(len(spans) - 1):
+        span_t0 = spans[span_idx]
+        span_t1 = spans[span_idx + 1]
+
+        if abs(span_t1 - span_t0) < tolerance:
+            continue
+
+        d0 = _curve_signed_distance_to_plane(curve.point_at(span_t0), plane)
+        d1 = _curve_signed_distance_to_plane(curve.point_at(span_t1), plane)
+
+        if d0 * d1 > tolerance * tolerance:
+            continue
+
+        ta, tb = span_t0, span_t1
+        da, db = d0, d1
+
+        for _ in range(20):
+            if abs(tb - ta) < tolerance * 0.1:
+                break
+            tm = (ta + tb) * 0.5
+            pt_m = curve.point_at(tm)
+            dm = _curve_signed_distance_to_plane(pt_m, plane)
+            if abs(dm) < tolerance:
+                ta = tb = tm
+                break
+            if da * dm < 0:
+                tb, db = tm, dm
+            else:
+                ta, da = tm, dm
+
+        t = (ta + tb) * 0.5
+
+        for iteration in range(15):
+            pt = curve.point_at(t)
+            f = _curve_signed_distance_to_plane(pt, plane)
+            if abs(f) < tolerance:
+                break
+            tan = curve.tangent_at(t)
+            df = plane.z_axis.dot(tan)
+            if abs(df) < 1e-10:
+                if f * da < 0:
+                    t = (ta + t) * 0.5
+                else:
+                    t = (t + tb) * 0.5
+                continue
+            dt = -f / df
+            t_new = t + dt
+            t_new = max(span_t0, min(span_t1, t_new))
+            if abs(dt) < tolerance * 0.01:
+                t = t_new
+                break
+            t = t_new
+
+        pt_final = curve.point_at(t)
+        if abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance:
+            is_duplicate = False
+            for existing_t in results:
+                if abs(t - existing_t) < tolerance * 2.0:
+                    is_duplicate = True
+                    break
+            if not is_duplicate:
+                results.append(t)
+
+    return sorted(results)
+
 
 def curve_plane_production(curve, plane, tolerance=None):
     """Curve-plane intersection using production CAD kernel method."""
-    return curve.intersect_plane_production(plane, tolerance)
+    if tolerance is None:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    if not curve.is_valid():
+        return []
+
+    def signed_distance_derivative(t):
+        tan = curve.tangent_at(t)
+        return plane.z_axis.dot(tan)
+
+    results = []
+    spans = curve.get_span_vector()
+
+    for span_idx in range(len(spans) - 1):
+        span_t0 = spans[span_idx]
+        span_t1 = spans[span_idx + 1]
+
+        if abs(span_t1 - span_t0) < tolerance:
+            continue
+
+        bezier_cvs = curve.convert_span_to_bezier(span_idx)
+        if not bezier_cvs:
+            continue
+
+        def subdivide_and_solve(ta, tb, depth):
+            MAX_DEPTH = 30
+            if depth > MAX_DEPTH:
+                return
+
+            pa = curve.point_at(ta)
+            pb = curve.point_at(tb)
+            da = _curve_signed_distance_to_plane(pa, plane)
+            db = _curve_signed_distance_to_plane(pb, plane)
+
+            if da * db > tolerance * tolerance:
+                return
+
+            segment_length = pa.distance(pb)
+            if segment_length < tolerance * 10.0 or abs(tb - ta) < tolerance * 0.001:
+                if abs(db - da) > tolerance:
+                    t_init = ta - da * (tb - ta) / (db - da)
+                else:
+                    t_init = (ta + tb) * 0.5
+                t_init = max(ta, min(tb, t_init))
+
+                t = t_init
+                for newton_iter in range(5):
+                    pt = curve.point_at(t)
+                    f = _curve_signed_distance_to_plane(pt, plane)
+                    if abs(f) < tolerance:
+                        if ta <= t <= tb:
+                            is_duplicate = False
+                            for existing_t in results:
+                                if abs(t - existing_t) < tolerance * 2.0:
+                                    is_duplicate = True
+                                    break
+                            if not is_duplicate:
+                                results.append(t)
+                        return
+                    df = signed_distance_derivative(t)
+                    if abs(df) < 1e-10:
+                        t = (ta + tb) * 0.5
+                        break
+                    dt = -f / df
+                    t_new = t + dt
+                    t_new = max(ta, min(tb, t_new))
+                    if abs(dt) < tolerance * 0.001:
+                        t = t_new
+                        break
+                    t = t_new
+
+                pt_final = curve.point_at(t)
+                if abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance and ta <= t <= tb:
+                    is_duplicate = False
+                    for existing_t in results:
+                        if abs(t - existing_t) < tolerance * 2.0:
+                            is_duplicate = True
+                            break
+                    if not is_duplicate:
+                        results.append(t)
+                return
+
+            tm = (ta + tb) * 0.5
+            pm = curve.point_at(tm)
+
+            v = Vector(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z)
+            w = Vector(pm.x - pa.x, pm.y - pa.y, pm.z - pa.z)
+
+            if v.magnitude() > Tolerance.ZERO_TOLERANCE:
+                t_proj = w.dot(v) / v.dot(v)
+                p_proj = Point(pa.x + t_proj * v.x, pa.y + t_proj * v.y, pa.z + t_proj * v.z)
+                deviation = pm.distance(p_proj)
+
+                if deviation < tolerance * 10.0:
+                    if abs(db - da) > tolerance:
+                        t_root = ta - da * (tb - ta) / (db - da)
+                        t_root = max(ta, min(tb, t_root))
+                        for _ in range(3):
+                            pt = curve.point_at(t_root)
+                            f = _curve_signed_distance_to_plane(pt, plane)
+                            if abs(f) < tolerance:
+                                break
+                            df = signed_distance_derivative(t_root)
+                            if abs(df) > 1e-10:
+                                t_root -= f / df
+                                t_root = max(ta, min(tb, t_root))
+
+                        if abs(_curve_signed_distance_to_plane(curve.point_at(t_root), plane)) < tolerance:
+                            is_duplicate = False
+                            for existing_t in results:
+                                if abs(t_root - existing_t) < tolerance * 2.0:
+                                    is_duplicate = True
+                                    break
+                            if not is_duplicate:
+                                results.append(t_root)
+                    return
+
+            subdivide_and_solve(ta, tm, depth + 1)
+            subdivide_and_solve(tm, tb, depth + 1)
+
+        subdivide_and_solve(span_t0, span_t1, 0)
+
+    return sorted(results)
+
 
 def curve_closest_point(curve, test_point, t0=0.0, t1=0.0):
     """Find closest point on NURBS curve to test point."""
-    return curve.closest_point_to(test_point, t0, t1)
+    return Closest.curve_point(curve, test_point, t0, t1)

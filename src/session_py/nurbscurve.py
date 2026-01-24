@@ -7,7 +7,6 @@ from .point import Point
 from .vector import Vector
 from .plane import Plane
 from .tolerance import Tolerance
-from .boundingbox import BoundingBox
 from .xform import Xform
 from .color import Color
 from . import knot
@@ -64,6 +63,7 @@ class NurbsCurve:
         self.m_knot = np.array([], dtype=np.float64)
         self.m_cv = np.array([], dtype=np.float64)
 
+        self.xform = Xform.identity()
         self._rmf_cache = None
     
     #############################################################################
@@ -1049,24 +1049,49 @@ class NurbsCurve:
         return True
     
     def length(self) -> float:
-        """Compute curve length"""
+        """Compute curve length using Gauss-Legendre quadrature"""
         if not self.is_valid():
             return 0.0
-        
-        t0, t1 = self.domain()
-        num_samples = max(100, self.m_cv_count * 10)
-        dt = (t1 - t0) / num_samples
-        
-        total_length = 0.0
-        p_prev = self.point_at(t0)
-        
-        for i in range(1, num_samples + 1):
-            t = t0 + i * dt
-            p_curr = self.point_at(t)
-            total_length += p_prev.distance(p_curr)
-            p_prev = p_curr
-        
-        return total_length
+
+        GL_X = [
+            -0.9739065285171717, -0.8650633666889845, -0.6794095682990244,
+            -0.4333953941292472, -0.1488743389816312,
+             0.1488743389816312,  0.4333953941292472,  0.6794095682990244,
+             0.8650633666889845,  0.9739065285171717
+        ]
+        GL_W = [
+            0.0666713443086881, 0.1494513491505806, 0.2190863625159820,
+            0.2692667193099963, 0.2955242247147529,
+            0.2955242247147529, 0.2692667193099963, 0.2190863625159820,
+            0.1494513491505806, 0.0666713443086881
+        ]
+
+        total = 0.0
+        n_spans = self.span_count()
+        SUBDIVISIONS = 4
+
+        for span in range(n_spans):
+            span_a = self.m_knot[self.m_order - 2 + span]
+            span_b = self.m_knot[self.m_order - 1 + span]
+            if span_b <= span_a:
+                continue
+
+            span_width = (span_b - span_a) / SUBDIVISIONS
+            for sub in range(SUBDIVISIONS):
+                a = span_a + sub * span_width
+                b = a + span_width
+                mid = (a + b) * 0.5
+                half = (b - a) * 0.5
+                s = 0.0
+
+                for i in range(10):
+                    t = mid + half * GL_X[i]
+                    derivs = self.evaluate(t, 1)
+                    s += GL_W[i] * derivs[1].magnitude()
+
+                total += half * s
+
+        return total
     
     #############################################################################
     # CURVE MODIFICATION
@@ -1148,391 +1173,6 @@ class NurbsCurve:
 
         self._invalidate_rmf_cache()
         return True
-    
-    #############################################################################
-    # INTERSECTION OPERATIONS
-    #############################################################################
-    
-    def intersect_plane(self, plane: Plane, tolerance: float = None) -> List[float]:
-        """Find all intersections between curve and plane (standard method).
-        
-        Implementation matches C++ version with endpoint checking.
-        """
-        if tolerance is None:
-            tolerance = Tolerance.ZERO_TOLERANCE
-        
-        if not self.is_valid():
-            return []
-        
-        def signed_distance(p: Point) -> float:
-            """Signed distance from point to plane"""
-            v = Vector(p.x - plane.origin.x, p.y - plane.origin.y, p.z - plane.origin.z)
-            return v.dot(plane.z_axis)
-        
-        results = []
-        t_start, t_end = self.domain()
-        
-        # Get span parameters for better subdivision
-        span_params = self.get_span_vector()
-        
-        # Check each span for intersections
-        for i in range(len(span_params) - 1):
-            t0 = span_params[i]
-            t1 = span_params[i + 1]
-            
-            # Skip zero-length spans
-            if abs(t1 - t0) < tolerance:
-                continue
-            
-            # Check for sign change (intersection) in this span
-            d0 = signed_distance(self.point_at(t0))
-            d1 = signed_distance(self.point_at(t1))
-            
-            # Check if span crosses plane
-            if d0 * d1 < 0:
-                # Sign change - there's an intersection
-                # Use bisection to find it
-                ta, tb = t0, t1
-                for _ in range(50):
-                    tm = (ta + tb) * 0.5
-                    dm = signed_distance(self.point_at(tm))
-                    if abs(dm) < tolerance:
-                        break
-                    if dm * d0 < 0:
-                        tb = tm
-                    else:
-                        ta = tm
-                results.append(tm)
-            elif abs(d0) < tolerance:
-                # Start point is on plane
-                # Avoid duplicates
-                if not results or abs(results[-1] - t0) >= tolerance:
-                    results.append(t0)
-        
-        # Check end point explicitly
-        d_end = signed_distance(self.point_at(t_end))
-        if abs(d_end) < tolerance:
-            if not results or abs(results[-1] - t_end) >= tolerance:
-                results.append(t_end)
-        
-        # Sort and remove any remaining duplicates
-        results.sort()
-        if len(results) > 1:
-            unique_results = [results[0]]
-            for i in range(1, len(results)):
-                if abs(results[i] - unique_results[-1]) >= tolerance * 2.0:
-                    unique_results.append(results[i])
-            results = unique_results
-        
-        return results
-    
-    def intersect_plane_points(self, plane: Plane, tolerance: float = None) -> List[Point]:
-        """Find all intersection points between curve and plane.
-        
-        Parameters
-        ----------
-        plane : Plane
-            The plane to intersect with.
-        tolerance : float, optional
-            Intersection tolerance. Defaults to Tolerance.ZERO_TOLERANCE.
-            
-        Returns
-        -------
-        list of Point
-            Intersection points.
-        """
-        params = self.intersect_plane(plane, tolerance)
-        return [self.point_at(t) for t in params]
-    
-    def intersect_plane_bezier_clipping(self, plane: Plane, tolerance: float = None) -> List[float]:
-        """Curve-plane intersection using Bézier clipping (faster for multiple intersections).
-        
-        Parameters
-        ----------
-        plane : Plane
-            The plane to intersect with.
-        tolerance : float, optional
-            Intersection tolerance. Defaults to Tolerance.ZERO_TOLERANCE.
-            
-        Returns
-        -------
-        list of float
-            Parameter values where curve intersects plane.
-            
-        Notes
-        -----
-        This is an advanced method using Bézier clipping for interval reduction.
-        It's 2-5x faster than the standard method for curves with many intersections.
-        Used by Rhino, SolidWorks, and other professional CAD software.
-        """
-        if tolerance is None:
-            tolerance = Tolerance.ZERO_TOLERANCE
-        
-        if not self.is_valid():
-            return []
-        
-        def signed_distance(p: Point) -> float:
-            """Signed distance from point to plane"""
-            v = Vector(p.x - plane.origin.x, p.y - plane.origin.y, p.z - plane.origin.z)
-            return v.dot(plane.z_axis)
-        
-        results = []
-        t0, t1 = self.domain()
-        
-        def clip_recursive(ta: float, tb: float, depth: int):
-            """Recursive Bézier clipping on interval [ta, tb]"""
-            # Prevent infinite recursion
-            if depth > 50:
-                tm = (ta + tb) * 0.5
-                pm = self.point_at(tm)
-                dist = signed_distance(pm)
-                if abs(dist) < tolerance:
-                    results.append(tm)
-                return
-            
-            # Check if interval is small enough
-            if abs(tb - ta) < tolerance * 0.01:
-                tm = (ta + tb) * 0.5
-                pm = self.point_at(tm)
-                dist = signed_distance(pm)
-                
-                if abs(dist) < tolerance:
-                    # Newton refinement for final precision
-                    t = tm
-                    for _ in range(10):
-                        pt = self.point_at(t)
-                        tan = self.tangent_at(t)
-                        
-                        f = signed_distance(pt)
-                        df = tan.dot(plane.z_axis)
-                        
-                        if abs(df) < 1e-12:
-                            break
-                        
-                        dt = -f / df
-                        t += dt
-                        
-                        if abs(dt) < tolerance * 0.01:
-                            break
-                        if t < ta or t > tb:
-                            t = tm
-                            break
-                    
-                    # Verify solution
-                    pt_final = self.point_at(t)
-                    if abs(signed_distance(pt_final)) < tolerance and ta <= t <= tb:
-                        results.append(t)
-                return
-            
-            # Sample curve at key parameters (order+1 points for Bézier-like behavior)
-            num_samples = min(self.order() + 1, 10)
-            distances = []
-            params = []
-            
-            dt = (tb - ta) / (num_samples - 1)
-            for i in range(num_samples):
-                t = ta + i * dt
-                p = self.point_at(t)
-                distances.append(signed_distance(p))
-                params.append(t)
-            
-            # Find min and max distances
-            d_min = min(distances)
-            d_max = max(distances)
-            
-            # Quick rejection: curve segment entirely on one side
-            if d_min > tolerance or d_max < -tolerance:
-                return
-            
-            # Find clipping bounds using convex hull property
-            t_min = ta
-            t_max = tb
-            
-            # Simple clipping: find where distance function changes sign
-            for i in range(len(distances) - 1):
-                if distances[i] * distances[i + 1] < 0:
-                    # Sign change between params[i] and params[i+1]
-                    # Use linear interpolation to estimate clipping point
-                    d0 = distances[i]
-                    d1 = distances[i + 1]
-                    t_clip = params[i] - d0 * (params[i + 1] - params[i]) / (d1 - d0)
-                    
-                    if d0 > 0:
-                        t_max = min(t_max, t_clip + (tb - ta) * 0.1)
-                    else:
-                        t_min = max(t_min, t_clip - (tb - ta) * 0.1)
-            
-            # Ensure valid interval
-            if t_min >= t_max:
-                t_min = ta
-                t_max = tb
-            
-            # Clamp to original interval
-            t_min = max(ta, t_min)
-            t_max = min(tb, t_max)
-            
-            # Check if clipping reduced interval significantly
-            reduction = (t_max - t_min) / (tb - ta)
-            
-            if reduction > 0.8 or (t_max - t_min) < tolerance * 0.1:
-                # Not much reduction, split in half
-                tm = (ta + tb) * 0.5
-                clip_recursive(ta, tm, depth + 1)
-                clip_recursive(tm, tb, depth + 1)
-            else:
-                # Good reduction, continue on clipped interval
-                clip_recursive(t_min, t_max, depth + 1)
-        
-        # Start recursive clipping
-        clip_recursive(t0, t1, 0)
-        
-        # Sort and remove duplicates
-        results.sort()
-        if len(results) > 1:
-            unique_results = [results[0]]
-            for i in range(1, len(results)):
-                if abs(results[i] - results[i-1]) > tolerance * 2.0:
-                    unique_results.append(results[i])
-            results = unique_results
-        
-        return results
-    
-    def intersect_plane_algebraic(self, plane: Plane, tolerance: float = None) -> List[float]:
-        """Curve-plane intersection using algebraic/polynomial method (most precise).
-        
-        Parameters
-        ----------
-        plane : Plane
-            The plane to intersect with.
-        tolerance : float, optional
-            Intersection tolerance. Defaults to Tolerance.ZERO_TOLERANCE.
-            
-        Returns
-        -------
-        list of float
-            Parameter values where curve intersects plane.
-            
-        Notes
-        -----
-        This method converts the intersection problem to polynomial root finding.
-        It's the most mathematically precise but can be slower for high-degree curves.
-        Uses the hodograph (derivative) for Newton refinement with quadratic convergence.
-        
-        Algorithm:
-        1. For each span, convert to Bezier representation
-        2. Project curve onto plane normal: d(t) = n · (C(t) - P₀)
-        3. Find roots where d(t) = 0 using derivative information
-        4. Refine with Newton-Raphson using curve derivatives
-        """
-        if tolerance is None:
-            tolerance = Tolerance.ZERO_TOLERANCE
-        
-        if not self.is_valid():
-            return []
-        
-        def signed_distance(p: Point) -> float:
-            """Signed distance from point to plane"""
-            v = Vector(p.x - plane.origin.x, p.y - plane.origin.y, p.z - plane.origin.z)
-            return v.dot(plane.z_axis)
-        
-        results = []
-        t0, t1 = self.domain()
-        
-        # Process each span separately for better accuracy
-        num_spans = self.span_count()
-        spans = self.get_span_vector()
-        
-        for span_idx in range(len(spans) - 1):
-            span_t0 = spans[span_idx]
-            span_t1 = spans[span_idx + 1]
-            
-            # Skip zero-length spans
-            if abs(span_t1 - span_t0) < tolerance:
-                continue
-            
-            # Sample span endpoints
-            d0 = signed_distance(self.point_at(span_t0))
-            d1 = signed_distance(self.point_at(span_t1))
-            
-            # Check if span crosses plane
-            if d0 * d1 > tolerance * tolerance:
-                # Same sign, no intersection in this span
-                continue
-            
-            # Use bisection to bracket root, then Newton with derivatives
-            ta, tb = span_t0, span_t1
-            da, db = d0, d1
-            
-            # Bisection phase (guaranteed convergence)
-            for _ in range(20):
-                if abs(tb - ta) < tolerance * 0.1:
-                    break
-                
-                tm = (ta + tb) * 0.5
-                pt_m = self.point_at(tm)
-                dm = signed_distance(pt_m)
-                
-                if abs(dm) < tolerance:
-                    ta = tb = tm
-                    break
-                
-                if da * dm < 0:
-                    tb, db = tm, dm
-                else:
-                    ta, da = tm, dm
-            
-            # Newton-Raphson with hodograph (quadratic convergence)
-            t = (ta + tb) * 0.5
-            
-            for iteration in range(15):
-                pt = self.point_at(t)
-                f = signed_distance(pt)
-                
-                # Check convergence
-                if abs(f) < tolerance:
-                    break
-                
-                # Compute derivative: df/dt = n · C'(t)
-                tan = self.tangent_at(t)
-                df = plane.z_axis.dot(tan)
-                
-                # Avoid division by zero (tangent parallel to plane)
-                if abs(df) < 1e-10:
-                    # Fall back to bisection
-                    if f * da < 0:
-                        t = (ta + t) * 0.5
-                    else:
-                        t = (t + tb) * 0.5
-                    continue
-                
-                # Newton step
-                dt = -f / df
-                t_new = t + dt
-                
-                # Clamp to span bounds
-                t_new = max(span_t0, min(span_t1, t_new))
-                
-                # Check step size convergence
-                if abs(dt) < tolerance * 0.01:
-                    t = t_new
-                    break
-                
-                t = t_new
-            
-            # Verify solution is accurate
-            pt_final = self.point_at(t)
-            if abs(signed_distance(pt_final)) < tolerance:
-                # Check if this is a duplicate
-                is_duplicate = False
-                for existing_t in results:
-                    if abs(t - existing_t) < tolerance * 2.0:
-                        is_duplicate = True
-                        break
-                
-                if not is_duplicate:
-                    results.append(t)
-        
-        return sorted(results)
     
     #############################################################################
     # POLYLINE CONVERSION
@@ -1667,35 +1307,6 @@ class NurbsCurve:
             params.append(t)
 
         return points, params
-    
-    def get_bounding_box(self) -> Optional[BoundingBox]:
-        """Get the bounding box of the curve.
-        
-        Returns
-        -------
-        BoundingBox or None
-            The bounding box containing all control points, or None if invalid.
-        """
-        if not self.is_valid():
-            return None
-        
-        min_pt = [float('inf')] * 3
-        max_pt = [float('-inf')] * 3
-        
-        for i in range(self.m_cv_count):
-            pt = self.get_cv(i)
-            if pt:
-                min_pt[0] = min(min_pt[0], pt.x)
-                min_pt[1] = min(min_pt[1], pt.y)
-                min_pt[2] = min(min_pt[2], pt.z)
-                max_pt[0] = max(max_pt[0], pt.x)
-                max_pt[1] = max(max_pt[1], pt.y)
-                max_pt[2] = max(max_pt[2], pt.z)
-        
-        return BoundingBox(
-            Point(min_pt[0], min_pt[1], min_pt[2]),
-            Point(max_pt[0], max_pt[1], max_pt[2])
-        )
     
     def zero_cvs(self) -> bool:
         """Zero all control vertices and set weights to 1 if rational.
@@ -2383,14 +1994,14 @@ class NurbsCurve:
         
         return self.set_cv(self.m_cv_count - 1, end_point)
     
-    def transform(self, xform: Xform) -> bool:
+    def transform(self, xform: Xform = None) -> bool:
         """Apply transformation to the curve.
-        
+
         Parameters
         ----------
-        xform : Xform
-            Transformation to apply.
-            
+        xform : Xform, optional
+            Transformation to apply. If None, uses stored self.xform.
+
         Returns
         -------
         bool
@@ -2398,42 +2009,36 @@ class NurbsCurve:
         """
         if not self.is_valid():
             return False
-        
+
+        xf = xform if xform is not None else self.xform
+
         for i in range(self.m_cv_count):
             pt = self.get_cv(i)
             if pt:
-                transformed_pt = xform.transform_point(pt)
-                self.set_cv(i, transformed_pt)
-        
+                xf.transform_point(pt)
+                self.set_cv(i, pt)
+
         return True
-    
+
     def transformed(self, xform: Xform = None) -> 'NurbsCurve':
         """Get transformed copy of the curve.
-        
+
         Parameters
         ----------
         xform : Xform, optional
             Transformation to apply. If None, uses stored self.xform.
-            
+
         Returns
         -------
         NurbsCurve
             Transformed copy of the curve.
         """
-        result = NurbsCurve()
-        result.m_dim = self.m_dim
-        result.m_is_rat = self.m_is_rat
-        result.m_order = self.m_order
-        result.m_cv_count = self.m_cv_count
-        result.m_cv_stride = self.m_cv_stride
-        result.m_knot = self.m_knot.copy()
-        result.m_cv = self.m_cv.copy()
-        result.guid = str(uuid.uuid4())
-        result.name = self.name + "_transformed"
-        
-        if xform:
-            result.transform(xform)
-        
+        result = self.duplicate()
+        result.xform = self.xform.duplicate()
+
+        xf = xform if xform is not None else self.xform
+        result.transform(xf)
+
         return result
     
     def superfluous_knot(self, end: int) -> float:
@@ -2657,12 +2262,12 @@ class NurbsCurve:
     
     def clamp_end(self, end: int) -> bool:
         """Clamp ends (add multiplicity to end knots).
-        
+
         Parameters
         ----------
         end : int
             0 for start, 1 for end, 2 for both.
-            
+
         Returns
         -------
         bool
@@ -2670,9 +2275,22 @@ class NurbsCurve:
         """
         if not self.is_valid():
             return False
-        
-        # This is a simplified implementation
-        # Full implementation would insert knots to achieve full multiplicity
+        if end < 0 or end > 2:
+            return False
+
+        # Clamp start
+        if end == 0 or end == 2:
+            t = self.m_knot[self.m_order - 2]
+            for i in range(self.m_order - 2):
+                self.m_knot[i] = t
+
+        # Clamp end
+        if end == 1 or end == 2:
+            t = self.m_knot[self.m_cv_count - 1]
+            kc = self.knot_count()
+            for i in range(self.m_cv_count, kc):
+                self.m_knot[i] = t
+
         return True
     
     def evaluate(self, t: float, derivative_count: int = 0) -> List[Vector]:
@@ -2767,43 +2385,6 @@ class NurbsCurve:
             result.append(Vector(0.0, 0.0, 0.0))
 
         return result
-    
-    def closest_point_to(self, test_point: Point, t0: float = None, t1: float = None) -> Tuple[float, float]:
-        """Find closest point with parameter bounds.
-        
-        Parameters
-        ----------
-        test_point : Point
-            Point to find closest curve point to.
-        t0 : float, optional
-            Start of search interval. Defaults to curve start.
-        t1 : float, optional
-            End of search interval. Defaults to curve end.
-            
-        Returns
-        -------
-        tuple of (float, float)
-            (parameter, distance) of closest point.
-        """
-        domain_t0, domain_t1 = self.domain()
-        
-        if t0 is None:
-            t0 = domain_t0
-        if t1 is None:
-            t1 = domain_t1
-        
-        closest_pt, closest_t = self.closest_point(test_point)
-        
-        # Clamp to bounds
-        if closest_t < t0:
-            closest_t = t0
-            closest_pt = self.point_at(t0)
-        elif closest_t > t1:
-            closest_t = t1
-            closest_pt = self.point_at(t1)
-        
-        distance = test_point.distance(closest_pt)
-        return (closest_t, distance)
     
     def get_nurbs_form(self) -> int:
         """Get NURBS form (always returns 1 for NURBS curve).
@@ -3338,220 +2919,6 @@ class NurbsCurve:
         
         return bezier_cvs
     
-    def intersect_plane_production(self, plane: Plane, tolerance: float = None) -> List[float]:
-        """Curve-plane intersection using production CAD kernel method.
-        
-        This is the INDUSTRY STANDARD method used in Rhino, Parasolid, ACIS, etc.
-        
-        Parameters
-        ----------
-        plane : Plane
-            The plane to intersect with.
-        tolerance : float, optional
-            Intersection tolerance. Defaults to Tolerance.ZERO_TOLERANCE.
-            
-        Returns
-        -------
-        list of float
-            Parameter values where curve intersects plane.
-            
-        Notes
-        -----
-        **Algorithm (Industry Standard - Subdivision + Newton Hybrid):**
-        
-        1. Convert to Bezier spans (one span at a time)
-        2. Recursively subdivide until segments are nearly linear
-        3. Check for sign changes in signed distance
-        4. Use Newton-Raphson (2-3 iterations) for quadratic convergence
-        
-        **Why this is the best method:**
-        - Very robust (no missed intersections)
-        - Handles rational curves perfectly
-        - Newton gives machine-precision results quickly
-        - Subdivision provides reliable bracketing
-        
-        **Used by:** Rhino/OpenNURBS, Parasolid, ACIS, Autodesk kernels
-        
-        **Performance:** O(log n) subdivision + O(1) Newton per root
-        """
-        if tolerance is None:
-            tolerance = Tolerance.ZERO_TOLERANCE
-        
-        if not self.is_valid():
-            return []
-        
-        def signed_distance(p: Point) -> float:
-            """Signed distance from point to plane"""
-            v = Vector(p.x - plane.origin.x, p.y - plane.origin.y, p.z - plane.origin.z)
-            return v.dot(plane.z_axis)
-        
-        def signed_distance_derivative(t: float) -> float:
-            """Derivative of signed distance: df/dt = n · C'(t)"""
-            tan = self.tangent_at(t)
-            return plane.z_axis.dot(tan)
-        
-        results = []
-        
-        # Process each Bezier span separately
-        spans = self.get_span_vector()
-        
-        for span_idx in range(len(spans) - 1):
-            span_t0 = spans[span_idx]
-            span_t1 = spans[span_idx + 1]
-            
-            # Skip degenerate spans
-            if abs(span_t1 - span_t0) < tolerance:
-                continue
-            
-            # Get Bezier representation of this span
-            bezier_cvs = self.convert_span_to_bezier(span_idx)
-            if not bezier_cvs:
-                continue
-            
-            # Recursive subdivision for this span
-            def subdivide_and_solve(ta: float, tb: float, depth: int):
-                """Recursively subdivide until nearly linear, then solve"""
-                
-                MAX_DEPTH = 30
-                if depth > MAX_DEPTH:
-                    return
-                
-                # Evaluate at endpoints
-                pa = self.point_at(ta)
-                pb = self.point_at(tb)
-                da = signed_distance(pa)
-                db = signed_distance(pb)
-                
-                # Check if root exists in this interval
-                if da * db > tolerance * tolerance:
-                    # Same sign, no root (or even number of roots)
-                    return
-                
-                # Check if segment is nearly linear (subdivision stopping criterion)
-                segment_length = pa.distance(pb)
-                if segment_length < tolerance * 10.0 or abs(tb - ta) < tolerance * 0.001:
-                    # Segment is small enough, apply Newton's method
-                    
-                    # Initial guess: linear interpolation
-                    if abs(db - da) > tolerance:
-                        t_init = ta - da * (tb - ta) / (db - da)
-                    else:
-                        t_init = (ta + tb) * 0.5
-                    
-                    t_init = max(ta, min(tb, t_init))
-                    
-                    # Newton-Raphson iteration (typically converges in 2-3 iterations)
-                    t = t_init
-                    for newton_iter in range(5):  # Max 5 iterations for safety
-                        pt = self.point_at(t)
-                        f = signed_distance(pt)
-                        
-                        # Check convergence
-                        if abs(f) < tolerance:
-                            # Verify solution is in bounds
-                            if ta <= t <= tb:
-                                # Check for duplicate
-                                is_duplicate = False
-                                for existing_t in results:
-                                    if abs(t - existing_t) < tolerance * 2.0:
-                                        is_duplicate = True
-                                        break
-                                
-                                if not is_duplicate:
-                                    results.append(t)
-                            return
-                        
-                        # Compute derivative
-                        df = signed_distance_derivative(t)
-                        
-                        # Check for tangent parallel to plane (singular point)
-                        if abs(df) < 1e-10:
-                            # Fall back to bisection
-                            t = (ta + tb) * 0.5
-                            break
-                        
-                        # Newton step: t_new = t - f/f'
-                        dt = -f / df
-                        t_new = t + dt
-                        
-                        # Clamp to interval (bracketing)
-                        t_new = max(ta, min(tb, t_new))
-                        
-                        # Check step convergence
-                        if abs(dt) < tolerance * 0.001:
-                            t = t_new
-                            break
-                        
-                        t = t_new
-                    
-                    # Final verification
-                    pt_final = self.point_at(t)
-                    if abs(signed_distance(pt_final)) < tolerance and ta <= t <= tb:
-                        # Check for duplicate
-                        is_duplicate = False
-                        for existing_t in results:
-                            if abs(t - existing_t) < tolerance * 2.0:
-                                is_duplicate = True
-                                break
-                        
-                        if not is_duplicate:
-                            results.append(t)
-                    
-                    return
-                
-                # Subdivide: check midpoint to detect curvature
-                tm = (ta + tb) * 0.5
-                pm = self.point_at(tm)
-                dm = signed_distance(pm)
-                
-                # Test for linearity: if midpoint is on the line between endpoints
-                # Distance from midpoint to line connecting endpoints
-                v = Vector(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z)
-                w = Vector(pm.x - pa.x, pm.y - pa.y, pm.z - pa.z)
-                
-                if v.magnitude() > Tolerance.ZERO_TOLERANCE:
-                    # Project w onto v
-                    t_proj = w.dot(v) / v.dot(v)
-                    p_proj = Point(pa.x + t_proj * v.x, pa.y + t_proj * v.y, pa.z + t_proj * v.z)
-                    deviation = pm.distance(p_proj)
-                    
-                    # If deviation is small, segment is nearly linear
-                    if deviation < tolerance * 10.0:
-                        # Apply Newton directly
-                        if abs(db - da) > tolerance:
-                            t_root = ta - da * (tb - ta) / (db - da)
-                            t_root = max(ta, min(tb, t_root))
-                            
-                            # Quick Newton refinement
-                            for _ in range(3):
-                                pt = self.point_at(t_root)
-                                f = signed_distance(pt)
-                                if abs(f) < tolerance:
-                                    break
-                                df = signed_distance_derivative(t_root)
-                                if abs(df) > 1e-10:
-                                    t_root -= f / df
-                                    t_root = max(ta, min(tb, t_root))
-                            
-                            if abs(signed_distance(self.point_at(t_root))) < tolerance:
-                                is_duplicate = False
-                                for existing_t in results:
-                                    if abs(t_root - existing_t) < tolerance * 2.0:
-                                        is_duplicate = True
-                                        break
-                                if not is_duplicate:
-                                    results.append(t_root)
-                        return
-                
-                # Not linear enough, subdivide into two segments
-                subdivide_and_solve(ta, tm, depth + 1)
-                subdivide_and_solve(tm, tb, depth + 1)
-            
-            # Start subdivision for this span
-            subdivide_and_solve(span_t0, span_t1, 0)
-        
-        return sorted(results)
-
     ###########################################################################################
     # JSON Serialization
     ###########################################################################################

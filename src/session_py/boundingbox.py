@@ -244,6 +244,137 @@ class BoundingBox:
             half = Vector((L * 0.5) + inflate, r_eff + inflate, r_eff + inflate)
             return cls(c, ux, uy, uz, half)
 
+    @classmethod
+    def from_nurbscurve(cls, curve, inflate: float = 0.0, tight: bool = False, plane=None):
+        if not curve.is_valid() or curve.cv_count() == 0:
+            return cls()
+
+        if not tight:
+            points = [curve.get_cv(i) for i in range(curve.cv_count())]
+            if plane is not None:
+                return cls.from_points_with_plane(points, plane, inflate)
+            return cls.from_points(points, inflate)
+
+        t0, t1 = curve.domain()
+        extrema_points = [curve.point_at(t0), curve.point_at(t1)]
+
+        spans = curve.get_span_vector()
+        for t in spans:
+            if t > t0 and t < t1:
+                extrema_points.append(curve.point_at(t))
+
+        if plane is not None:
+            axes = [plane.x_axis, plane.y_axis, plane.z_axis]
+        else:
+            axes = [Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1)]
+
+        NUM_SAMPLES = 20
+        dt = (t1 - t0) / NUM_SAMPLES
+
+        for axis_idx, axis in enumerate(axes):
+            for i in range(NUM_SAMPLES):
+                t_start = t0 + i * dt
+                t_end = t_start + dt
+
+                deriv_start = curve.evaluate(t_start, 1)
+                deriv_end = curve.evaluate(t_end, 1)
+                if len(deriv_start) < 2 or len(deriv_end) < 2:
+                    continue
+
+                if plane is not None:
+                    d_start = deriv_start[1].dot(axis)
+                    d_end = deriv_end[1].dot(axis)
+                else:
+                    d_start = deriv_start[1][axis_idx]
+                    d_end = deriv_end[1][axis_idx]
+
+                if d_start * d_end < 0:
+                    t_lo, t_hi = t_start, t_end
+                    t_root = (t_lo + t_hi) * 0.5
+
+                    for _ in range(20):
+                        deriv = curve.evaluate(t_root, 2)
+                        if len(deriv) < 3:
+                            break
+
+                        if plane is not None:
+                            f = deriv[1].dot(axis)
+                            fp = deriv[2].dot(axis)
+                        else:
+                            f = deriv[1][axis_idx]
+                            fp = deriv[2][axis_idx]
+
+                        if abs(f) < 1e-12:
+                            break
+
+                        if abs(fp) > 1e-14:
+                            t_new = t_root - f / fp
+                            if t_lo <= t_new <= t_hi:
+                                t_root = t_new
+                            else:
+                                if f * d_start < 0:
+                                    t_hi = t_root
+                                else:
+                                    t_lo = t_root
+                                t_root = (t_lo + t_hi) * 0.5
+                        else:
+                            t_root = (t_lo + t_hi) * 0.5
+
+                        deriv_check = curve.evaluate(t_root, 1)
+                        if len(deriv_check) >= 2:
+                            if plane is not None:
+                                f_check = deriv_check[1].dot(axis)
+                            else:
+                                f_check = deriv_check[1][axis_idx]
+                            if f_check * d_start < 0:
+                                t_hi = t_root
+                                d_end = f_check
+                            else:
+                                t_lo = t_root
+                                d_start = f_check
+
+                    extrema_points.append(curve.point_at(t_root))
+
+        if plane is not None:
+            return cls.from_points_with_plane(extrema_points, plane, inflate)
+        return cls.from_points(extrema_points, inflate)
+
+    @classmethod
+    def from_points_with_plane(cls, points: List[Point], plane, inflate: float = 0.0):
+        if not points:
+            return cls()
+
+        from .xform import Xform
+        origin = plane.origin
+        x_axis = plane.x_axis
+        y_axis = plane.y_axis
+        z_axis = plane.z_axis
+        plane_to_xy = Xform.plane_to_xy(origin, x_axis, y_axis, z_axis)
+
+        min_x = min_y = min_z = float('inf')
+        max_x = max_y = max_z = float('-inf')
+
+        for pt in points:
+            local_pt = plane_to_xy.transformed_point(pt)
+            min_x = min(min_x, local_pt.x)
+            min_y = min(min_y, local_pt.y)
+            min_z = min(min_z, local_pt.z)
+            max_x = max(max_x, local_pt.x)
+            max_y = max(max_y, local_pt.y)
+            max_z = max(max_z, local_pt.z)
+
+        local_center = Point((min_x + max_x) * 0.5, (min_y + max_y) * 0.5, (min_z + max_z) * 0.5)
+        half_size = Vector(
+            (max_x - min_x) * 0.5 + inflate,
+            (max_y - min_y) * 0.5 + inflate,
+            (max_z - min_z) * 0.5 + inflate
+        )
+
+        xy_to_plane = Xform.xy_to_plane(origin, x_axis, y_axis, z_axis)
+        world_center = xy_to_plane.transformed_point(local_center)
+
+        return cls(world_center, x_axis, y_axis, z_axis, half_size)
+
     def point_at(self, x: float, y: float, z: float) -> Point:
         return Point(
             self.center.x + x * self.x_axis[0] + y * self.y_axis[0] + z * self.z_axis[0],

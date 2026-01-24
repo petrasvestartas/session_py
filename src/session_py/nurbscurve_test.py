@@ -1,3 +1,4 @@
+from pathlib import Path
 from session_py.mini_test import MINI_TEST, MINI_CHECK
 
 
@@ -273,12 +274,15 @@ def test_nurbscurve_conversions():
 
     MINI_CHECK(len(len_pts) == 13)
     MINI_CHECK(TOLERANCE.is_point_close(len_pts[0], Point(0.0, 0.0, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(len_pts[6], Point(1.928691287815458, 0.510169864866836, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(len_pts[12], Point(3.934494402948975, 0.128829830906625, 0.0)))
 
 
 @MINI_TEST("NurbsCurve", "Evaluation")
 def test_nurbscurve_evaluation():
     from session_py import NurbsCurve
     from session_py import Point
+    from session_py import Vector
     from session_py import Tolerance
 
     TOLERANCE = Tolerance()
@@ -299,6 +303,9 @@ def test_nurbscurve_evaluation():
 
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
 
+    # Length
+    MINI_CHECK(TOLERANCE.is_close(curve.length(), 11.3010276326))
+
     # Get point at parameter t
     point_at = curve.point_at(0.5)
     MINI_CHECK(TOLERANCE.is_close(point_at[0], 1.445733625) and TOLERANCE.is_close(point_at[1], 1.80199875) and TOLERANCE.is_close(point_at[2], -0.134851625))
@@ -314,11 +321,14 @@ def test_nurbscurve_evaluation():
     tangent = curve.tangent_at(0.5)
     MINI_CHECK(TOLERANCE.is_close(tangent[0], 0.037069134389828) and TOLERANCE.is_close(tangent[1], 0.990209443486538) and TOLERANCE.is_close(tangent[2], -0.134577625575985))
 
-    # Frame at
+    # Frame at (normalized=True: t in [0,1] mapped to domain)
     result = curve.frame_at(0.5, normalized=True)
     MINI_CHECK(result is not None)
     o, t, n, b = result
     MINI_CHECK(TOLERANCE.is_close(o[0], 3.156927375) and TOLERANCE.is_close(o[1], 1.3351115) and TOLERANCE.is_close(o[2], 0.130488875))
+    MINI_CHECK(TOLERANCE.is_close(t[0], 0.701806140304030) and TOLERANCE.is_close(t[1], 0.697509131556264) and TOLERANCE.is_close(t[2], 0.144738221721788))
+    MINI_CHECK(TOLERANCE.is_close(n[0], -0.513930504714161) and TOLERANCE.is_close(n[1], 0.355053088776962) and TOLERANCE.is_close(n[2], 0.780905077761815))
+    MINI_CHECK(TOLERANCE.is_close(b[0], 0.493298669931115) and TOLERANCE.is_close(b[1], -0.622429365908747) and TOLERANCE.is_close(b[2], 0.607649657861031))
 
     MINI_CHECK(curve.frame_at(-0.1, normalized=True) is None)
     MINI_CHECK(curve.frame_at(1.1, normalized=True) is None)
@@ -326,16 +336,42 @@ def test_nurbscurve_evaluation():
     MINI_CHECK(curve.frame_at(curve.domain_end(), normalized=False) is not None)
     MINI_CHECK(curve.frame_at(curve.domain_start() - 0.1, normalized=False) is None)
 
-    # Perpendicular frame at
+    # Perpendicular frame at (RMF with Frenet initialization, matches Rhino)
     result = curve.perpendicular_frame_at(0.5, normalized=True)
     MINI_CHECK(result is not None)
     o, t, n, b = result
     MINI_CHECK(TOLERANCE.is_point_close(o, Point(3.156927375, 1.3351115, 0.130488875)))
+    MINI_CHECK(TOLERANCE.is_vector_close(t, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)))
+    MINI_CHECK(TOLERANCE.is_vector_close(n, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)))
+    MINI_CHECK(TOLERANCE.is_vector_close(b, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)))
     MINI_CHECK(curve.perpendicular_frame_at(-0.1, normalized=True) is None)
     MINI_CHECK(curve.perpendicular_frame_at(1.1, normalized=True) is None)
     MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start(), normalized=False) is not None)
     MINI_CHECK(curve.perpendicular_frame_at(curve.domain_end(), normalized=False) is not None)
     MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start() - 0.1, normalized=False) is None)
+
+    # Get multiple rotation minimization frames along the curve (matches Rhino)
+    params = [0.0, 0.25, 0.5, 0.75, 1.0]
+    frames = curve.get_perpendicular_frames(params)
+    MINI_CHECK(len(frames) == 5)
+    # Frame 0 (start)
+    o0, t0, n0, b0 = frames[0]
+    MINI_CHECK(TOLERANCE.is_point_close(o0, Point(1.957614, 1.140253, -0.191281)))
+    MINI_CHECK(TOLERANCE.is_vector_close(t0, Vector(0.532767753269467, 0.809398954921174, -0.247046256496055)))
+    MINI_CHECK(TOLERANCE.is_vector_close(n0, Vector(-0.261213903019039, -0.120386647366337, -0.957744408496053)))
+    MINI_CHECK(TOLERANCE.is_vector_close(b0, Vector(-0.804938393882267, 0.574787253606414, 0.147288136473484)))
+    # Frame 2 (middle)
+    o2, t2, n2, b2 = frames[2]
+    MINI_CHECK(TOLERANCE.is_point_close(o2, Point(3.156927375, 1.3351115, 0.130488875)))
+    MINI_CHECK(TOLERANCE.is_vector_close(t2, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)))
+    MINI_CHECK(TOLERANCE.is_vector_close(n2, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)))
+    MINI_CHECK(TOLERANCE.is_vector_close(b2, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)))
+    # Frame 4 (end)
+    o4, t4, n4, b4 = frames[4]
+    MINI_CHECK(TOLERANCE.is_point_close(o4, Point(2.15032, 1.868606, 0.0)))
+    MINI_CHECK(TOLERANCE.is_vector_close(t4, Vector(0.183261707605497, 0.080808692422033, 0.979737261593412)))
+    MINI_CHECK(TOLERANCE.is_vector_close(n4, Vector(0.896455027206172, 0.395289116914872, -0.200287039634224)))
+    MINI_CHECK(TOLERANCE.is_vector_close(b4, Vector(-0.403464410725777, 0.914995338391241, 0.0)))
 
     # Points
     p0 = curve.point_at_start()
@@ -403,6 +439,27 @@ def test_nurbscurve_modifications():
     curve_rational.make_non_rational(force=True)
     MINI_CHECK(curve_rational.length() == original_length)
 
+    # Clamp ends - create unclamped curve manually
+    points_open = points
+    curve_open = NurbsCurve(dimension=3, is_rational=False, order=3, cv_count=5)
+    # Manually allocate arrays (C++ constructor does this automatically)
+    import numpy as np
+    knot_count = curve_open.m_order + curve_open.m_cv_count - 2
+    curve_open.m_knot = np.zeros(knot_count, dtype=np.float64)
+    curve_open.m_cv = np.zeros(curve_open.m_cv_count * curve_open.m_cv_stride, dtype=np.float64)
+
+    for i in range(5):
+        curve_open.set_cv(i, points_open[i])
+
+    for i in range(curve_open.knot_count()):
+        curve_open.set_knot(i, i * 1.0)
+
+    # Now clamp, making 2 knots at the ends the same
+    curve_open.clamp_end(2)
+    knots = curve_open.get_knots()
+    MINI_CHECK(TOLERANCE.is_close(knots[0], knots[1]))
+    MINI_CHECK(TOLERANCE.is_close(knots[-2], knots[-1]))
+
 
 @MINI_TEST("NurbsCurve", "json_roundtrip")
 def test_nurbscurve_json_roundtrip():
@@ -419,7 +476,7 @@ def test_nurbscurve_json_roundtrip():
     curve.set_domain(0.0, 1.0)
     curve.set_domain(0.0, 1.0)
 
-    filename = "serialization/test_nurbscurve.json"
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
     curve.json_dump(filename)
     loaded = NurbsCurve.json_load(filename)
 
@@ -444,7 +501,7 @@ def test_nurbscurve_protobuf_roundtrip():
     curve.set_domain(0.0, 1.0)
     curve.set_domain(0.0, 1.0)
 
-    filename = "serialization/test_nurbscurve.bin"
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
     curve.protobuf_dump(filename)
     loaded = NurbsCurve.protobuf_load(filename)
 
@@ -459,6 +516,7 @@ def test_nurbscurve_intersect_plane():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Plane
+    from session_py import intersection
 
     points = [
         Point(0.0, 0.0, 0.0),
@@ -469,9 +527,52 @@ def test_nurbscurve_intersect_plane():
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
     curve.set_domain(0.0, 1.0)
     plane = Plane.xy_plane()
-    intersections = curve.intersect_plane(plane)
+    intersections = intersection.curve_plane(curve, plane)
 
     MINI_CHECK(len(intersections) >= 0)
+
+
+@MINI_TEST("NurbsCurve", "transformations")
+def test_nurbscurve_transformations():
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import Xform
+
+    points = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 2.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 2.0, 0.0),
+        Point(4.0, 0.0, 0.0)
+    ]
+
+    # transform() - Apply stored xform (in-place)
+    curve1 = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve1.xform = Xform.translation(0.0, 0.0, 1.0)
+    curve1.transform()
+    MINI_CHECK(curve1.xform.is_identity() == False)
+    MINI_CHECK(curve1.cv(0)[2] == 1.0)
+
+    # transform(xform) - Apply custom xform (in-place)
+    curve2 = NurbsCurve.create(periodic=False, degree=2, points=points)
+    x = Xform.translation(0.0, 0.0, 1.0)
+    curve2.transform(x)
+    MINI_CHECK(curve2.xform.is_identity() == True)
+    MINI_CHECK(curve2.cv(0)[2] == 1.0)
+
+    # transformed() - Get copy with stored xform applied
+    curve3 = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve3.xform = Xform.translation(0.0, 0.0, 10.0)
+    curve3_transformed = curve3.transformed()
+    MINI_CHECK(curve3_transformed.xform.is_identity() == False)
+    MINI_CHECK(curve3_transformed.cv(0)[2] == 10.0)
+
+    # transformed(xform) - Get copy with custom xform
+    curve4 = NurbsCurve.create(periodic=False, degree=2, points=points)
+    x = Xform.translation(10.0, 0.0, 0.0)
+    curve4_transformed = curve4.transformed(x)
+    MINI_CHECK(curve4_transformed.xform.is_identity() == True)
+    MINI_CHECK(curve4_transformed.cv(0)[0] == 10.0)
 
 
 if __name__ == "__main__":
