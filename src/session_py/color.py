@@ -40,6 +40,38 @@ class Color:
         self._b = int(b)
         self._a = int(a)
 
+    @property
+    def r(self):
+        return self._r
+
+    @r.setter
+    def r(self, value):
+        self._r = int(value)
+
+    @property
+    def g(self):
+        return self._g
+
+    @g.setter
+    def g(self, value):
+        self._g = int(value)
+
+    @property
+    def b(self):
+        return self._b
+
+    @b.setter
+    def b(self, value):
+        self._b = int(value)
+
+    @property
+    def a(self):
+        return self._a
+
+    @a.setter
+    def a(self, value):
+        self._a = int(value)
+
     ###########################################################################################
     # Operators
     ###########################################################################################

@@ -463,52 +463,77 @@ def test_nurbscurve_modifications():
 
 @MINI_TEST("NurbsCurve", "json_roundtrip")
 def test_nurbscurve_json_roundtrip():
+    # from session_py import NurbsCurve
+    # from session_py import Point
+    # from session_py import Tolerance
+    # from pathlib import Path
     from session_py import NurbsCurve
     from session_py import Point
+    from session_py import Tolerance
+    TOLERANCE = Tolerance()
 
     points = [
         Point(0.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(2.0, 0.0, 0.0)
+        Point(1.0, 2.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 2.0, 0.0),
+        Point(4.0, 0.0, 0.0)
     ]
-
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
-    curve.set_domain(0.0, 1.0)
-    curve.set_domain(0.0, 1.0)
 
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
     curve.json_dump(filename)
     loaded = NurbsCurve.json_load(filename)
 
+    MINI_CHECK(loaded.name == curve.name)
+    MINI_CHECK(TOLERANCE.is_close(loaded.width, curve.width))
+    MINI_CHECK(loaded.linecolor[0] == curve.linecolor[0])
+    MINI_CHECK(loaded.linecolor[1] == curve.linecolor[1])
+    MINI_CHECK(loaded.linecolor[2] == curve.linecolor[2])
+    MINI_CHECK(loaded.dimension() == curve.dimension())
     MINI_CHECK(loaded.is_valid() == True)
-    MINI_CHECK(loaded.cv_count() == 3)
-    MINI_CHECK(loaded.degree() == 2)
-    MINI_CHECK(loaded.order() == 3)
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(0), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(1), points[1]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(2), points[2]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(3), points[3]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(4), points[4]))
 
 
 @MINI_TEST("NurbsCurve", "protobuf_roundtrip")
 def test_nurbscurve_protobuf_roundtrip():
+    # from session_py import NurbsCurve
+    # from session_py import Point
+    # from session_py import Tolerance
+    # from pathlib import Path
     from session_py import NurbsCurve
     from session_py import Point
+    from session_py import Tolerance
+    TOLERANCE = Tolerance()
 
     points = [
         Point(0.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(2.0, 0.0, 0.0)
+        Point(1.0, 2.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 2.0, 0.0),
+        Point(4.0, 0.0, 0.0)
     ]
-
     curve = NurbsCurve.create(periodic=False, degree=2, points=points)
-    curve.set_domain(0.0, 1.0)
-    curve.set_domain(0.0, 1.0)
 
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
     curve.protobuf_dump(filename)
     loaded = NurbsCurve.protobuf_load(filename)
 
+    MINI_CHECK(loaded.name == curve.name)
+    MINI_CHECK(TOLERANCE.is_close(loaded.width, curve.width))
+    MINI_CHECK(loaded.linecolor[0] == curve.linecolor[0])
+    MINI_CHECK(loaded.linecolor[1] == curve.linecolor[1])
+    MINI_CHECK(loaded.linecolor[2] == curve.linecolor[2])
     MINI_CHECK(loaded.is_valid() == True)
-    MINI_CHECK(loaded.cv_count() == 3)
-    MINI_CHECK(loaded.degree() == 2)
-    MINI_CHECK(loaded.order() == 3)
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(0), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(1), points[1]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(2), points[2]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(3), points[3]))
+    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(4), points[4]))
 
 
 @MINI_TEST("NurbsCurve", "intersect_plane")

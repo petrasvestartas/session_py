@@ -29,6 +29,7 @@ from .obj import load_obj, save_obj
 from . import intersection
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
+from .primitives import Primitives
 from .ray_box_intersection import ray_box
 from .closest import Closest
 
@@ -63,6 +64,7 @@ __all__ = [
     "intersection",
     "NurbsCurve",
     "NurbsSurface",
+    "Primitives",
     "ray_box",
     "Closest",
 ]

@@ -1,26 +1,77 @@
 {
-  "guid": "0aae0c5d-d5ff-4993-8115-3d3c8fc24f40",
-  "name": "my_nurbscurve",
-  "m_dim": 3,
-  "m_is_rat": 0,
-  "m_order": 3,
-  "m_cv_count": 3,
-  "m_cv_stride": 3,
-  "m_knot": [
-    0.0,
-    0.0,
-    1.0,
-    1.0
+  "control_points": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      1.0,
+      2.0,
+      0.0
+    ],
+    [
+      2.0,
+      0.0,
+      0.0
+    ],
+    [
+      3.0,
+      2.0,
+      0.0
+    ],
+    [
+      4.0,
+      0.0,
+      0.0
+    ]
   ],
-  "m_cv": [
-    0.0,
+  "cv_count": 5,
+  "cv_stride": 3,
+  "dimension": 3,
+  "guid": "54f60f03-ae68-4050-943c-3b4d56ab70ec",
+  "is_rational": false,
+  "knots": [
     0.0,
     0.0,
     1.0,
-    1.0,
-    0.0,
     2.0,
-    0.0,
-    0.0
-  ]
+    3.0,
+    3.0
+  ],
+  "linecolor": {
+    "a": 255,
+    "b": 255,
+    "g": 255,
+    "guid": "90136d0d-71c0-47fb-99a6-c39922458943",
+    "name": "white",
+    "r": 255,
+    "type": "Color"
+  },
+  "name": "my_nurbscurve",
+  "order": 3,
+  "width": 1.0,
+  "xform": {
+    "guid": "eb4e4aea-ae3e-4d71-8ed3-0b549b90aa03",
+    "m": [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "name": "my_xform",
+    "type": "Xform"
+  }
 }

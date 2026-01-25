@@ -53,6 +53,9 @@ class NurbsCurve:
                  order: int = 4, cv_count: int = 0):
         self.guid = str(uuid.uuid4())
         self.name = "my_nurbscurve"
+        self.width = 1.0
+        self.linecolor = Color.white()
+        self.xform = Xform.identity()
 
         self.m_dim = dimension
         self.m_is_rat = 1 if is_rational else 0
@@ -63,7 +66,6 @@ class NurbsCurve:
         self.m_knot = np.array([], dtype=np.float64)
         self.m_cv = np.array([], dtype=np.float64)
 
-        self.xform = Xform.identity()
         self._rmf_cache = None
     
     #############################################################################
@@ -2420,12 +2422,26 @@ class NurbsCurve:
     
     def __str__(self) -> str:
         """String representation."""
-        return f"degree={self.degree()}, cvs={self.m_cv_count}"
+        return f"NurbsCurve(degree={self.degree()}, cvs={self.m_cv_count})"
 
     def __repr__(self) -> str:
         """Representation string."""
         rational_str = "true" if self.m_is_rat else "false"
-        return f"NurbsCurve({self.name}, dim={self.m_dim}, order={self.m_order}, cvs={self.m_cv_count}, rational={rational_str})"
+        lines = [
+            "NurbsCurve(",
+            f"  name={self.name},",
+            f"  dim={self.m_dim},",
+            f"  order={self.m_order},",
+            f"  cvs={self.m_cv_count},",
+            f"  rational={rational_str},",
+            "  control_points=["
+        ]
+        for i in range(self.m_cv_count):
+            p = self.get_cv(i)
+            lines.append(f"    cv[{i}]: {p[0]}, {p[1]}, {p[2]}")
+        lines.append("  ]")
+        lines.append(")")
+        return "\n".join(lines)
 
     def duplicate(self) -> "NurbsCurve":
         """Create a duplicate with a new GUID.
@@ -2924,32 +2940,51 @@ class NurbsCurve:
     ###########################################################################################
 
     def __jsondump__(self):
-        """Return a JSON-serializable dictionary representation."""
+        """Return a JSON-serializable dictionary representation (matches C++ format)."""
+        control_points = []
+        for i in range(self.m_cv_count):
+            p = self.get_cv(i)
+            if p:
+                control_points.append([p[0], p[1], p[2]])
+            else:
+                control_points.append([0.0, 0.0, 0.0])
         return {
+            "control_points": control_points,
+            "cv_count": int(self.m_cv_count),
+            "cv_stride": int(self.m_cv_stride),
+            "dimension": int(self.m_dim),
             "guid": self.guid,
+            "is_rational": self.m_is_rat != 0,
+            "knots": self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot),
+            "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
-            "m_dim": int(self.m_dim),
-            "m_is_rat": int(self.m_is_rat),
-            "m_order": int(self.m_order),
-            "m_cv_count": int(self.m_cv_count),
-            "m_cv_stride": int(self.m_cv_stride),
-            "m_knot": self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot),
-            "m_cv": self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv),
+            "order": int(self.m_order),
+            "width": float(self.width),
+            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
     def __jsonload__(cls, data):
-        """Create NurbsCurve from JSON dictionary."""
+        """Create NurbsCurve from JSON dictionary (accepts C++ format)."""
         curve = cls()
         curve.guid = data.get("guid", curve.guid)
         curve.name = data.get("name", curve.name)
-        curve.m_dim = data.get("m_dim", 0)
-        curve.m_is_rat = data.get("m_is_rat", 0)
-        curve.m_order = data.get("m_order", 0)
-        curve.m_cv_count = data.get("m_cv_count", 0)
-        curve.m_cv_stride = data.get("m_cv_stride", 0)
-        curve.m_knot = np.array(data.get("m_knot", []), dtype=np.float64)
-        curve.m_cv = np.array(data.get("m_cv", []), dtype=np.float64)
+        curve.width = data.get("width", 1.0)
+        if "linecolor" in data:
+            curve.linecolor = Color.__jsonload__(data["linecolor"])
+        if "xform" in data:
+            curve.xform = Xform.__jsonload__(data["xform"])
+        curve.m_dim = data.get("dimension", 0)
+        curve.m_is_rat = 1 if data.get("is_rational", False) else 0
+        curve.m_order = data.get("order", 0)
+        curve.m_cv_count = data.get("cv_count", 0)
+        curve.m_cv_stride = data.get("cv_stride", curve.m_dim + (1 if curve.m_is_rat else 0))
+        curve.m_knot = np.array(data.get("knots", []), dtype=np.float64)
+        control_points = data.get("control_points", [])
+        flat_cv = []
+        for cp in control_points:
+            flat_cv.extend(cp[:curve.m_cv_stride])
+        curve.m_cv = np.array(flat_cv, dtype=np.float64)
         return curve
 
     def json_dump(self, filepath):
@@ -2974,6 +3009,8 @@ class NurbsCurve:
         """Write protobuf binary to file."""
         try:
             from .proto import nurbscurve_pb2
+            from .proto import color_pb2
+            from .proto import xform_pb2
             proto = nurbscurve_pb2.NurbsCurve()
             proto.guid = self.guid
             proto.name = self.name
@@ -2984,6 +3021,16 @@ class NurbsCurve:
             proto.cv_stride = int(self.m_cv_stride)
             proto.knots.extend(self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot))
             proto.cvs.extend(self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv))
+            proto.width = float(self.width)
+            proto.linecolor.guid = self.linecolor.guid
+            proto.linecolor.r = int(self.linecolor.r)
+            proto.linecolor.g = int(self.linecolor.g)
+            proto.linecolor.b = int(self.linecolor.b)
+            proto.linecolor.a = int(self.linecolor.a)
+            proto.linecolor.name = self.linecolor.name
+            proto.xform.guid = self.xform.guid
+            proto.xform.name = self.xform.name
+            proto.xform.matrix.extend(self.xform.m.flatten().tolist() if hasattr(self.xform.m, 'flatten') else list(self.xform.m))
             with open(filepath, 'wb') as f:
                 f.write(proto.SerializeToString())
         except ImportError:
@@ -3007,6 +3054,18 @@ class NurbsCurve:
             curve.m_cv_stride = proto.cv_stride
             curve.m_knot = np.array(list(proto.knots), dtype=np.float64)
             curve.m_cv = np.array(list(proto.cvs), dtype=np.float64)
+            curve.width = proto.width if proto.width != 0.0 else 1.0
+            if proto.HasField('linecolor'):
+                curve.linecolor = Color(proto.linecolor.r, proto.linecolor.g,
+                                         proto.linecolor.b, proto.linecolor.a)
+                curve.linecolor.guid = proto.linecolor.guid
+                curve.linecolor.name = proto.linecolor.name
+            if proto.HasField('xform'):
+                curve.xform = Xform()
+                curve.xform.guid = proto.xform.guid
+                curve.xform.name = proto.xform.name
+                if proto.xform.matrix:
+                    curve.xform.m = np.array(list(proto.xform.matrix), dtype=np.float64).reshape(4, 4)
             return curve
         except ImportError:
             raise ImportError("protobuf not available - run ./protobuf.sh to install")
