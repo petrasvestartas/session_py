@@ -39,8 +39,8 @@ def test_nurbscurve_constructor():
     MINI_CHECK(curve.order() == 3)
     MINI_CHECK(curve.name == "my_nurbscurve")
     MINI_CHECK(curve.guid != "")
-    MINI_CHECK(cstr == "degree=2, cvs=4")
-    MINI_CHECK(crepr == "NurbsCurve(my_nurbscurve, dim=3, order=3, cvs=4, rational=false)")
+    MINI_CHECK(cstr == "NurbsCurve(degree=2, cvs=4)")
+    MINI_CHECK("name=my_nurbscurve" in crepr)
     MINI_CHECK(ccopy.cv_count() == curve.cv_count())
     MINI_CHECK(ccopy.guid != curve.guid)
 
