@@ -30,8 +30,7 @@ def test_nurbscurve_constructor():
     cother = NurbsCurve.create(periodic=False, degree=2, points=points)
 
     # Point division
-    divided = []
-    curve.divide_by_count(10, divided)
+    divided, _ = curve.divide_by_count(10, True)
 
     MINI_CHECK(curve.is_valid() == True)
     MINI_CHECK(curve.cv_count() == 4)
@@ -39,7 +38,7 @@ def test_nurbscurve_constructor():
     MINI_CHECK(curve.order() == 3)
     MINI_CHECK(curve.name == "my_nurbscurve")
     MINI_CHECK(curve.guid != "")
-    MINI_CHECK(cstr == "NurbsCurve(degree=2, cvs=4)")
+    MINI_CHECK(cstr == "NurbsCurve(name=my_nurbscurve, degree=2, cvs=4)")
     MINI_CHECK("name=my_nurbscurve" in crepr)
     MINI_CHECK(ccopy.cv_count() == curve.cv_count())
     MINI_CHECK(ccopy.guid != curve.guid)
@@ -77,6 +76,31 @@ def test_nurbscurve_attributes():
     # Valid domain exists
     is_valid_knot_vector = curve.is_valid_knot_vector()
     MINI_CHECK(is_valid_knot_vector == True)
+
+    # Insert knot into curve
+    # Useful for splitting curves at a parameter
+    # Increase local control without changing shape
+    copy_curve = curve.duplicate()
+    before_pt = copy_curve.point_at(1.5)
+    copy_curve.insert_knot(1.5, 1)
+    MINI_CHECK(TOLERANCE.is_point_close(before_pt, copy_curve.point_at(1.5)))
+
+    # Check if the curve is clamped at start, end, or both
+    is_clamped_start = curve.is_clamped(0)
+    is_clamped_end = curve.is_clamped(1)
+    is_clamped_both = curve.is_clamped(2)
+    MINI_CHECK(is_clamped_start == True and is_clamped_end == True and is_clamped_both == True)
+
+    # Useful for controlling curve by cv on lying on it
+    greville0 = curve.greville_abcissa(0)
+    MINI_CHECK(TOLERANCE.is_close(greville0, 0.0))
+
+    greville = curve.get_greville_abcissae()
+    MINI_CHECK(len(greville) == 4)
+    MINI_CHECK(TOLERANCE.is_close(greville[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(greville[1], 0.5))
+    MINI_CHECK(TOLERANCE.is_close(greville[2], 1.5))
+    MINI_CHECK(TOLERANCE.is_close(greville[3], 2.0))
 
     #############################################
     # Accessors
@@ -177,10 +201,18 @@ def test_nurbscurve_attributes():
 
     # Direct memory access to knot values, fast, read-only
     # Vector return is slower and makes a copy
+    knots = curve.knot_array()
+    k0 = knots[0]
     knot_vector = curve.get_knots()
+    MINI_CHECK(k0 == 0.0)
     MINI_CHECK(knot_vector[0] == 0.0 and knot_vector[1] == 0.0 and
                knot_vector[2] == 1.0 and knot_vector[3] == 2.0 and
                knot_vector[4] == 2.0)
+
+    # Control vertex array access
+    cvs = curve.cv_array()
+    cx0 = cvs[0]
+    MINI_CHECK(cx0 == 0.0)
 
     #####################################################
     # Domain & Parameterization - HERE
@@ -266,8 +298,16 @@ def test_nurbscurve_conversions():
     div_pts, div_params = curve.divide_by_count(10, True)
 
     MINI_CHECK(len(div_pts) == 10)
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[0], Point(0.0, 0.0, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[9], Point(4.0, 0.0, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[1], Point(0.328571015882635, 0.598213506310667, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[2], Point(0.740744941524856, 1.140321234797829, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[3], Point(1.338523997492639, 1.232716041998164, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[4], Point(1.712929663130383, 0.664818756620870, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[5], Point(2.287070327006695, 0.664818745295462, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[6], Point(2.661475993133979, 1.232716033043460, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[7], Point(3.259255052521522, 1.140321240507253, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[8], Point(3.671428981912368, 0.598213509892612, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[9], Point(4.000000000000000, 0.000000000000000, 0.000000000000000)))
 
     # divide_by_length
     len_pts, len_params = curve.divide_by_length(0.5)
@@ -534,27 +574,6 @@ def test_nurbscurve_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(2), points[2]))
     MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(3), points[3]))
     MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(4), points[4]))
-
-
-@MINI_TEST("NurbsCurve", "intersect_plane")
-def test_nurbscurve_intersect_plane():
-    from session_py import NurbsCurve
-    from session_py import Point
-    from session_py import Plane
-    from session_py import intersection
-
-    points = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 1.0, 0.0),
-        Point(2.0, 0.0, 0.0)
-    ]
-
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
-    curve.set_domain(0.0, 1.0)
-    plane = Plane.xy_plane()
-    intersections = intersection.curve_plane(curve, plane)
-
-    MINI_CHECK(len(intersections) >= 0)
 
 
 @MINI_TEST("NurbsCurve", "transformations")

@@ -159,7 +159,7 @@ class NurbsCurve:
             self.set_cv(i, pt)
         
         # Create clamped uniform knot vector
-        self.make_clamped_uniform_knot_vector(knot_delta)
+        self._make_clamped_uniform_knot_vector(knot_delta)
         
         return True
     
@@ -177,7 +177,7 @@ class NurbsCurve:
             self.set_cv(i, pt)
 
         # Create periodic uniform knot vector
-        self.make_periodic_uniform_knot_vector(knot_delta)
+        self._make_periodic_uniform_knot_vector(knot_delta)
 
         return True
 
@@ -472,7 +472,7 @@ class NurbsCurve:
     # KNOT VECTOR OPERATIONS (CONTINUED)
     #############################################################################
     
-    def make_clamped_uniform_knot_vector(self, delta: float = 1.0) -> bool:
+    def _make_clamped_uniform_knot_vector(self, delta: float = 1.0) -> bool:
         """Make knot vector a clamped uniform knot vector.
         
         Implementation matches OpenNURBS ON_MakeClampedUniformKnotVector.
@@ -489,7 +489,7 @@ class NurbsCurve:
         self.m_knot = result
         return True
     
-    def make_periodic_uniform_knot_vector(self, delta: float = 1.0) -> bool:
+    def _make_periodic_uniform_knot_vector(self, delta: float = 1.0) -> bool:
         """Make knot vector a periodic uniform knot vector"""
         if delta <= 0.0:
             return False
@@ -1096,7 +1096,7 @@ class NurbsCurve:
         return total
     
     #############################################################################
-    # CURVE MODIFICATION
+    # MODIFICATION OPERATIONS
     #############################################################################
     
     def make_rational(self) -> bool:
@@ -1177,7 +1177,7 @@ class NurbsCurve:
         return True
     
     #############################################################################
-    # POLYLINE CONVERSION
+    # CONVERSION METHODS
     #############################################################################
     
     def divide_by_count(self, count: int, include_endpoints: bool = True) -> Tuple[List[Point], List[float]]:
@@ -1310,7 +1310,7 @@ class NurbsCurve:
 
         return points, params
     
-    def zero_cvs(self) -> bool:
+    def _zero_cvs(self) -> bool:
         """Zero all control vertices and set weights to 1 if rational.
         
         Returns
@@ -1328,7 +1328,108 @@ class NurbsCurve:
                 self.m_cv[i * self.m_cv_stride + self.m_dim] = 1.0
         
         return True
-    
+
+    def insert_knot(self, knot_value: float, knot_multiplicity: int = 1) -> bool:
+        if not self.is_valid():
+            return False
+
+        p = self.degree()
+        if knot_multiplicity < 1 or knot_multiplicity > p:
+            return False
+
+        d0, d1 = self.domain()
+        if knot_value < d0 or knot_value > d1:
+            return False
+
+        # Handle end knots
+        if knot_value == d0:
+            if knot_multiplicity == p:
+                return self.clamp_end(0)
+            if knot_multiplicity == 1:
+                return True
+            return False
+        if knot_value == d1:
+            if knot_multiplicity == p:
+                return self.clamp_end(1)
+            if knot_multiplicity == 1:
+                return True
+            return False
+
+        import numpy as np
+        import math
+
+        n = self.m_cv_count - 1
+        full_knot_count = self.m_cv_count + self.m_order
+
+        for insert_iter in range(knot_multiplicity):
+            # Build full knot vector
+            U = np.zeros(full_knot_count)
+            U[0] = self.m_knot[0]
+            for i in range(len(self.m_knot)):
+                U[i + 1] = self.m_knot[i]
+            U[full_knot_count - 1] = self.m_knot[-1]
+
+            # Count current multiplicity
+            tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
+            mult = sum(1 for i in range(full_knot_count) if abs(U[i] - knot_value) <= tol)
+            if mult >= p:
+                return False
+
+            # Find span
+            span = self._find_span(knot_value)
+            k = span + self.m_order - 1
+
+            # Single-knot insertion
+            m_full = full_knot_count - 1
+            new_full_knot_count = full_knot_count + 1
+            new_cv_count = self.m_cv_count + 1
+
+            U_new = np.zeros(new_full_knot_count)
+            cv_new = np.zeros(new_cv_count * self.m_cv_stride)
+
+            # Copy unaffected knots
+            for i in range(k + 1):
+                U_new[i] = U[i]
+            U_new[k + 1] = knot_value
+            for i in range(k + 1, m_full + 1):
+                U_new[i + 1] = U[i]
+
+            # Copy unaffected CVs before
+            for i in range(k - p + 1):
+                src = i * self.m_cv_stride
+                dst = i * self.m_cv_stride
+                cv_new[dst:dst + self.m_cv_stride] = self.m_cv[src:src + self.m_cv_stride]
+
+            # Copy unaffected CVs after
+            for i in range(k + 1, n + 2):
+                src = (i - 1) * self.m_cv_stride
+                dst = i * self.m_cv_stride
+                cv_new[dst:dst + self.m_cv_stride] = self.m_cv[src:src + self.m_cv_stride]
+
+            # Compute new CVs in affected region
+            for i in range(k - p + 1, k + 1):
+                denom = U[i + p] - U[i]
+                alpha = (knot_value - U[i]) / denom if denom != 0.0 else 0.0
+
+                src_prev = (i - 1) * self.m_cv_stride
+                src_curr = i * self.m_cv_stride
+                dst = i * self.m_cv_stride
+
+                for d in range(self.m_cv_stride):
+                    cv_new[dst + d] = (1.0 - alpha) * self.m_cv[src_prev + d] + alpha * self.m_cv[src_curr + d]
+
+            # Update internal state
+            self.m_cv_count = new_cv_count
+            self.m_cv = cv_new
+
+            new_compressed_knot_count = self.m_order + self.m_cv_count - 2
+            self.m_knot = np.array([U_new[i + 1] for i in range(new_compressed_knot_count)])
+
+            full_knot_count = new_full_knot_count
+            n = self.m_cv_count - 1
+
+        return True
+
     def is_clamped(self, end: int = 2) -> bool:
         """Check if knot vector is clamped at ends.
         
@@ -1348,34 +1449,14 @@ class NurbsCurve:
         # Use knot module function
         return knot.is_clamped(self.m_order, self.m_cv_count, self.m_knot, end)
     
-    def control_polygon_length(self) -> float:
-        """Get the length of the control polygon.
-        
-        Returns
-        -------
-        float
-            Total length of control polygon edges.
-        """
-        if not self.is_valid() or self.m_cv_count < 2:
-            return 0.0
-        
-        total_length = 0.0
-        for i in range(self.m_cv_count - 1):
-            p1 = self.get_cv(i)
-            p2 = self.get_cv(i + 1)
-            if p1 and p2:
-                total_length += p1.distance(p2)
-        
-        return total_length
-    
     def greville_abcissa(self, cv_index: int) -> float:
         """Get Greville abcissa for a control point.
-        
+
         Parameters
         ----------
         cv_index : int
             Index of the control vertex.
-            
+
         Returns
         -------
         float
@@ -1383,12 +1464,25 @@ class NurbsCurve:
         """
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return 0.0
-        
-        total = 0.0
-        for i in range(self.m_order - 1):
-            total += self.m_knot[cv_index + i]
-        
-        return total / (self.m_order - 1)
+
+        knot = self.m_knot[cv_index:]
+        order = self.m_order
+
+        if order <= 2 or knot[0] == knot[order - 2]:
+            return float(knot[0])
+
+        p = order - 1
+        k0 = knot[0]
+        k = knot[p // 2]
+        k1 = knot[p - 1]
+        tol = (k1 - k0) * 1.490116119385e-8
+
+        g = sum(knot[i] for i in range(p)) / p
+
+        if abs(2.0 * k - (k0 + k1)) <= tol and abs(g - k) <= (abs(g) * 1.490116119385e-8 + tol):
+            g = k
+
+        return float(g)
     
     def get_greville_abcissae(self) -> List[float]:
         """Get all Greville abcissae.
@@ -1995,7 +2089,11 @@ class NurbsCurve:
             return False
         
         return self.set_cv(self.m_cv_count - 1, end_point)
-    
+
+    #############################################################################
+    # TRANSFORMATION
+    #############################################################################
+
     def transform(self, xform: Xform = None) -> bool:
         """Apply transformation to the curve.
 
@@ -2125,114 +2223,7 @@ class NurbsCurve:
         
         return True
     
-    def has_bezier_spans(self) -> bool:
-        """Check if curve has bezier spans (all distinct knots have multiplicity = degree).
-        
-        Returns
-        -------
-        bool
-            True if curve has bezier spans.
-        """
-        if not self.is_valid():
-            return False
-        
-        degree = self.degree()
-        
-        # Check interior knots
-        i = self.m_order - 1
-        while i < self.m_cv_count - 1:
-            mult = self.knot_multiplicity(i)
-            if mult != degree:
-                return False
-            i += mult
-        
-        return True
-    
-    def append(self, other: 'NurbsCurve') -> bool:
-        """Append another NURBS curve to this one.
-        
-        Parameters
-        ----------
-        other : NurbsCurve
-            The curve to append.
-            
-        Returns
-        -------
-        bool
-            True if successful.
-        """
-        if not self.is_valid() or not other.is_valid():
-            return False
-        if self.m_dim != other.m_dim:
-            return False
-        if self.m_is_rat != other.m_is_rat:
-            return False
-        
-        # Check if curves are connected
-        this_end = self.point_at_end()
-        other_start = other.point_at_start()
-        gap = this_end.distance(other_start)
-        if gap > Tolerance.ZERO_TOLERANCE * 10.0:
-            return False
-        
-        # Make copies and match degrees
-        other_copy = NurbsCurve()
-        other_copy.m_dim = other.m_dim
-        other_copy.m_is_rat = other.m_is_rat
-        other_copy.m_order = other.m_order
-        other_copy.m_cv_count = other.m_cv_count
-        other_copy.m_cv_stride = other.m_cv_stride
-        other_copy.m_knot = other.m_knot.copy()
-        other_copy.m_cv = other.m_cv.copy()
-        
-        max_degree = max(self.degree(), other_copy.degree())
-        if self.degree() < max_degree:
-            self.increase_degree(max_degree)
-        if other_copy.degree() < max_degree:
-            other_copy.increase_degree(max_degree)
-        
-        # Reparameterize other curve
-        t0_this, t1_this = self.domain()
-        t0_other, t1_other = other_copy.domain()
-        
-        domain_shift = t1_this - t0_other
-        for i in range(len(other_copy.m_knot)):
-            other_copy.m_knot[i] += domain_shift
-        
-        # Merge knot vectors
-        new_knots = list(self.m_knot)
-        for i in range(self.m_order, len(other_copy.m_knot)):
-            new_knots.append(other_copy.m_knot[i])
-        
-        # Merge CVs (average overlapping CV)
-        new_cvs = []
-        cvs = self.cv_size()
-        
-        # Add all but last CV from this curve
-        for i in range(self.m_cv_count - 1):
-            for j in range(cvs):
-                new_cvs.append(self.m_cv[i * cvs + j])
-        
-        # Average last CV of this with first CV of other
-        for j in range(cvs):
-            val_this = self.m_cv[(self.m_cv_count - 1) * cvs + j]
-            val_other = other_copy.m_cv[j]
-            new_cvs.append((val_this + val_other) * 0.5)
-        
-        # Add remaining CVs from other
-        for i in range(1, other_copy.m_cv_count):
-            for j in range(cvs):
-                new_cvs.append(other_copy.m_cv[i * cvs + j])
-        
-        # Update this curve
-        new_cv_count = self.m_cv_count + other_copy.m_cv_count - 1
-        self.m_cv_count = new_cv_count
-        self.m_knot = np.array(new_knots)
-        self.m_cv = np.array(new_cvs)
-        
-        return True
-    
-    def clean_knots(self, tolerance: float = 0.0) -> bool:
+    def _clean_knots(self, tolerance: float = 0.0) -> bool:
         """Clean up invalid knots (remove duplicates within tolerance).
         
         Parameters
@@ -2387,27 +2378,7 @@ class NurbsCurve:
             result.append(Vector(0.0, 0.0, 0.0))
 
         return result
-    
-    def get_nurbs_form(self) -> int:
-        """Get NURBS form (always returns 1 for NURBS curve).
-        
-        Returns
-        -------
-        int
-            1 (NURBS form).
-        """
-        return 1
-    
-    def has_nurbs_form(self) -> int:
-        """Check if has NURBS form (always returns 1).
-        
-        Returns
-        -------
-        int
-            1 (has NURBS form).
-        """
-        return 1
-    
+
     def to_string(self) -> str:
         """Convert curve to string representation.
         
@@ -2419,10 +2390,14 @@ class NurbsCurve:
         return (f"NurbsCurve(dim={self.m_dim}, rational={bool(self.m_is_rat)}, "
                 f"order={self.m_order}, cvs={self.m_cv_count}, "
                 f"knots={self.knot_count()}, valid={self.is_valid()})")
-    
+
+    #############################################################################
+    # STRING REPRESENTATION
+    #############################################################################
+
     def __str__(self) -> str:
         """String representation."""
-        return f"NurbsCurve(degree={self.degree()}, cvs={self.m_cv_count})"
+        return f"NurbsCurve(name={self.name}, degree={self.degree()}, cvs={self.m_cv_count})"
 
     def __repr__(self) -> str:
         """Representation string."""
@@ -2430,15 +2405,14 @@ class NurbsCurve:
         lines = [
             "NurbsCurve(",
             f"  name={self.name},",
-            f"  dim={self.m_dim},",
-            f"  order={self.m_order},",
+            f"  degree={self.degree()},",
             f"  cvs={self.m_cv_count},",
             f"  rational={rational_str},",
             "  control_points=["
         ]
         for i in range(self.m_cv_count):
             p = self.get_cv(i)
-            lines.append(f"    cv[{i}]: {p[0]}, {p[1]}, {p[2]}")
+            lines.append(f"    {p[0]}, {p[1]}, {p[2]}")
         lines.append("  ]")
         lines.append(")")
         return "\n".join(lines)
@@ -2639,8 +2613,8 @@ class NurbsCurve:
 
         return points, params
     
-    def span_is_linear(self, span_index: int, min_length: float = 0.0, 
-                      tolerance: float = None) -> bool:
+    def _span_is_linear(self, span_index: int, min_length: float = 0.0,
+                       tolerance: float = None) -> bool:
         """Check if span is linear within tolerance.
         
         Parameters
@@ -2701,7 +2675,7 @@ class NurbsCurve:
         
         return True
     
-    def span_is_singular(self, span_index: int) -> bool:
+    def _span_is_singular(self, span_index: int) -> bool:
         """Check if span is singular (collapsed to a point).
         
         Parameters
@@ -2729,7 +2703,7 @@ class NurbsCurve:
         
         return p0.distance(p1) < Tolerance.ZERO_TOLERANCE
     
-    def repair_bad_knots(self, tolerance: float = 0.0, repair: bool = True) -> bool:
+    def _repair_bad_knots(self, tolerance: float = 0.0, repair: bool = True) -> bool:
         """Repair bad knots (too close, high multiplicity).
         
         Parameters
@@ -2748,36 +2722,12 @@ class NurbsCurve:
             return False
         
         if repair:
-            return self.clean_knots(tolerance)
+            return self._clean_knots(tolerance)
         
         # Just check
         for i in range(len(self.m_knot) - 1):
             if self.m_knot[i] > self.m_knot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
-        
-        return True
-    
-    def make_piecewise_bezier(self, set_end_weights_to_one: bool = False) -> bool:
-        """Make curve have piecewise bezier spans.
-        
-        Parameters
-        ----------
-        set_end_weights_to_one : bool, optional
-            Whether to set end weights to 1. Defaults to False.
-            
-        Returns
-        -------
-        bool
-            True if successful.
-        """
-        if not self.is_valid():
-            return False
-        
-        # This is a complex operation requiring knot insertion
-        # Simplified implementation
-        if set_end_weights_to_one and self.m_is_rat:
-            self.set_weight(0, 1.0)
-            self.set_weight(self.m_cv_count - 1, 1.0)
         
         return True
     
@@ -2805,7 +2755,7 @@ class NurbsCurve:
         # Would require reparameterization and CV reordering
         return False  # Stub for now
     
-    def get_parameter_tolerance(self, t: float) -> Tuple[float, float]:
+    def _get_parameter_tolerance(self, t: float) -> Tuple[float, float]:
         """Get parameter tolerance at point.
         
         Parameters
@@ -2824,116 +2774,6 @@ class NurbsCurve:
         # Simple implementation: use small epsilon
         eps = Tolerance.ZERO_TOLERANCE * 10.0
         return (t - eps, t + eps)
-    
-    def convert_span_to_bezier(self, span_index: int) -> Optional[List[Point]]:
-        """Convert a NURBS span to Bezier curve (OpenNURBS-compatible).
-        
-        Parameters
-        ----------
-        span_index : int
-            Index of the span to convert (0 <= span_index <= cv_count - order).
-            
-        Returns
-        -------
-        list of Point or None
-            Bezier control points, or None if invalid.
-            
-        Notes
-        -----
-        This implements the OpenNURBS algorithm:
-        1. Extract CVs for the span
-        2. Apply de Boor's algorithm to convert to Bezier basis
-        3. Return the resulting Bezier control points
-        
-        Based on OpenNURBS ON_NurbsCurve::ConvertSpanToBezier() and
-        ON_ConvertNurbSpanToBezier() which uses ON_EvaluateNurbsDeBoor().
-        
-        References
-        ----------
-        - OpenNURBS: opennurbs_nurbscurve.cpp, line 2361
-        - BOHM-01, Page 7 (Boehm's algorithm)
-        """
-        if not self.is_valid():
-            return None
-        
-        if span_index < 0 or span_index > self.m_cv_count - self.m_order:
-            return None
-        
-        if not self.m_knot.size or not self.m_cv.size:
-            return None
-        
-        # Get knot values for this span
-        # Knot array for span: [span_index ... span_index + 2*order - 2]
-        knot_start = span_index
-        knot_end = span_index + 2 * self.m_order - 2
-        
-        if knot_end > len(self.m_knot):
-            return None
-        
-        # Get span domain [t0, t1]
-        t0 = self.m_knot[span_index + self.m_order - 2]
-        t1 = self.m_knot[span_index + self.m_order - 1]
-        
-        # Check for degenerate span (zero length)
-        if abs(t1 - t0) < Tolerance.ZERO_TOLERANCE:
-            return None
-        
-        # Extract control points for this span
-        bezier_cvs = []
-        cvdim = self.cv_size()
-        
-        # Copy CVs from NURBS curve
-        cv_data = np.zeros((self.m_order, cvdim))
-        for i in range(self.m_order):
-            idx = (span_index + i) * self.m_cv_stride
-            for j in range(cvdim):
-                cv_data[i, j] = self.m_cv[idx + j]
-        
-        # Apply Oslo algorithm (de Boor's algorithm) to convert to Bezier
-        # This is what ON_ConvertNurbSpanToBezier does:
-        # 1. ON_EvaluateNurbsDeBoor(cvdim, order, cvstride, cv, knot, 1, 0.0, t0)
-        # 2. ON_EvaluateNurbsDeBoor(cvdim, order, cvstride, cv, knot, -2, t0, t1)
-        
-        # The de Boor algorithm with specific parameters converts the control
-        # polygon to Bezier form. This is a simplified implementation:
-        
-        # For now, use the control points directly if the span has the right
-        # multiplicity structure, or sample for a simple approximation
-        
-        # Simple approach: The CVs for a fully multiple knot span ARE the Bezier CVs
-        # Check if we have a Bezier span (full multiplicity at ends)
-        left_mult = 0
-        right_mult = 0
-        
-        # Count multiplicity at t0
-        for i in range(max(0, knot_start), min(len(self.m_knot), knot_start + self.m_order)):
-            if abs(self.m_knot[i] - t0) < Tolerance.ZERO_TOLERANCE:
-                left_mult += 1
-        
-        # Count multiplicity at t1  
-        for i in range(max(0, knot_start + self.m_order - 1), min(len(self.m_knot), knot_end + 1)):
-            if abs(self.m_knot[i] - t1) < Tolerance.ZERO_TOLERANCE:
-                right_mult += 1
-        
-        # If full multiplicity (= order), the CVs are already Bezier CVs
-        if left_mult >= self.m_order - 1 and right_mult >= self.m_order - 1:
-            # Extract as Points
-            for i in range(self.m_order):
-                cv_idx = span_index + i
-                pt = self.get_cv(cv_idx)
-                if pt:
-                    bezier_cvs.append(pt)
-            
-            return bezier_cvs if len(bezier_cvs) == self.m_order else None
-        
-        # Otherwise, sample the span to approximate Bezier CVs
-        # This is not exact but works for visualization
-        for i in range(self.m_order):
-            t = t0 + (t1 - t0) * i / (self.m_order - 1)
-            pt = self.point_at(t)
-            bezier_cvs.append(pt)
-        
-        return bezier_cvs
     
     ###########################################################################################
     # JSON Serialization
