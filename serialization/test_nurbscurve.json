@@ -29,7 +29,7 @@
   "cv_count": 5,
   "cv_stride": 3,
   "dimension": 3,
-  "guid": "7b536649-56e7-48ab-954f-f19d4d3cea2f",
+  "guid": "93bd3445-fecf-473d-a761-a35724ac6fb6",
   "is_rational": false,
   "knots": [
     0.0,
@@ -43,7 +43,7 @@
     "a": 255,
     "b": 0,
     "g": 0,
-    "guid": "3412044c-7052-4d4c-b8b6-695c13adf40e",
+    "guid": "dc8ac137-f2a9-48e0-b4dc-73fd91efec53",
     "name": "black",
     "r": 0,
     "type": "Color"
@@ -52,7 +52,7 @@
   "order": 3,
   "width": 1.0,
   "xform": {
-    "guid": "91e620b1-99c4-4d0b-81be-426ae815fac0",
+    "guid": "6851003a-4a20-45c3-847b-91f3bffa2699",
     "m": [
       1.0,
       0.0,
