@@ -375,11 +375,22 @@ class PointCloud:
             data = json.load(f)
         return cls.__jsonload__(data)
 
+    def json_dumps(self):
+        """Convert to JSON string."""
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, json_string):
+        """Load from JSON string."""
+        import json
+        return cls.__jsonload__(json.loads(json_string))
+
     ###########################################################################################
     # Protobuf Serialization
     ###########################################################################################
 
-    def to_protobuf(self) -> bytes:
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format."""
         from .proto import pointcloud_pb2
 
@@ -398,7 +409,7 @@ class PointCloud:
         return proto.SerializeToString()
 
     @classmethod
-    def from_protobuf(cls, data: bytes) -> "PointCloud":
+    def pb_loads(cls, data: bytes) -> "PointCloud":
         """Create from protobuf binary format."""
         from .proto import pointcloud_pb2
 
@@ -423,14 +434,14 @@ class PointCloud:
 
         return pc
 
-    def protobuf_dump(self, filepath) -> None:
+    def pb_dump(self, filepath) -> None:
         """Write protobuf to file."""
         with open(filepath, 'wb') as f:
-            f.write(self.to_protobuf())
+            f.write(self.pb_dumps())
 
     @classmethod
-    def protobuf_load(cls, filepath) -> "PointCloud":
+    def pb_load(cls, filepath) -> "PointCloud":
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             data = f.read()
-        return cls.from_protobuf(data)
+        return cls.pb_loads(data)

@@ -283,6 +283,13 @@ def test_xform_json_roundtrip():
     xform = Xform.translation(1.0, 2.0, 3.0)
     xform.name = "test_xform"
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     # json_dump(fname) / json_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.json"
     xform.json_dump(fname)
@@ -303,10 +310,15 @@ def test_xform_protobuf_roundtrip():
     xform = Xform.translation(1.0, 2.0, 3.0)
     xform.name = "test_xform_proto"
 
-    # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
+    # pb_dump(fname) / pb_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.bin"
-    xform.protobuf_dump(fname)
-    loaded = Xform.protobuf_load(fname)
+    xform.pb_dump(fname)
+    loaded = Xform.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_xform_proto")
     MINI_CHECK(TOLERANCE.is_close(loaded.m[12], 1.0))

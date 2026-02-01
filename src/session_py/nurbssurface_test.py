@@ -59,7 +59,7 @@ def test_nurbssurface_constructor():
 
     MINI_CHECK(s.name == "my_nurbssurface")
     MINI_CHECK(s.width == 1.0)
-    MINI_CHECK(s.surfacecolor == Color.white())
+    MINI_CHECK(s.surfacecolor == Color.black())
     MINI_CHECK(s.guid)
     MINI_CHECK(s.m_dim == 3)
     MINI_CHECK(not s.m_is_rat)
@@ -430,6 +430,13 @@ def test_json_roundtrip():
         for j in range(3):
             surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     # Serialize to JSON
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
     surf.json_dump(fname)
@@ -470,9 +477,14 @@ def test_protobuf_roundtrip():
         for j in range(3):
             surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
-    surf.protobuf_dump(path)
-    loaded = NurbsSurface.protobuf_load(path)
+    surf.pb_dump(path)
+    loaded = NurbsSurface.pb_load(path)
 
     MINI_CHECK(surf is not None)
     MINI_CHECK(loaded.name == surf.name)
@@ -689,30 +701,6 @@ def test_swap_coordinates():
     MINI_CHECK(TOLERANCE.is_close(pt[0], 2.0))
     MINI_CHECK(TOLERANCE.is_close(pt[1], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pt[2], 3.0))
-
-
-@MINI_TEST("NurbsSurface", "change_dimension")
-def test_change_dimension():
-    from session_py import NurbsSurface
-    from session_py import Point
-    from .tolerance import TOLERANCE
-
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
-
-    surf.set_cv(0, 0, Point(1.0, 2.0, 3.0))
-
-    old_dim = surf.dimension()
-    surf.change_dimension(2)
-    new_dim = surf.dimension()
-
-    pt = surf.get_cv(0, 0)
-
-    MINI_CHECK(old_dim == 3)
-    MINI_CHECK(new_dim == 2)
-    MINI_CHECK(TOLERANCE.is_close(pt[0], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(pt[1], 2.0))
 
 
 @MINI_TEST("NurbsSurface", "zero_cvs")

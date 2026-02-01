@@ -115,3 +115,19 @@ def reload_session():
 def clear_session():
     """Shortcut for clear_package('session_py')."""
     return clear_package("session_py")
+
+
+def reload_rhino():
+    """Shortcut for reload_package('session_rhino')."""
+    return reload_package("session_rhino")
+
+
+def clear_rhino():
+    """Shortcut for clear_package('session_rhino')."""
+    return clear_package("session_rhino")
+
+
+def reload_all():
+    """Reload both session_py and session_rhino."""
+    reload_package("session_py")
+    reload_package("session_rhino")

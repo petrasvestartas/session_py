@@ -127,6 +127,13 @@ def test_pointcloud_json_roundtrip():
     )
     pc.name = "test_pointcloud"
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.json"
     pc.json_dump(fname)
     loaded = PointCloud.json_load(fname)
@@ -153,9 +160,14 @@ def test_pointcloud_protobuf_roundtrip():
     )
     pc.name = "test_pointcloud"
 
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.bin"
-    pc.protobuf_dump(fname)
-    loaded = PointCloud.protobuf_load(fname)
+    pc.pb_dump(fname)
+    loaded = PointCloud.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_pointcloud")
     MINI_CHECK(len(loaded) == 2)

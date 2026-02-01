@@ -152,7 +152,7 @@ def test_get_domain():
 def test_set_domain():
     from session_py import knot
 
-    # Create and reparameterize knot vector
+    # Create knot vector and set domain
     k = knot.make_clamped_uniform(4, 4, 1.0)
     set_result = knot.set_domain(4, 4, k, 5.0, 10.0)
     t0, t1 = knot.get_domain(4, 4, k)

@@ -26,7 +26,7 @@ class Polyline:
         self.guid = str(uuid.uuid4())
         self.name = "my_polyline"
         self.width = 1.0
-        self.linecolor = Color.white()
+        self.linecolor = Color.black()
         self.xform = Xform.identity()
 
         # Store coordinates as flat array [x0, y0, z0, x1, y1, z1, ...]
@@ -784,11 +784,22 @@ class Polyline:
             data = json.load(f)
         return cls.__jsonload__(data)
 
+    def json_dumps(self):
+        """Convert to JSON string."""
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, json_string):
+        """Load from JSON string."""
+        import json
+        return cls.__jsonload__(json.loads(json_string))
+
     ###########################################################################################
     # Protobuf Serialization
     ###########################################################################################
 
-    def to_protobuf(self):
+    def pb_dumps(self):
         """Convert to protobuf binary format.
 
         Returns
@@ -819,7 +830,7 @@ class Polyline:
         return proto.SerializeToString()
 
     @classmethod
-    def from_protobuf(cls, data):
+    def pb_loads(cls, data):
         """Create Polyline from protobuf binary data.
 
         Parameters
@@ -859,7 +870,7 @@ class Polyline:
 
         return polyline
 
-    def protobuf_dump(self, filepath):
+    def pb_dump(self, filepath):
         """Write protobuf to file.
 
         Parameters
@@ -868,12 +879,12 @@ class Polyline:
             Path to the output file.
 
         """
-        data = self.to_protobuf()
+        data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def protobuf_load(cls, filepath):
+    def pb_load(cls, filepath):
         """Read protobuf from file.
 
         Parameters
@@ -889,7 +900,7 @@ class Polyline:
         """
         with open(filepath, 'rb') as f:
             data = f.read()
-        return cls.from_protobuf(data)
+        return cls.pb_loads(data)
 
     def __str__(self) -> str:
         """Returns a minimal string representation of the polyline."""

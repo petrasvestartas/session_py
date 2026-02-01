@@ -219,6 +219,13 @@ def test_plane_json_roundtrip():
     pl = Plane.xy_plane()
     pl.name = "test_plane"
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.json"
     pl.json_dump(fname)
     loaded = Plane.json_load(fname)
@@ -236,10 +243,15 @@ def test_plane_protobuf_roundtrip():
     pl = Plane.xy_plane()
     pl.name = "test_plane"
 
-    # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
+    # pb_dump(fname) / pb_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.bin"
-    pl.protobuf_dump(fname)
-    loaded = Plane.protobuf_load(fname)
+    pl.pb_dump(fname)
+    loaded = Plane.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_plane")
     MINI_CHECK(TOLERANCE.is_close(loaded.c, 1.0))

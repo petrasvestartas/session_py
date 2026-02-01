@@ -121,6 +121,13 @@ def test_line_json_roundtrip():
     l = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     l.name = "test_line"
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     # json_dump(fname) / json_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.json"
     l.json_dump(fname)
@@ -143,10 +150,15 @@ def test_line_protobuf_roundtrip():
     l = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     l.name = "test_line"
 
-    # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
+    # pb_dump(fname) / pb_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.bin"
-    l.protobuf_dump(fname)
-    loaded = Line.protobuf_load(fname)
+    l.pb_dump(fname)
+    loaded = Line.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))

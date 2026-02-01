@@ -785,6 +785,17 @@ class Mesh:
             data = json.load(f)
         return cls.__jsonload__(data)
 
+    def json_dumps(self):
+        """Convert to JSON string."""
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, json_string):
+        """Load from JSON string."""
+        import json
+        return cls.__jsonload__(json.loads(json_string))
+
     ###########################################################################################
     # Transformation
     ###########################################################################################
@@ -840,7 +851,7 @@ class Mesh:
     # Protobuf Serialization
     ###########################################################################################
 
-    def to_protobuf(self):
+    def pb_dumps(self):
         """Convert to protobuf binary format."""
         from .proto import mesh_pb2
 
@@ -932,7 +943,7 @@ class Mesh:
         return proto.SerializeToString()
 
     @classmethod
-    def from_protobuf(cls, data):
+    def pb_loads(cls, data):
         """Create Mesh from protobuf binary data."""
         from .proto import mesh_pb2
         from .color import Color
@@ -1015,15 +1026,15 @@ class Mesh:
 
         return mesh
 
-    def protobuf_dump(self, filepath):
+    def pb_dump(self, filepath):
         """Write protobuf to file."""
-        data = self.to_protobuf()
+        data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def protobuf_load(cls, filepath):
+    def pb_load(cls, filepath):
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             data = f.read()
-        return cls.from_protobuf(data)
+        return cls.pb_loads(data)

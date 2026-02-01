@@ -50,7 +50,7 @@ class NurbsSurface:
         self.guid = str(uuid.uuid4())
         self.name = "my_nurbssurface"
         self.width = 1.0
-        self.surfacecolor = Color.white()
+        self.surfacecolor = Color.black()
         self.xform = Xform.identity()
 
         # Core NURBS data
@@ -88,7 +88,7 @@ class NurbsSurface:
         self.guid = str(uuid.uuid4())
         self.name = "my_nurbssurface"
         self.width = 1.0
-        self.surfacecolor = Color.white()
+        self.surfacecolor = Color.black()
         self.xform = Xform.identity()
         
         self.m_dim = 0
@@ -1434,51 +1434,6 @@ class NurbsSurface:
         
         return not self.is_rational()
     
-    def change_dimension(self, desired_dimension: int) -> bool:
-        """Change dimension of surface.
-        
-        Parameters
-        ----------
-        desired_dimension : int
-            New dimension.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if desired_dimension == self.m_dim:
-            return True
-        if desired_dimension < 1:
-            return False
-        
-        old_dim = self.m_dim
-        new_dim = desired_dimension
-        old_cv_size = (old_dim + 1) if self.m_is_rat else old_dim
-        new_cv_size = (new_dim + 1) if self.m_is_rat else new_dim
-        
-        new_cv = np.zeros(self.m_cv_count[0] * self.m_cv_count[1] * new_cv_size)
-        
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                old_index = i * self.m_cv_stride[0] + j * self.m_cv_stride[1]
-                new_index = i * (new_cv_size * self.m_cv_count[1]) + j * new_cv_size
-                
-                # Copy existing dimensions
-                copy_dim = min(old_dim, new_dim)
-                new_cv[new_index:new_index + copy_dim] = self.m_cv[old_index:old_index + copy_dim]
-                
-                # Copy weight if rational
-                if self.m_is_rat:
-                    new_cv[new_index + new_dim] = self.m_cv[old_index + old_dim]
-        
-        self.m_cv = new_cv
-        self.m_dim = new_dim
-        self.m_cv_stride[1] = new_cv_size
-        self.m_cv_stride[0] = new_cv_size * self.m_cv_count[1]
-
-        return True
-
     ###########################################################################
     # GEOMETRIC OPERATIONS
     ###########################################################################
@@ -2410,12 +2365,23 @@ class NurbsSurface:
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data)
-    
+
+    def json_dumps(self):
+        """Convert to JSON string."""
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, json_string):
+        """Load from JSON string."""
+        import json
+        return cls.__jsonload__(json.loads(json_string))
+
     ###########################################################################
     # PROTOBUF SERIALIZATION
     ###########################################################################
 
-    def to_protobuf(self):
+    def pb_dumps(self):
         """Convert to protobuf binary format.
 
         Returns
@@ -2461,7 +2427,7 @@ class NurbsSurface:
         return proto.SerializeToString()
 
     @classmethod
-    def from_protobuf(cls, data):
+    def pb_loads(cls, data):
         """Create NurbsSurface from protobuf binary data.
 
         Parameters
@@ -2524,7 +2490,7 @@ class NurbsSurface:
 
         return surface
 
-    def protobuf_dump(self, filepath):
+    def pb_dump(self, filepath):
         """Write protobuf to file.
 
         Parameters
@@ -2532,12 +2498,12 @@ class NurbsSurface:
         filepath : str or Path
             Path to the output file.
         """
-        data = self.to_protobuf()
+        data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def protobuf_load(cls, filepath) -> 'NurbsSurface':
+    def pb_load(cls, filepath) -> 'NurbsSurface':
         """Read protobuf from file.
 
         Parameters
@@ -2552,4 +2518,4 @@ class NurbsSurface:
         """
         with open(filepath, 'rb') as f:
             data = f.read()
-        return cls.from_protobuf(data)
+        return cls.pb_loads(data)

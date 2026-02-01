@@ -4,6 +4,7 @@ import math
 from .nurbscurve import NurbsCurve
 from .point import Point
 from .tolerance import Tolerance
+from . import knot
 
 
 class Primitives:
@@ -142,7 +143,7 @@ class Primitives:
             z = center[2]
             curve.set_cv(i, Point(x, y, z))
 
-        curve.make_clamped_uniform_knot_vector(1.0)
+        curve.m_knot = knot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
         return curve
 
     @staticmethod
@@ -166,5 +167,5 @@ class Primitives:
             z = t * turns * pitch
             curve.set_cv(i, Point(x, y, z))
 
-        curve.make_clamped_uniform_knot_vector(1.0)
+        curve.m_knot = knot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
         return curve

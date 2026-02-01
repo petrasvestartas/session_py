@@ -103,6 +103,13 @@ def test_polyline_json_roundtrip():
     pl = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0), Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0)])
     pl.name = "test_polyline"
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     # json_dump(fname) / json_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_polyline.json"
     pl.json_dump(fname)
@@ -124,10 +131,15 @@ def test_polyline_protobuf_roundtrip():
     pl = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0), Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0)])
     pl.name = "test_polyline"
 
-    # protobuf_dump(fname) / protobuf_load(fname) - file-based serialization
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
+    # pb_dump(fname) / pb_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_polyline.bin"
-    pl.protobuf_dump(fname)
-    loaded = Polyline.protobuf_load(fname)
+    pl.pb_dump(fname)
+    loaded = Polyline.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_polyline")
     MINI_CHECK(len(loaded) == 4)

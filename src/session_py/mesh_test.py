@@ -268,6 +268,13 @@ def test_mesh_json_roundtrip():
     v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
     mesh.add_face([v0, v1, v2])
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.json"
     mesh.json_dump(filename)
     loaded = Mesh.json_load(filename)
@@ -290,9 +297,14 @@ def test_mesh_protobuf_roundtrip():
     v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
     mesh.add_face([v0, v1, v2])
 
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.bin"
-    mesh.protobuf_dump(filename)
-    loaded = Mesh.protobuf_load(filename)
+    mesh.pb_dump(filename)
+    loaded = Mesh.pb_load(filename)
 
     MINI_CHECK(loaded.name == mesh.name)
     MINI_CHECK(loaded.number_of_vertices() == mesh.number_of_vertices())

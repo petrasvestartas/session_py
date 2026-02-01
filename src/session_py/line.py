@@ -45,7 +45,7 @@ class Line:
         self._y1 = y1
         self._z1 = z1
         self.width = 1.0
-        self.linecolor = Color.white()
+        self.linecolor = Color.black()
         self.xform = Xform.identity()
 
     def duplicate(self):
@@ -635,6 +635,17 @@ class Line:
             data = json.load(f)
         return cls.__jsonload__(data)
 
+    def json_dumps(self):
+        """Convert to JSON string."""
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, json_string):
+        """Load from JSON string."""
+        import json
+        return cls.__jsonload__(json.loads(json_string))
+
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from polymorphic JSON format.
@@ -676,7 +687,7 @@ class Line:
     # Protobuf Serialization
     ###########################################################################################
 
-    def to_protobuf(self):
+    def pb_dumps(self):
         """Convert to protobuf binary format.
 
         Returns
@@ -715,7 +726,7 @@ class Line:
         return proto.SerializeToString()
 
     @classmethod
-    def from_protobuf(cls, data):
+    def pb_loads(cls, data):
         """Create Line from protobuf binary data.
 
         Parameters
@@ -749,7 +760,7 @@ class Line:
 
         return line
 
-    def protobuf_dump(self, filepath):
+    def pb_dump(self, filepath):
         """Write protobuf to file.
 
         Parameters
@@ -758,12 +769,12 @@ class Line:
             Path to the output file.
 
         """
-        data = self.to_protobuf()
+        data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def protobuf_load(cls, filepath):
+    def pb_load(cls, filepath):
         """Read protobuf from file.
 
         Parameters
@@ -779,7 +790,7 @@ class Line:
         """
         with open(filepath, 'rb') as f:
             data = f.read()
-        return cls.from_protobuf(data)
+        return cls.pb_loads(data)
 
     def __str__(self):
         """String representation."""

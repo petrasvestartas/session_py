@@ -384,6 +384,13 @@ def test_vector_json_roundtrip():
     v = Vector(42.1, 84.2, 126.3)
     v.name = "test_vector"
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     # json_dump(fname) / json_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_vector.json"
     v.json_dump(fname)
@@ -403,10 +410,15 @@ def test_vector_protobuf_roundtrip():
     v = Vector(42.1, 84.2, 126.3)
     v.name = "test_vector"
 
-    # protobuf_dump(filename) / protobuf_load(filename) - file-based serialization
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
+    # pb_dump(filename) / pb_load(filename) - file-based serialization
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_vector.bin"
-    v.protobuf_dump(path)
-    loaded = Vector.protobuf_load(path)
+    v.pb_dump(path)
+    loaded = Vector.pb_load(path)
 
     MINI_CHECK(loaded.name == "test_vector")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))

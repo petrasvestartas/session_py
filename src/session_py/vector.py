@@ -1047,11 +1047,22 @@ class Vector:
             data = json.load(f)
         return cls.__jsonload__(data)
 
+    def json_dumps(self):
+        """Convert to JSON string."""
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, json_string):
+        """Load from JSON string."""
+        import json
+        return cls.__jsonload__(json.loads(json_string))
+
     ###########################################################################################
     # Protobuf Serialization
     ###########################################################################################
 
-    def to_protobuf(self):
+    def pb_dumps(self):
         """Convert to protobuf binary format.
 
         Returns
@@ -1071,7 +1082,7 @@ class Vector:
         return proto.SerializeToString()
 
     @classmethod
-    def from_protobuf(cls, data):
+    def pb_loads(cls, data):
         """Create Vector from protobuf binary data.
 
         Parameters
@@ -1095,7 +1106,7 @@ class Vector:
         
         return v
 
-    def protobuf_dump(self, filepath):
+    def pb_dump(self, filepath):
         """Write protobuf to file.
 
         Parameters
@@ -1104,12 +1115,12 @@ class Vector:
             Path to the output file.
 
         """
-        data = self.to_protobuf()
+        data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def protobuf_load(cls, filepath):
+    def pb_load(cls, filepath):
         """Read protobuf from file.
 
         Parameters
@@ -1125,4 +1136,4 @@ class Vector:
         """
         with open(filepath, 'rb') as f:
             data = f.read()
-        return cls.from_protobuf(data)
+        return cls.pb_loads(data)

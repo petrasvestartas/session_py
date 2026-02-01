@@ -18,7 +18,7 @@ def test_nurbscurve_constructor():
     # For linear curves use degree 1
     # When 3 points use degree 2 curve, Rhino default
     # When x>3 points use degree 3 curve
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve = NurbsCurve.create(False, 2, points)
     curve.set_domain(0.0, 1.0)
 
     # Minimal and Full String Representation
@@ -27,7 +27,7 @@ def test_nurbscurve_constructor():
 
     # Copy (duplicates everything except guid)
     ccopy = curve.duplicate()
-    cother = NurbsCurve.create(periodic=False, degree=2, points=points)
+    cother = NurbsCurve.create(False, 2, points)
 
     # Point division
     divided, _ = curve.divide_by_count(10, True)
@@ -60,7 +60,7 @@ def test_nurbscurve_attributes():
         Point(3.0, 1.0, 0.0)
     ]
 
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve = NurbsCurve.create(False, 2, points)
 
     #############################################
     # Validation
@@ -239,15 +239,16 @@ def test_nurbscurve_attributes():
     #####################################################
     # Geometric checks
     #####################################################
+
+    found, t_out = curve.get_next_discontinuity(2, curve.domain_start(), curve.domain_end())
+    MINI_CHECK(found == True and t_out == 0.5)
+
     # Is rational is related to control points having weights
     # is_rational = false means control points [x, y, z]
     # is_rational = false means control points [xw, yw, zw]
     # Rational curves are used to represent:
     # circles, ellipses, parabolas, hyperbolas exactly
     is_rational = curve.is_rational()
-    MINI_CHECK(is_rational == True)
-
-    # circles, ellipses, parabolas, hyperbolas exactly
     closed = curve.is_closed()
     periodic = curve.is_periodic()
     linear = curve.is_linear()
@@ -257,7 +258,11 @@ def test_nurbscurve_attributes():
     on_plane = curve.is_in_plane(plane)
     is_open = curve.is_natural()
     is_polyline, _, _ = curve.is_polyline()
+    is_singular = curve.is_singular()
+    is_duplicate = curve.is_duplicate(curve, False)
+    is_continuous = curve.is_continuous(1, curve.domain_middle())
 
+    MINI_CHECK(is_rational == True)
     MINI_CHECK(closed == False)
     MINI_CHECK(periodic == False)
     MINI_CHECK(linear == False)
@@ -266,6 +271,9 @@ def test_nurbscurve_attributes():
     MINI_CHECK(on_plane == False)
     MINI_CHECK(is_open == False)
     MINI_CHECK(is_polyline == False)
+    MINI_CHECK(is_singular == False)
+    MINI_CHECK(is_duplicate == True)
+    MINI_CHECK(is_continuous == True)
 
 
 @MINI_TEST("NurbsCurve", "Conversions")
@@ -284,7 +292,7 @@ def test_nurbscurve_conversions():
         Point(4.0, 0.0, 0.0)
     ]
 
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve = NurbsCurve.create(False, 2, points)
 
     # to_polyline_adaptive
     adaptive_pts, adaptive_params = curve.to_polyline_adaptive(0.1, 0.0, 0.0)
@@ -341,7 +349,7 @@ def test_nurbscurve_evaluation():
         Point(2.15032, 1.868606, 0)
     ]
 
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve = NurbsCurve.create(False, 2, points)
 
     # Length
     MINI_CHECK(TOLERANCE.is_close(curve.length(), 11.3010276326))
@@ -362,7 +370,7 @@ def test_nurbscurve_evaluation():
     MINI_CHECK(TOLERANCE.is_close(tangent[0], 0.037069134389828) and TOLERANCE.is_close(tangent[1], 0.990209443486538) and TOLERANCE.is_close(tangent[2], -0.134577625575985))
 
     # Frame at (normalized=True: t in [0,1] mapped to domain)
-    result = curve.frame_at(0.5, normalized=True)
+    result = curve.frame_at(0.5, True)
     MINI_CHECK(result is not None)
     o, t, n, b = result
     MINI_CHECK(TOLERANCE.is_close(o[0], 3.156927375) and TOLERANCE.is_close(o[1], 1.3351115) and TOLERANCE.is_close(o[2], 0.130488875))
@@ -370,29 +378,29 @@ def test_nurbscurve_evaluation():
     MINI_CHECK(TOLERANCE.is_close(n[0], -0.513930504714161) and TOLERANCE.is_close(n[1], 0.355053088776962) and TOLERANCE.is_close(n[2], 0.780905077761815))
     MINI_CHECK(TOLERANCE.is_close(b[0], 0.493298669931115) and TOLERANCE.is_close(b[1], -0.622429365908747) and TOLERANCE.is_close(b[2], 0.607649657861031))
 
-    MINI_CHECK(curve.frame_at(-0.1, normalized=True) is None)
-    MINI_CHECK(curve.frame_at(1.1, normalized=True) is None)
-    MINI_CHECK(curve.frame_at(curve.domain_start(), normalized=False) is not None)
-    MINI_CHECK(curve.frame_at(curve.domain_end(), normalized=False) is not None)
-    MINI_CHECK(curve.frame_at(curve.domain_start() - 0.1, normalized=False) is None)
+    MINI_CHECK(curve.frame_at(-0.1, True) is None)
+    MINI_CHECK(curve.frame_at(1.1, True) is None)
+    MINI_CHECK(curve.frame_at(curve.domain_start(), False) is not None)
+    MINI_CHECK(curve.frame_at(curve.domain_end(), False) is not None)
+    MINI_CHECK(curve.frame_at(curve.domain_start() - 0.1, False) is None)
 
     # Perpendicular frame at (RMF with Frenet initialization, matches Rhino)
-    result = curve.perpendicular_frame_at(0.5, normalized=True)
+    result = curve.perpendicular_frame_at(0.5, True)
     MINI_CHECK(result is not None)
     o, t, n, b = result
     MINI_CHECK(TOLERANCE.is_point_close(o, Point(3.156927375, 1.3351115, 0.130488875)))
     MINI_CHECK(TOLERANCE.is_vector_close(t, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)))
     MINI_CHECK(TOLERANCE.is_vector_close(n, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)))
     MINI_CHECK(TOLERANCE.is_vector_close(b, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)))
-    MINI_CHECK(curve.perpendicular_frame_at(-0.1, normalized=True) is None)
-    MINI_CHECK(curve.perpendicular_frame_at(1.1, normalized=True) is None)
-    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start(), normalized=False) is not None)
-    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_end(), normalized=False) is not None)
-    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start() - 0.1, normalized=False) is None)
+    MINI_CHECK(curve.perpendicular_frame_at(-0.1, True) is None)
+    MINI_CHECK(curve.perpendicular_frame_at(1.1, True) is None)
+    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start(), False) is not None)
+    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_end(), False) is not None)
+    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start() - 0.1, False) is None)
 
     # Get multiple rotation minimization frames along the curve (matches Rhino)
     params = [0.0, 0.25, 0.5, 0.75, 1.0]
-    frames = curve.get_perpendicular_frames(params)
+    frames = curve.get_perpendicular_frames(params, True)
     MINI_CHECK(len(frames) == 5)
     # Frame 0 (start)
     o0, t0, n0, b0 = frames[0]
@@ -443,7 +451,7 @@ def test_nurbscurve_modifications():
         Point(4.0, 0.0, 0.0)
     ]
 
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve = NurbsCurve.create(False, 2, points)
 
     # Reverse the curve
     curve_reversed = curve.duplicate()
@@ -457,6 +465,13 @@ def test_nurbscurve_modifications():
     MINI_CHECK(TOLERANCE.is_point_close(curve.get_cv(2), Point(0.0, 2.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(curve.get_cv(3), Point(2.0, 3.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(curve.get_cv(4), Point(0.0, 4.0, 0.0)))
+
+    # Trim curve at domain parameter
+    ct = curve.duplicate()
+    a_val = ct.domain_start() + (ct.domain_end() - ct.domain_start()) / 3.0
+    b_val = ct.domain_start() + 2.0 * (ct.domain_end() - ct.domain_start()) / 3.0
+    ct.trim(a_val, b_val)
+    MINI_CHECK(ct.length() < curve.length())
 
     # Split curve at domain middle
     split_t = curve.domain_middle()
@@ -476,12 +491,12 @@ def test_nurbscurve_modifications():
     curve_rational.set_weight(2, 10)
     MINI_CHECK(curve_rational.length() != original_length)
 
-    curve_rational.make_non_rational(force=True)
+    curve_rational.make_non_rational(True)
     MINI_CHECK(curve_rational.length() == original_length)
 
     # Clamp ends - create unclamped curve manually
     points_open = points
-    curve_open = NurbsCurve(dimension=3, is_rational=False, order=3, cv_count=5)
+    curve_open = NurbsCurve(3, False, 3, 5)
     # Manually allocate arrays (C++ constructor does this automatically)
     import numpy as np
     knot_count = curve_open.m_order + curve_open.m_cv_count - 2
@@ -500,13 +515,26 @@ def test_nurbscurve_modifications():
     MINI_CHECK(TOLERANCE.is_close(knots[0], knots[1]))
     MINI_CHECK(TOLERANCE.is_close(knots[-2], knots[-1]))
 
+    # Increase degree without change the shape
+    raised = curve.duplicate()
+    raised.increase_degree(3)
+    MINI_CHECK(curve.degree() != raised.degree() and TOLERANCE.is_point_close(curve.point_at_middle(), raised.point_at_middle()))
+
+    # Change closed curve seam
+    closed_pts = [
+        Point(1.0, 0.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(-1.0, 0.0, 0.0),
+        Point(0.0, -1.0, 0.0)
+    ]
+    c = NurbsCurve.create(True, 2, closed_pts)
+    expected_start = c.point_at(c.domain_middle())
+    c.change_closed_curve_seam(c.domain_middle())
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at_start(), expected_start))
+
 
 @MINI_TEST("NurbsCurve", "json_roundtrip")
 def test_nurbscurve_json_roundtrip():
-    # from session_py import NurbsCurve
-    # from session_py import Point
-    # from session_py import Tolerance
-    # from pathlib import Path
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Tolerance
@@ -519,32 +547,35 @@ def test_nurbscurve_json_roundtrip():
         Point(3.0, 2.0, 0.0),
         Point(4.0, 0.0, 0.0)
     ]
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve = NurbsCurve.create(False, 2, points)
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
+    # JSON object
+    json_obj = curve.__jsondump__()
+    loaded_json = NurbsCurve.__jsonload__(json_obj)
+
+    # String
+    json_string = curve.json_dumps()
+    loaded_json_string = NurbsCurve.json_loads(json_string)
+
+    # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
     curve.json_dump(filename)
-    loaded = NurbsCurve.json_load(filename)
+    loaded_from_file = NurbsCurve.json_load(filename)
 
-    MINI_CHECK(loaded.name == curve.name)
-    MINI_CHECK(TOLERANCE.is_close(loaded.width, curve.width))
-    MINI_CHECK(loaded.linecolor[0] == curve.linecolor[0])
-    MINI_CHECK(loaded.linecolor[1] == curve.linecolor[1])
-    MINI_CHECK(loaded.linecolor[2] == curve.linecolor[2])
-    MINI_CHECK(loaded.dimension() == curve.dimension())
-    MINI_CHECK(loaded.is_valid() == True)
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(0), points[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(1), points[1]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(2), points[2]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(3), points[3]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(4), points[4]))
+    MINI_CHECK(loaded_json == curve)
+    MINI_CHECK(loaded_json_string == curve)
+    MINI_CHECK(loaded_from_file == curve)
 
 
 @MINI_TEST("NurbsCurve", "protobuf_roundtrip")
 def test_nurbscurve_protobuf_roundtrip():
-    # from session_py import NurbsCurve
-    # from session_py import Point
-    # from session_py import Tolerance
-    # from pathlib import Path
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Tolerance
@@ -557,23 +588,24 @@ def test_nurbscurve_protobuf_roundtrip():
         Point(3.0, 2.0, 0.0),
         Point(4.0, 0.0, 0.0)
     ]
-    curve = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve = NurbsCurve.create(False, 2, points)
 
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
+
+    # String
+    proto_string = curve.pb_dumps()
+    loaded_proto_string = NurbsCurve.pb_loads(proto_string)
+
+    # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
-    curve.protobuf_dump(filename)
-    loaded = NurbsCurve.protobuf_load(filename)
+    curve.pb_dump(filename)
+    loaded = NurbsCurve.pb_load(filename)
 
-    MINI_CHECK(loaded.name == curve.name)
-    MINI_CHECK(TOLERANCE.is_close(loaded.width, curve.width))
-    MINI_CHECK(loaded.linecolor[0] == curve.linecolor[0])
-    MINI_CHECK(loaded.linecolor[1] == curve.linecolor[1])
-    MINI_CHECK(loaded.linecolor[2] == curve.linecolor[2])
-    MINI_CHECK(loaded.is_valid() == True)
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(0), points[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(1), points[1]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(2), points[2]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(3), points[3]))
-    MINI_CHECK(TOLERANCE.is_point_close(loaded.get_cv(4), points[4]))
+    MINI_CHECK(loaded_proto_string == curve)
+    MINI_CHECK(loaded == curve)
 
 
 @MINI_TEST("NurbsCurve", "transformations")
@@ -591,32 +623,32 @@ def test_nurbscurve_transformations():
     ]
 
     # transform() - Apply stored xform (in-place)
-    curve1 = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve1 = NurbsCurve.create(False, 2, points)
     curve1.xform = Xform.translation(0.0, 0.0, 1.0)
     curve1.transform()
     MINI_CHECK(curve1.xform.is_identity() == False)
     MINI_CHECK(curve1.cv(0)[2] == 1.0)
 
     # transform(xform) - Apply custom xform (in-place)
-    curve2 = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve2 = NurbsCurve.create(False, 2, points)
     x = Xform.translation(0.0, 0.0, 1.0)
     curve2.transform(x)
     MINI_CHECK(curve2.xform.is_identity() == True)
     MINI_CHECK(curve2.cv(0)[2] == 1.0)
 
     # transformed() - Get copy with stored xform applied
-    curve3 = NurbsCurve.create(periodic=False, degree=2, points=points)
+    curve3 = NurbsCurve.create(False, 2, points)
     curve3.xform = Xform.translation(0.0, 0.0, 10.0)
     curve3_transformed = curve3.transformed()
     MINI_CHECK(curve3_transformed.xform.is_identity() == False)
     MINI_CHECK(curve3_transformed.cv(0)[2] == 10.0)
 
     # transformed(xform) - Get copy with custom xform
-    curve4 = NurbsCurve.create(periodic=False, degree=2, points=points)
-    x = Xform.translation(10.0, 0.0, 0.0)
+    curve4 = NurbsCurve.create(False, 2, points)
+    x = Xform.translation(0.0, 0.0, 10.0)
     curve4_transformed = curve4.transformed(x)
     MINI_CHECK(curve4_transformed.xform.is_identity() == True)
-    MINI_CHECK(curve4_transformed.cv(0)[0] == 10.0)
+    MINI_CHECK(curve4_transformed.cv(0)[2] == 10.0)
 
 
 if __name__ == "__main__":
