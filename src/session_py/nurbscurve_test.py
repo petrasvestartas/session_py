@@ -1,5 +1,6 @@
 from pathlib import Path
 from session_py.mini_test import MINI_TEST, MINI_CHECK
+from session_py.tolerance import TOLERANCE
 
 
 @MINI_TEST("NurbsCurve", "constructor")
@@ -49,9 +50,6 @@ def test_nurbscurve_attributes():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Plane
-    from session_py import Tolerance
-
-    TOLERANCE = Tolerance()
 
     points = [
         Point(0.0, 0.0, 0.0),
@@ -98,9 +96,9 @@ def test_nurbscurve_attributes():
     greville = curve.get_greville_abcissae()
     MINI_CHECK(len(greville) == 4)
     MINI_CHECK(TOLERANCE.is_close(greville[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(greville[1], 0.5))
-    MINI_CHECK(TOLERANCE.is_close(greville[2], 1.5))
-    MINI_CHECK(TOLERANCE.is_close(greville[3], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(greville[1], 0.879872167739067))
+    MINI_CHECK(TOLERANCE.is_close(greville[2], 2.639616503217201))
+    MINI_CHECK(TOLERANCE.is_close(greville[3], 3.519488670956267))
 
     #############################################
     # Accessors
@@ -175,12 +173,13 @@ def test_nurbscurve_attributes():
 
     # Get knot value at index
     knot3 = curve.knot(3)
-    MINI_CHECK(knot3 == 2)
+    MINI_CHECK(TOLERANCE.is_close(knot3, 3.519488670956267))
 
     # Set knot value at index
     # ATTENTION you can brake increasing rule
-    curve.set_knot(4, 2)
-    MINI_CHECK(curve.knot(4) == 2)
+    end_knot = curve.knot(4)
+    curve.set_knot(4, end_knot)
+    MINI_CHECK(TOLERANCE.is_close(curve.knot(4), end_knot))
 
     # Count repeated knots at index [0, 0, 1, 1, 2]
     m0 = curve.knot_multiplicity(0)  # 2 (two 0's)
@@ -195,9 +194,8 @@ def test_nurbscurve_attributes():
     MINI_CHECK(m4 == 2)
 
     # Superflous knots are used for extension of clamped curves
-    # For knot vector [0, 0, 0.5, 1, 2]: 2*knot[4] - knot[1] = 2*2 - 0 = 4
     superfluous_knot = curve.superfluous_knot(1)
-    MINI_CHECK(superfluous_knot == 4)
+    MINI_CHECK(TOLERANCE.is_close(superfluous_knot, 7.038977341912535))
 
     # Direct memory access to knot values, fast, read-only
     # Vector return is slower and makes a copy
@@ -205,9 +203,9 @@ def test_nurbscurve_attributes():
     k0 = knots[0]
     knot_vector = curve.get_knots()
     MINI_CHECK(k0 == 0.0)
-    MINI_CHECK(knot_vector[0] == 0.0 and knot_vector[1] == 0.0 and
-               knot_vector[2] == 1.0 and knot_vector[3] == 2.0 and
-               knot_vector[4] == 2.0)
+    MINI_CHECK(TOLERANCE.is_close(knot_vector[0], 0.0) and TOLERANCE.is_close(knot_vector[1], 0.0) and
+               TOLERANCE.is_close(knot_vector[2], 1.759744335478134) and TOLERANCE.is_close(knot_vector[3], 3.519488670956267) and
+               TOLERANCE.is_close(knot_vector[4], 3.519488670956267))
 
     # Control vertex array access
     cvs = curve.cv_array()
@@ -220,13 +218,13 @@ def test_nurbscurve_attributes():
 
     # get start and end of the curve interval
     start, end = curve.domain()
-    MINI_CHECK(start == 0.0 and end == 2.0)
+    MINI_CHECK(TOLERANCE.is_close(start, 0.0) and TOLERANCE.is_close(end, 3.519488670956267))
 
     # Get start, middle and end values of the interval
     start = curve.domain_start()
     middle = curve.domain_middle()
     end = curve.domain_end()
-    MINI_CHECK(start == 0.0 and middle == 1.0 and end == 2.0)
+    MINI_CHECK(TOLERANCE.is_close(start, 0.0) and TOLERANCE.is_close(middle, 1.759744335478134) and TOLERANCE.is_close(end, 3.519488670956267))
 
     # Change curve domain
     curve.set_domain(0.0, 1.0)
@@ -280,9 +278,6 @@ def test_nurbscurve_attributes():
 def test_nurbscurve_conversions():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py import Tolerance
-
-    TOLERANCE = Tolerance()
 
     points = [
         Point(0.0, 0.0, 0.0),
@@ -307,14 +302,14 @@ def test_nurbscurve_conversions():
 
     MINI_CHECK(len(div_pts) == 10)
     MINI_CHECK(TOLERANCE.is_point_close(div_pts[0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[1], Point(0.328571015882635, 0.598213506310667, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[2], Point(0.740744941524856, 1.140321234797829, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[3], Point(1.338523997492639, 1.232716041998164, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[4], Point(1.712929663130383, 0.664818756620870, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[5], Point(2.287070327006695, 0.664818745295462, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[6], Point(2.661475993133979, 1.232716033043460, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[7], Point(3.259255052521522, 1.140321240507253, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(div_pts[8], Point(3.671428981912368, 0.598213509892612, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[1], Point(0.328571016773017, 0.598213507757063, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[2], Point(0.740744944144815, 1.140321237310326, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[3], Point(1.338524001477341, 1.232716038191446, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[4], Point(1.712929668000343, 0.664818751028787, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[5], Point(2.287070333148604, 0.664818752348101, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[6], Point(2.661475999779531, 1.232716039392177, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[7], Point(3.259255057037078, 1.140321236176910, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[8], Point(3.671428983538974, 0.598213507250245, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(div_pts[9], Point(4.000000000000000, 0.000000000000000, 0.000000000000000)))
 
     # divide_by_length
@@ -322,8 +317,8 @@ def test_nurbscurve_conversions():
 
     MINI_CHECK(len(len_pts) == 13)
     MINI_CHECK(TOLERANCE.is_point_close(len_pts[0], Point(0.0, 0.0, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(len_pts[6], Point(1.928691287815458, 0.510169864866836, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(len_pts[12], Point(3.934494402948975, 0.128829830906625, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(len_pts[6], Point(1.928691288503169, 0.510169864670676, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(len_pts[12], Point(3.934494396222682, 0.128829843907475, 0.0)))
 
 
 @MINI_TEST("NurbsCurve", "Evaluation")
@@ -331,9 +326,7 @@ def test_nurbscurve_evaluation():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Vector
-    from session_py import Tolerance
-
-    TOLERANCE = Tolerance()
+    from session_py import Plane
 
     points = [
         Point(1.957614, 1.140253, -0.191281),
@@ -356,70 +349,62 @@ def test_nurbscurve_evaluation():
 
     # Get point at parameter t
     point_at = curve.point_at(0.5)
-    MINI_CHECK(TOLERANCE.is_close(point_at[0], 1.445733625) and TOLERANCE.is_close(point_at[1], 1.80199875) and TOLERANCE.is_close(point_at[2], -0.134851625))
+    MINI_CHECK(TOLERANCE.is_close(point_at[0], 1.463452399002842) and TOLERANCE.is_close(point_at[1], 1.680997287875395) and TOLERANCE.is_close(point_at[2], -0.124474565996108))
 
     # Get point and derivatives at parameter t
     derivatives = curve.evaluate(0.5, 2)
     MINI_CHECK(len(derivatives) == 3)
-    MINI_CHECK(TOLERANCE.is_close(derivatives[0][0], 1.445733625) and TOLERANCE.is_close(derivatives[0][1], 1.80199875) and TOLERANCE.is_close(derivatives[0][2], -0.134851625))
-    MINI_CHECK(TOLERANCE.is_close(derivatives[1][0], 0.0432025) and TOLERANCE.is_close(derivatives[1][1], 1.154047) and TOLERANCE.is_close(derivatives[1][2], -0.1568445))
-    MINI_CHECK(TOLERANCE.is_close(derivatives[2][0], 4.267853) and TOLERANCE.is_close(derivatives[2][1], -0.677778) and TOLERANCE.is_close(derivatives[2][2], -1.078813))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[0][0], 1.463452399002842) and TOLERANCE.is_close(derivatives[0][1], 1.680997287875395) and TOLERANCE.is_close(derivatives[0][2], -0.124474565996108))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[1][0], -0.311619416021204) and TOLERANCE.is_close(derivatives[1][1], 0.974021205471335) and TOLERANCE.is_close(derivatives[1][2], -0.037441955449586))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[2][0], 2.706815143892446) and TOLERANCE.is_close(derivatives[2][1], -0.429869481117820) and TOLERANCE.is_close(derivatives[2][2], -0.684219293829483))
 
     # Tangent vector at parameter t
     tangent = curve.tangent_at(0.5)
-    MINI_CHECK(TOLERANCE.is_close(tangent[0], 0.037069134389828) and TOLERANCE.is_close(tangent[1], 0.990209443486538) and TOLERANCE.is_close(tangent[2], -0.134577625575985))
+    MINI_CHECK(TOLERANCE.is_close(tangent[0], -0.304511941745027) and TOLERANCE.is_close(tangent[1], 0.951805546117607) and TOLERANCE.is_close(tangent[2], -0.036587972264639))
 
-    # Frame at (normalized=True: t in [0,1] mapped to domain)
-    result = curve.frame_at(0.5, True)
-    MINI_CHECK(result is not None)
-    o, t, n, b = result
-    MINI_CHECK(TOLERANCE.is_close(o[0], 3.156927375) and TOLERANCE.is_close(o[1], 1.3351115) and TOLERANCE.is_close(o[2], 0.130488875))
-    MINI_CHECK(TOLERANCE.is_close(t[0], 0.701806140304030) and TOLERANCE.is_close(t[1], 0.697509131556264) and TOLERANCE.is_close(t[2], 0.144738221721788))
-    MINI_CHECK(TOLERANCE.is_close(n[0], -0.513930504714161) and TOLERANCE.is_close(n[1], 0.355053088776962) and TOLERANCE.is_close(n[2], 0.780905077761815))
-    MINI_CHECK(TOLERANCE.is_close(b[0], 0.493298669931115) and TOLERANCE.is_close(b[1], -0.622429365908747) and TOLERANCE.is_close(b[2], 0.607649657861031))
+    # normalized=true (default): t in [0,1] mapped to domain
+    f = curve.plane_at(0.5, True)
+    MINI_CHECK(TOLERANCE.is_close(f.origin[0], 3.156927375) and TOLERANCE.is_close(f.origin[1], 1.3351115) and TOLERANCE.is_close(f.origin[2], 0.130488875))
+    MINI_CHECK(TOLERANCE.is_close(f.x_axis[0], 0.701806140304030) and TOLERANCE.is_close(f.x_axis[1], 0.697509131556264) and TOLERANCE.is_close(f.x_axis[2], 0.144738221721788))
+    MINI_CHECK(TOLERANCE.is_close(f.y_axis[0], -0.513930504714161) and TOLERANCE.is_close(f.y_axis[1], 0.355053088776962) and TOLERANCE.is_close(f.y_axis[2], 0.780905077761815))
+    MINI_CHECK(TOLERANCE.is_close(f.z_axis[0], 0.493298669931115) and TOLERANCE.is_close(f.z_axis[1], -0.622429365908747) and TOLERANCE.is_close(f.z_axis[2], 0.607649657861031))
 
-    MINI_CHECK(curve.frame_at(-0.1, True) is None)
-    MINI_CHECK(curve.frame_at(1.1, True) is None)
-    MINI_CHECK(curve.frame_at(curve.domain_start(), False) is not None)
-    MINI_CHECK(curve.frame_at(curve.domain_end(), False) is not None)
-    MINI_CHECK(curve.frame_at(curve.domain_start() - 0.1, False) is None)
+    MINI_CHECK(curve.plane_at(-0.1, True).is_valid() == False)
+    MINI_CHECK(curve.plane_at(1.1, True).is_valid() == False)
+    MINI_CHECK(curve.plane_at(curve.domain_start(), False).is_valid() == True)
+    MINI_CHECK(curve.plane_at(curve.domain_end(), False).is_valid() == True)
+    MINI_CHECK(curve.plane_at(curve.domain_start() - 0.1, False).is_valid() == False)
 
     # Perpendicular frame at (RMF with Frenet initialization, matches Rhino)
-    result = curve.perpendicular_frame_at(0.5, True)
-    MINI_CHECK(result is not None)
-    o, t, n, b = result
-    MINI_CHECK(TOLERANCE.is_point_close(o, Point(3.156927375, 1.3351115, 0.130488875)))
-    MINI_CHECK(TOLERANCE.is_vector_close(t, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)))
-    MINI_CHECK(TOLERANCE.is_vector_close(n, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)))
-    MINI_CHECK(TOLERANCE.is_vector_close(b, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)))
-    MINI_CHECK(curve.perpendicular_frame_at(-0.1, True) is None)
-    MINI_CHECK(curve.perpendicular_frame_at(1.1, True) is None)
-    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start(), False) is not None)
-    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_end(), False) is not None)
-    MINI_CHECK(curve.perpendicular_frame_at(curve.domain_start() - 0.1, False) is None)
+    pf = curve.perpendicular_plane_at(0.5, True)
+    MINI_CHECK(TOLERANCE.is_point_close(pf.origin, Point(3.156927375, 1.3351115, 0.130488875)))
+    MINI_CHECK(TOLERANCE.is_vector_close(pf.x_axis, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)))
+    MINI_CHECK(TOLERANCE.is_vector_close(pf.y_axis, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)))
+    MINI_CHECK(TOLERANCE.is_vector_close(pf.z_axis, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)))
+    MINI_CHECK(curve.perpendicular_plane_at(-0.1, True).is_valid() == False)
+    MINI_CHECK(curve.perpendicular_plane_at(1.1, True).is_valid() == False)
+    MINI_CHECK(curve.perpendicular_plane_at(curve.domain_start(), False).is_valid() == True)
+    MINI_CHECK(curve.perpendicular_plane_at(curve.domain_end(), False).is_valid() == True)
+    MINI_CHECK(curve.perpendicular_plane_at(curve.domain_start() - 0.1, False).is_valid() == False)
 
     # Get multiple rotation minimization frames along the curve (matches Rhino)
-    params = [0.0, 0.25, 0.5, 0.75, 1.0]
-    frames = curve.get_perpendicular_frames(params, True)
+    frames = curve.get_perpendicular_planes(4)
     MINI_CHECK(len(frames) == 5)
     # Frame 0 (start)
-    o0, t0, n0, b0 = frames[0]
-    MINI_CHECK(TOLERANCE.is_point_close(o0, Point(1.957614, 1.140253, -0.191281)))
-    MINI_CHECK(TOLERANCE.is_vector_close(t0, Vector(0.532767753269467, 0.809398954921174, -0.247046256496055)))
-    MINI_CHECK(TOLERANCE.is_vector_close(n0, Vector(-0.261213903019039, -0.120386647366337, -0.957744408496053)))
-    MINI_CHECK(TOLERANCE.is_vector_close(b0, Vector(-0.804938393882267, 0.574787253606414, 0.147288136473484)))
+    MINI_CHECK(TOLERANCE.is_point_close(frames[0].origin, Point(1.957614, 1.140253, -0.191281)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[0].x_axis, Vector(0.532767753269467, 0.809398954921174, -0.247046256496055)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[0].y_axis, Vector(-0.261213903019039, -0.120386647366337, -0.957744408496052)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[0].z_axis, Vector(-0.804938393882267, 0.574787253606414, 0.147288136473484)))
     # Frame 2 (middle)
-    o2, t2, n2, b2 = frames[2]
-    MINI_CHECK(TOLERANCE.is_point_close(o2, Point(3.156927375, 1.3351115, 0.130488875)))
-    MINI_CHECK(TOLERANCE.is_vector_close(t2, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)))
-    MINI_CHECK(TOLERANCE.is_vector_close(n2, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)))
-    MINI_CHECK(TOLERANCE.is_vector_close(b2, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)))
+    MINI_CHECK(TOLERANCE.is_point_close(frames[2].origin, Point(3.676077075808618, 0.909845354074582, 0.350126131660904)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[2].x_axis, Vector(-0.188216728828592, 0.616420980974357, -0.764591156896073)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[2].y_axis, Vector(0.183061410483993, -0.742842969436200, -0.643950963001702)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[2].z_axis, Vector(-0.964916049706230, -0.261169479407185, 0.026972579511507)))
     # Frame 4 (end)
-    o4, t4, n4, b4 = frames[4]
-    MINI_CHECK(TOLERANCE.is_point_close(o4, Point(2.15032, 1.868606, 0.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(t4, Vector(0.183261707605497, 0.080808692422033, 0.979737261593412)))
-    MINI_CHECK(TOLERANCE.is_vector_close(n4, Vector(0.896455027206172, 0.395289116914872, -0.200287039634224)))
-    MINI_CHECK(TOLERANCE.is_vector_close(b4, Vector(-0.403464410725777, 0.914995338391241, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(frames[4].origin, Point(2.150320000000000, 1.868606000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[4].x_axis, Vector(0.183261707646767, 0.080808692310795, 0.979737261594868)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[4].y_axis, Vector(0.896455027441244, 0.395289116385372, -0.200287039627106)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[4].z_axis, Vector(-0.403464410184726, 0.914995338629816, 0.000000000000000)))
 
     # Points
     p0 = curve.point_at_start()
@@ -439,9 +424,6 @@ def test_nurbscurve_evaluation():
 def test_nurbscurve_modifications():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py import Tolerance
-
-    TOLERANCE = Tolerance()
 
     points = [
         Point(0.0, 0.0, 0.0),
@@ -468,9 +450,9 @@ def test_nurbscurve_modifications():
 
     # Trim curve at domain parameter
     ct = curve.duplicate()
-    a_val = ct.domain_start() + (ct.domain_end() - ct.domain_start()) / 3.0
-    b_val = ct.domain_start() + 2.0 * (ct.domain_end() - ct.domain_start()) / 3.0
-    ct.trim(a_val, b_val)
+    a = ct.domain_start() + (ct.domain_end() - ct.domain_start()) / 3.0
+    b = ct.domain_start() + 2.0 * (ct.domain_end() - ct.domain_start()) / 3.0
+    ct.trim(a, b)
     MINI_CHECK(ct.length() < curve.length())
 
     # Split curve at domain middle
@@ -496,12 +478,7 @@ def test_nurbscurve_modifications():
 
     # Clamp ends - create unclamped curve manually
     points_open = points
-    curve_open = NurbsCurve(3, False, 3, 5)
-    # Manually allocate arrays (C++ constructor does this automatically)
-    import numpy as np
-    knot_count = curve_open.m_order + curve_open.m_cv_count - 2
-    curve_open.m_knot = np.zeros(knot_count, dtype=np.float64)
-    curve_open.m_cv = np.zeros(curve_open.m_cv_count * curve_open.m_cv_stride, dtype=np.float64)
+    curve_open = NurbsCurve(3, False, 3, 5)  # dim=3, non-rational, order=3 (deg 2), 5 CVs
 
     for i in range(5):
         curve_open.set_cv(i, points_open[i])
@@ -537,8 +514,6 @@ def test_nurbscurve_modifications():
 def test_nurbscurve_json_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py import Tolerance
-    TOLERANCE = Tolerance()
 
     points = [
         Point(0.0, 0.0, 0.0),
@@ -578,8 +553,6 @@ def test_nurbscurve_json_roundtrip():
 def test_nurbscurve_protobuf_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py import Tolerance
-    TOLERANCE = Tolerance()
 
     points = [
         Point(0.0, 0.0, 0.0),

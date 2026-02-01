@@ -300,6 +300,43 @@ class Plane:
         plane._d = 0.0
         return plane
 
+    @staticmethod
+    def invalid():
+        p = object.__new__(Plane)
+        p.guid = str(uuid.uuid4())
+        p.name = "my_plane"
+        p.width = 1.0
+        p.xform = Xform.identity()
+        p._origin = Point(0, 0, 0)
+        p._x_axis = Vector(0, 0, 0)
+        p._y_axis = Vector(0, 0, 0)
+        p._z_axis = Vector(0, 0, 0)
+        p._a = 0.0
+        p._b = 0.0
+        p._c = 0.0
+        p._d = 0.0
+        return p
+
+    def is_valid(self) -> bool:
+        return self._x_axis.magnitude() > 1e-14 and self._y_axis.magnitude() > 1e-14 and self._z_axis.magnitude() > 1e-14
+
+    @staticmethod
+    def from_frame(origin, x_axis, y_axis, z_axis):
+        p = object.__new__(Plane)
+        p.guid = str(uuid.uuid4())
+        p.name = "my_plane"
+        p.width = 1.0
+        p.xform = Xform.identity()
+        p._origin = origin
+        p._x_axis = x_axis
+        p._y_axis = y_axis
+        p._z_axis = z_axis
+        p._a = z_axis[0]
+        p._b = z_axis[1]
+        p._c = z_axis[2]
+        p._d = -(z_axis[0] * origin[0] + z_axis[1] * origin[1] + z_axis[2] * origin[2])
+        return p
+
     ###########################################################################################
     # Operators
     ###########################################################################################
@@ -331,16 +368,29 @@ class Plane:
         result.guid = str(uuid.uuid4())
         return result
 
+    @property
     def str(self):
         """Return minimal string representation."""
-        return f"{self._origin[0]}, {self._origin[1]}, {self._origin[2]}"
+        ox = f"{self._origin[0]:.6f}"
+        oy = f"{self._origin[1]:.6f}"
+        oz = f"{self._origin[2]:.6f}"
+        xx = f"{self._x_axis[0]:.6f}"
+        xy = f"{self._x_axis[1]:.6f}"
+        xz = f"{self._x_axis[2]:.6f}"
+        yx = f"{self._y_axis[0]:.6f}"
+        yy = f"{self._y_axis[1]:.6f}"
+        yz = f"{self._y_axis[2]:.6f}"
+        zx = f"{self._z_axis[0]:.6f}"
+        zy = f"{self._z_axis[1]:.6f}"
+        zz = f"{self._z_axis[2]:.6f}"
+        return f"{ox}, {oy}, {oz}\n{xx}, {xy}, {xz}\n{yx}, {yy}, {yz}\n{zx}, {zy}, {zz}"
 
     def repr(self):
         """Return full string representation."""
         return f"Plane({self.name}, {self._origin[0]}, {self._origin[1]}, {self._origin[2]}, {self._z_axis[0]}, {self._z_axis[1]}, {self._z_axis[2]})"
 
     def __str__(self):
-        return self.str()
+        return self.str
 
     def __repr__(self):
         return self.repr()

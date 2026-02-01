@@ -139,6 +139,10 @@ class NurbsCurve:
             curve.create_periodic_uniform(dimension, degree + 1, points, knot_delta)
         else:
             curve.create_clamped_uniform(dimension, degree + 1, points, knot_delta)
+        if curve.is_valid():
+            L = curve.length()
+            if L > 0.0:
+                curve.set_domain(0.0, L)
         return curve
 
 
@@ -160,8 +164,13 @@ class NurbsCurve:
         self.m_cv_count = cv_count
         self.m_cv_stride = (dimension + 1) if is_rational else dimension
 
-        self.m_knot = np.array([], dtype=np.float64)
-        self.m_cv = np.array([], dtype=np.float64)
+        if cv_count > 0 and order > 0 and cv_count >= order:
+            knot_count = order + cv_count - 2
+            self.m_knot = np.zeros(knot_count, dtype=np.float64)
+            self.m_cv = np.zeros(cv_count * self.m_cv_stride, dtype=np.float64)
+        else:
+            self.m_knot = np.array([], dtype=np.float64)
+            self.m_cv = np.array([], dtype=np.float64)
 
         self._rmf_cache = None
 
@@ -1852,19 +1861,19 @@ class NurbsCurve:
             tan.normalize_self()
         return tan
 
-    def frame_at(self, t: float, normalized: bool = True) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
+    def plane_at(self, t: float, normalized: bool = True) -> 'Plane':
         """Get Frenet frame at parameter t (tangent, normal, binormal)"""
         if not self.is_valid():
-            return None
+            return Plane.invalid()
 
         t0, t1 = self.domain()
         if normalized:
             if t < 0.0 or t > 1.0:
-                return None
+                return Plane.invalid()
             param = t0 + t * (t1 - t0)
         else:
             if t < t0 or t > t1:
-                return None
+                return Plane.invalid()
             param = t
 
         h = (t1 - t0) * 1e-5
@@ -1909,7 +1918,7 @@ class NurbsCurve:
 
         d1_mag = d1.magnitude()
         if d1_mag < 1e-14:
-            return None
+            return Plane.invalid()
 
         T = d1.normalized()
 
@@ -1931,7 +1940,7 @@ class NurbsCurve:
 
         B = T.cross(N).normalized()
 
-        return (origin, T, N, B)
+        return Plane.from_frame(origin, T, N, B)
 
     def _invalidate_rmf_cache(self):
         self._rmf_cache = None
@@ -1952,11 +1961,10 @@ class NurbsCurve:
             t = t0 + i * dt
             params.append(t)
 
-            result = self._perpendicular_frame_at_internal(t, False)
-            if result:
-                o, r, s, tangent = result
-                origins.append(o)
-                quaternions.append(self._frame_to_quaternion(r, s, tangent))
+            pl = self.perpendicular_plane_at(t, False)
+            if pl.is_valid():
+                origins.append(pl.origin)
+                quaternions.append(self._frame_to_quaternion(pl.x_axis, pl.y_axis, pl.z_axis))
             else:
                 origins.append(Point(0, 0, 0))
                 quaternions.append([1.0, 0.0, 0.0, 0.0])
@@ -2016,17 +2024,17 @@ class NurbsCurve:
             w0*q0[3] + w1*q1_adj[3]
         ]
 
-    def _perpendicular_frame_at_internal(self, t: float, normalized: bool) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
-        """Internal: compute RMF with Frenet initialization (matches Rhino)"""
+    def perpendicular_plane_at(self, t: float, normalized: bool = True) -> 'Plane':
+        """Get rotation minimizing perpendicular frame at parameter t"""
         if not self.is_valid():
-            return None
+            return Plane.invalid()
 
         t0, t1 = self.domain()
         param = t0 + t * (t1 - t0) if normalized else t
         if normalized and (t < 0.0 or t > 1.0):
-            return None
+            return Plane.invalid()
         if not normalized and (t < t0 or t > t1):
-            return None
+            return Plane.invalid()
 
         # Get initial frame at t0 using Frenet (curvature-based)
         derivs0 = self.evaluate(t0, 2)
@@ -2035,7 +2043,7 @@ class NurbsCurve:
 
         D1_0_mag = D1_0.magnitude()
         if D1_0_mag < 1e-14:
-            return None
+            return Plane.invalid()
 
         tangent0 = D1_0 / D1_0_mag
 
@@ -2064,7 +2072,7 @@ class NurbsCurve:
         # If at start, return Frenet frame directly
         if abs(param - t0) < 1e-14:
             s0 = tangent0.cross(r0).normalized()
-            return (origin, r0, s0, tangent0)
+            return Plane.from_frame(origin, r0, s0, tangent0)
 
         # Propagate frame using Double Reflection (RMF) algorithm
         num_steps = max(10, int((param - t0) / (t1 - t0) * 100))
@@ -2122,16 +2130,13 @@ class NurbsCurve:
         ri = Vector(ri.x - ri_dot_t * tangent.x, ri.y - ri_dot_t * tangent.y, ri.z - ri_dot_t * tangent.z).normalized()
         s = tangent.cross(ri).normalized()
 
-        return (origin, ri, s, tangent)
+        return Plane.from_frame(origin, ri, s, tangent)
 
-    def perpendicular_frame_at(self, t: float, normalized: bool = True) -> Optional[Tuple[Point, Vector, Vector, Vector]]:
-        """Get rotation minimizing perpendicular frame at parameter t
-        Uses the exact Double Reflection algorithm for accuracy"""
-        return self._perpendicular_frame_at_internal(t, normalized)
-
-    def get_perpendicular_frames(self, params: List[float], normalized: bool) -> List[Tuple[Point, Vector, Vector, Vector]]:
-        """Get multiple perpendicular frames along the curve"""
-        return [f for t in params if (f := self.perpendicular_frame_at(t, normalized)) is not None]
+    def get_perpendicular_planes(self, count: int) -> List['Plane']:
+        """Get multiple rotation minimizing frames along the curve.
+        count = number of subdivisions (returns count+1 frames at arc-length equidistant points)"""
+        pts, params = self.divide_by_count(count + 1, True)
+        return [self.perpendicular_plane_at(t, False) for t in params]
 
     def _batch_evaluate_deriv1(self, params: np.ndarray) -> np.ndarray:
         n = len(params)

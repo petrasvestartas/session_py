@@ -1671,12 +1671,7 @@ class NurbsSurface:
                 f"cv_count=({self.m_cv_count[0]},{self.m_cv_count[1]}))")
     
     def __str__(self) -> str:
-        """Minimal string representation with topology info."""
-        u_status = "closed" if self.is_closed(0) else "open"
-        v_status = "closed" if self.is_closed(1) else "open"
-        return (f"order=({self.m_order[0]},{self.m_order[1]}), "
-                f"cv=({self.m_cv_count[0]},{self.m_cv_count[1]}), "
-                f"u={u_status}, v={v_status}")
+        return self.to_string()
 
     def __repr__(self) -> str:
         """Full detailed representation (follows protobuf schema)."""

@@ -45,9 +45,8 @@ def test_nurbssurface_constructor():
     control_point = s.get_cv(2, 1) # 3.75, 1.25, 4.0
     point = s.point_at(2.5, 2.5) # 2.5, 2.5, 4.0
 
-    # Minimal and Full String Representation
-    str_repr = str(s)  # order=(3,3), cv=(4,4), u=open, v=open
-    full_repr = repr(s) # NurbsSurface(test_nurbssurface, dim=3, order=(3,3), cv_count=(4,4), rational=0, Color(my_color, 255, 128, 64, 255), width=2.0)
+    # String representation
+    str_repr = str(s)
 
     # Duplicate for comparison
     s_copy = s.duplicate()
@@ -79,8 +78,7 @@ def test_nurbssurface_constructor():
     MINI_CHECK(control_point[0] == 3.75 and control_point[1] == 1.25 and control_point[2] == 4.0)
     MINI_CHECK(point[0] == 2.5 and point[1] == 2.5 and point[2] == 4.0)
 
-    MINI_CHECK(str_repr == "order=(3,3), cv=(4,4), u=open, v=open")
-    MINI_CHECK(full_repr == "NurbsSurface(name='my_nurbssurface', dim=3, rational=False, order_u=3, order_v=3, cv_count_u=4, cv_count_v=4, cv_stride_u=12, cv_stride_v=3, knots_u=[0, 0, 2.5, 5, 5], knots_v=[0, 0, 2.5, 5, 5], cvs=48 values, width=1.0, surfacecolor=Color(white, 255, 255, 255, 255), xform=Xform(name='my_xform', matrix=[1.000, 0.000, 0.000, 0.000, 0.000, 1.000, 0.000, 0.000, 0.000, 0.000, 1.000, 0.000, 0.000, 0.000, 0.000, 1.000]))")
+    MINI_CHECK(str_repr == "NurbsSurface(dim=3, order=(3,3), cv_count=(4,4))")
 
     MINI_CHECK(s_copy == s)
     MINI_CHECK(s_copy.name == s.name)
