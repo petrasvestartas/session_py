@@ -101,7 +101,7 @@ class NurbsSurface:
         self.m_cv = np.array([], dtype=np.float64)
     
     @staticmethod
-    def create(dimension: int, is_rational: bool,
+    def create_raw(dimension: int, is_rational: bool,
                order0: int, order1: int,
                cv_count0: int, cv_count1: int,
                is_periodic_u: bool = False, is_periodic_v: bool = False,
@@ -151,7 +151,27 @@ class NurbsSurface:
 
             return surf
         return None
-    
+
+    @staticmethod
+    def create(periodic_u: bool, periodic_v: bool,
+               degree_u: int, degree_v: int,
+               cv_count_u: int, cv_count_v: int,
+               points: List['Point']) -> 'NurbsSurface':
+        if cv_count_u < 2 or cv_count_v < 2:
+            return NurbsSurface()
+        if len(points) != cv_count_u * cv_count_v:
+            return NurbsSurface()
+        order0 = degree_u + 1
+        order1 = degree_v + 1
+        surf = NurbsSurface.create_raw(3, False, order0, order1, cv_count_u, cv_count_v,
+                                       periodic_u, periodic_v, 1.0, 1.0)
+        if surf is None:
+            return NurbsSurface()
+        for i in range(cv_count_u):
+            for j in range(cv_count_v):
+                surf.set_cv(i, j, points[i * cv_count_v + j])
+        return surf
+
     def _create_impl(self, dimension: int, is_rational: bool,
                order0: int, order1: int,
                cv_count0: int, cv_count1: int) -> bool:
@@ -1471,54 +1491,24 @@ class NurbsSurface:
 
         return BoundingBox(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
     
-    def subdivide(self, nu: int, nv: int) -> List[List[Point]]:
-        """Subdivide surface into a grid of points.
-
-        Evaluates the surface at regular intervals in both parameter directions
-        to create a grid of points.
-
-        Parameters
-        ----------
-        nu : int
-            Number of subdivisions in u direction.
-        nv : int
-            Number of subdivisions in v direction.
-
-        Returns
-        -------
-        list of list of Point
-            2D grid of points, where grid[i][j] is the point at subdivision (i, j).
-            Grid dimensions are (nu+1) x (nv+1).
-        """
-        
+    def divide_by_count(self, nu: int, nv: int):
         u0, u1 = self.domain(0)
         v0, v1 = self.domain(1)
 
-        # flat list of points
-        points = []
-
-        # mapping from (i, j) → vertex index
-        index = lambda i, j: i * (nv + 1) + j
-
-        # generate points
+        grid = []
+        params = []
         for i in range(nu + 1):
+            row = []
+            param_row = []
             u = u0 + (u1 - u0) * (i / nu) if nu > 0 else u0
             for j in range(nv + 1):
                 v = v0 + (v1 - v0) * (j / nv) if nv > 0 else v0
-                points.append(self.point_at(u, v))
+                row.append(self.point_at(u, v))
+                param_row.append((u, v))
+            grid.append(row)
+            params.append(param_row)
 
-        # generate quad faces using indices
-        faces = []
-        for i in range(nu):
-            for j in range(nv):
-                faces.append([
-                    index(i,     j),
-                    index(i + 1, j),
-                    index(i + 1, j + 1),
-                    index(i,     j + 1),
-                ])
-
-        return points, faces
+        return grid, params
 
 
     def is_planar(self, plane: Optional[Plane] = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
@@ -1728,7 +1718,7 @@ class NurbsSurface:
         """
         # Stub - complex implementation
         return NurbsSurface()
-    
+
     ###########################################################################
     # ADDITIONAL CREATION METHODS
     ###########################################################################

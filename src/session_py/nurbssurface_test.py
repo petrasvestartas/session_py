@@ -10,7 +10,7 @@ def test_nurbssurface_constructor():
     from session_py import Color
     from session_py import Point
 
-    s = NurbsSurface.create(3, False, 3, 3, 4, 4, knot_delta_u=2.5, knot_delta_v=2.5)
+    s = NurbsSurface.create_raw(3, False, 3, 3, 4, 4, False, False, 2.5, 2.5)
     cvs = [
         # i=0
         Point(0.0, 0.0, 0.0),
@@ -51,10 +51,8 @@ def test_nurbssurface_constructor():
     # Duplicate for comparison
     s_copy = s.duplicate()
 
-    # Quad faces as coordinates (surface subdivision)
-    divisions_u = 5
-    divisions_v = 5
-    v, _ = s.subdivide(divisions_u, divisions_v)
+    # Subdivision test
+    v, uv = s.divide_by_count(5, 5)
 
     MINI_CHECK(s.name == "my_nurbssurface")
     MINI_CHECK(s.width == 1.0)
@@ -132,20 +130,13 @@ def test_nurbssurface_constructor():
     MINI_CHECK(close_pt(v[35], 5.0, 5.0, 0.0))
 
 
-
-
-
 @MINI_TEST("NurbsSurface", "create_operations")
 def test_create_operations():
     from session_py import NurbsSurface
     from session_py import Point
 
     # Create a simple 2x2 bilinear surface
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-
-    # Set up clamped uniform knot vectors
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     # Set corner control points
     surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
@@ -168,10 +159,9 @@ def test_accessors():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create(3, False, 4, 3, 5, 4)
+    surf = NurbsSurface.create_raw(3, False, 4, 3, 5, 4, False, False, 1.0, 1.0)
 
     # Test knot access
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
     knot_val = surf.knot(0, 2)
 
     # Test set knot
@@ -200,11 +190,7 @@ def test_accessors():
 def test_knot_operations():
     from session_py import NurbsSurface
 
-    surf = NurbsSurface.create(3, False, 4, 4, 4, 4)
-
-    # Make clamped uniform knot vector
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 4, 4, 4, 4, False, False, 1.0, 1.0)
 
     # Verify domain
     u0, u1 = surf.domain(0)
@@ -225,7 +211,7 @@ def test_rational_operations():
     from session_py import Point
 
     # Create non-rational surface
-    surf = NurbsSurface.create(3, False, 3, 3, 3, 3)
+    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
 
     # Make it rational
     surf.make_rational()
@@ -253,9 +239,7 @@ def test_evaluation():
     from session_py import Point
 
     # Create simple bilinear surface (2x2 control points, order 2x2)
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     # Set corner control points to unit square in XY plane
     surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
@@ -291,9 +275,7 @@ def test_geometric_queries():
     from session_py import Point
 
     # Create and setup surface
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
     surf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
@@ -316,9 +298,7 @@ def test_modification():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create(3, False, 2, 2, 3, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 3, 2, False, False, 1.0, 1.0)
 
     # Set some CVs
     surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
@@ -352,9 +332,7 @@ def test_isocurve():
     from session_py import Point
 
     # Create surface
-    surf = NurbsSurface.create(3, False, 3, 3, 3, 3)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
 
     # Set up a grid of control points
     for i in range(3):
@@ -384,9 +362,7 @@ def test_transformation():
     from session_py import Xform
 
     # Create simple surface
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
     surf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
@@ -415,25 +391,22 @@ def test_json_roundtrip():
     from pathlib import Path
 
     # Create and setup surface
-    surf = NurbsSurface.create(3, False, 3, 3, 3, 3)
+    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
     surf.surfacecolor = Color(255, 128, 64, 255)
-
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
 
     # Set some CVs
     for i in range(3):
         for j in range(3):
             surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
+    #   __jsondump__()  | dict         | to JSON object (internal use)
+    #   __jsonload__(d) | dict         | from JSON object (internal use)
+    #   json_dumps()    | str          | to JSON string
+    #   json_loads(s)   | str          | from JSON string
+    #   json_dump(path) | file         | write to file
+    #   json_load(path) | file         | read from file
 
     # Serialize to JSON
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
@@ -462,23 +435,20 @@ def test_protobuf_roundtrip():
     from pathlib import Path
 
     # Create and setup surface
-    surf = NurbsSurface.create(3, False, 3, 3, 3, 3)
+    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
     surf.surfacecolor = Color(255, 128, 64, 255)
-
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
 
     # Set some CVs
     for i in range(3):
         for j in range(3):
             surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
-    #   pb_dumps()      │ bytes        │ to protobuf bytes
-    #   pb_loads(b)     │ bytes        │ from protobuf bytes
-    #   pb_dump(path)   │ file         │ write to file
-    #   pb_load(path)   │ file         │ read from file
+    #   pb_dumps()      | bytes        | to protobuf bytes
+    #   pb_loads(b)     | bytes        | from protobuf bytes
+    #   pb_dump(path)   | file         | write to file
+    #   pb_load(path)   | file         | read from file
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
     surf.pb_dump(path)
@@ -504,9 +474,7 @@ def test_advanced_accessors():
     from session_py import Point
 
     # Create rational surface for testing get_cv_4d/set_cv_4d
-    surf = NurbsSurface.create(3, True, 3, 3, 3, 3)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, True, 3, 3, 3, 3, False, False, 1.0, 1.0)
 
     # Test set_cv_4d with homogeneous coordinates
     x, y, z, w = 2.0, 3.0, 4.0, 2.0
@@ -545,9 +513,7 @@ def test_clamp_operations():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create(3, False, 4, 4, 4, 4)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 4, 4, 4, 4, False, False, 1.0, 1.0)
 
     # Set up control points
     for i in range(4):
@@ -570,9 +536,7 @@ def test_singularity():
     from session_py import Point
 
     # Create a simple surface
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     # Set all CVs to different points (non-singular)
     surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
@@ -599,9 +563,7 @@ def test_bounding_box():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create(3, False, 2, 2, 3, 3)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 3, 3, False, False, 1.0, 1.0)
 
     # Set CVs in a known range
     for i in range(3):
@@ -621,9 +583,7 @@ def test_domain_operations():
     from session_py import NurbsSurface
     from .tolerance import TOLERANCE
 
-    surf = NurbsSurface.create(3, False, 3, 3, 3, 3)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
 
     # Get initial domain
     dom_u = surf.domain(0)
@@ -656,9 +616,7 @@ def test_corner_points():
     from session_py import Point
     from .tolerance import TOLERANCE
 
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     # Set corner control points
     surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
@@ -684,9 +642,7 @@ def test_swap_coordinates():
     from session_py import Point
     from .tolerance import TOLERANCE
 
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     # Set a control point with distinct coordinates
     surf.set_cv(0, 0, Point(1.0, 2.0, 3.0))
@@ -707,9 +663,7 @@ def test_zero_cvs():
     from session_py import Point
     from .tolerance import TOLERANCE
 
-    surf = NurbsSurface.create(3, False, 2, 2, 2, 2)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
 
     # Set non-zero control points
     surf.set_cv(0, 0, Point(1.0, 2.0, 3.0))
@@ -733,9 +687,7 @@ def test_zero_cvs():
 def test_get_knots():
     from session_py import NurbsSurface
 
-    surf = NurbsSurface.create(3, False, 4, 3, 4, 3)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 2.0)
+    surf = NurbsSurface.create_raw(3, False, 4, 3, 4, 3, False, False, 1.0, 2.0)
 
     knots_u = surf.get_knots(0)
     knots_v = surf.get_knots(1)
@@ -752,9 +704,7 @@ def test_make_non_rational():
     from session_py import Point
 
     # Create rational surface with all weights = 1
-    surf = NurbsSurface.create(3, True, 3, 3, 3, 3)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, True, 3, 3, 3, 3, False, False, 1.0, 1.0)
 
     # Set all weights to 1.0
     for i in range(3):
@@ -794,9 +744,7 @@ def test_create_clamped_uniform():
 def test_knot_multiplicity():
     from session_py import NurbsSurface
 
-    surf = NurbsSurface.create(3, False, 4, 4, 4, 4)
-    surf.make_clamped_uniform_knot_vector(0, 1.0)
-    surf.make_clamped_uniform_knot_vector(1, 1.0)
+    surf = NurbsSurface.create_raw(3, False, 4, 4, 4, 4, False, False, 1.0, 1.0)
 
     # Check first knot multiplicity (should be equal to degree for clamped)
     mult_u_start = surf.knot_multiplicity(0, 0)
@@ -824,7 +772,7 @@ def test_sphere():
     w = math.sqrt(2.0) / 2.0
     pi = math.pi
 
-    surf = NurbsSurface.create(3, True, 3, 3, 9, 5)
+    surf = NurbsSurface.create_raw(3, True, 3, 3, 9, 5, False, False, 1.0, 1.0)
     surf.name = "unit_sphere"
 
     u_knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
@@ -879,7 +827,7 @@ def test_cylinder():
     w = math.sqrt(2.0) / 2.0
     pi = math.pi
 
-    surf = NurbsSurface.create(3, True, 3, 2, 9, 2)
+    surf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2, False, False, 1.0, 1.0)
     surf.name = "unit_cylinder"
 
     u_knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
@@ -938,7 +886,7 @@ def test_torus():
     w = math.sqrt(2.0) / 2.0
     pi = math.pi
 
-    surf = NurbsSurface.create(3, True, 3, 3, 9, 9)
+    surf = NurbsSurface.create_raw(3, True, 3, 3, 9, 9, False, False, 1.0, 1.0)
     surf.name = "unit_torus"
 
     knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
@@ -999,7 +947,7 @@ def test_cone():
     w = math.sqrt(2.0) / 2.0
     pi = math.pi
 
-    surf = NurbsSurface.create(3, True, 3, 2, 9, 2)
+    surf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2, False, False, 1.0, 1.0)
     surf.name = "unit_cone"
 
     u_knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
