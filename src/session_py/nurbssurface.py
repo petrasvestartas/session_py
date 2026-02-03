@@ -63,6 +63,7 @@ class NurbsSurface:
         # Data arrays
         self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
+        self.m_outer_loop = NurbsCurve()
 
         # Create if parameters provided
         if cv_count0 > 0 and cv_count1 > 0:
@@ -1117,7 +1118,7 @@ class NurbsSurface:
         
         du = derivs[1]
         dv = derivs[2]
-        normal = du.cross(dv)
+        normal = dv.cross(du)
         
         mag = normal.magnitude()
         if mag < 1e-14:
@@ -1511,6 +1512,18 @@ class NurbsSurface:
         return grid, params
 
 
+    def set_outer_loop(self, loop):
+        self.m_outer_loop = loop
+
+    def get_outer_loop(self):
+        return self.m_outer_loop
+
+    def is_trimmed(self):
+        return self.m_outer_loop.is_valid()
+
+    def clear_outer_loop(self):
+        self.m_outer_loop = NurbsCurve()
+
     def is_planar(self, plane: Optional[Plane] = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
         """Check if surface is planar within tolerance.
 
@@ -1656,28 +1669,25 @@ class NurbsSurface:
         str
             String representation of surface.
         """
-        return (f"NurbsSurface(dim={self.m_dim}, "
-                f"order=({self.m_order[0]},{self.m_order[1]}), "
-                f"cv_count=({self.m_cv_count[0]},{self.m_cv_count[1]}))")
+        return (f"NurbsSurface(name={self.name}, "
+                f"degree=({self.degree(0)},{self.degree(1)}), "
+                f"cvs=({self.m_cv_count[0]},{self.m_cv_count[1]}))")
     
     def __str__(self) -> str:
         return self.to_string()
 
     def __repr__(self) -> str:
-        """Full detailed representation (follows protobuf schema)."""
-        knots_u_str = f"[{', '.join(f'{k:.3g}' for k in self.m_knot[0][:5])}{'...' if len(self.m_knot[0]) > 5 else ''}]"
-        knots_v_str = f"[{', '.join(f'{k:.3g}' for k in self.m_knot[1][:5])}{'...' if len(self.m_knot[1]) > 5 else ''}]"
-
-        return (f"NurbsSurface(name='{self.name}', dim={self.m_dim}, "
-                f"rational={bool(self.m_is_rat)}, "
-                f"order_u={self.m_order[0]}, order_v={self.m_order[1]}, "
-                f"cv_count_u={self.m_cv_count[0]}, cv_count_v={self.m_cv_count[1]}, "
-                f"cv_stride_u={self.m_cv_stride[0]}, cv_stride_v={self.m_cv_stride[1]}, "
-                f"knots_u={knots_u_str}, knots_v={knots_v_str}, "
-                f"cvs={len(self.m_cv)} values, "
-                f"width={self.width}, "
-                f"surfacecolor={repr(self.surfacecolor)}, "
-                f"xform={repr(self.xform)})")
+        result = (f"NurbsSurface(\n  name={self.name},\n"
+                  f"  degree=({self.degree(0)},{self.degree(1)}),\n"
+                  f"  cvs=({self.m_cv_count[0]},{self.m_cv_count[1]}),\n"
+                  f"  rational={'true' if self.m_is_rat else 'false'},\n"
+                  f"  control_points=[\n")
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                p = self.get_cv(i, j)
+                result += f"    {p[0]}, {p[1]}, {p[2]}\n"
+        result += "  ]\n)"
+        return result
     
     ###########################################################################
     # ADDITIONAL STATIC FACTORY METHODS
@@ -1685,39 +1695,152 @@ class NurbsSurface:
     
     @staticmethod
     def create_ruled(curveA: 'NurbsCurve', curveB: 'NurbsCurve') -> 'NurbsSurface':
-        """Create ruled surface from two curves.
-        
-        Parameters
-        ----------
-        curveA : NurbsCurve
-            First curve.
-        curveB : NurbsCurve
-            Second curve.
-        
-        Returns
-        -------
-        NurbsSurface
-            Ruled surface.
-        """
-        # Stub - complex implementation
-        return NurbsSurface()
+        if not curveA.is_valid() or not curveB.is_valid():
+            return NurbsSurface()
+
+        cA = curveA.duplicate()
+        cB = curveB.duplicate()
+
+        cA.set_domain(0.0, 1.0)
+        cB.set_domain(0.0, 1.0)
+
+        if cA.degree() < cB.degree():
+            cA.increase_degree(cB.degree())
+        elif cB.degree() < cA.degree():
+            cB.increase_degree(cA.degree())
+
+        if cA.is_rational() or cB.is_rational():
+            cA.make_rational()
+            cB.make_rational()
+
+        knots_a = list(cA.get_knots())
+        knots_b = list(cB.get_knots())
+        tol = 1e-10
+
+        for k in knots_b:
+            found = any(abs(ka - k) < tol for ka in knots_a)
+            if not found:
+                cA.insert_knot(k, 1)
+
+        knots_a = list(cA.get_knots())
+        for k in knots_a:
+            found = any(abs(kb - k) < tol for kb in knots_b)
+            if not found:
+                cB.insert_knot(k, 1)
+
+        order_u = cA.order()
+        cv_count_u = cA.cv_count()
+        is_rat = cA.is_rational()
+
+        surface = NurbsSurface.create_raw(3, is_rat, order_u, 2, cv_count_u, 2)
+        if surface is None:
+            return NurbsSurface()
+
+        for i in range(cA.knot_count()):
+            surface.set_knot(0, i, cA.knot(i))
+
+        surface.set_knot(1, 0, 0.0)
+        surface.set_knot(1, 1, 1.0)
+
+        if is_rat:
+            for i in range(cv_count_u):
+                ok_a, ax, ay, az, aw = cA.get_cv_4d(i)
+                surface.set_cv_4d(i, 0, ax, ay, az, aw)
+                ok_b, bx, by, bz, bw = cB.get_cv_4d(i)
+                surface.set_cv_4d(i, 1, bx, by, bz, bw)
+        else:
+            for i in range(cv_count_u):
+                surface.set_cv(i, 0, cA.get_cv(i))
+                surface.set_cv(i, 1, cB.get_cv(i))
+
+        return surface
     
     @staticmethod
-    def create_planar(curves: List['NurbsCurve']) -> 'NurbsSurface':
-        """Create planar surface from boundary curves.
-        
-        Parameters
-        ----------
-        curves : list of NurbsCurve
-            Boundary curves.
-        
-        Returns
-        -------
-        NurbsSurface
-            Planar surface.
-        """
-        # Stub - complex implementation
-        return NurbsSurface()
+    def create_planar(curves):
+        surface = NurbsSurface()
+        if not curves:
+            return surface
+
+        all_pts = []
+        for crv in curves:
+            for i in range(crv.cv_count()):
+                all_pts.append(crv.get_cv(i))
+        if len(all_pts) < 3:
+            return surface
+
+        plane = Plane.from_points_pca(all_pts)
+        if plane.z_axis.magnitude() < 1e-10:
+            return surface
+
+        xax = plane.x_axis
+        yax = plane.y_axis
+        orig = plane.origin
+
+        min_u = float('inf')
+        max_u = float('-inf')
+        min_v = float('inf')
+        max_v = float('-inf')
+
+        for pt in all_pts:
+            dx = pt[0] - orig[0]
+            dy = pt[1] - orig[1]
+            dz = pt[2] - orig[2]
+            u = dx * xax[0] + dy * xax[1] + dz * xax[2]
+            v = dx * yax[0] + dy * yax[1] + dz * yax[2]
+            min_u = min(min_u, u)
+            max_u = max(max_u, u)
+            min_v = min(min_v, v)
+            max_v = max(max_v, v)
+
+        pad = max(max_u - min_u, max_v - min_v) * 0.05
+        if pad < 1e-6:
+            pad = 1.0
+        min_u -= pad
+        max_u += pad
+        min_v -= pad
+        max_v += pad
+
+        range_u = max_u - min_u
+        range_v = max_v - min_v
+
+        surface = NurbsSurface.create_raw(3, False, 2, 2, 2, 2)
+        if surface is None:
+            return NurbsSurface()
+        surface.set_knot(0, 0, 0.0)
+        surface.set_knot(0, 1, 1.0)
+        surface.set_knot(1, 0, 0.0)
+        surface.set_knot(1, 1, 1.0)
+
+        def plane_pt(u, v):
+            return Point(
+                orig[0] + u * xax[0] + v * yax[0],
+                orig[1] + u * xax[1] + v * yax[1],
+                orig[2] + u * xax[2] + v * yax[2]
+            )
+
+        surface.set_cv(0, 0, plane_pt(min_u, min_v))
+        surface.set_cv(0, 1, plane_pt(min_u, max_v))
+        surface.set_cv(1, 0, plane_pt(max_u, min_v))
+        surface.set_cv(1, 1, plane_pt(max_u, max_v))
+
+        uv_pts = []
+        for crv in curves:
+            pts3d, params = crv.divide_by_count(50, True)
+            for pt in pts3d:
+                dx = pt[0] - orig[0]
+                dy = pt[1] - orig[1]
+                dz = pt[2] - orig[2]
+                pu = dx * xax[0] + dy * xax[1] + dz * xax[2]
+                pv = dx * yax[0] + dy * yax[1] + dz * yax[2]
+                nu = (pu - min_u) / range_u
+                nv = (pv - min_v) / range_v
+                uv_pts.append(Point(nu, nv, 0.0))
+
+        if len(uv_pts) >= 3:
+            loop = NurbsCurve.create(False, 3, uv_pts)
+            surface.set_outer_loop(loop)
+
+        return surface
 
     ###########################################################################
     # ADDITIONAL CREATION METHODS
@@ -2283,7 +2406,8 @@ class NurbsSurface:
                 'g': self.surfacecolor[1],
                 'b': self.surfacecolor[2],
                 'a': self.surfacecolor[3]
-            }
+            },
+            **(({'outer_loop': self.m_outer_loop.__jsondump__()} if self.is_trimmed() else {}))
         }
     
     @classmethod
@@ -2317,7 +2441,10 @@ class NurbsSurface:
         if 'surfacecolor' in data:
             c = data['surfacecolor']
             srf.surfacecolor = Color(c.get('r', 255), c.get('g', 255), c.get('b', 255), c.get('a', 255))
-        
+
+        if 'outer_loop' in data:
+            srf.m_outer_loop = NurbsCurve.__jsonload__(data['outer_loop'])
+
         return srf
     
     def json_dump(self, filepath):

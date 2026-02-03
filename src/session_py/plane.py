@@ -193,6 +193,63 @@ class Plane:
         return plane
 
     @staticmethod
+    def from_points_pca(points):
+        if len(points) < 3:
+            return Plane()
+
+        n = len(points)
+        cx = sum(p[0] for p in points) / n
+        cy = sum(p[1] for p in points) / n
+        cz = sum(p[2] for p in points) / n
+
+        cxx = cyy = czz = cxy = cxz = cyz = 0.0
+        for p in points:
+            dx, dy, dz = p[0] - cx, p[1] - cy, p[2] - cz
+            cxx += dx * dx; cyy += dy * dy; czz += dz * dz
+            cxy += dx * dy; cxz += dx * dz; cyz += dy * dz
+
+        eigvec = [[0.0]*3 for _ in range(3)]
+        eigval = [0.0]*3
+        cov = [[cxx, cxy, cxz], [cxy, cyy, cyz], [cxz, cyz, czz]]
+
+        for e in range(3):
+            vx, vy, vz = (1.0, 0.0, 0.0) if e == 0 else ((0.0, 1.0, 0.0) if e == 1 else (0.0, 0.0, 1.0))
+            for _ in range(100):
+                nx = cov[0][0] * vx + cov[0][1] * vy + cov[0][2] * vz
+                ny = cov[1][0] * vx + cov[1][1] * vy + cov[1][2] * vz
+                nz = cov[2][0] * vx + cov[2][1] * vy + cov[2][2] * vz
+                mag = math.sqrt(nx*nx + ny*ny + nz*nz)
+                if mag < 1e-15:
+                    break
+                vx, vy, vz = nx/mag, ny/mag, nz/mag
+            eigvec[e] = [vx, vy, vz]
+            eigval[e] = (cov[0][0]*vx*vx + cov[1][1]*vy*vy + cov[2][2]*vz*vz
+                        + 2*cov[0][1]*vx*vy + 2*cov[0][2]*vx*vz + 2*cov[1][2]*vy*vz)
+            for i in range(3):
+                for j in range(3):
+                    cov[i][j] -= eigval[e] * eigvec[e][i] * eigvec[e][j]
+
+        x_axis = Vector(eigvec[0][0], eigvec[0][1], eigvec[0][2])
+        y_axis = Vector(eigvec[1][0], eigvec[1][1], eigvec[1][2])
+        z_axis = x_axis.cross(y_axis)
+        z_axis.normalize_self()
+        y_axis = z_axis.cross(x_axis)
+        y_axis.normalize_self()
+        x_axis.normalize_self()
+
+        plane = Plane.__new__(Plane)
+        plane.guid = str(uuid.uuid4())
+        plane.name = "my_plane"
+        plane.width = 1.0
+        plane.xform = Xform.identity()
+        plane._origin = Point(cx, cy, cz)
+        plane._x_axis = x_axis
+        plane._y_axis = y_axis
+        plane._z_axis = z_axis
+        plane._update_equation()
+        return plane
+
+    @staticmethod
     def from_two_points(point1, point2):
         """Create a plane from two points.
 
