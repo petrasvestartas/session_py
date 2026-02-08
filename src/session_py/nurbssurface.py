@@ -1983,7 +1983,250 @@ class NurbsSurface:
                 surface.set_cv(i, 1, cB.get_cv(i))
 
         return surface
-    
+
+    @staticmethod
+    def create_loft(input_curves, degree_v=3):
+        if len(input_curves) < 2:
+            return NurbsSurface()
+        for c in input_curves:
+            if not c.is_valid():
+                return NurbsSurface()
+
+        curves = [c.duplicate() for c in input_curves]
+        NurbsSurface._make_curves_compatible(curves)
+        NurbsSurface._make_curves_compatible(curves)
+
+        n_sections = len(curves)
+        cv_count_u = curves[0].cv_count()
+        order_u = curves[0].order()
+        is_rat = curves[0].is_rational()
+
+        if degree_v >= n_sections:
+            degree_v = n_sections - 1
+        if degree_v < 1:
+            degree_v = 1
+        order_v = degree_v + 1
+
+        v_params = [0.0] * n_sections
+        for k in range(1, n_sections):
+            pk_prev = curves[k - 1].point_at_middle()
+            pk_curr = curves[k].point_at_middle()
+            dx = pk_curr[0] - pk_prev[0]
+            dy = pk_curr[1] - pk_prev[1]
+            dz = pk_curr[2] - pk_prev[2]
+            v_params[k] = v_params[k - 1] + math.sqrt(dx * dx + dy * dy + dz * dz)
+
+        total_len = v_params[-1]
+        if total_len > 1e-14:
+            for k in range(n_sections):
+                v_params[k] /= total_len
+        else:
+            for k in range(n_sections):
+                v_params[k] = float(k) / (n_sections - 1)
+
+        cv_count_v = n_sections
+        knot_count_v = order_v + cv_count_v - 2
+        knots_v = [0.0] * knot_count_v
+
+        if degree_v >= n_sections - 1:
+            d = degree_v
+            for i in range(d):
+                knots_v[i] = 0.0
+            for i in range(d, knot_count_v):
+                knots_v[i] = 1.0
+        else:
+            for i in range(order_v - 1):
+                knots_v[i] = v_params[0]
+            for j in range(1, n_sections - order_v + 1):
+                s = 0.0
+                for i in range(j, j + degree_v):
+                    s += v_params[i]
+                knots_v[order_v - 2 + j] = s / degree_v
+            for i in range(knot_count_v - order_v + 1, knot_count_v):
+                knots_v[i] = v_params[n_sections - 1]
+
+        surface = NurbsSurface.create_raw(3, is_rat, order_u, order_v, cv_count_u, cv_count_v)
+        if surface is None:
+            return NurbsSurface()
+
+        for i in range(surface.knot_count(0)):
+            surface.set_knot(0, i, curves[0].knot(i))
+        for i in range(len(knots_v)):
+            if i < surface.knot_count(1):
+                surface.set_knot(1, i, knots_v[i])
+
+        n = n_sections
+        N_matrix = [[0.0] * n for _ in range(n)]
+        knots_v_arr = np.array(knots_v)
+
+        for k in range(n):
+            t = v_params[k]
+            t0 = knots_v[order_v - 2]
+            t1 = knots_v[knot_count_v - order_v + 1]
+            if t < t0:
+                t = t0
+            if t > t1:
+                t = t1
+
+            span = knot.find_span(order_v, cv_count_v, knots_v_arr, t)
+            d = order_v - 1
+            knot_base = span + d
+
+            if knots_v[knot_base - 1] == knots_v[knot_base]:
+                if t <= knots_v[knot_base]:
+                    N_matrix[k][span] = 1.0
+                else:
+                    N_matrix[k][span + order_v - 1] = 1.0
+                continue
+
+            Nvals = [0.0] * (order_v * order_v)
+            Nvals[order_v * order_v - 1] = 1.0
+            left = [0.0] * d
+            right = [0.0] * d
+            N_idx = order_v * order_v - 1
+            k_right = knot_base
+            k_left = knot_base - 1
+
+            for j in range(d):
+                N0_idx = N_idx
+                N_idx -= (order_v + 1)
+                left[j] = t - knots_v[k_left]
+                right[j] = knots_v[k_right] - t
+                k_left -= 1
+                k_right += 1
+
+                x = 0.0
+                for r in range(j + 1):
+                    a0 = left[j - r]
+                    a1 = right[r]
+                    denom = a0 + a1
+                    y = Nvals[N0_idx + r] / denom if denom != 0.0 else 0.0
+                    Nvals[N_idx + r] = x + a1 * y
+                    x = a0 * y
+                Nvals[N_idx + j + 1] = x
+
+            for j in range(order_v):
+                col = span + j
+                if 0 <= col < n:
+                    N_matrix[k][col] = Nvals[j]
+
+        dim = 4 if is_rat else 3
+        for i in range(cv_count_u):
+            rhs = [[0.0] * dim for _ in range(n)]
+            for k in range(n):
+                if is_rat:
+                    cx, cy, cz, cw = curves[k].get_cv_4d(i)
+                    rhs[k] = [cx, cy, cz, cw]
+                else:
+                    p = curves[k].get_cv(i)
+                    rhs[k] = [p[0], p[1], p[2]]
+
+            A = [row[:] for row in N_matrix]
+            b = [row[:] for row in rhs]
+
+            for col in range(n):
+                max_row = col
+                max_val = abs(A[col][col])
+                for row in range(col + 1, n):
+                    if abs(A[row][col]) > max_val:
+                        max_val = abs(A[row][col])
+                        max_row = row
+                if max_val < 1e-14:
+                    continue
+                A[col], A[max_row] = A[max_row], A[col]
+                b[col], b[max_row] = b[max_row], b[col]
+                for row in range(col + 1, n):
+                    factor = A[row][col] / A[col][col]
+                    for c in range(col, n):
+                        A[row][c] -= factor * A[col][c]
+                    for d2 in range(dim):
+                        b[row][d2] -= factor * b[col][d2]
+
+            Q = [[0.0] * dim for _ in range(n)]
+            for row in range(n - 1, -1, -1):
+                for d2 in range(dim):
+                    Q[row][d2] = b[row][d2]
+                    for c in range(row + 1, n):
+                        Q[row][d2] -= A[row][c] * Q[c][d2]
+                    if abs(A[row][row]) > 1e-14:
+                        Q[row][d2] /= A[row][row]
+
+            for j in range(n):
+                if is_rat:
+                    surface.set_cv_4d(i, j, Q[j][0], Q[j][1], Q[j][2], Q[j][3])
+                else:
+                    surface.set_cv(i, j, Point(Q[j][0], Q[j][1], Q[j][2]))
+
+        return surface
+
+    @staticmethod
+    def _merge_knot_vectors(a, b, tol=1e-10):
+        merged = []
+        i, j = 0, 0
+        while i < len(a) and j < len(b):
+            if abs(a[i] - b[j]) < tol:
+                merged.append(a[i])
+                i += 1
+                j += 1
+            elif a[i] < b[j]:
+                merged.append(a[i])
+                i += 1
+            else:
+                merged.append(b[j])
+                j += 1
+        while i < len(a):
+            merged.append(a[i])
+            i += 1
+        while j < len(b):
+            merged.append(b[j])
+            j += 1
+        return merged
+
+    @staticmethod
+    def _knot_vectors_equal(a, b, tol=1e-10):
+        if len(a) != len(b):
+            return False
+        for i in range(len(a)):
+            if abs(a[i] - b[i]) > tol:
+                return False
+        return True
+
+    @staticmethod
+    def _make_curves_compatible(curves):
+        if len(curves) < 2:
+            return
+        max_deg = max(c.degree() for c in curves)
+        for c in curves:
+            if c.degree() < max_deg:
+                c.increase_degree(max_deg)
+        any_rational = any(c.is_rational() for c in curves)
+        if any_rational:
+            for c in curves:
+                c.make_rational()
+        already_compatible = True
+        for i in range(1, len(curves)):
+            if curves[i].cv_count() != curves[0].cv_count():
+                already_compatible = False
+                break
+            if not NurbsSurface._knot_vectors_equal(list(curves[i].get_knots()), list(curves[0].get_knots())):
+                already_compatible = False
+                break
+        if already_compatible:
+            return
+        for c in curves:
+            c.set_domain(0.0, 1.0)
+        unified = list(curves[0].get_knots())
+        for i in range(1, len(curves)):
+            unified = NurbsSurface._merge_knot_vectors(unified, list(curves[i].get_knots()))
+        tol = 1e-10
+        for c in curves:
+            cur_knots = list(c.get_knots())
+            for k in unified:
+                found = any(abs(ck - k) < tol for ck in cur_knots)
+                if not found:
+                    c.insert_knot(k, 1)
+                    cur_knots = list(c.get_knots())
+
     @staticmethod
     def create_planar(curves):
         surface = NurbsSurface()
