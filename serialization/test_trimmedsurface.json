@@ -1,0 +1,157 @@
+{
+  "guid": "b8a7300c-36e4-41d3-9bf0-d71d9df453c8",
+  "inner_loops": [],
+  "name": "test_trimmedsurface",
+  "outer_loop": {
+    "control_points": [
+      [
+        0.1,
+        0.1,
+        0.0
+      ],
+      [
+        0.9,
+        0.1,
+        0.0
+      ],
+      [
+        0.9,
+        0.9,
+        0.0
+      ],
+      [
+        0.1,
+        0.9,
+        0.0
+      ],
+      [
+        0.1,
+        0.1,
+        0.0
+      ]
+    ],
+    "cv_count": 5,
+    "cv_stride": 3,
+    "dimension": 3,
+    "guid": "5641fcdd-67d3-4d08-acf7-2377dc684d13",
+    "is_rational": false,
+    "knots": [
+      0.0,
+      0.7999999999999999,
+      1.5999999999999999,
+      2.4,
+      3.1999999999999997
+    ],
+    "linecolor": {
+      "a": 255,
+      "b": 0,
+      "g": 0,
+      "guid": "93fb75d8-4ba5-4ac6-878e-f7017c481211",
+      "name": "black",
+      "r": 0,
+      "type": "Color"
+    },
+    "name": "my_nurbscurve",
+    "order": 2,
+    "width": 1.0,
+    "xform": {
+      "guid": "9cd13bdb-baf6-49eb-8884-64c8ca0e7e14",
+      "m": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "my_xform",
+      "type": "Xform"
+    }
+  },
+  "surface": {
+    "guid": "62c9945d-86d4-4cbf-bd7a-dc586897a67e",
+    "name": "my_nurbssurface",
+    "dimension": 3,
+    "is_rational": false,
+    "order_u": 2,
+    "order_v": 2,
+    "cv_count_u": 2,
+    "cv_count_v": 2,
+    "knots_u": [
+      0.0,
+      1.0
+    ],
+    "knots_v": [
+      0.0,
+      1.0
+    ],
+    "control_points": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      5.0,
+      0.0,
+      5.0,
+      0.0,
+      0.0,
+      5.0,
+      5.0,
+      0.0
+    ],
+    "width": 1.0,
+    "surfacecolor": {
+      "a": 255,
+      "b": 0,
+      "g": 0,
+      "guid": "a75b6c13-7785-4bc5-b825-4aee4e0ae7c3",
+      "name": "black",
+      "r": 0,
+      "type": "Color"
+    }
+  },
+  "surfacecolor": {
+    "a": 255,
+    "b": 64,
+    "g": 128,
+    "guid": "29e00733-9100-47f8-b3fe-b3d3aa7cc8db",
+    "name": "my_color",
+    "r": 255,
+    "type": "Color"
+  },
+  "type": "TrimmedSurface",
+  "width": 2.0,
+  "xform": {
+    "guid": "ef158c30-f225-4dd3-a0bb-bfed207b8be5",
+    "m": [
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "name": "my_xform",
+    "type": "Xform"
+  }
+}

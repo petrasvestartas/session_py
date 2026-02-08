@@ -30,6 +30,7 @@ from . import intersection
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .primitives import Primitives
+from .trimmedsurface import TrimmedSurface
 from .ray_box_intersection import ray_box
 from .closest import Closest
 
@@ -65,6 +66,7 @@ __all__ = [
     "NurbsCurve",
     "NurbsSurface",
     "Primitives",
+    "TrimmedSurface",
     "ray_box",
     "Closest",
 ]

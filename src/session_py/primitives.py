@@ -15,19 +15,18 @@ class Primitives:
         """Create a circle as a rational NURBS curve (9 control points)."""
         w = math.sqrt(2.0) / 2.0
 
-        curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-        curve.m_knot = np.array([0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4], dtype=np.float64)
-        curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
-
-        angles = [0, math.pi/4, math.pi/2, 3*math.pi/4,
-                  math.pi, 5*math.pi/4, 3*math.pi/2, 7*math.pi/4, 2*math.pi]
+        cx_pat = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+        cy_pat = [0, 1, 1, 1, 0, -1, -1, -1, 0]
         weights = [1, w, 1, w, 1, w, 1, w, 1]
 
+        curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
+        curve.m_knot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
+        curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
+
         for i in range(9):
-            x = cx + radius * math.cos(angles[i])
-            y = cy + radius * math.sin(angles[i])
-            z = cz
-            curve.set_cv_4d(i, x * weights[i], y * weights[i], z * weights[i], weights[i])
+            px = cx + radius * cx_pat[i]
+            py = cy + radius * cy_pat[i]
+            curve.set_cv_4d(i, px * weights[i], py * weights[i], cz * weights[i], weights[i])
 
         return curve
 
@@ -35,20 +34,18 @@ class Primitives:
     def ellipse(cx: float, cy: float, cz: float, major_radius: float, minor_radius: float) -> NurbsCurve:
         """Create an ellipse as a rational NURBS curve."""
         w = math.sqrt(2.0) / 2.0
-
-        curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-        curve.m_knot = np.array([0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4], dtype=np.float64)
-        curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
-
-        angles = [0, math.pi/4, math.pi/2, 3*math.pi/4,
-                  math.pi, 5*math.pi/4, 3*math.pi/2, 7*math.pi/4, 2*math.pi]
+        ex = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+        ey = [0, 1, 1, 1, 0, -1, -1, -1, 0]
         weights = [1, w, 1, w, 1, w, 1, w, 1]
 
+        curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
+        curve.m_knot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
+        curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
+
         for i in range(9):
-            x = cx + major_radius * math.cos(angles[i])
-            y = cy + minor_radius * math.sin(angles[i])
-            z = cz
-            curve.set_cv_4d(i, x * weights[i], y * weights[i], z * weights[i], weights[i])
+            px = cx + major_radius * ex[i]
+            py = cy + minor_radius * ey[i]
+            curve.set_cv_4d(i, px * weights[i], py * weights[i], cz * weights[i], weights[i])
 
         return curve
 

@@ -7,6 +7,7 @@ from .point import Point
 from .vector import Vector
 from .plane import Plane
 from .tolerance import Tolerance
+from .tolerance import PI
 from .boundingbox import BoundingBox
 from .xform import Xform
 from .color import Color
@@ -64,6 +65,8 @@ class NurbsSurface:
         self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
         self.m_outer_loop = NurbsCurve()
+        self.m_inner_loops = []
+        self.m_mesh = None
 
         # Create if parameters provided
         if cv_count0 > 0 and cv_count1 > 0:
@@ -980,29 +983,26 @@ class NurbsSurface:
             Basis function values.
         """
         order = self.m_order[dir]
-        d = order - 1  # degree
-        
-        # OpenNURBS shifts knot by (order-2) + span, then by d inside basis
-        # Net shift: span + d = span + order - 1
-        # But we need to account for the pointer offset behavior
-        knot_base = span + d  # This gives us the right position
+        d = order - 1
+        knot_base = span + d
         knot = self.m_knot[dir]
-        
-        # Check for degenerate span
+
         if knot[knot_base - 1] == knot[knot_base]:
-            return np.zeros(order)
-        
+            out = np.zeros(order)
+            if t <= knot[knot_base]:
+                out[0] = 1.0
+            else:
+                out[order - 1] = 1.0
+            return out
+
         N = np.zeros(order * order)
         N[order * order - 1] = 1.0
-        
         left = np.zeros(d)
         right = np.zeros(d)
-        
-        # Cox-de Boor recursion  - OpenNURBS lines 702-718
         N_idx = order * order - 1
         k_right = knot_base
         k_left = knot_base - 1
-        
+
         for j in range(d):
             N0_idx = N_idx
             N_idx -= (order + 1)
@@ -1010,17 +1010,17 @@ class NurbsSurface:
             right[j] = knot[k_right] - t
             k_left -= 1
             k_right += 1
-            
+
             x = 0.0
             for r in range(j + 1):
                 a0 = left[j - r]
                 a1 = right[r]
-                y = N[N0_idx + r] / (a0 + a1)
+                denom = a0 + a1
+                y = N[N0_idx + r] / denom if abs(denom) > 0.0 else 0.0
                 N[N_idx + r] = x + a1 * y
                 x = a0 * y
             N[N_idx + j + 1] = x
-        
-        # Return just the final row of basis functions
+
         return N[0:order]
     
     ###########################################################################
@@ -1523,6 +1523,235 @@ class NurbsSurface:
 
     def clear_outer_loop(self):
         self.m_outer_loop = NurbsCurve()
+
+    def add_inner_loop(self, loop):
+        self.m_inner_loops.append(loop)
+
+    def get_inner_loop(self, index):
+        return self.m_inner_loops[index]
+
+    def inner_loop_count(self):
+        return len(self.m_inner_loops)
+
+    def clear_inner_loops(self):
+        self.m_inner_loops = []
+
+    def _compute_bbox_diagonal(self):
+        import math
+        minx = miny = minz = 1e30
+        maxx = maxy = maxz = -1e30
+        for i in range(self.cv_count(0)):
+            for j in range(self.cv_count(1)):
+                p = self.get_cv(i, j)
+                if p[0] < minx: minx = p[0]
+                if p[1] < miny: miny = p[1]
+                if p[2] < minz: minz = p[2]
+                if p[0] > maxx: maxx = p[0]
+                if p[1] > maxy: maxy = p[1]
+                if p[2] > maxz: maxz = p[2]
+        dx, dy, dz = maxx-minx, maxy-miny, maxz-minz
+        return math.sqrt(dx*dx + dy*dy + dz*dz)
+
+    def _span_flatness(self, span_u, span_v):
+        import math
+        deg_u = self.degree(0)
+        deg_v = self.degree(1)
+        c00 = self.get_cv(span_u, span_v)
+        c10 = self.get_cv(span_u + deg_u, span_v)
+        c01 = self.get_cv(span_u, span_v + deg_v)
+        c11 = self.get_cv(span_u + deg_u, span_v + deg_v)
+        max_dist = 0.0
+        for a in range(deg_u + 1):
+            s = a / deg_u if deg_u > 0 else 0.0
+            for b in range(deg_v + 1):
+                if (a == 0 or a == deg_u) and (b == 0 or b == deg_v):
+                    continue
+                t = b / deg_v if deg_v > 0 else 0.0
+                cv = self.get_cv(span_u + a, span_v + b)
+                bx = (1-s)*(1-t)*c00[0] + s*(1-t)*c10[0] + (1-s)*t*c01[0] + s*t*c11[0]
+                by = (1-s)*(1-t)*c00[1] + s*(1-t)*c10[1] + (1-s)*t*c01[1] + s*t*c11[1]
+                bz = (1-s)*(1-t)*c00[2] + s*(1-t)*c10[2] + (1-s)*t*c01[2] + s*t*c11[2]
+                dx, dy, dz = cv[0]-bx, cv[1]-by, cv[2]-bz
+                d = math.sqrt(dx*dx + dy*dy + dz*dz)
+                if d > max_dist:
+                    max_dist = d
+        return max_dist
+
+    def _span_subs(self, dir, sp, osp, flat, max_angle_deg, flat_tol):
+        import math
+        n = len(sp) - 1
+        subs = [2] * n
+        s_positions = [
+            osp[0] + (osp[-1] - osp[0]) * 0.25,
+            (osp[0] + osp[-1]) * 0.5,
+            osp[0] + (osp[-1] - osp[0]) * 0.75
+        ]
+        for i in range(n):
+            if flat[i] < flat_tol:
+                continue
+            t0, t1 = sp[i], sp[i + 1]
+            max_angle = 0.0
+            for s in s_positions:
+                prev_n = None
+                total_angle = 0.0
+                for k in range(5):
+                    t = t0 + k * (t1 - t0) / 4.0
+                    if dir == 0:
+                        nv = self.normal_at(t, s)
+                    else:
+                        nv = self.normal_at(s, t)
+                    if prev_n is not None:
+                        dot = prev_n[0]*nv[0] + prev_n[1]*nv[1] + prev_n[2]*nv[2]
+                        dot = max(-1.0, min(1.0, dot))
+                        total_angle += math.acos(dot) * 180.0 / PI
+                    prev_n = nv
+                if total_angle > max_angle:
+                    max_angle = total_angle
+            subs[i] = max(2, min(int(math.ceil(max_angle / max_angle_deg)), 24))
+        return subs
+
+    def mesh(self):
+        if self.m_mesh is not None:
+            return self.m_mesh
+        import math
+        from .mesh import Mesh
+        usp = self.get_span_vector(0)
+        vsp = self.get_span_vector(1)
+        if len(usp) < 2 or len(vsp) < 2:
+            return Mesh()
+        ns_u = len(usp) - 1
+        ns_v = len(vsp) - 1
+        max_angle_deg = 15.0
+        bbox_diag = self._compute_bbox_diagonal()
+        flat_tol = bbox_diag * 0.001
+        u_flat = [0.0] * ns_u
+        v_flat = [0.0] * ns_v
+        for i in range(ns_u):
+            for j in range(ns_v):
+                f = self._span_flatness(i, j)
+                if f > u_flat[i]:
+                    u_flat[i] = f
+                if f > v_flat[j]:
+                    v_flat[j] = f
+        u_subs = self._span_subs(0, usp, vsp, u_flat, max_angle_deg, flat_tol)
+        v_subs = self._span_subs(1, vsp, usp, v_flat, max_angle_deg, flat_tol)
+        total_u = sum(u_subs) + 1
+        total_v = sum(v_subs) + 1
+        v_mid = (vsp[0] + vsp[-1]) * 0.5
+        u_mid = (usp[0] + usp[-1]) * 0.5
+        u_len = 0.0
+        p0 = self.point_at(usp[0], v_mid)
+        n_sample = max(total_u, 10)
+        for i in range(1, n_sample + 1):
+            u = usp[0] + i * (usp[-1] - usp[0]) / n_sample
+            p1 = self.point_at(u, v_mid)
+            u_len += math.sqrt((p1[0]-p0[0])**2 + (p1[1]-p0[1])**2 + (p1[2]-p0[2])**2)
+            p0 = p1
+        v_len = 0.0
+        p0 = self.point_at(u_mid, vsp[0])
+        n_sample = max(total_v, 10)
+        for i in range(1, n_sample + 1):
+            v = vsp[0] + i * (vsp[-1] - vsp[0]) / n_sample
+            p1 = self.point_at(u_mid, v)
+            v_len += math.sqrt((p1[0]-p0[0])**2 + (p1[1]-p0[1])**2 + (p1[2]-p0[2])**2)
+            p0 = p1
+        if u_len > 1e-14 and v_len > 1e-14 and total_u > 0 and total_v > 0:
+            spacing_u = u_len / total_u
+            spacing_v = v_len / total_v
+            ratio = spacing_u / spacing_v
+            if ratio > 2.0:
+                scale = math.sqrt(ratio)
+                u_subs = [min(int(math.ceil(s * scale)), 24) for s in u_subs]
+            elif ratio < 0.5:
+                scale = math.sqrt(1.0 / ratio)
+                v_subs = [min(int(math.ceil(s * scale)), 24) for s in v_subs]
+        us = []
+        for i in range(len(usp) - 1):
+            for s in range(u_subs[i]):
+                us.append(usp[i] + s * (usp[i + 1] - usp[i]) / u_subs[i])
+        us.append(usp[-1])
+        vs = []
+        for i in range(len(vsp) - 1):
+            for s in range(v_subs[i]):
+                vs.append(vsp[i] + s * (vsp[i + 1] - vsp[i]) / v_subs[i])
+        vs.append(vsp[-1])
+        closed_u = self.is_closed(0)
+        closed_v = self.is_closed(1)
+        if closed_u:
+            us.pop()
+        if closed_v:
+            vs.pop()
+        nu, nv = len(us), len(vs)
+        result = Mesh()
+        vkeys = []
+        for i in range(nu):
+            for j in range(nv):
+                pt = self.point_at(us[i], vs[j])
+                vk = result.add_vertex(pt)
+                vkeys.append(vk)
+        nu_faces = nu if closed_u else nu - 1
+        nv_faces = nv if closed_v else nv - 1
+        for i in range(nu_faces):
+            for j in range(nv_faces):
+                i1 = (i + 1) % nu
+                j1 = (j + 1) % nv
+                v00 = vkeys[i * nv + j]
+                v10 = vkeys[i1 * nv + j]
+                v01 = vkeys[i * nv + j1]
+                v11 = vkeys[i1 * nv + j1]
+                if (i + j) % 2 == 0:
+                    result.add_face([v00, v10, v11])
+                    result.add_face([v00, v11, v01])
+                else:
+                    result.add_face([v00, v10, v01])
+                    result.add_face([v10, v11, v01])
+        nv_total = len(result.vertex)
+        max_vkey = max(result.vertex.keys()) if result.vertex else 0
+        vnx = [0.0] * (max_vkey + 1)
+        vny = [0.0] * (max_vkey + 1)
+        vnz = [0.0] * (max_vkey + 1)
+        for fi, vids in result.face.items():
+            if len(vids) < 3:
+                continue
+            p0 = result.vertex[vids[0]]
+            p1 = result.vertex[vids[1]]
+            p2 = result.vertex[vids[2]]
+            e1x, e1y, e1z = p1.x-p0.x, p1.y-p0.y, p1.z-p0.z
+            e2x, e2y, e2z = p2.x-p0.x, p2.y-p0.y, p2.z-p0.z
+            fnx = e1y*e2z - e1z*e2y
+            fny = e1z*e2x - e1x*e2z
+            fnz = e1x*e2y - e1y*e2x
+            for vi in vids:
+                vnx[vi] += fnx
+                vny[vi] += fny
+                vnz[vi] += fnz
+        for vk in result.vertex:
+            ln = math.sqrt(vnx[vk]**2 + vny[vk]**2 + vnz[vk]**2)
+            if ln > 1e-15:
+                vnx[vk] /= ln
+                vny[vk] /= ln
+                vnz[vk] /= ln
+            result.vertex[vk].set_normal(vnx[vk], vny[vk], vnz[vk])
+        self.m_mesh = result
+        return self.m_mesh
+
+    def boundary_curves_3d(self):
+        """Return 3D boundary curves evaluated on the surface.
+
+        Returns list of NurbsCurves: [outer_boundary, hole0, hole1, ...]
+        The outer_loop and inner_loops are stored in UV parameter space.
+        This method evaluates them on the surface to produce 3D curves.
+        """
+        if not self.is_trimmed():
+            return []
+        curves = []
+        for loop in [self.m_outer_loop] + self.m_inner_loops:
+            pts_3d = []
+            for i in range(loop.cv_count()):
+                uv = loop.get_cv(i)
+                pts_3d.append(self.point_at(uv[0], uv[1]))
+            curves.append(NurbsCurve.create(True, 1, pts_3d))
+        return curves
 
     def is_planar(self, plane: Optional[Plane] = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
         """Check if surface is planar within tolerance.
@@ -2304,25 +2533,78 @@ class NurbsSurface:
         
         return nurbs_crv
     
-    def closest_point(self, point: Point) -> Tuple[Point, float, float]:
-        """Closest point on surface to test point.
-        
-        Parameters
-        ----------
-        point : Point
-            Test point.
-        
-        Returns
-        -------
-        tuple
-            (closest_point, u_param, v_param)
-        """
-        # Stub - requires iterative closest point algorithm
-        u0, u1 = self.domain(0)
-        v0, v1 = self.domain(1)
-        u_out = (u0 + u1) / 2.0
-        v_out = (v0 + v1) / 2.0
-        return (self.point_at(u_out, v_out), u_out, v_out)
+    def closest_point(self, point):
+        dom_u = self.domain(0)
+        dom_v = self.domain(1)
+        nu, nv = 16, 16
+        best_dist2 = 1e300
+        best_u = (dom_u[0] + dom_u[1]) * 0.5
+        best_v = (dom_v[0] + dom_v[1]) * 0.5
+        for i in range(nu + 1):
+            u = dom_u[0] + (dom_u[1] - dom_u[0]) * i / nu
+            for j in range(nv + 1):
+                v = dom_v[0] + (dom_v[1] - dom_v[0]) * j / nv
+                pt = self.point_at(u, v)
+                dx = pt[0] - point[0]
+                dy = pt[1] - point[1]
+                dz = pt[2] - point[2]
+                d2 = dx * dx + dy * dy + dz * dz
+                if d2 < best_dist2:
+                    best_dist2 = d2
+                    best_u = u
+                    best_v = v
+        u, v = best_u, best_v
+        for _ in range(20):
+            derivs = self.evaluate(u, v, 1)
+            if len(derivs) < 3:
+                break
+            dx = derivs[0][0] - point[0]
+            dy = derivs[0][1] - point[1]
+            dz = derivs[0][2] - point[2]
+            su0, su1, su2 = derivs[1][0], derivs[1][1], derivs[1][2]
+            sv0, sv1, sv2 = derivs[2][0], derivs[2][1], derivs[2][2]
+            fu = dx * su0 + dy * su1 + dz * su2
+            fv = dx * sv0 + dy * sv1 + dz * sv2
+            if abs(fu) < 1e-14 and abs(fv) < 1e-14:
+                break
+            juu = su0 * su0 + su1 * su1 + su2 * su2
+            juv = su0 * sv0 + su1 * sv1 + su2 * sv2
+            jvv = sv0 * sv0 + sv1 * sv1 + sv2 * sv2
+            det = juu * jvv - juv * juv
+            if abs(det) < 1e-30:
+                break
+            du = -(jvv * fu - juv * fv) / det
+            dv = -(juu * fv - juv * fu) / det
+            u += du
+            v += dv
+            u = max(dom_u[0], min(dom_u[1], u))
+            v = max(dom_v[0], min(dom_v[1], v))
+            if du * du + dv * dv < 1e-28:
+                break
+        return (self.point_at(u, v), u, v)
+
+    def add_hole(self, curve_3d):
+        dom = curve_3d.domain()
+        sdom_u = self.domain(0)
+        sdom_v = self.domain(1)
+        range_u = sdom_u[1] - sdom_u[0]
+        range_v = sdom_v[1] - sdom_v[0]
+        n_samples = max(curve_3d.cv_count() * 4, 32)
+        uv_pts = []
+        for i in range(n_samples):
+            t = dom[0] + (dom[1] - dom[0]) * i / n_samples
+            pt3d = curve_3d.point_at(t)
+            _, u, v = self.closest_point(pt3d)
+            nu = (u - sdom_u[0]) / range_u
+            nv = (v - sdom_v[0]) / range_v
+            uv_pts.append(Point(nu, nv, 0.0))
+        if len(uv_pts) >= 3:
+            from .nurbscurve import NurbsCurve
+            self.add_inner_loop(NurbsCurve.create(True, 1, uv_pts))
+
+    def add_holes(self, curves_3d):
+        for crv in curves_3d:
+            self.add_hole(crv)
     
     ###########################################################################
     # ADVANCED OPERATIONS
@@ -2401,49 +2683,49 @@ class NurbsSurface:
             'knots_v': self.m_knot[1].tolist(),
             'control_points': self.m_cv.tolist(),
             'width': self.width,
-            'surfacecolor': {
-                'r': self.surfacecolor[0],
-                'g': self.surfacecolor[1],
-                'b': self.surfacecolor[2],
-                'a': self.surfacecolor[3]
-            },
-            **(({'outer_loop': self.m_outer_loop.__jsondump__()} if self.is_trimmed() else {}))
+            'surfacecolor': self.surfacecolor.__jsondump__(),
+            **(({'outer_loop': self.m_outer_loop.__jsondump__()} if self.is_trimmed() else {})),
+            **(({'inner_loops': [l.__jsondump__() for l in self.m_inner_loops]} if self.m_inner_loops else {})),
+            **(({'mesh': self.m_mesh.__jsondump__()} if self.m_mesh is not None else {}))
         }
     
     @classmethod
-    def __jsonload__(cls, data: dict) -> 'NurbsSurface':
+    def __jsonload__(cls, data: dict, guid=None, name=None) -> 'NurbsSurface':
         """Create from JSON dict."""
         from .color import Color
         srf = cls()
-        
+
         dimension = data.get('dimension', 3)
         is_rational = data.get('is_rational', False)
         order_u = data.get('order_u', 4)
         order_v = data.get('order_v', 4)
         cv_count_u = data.get('cv_count_u', 0)
         cv_count_v = data.get('cv_count_v', 0)
-        
+
         if cv_count_u > 0 and cv_count_v > 0:
             srf._create_impl(dimension, is_rational, order_u, order_v, cv_count_u, cv_count_v)
-            
+
             if 'knots_u' in data:
                 srf.m_knot[0] = np.array(data['knots_u'], dtype=np.float64)
             if 'knots_v' in data:
                 srf.m_knot[1] = np.array(data['knots_v'], dtype=np.float64)
             if 'control_points' in data:
                 srf.m_cv = np.array(data['control_points'], dtype=np.float64)
-        
-        # Set metadata AFTER _create_impl (which calls destroy/initialize)
-        srf.guid = data.get('guid', srf.guid)
-        srf.name = data.get('name', 'my_nurbssurface')
+
+        srf.guid = guid if guid is not None else data.get('guid', srf.guid)
+        srf.name = name if name is not None else data.get('name', 'my_nurbssurface')
         srf.width = data.get('width', 1.0)
-        
+
         if 'surfacecolor' in data:
-            c = data['surfacecolor']
-            srf.surfacecolor = Color(c.get('r', 255), c.get('g', 255), c.get('b', 255), c.get('a', 255))
+            srf.surfacecolor = Color.__jsonload__(data['surfacecolor'])
 
         if 'outer_loop' in data:
             srf.m_outer_loop = NurbsCurve.__jsonload__(data['outer_loop'])
+        if 'inner_loops' in data:
+            srf.m_inner_loops = [NurbsCurve.__jsonload__(l) for l in data['inner_loops']]
+        if data.get('mesh'):
+            from .mesh import Mesh
+            srf.m_mesh = Mesh.__jsonload__(data['mesh'])
 
         return srf
     
@@ -2536,6 +2818,17 @@ class NurbsSurface:
         proto.xform.name = self.xform.name
         proto.xform.matrix.extend(self.xform.m)
 
+        # Outer loop
+        if self.is_trimmed():
+            loop_data = self.m_outer_loop.pb_dumps()
+            proto.outer_loop.ParseFromString(loop_data)
+
+        # Inner loops
+        for inner in self.m_inner_loops:
+            loop_data = inner.pb_dumps()
+            il = proto.inner_loops.add()
+            il.ParseFromString(loop_data)
+
         return proto.SerializeToString()
 
     @classmethod
@@ -2599,6 +2892,16 @@ class NurbsSurface:
         surface.xform = Xform()
         surface.xform.name = proto.xform.name
         surface.xform.m = list(proto.xform.matrix)
+
+        # Load outer loop
+        if proto.HasField('outer_loop') and proto.outer_loop.cv_count > 0:
+            loop_data = proto.outer_loop.SerializeToString()
+            surface.m_outer_loop = NurbsCurve.pb_loads(loop_data)
+
+        # Load inner loops
+        for il in proto.inner_loops:
+            loop_data = il.SerializeToString()
+            surface.m_inner_loops.append(NurbsCurve.pb_loads(loop_data))
 
         return surface
 

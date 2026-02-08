@@ -234,9 +234,8 @@ class Mesh:
             vertex_key = self._max_vertex
         else:
             vertex_key = vkey
-
-        if vertex_key >= self._max_vertex:
-            self._max_vertex = vertex_key + 1
+            if vertex_key >= self._max_vertex:
+                self._max_vertex = vertex_key + 1
 
         self.vertex[vertex_key] = VertexData(position)
         self.halfedge[vertex_key] = {}
@@ -275,9 +274,8 @@ class Mesh:
             face_key = self._max_face
         else:
             face_key = fkey
-
-        if face_key >= self._max_face:
-            self._max_face = face_key + 1
+            if face_key >= self._max_face:
+                self._max_face = face_key + 1
 
         self.face[face_key] = vertices.copy()
         self.triangulation.pop(face_key, None)
@@ -721,13 +719,13 @@ class Mesh:
                     mesh._max_face = key + 1
 
         # Load face attributes
-        if "facedata" in data:
+        if data.get("facedata"):
             for key_str, attrs in data["facedata"].items():
                 key = int(key_str)
                 mesh.facedata[key] = attrs
 
         # Load edge attributes
-        if "edgedata" in data:
+        if data.get("edgedata"):
             for edge_str, attrs in data["edgedata"].items():
                 u, v = map(int, edge_str.split(","))
                 mesh.edgedata[(u, v)] = attrs

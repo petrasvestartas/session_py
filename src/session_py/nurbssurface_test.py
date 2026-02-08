@@ -355,40 +355,38 @@ def test_json_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    # Create and setup surface
     surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
     surf.surfacecolor = Color(255, 128, 64, 255)
 
-    # Set some CVs
     for i in range(3):
         for j in range(3):
             surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
-    #   __jsondump__()  | dict         | to JSON object (internal use)
-    #   __jsonload__(d) | dict         | from JSON object (internal use)
-    #   json_dumps()    | str          | to JSON string
-    #   json_loads(s)   | str          | from JSON string
-    #   json_dump(path) | file         | write to file
-    #   json_load(path) | file         | read from file
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
 
-    # Serialize to JSON
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
-    surf.json_dump(fname)
-    loaded = NurbsSurface.json_load(fname)
+    # JSON object
+    json_obj = surf.__jsondump__()
+    loaded_json = NurbsSurface.__jsonload__(json_obj)
 
-    MINI_CHECK(loaded.name == surf.name)
-    MINI_CHECK(TOLERANCE.is_close(loaded.width, surf.width))
-    MINI_CHECK(loaded.surfacecolor[0] == surf.surfacecolor[0])
-    MINI_CHECK(loaded.surfacecolor[1] == surf.surfacecolor[1])
-    MINI_CHECK(loaded.surfacecolor[2] == surf.surfacecolor[2])
-    MINI_CHECK(loaded.dimension() == surf.dimension())
-    MINI_CHECK(loaded.is_rational() == surf.is_rational())
-    MINI_CHECK(loaded.order(0) == surf.order(0))
-    MINI_CHECK(loaded.order(1) == surf.order(1))
-    MINI_CHECK(loaded.cv_count_dir(0) == surf.cv_count_dir(0))
-    MINI_CHECK(loaded.cv_count_dir(1) == surf.cv_count_dir(1))
+    # String
+    json_string = surf.json_dumps()
+    loaded_json_string = NurbsSurface.json_loads(json_string)
+
+    # File
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
+    surf.json_dump(filename)
+    loaded_from_file = NurbsSurface.json_load(filename)
+
+    MINI_CHECK(loaded_json == surf)
+    MINI_CHECK(loaded_json_string == surf)
+    MINI_CHECK(loaded_from_file == surf)
 
 
 @MINI_TEST("NurbsSurface", "protobuf_roundtrip")
@@ -398,33 +396,31 @@ def test_protobuf_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    # Create and setup surface
     surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
     surf.surfacecolor = Color(255, 128, 64, 255)
 
-    # Set some CVs
     for i in range(3):
         for j in range(3):
             surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
-    # Serialize to protobuf
-    path = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
-    surf.pb_dump(path)
-    loaded = NurbsSurface.pb_load(path)
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
 
-    MINI_CHECK(loaded.name == surf.name)
-    MINI_CHECK(TOLERANCE.is_close(loaded.width, surf.width))
-    MINI_CHECK(loaded.surfacecolor[0] == surf.surfacecolor[0])
-    MINI_CHECK(loaded.surfacecolor[1] == surf.surfacecolor[1])
-    MINI_CHECK(loaded.surfacecolor[2] == surf.surfacecolor[2])
-    MINI_CHECK(loaded.dimension() == surf.dimension())
-    MINI_CHECK(loaded.is_rational() == surf.is_rational())
-    MINI_CHECK(loaded.order(0) == surf.order(0))
-    MINI_CHECK(loaded.order(1) == surf.order(1))
-    MINI_CHECK(loaded.cv_count_dir(0) == surf.cv_count_dir(0))
-    MINI_CHECK(loaded.cv_count_dir(1) == surf.cv_count_dir(1))
+    # String
+    proto_string = surf.pb_dumps()
+    loaded_proto_string = NurbsSurface.pb_loads(proto_string)
+
+    # File
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
+    surf.pb_dump(filename)
+    loaded = NurbsSurface.pb_load(filename)
+
+    MINI_CHECK(loaded_proto_string == surf)
+    MINI_CHECK(loaded == surf)
 
 
 @MINI_TEST("NurbsSurface", "advanced_accessors")

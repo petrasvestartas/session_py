@@ -26,6 +26,11 @@ class Tolerance:
 
     SUPPORTED_UNITS = ["M", "MM"]
 
+    # Mathematical constants
+    PI = math.pi
+    TO_DEGREES = 180.0 / math.pi
+    TO_RADIANS = math.pi / 180.0
+
     # Default tolerance values (f32 only)
     ABSOLUTE = 1e-9
     RELATIVE = 1e-6
@@ -331,6 +336,11 @@ class Tolerance:
 
             return abs(int(decimal.Decimal(str(tol)).as_tuple().exponent))
         raise NotImplementedError
+
+    @staticmethod
+    def round_to(value, ndigits):
+        factor = 10 ** ndigits
+        return round(value * factor) / factor
 
     def __repr__(self):
         return f"Tolerance(unit='{self.unit}', absolute={self.absolute}, relative={self.relative}, angular={self.angular}, approximation={self.approximation}, precision={self.precision}, lineardeflection={self.lineardeflection}, angulardeflection={self.angulardeflection})"

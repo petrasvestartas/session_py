@@ -106,6 +106,108 @@ class Graph:
         return graph
 
     ###########################################################################################
+    # Serialization: json_dumps, json_loads, json_dump, json_load
+    ###########################################################################################
+
+    def json_dumps(self):
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, s):
+        import json
+        return cls.__jsonload__(json.loads(s))
+
+    def json_dump(self, filepath):
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        import json
+        with open(filepath, 'r') as f:
+            return cls.__jsonload__(json.load(f))
+
+    ###########################################################################################
+    # Serialization: pb_dumps, pb_loads, pb_dump, pb_load
+    ###########################################################################################
+
+    def pb_dumps(self):
+        from .proto import graph_pb2
+
+        proto = graph_pb2.Graph()
+        proto.name = self.name
+        proto.guid = self.guid
+        proto.vertex_count = self.vertex_count
+        proto.edge_count = self.edge_count
+
+        for name, vertex in self.vertices.items():
+            v = proto.vertices[name]
+            v.name = vertex.name
+            v.guid = vertex.guid
+            v.attribute = vertex.attribute
+            v.index = vertex.index
+
+        seen = set()
+        for u, neighbors in self.edges.items():
+            for v, edge in neighbors.items():
+                key = (u, v) if u < v else (v, u)
+                if key in seen:
+                    continue
+                seen.add(key)
+                e = proto.edges.add()
+                e.guid = edge.guid
+                e.name = edge.name
+                e.v0 = edge.v0
+                e.v1 = edge.v1
+                e.attribute = edge.attribute
+                e.index = edge.index
+
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data):
+        from .proto import graph_pb2
+
+        proto = graph_pb2.Graph()
+        proto.ParseFromString(data)
+
+        graph = cls(name=proto.name)
+        graph.guid = proto.guid
+        graph.vertex_count = proto.vertex_count
+        graph.edge_count = proto.edge_count
+
+        for name, v in proto.vertices.items():
+            vertex = Vertex(v.name, v.attribute)
+            vertex.guid = v.guid
+            vertex.index = v.index
+            graph.vertices[name] = vertex
+
+        for e in proto.edges:
+            edge = Edge(e.v0, e.v1, e.attribute)
+            edge.guid = e.guid
+            edge.name = e.name
+            edge.index = e.index
+            if e.v0 not in graph.edges:
+                graph.edges[e.v0] = {}
+            if e.v1 not in graph.edges:
+                graph.edges[e.v1] = {}
+            graph.edges[e.v0][e.v1] = edge
+            graph.edges[e.v1][e.v0] = edge
+
+        return graph
+
+    def pb_dump(self, filepath):
+        with open(filepath, 'wb') as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath):
+        with open(filepath, 'rb') as f:
+            return cls.pb_loads(f.read())
+
+    ###########################################################################################
     # Details: Essential Graph Methods
     ###########################################################################################
 
@@ -408,6 +510,9 @@ class Graph:
         ['B', 'C']
         """
         return iter(self.edges.get(node, {}).keys())
+
+    def get_neighbors(self, node):
+        return list(self.neighbors(node))
 
     def number_of_vertices(self):
         """Get the number of vertices in the graph.

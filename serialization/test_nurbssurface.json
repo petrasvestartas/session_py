@@ -1,5 +1,5 @@
 {
-  "guid": "57785f36-faeb-4984-86ba-54f069b3c561",
+  "guid": "ba5c979c-38ae-4592-8c07-8f0ea74c1365",
   "name": "test_nurbssurface",
   "dimension": 3,
   "is_rational": false,
@@ -50,9 +50,12 @@
   ],
   "width": 2.0,
   "surfacecolor": {
-    "r": 255,
-    "g": 128,
+    "a": 255,
     "b": 64,
-    "a": 255
+    "g": 128,
+    "guid": "b33262e3-ce95-4e98-922a-2cbe2168f8b0",
+    "name": "my_color",
+    "r": 255,
+    "type": "Color"
   }
 }

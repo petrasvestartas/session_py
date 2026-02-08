@@ -583,3 +583,66 @@ class BoundingBox:
             bbox.xform = decode_node(data["xform"])
 
         return bbox
+
+    def json_dumps(self):
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, s):
+        import json
+        return cls.__jsonload__(json.loads(s))
+
+    def json_dump(self, filepath):
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        import json
+        with open(filepath, 'r') as f:
+            return cls.__jsonload__(json.load(f))
+
+    def pb_dumps(self):
+        from .proto import boundingbox_pb2
+        proto = boundingbox_pb2.BoundingBox()
+        proto.center.ParseFromString(self.center.pb_dumps())
+        proto.x_axis.ParseFromString(self.x_axis.pb_dumps())
+        proto.y_axis.ParseFromString(self.y_axis.pb_dumps())
+        proto.z_axis.ParseFromString(self.z_axis.pb_dumps())
+        proto.half_size.ParseFromString(self.half_size.pb_dumps())
+        proto.guid = self.guid
+        proto.name = self.name
+        if hasattr(self, 'xform'):
+            proto.xform.guid = self.xform.guid
+            proto.xform.name = self.xform.name
+            proto.xform.matrix.extend(self.xform.m)
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data):
+        from .proto import boundingbox_pb2
+        proto = boundingbox_pb2.BoundingBox()
+        proto.ParseFromString(data)
+        center = Point.pb_loads(proto.center.SerializeToString())
+        x_axis = Vector.pb_loads(proto.x_axis.SerializeToString())
+        y_axis = Vector.pb_loads(proto.y_axis.SerializeToString())
+        z_axis = Vector.pb_loads(proto.z_axis.SerializeToString())
+        half_size = Vector.pb_loads(proto.half_size.SerializeToString())
+        bbox = cls(center, x_axis, y_axis, z_axis, half_size)
+        bbox.guid = proto.guid
+        bbox.name = proto.name
+        if proto.HasField('xform'):
+            from .xform import Xform
+            bbox.xform = Xform.pb_loads(proto.xform.SerializeToString())
+        return bbox
+
+    def pb_dump(self, filepath):
+        with open(filepath, 'wb') as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath):
+        with open(filepath, 'rb') as f:
+            return cls.pb_loads(f.read())

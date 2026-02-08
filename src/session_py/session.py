@@ -118,8 +118,85 @@ class Session:
             session.lookup[cylinder.guid] = cylinder
         for arrow in session.objects.arrows:
             session.lookup[arrow.guid] = arrow
+        for nurbscurve in session.objects.nurbscurves:
+            session.lookup[nurbscurve.guid] = nurbscurve
+        for nurbssurface in session.objects.nurbssurfaces:
+            session.lookup[nurbssurface.guid] = nurbssurface
 
         return session
+
+    def json_dumps(self):
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, s):
+        import json
+        return cls.__jsonload__(json.loads(s))
+
+    def json_dump(self, filepath):
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        import json
+        with open(filepath, 'r') as f:
+            return cls.__jsonload__(json.load(f))
+
+    def pb_dumps(self):
+        from .proto import session_pb2
+        proto = session_pb2.Session()
+        proto.name = self.name
+        proto.guid = self.guid
+        proto.objects.ParseFromString(self.objects.pb_dumps())
+        proto.tree.ParseFromString(self.tree.pb_dumps())
+        proto.graph.ParseFromString(self.graph.pb_dumps())
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data):
+        from .proto import session_pb2
+        proto = session_pb2.Session()
+        proto.ParseFromString(data)
+        session = cls(name=proto.name)
+        session.guid = proto.guid
+        session.objects = Objects.pb_loads(proto.objects.SerializeToString())
+        session.tree = Tree.pb_loads(proto.tree.SerializeToString())
+        session.graph = Graph.pb_loads(proto.graph.SerializeToString())
+        for point in session.objects.points:
+            session.lookup[point.guid] = point
+        for line in session.objects.lines:
+            session.lookup[line.guid] = line
+        for plane in session.objects.planes:
+            session.lookup[plane.guid] = plane
+        for bbox in session.objects.bboxes:
+            session.lookup[bbox.guid] = bbox
+        for polyline in session.objects.polylines:
+            session.lookup[polyline.guid] = polyline
+        for pointcloud in session.objects.pointclouds:
+            session.lookup[pointcloud.guid] = pointcloud
+        for mesh in session.objects.meshes:
+            session.lookup[mesh.guid] = mesh
+        for cylinder in session.objects.cylinders:
+            session.lookup[cylinder.guid] = cylinder
+        for arrow in session.objects.arrows:
+            session.lookup[arrow.guid] = arrow
+        for nurbscurve in session.objects.nurbscurves:
+            session.lookup[nurbscurve.guid] = nurbscurve
+        for nurbssurface in session.objects.nurbssurfaces:
+            session.lookup[nurbssurface.guid] = nurbssurface
+        return session
+
+    def pb_dump(self, filepath):
+        with open(filepath, 'wb') as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath):
+        with open(filepath, 'rb') as f:
+            return cls.pb_loads(f.read())
 
     ###########################################################################################
     # Details - Add objects
@@ -243,6 +320,18 @@ class Session:
         self.graph.add_node(cylinder.guid, f"cylinder_{cylinder.name}")
         tree_node = TreeNode(name=cylinder.guid)
         return tree_node
+
+    def add_nurbscurve(self, nurbscurve) -> TreeNode:
+        self.objects.nurbscurves.append(nurbscurve)
+        self.lookup[nurbscurve.guid] = nurbscurve
+        self.graph.add_node(nurbscurve.guid, f"nurbscurve_{nurbscurve.name}")
+        return TreeNode(name=nurbscurve.guid)
+
+    def add_nurbssurface(self, nurbssurface) -> TreeNode:
+        self.objects.nurbssurfaces.append(nurbssurface)
+        self.lookup[nurbssurface.guid] = nurbssurface
+        self.graph.add_node(nurbssurface.guid, f"nurbssurface_{nurbssurface.name}")
+        return TreeNode(name=nurbssurface.guid)
 
     def add_arrow(self, arrow) -> TreeNode:
         """Add an arrow to the Session.

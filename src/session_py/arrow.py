@@ -289,3 +289,62 @@ class Arrow:
             arrow.xform = decode_node(data["xform"])
 
         return arrow
+
+    def json_dumps(self):
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, s):
+        import json
+        return cls.__jsonload__(json.loads(s))
+
+    def json_dump(self, filepath):
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        import json
+        with open(filepath, 'r') as f:
+            return cls.__jsonload__(json.load(f))
+
+    def pb_dumps(self):
+        from .proto import arrow_pb2
+        proto = arrow_pb2.Arrow()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.radius = self.radius
+        proto.line.ParseFromString(self.line.pb_dumps())
+        proto.mesh.ParseFromString(self.mesh.pb_dumps())
+        if hasattr(self, 'xform'):
+            proto.xform.guid = self.xform.guid
+            proto.xform.name = self.xform.name
+            proto.xform.matrix.extend(self.xform.m)
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data):
+        from .proto import arrow_pb2
+        proto = arrow_pb2.Arrow()
+        proto.ParseFromString(data)
+        line = Line.pb_loads(proto.line.SerializeToString())
+        arrow = cls(line, proto.radius)
+        arrow.guid = proto.guid
+        arrow.name = proto.name
+        if proto.HasField('mesh'):
+            arrow.mesh = Mesh.pb_loads(proto.mesh.SerializeToString())
+        if proto.HasField('xform'):
+            from .xform import Xform
+            arrow.xform = Xform.pb_loads(proto.xform.SerializeToString())
+        return arrow
+
+    def pb_dump(self, filepath):
+        with open(filepath, 'wb') as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath):
+        with open(filepath, 'rb') as f:
+            return cls.pb_loads(f.read())

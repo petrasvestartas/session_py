@@ -62,6 +62,86 @@ class Tree:
             tree.add(root)
         return tree
 
+    def json_dumps(self):
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def json_loads(cls, s):
+        import json
+        return cls.__jsonload__(json.loads(s))
+
+    def json_dump(self, filepath):
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def json_load(cls, filepath):
+        import json
+        with open(filepath, 'r') as f:
+            return cls.__jsonload__(json.load(f))
+
+    def pb_dumps(self):
+        from .proto import tree_pb2
+        from .proto import treenode_pb2
+
+        def node_to_proto(node):
+            proto_node = treenode_pb2.TreeNode()
+            proto_node.guid = node.guid
+            proto_node.name = node.name
+            proto_node.parent_guid = ""
+            for child in node.children:
+                child_proto = node_to_proto(child)
+                proto_node.children.append(child_proto)
+            return proto_node
+
+        proto = tree_pb2.Tree()
+        proto.guid = self.guid
+        proto.name = self.name
+        if self.root:
+            proto.root.CopyFrom(node_to_proto(self.root))
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data):
+        from .proto import tree_pb2
+        from .treenode import TreeNode
+
+        proto = tree_pb2.Tree()
+        proto.ParseFromString(data)
+
+        def proto_to_node(proto_node):
+            node = TreeNode(name=proto_node.name)
+            node.guid = proto_node.guid
+            for child_proto in proto_node.children:
+                child = proto_to_node(child_proto)
+                node.add(child)
+            return node
+
+        tree = cls(name=proto.name)
+        tree.guid = proto.guid
+        if proto.HasField('root'):
+            root = proto_to_node(proto.root)
+            tree._root = root
+            root._tree = tree
+        return tree
+
+    def pb_dump(self, filepath):
+        with open(filepath, 'wb') as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath):
+        with open(filepath, 'rb') as f:
+            return cls.pb_loads(f.read())
+
+    def find_node_by_guid(self, guid):
+        for node in self.nodes:
+            if node.guid == guid:
+                return node
+        return None
+
     ###########################################################################################
     # Details
     ###########################################################################################

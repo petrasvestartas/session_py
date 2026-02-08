@@ -1717,7 +1717,7 @@ class NurbsCurve:
         pt = np.zeros(self.m_dim)
         
         if self.m_is_rat:
-            # Rational curve: C(t) = Σ(Ni * wi * Pi) / Σ(Ni * wi)
+            # Rational: CVs stored as (x*w, y*w, z*w, w) - homogeneous form
             w = 0.0
             for i in range(self.m_order):
                 cv_idx = span + i
@@ -1727,7 +1727,7 @@ class NurbsCurve:
                 weight = self.m_cv[idx + self.m_dim]
                 w += N[i] * weight
                 for j in range(self.m_dim):
-                    pt[j] += N[i] * self.m_cv[idx + j] * weight
+                    pt[j] += N[i] * self.m_cv[idx + j]
 
             if abs(w) > 1e-10:
                 pt /= w
@@ -1788,9 +1788,10 @@ class NurbsCurve:
                 cz = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
                 wv = self.m_cv[idx + self.m_dim] if self.m_is_rat else 1.0
 
-                Aders[k][0] += Nx * cx * wv
-                Aders[k][1] += Nx * cy * wv
-                Aders[k][2] += Nx * cz * wv
+                # CVs stored in homogeneous form: cx=x*w, cy=y*w, cz=z*w
+                Aders[k][0] += Nx * cx
+                Aders[k][1] += Nx * cy
+                Aders[k][2] += Nx * cz
                 Aders[k][3] += Nx * wv
 
         # Convert from homogeneous derivatives (Aders) to Cartesian derivatives
@@ -2967,11 +2968,11 @@ class NurbsCurve:
         }
 
     @classmethod
-    def __jsonload__(cls, data):
+    def __jsonload__(cls, data, guid=None, name=None):
         """Create NurbsCurve from JSON dictionary (accepts C++ format)."""
         curve = cls()
-        curve.guid = data.get("guid", curve.guid)
-        curve.name = data.get("name", curve.name)
+        curve.guid = guid if guid is not None else data.get("guid", curve.guid)
+        curve.name = name if name is not None else data.get("name", curve.name)
         curve.width = data.get("width", 1.0)
         if "linecolor" in data:
             curve.linecolor = Color.__jsonload__(data["linecolor"])
