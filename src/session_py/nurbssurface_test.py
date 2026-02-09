@@ -1188,5 +1188,32 @@ def test_nurbssurface_constructor_loft():
     MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 2), Point(1, -5, 0)))
 
 
+@MINI_TEST("NurbsSurface", "create_network")
+def test_create_network():
+    from session_py import NurbsSurface
+    from session_py import NurbsCurve
+    from session_py import Point
+    uc0 = NurbsCurve.create(False, 2, [Point(10,9.569076,0), Point(5.5,9.569076,3.5), Point(1,9.569076,0)])
+    uc1 = NurbsCurve.create(False, 2, [Point(10,16.569076,0), Point(5.5,16.569076,3.5), Point(1,16.569076,0)])
+    vc0 = NurbsCurve.create(False, 3, [Point(1,9.569076,0), Point(1,11.569076,3.0), Point(1,14.569076,3.0), Point(1,16.569076,0)])
+    vc1 = NurbsCurve.create(False, 2, [Point(4.236484,9.569076,1.612033), Point(3,13.069076,4.250144), Point(3.667141,16.569076,1.459684)])
+    vc2 = NurbsCurve.create(False, 2, [Point(7.295129,16.569076,1.471513), Point(8,13.069076,4.250144), Point(6.99265,9.569076,1.557456)])
+    vc3 = NurbsCurve.create(False, 3, [Point(10,9.569076,0), Point(10,11.569076,3), Point(10,14.569076,3), Point(10,16.569076,0)])
+    srf = NurbsSurface.create_network([uc0, uc1], [vc0, vc1, vc2, vc3])
+    MINI_CHECK(srf.cv_count(0) >= 4)
+    MINI_CHECK(srf.cv_count(1) >= 4)
+    MINI_CHECK(srf.degree(0) == 3)
+    MINI_CHECK(srf.degree(1) == 3)
+    p00 = srf.point_at(0, 0)
+    p01 = srf.point_at(0, 1)
+    p10 = srf.point_at(1, 0)
+    p11 = srf.point_at(1, 1)
+    MINI_CHECK(abs(p00[0] - 10.0) < 0.5)
+    MINI_CHECK(abs(p00[1] - 9.569076) < 0.5)
+    MINI_CHECK(abs(p10[0] - 1.0) < 0.5)
+    MINI_CHECK(abs(p11[0] - 1.0) < 0.5)
+    MINI_CHECK(abs(p01[1] - 16.569076) < 0.5)
+
+
 if __name__ == "__main__":
     run_all(language="python")

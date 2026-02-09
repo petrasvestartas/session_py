@@ -175,6 +175,10 @@ class Objects:
             proto.cylinders.add().ParseFromString(c.pb_dumps())
         for a in self.arrows:
             proto.arrows.add().ParseFromString(a.pb_dumps())
+        for nc in self.nurbscurves:
+            proto.nurbscurves.add().ParseFromString(nc.pb_dumps())
+        for ns in self.nurbssurfaces:
+            proto.nurbssurfaces.add().ParseFromString(ns.pb_dumps())
         return proto.SerializeToString()
 
     @classmethod
@@ -203,6 +207,10 @@ class Objects:
             objects.cylinders.append(Cylinder.pb_loads(c.SerializeToString()))
         for a in proto.arrows:
             objects.arrows.append(Arrow.pb_loads(a.SerializeToString()))
+        for nc in proto.nurbscurves:
+            objects.nurbscurves.append(NurbsCurve.pb_loads(nc.SerializeToString()))
+        for ns in proto.nurbssurfaces:
+            objects.nurbssurfaces.append(NurbsSurface.pb_loads(ns.SerializeToString()))
         return objects
 
     def pb_dump(self, filepath):

@@ -2499,28 +2499,440 @@ class NurbsSurface:
         return True
     
     ###########################################################################
+    # NETWORK SURFACE (GORDON SURFACE)
+    ###########################################################################
+
+    @staticmethod
+    def create_network(u_curves, v_curves):
+        from .knot import find_span
+        surface = NurbsSurface()
+        n_u = len(u_curves)
+        n_v = len(v_curves)
+        if n_u < 2 or n_v < 2:
+            return surface
+
+        u_crvs = [c.duplicate() for c in u_curves]
+        v_crvs = [c.duplicate() for c in v_curves]
+
+        def min_dist_sq(crv, pt):
+            t0, t1 = crv.domain()
+            best = 1e30
+            for i in range(51):
+                t = t0 + (t1 - t0) * i / 50.0
+                p = crv.point_at(t)
+                d = (p[0]-pt[0])**2 + (p[1]-pt[1])**2 + (p[2]-pt[2])**2
+                if d < best:
+                    best = d
+            return best
+
+        def find_param(crv, pt):
+            t0, t1 = crv.domain()
+            best_t, best_d = t0, 1e30
+            ns = 200
+            for i in range(ns + 1):
+                t = t0 + (t1 - t0) * i / ns
+                p = crv.point_at(t)
+                d = (p[0]-pt[0])**2 + (p[1]-pt[1])**2 + (p[2]-pt[2])**2
+                if d < best_d:
+                    best_d = d
+                    best_t = t
+            for _ in range(20):
+                derivs = crv.evaluate(best_t, 2)
+                dx = derivs[0][0]-pt[0]
+                dy = derivs[0][1]-pt[1]
+                dz = derivs[0][2]-pt[2]
+                f1 = 2.0*(dx*derivs[1][0] + dy*derivs[1][1] + dz*derivs[1][2])
+                f2 = 2.0*(derivs[1][0]**2 + derivs[1][1]**2 + derivs[1][2]**2
+                          + dx*derivs[2][0] + dy*derivs[2][1] + dz*derivs[2][2])
+                if abs(f2) < 1e-14:
+                    break
+                dt = f1 / f2
+                best_t -= dt
+                best_t = max(t0, min(t1, best_t))
+                if abs(dt) < 1e-14:
+                    break
+            return best_t
+
+        # Orient v-curves: start near u_curves[0]
+        for vc in v_crvs:
+            vs = vc.point_at(vc.domain_start())
+            ve = vc.point_at(vc.domain_end())
+            if min_dist_sq(u_crvs[0], ve) < min_dist_sq(u_crvs[0], vs):
+                vc.reverse()
+
+        # Sort v-curves by u-parameter on u_curves[0]
+        u_params_raw = [find_param(u_crvs[0], vc.point_at(vc.domain_start())) for vc in v_crvs]
+        v_order = sorted(range(n_v), key=lambda j: u_params_raw[j])
+        v_crvs = [v_crvs[j] for j in v_order]
+
+        # Orient u-curves: start near first sorted v-curve
+        for uc in u_crvs:
+            us = uc.point_at(uc.domain_start())
+            ue = uc.point_at(uc.domain_end())
+            if min_dist_sq(v_crvs[0], ue) < min_dist_sq(v_crvs[0], us):
+                uc.reverse()
+
+        # Make curves compatible
+        NurbsSurface._make_curves_compatible(u_crvs)
+        NurbsSurface._make_curves_compatible(v_crvs)
+        for c in u_crvs:
+            c.set_domain(0.0, 1.0)
+        for c in v_crvs:
+            c.set_domain(0.0, 1.0)
+
+        # Find intersection parameters for ALL pairs
+        t_u_ij = [[0.0]*n_v for _ in range(n_u)]
+        t_v_ij = [[0.0]*n_v for _ in range(n_u)]
+        for i in range(n_u):
+            for j in range(n_v):
+                approx_v = float(i) / (n_u - 1) if n_u > 1 else 0.0
+                pv = v_crvs[j].point_at(approx_v)
+                t_u_ij[i][j] = find_param(u_crvs[i], pv)
+                pu = u_crvs[i].point_at(t_u_ij[i][j])
+                t_v_ij[i][j] = find_param(v_crvs[j], pu)
+
+        # Average intersection parameters
+        u_params = [sum(t_u_ij[i][j] for i in range(n_u)) / n_u for j in range(n_v)]
+        v_params = [sum(t_v_ij[i][j] for j in range(n_v)) / n_v for i in range(n_u)]
+
+        # Helpers
+        def gauss_solve(n, dim, A, b):
+            for col in range(n):
+                mr, mv = col, abs(A[col][col])
+                for r in range(col+1, n):
+                    if abs(A[r][col]) > mv:
+                        mv = abs(A[r][col])
+                        mr = r
+                if mv < 1e-14:
+                    continue
+                A[col], A[mr] = A[mr], A[col]
+                b[col], b[mr] = b[mr], b[col]
+                for r in range(col+1, n):
+                    f = A[r][col] / A[col][col]
+                    for c in range(col, n):
+                        A[r][c] -= f * A[col][c]
+                    for d in range(dim):
+                        b[r][d] -= f * b[col][d]
+            for r in range(n-1, -1, -1):
+                for d in range(dim):
+                    for c in range(r+1, n):
+                        b[r][d] -= A[r][c] * b[c][d]
+                    if abs(A[r][r]) > 1e-14:
+                        b[r][d] /= A[r][r]
+
+        def build_interp_knots(n_pts, deg, params):
+            ord_ = deg + 1
+            kc = ord_ + n_pts - 2
+            knots = [0.0] * kc
+            for i in range(ord_ - 1):
+                knots[i] = params[0]
+            for j in range(1, n_pts - ord_ + 1):
+                s = sum(params[j:j+deg]) / deg
+                knots[ord_ - 2 + j] = s
+            for i in range(kc - ord_ + 1, kc):
+                knots[i] = params[n_pts - 1]
+            return knots
+
+        def build_basis_matrix(n, ord_, params, knots):
+            N = [[0.0]*n for _ in range(n)]
+            for row in range(n):
+                t = params[row]
+                span = find_span(ord_, n, knots, t)
+                d = ord_ - 1
+                kb = span + d
+                if knots[kb - 1] == knots[kb]:
+                    if t <= knots[kb]:
+                        N[row][span] = 1.0
+                    else:
+                        N[row][span + ord_ - 1] = 1.0
+                    continue
+                Nv = [0.0] * (ord_ * ord_)
+                Nv[ord_ * ord_ - 1] = 1.0
+                left = [0.0] * d
+                right = [0.0] * d
+                ni = ord_ * ord_ - 1
+                kr, kl = kb, kb - 1
+                for jj in range(d):
+                    n0 = ni
+                    ni -= (ord_ + 1)
+                    left[jj] = t - knots[kl]
+                    right[jj] = knots[kr] - t
+                    kl -= 1
+                    kr += 1
+                    xv = 0.0
+                    for r in range(jj + 1):
+                        a0 = left[jj - r]
+                        a1 = right[r]
+                        den = a0 + a1
+                        yv = Nv[n0 + r] / den if den != 0.0 else 0.0
+                        Nv[ni + r] = xv + a1 * yv
+                        xv = a0 * yv
+                    Nv[ni + jj + 1] = xv
+                for jj in range(ord_):
+                    col = span + jj
+                    if 0 <= col < n:
+                        N[row][col] = Nv[jj]
+            return N
+
+        # Reparametrize curves using monotone Hermite parameter mapping
+        def monotone_hermite_eval(xs, ys, t):
+            n = len(xs)
+            if n < 2: return t
+            if t <= xs[0]: return ys[0]
+            if t >= xs[n-1]: return ys[n-1]
+            delta = [(ys[k+1]-ys[k])/(xs[k+1]-xs[k]) for k in range(n-1)]
+            d = [0.0]*n
+            d[0] = delta[0]; d[n-1] = delta[n-2]
+            for k in range(1, n-1):
+                d[k] = 0.0 if delta[k-1]*delta[k] <= 0 else (delta[k-1]+delta[k])/2.0
+            for k in range(n-1):
+                if abs(delta[k]) < 1e-15: d[k] = 0; d[k+1] = 0; continue
+                alpha, beta = d[k]/delta[k], d[k+1]/delta[k]
+                if alpha < 0: d[k] = 0; alpha = 0
+                if beta < 0: d[k+1] = 0; beta = 0
+                r2 = alpha*alpha + beta*beta
+                if r2 > 9.0:
+                    tau = 3.0 / (r2**0.5)
+                    d[k] = tau * alpha * delta[k]
+                    d[k+1] = tau * beta * delta[k]
+            ki = 0
+            for i in range(n-1):
+                if t < xs[i+1]: ki = i; break
+                if i == n-2: ki = i
+            h = xs[ki+1] - xs[ki]
+            if h < 1e-15: return ys[ki]
+            s = (t - xs[ki]) / h; s2 = s*s; s3 = s2*s
+            return (2*s3-3*s2+1)*ys[ki] + (s3-2*s2+s)*h*d[ki] \
+                 + (-2*s3+3*s2)*ys[ki+1] + (s3-s2)*h*d[ki+1]
+
+        def reparametrize_curve(crv, target_params, actual_params):
+            np_ = len(target_params)
+            mx, my = [], []
+            has0 = any(abs(target_params[k]) < 1e-10 for k in range(np_))
+            has1 = any(abs(target_params[k] - 1.0) < 1e-10 for k in range(np_))
+            if not has0: mx.append(0.0); my.append(0.0)
+            for k in range(np_): mx.append(target_params[k]); my.append(actual_params[k])
+            if not has1: mx.append(1.0); my.append(1.0)
+            max_dev = max(abs(my[k]-mx[k]) for k in range(len(mx)))
+            if max_dev < 1e-6: return crv
+            nu = max(crv.cv_count() * 5, 30)
+            sample_set = set()
+            for k in range(nu): sample_set.add(float(k) / (nu - 1))
+            for k in range(np_): sample_set.add(target_params[k])
+            sp = sorted(sample_set)
+            ns = len(sp)
+            pts = []
+            for k in range(ns):
+                tm = max(0.0, min(1.0, monotone_hermite_eval(mx, my, sp[k])))
+                pts.append(crv.point_at(tm))
+            deg = min(3, ns - 1); ord_ = deg + 1
+            kn = build_interp_knots(ns, deg, sp)
+            N = build_basis_matrix(ns, ord_, sp, kn)
+            rhs = [[pts[k][0], pts[k][1], pts[k][2]] for k in range(ns)]
+            A_copy = [row[:] for row in N]
+            gauss_solve(ns, 3, A_copy, rhs)
+            nc = NurbsCurve(3, False, ord_, ns)
+            for k in range(min(len(kn), nc.knot_count())):
+                nc.set_knot(k, kn[k])
+            for k in range(ns):
+                nc.set_cv(k, Point(rhs[k][0], rhs[k][1], rhs[k][2]))
+            nc.set_domain(0.0, 1.0)
+            return nc
+
+        for i in range(n_u):
+            tgt = [u_params[j] for j in range(n_v)]
+            act = [t_u_ij[i][j] for j in range(n_v)]
+            u_crvs[i] = reparametrize_curve(u_crvs[i], tgt, act)
+        for j in range(n_v):
+            tgt = [v_params[i] for i in range(n_u)]
+            act = [t_v_ij[i][j] for i in range(n_u)]
+            v_crvs[j] = reparametrize_curve(v_crvs[j], tgt, act)
+
+        NurbsSurface._make_curves_compatible(u_crvs)
+        NurbsSurface._make_curves_compatible(v_crvs)
+        for c in u_crvs: c.set_domain(0.0, 1.0)
+        for c in v_crvs: c.set_domain(0.0, 1.0)
+
+        # Intersection points from u-curves (ensures exact v-curve interpolation at grid points)
+        P_ij = [[None]*n_v for _ in range(n_u)]
+        for i in range(n_u):
+            for j in range(n_v):
+                P_ij[i][j] = u_crvs[i].point_at(u_params[j])
+
+        def skin_curves(curves, cross_params, cross_degree):
+            nc = len(curves)
+            cv_along = curves[0].cv_count()
+            order_along = curves[0].order()
+            cdeg = min(cross_degree, nc - 1)
+            cord = cdeg + 1
+            cross_knots = build_interp_knots(nc, cdeg, cross_params)
+            N_cross = build_basis_matrix(nc, cord, cross_params, cross_knots)
+            srf = NurbsSurface.create_raw(3, False, order_along, cord, cv_along, nc)
+            for i in range(srf.knot_count(0)):
+                srf.set_knot(0, i, curves[0].knot(i))
+            v_kc = len(cross_knots)
+            for i in range(min(v_kc, srf.knot_count(1))):
+                srf.set_knot(1, i, cross_knots[i])
+            for j in range(cv_along):
+                A = [row[:] for row in N_cross]
+                rhs = [[0.0]*3 for _ in range(nc)]
+                for k in range(nc):
+                    p = curves[k].get_cv(j)
+                    rhs[k] = [p[0], p[1], p[2]]
+                gauss_solve(nc, 3, A, rhs)
+                for k in range(nc):
+                    srf.set_cv(j, k, Point(rhs[k][0], rhs[k][1], rhs[k][2]))
+            return srf
+
+        # Step 1: S_profiles = skin u-curves at v_params
+        s_profiles = skin_curves(u_crvs, v_params, 3)
+
+        # Step 2: S_guides = skin v-curves at u_params, transpose
+        s_guides = skin_curves(v_crvs, u_params, 3)
+        s_guides.transpose()
+
+        # Step 3: S_tensor = interpolate intersection point grid
+        u_deg = min(3, n_v - 1)
+        u_ord = u_deg + 1
+        u_knots_t = build_interp_knots(n_v, u_deg, u_params)
+        N_u = build_basis_matrix(n_v, u_ord, u_params, u_knots_t)
+        row_curves = []
+        for i in range(n_u):
+            A = [row[:] for row in N_u]
+            rhs = [[P_ij[i][j][0], P_ij[i][j][1], P_ij[i][j][2]] for j in range(n_v)]
+            gauss_solve(n_v, 3, A, rhs)
+            crv = NurbsCurve(3, False, u_ord, n_v)
+            for k in range(min(len(u_knots_t), crv.knot_count())):
+                crv.set_knot(k, u_knots_t[k])
+            for k in range(n_v):
+                crv.set_cv(k, Point(rhs[k][0], rhs[k][1], rhs[k][2]))
+            row_curves.append(crv)
+        s_tensor = skin_curves(row_curves, v_params, 3)
+
+        # Step 4: Make all three surfaces compatible
+        for dir_ in range(2):
+            s_profiles.set_domain(dir_, 0.0, 1.0)
+            s_guides.set_domain(dir_, 0.0, 1.0)
+            s_tensor.set_domain(dir_, 0.0, 1.0)
+
+        max_deg_u = max(s_profiles.degree(0), s_guides.degree(0), s_tensor.degree(0))
+        max_deg_v = max(s_profiles.degree(1), s_guides.degree(1), s_tensor.degree(1))
+        for srf in [s_profiles, s_guides, s_tensor]:
+            if srf.degree(0) < max_deg_u:
+                srf.increase_degree(0, max_deg_u)
+            if srf.degree(1) < max_deg_v:
+                srf.increase_degree(1, max_deg_v)
+
+        ktol = 1e-10
+        for dir_ in range(2):
+            ka = list(s_profiles.get_knots(dir_))
+            kb = list(s_guides.get_knots(dir_))
+            kc = list(s_tensor.get_knots(dir_))
+            unified = NurbsSurface._merge_knot_vectors(
+                NurbsSurface._merge_knot_vectors(ka, kb), kc)
+            for srf in [s_profiles, s_guides, s_tensor]:
+                cur = list(srf.get_knots(dir_))
+                for kv in unified:
+                    found = any(abs(ck - kv) < ktol for ck in cur)
+                    if not found:
+                        srf.insert_knot(dir_, kv, 1)
+                        cur = list(srf.get_knots(dir_))
+
+        # Step 5: Combine control points
+        final_cv_u = s_profiles.cv_count(0)
+        final_cv_v = s_profiles.cv_count(1)
+        surface = s_profiles.duplicate()
+        for i in range(final_cv_u):
+            for j in range(final_cv_v):
+                pp = s_profiles.get_cv(i, j)
+                pg = s_guides.get_cv(i, j)
+                pt = s_tensor.get_cv(i, j)
+                surface.set_cv(i, j, Point(
+                    pp[0] + pg[0] - pt[0],
+                    pp[1] + pg[1] - pt[1],
+                    pp[2] + pg[2] - pt[2]))
+        return surface
+
+    ###########################################################################
     # KNOT VECTOR OPERATIONS (ADDITIONAL)
     ###########################################################################
     
+    def _to_curve_internal(self, dir: int):
+        """Pack surface into a high-dimensional curve along dir."""
+        dim = self.m_dim
+        if dir == 0:
+            n_along = self.cv_count(0)
+            n_other = self.cv_count(1)
+        else:
+            n_along = self.cv_count(1)
+            n_other = self.cv_count(0)
+        hdim = dim * n_other
+        crv = NurbsCurve(hdim, False, self.order(dir), n_along)
+        for k in range(self.knot_count(dir)):
+            crv.set_knot(k, self.m_knot[dir][k])
+        for i in range(n_along):
+            cv_data = []
+            for j in range(n_other):
+                if dir == 0:
+                    p = self.get_cv(i, j)
+                else:
+                    p = self.get_cv(j, i)
+                cv_data.extend([p[0], p[1], p[2]])
+            for d in range(hdim):
+                crv.m_cv[i * crv.m_cv_stride + d] = cv_data[d]
+        return crv
+
+    def _from_curve_internal(self, crv, dir: int):
+        """Unpack high-dimensional curve back into surface."""
+        dim = self.m_dim
+        if dir == 0:
+            n_other = self.cv_count(1)
+            new_n_along = crv.cv_count()
+        else:
+            n_other = self.cv_count(0)
+            new_n_along = crv.cv_count()
+        new_order = crv.order()
+        if dir == 0:
+            new_srf = NurbsSurface.create_raw(dim, False, new_order, self.order(1),
+                                               new_n_along, self.cv_count(1))
+            for k in range(crv.knot_count()):
+                new_srf.set_knot(0, k, crv.knot(k))
+            for k in range(self.knot_count(1)):
+                new_srf.set_knot(1, k, self.m_knot[1][k])
+        else:
+            new_srf = NurbsSurface.create_raw(dim, False, self.order(0), new_order,
+                                               self.cv_count(0), new_n_along)
+            for k in range(self.knot_count(0)):
+                new_srf.set_knot(0, k, self.m_knot[0][k])
+            for k in range(crv.knot_count()):
+                new_srf.set_knot(1, k, crv.knot(k))
+        for i in range(new_n_along):
+            for j in range(n_other):
+                base = i * crv.m_cv_stride + j * dim
+                x = crv.m_cv[base]
+                y = crv.m_cv[base + 1]
+                z = crv.m_cv[base + 2]
+                if dir == 0:
+                    new_srf.set_cv(i, j, Point(x, y, z))
+                else:
+                    new_srf.set_cv(j, i, Point(x, y, z))
+        self.m_order = new_srf.m_order
+        self.m_cv_count = new_srf.m_cv_count
+        self.m_knot = new_srf.m_knot
+        self.m_cv = new_srf.m_cv
+        self.m_cv_stride = new_srf.m_cv_stride
+        return True
+
     def insert_knot(self, dir: int, knot_value: float, knot_multiplicity: int = 1) -> bool:
-        """Insert knot in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        knot_value : float
-            Knot value to insert.
-        knot_multiplicity : int, optional
-            Number of times to insert. Defaults to 1.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        # Stub - requires Boehm's algorithm
-        return False
+        if dir < 0 or dir > 1:
+            return False
+        crv = self._to_curve_internal(dir)
+        if crv is None:
+            return False
+        for _ in range(knot_multiplicity):
+            if not crv.insert_knot(knot_value, 1):
+                return False
+        return self._from_curve_internal(crv, dir)
     
     ###########################################################################
     # MODIFICATION OPERATIONS (ADDITIONAL)
@@ -2644,22 +3056,18 @@ class NurbsSurface:
         return knot.clamp(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], end)
     
     def increase_degree(self, dir: int, desired_degree: int) -> bool:
-        """Increase degree in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        desired_degree : int
-            Desired degree.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        # Stub - requires degree elevation algorithm
-        return False
+        if dir < 0 or dir > 1:
+            return False
+        if desired_degree < self.degree(dir):
+            return False
+        if desired_degree == self.degree(dir):
+            return True
+        crv = self._to_curve_internal(dir)
+        if crv is None:
+            return False
+        if not crv.increase_degree(desired_degree):
+            return False
+        return self._from_curve_internal(crv, dir)
     
     ###########################################################################
     # TRANSFORMATION (OVERLOADS)
