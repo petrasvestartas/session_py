@@ -4,6 +4,7 @@ import json
 
 from .nurbssurface import NurbsSurface
 from .nurbscurve import NurbsCurve
+from .primitives import Primitives
 from .xform import Xform
 from .color import Color
 
@@ -29,7 +30,7 @@ class TrimmedSurface:
 
     @staticmethod
     def create_planar(boundary):
-        srf = NurbsSurface.create_planar([boundary])
+        srf = Primitives.create_planar(boundary)
         ts = TrimmedSurface()
         ts.m_surface = srf.duplicate()
         if srf.is_trimmed():

@@ -628,18 +628,18 @@ class Mesh:
         for (u, v), attrs in self.edgedata.items():
             edgedata_json[f"{u},{v}"] = attrs
 
-        # Colors as flat RGB arrays (matching Rust format)
+        # Colors as flat RGBA arrays
         pointcolors_flat = []
         for c in self.pointcolors:
-            pointcolors_flat.extend([c[0], c[1], c[2]])
+            pointcolors_flat.extend([c[0], c[1], c[2], c[3]])
 
         facecolors_flat = []
         for c in self.facecolors:
-            facecolors_flat.extend([c[0], c[1], c[2]])
+            facecolors_flat.extend([c[0], c[1], c[2], c[3]])
 
         linecolors_flat = []
         for c in self.linecolors:
-            linecolors_flat.extend([c[0], c[1], c[2]])
+            linecolors_flat.extend([c[0], c[1], c[2], c[3]])
 
         # Return fields in alphabetical order to match Rust's serde_json
         return {
@@ -745,24 +745,18 @@ class Mesh:
         if "xform" in data:
             mesh.xform = decode_node(data["xform"])
 
-        # Load colors from flat RGB arrays
+        # Load colors from flat RGBA arrays
         if "pointcolors" in data:
-            rgb_values = data["pointcolors"]
-            mesh.pointcolors = []
-            for i in range(0, len(rgb_values) - 2, 3):
-                mesh.pointcolors.append(Color(rgb_values[i], rgb_values[i+1], rgb_values[i+2], 255))
+            arr = data["pointcolors"]
+            mesh.pointcolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
 
         if "facecolors" in data:
-            rgb_values = data["facecolors"]
-            mesh.facecolors = []
-            for i in range(0, len(rgb_values) - 2, 3):
-                mesh.facecolors.append(Color(rgb_values[i], rgb_values[i+1], rgb_values[i+2], 255))
+            arr = data["facecolors"]
+            mesh.facecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
 
         if "linecolors" in data:
-            rgb_values = data["linecolors"]
-            mesh.linecolors = []
-            for i in range(0, len(rgb_values) - 2, 3):
-                mesh.linecolors.append(Color(rgb_values[i], rgb_values[i+1], rgb_values[i+2], 255))
+            arr = data["linecolors"]
+            mesh.linecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
 
         if "widths" in data:
             mesh.widths = data["widths"]

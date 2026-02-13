@@ -358,18 +358,13 @@ def test_json_roundtrip():
     surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
-    surf.surfacecolor = Color(255, 128, 64, 255)
+    surf.facecolors = [Color(255, 128, 64, 255)]
+    surf.pointcolors = [Color(0, 255, 0, 255)]
+    surf.linecolors = [Color(0, 0, 255, 255)]
 
     for i in range(3):
         for j in range(3):
             surf.set_cv(i, j, Point(float(i), float(j), 0.0))
-
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
 
     # JSON object
     json_obj = surf.__jsondump__()
@@ -399,7 +394,9 @@ def test_protobuf_roundtrip():
     surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
-    surf.surfacecolor = Color(255, 128, 64, 255)
+    surf.facecolors = [Color(255, 128, 64, 255)]
+    surf.pointcolors = [Color(0, 255, 0, 255)]
+    surf.linecolors = [Color(0, 0, 255, 255)]
 
     for i in range(3):
         for j in range(3):
@@ -981,238 +978,6 @@ def test_cone():
     mid = surf.point_at(0.0, height * 0.5)
     MINI_CHECK(TOLERANCE.is_close(mid[0], radius * 0.5))
     MINI_CHECK(TOLERANCE.is_close(mid[2], height * 0.5))
-
-
-@MINI_TEST("NurbsSurface", "create_planar")
-def test_nurbssurface_create_planar():
-    from session_py import NurbsSurface
-    from session_py import NurbsCurve
-    from session_py import Point
-
-    pts = [Point(0,0,0), Point(3,1,0), Point(5,0.5,0), Point(6,3,0), Point(4,5,0), Point(1,4,0), Point(0,0,0)]
-    boundary = NurbsCurve.create(False, 3, pts)
-    surf = NurbsSurface.create_planar([boundary])
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(surf.is_planar())
-    MINI_CHECK(surf.degree(0) == 1)
-    MINI_CHECK(surf.degree(1) == 1)
-    MINI_CHECK(surf.cv_count_dir(0) == 2)
-    MINI_CHECK(surf.cv_count_dir(1) == 2)
-    MINI_CHECK(surf.is_trimmed())
-    MINI_CHECK(surf.get_outer_loop().is_valid())
-
-    pd, puv = surf.divide_by_count(4, 4)
-    MINI_CHECK(len(pd) == 5)
-    MINI_CHECK(len(pd[0]) == 5)
-
-
-@MINI_TEST("NurbsSurface", "constructor_ruled")
-def test_nurbssurface_constructor_ruled():
-    from session_py import NurbsSurface
-    from session_py import NurbsCurve
-    from session_py import Point
-    from session_py import Vector
-
-    pts_a = [Point(3,0,0), Point(-2,0,5)]
-    pts_b = [Point(3,5,5), Point(-2,5,0)]
-    crvA = NurbsCurve.create(False, 1, pts_a)
-    crvB = NurbsCurve.create(False, 1, pts_b)
-    ruled = NurbsSurface.create_ruled(crvA, crvB)
-
-    MINI_CHECK(ruled.is_valid())
-    MINI_CHECK(ruled.degree(0) == 1)
-    MINI_CHECK(ruled.degree(1) == 1)
-    MINI_CHECK(ruled.cv_count_dir(0) == 2)
-    MINI_CHECK(ruled.cv_count_dir(1) == 2)
-
-    rd, ruv = ruled.divide_by_count(4, 4)
-    MINI_CHECK(len(rd) == 5)
-    MINI_CHECK(len(rd[0]) == 5)
-
-    pts = []
-    for i in range(len(rd)):
-        for j in range(len(rd[i])):
-            pts.append(rd[i][j])
-
-    normals = []
-    for i in range(len(ruv)):
-        for j in range(len(ruv[i])):
-            normals.append(ruled.normal_at(ruv[i][j][0], ruv[i][j][1]))
-
-    uvs = []
-    for i in range(len(ruv)):
-        for j in range(len(ruv[i])):
-            uvs.append(ruv[i][j])
-
-    MINI_CHECK(TOLERANCE.is_point_close(pts[0],  Point( 3.00, 0.00, 0.00)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[1],  Point( 3.00, 1.25, 1.25)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[2],  Point( 3.00, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[3],  Point( 3.00, 3.75, 3.75)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[4],  Point( 3.00, 5.00, 5.00)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[5],  Point( 1.75, 0.00, 1.25)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[6],  Point( 1.75, 1.25, 1.875)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[7],  Point( 1.75, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[8],  Point( 1.75, 3.75, 3.125)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[9],  Point( 1.75, 5.00, 3.75)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[10], Point( 0.50, 0.00, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[11], Point( 0.50, 1.25, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[12], Point( 0.50, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[13], Point( 0.50, 3.75, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[14], Point( 0.50, 5.00, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[15], Point(-0.75, 0.00, 3.75)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[16], Point(-0.75, 1.25, 3.125)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[17], Point(-0.75, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[18], Point(-0.75, 3.75, 1.875)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[19], Point(-0.75, 5.00, 1.25)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[20], Point(-2.00, 0.00, 5.00)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[21], Point(-2.00, 1.25, 3.75)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[22], Point(-2.00, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[23], Point(-2.00, 3.75, 1.25)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[24], Point(-2.00, 5.00, 0.00)))
-
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[0],  Vector( 0.577350269189626, -0.577350269189626,  0.577350269189626)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[1],  Vector( 1.0/3.0, -2.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[2],  Vector( 0.0, -0.707106781186547,  0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[3],  Vector(-1.0/3.0, -2.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[4],  Vector(-0.577350269189626, -0.577350269189626,  0.577350269189626)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[5],  Vector( 2.0/3.0, -1.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[6],  Vector( 0.408248290463863, -0.408248290463863,  0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[7],  Vector( 0.0, -0.447213595499958,  0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[8],  Vector(-0.408248290463863, -0.408248290463863,  0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[9],  Vector(-2.0/3.0, -1.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[10], Vector( 0.707106781186547,  0.0,  0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[11], Vector( 0.447213595499958,  0.0,  0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[12], Vector( 0.0, 0.0, 1.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[13], Vector(-0.447213595499958,  0.0,  0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[14], Vector(-0.707106781186547,  0.0,  0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[15], Vector( 2.0/3.0, 1.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[16], Vector( 0.408248290463863,  0.408248290463863,  0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[17], Vector( 0.0, 0.447213595499958,  0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[18], Vector(-0.408248290463863,  0.408248290463863,  0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[19], Vector(-2.0/3.0, 1.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[20], Vector( 0.577350269189626,  0.577350269189626,  0.577350269189626)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[21], Vector( 1.0/3.0, 2.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[22], Vector( 0.0, 0.707106781186547,  0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[23], Vector(-1.0/3.0, 2.0/3.0, 2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[24], Vector(-0.577350269189626,  0.577350269189626,  0.577350269189626)))
-
-    MINI_CHECK(TOLERANCE.is_close(uvs[0][0],  0.00) and TOLERANCE.is_close(uvs[0][1],  0.00))
-    MINI_CHECK(TOLERANCE.is_close(uvs[1][0],  0.00) and TOLERANCE.is_close(uvs[1][1],  0.25))
-    MINI_CHECK(TOLERANCE.is_close(uvs[4][0],  0.00) and TOLERANCE.is_close(uvs[4][1],  1.00))
-    MINI_CHECK(TOLERANCE.is_close(uvs[6][0],  0.25) and TOLERANCE.is_close(uvs[6][1],  0.25))
-    MINI_CHECK(TOLERANCE.is_close(uvs[12][0], 0.50) and TOLERANCE.is_close(uvs[12][1], 0.50))
-    MINI_CHECK(TOLERANCE.is_close(uvs[24][0], 1.00) and TOLERANCE.is_close(uvs[24][1], 1.00))
-
-@MINI_TEST("NurbsSurface", "constructor_loft")
-def test_nurbssurface_constructor_loft():
-    from session_py import NurbsSurface
-    from session_py import NurbsCurve
-    from session_py import Point
-    from session_py import Primitives
-
-    c1 = Primitives.circle(0, 0, 0.0, 2.0)
-    c2 = Primitives.circle(0, 0, 2.0, 1.0)
-    c3 = Primitives.circle(0, 0, 4.0, 1.5)
-    c4 = Primitives.circle(0, 0, 6.0, 0.8)
-
-    srf = NurbsSurface.create_loft([c1, c2, c3, c4], 3)
-
-    MINI_CHECK(srf.is_valid())
-    MINI_CHECK(srf.cv_count_dir(0) == 9)
-    MINI_CHECK(srf.cv_count_dir(1) == 4)
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 0), Point(2, 0, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 1), Point(-0.677194251158421, 0, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 2), Point(3.00619893067415, 0, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 3), Point(0.8, 0, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 0), Point(2, 2, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 1), Point(-0.677194251158421, -0.677194251158421, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 2), Point(3.00619893067414, 3.00619893067414, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 3), Point(0.8, 0.8, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 0), Point(0, 2, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 1), Point(0, -0.677194251158421, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 2), Point(0, 3.00619893067415, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 3), Point(0, 0.8, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 0), Point(-2, 2, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 1), Point(0.677194251158421, -0.677194251158421, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 2), Point(-3.00619893067414, 3.00619893067414, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 3), Point(-0.8, 0.8, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 0), Point(-2, 0, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 1), Point(0.677194251158421, 0, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 2), Point(-3.00619893067415, 0, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 3), Point(-0.8, 0, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 0), Point(-2, -2, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 1), Point(0.677194251158421, 0.677194251158421, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 2), Point(-3.00619893067414, -3.00619893067414, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 3), Point(-0.8, -0.8, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 0), Point(0, -2, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 1), Point(0, 0.677194251158421, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 2), Point(0, -3.00619893067415, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 3), Point(0, -0.8, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 0), Point(2, -2, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 1), Point(-0.677194251158421, 0.677194251158421, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 2), Point(3.00619893067414, -3.00619893067414, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 3), Point(0.8, -0.8, 6)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 0), Point(2, 0, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 1), Point(-0.677194251158421, 0, 1.75222035185728)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 2), Point(3.00619893067415, 0, 4.08030037218547)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 3), Point(0.8, 0, 6)))
-
-    open_pts = [
-        [Point(10, -12, 0), Point(10, -10, 3), Point(10, -7, 3), Point(10, -5, 0)],
-        [Point(5.5, -12, 3.5), Point(5.5, -10.0, 1.5), Point(5.5, -7.0, 1.5), Point(5.5, -5, 3.5)],
-        [Point(1, -12, 0), Point(1, -10, 3.0), Point(1, -7, 3.0), Point(1, -5, 0)],
-    ]
-    open_curves = [
-        NurbsCurve.create(False, 3, open_pts[0]),
-        NurbsCurve.create(False, 3, open_pts[1]),
-        NurbsCurve.create(False, 3, open_pts[2]),
-    ]
-    open_srf = NurbsSurface.create_loft(open_curves, 3)
-
-    MINI_CHECK(open_srf.is_valid())
-    MINI_CHECK(open_srf.cv_count_dir(0) == 4)
-    MINI_CHECK(open_srf.cv_count_dir(1) == 3)
-
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 0), Point(10, -12, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 1), Point(5.5, -12, 7)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 2), Point(1, -12, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(1, 0), Point(10, -10, 3)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(1, 1), Point(5.5, -10, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(1, 2), Point(1, -10, 3)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(2, 0), Point(10, -7, 3)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(2, 1), Point(5.5, -7, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(2, 2), Point(1, -7, 3)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 0), Point(10, -5, 0)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 1), Point(5.5, -5, 7)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 2), Point(1, -5, 0)))
-
-
-@MINI_TEST("NurbsSurface", "create_network")
-def test_create_network():
-    from session_py import NurbsSurface
-    from session_py import NurbsCurve
-    from session_py import Point
-    uc0 = NurbsCurve.create(False, 2, [Point(10,9.569076,0), Point(5.5,9.569076,3.5), Point(1,9.569076,0)])
-    uc1 = NurbsCurve.create(False, 2, [Point(10,16.569076,0), Point(5.5,16.569076,3.5), Point(1,16.569076,0)])
-    vc0 = NurbsCurve.create(False, 3, [Point(1,9.569076,0), Point(1,11.569076,3.0), Point(1,14.569076,3.0), Point(1,16.569076,0)])
-    vc1 = NurbsCurve.create(False, 2, [Point(4.236484,9.569076,1.612033), Point(3,13.069076,4.250144), Point(3.667141,16.569076,1.459684)])
-    vc2 = NurbsCurve.create(False, 2, [Point(7.295129,16.569076,1.471513), Point(8,13.069076,4.250144), Point(6.99265,9.569076,1.557456)])
-    vc3 = NurbsCurve.create(False, 3, [Point(10,9.569076,0), Point(10,11.569076,3), Point(10,14.569076,3), Point(10,16.569076,0)])
-    srf = NurbsSurface.create_network([uc0, uc1], [vc0, vc1, vc2, vc3])
-    MINI_CHECK(srf.cv_count(0) >= 4)
-    MINI_CHECK(srf.cv_count(1) >= 4)
-    MINI_CHECK(srf.degree(0) == 3)
-    MINI_CHECK(srf.degree(1) == 3)
-    p00 = srf.point_at(0, 0)
-    p01 = srf.point_at(0, 1)
-    p10 = srf.point_at(1, 0)
-    p11 = srf.point_at(1, 1)
-    MINI_CHECK(abs(p00[0] - 10.0) < 0.5)
-    MINI_CHECK(abs(p00[1] - 9.569076) < 0.5)
-    MINI_CHECK(abs(p10[0] - 1.0) < 0.5)
-    MINI_CHECK(abs(p11[0] - 1.0) < 0.5)
-    MINI_CHECK(abs(p01[1] - 16.569076) < 0.5)
 
 
 if __name__ == "__main__":

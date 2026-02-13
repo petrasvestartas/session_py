@@ -928,3 +928,44 @@ def build_interp_knots(params: np.ndarray, degree: int) -> np.ndarray:
         knots[kc - 1 - i] = t_max
 
     return knots
+
+
+def eval_basis(order: int, knot: np.ndarray, span: int, t: float) -> List[float]:
+    """Evaluate B-spline basis functions at parameter t (Cox-de Boor).
+
+    Parameters
+    ----------
+    order : int
+        Order of the B-spline (degree + 1).
+    knot : np.ndarray
+        Full knot vector.
+    span : int
+        Span index (from find_span).
+    t : float
+        Parameter value.
+
+    Returns
+    -------
+    list
+        Vector of 'order' basis function values.
+    """
+    basis = [0.0] * order
+    left = [0.0] * order
+    right = [0.0] * order
+
+    k_offset = order - 2 + span
+    basis[0] = 1.0
+
+    for j in range(1, order):
+        left[j] = t - knot[k_offset + 1 - j]
+        right[j] = knot[k_offset + j] - t
+        saved = 0.0
+
+        for r in range(j):
+            denom = right[r + 1] + left[j - r]
+            temp = basis[r] / denom if denom != 0.0 else 0.0
+            basis[r] = saved + right[r + 1] * temp
+            saved = left[j - r] * temp
+        basis[j] = saved
+
+    return basis

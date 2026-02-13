@@ -1,0 +1,56 @@
+{
+    "type": "Objects",
+    "guid": "b4ab4a91-f9c1-49c1-bc83-0d7459f23ff9",
+    "name": "test_objects",
+    "points": [
+        {
+            "guid": "20681c9b-606b-4334-aed9-fbbc6e065a14",
+            "name": "my_point",
+            "pointcolor": {
+                "a": 255,
+                "b": 255,
+                "g": 0,
+                "guid": "7c1485e6-88b3-43c7-880a-6ea49b02e37a",
+                "name": "blue",
+                "r": 0,
+                "type": "Color"
+            },
+            "type": "Point",
+            "width": 1.0,
+            "x": 1.0,
+            "xform": {
+                "guid": "41ce870d-7473-4325-8b1d-ea42921fbef3",
+                "m": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "name": "my_xform",
+                "type": "Xform"
+            },
+            "y": 2.0,
+            "z": 3.0
+        }
+    ],
+    "lines": [],
+    "planes": [],
+    "bboxes": [],
+    "polylines": [],
+    "pointclouds": [],
+    "meshes": [],
+    "nurbscurves": [],
+    "nurbssurfaces": []
+}

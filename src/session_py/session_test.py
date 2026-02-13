@@ -6,8 +6,6 @@ from .boundingbox import BoundingBox
 from .polyline import Polyline
 from .pointcloud import PointCloud
 from .mesh import Mesh
-from .cylinder import Cylinder
-from .arrow import Arrow
 from .vector import Vector
 
 
@@ -19,10 +17,8 @@ def test_session_serialization_with_all_geometry_types():
     my_session = Session("test_session")
 
     # Create all geometry types (in specified order)
-    arrow = Arrow(Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0), 0.1)
     bbox = BoundingBox.from_point(Point(0.0, 0.0, 0.0), 1.0)
     # color - not a geometry type that can be added to session
-    cylinder = Cylinder(Line(0.0, 0.0, 0.0, 0.0, 0.0, 1.0), 0.5)
     line = Line(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
     mesh = Mesh()
     plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
@@ -42,9 +38,7 @@ def test_session_serialization_with_all_geometry_types():
     my_session.add(complex_folder, geometry_folder)
 
     # Add all geometry to session - returns TreeNode for easy nesting!
-    arrow_node = my_session.add_arrow(arrow)
     bbox_node = my_session.add_bbox(bbox)
-    cylinder_node = my_session.add_cylinder(cylinder)
     line_node = my_session.add_line(line)
     mesh_node = my_session.add_mesh(mesh)
     plane_node = my_session.add_plane(plane)
@@ -58,13 +52,11 @@ def test_session_serialization_with_all_geometry_types():
     my_session.add(line_node, primitives_folder)
     my_session.add(plane_node, primitives_folder)
 
-    # Complex: mesh, polyline, pointcloud, bbox, cylinder, arrow
+    # Complex: mesh, polyline, pointcloud, bbox
     my_session.add(mesh_node, complex_folder)
     my_session.add(polyline_node, complex_folder)
     my_session.add(pointcloud_node, complex_folder)
     my_session.add(bbox_node, complex_folder)
-    my_session.add(cylinder_node, complex_folder)
-    my_session.add(arrow_node, complex_folder)
 
     # Add some edges between objects
     my_session.add_edge(point.guid, line.guid, "point_to_line")
@@ -73,21 +65,19 @@ def test_session_serialization_with_all_geometry_types():
     # Graph structure before serialization
     original_graph_vertices = my_session.graph.number_of_vertices()
     original_graph_edges = my_session.graph.number_of_edges()
-    assert original_graph_vertices == 9
+    assert original_graph_vertices == 7
     assert original_graph_edges == 2
 
-    # Tree should have: root + geometry + primitives + complex + 9 geometry nodes = 13 nodes
+    # Tree should have: root + geometry + primitives + complex + 7 geometry nodes = 11 nodes
     original_tree_nodes = list(my_session.tree.nodes)
-    assert len(original_tree_nodes) == 13
+    assert len(original_tree_nodes) == 11
 
     filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
     json_dump(my_session, filepath)
     loaded = json_load(filepath)
 
     assert loaded.name == my_session.name
-    assert len(loaded.objects.arrows) == len(my_session.objects.arrows)
     assert len(loaded.objects.bboxes) == len(my_session.objects.bboxes)
-    assert len(loaded.objects.cylinders) == len(my_session.objects.cylinders)
     assert len(loaded.objects.lines) == len(my_session.objects.lines)
     assert len(loaded.objects.meshes) == len(my_session.objects.meshes)
     assert len(loaded.objects.planes) == len(my_session.objects.planes)

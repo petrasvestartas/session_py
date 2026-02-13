@@ -114,10 +114,6 @@ class Session:
             session.lookup[pointcloud.guid] = pointcloud
         for mesh in session.objects.meshes:
             session.lookup[mesh.guid] = mesh
-        for cylinder in session.objects.cylinders:
-            session.lookup[cylinder.guid] = cylinder
-        for arrow in session.objects.arrows:
-            session.lookup[arrow.guid] = arrow
         for nurbscurve in session.objects.nurbscurves:
             session.lookup[nurbscurve.guid] = nurbscurve
         for nurbssurface in session.objects.nurbssurfaces:
@@ -179,10 +175,6 @@ class Session:
             session.lookup[pointcloud.guid] = pointcloud
         for mesh in session.objects.meshes:
             session.lookup[mesh.guid] = mesh
-        for cylinder in session.objects.cylinders:
-            session.lookup[cylinder.guid] = cylinder
-        for arrow in session.objects.arrows:
-            session.lookup[arrow.guid] = arrow
         for nurbscurve in session.objects.nurbscurves:
             session.lookup[nurbscurve.guid] = nurbscurve
         for nurbssurface in session.objects.nurbssurfaces:
@@ -307,20 +299,6 @@ class Session:
         tree_node = TreeNode(name=mesh.guid)
         return tree_node
 
-    def add_cylinder(self, cylinder) -> TreeNode:
-        """Add a cylinder to the Session.
-
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this cylinder.
-        """
-        self.objects.cylinders.append(cylinder)
-        self.lookup[cylinder.guid] = cylinder
-        self.graph.add_node(cylinder.guid, f"cylinder_{cylinder.name}")
-        tree_node = TreeNode(name=cylinder.guid)
-        return tree_node
-
     def add_nurbscurve(self, nurbscurve) -> TreeNode:
         self.objects.nurbscurves.append(nurbscurve)
         self.lookup[nurbscurve.guid] = nurbscurve
@@ -332,20 +310,6 @@ class Session:
         self.lookup[nurbssurface.guid] = nurbssurface
         self.graph.add_node(nurbssurface.guid, f"nurbssurface_{nurbssurface.name}")
         return TreeNode(name=nurbssurface.guid)
-
-    def add_arrow(self, arrow) -> TreeNode:
-        """Add an arrow to the Session.
-
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this arrow.
-        """
-        self.objects.arrows.append(arrow)
-        self.lookup[arrow.guid] = arrow
-        self.graph.add_node(arrow.guid, f"arrow_{arrow.name}")
-        tree_node = TreeNode(name=arrow.guid)
-        return tree_node
 
     def add(self, node: TreeNode, parent: TreeNode = None) -> None:
         """Add a TreeNode to the tree hierarchy.
@@ -450,8 +414,6 @@ class Session:
         from .pointcloud import PointCloud
         from .mesh import Mesh
         from .plane import Plane
-        from .cylinder import Cylinder
-        from .arrow import Arrow
 
         if isinstance(geometry, Point):
             return BoundingBox.from_point(geometry, inflate)
@@ -487,32 +449,6 @@ class Session:
         elif isinstance(geometry, Plane):
             # Create bounded box around plane origin
             return BoundingBox.from_point(geometry.origin, inflate * 10.0)
-        elif isinstance(geometry, Cylinder):
-            # Compute from cylinder line endpoints and radius
-            points = [geometry.line.start(), geometry.line.end()]
-            bbox = BoundingBox.from_points(points, inflate)
-            # Inflate by cylinder radius
-            from .vector import Vector
-
-            bbox.half_size = Vector(
-                bbox.half_size[0] + geometry.radius,
-                bbox.half_size[1] + geometry.radius,
-                bbox.half_size[2] + geometry.radius,
-            )
-            return bbox
-        elif isinstance(geometry, Arrow):
-            # Compute from arrow line endpoints
-            points = [geometry.line.start(), geometry.line.end()]
-            bbox = BoundingBox.from_points(points, inflate)
-            # Inflate by arrow radius
-            from .vector import Vector
-
-            bbox.half_size = Vector(
-                bbox.half_size[0] + geometry.radius,
-                bbox.half_size[1] + geometry.radius,
-                bbox.half_size[2] + geometry.radius,
-            )
-            return bbox
         else:
             # Fallback
             return BoundingBox.from_point(Point(0, 0, 0), inflate)
@@ -565,8 +501,6 @@ class Session:
         from .plane import Plane
         from .boundingbox import BoundingBox
         from .mesh import Mesh
-        from .cylinder import Cylinder
-        from .arrow import Arrow
         from .intersection import line_line, line_plane, ray_box, ray_mesh_bvh
 
         dir_vec = Vector(direction[0], direction[1], direction[2])
@@ -662,14 +596,6 @@ class Session:
                 pts = ray_mesh_bvh(ray_line, geom, 1e-6, False)
                 if pts:
                     hit_point = pts[0]
-            elif isinstance(geom, Cylinder):
-                hp = line_line(ray_line, geom.line, Tolerance.APPROXIMATION)
-                if hp is not None:
-                    hit_point = hp
-            elif isinstance(geom, Arrow):
-                hp = line_line(ray_line, geom.line, Tolerance.APPROXIMATION)
-                if hp is not None:
-                    hit_point = hp
             elif isinstance(geom, Point):
                 ok, hp, t = point_hit(geom)
                 if ok:
@@ -798,8 +724,6 @@ class Session:
             transformed_objects.polylines,
             transformed_objects.pointclouds,
             transformed_objects.meshes,
-            transformed_objects.cylinders,
-            transformed_objects.arrows,
         ]:
             for geom in collection:
                 transformed_lookup[geom.guid] = geom
@@ -831,8 +755,6 @@ class Session:
             transformed_objects.polylines,
             transformed_objects.pointclouds,
             transformed_objects.meshes,
-            transformed_objects.cylinders,
-            transformed_objects.arrows,
         ]:
             for geom in collection:
                 geom.transform()

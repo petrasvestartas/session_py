@@ -1,5 +1,5 @@
 {
-  "guid": "c005a865-effd-4e5d-aa62-cb6323f0b235",
+  "guid": "33a10ba1-61b2-4e93-9ade-7a3ee2640e78",
   "inner_loops": [],
   "name": "test_trimmedsurface",
   "outer_loop": {
@@ -33,7 +33,7 @@
     "cv_count": 5,
     "cv_stride": 3,
     "dimension": 3,
-    "guid": "013d8c94-4378-4df2-8f4a-b5bece431075",
+    "guid": "803cb9d5-6322-45fe-8186-e7518fa55fc2",
     "is_rational": false,
     "knots": [
       0.0,
@@ -42,20 +42,14 @@
       2.4,
       3.1999999999999997
     ],
-    "linecolor": {
-      "a": 255,
-      "b": 0,
-      "g": 0,
-      "guid": "96722d8e-d8c2-40a4-a5e9-6e8c00ca90d6",
-      "name": "black",
-      "r": 0,
-      "type": "Color"
-    },
+    "linecolors": [],
     "name": "my_nurbscurve",
     "order": 2,
+    "pointcolors": [],
+    "type": "NurbsCurve",
     "width": 1.0,
     "xform": {
-      "guid": "894366bb-61fb-4f50-872b-1a9d4e927d6f",
+      "guid": "0c6efec0-f646-4a84-a8de-ae56f5354757",
       "m": [
         1.0,
         0.0,
@@ -79,22 +73,6 @@
     }
   },
   "surface": {
-    "guid": "df848e66-4671-4f64-af54-172d96a6fc14",
-    "name": "my_nurbssurface",
-    "dimension": 3,
-    "is_rational": false,
-    "order_u": 2,
-    "order_v": 2,
-    "cv_count_u": 2,
-    "cv_count_v": 2,
-    "knots_u": [
-      0.0,
-      1.0
-    ],
-    "knots_v": [
-      0.0,
-      1.0
-    ],
     "control_points": [
       0.0,
       0.0,
@@ -109,22 +87,56 @@
       5.0,
       0.0
     ],
+    "cv_count_u": 2,
+    "cv_count_v": 2,
+    "dimension": 3,
+    "facecolors": [],
+    "guid": "a84a88bb-79e8-41d3-b38a-7bd3309c9b53",
+    "is_rational": false,
+    "knots_u": [
+      0.0,
+      1.0
+    ],
+    "knots_v": [
+      0.0,
+      1.0
+    ],
+    "linecolors": [],
+    "name": "my_nurbssurface",
+    "order_u": 2,
+    "order_v": 2,
+    "pointcolors": [],
+    "type": "NurbsSurface",
     "width": 1.0,
-    "surfacecolor": {
-      "a": 255,
-      "b": 0,
-      "g": 0,
-      "guid": "1197c05c-e987-4dc6-bf76-3140227e5fd4",
-      "name": "black",
-      "r": 0,
-      "type": "Color"
+    "xform": {
+      "guid": "dd3bc5a8-8f1e-491f-ab8d-9dc4a2083135",
+      "m": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "my_xform",
+      "type": "Xform"
     }
   },
   "surfacecolor": {
     "a": 255,
     "b": 64,
     "g": 128,
-    "guid": "671292bd-2fb4-47c4-829d-e24eefcf2ca1",
+    "guid": "76b1964e-3ff0-4cdc-ab54-60a4db0cd1d5",
     "name": "my_color",
     "r": 255,
     "type": "Color"
@@ -132,7 +144,7 @@
   "type": "TrimmedSurface",
   "width": 2.0,
   "xform": {
-    "guid": "b5a22b35-4657-493f-b1d5-947fd62e8c77",
+    "guid": "6bdd225e-8f63-4476-a22d-5686e457885d",
     "m": [
       1.0,
       0.0,

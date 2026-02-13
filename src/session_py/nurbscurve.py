@@ -145,6 +145,223 @@ class NurbsCurve:
                 curve.set_domain(0.0, L)
         return curve
 
+    @staticmethod
+    def create_interpolated(points, parameterization=CurveKnotStyle.Chord):
+        n = len(points)
+        if n < 2:
+            return NurbsCurve()
+        dim = 3
+        degree = 3
+        order = degree + 1
+
+        periodic = parameterization in (CurveKnotStyle.UniformPeriodic,
+                                        CurveKnotStyle.ChordPeriodic,
+                                        CurveKnotStyle.ChordSquareRootPeriodic)
+
+        if periodic and n < 3:
+            return NurbsCurve()
+
+        def pdist(a, b):
+            dx, dy, dz = a[0]-b[0], a[1]-b[1], a[2]-b[2]
+            return math.sqrt(dx*dx + dy*dy + dz*dz)
+
+        if periodic:
+            cv_count = n + 3
+            kc = cv_count + order - 2
+
+            base_map = {CurveKnotStyle.UniformPeriodic: CurveKnotStyle.Uniform,
+                        CurveKnotStyle.ChordSquareRootPeriodic: CurveKnotStyle.ChordSquareRoot}
+            base_style = base_map.get(parameterization, CurveKnotStyle.Chord)
+
+            params = [0.0] * (n + 1)
+            if base_style == CurveKnotStyle.Uniform:
+                for i in range(1, n + 1):
+                    params[i] = float(i)
+            else:
+                for i in range(1, n):
+                    d = pdist(points[i-1], points[i])
+                    if base_style == CurveKnotStyle.ChordSquareRoot:
+                        d = math.sqrt(d)
+                    params[i] = params[i-1] + d
+                d_close = pdist(points[n-1], points[0])
+                if base_style == CurveKnotStyle.ChordSquareRoot:
+                    d_close = math.sqrt(d_close)
+                params[n] = params[n-1] + d_close
+
+            dmin, dmax = 1e300, 0.0
+            for i in range(n):
+                d = params[i+1] - params[i]
+                if d < dmin: dmin = d
+                if d > dmax: dmax = d
+            if dmax <= 0.0 or dmax * 1.490116119385e-8 >= dmin:
+                return NurbsCurve()
+
+            knots_vec = [0.0] * kc
+            for i in range(n + 1):
+                knots_vec[i + 2] = params[i]
+            knots_vec[cv_count]     = knots_vec[3] - knots_vec[2] + knots_vec[cv_count - 1]
+            knots_vec[1]            = knots_vec[cv_count - 2] - knots_vec[cv_count - 1] + knots_vec[2]
+            knots_vec[cv_count + 1] = knots_vec[4] - knots_vec[3] + knots_vec[cv_count]
+            knots_vec[0]            = knots_vec[cv_count - 3] - knots_vec[cv_count - 2] + knots_vec[1]
+
+            A = [[0.0] * n for _ in range(n)]
+            rhs = [0.0] * (n * dim)
+
+            for i in range(n):
+                basis = knot.eval_basis(order, knots_vec, i, params[i])
+                c0 = i % n
+                c1 = (i + 1) % n
+                c2 = (i + 2) % n
+                A[i][c0] += basis[0]
+                A[i][c1] += basis[1]
+                A[i][c2] += basis[2]
+                for d in range(dim):
+                    rhs[i * dim + d] = points[i][d]
+
+            cv = [0.0] * (n * dim)
+            for i in range(n):
+                for d in range(dim):
+                    cv[i * dim + d] = rhs[i * dim + d]
+
+            for col in range(n):
+                pivot = col
+                for row in range(col + 1, n):
+                    if abs(A[row][col]) > abs(A[pivot][col]):
+                        pivot = row
+                if pivot != col:
+                    A[col], A[pivot] = A[pivot], A[col]
+                    for d in range(dim):
+                        cv[col*dim+d], cv[pivot*dim+d] = cv[pivot*dim+d], cv[col*dim+d]
+                if abs(A[col][col]) < 1e-300:
+                    return NurbsCurve()
+                for row in range(col + 1, n):
+                    factor = A[row][col] / A[col][col]
+                    for j in range(col, n):
+                        A[row][j] -= factor * A[col][j]
+                    for d in range(dim):
+                        cv[row*dim+d] -= factor * cv[col*dim+d]
+
+            for i in range(n - 1, -1, -1):
+                for d in range(dim):
+                    s = cv[i*dim+d]
+                    for j in range(i + 1, n):
+                        s -= A[i][j] * cv[j*dim+d]
+                    cv[i*dim+d] = s / A[i][i]
+
+            curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=cv_count)
+            curve.m_knot = np.array(knots_vec, dtype=np.float64)
+            for i in range(n):
+                curve.set_cv(i, Point(cv[i*3], cv[i*3+1], cv[i*3+2]))
+            curve.set_cv(n, curve.get_cv(0))
+            curve.set_cv(n + 1, curve.get_cv(1))
+            curve.set_cv(n + 2, curve.get_cv(2))
+            return curve
+
+        # Open interpolation
+        cv_count = n + 2
+
+        pts = np.zeros((n, dim))
+        for i in range(n):
+            pts[i, 0] = points[i][0]
+            pts[i, 1] = points[i][1]
+            pts[i, 2] = points[i][2]
+
+        params = knot.compute_parameters(pts, parameterization)
+        knots_vec = knot.build_interp_knots(params, degree)
+        kc = len(knots_vec)
+
+        def estimate_tangent(i0, i1, i2):
+            d01 = pdist(points[i0], points[i1])
+            d21 = pdist(points[i2], points[i1])
+            if d01 + d21 < 1e-300:
+                return Vector(0, 0, 0)
+            s = d01 / (d01 + d21)
+            t = 1.0 - s
+            denom = 2.0 * s * t
+            if denom < 1e-16:
+                dx = points[i1][0] - points[i0][0]
+                dy = points[i1][1] - points[i0][1]
+                dz = points[i1][2] - points[i0][2]
+                l = math.sqrt(dx*dx + dy*dy + dz*dz)
+                return Vector(dx/l, dy/l, dz/l) if l > 0 else Vector(0, 0, 0)
+            cvx = (-t*t*points[i0][0] + points[i1][0] - s*s*points[i2][0]) / denom
+            cvy = (-t*t*points[i0][1] + points[i1][1] - s*s*points[i2][1]) / denom
+            cvz = (-t*t*points[i0][2] + points[i1][2] - s*s*points[i2][2]) / denom
+            dx = cvx - points[i0][0]
+            dy = cvy - points[i0][1]
+            dz = cvz - points[i0][2]
+            l = math.sqrt(dx*dx + dy*dy + dz*dz)
+            return Vector(dx/l, dy/l, dz/l) if l > 0 else Vector(0, 0, 0)
+
+        if n >= 3:
+            tan_start = estimate_tangent(0, 1, 2)
+            end_raw = estimate_tangent(n-1, n-2, n-3)
+            tan_end = Vector(-end_raw[0], -end_raw[1], -end_raw[2])
+        else:
+            dx = points[1][0] - points[0][0]
+            dy = points[1][1] - points[0][1]
+            dz = points[1][2] - points[0][2]
+            l = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if l > 0:
+                tan_start = Vector(dx/l, dy/l, dz/l)
+                tan_end = tan_start
+            else:
+                tan_start = Vector(0, 0, 0)
+                tan_end = Vector(0, 0, 0)
+
+        d_start = pdist(points[0], points[1])
+        d_end = pdist(points[n-1], points[n-2])
+
+        cv = [0.0] * (cv_count * dim)
+        for d in range(dim):
+            cv[d] = points[0][d]
+        s0 = d_start / 3.0
+        for d in range(dim):
+            cv[dim + d] = points[0][d] + s0 * tan_start[d]
+        for i in range(1, n-1):
+            for d in range(dim):
+                cv[(i+1) * dim + d] = points[i][d]
+        s1 = -d_end / 3.0
+        for d in range(dim):
+            cv[n * dim + d] = points[n-1][d] + s1 * tan_end[d]
+        for d in range(dim):
+            cv[(n+1) * dim + d] = points[n-1][d]
+
+        sys_n = n
+        lower = [0.0] * sys_n
+        diag_arr = [0.0] * sys_n
+        upper = [0.0] * sys_n
+        rhs = [0.0] * (sys_n * dim)
+
+        diag_arr[0] = 1.0
+        for d in range(dim):
+            rhs[d] = cv[dim + d]
+
+        for i in range(1, n-1):
+            basis = knot.eval_basis(order, knots_vec, i, params[i])
+            lower[i] = basis[0]
+            diag_arr[i] = basis[1]
+            upper[i] = basis[2]
+            for d in range(dim):
+                rhs[i * dim + d] = points[i][d]
+
+        diag_arr[n-1] = 1.0
+        for d in range(dim):
+            rhs[(n-1) * dim + d] = cv[n * dim + d]
+
+        solution = knot.solve_tridiagonal(dim, sys_n, lower, diag_arr, upper, rhs)
+
+        for i in range(sys_n):
+            for d in range(dim):
+                cv[(i+1) * dim + d] = solution[i * dim + d]
+
+        curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=cv_count)
+        curve.m_knot = np.array(knots_vec, dtype=np.float64)
+        curve.m_cv = np.zeros(cv_count * dim, dtype=np.float64)
+        for i in range(cv_count):
+            curve.set_cv(i, Point(cv[i*3], cv[i*3+1], cv[i*3+2]))
+
+        return curve
 
     ###########################################################################################
     # Constructors & Destructor
@@ -155,7 +372,8 @@ class NurbsCurve:
         self.guid = str(uuid.uuid4())
         self.name = "my_nurbscurve"
         self.width = 1.0
-        self.linecolor = Color.black()
+        self.pointcolors = []
+        self.linecolors = []
         self.xform = Xform.identity()
 
         self.m_dim = dimension
@@ -187,7 +405,9 @@ class NurbsCurve:
             return False
         if abs(self.width - other.width) > Tolerance.ZERO_TOLERANCE:
             return False
-        if self.linecolor[0] != other.linecolor[0] or self.linecolor[1] != other.linecolor[1] or self.linecolor[2] != other.linecolor[2]:
+        if self.pointcolors != other.pointcolors:
+            return False
+        if self.linecolors != other.linecolors:
             return False
         if len(self.m_knot) != len(other.m_knot):
             return False
@@ -381,11 +601,15 @@ class NurbsCurve:
             return None
 
         idx = cv_index * self.m_cv_stride
-        return Point(
-            self.m_cv[idx] if self.m_dim > 0 else 0,
-            self.m_cv[idx + 1] if self.m_dim > 1 else 0,
-            self.m_cv[idx + 2] if self.m_dim > 2 else 0
-            )
+        x = self.m_cv[idx] if self.m_dim > 0 else 0.0
+        y = self.m_cv[idx + 1] if self.m_dim > 1 else 0.0
+        z = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
+        if self.m_is_rat:
+            w = self.m_cv[idx + self.m_dim]
+            if abs(w) < 1e-14:
+                return Point(0.0, 0.0, 0.0)
+            return Point(x / w, y / w, z / w)
+        return Point(x, y, z)
 
     def cv(self, cv_index: int) -> Optional[List[float]]:
         """Get raw CV data at index (like C++ double* cv(int))"""
@@ -2960,9 +3184,11 @@ class NurbsCurve:
             "guid": self.guid,
             "is_rational": self.m_is_rat != 0,
             "knots": self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot),
-            "linecolor": self.linecolor.__jsondump__(),
+            "linecolors": [v for c in self.linecolors for v in (c.r, c.g, c.b, c.a)],
             "name": self.name,
             "order": int(self.m_order),
+            "pointcolors": [v for c in self.pointcolors for v in (c.r, c.g, c.b, c.a)],
+            "type": "NurbsCurve",
             "width": float(self.width),
             "xform": self.xform.__jsondump__(),
         }
@@ -2974,8 +3200,12 @@ class NurbsCurve:
         curve.guid = guid if guid is not None else data.get("guid", curve.guid)
         curve.name = name if name is not None else data.get("name", curve.name)
         curve.width = data.get("width", 1.0)
-        if "linecolor" in data:
-            curve.linecolor = Color.__jsonload__(data["linecolor"])
+        if "pointcolors" in data:
+            arr = data["pointcolors"]
+            curve.pointcolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
+        if "linecolors" in data:
+            arr = data["linecolors"]
+            curve.linecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
         if "xform" in data:
             curve.xform = Xform.__jsonload__(data["xform"])
         curve.m_dim = data.get("dimension", 0)
@@ -3030,12 +3260,13 @@ class NurbsCurve:
         proto.knots.extend(self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot))
         proto.cvs.extend(self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv))
         proto.width = float(self.width)
-        proto.linecolor.guid = self.linecolor.guid
-        proto.linecolor.r = int(self.linecolor.r)
-        proto.linecolor.g = int(self.linecolor.g)
-        proto.linecolor.b = int(self.linecolor.b)
-        proto.linecolor.a = int(self.linecolor.a)
-        proto.linecolor.name = self.linecolor.name
+        from .proto import color_pb2
+        for c in self.pointcolors:
+            cp = proto.pointcolors.add()
+            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
+        for c in self.linecolors:
+            cp = proto.linecolors.add()
+            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
         proto.xform.guid = self.xform.guid
         proto.xform.name = self.xform.name
         proto.xform.matrix.extend(self.xform.m.flatten().tolist() if hasattr(self.xform.m, 'flatten') else list(self.xform.m))
@@ -3058,11 +3289,8 @@ class NurbsCurve:
         curve.m_knot = np.array(list(proto.knots), dtype=np.float64)
         curve.m_cv = np.array(list(proto.cvs), dtype=np.float64)
         curve.width = proto.width if proto.width != 0.0 else 1.0
-        if proto.HasField('linecolor'):
-            curve.linecolor = Color(proto.linecolor.r, proto.linecolor.g,
-                                     proto.linecolor.b, proto.linecolor.a)
-            curve.linecolor.guid = proto.linecolor.guid
-            curve.linecolor.name = proto.linecolor.name
+        curve.pointcolors = [Color(c.r, c.g, c.b, c.a) for c in proto.pointcolors]
+        curve.linecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.linecolors]
         if proto.HasField('xform'):
             curve.xform = Xform()
             curve.xform.guid = proto.xform.guid

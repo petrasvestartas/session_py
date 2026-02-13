@@ -624,6 +624,45 @@ def test_nurbscurve_transformations():
     MINI_CHECK(curve4_transformed.cv(0)[2] == 10.0)
 
 
+@MINI_TEST("NurbsCurve", "create_interpolated")
+def test_nurbscurve_create_interpolated():
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py.knot import CurveKnotStyle
+
+    points = [
+        Point(14, 9, 0), Point(21, 22, 0), Point(26, 10, 0),
+        Point(35, 19, 0), Point(41, 13, 0)
+    ]
+
+    c = NurbsCurve.create_interpolated(points, CurveKnotStyle.Chord)
+
+    MINI_CHECK(c.is_valid())
+    MINI_CHECK(c.degree() == 3)
+    MINI_CHECK(c.order() == 4)
+    MINI_CHECK(c.cv_count() == 7)
+    MINI_CHECK(c.is_rational() == False)
+
+    d0, d1 = c.domain()
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), points[4]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(6), points[4]))
+
+    # Periodic closed curve
+    closed_pts = [
+        Point(4, 20, 0), Point(-2, 20, 0), Point(-2, 25, 0), Point(-3, 28, 0), Point(-10, 28, 0),
+        Point(-10, 21, 0), Point(-13, 16, 0), Point(-8, 14, 0), Point(-6, 11, 0), Point(0, 15, 0)
+    ]
+
+    cp = NurbsCurve.create_interpolated(closed_pts, CurveKnotStyle.ChordPeriodic)
+
+    MINI_CHECK(cp.is_valid())
+    MINI_CHECK(cp.degree() == 3)
+    MINI_CHECK(cp.cv_count() == 13)
+    MINI_CHECK(cp.is_closed())
+
+
 if __name__ == "__main__":
     from session_py.mini_test import run_all
     run_all(language="python")

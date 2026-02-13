@@ -18,8 +18,6 @@ from .edge import Edge
 from .objects import Objects
 from .session import Session
 from .mesh import Mesh, NormalWeighting
-from .cylinder import Cylinder
-from .arrow import Arrow
 from .boundingbox import BoundingBox
 from .pointcloud import PointCloud
 from .bvh import BVH, BVHNode
@@ -52,8 +50,6 @@ __all__ = [
     "Session",
     "Mesh",
     "NormalWeighting",
-    "Cylinder",
-    "Arrow",
     "BoundingBox",
     "PointCloud",
     "BVH",

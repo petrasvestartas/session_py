@@ -29,19 +29,17 @@ from . import boundingbox_pb2 as boundingbox__pb2
 from . import polyline_pb2 as polyline__pb2
 from . import pointcloud_pb2 as pointcloud__pb2
 from . import mesh_pb2 as mesh__pb2
-from . import cylinder_pb2 as cylinder__pb2
-from . import arrow_pb2 as arrow__pb2
 from . import nurbscurve_pb2 as nurbscurve__pb2
 from . import nurbssurface_pb2 as nurbssurface__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\robjects.proto\x12\rsession_proto\x1a\x0bpoint.proto\x1a\nline.proto\x1a\x0bplane.proto\x1a\x11\x62oundingbox.proto\x1a\x0epolyline.proto\x1a\x10pointcloud.proto\x1a\nmesh.proto\x1a\x0e\x63ylinder.proto\x1a\x0b\x61rrow.proto\x1a\x10nurbscurve.proto\x1a\x12nurbssurface.proto\"\xf8\x03\n\x07Objects\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12$\n\x06points\x18\x03 \x03(\x0b\x32\x14.session_proto.Point\x12\"\n\x05lines\x18\x04 \x03(\x0b\x32\x13.session_proto.Line\x12$\n\x06planes\x18\x05 \x03(\x0b\x32\x14.session_proto.Plane\x12*\n\x06\x62\x62oxes\x18\x06 \x03(\x0b\x32\x1a.session_proto.BoundingBox\x12*\n\tpolylines\x18\x07 \x03(\x0b\x32\x17.session_proto.Polyline\x12.\n\x0bpointclouds\x18\x08 \x03(\x0b\x32\x19.session_proto.PointCloud\x12#\n\x06meshes\x18\t \x03(\x0b\x32\x13.session_proto.Mesh\x12*\n\tcylinders\x18\n \x03(\x0b\x32\x17.session_proto.Cylinder\x12$\n\x06\x61rrows\x18\x0b \x03(\x0b\x32\x14.session_proto.Arrow\x12.\n\x0bnurbscurves\x18\x0c \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12\x32\n\rnurbssurfaces\x18\r \x03(\x0b\x32\x1b.session_proto.NurbsSurfaceb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\robjects.proto\x12\rsession_proto\x1a\x0bpoint.proto\x1a\nline.proto\x1a\x0bplane.proto\x1a\x11\x62oundingbox.proto\x1a\x0epolyline.proto\x1a\x10pointcloud.proto\x1a\nmesh.proto\x1a\x10nurbscurve.proto\x1a\x12nurbssurface.proto\"\xa6\x03\n\x07Objects\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12$\n\x06points\x18\x03 \x03(\x0b\x32\x14.session_proto.Point\x12\"\n\x05lines\x18\x04 \x03(\x0b\x32\x13.session_proto.Line\x12$\n\x06planes\x18\x05 \x03(\x0b\x32\x14.session_proto.Plane\x12*\n\x06\x62\x62oxes\x18\x06 \x03(\x0b\x32\x1a.session_proto.BoundingBox\x12*\n\tpolylines\x18\x07 \x03(\x0b\x32\x17.session_proto.Polyline\x12.\n\x0bpointclouds\x18\x08 \x03(\x0b\x32\x19.session_proto.PointCloud\x12#\n\x06meshes\x18\t \x03(\x0b\x32\x13.session_proto.Mesh\x12.\n\x0bnurbscurves\x18\x0c \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12\x32\n\rnurbssurfaces\x18\r \x03(\x0b\x32\x1b.session_proto.NurbsSurfaceb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'objects_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_OBJECTS']._serialized_start=203
-  _globals['_OBJECTS']._serialized_end=707
+  _globals['_OBJECTS']._serialized_start=174
+  _globals['_OBJECTS']._serialized_end=596
 # @@protoc_insertion_point(module_scope)

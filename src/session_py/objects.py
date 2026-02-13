@@ -5,8 +5,6 @@ from .boundingbox import BoundingBox
 from .polyline import Polyline
 from .pointcloud import PointCloud
 from .mesh import Mesh
-from .cylinder import Cylinder
-from .arrow import Arrow
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 import uuid
@@ -35,11 +33,6 @@ class Objects:
         The list of point clouds.
     meshes : list[Mesh]
         The list of meshes.
-    cylinders : list[Cylinder]
-        The list of cylinders.
-    arrows : list[Arrow]
-        The list of arrows.
-
     """
 
     def __init__(self):
@@ -52,8 +45,6 @@ class Objects:
         self.polylines: list[Polyline] = []
         self.pointclouds: list[PointCloud] = []
         self.meshes: list[Mesh] = []
-        self.cylinders: list[Cylinder] = []
-        self.arrows: list[Arrow] = []
         self.nurbscurves: list[NurbsCurve] = []
         self.nurbssurfaces: list[NurbsSurface] = []
 
@@ -87,8 +78,6 @@ class Objects:
             "polylines": [pl.__jsondump__() for pl in self.polylines],
             "pointclouds": [pc.__jsondump__() for pc in self.pointclouds],
             "meshes": [m.__jsondump__() for m in self.meshes],
-            "cylinders": [c.__jsondump__() for c in self.cylinders],
-            "arrows": [a.__jsondump__() for a in self.arrows],
             "nurbscurves": [nc.__jsondump__() for nc in self.nurbscurves],
             "nurbssurfaces": [ns.__jsondump__() for ns in self.nurbssurfaces],
         }
@@ -125,8 +114,6 @@ class Objects:
         obj.polylines = [decode_node(pl) for pl in data.get("polylines", [])]
         obj.pointclouds = [decode_node(pc) for pc in data.get("pointclouds", [])]
         obj.meshes = [decode_node(m) for m in data.get("meshes", [])]
-        obj.cylinders = [decode_node(c) for c in data.get("cylinders", [])]
-        obj.arrows = [decode_node(a) for a in data.get("arrows", [])]
         obj.nurbscurves = [decode_node(nc) for nc in data.get("nurbscurves", [])]
         obj.nurbssurfaces = [decode_node(ns) for ns in data.get("nurbssurfaces", [])]
 
@@ -171,10 +158,6 @@ class Objects:
             proto.pointclouds.add().ParseFromString(pc.pb_dumps())
         for m in self.meshes:
             proto.meshes.add().ParseFromString(m.pb_dumps())
-        for c in self.cylinders:
-            proto.cylinders.add().ParseFromString(c.pb_dumps())
-        for a in self.arrows:
-            proto.arrows.add().ParseFromString(a.pb_dumps())
         for nc in self.nurbscurves:
             proto.nurbscurves.add().ParseFromString(nc.pb_dumps())
         for ns in self.nurbssurfaces:
@@ -203,10 +186,6 @@ class Objects:
             objects.pointclouds.append(PointCloud.pb_loads(pc.SerializeToString()))
         for m in proto.meshes:
             objects.meshes.append(Mesh.pb_loads(m.SerializeToString()))
-        for c in proto.cylinders:
-            objects.cylinders.append(Cylinder.pb_loads(c.SerializeToString()))
-        for a in proto.arrows:
-            objects.arrows.append(Arrow.pb_loads(a.SerializeToString()))
         for nc in proto.nurbscurves:
             objects.nurbscurves.append(NurbsCurve.pb_loads(nc.SerializeToString()))
         for ns in proto.nurbssurfaces:

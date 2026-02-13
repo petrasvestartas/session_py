@@ -17,10 +17,11 @@
   "facecolors": [
     255,
     255,
+    255,
     255
   ],
   "facedata": {},
-  "guid": "95d70d9a-6ee0-4429-b074-446ba36f0053",
+  "guid": "96f4b2b1-f7e9-4a89-ac7e-a0b08db1d1ec",
   "halfedge": {
     "1": {
       "2": 1,
@@ -44,12 +45,18 @@
     255,
     255,
     255,
+    255,
+    255,
+    255,
     255
   ],
   "max_face": 1,
   "max_vertex": 3,
   "name": "test_mesh",
   "pointcolors": [
+    255,
+    255,
+    255,
     255,
     255,
     255,
