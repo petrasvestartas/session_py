@@ -4,7 +4,7 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("Polyline", "constructor")
+@MINI_TEST("Polyline", "Constructor")
 def test_polyline_constructor():
     from session_py import Polyline
     from session_py import Point
@@ -78,7 +78,7 @@ def test_polyline_constructor():
     MINI_CHECK(plc.linecolor[0] == 255 and plc.linecolor[1] == 0 and plc.width == 2.5)
 
 
-@MINI_TEST("Polyline", "transformation")
+@MINI_TEST("Polyline", "Transformation")
 def test_polyline_transformation():
     from session_py import Polyline
     from session_py import Point
@@ -94,7 +94,7 @@ def test_polyline_transformation():
     MINI_CHECK(pl.xform == Xform.identity())
 
 
-@MINI_TEST("Polyline", "json_roundtrip")
+@MINI_TEST("Polyline", "Json_roundtrip")
 def test_polyline_json_roundtrip():
     from session_py import Polyline
     from session_py import Point
@@ -122,7 +122,7 @@ def test_polyline_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
 
 
-@MINI_TEST("Polyline", "protobuf_roundtrip")
+@MINI_TEST("Polyline", "Protobuf_roundtrip")
 def test_polyline_protobuf_roundtrip():
     from session_py import Polyline
     from session_py import Point
@@ -148,7 +148,7 @@ def test_polyline_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
 
 
-@MINI_TEST("Polyline", "length")
+@MINI_TEST("Polyline", "Length")
 def test_polyline_length():
     from session_py import Polyline
     from session_py import Point
@@ -162,7 +162,7 @@ def test_polyline_length():
     MINI_CHECK(TOLERANCE.is_close(mag_sq, 3.0))
 
 
-@MINI_TEST("Polyline", "center")
+@MINI_TEST("Polyline", "Center")
 def test_polyline_center():
     from session_py import Polyline
     from session_py import Point
@@ -181,7 +181,7 @@ def test_polyline_center():
     MINI_CHECK(TOLERANCE.is_close(c[2], 0.0))
 
 
-@MINI_TEST("Polyline", "is_closed")
+@MINI_TEST("Polyline", "Is_closed")
 def test_polyline_is_closed():
     from session_py import Polyline
     from session_py import Point
@@ -208,7 +208,7 @@ def test_polyline_is_closed():
     MINI_CHECK(is_closed == True)
 
 
-@MINI_TEST("Polyline", "reverse")
+@MINI_TEST("Polyline", "Reverse")
 def test_polyline_reverse():
     from session_py import Polyline
     from session_py import Point
@@ -229,7 +229,7 @@ def test_polyline_reverse():
     MINI_CHECK(in_place_first == 3.0)
 
 
-@MINI_TEST("Polyline", "closest_point")
+@MINI_TEST("Polyline", "Closest_point")
 def test_polyline_closest_point():
     from session_py import Polyline
     from session_py import Point
@@ -244,7 +244,7 @@ def test_polyline_closest_point():
     MINI_CHECK(TOLERANCE.is_close(distance, 1.0))
 
 
-@MINI_TEST("Polyline", "extend_segment")
+@MINI_TEST("Polyline", "Extend_segment")
 def test_polyline_extend_segment():
     from session_py import Polyline
     from session_py import Point
@@ -258,7 +258,7 @@ def test_polyline_extend_segment():
     MINI_CHECK(TOLERANCE.is_close(second, 1.5))
 
 
-@MINI_TEST("Polyline", "extend_segment_equally")
+@MINI_TEST("Polyline", "Extend_segment_equally")
 def test_polyline_extend_segment_equally():
     from session_py import Polyline
     from session_py import Point
@@ -272,7 +272,7 @@ def test_polyline_extend_segment_equally():
     MINI_CHECK(TOLERANCE.is_close(second, 1.5))
 
 
-@MINI_TEST("Polyline", "get_points")
+@MINI_TEST("Polyline", "Get_points")
 def test_polyline_get_points():
     from session_py import Polyline
     from session_py import Point
@@ -287,7 +287,7 @@ def test_polyline_get_points():
     MINI_CHECK(TOLERANCE.is_close(points[3][0], 0.0) and TOLERANCE.is_close(points[3][1], 1.0))
 
 
-@MINI_TEST("Polyline", "shift")
+@MINI_TEST("Polyline", "Shift")
 def test_polyline_shift():
     from session_py import Polyline
     from session_py import Point
@@ -302,7 +302,7 @@ def test_polyline_shift():
     MINI_CHECK(TOLERANCE.is_close(first_after_unshift, 0.0))
 
 
-@MINI_TEST("Polyline", "point_at")
+@MINI_TEST("Polyline", "Point_at")
 def test_polyline_point_at():
     from session_py import Polyline
     from session_py import Point
@@ -316,7 +316,7 @@ def test_polyline_point_at():
     MINI_CHECK(TOLERANCE.is_close(quarter[0], 0.5))
 
 
-@MINI_TEST("Polyline", "is_clockwise")
+@MINI_TEST("Polyline", "Is_clockwise")
 def test_polyline_is_clockwise():
     from session_py import Polyline
     from session_py import Point
@@ -332,7 +332,7 @@ def test_polyline_is_clockwise():
     MINI_CHECK(ccw_pl.is_clockwise(plane) == False)
 
 
-@MINI_TEST("Polyline", "convex_corners")
+@MINI_TEST("Polyline", "Convex_corners")
 def test_polyline_convex_corners():
     from session_py import Polyline
     from session_py import Point
@@ -345,7 +345,7 @@ def test_polyline_convex_corners():
     MINI_CHECK(isinstance(corners[0], bool))
 
 
-@MINI_TEST("Polyline", "tween")
+@MINI_TEST("Polyline", "Tween")
 def test_polyline_tween():
     from session_py import Polyline
     from session_py import Point
@@ -358,7 +358,7 @@ def test_polyline_tween():
     MINI_CHECK(TOLERANCE.is_close(tweened.get_point(1)[0], 2.0))
 
 
-@MINI_TEST("Polyline", "average_plane")
+@MINI_TEST("Polyline", "Average_plane")
 def test_polyline_average_plane():
     from session_py import Polyline
     from session_py import Point

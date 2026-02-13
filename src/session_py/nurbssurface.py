@@ -250,12 +250,12 @@ class NurbsSurface:
         self.initialize()
     
     ###########################################################################
-    # VALIDATION
+    # BOOLEAN QUERIES
     ###########################################################################
-    
+
     def is_valid(self) -> bool:
         """Check if NURBS surface is valid.
-        
+
         Returns
         -------
         bool
@@ -263,34 +263,293 @@ class NurbsSurface:
         """
         if self.m_dim < 1:
             return False
-        
+
         # Check both directions
         for dir in range(2):
             if self.m_order[dir] < 2:
                 return False
             if self.m_cv_count[dir] < self.m_order[dir]:
                 return False
-            
+
             # OpenNURBS formula: knot_count = order + cv_count - 2
             knot_count = self.m_order[dir] + self.m_cv_count[dir] - 2
             if len(self.m_knot[dir]) != knot_count:
                 return False
-            
+
             if not self.is_valid_knot_vector(dir):
                 return False
-            
+
             # Check stride is valid (OpenNURBS check)
             cv_size_val = (self.m_dim + 1) if self.m_is_rat else self.m_dim
             if self.m_cv_stride[dir] < cv_size_val:
                 return False
-        
+
         # Check CV array size
         cv_size_val = (self.m_dim + 1) if self.m_is_rat else self.m_dim
         expected_cv_size = self.m_cv_count[0] * self.m_cv_count[1] * cv_size_val
         if len(self.m_cv) < expected_cv_size:
             return False
-        
+
         return True
+
+    def is_rational(self) -> bool:
+        """Check if surface is rational."""
+        return self.m_is_rat != 0
+
+    def is_closed(self, dir: int) -> bool:
+        """Check if surface is closed in specified direction.
+
+        Parameters
+        ----------
+        dir : int
+            Direction (0 for u, 1 for v).
+
+        Returns
+        -------
+        bool
+            True if closed, False otherwise.
+        """
+        if dir < 0 or dir >= 2 or not self.is_valid():
+            return False
+
+        # Check if first and last rows/columns are coincident
+        if dir == 0:
+            # Check u direction - compare first and last u CVs
+            for j in range(self.m_cv_count[1]):
+                pt0 = self.get_cv(0, j)
+                pt1 = self.get_cv(self.m_cv_count[0] - 1, j)
+                if pt0.distance(pt1) > 1e-12:
+                    return False
+        else:
+            # Check v direction - compare first and last v CVs
+            for i in range(self.m_cv_count[0]):
+                pt0 = self.get_cv(i, 0)
+                pt1 = self.get_cv(i, self.m_cv_count[1] - 1)
+                if pt0.distance(pt1) > 1e-12:
+                    return False
+
+        return True
+
+    def is_periodic(self, dir: int) -> bool:
+        """Check if surface is periodic in specified direction.
+
+        Parameters
+        ----------
+        dir : int
+            Direction (0 for u, 1 for v).
+
+        Returns
+        -------
+        bool
+            True if periodic, False otherwise.
+        """
+        if dir < 0 or dir >= 2 or not self.is_valid():
+            return False
+
+        # Check knot vector periodicity
+        degree = self.degree(dir)
+        kc = self.knot_count(dir)
+
+        if kc != self.m_order[dir] + self.m_cv_count[dir] - 2:
+            return False
+
+        # Check uniform spacing
+        delta = self.m_knot[dir][self.m_cv_count[dir] - 1] - self.m_knot[dir][degree]
+        if delta <= 0:
+            return False
+
+        for i in range(self.m_cv_count[dir] - 1):
+            expected = self.m_knot[dir][i + degree] + delta
+            if abs(self.m_knot[dir][i + self.m_order[dir] - 1] - expected) > 1e-10:
+                return False
+
+        # Check CV periodicity
+        i0 = self.m_order[dir] - 2
+        i1 = self.m_cv_count[dir] - 1
+
+        for k in range(self.m_cv_count[1 - dir]):
+            for check_i in range(i0 + 1):
+                if dir == 0:
+                    pt0 = self.get_cv(check_i, k)
+                    pt1 = self.get_cv(i1 - (i0 - check_i), k)
+                else:
+                    pt0 = self.get_cv(k, check_i)
+                    pt1 = self.get_cv(k, i1 - (i0 - check_i))
+
+                if pt0.distance(pt1) > 1e-12:
+                    return False
+
+        return True
+
+    def is_planar(self, plane: Optional[Plane] = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
+        """Check if surface is planar within tolerance.
+
+        Parameters
+        ----------
+        plane : Plane, optional
+            If provided, will be set to the best-fit plane.
+        tolerance : float, optional
+            Tolerance for planarity check.
+
+        Returns
+        -------
+        bool
+            True if surface is planar, False otherwise.
+        """
+        # Simple implementation: check if all CVs are coplanar
+        if self.m_cv_count[0] < 2 or self.m_cv_count[1] < 2:
+            return False
+
+        # Get three non-collinear points
+        p0 = self.get_cv(0, 0)
+        p1 = self.get_cv(self.m_cv_count[0] - 1, 0)
+        p2 = self.get_cv(0, self.m_cv_count[1] - 1)
+
+        # Create plane from these points
+        v1 = Vector(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z)
+        v2 = Vector(p2.x - p0.x, p2.y - p0.y, p2.z - p0.z)
+        normal = v1.cross(v2)
+
+        if normal.magnitude() < 1e-14:
+            return False
+
+        normal = normal / normal.magnitude()
+        test_plane = Plane(p0, normal)
+
+        # Check all CVs against plane
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                pt = self.get_cv(i, j)
+                # Compute distance: |dot(pt - p0, normal)|
+                v = Vector(pt.x - p0.x, pt.y - p0.y, pt.z - p0.z)
+                dist = abs(v.dot(normal))
+                if dist > tolerance:
+                    return False
+
+        if plane is not None:
+            plane.origin = test_plane.origin
+            plane.normal = test_plane.normal
+
+        return True
+
+    def is_singular(self, side: int) -> bool:
+        """Check if surface side is singular (collapsed to a point).
+
+        Parameters
+        ----------
+        side : int
+            Side (0=south, 1=east, 2=north, 3=west).
+
+        Returns
+        -------
+        bool
+            True if singular, False otherwise.
+        """
+        if not self.is_valid():
+            return False
+
+        points = []
+
+        if side == 0:  # south (v=0)
+            if not self.is_clamped(1, 0):
+                return False
+            points = [self.get_cv(i, 0) for i in range(self.m_cv_count[0])]
+        elif side == 1:  # east (u=max)
+            if not self.is_clamped(0, 1):
+                return False
+            points = [self.get_cv(self.m_cv_count[0] - 1, j) for j in range(self.m_cv_count[1])]
+        elif side == 2:  # north (v=max)
+            if not self.is_clamped(1, 1):
+                return False
+            points = [self.get_cv(i, self.m_cv_count[1] - 1) for i in range(self.m_cv_count[0])]
+        elif side == 3:  # west (u=0)
+            if not self.is_clamped(0, 0):
+                return False
+            points = [self.get_cv(0, j) for j in range(self.m_cv_count[1])]
+        else:
+            return False
+
+        # Check if all points are coincident
+        if len(points) < 2:
+            return False
+
+        p0 = points[0]
+        for pt in points[1:]:
+            if p0.distance(pt) > 1e-12:
+                return False
+
+        return True
+
+    def is_clamped(self, dir: int, end: int = 2) -> bool:
+        """Check if surface is clamped in specified direction.
+
+        Parameters
+        ----------
+        dir : int
+            Direction (0 for u, 1 for v).
+        end : int, optional
+            Which end to check (0=start, 1=end, 2=both). Defaults to 2.
+
+        Returns
+        -------
+        bool
+            True if clamped, False otherwise.
+        """
+        if dir < 0 or dir >= 2:
+            return False
+        if len(self.m_knot[dir]) == 0:
+            return False
+
+        # Use knot module function
+        return knot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], end)
+
+    def is_valid_knot_vector(self, dir: int) -> bool:
+        """Check if knot vector is valid in specified direction.
+
+        Parameters
+        ----------
+        dir : int
+            Direction (0 for u, 1 for v).
+
+        Returns
+        -------
+        bool
+            True if knot vector is valid (non-decreasing).
+        """
+        if dir < 0 or dir >= 2:
+            return False
+        kc = self.knot_count(dir)
+        if len(self.m_knot[dir]) != kc:
+            return False
+
+        for i in range(1, kc):
+            if self.m_knot[dir][i] < self.m_knot[dir][i-1]:
+                return False
+        return True
+
+    def is_trimmed(self):
+        return self.m_outer_loop.is_valid()
+
+    def is_duplicate(self, other: 'NurbsSurface', ignore_parameterization: bool,
+                    tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
+        """Check if this surface is duplicate of another.
+
+        Parameters
+        ----------
+        other : NurbsSurface
+            Other surface to compare.
+        ignore_parameterization : bool
+            Whether to ignore parameterization differences.
+        tolerance : float, optional
+            Tolerance for comparison.
+
+        Returns
+        -------
+        bool
+            True if duplicate, False otherwise.
+        """
+        # Stub - requires comprehensive comparison
+        return False
 
     def __eq__(self, other) -> bool:
         """Check equality with another NurbsSurface (compares all attributes except guid)."""
@@ -359,11 +618,7 @@ class NurbsSurface:
     def dimension(self) -> int:
         """Get dimension of the surface."""
         return self.m_dim
-    
-    def is_rational(self) -> bool:
-        """Check if surface is rational."""
-        return self.m_is_rat != 0
-    
+
     def order(self, dir: int) -> int:
         """Get order (degree + 1) in specified direction.
         
@@ -766,31 +1021,7 @@ class NurbsSurface:
         if dir < 0 or dir >= 2:
             return np.array([])
         return self.m_knot[dir].copy()
-    
-    def is_valid_knot_vector(self, dir: int) -> bool:
-        """Check if knot vector is valid in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        bool
-            True if knot vector is valid (non-decreasing).
-        """
-        if dir < 0 or dir >= 2:
-            return False
-        kc = self.knot_count(dir)
-        if len(self.m_knot[dir]) != kc:
-            return False
-        
-        for i in range(1, kc):
-            if self.m_knot[dir][i] < self.m_knot[dir][i-1]:
-                return False
-        return True
-    
+
     ###########################################################################
     # DOMAIN & PARAMETERIZATION
     ###########################################################################
@@ -926,30 +1157,7 @@ class NurbsSurface:
             return False
         self.m_knot[dir] = result
         return True
-    
-    def is_clamped(self, dir: int, end: int = 2) -> bool:
-        """Check if surface is clamped in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        end : int, optional
-            Which end to check (0=start, 1=end, 2=both). Defaults to 2.
-        
-        Returns
-        -------
-        bool
-            True if clamped, False otherwise.
-        """
-        if dir < 0 or dir >= 2:
-            return False
-        if len(self.m_knot[dir]) == 0:
-            return False
-        
-        # Use knot module function
-        return knot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], end)
-    
+
     def _find_span(self, dir: int, t: float) -> int:
         """Find the knot span index containing parameter t.
         
@@ -1528,9 +1736,6 @@ class NurbsSurface:
     def get_outer_loop(self):
         return self.m_outer_loop
 
-    def is_trimmed(self):
-        return self.m_outer_loop.is_valid()
-
     def clear_outer_loop(self):
         self.m_outer_loop = NurbsCurve()
 
@@ -1592,7 +1797,6 @@ class NurbsSurface:
                     if total_angle > max_angle:
                         max_angle = total_angle
                 subs[i] = max(1, min(int(math.ceil(max_angle / max_angle_deg)), 24))
-            # Direct chord-height deviation check
             chord_tol = bbox_diag * 0.005
             max_dev = 0.0
             nc = min(n_other, 3)
@@ -1635,7 +1839,7 @@ class NurbsSurface:
         vsp = self.get_span_vector(1)
         if len(usp) < 2 or len(vsp) < 2:
             return Mesh()
-        if self.is_planar(1e-6):
+        if self.is_planar(tolerance=1e-6):
             result = Mesh()
             p00 = self.point_at_corner(0, 0)
             p10 = self.point_at_corner(1, 0)
@@ -1669,6 +1873,8 @@ class NurbsSurface:
         ns_v = len(vsp) - 1
         max_angle_deg = 20.0
         bbox_diag = self._compute_bbox_diagonal()
+        deg_u = self.degree(0)
+        deg_v = self.degree(1)
         u_subs = self._span_subs(0, usp, vsp, max_angle_deg, bbox_diag)
         v_subs = self._span_subs(1, vsp, usp, max_angle_deg, bbox_diag)
         total_u = sum(u_subs) + 1
@@ -1695,14 +1901,35 @@ class NurbsSurface:
             spacing_u = u_len / total_u
             spacing_v = v_len / total_v
             ratio = spacing_u / spacing_v
-            deg_u = self.degree(0)
-            deg_v = self.degree(1)
             if ratio > 2.0 and deg_u > 1:
                 scale = math.sqrt(ratio)
                 u_subs = [min(int(math.ceil(s * scale)), 24) for s in u_subs]
             elif ratio < 0.5 and deg_v > 1:
                 scale = math.sqrt(1.0 / ratio)
                 v_subs = [min(int(math.ceil(s * scale)), 24) for s in v_subs]
+        if deg_u == 1 and deg_v == 1:
+            max_twist = 0.0
+            chord_tol = bbox_diag * 0.005 if bbox_diag > 0 else 1e-6
+            for i in range(ns_u):
+                for j in range(ns_v):
+                    u0, u1 = usp[i], usp[i + 1]
+                    v0, v1 = vsp[j], vsp[j + 1]
+                    pm = self.point_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
+                    p00 = self.point_at(u0, v0)
+                    p11 = self.point_at(u1, v1)
+                    mx = (p00[0] + p11[0]) * 0.5
+                    my = (p00[1] + p11[1]) * 0.5
+                    mz = (p00[2] + p11[2]) * 0.5
+                    dx, dy, dz = pm[0] - mx, pm[1] - my, pm[2] - mz
+                    twist = math.sqrt(dx * dx + dy * dy + dz * dz)
+                    if twist > max_twist:
+                        max_twist = twist
+            if max_twist > chord_tol:
+                twist_subs = max(4, min(int(math.ceil(2.0 * math.sqrt(max_twist / chord_tol))), 24))
+                for i in range(len(u_subs)):
+                    u_subs[i] = max(u_subs[i], twist_subs)
+                for i in range(len(v_subs)):
+                    v_subs[i] = max(v_subs[i], twist_subs)
         us = []
         for i in range(len(usp) - 1):
             for s in range(u_subs[i]):
@@ -1730,30 +1957,50 @@ class NurbsSurface:
         fix_closed_gap(us, usp, closed_u)
         fix_closed_gap(vs, vsp, closed_v)
         nu, nv = len(us), len(vs)
+        sing_v0 = self.is_singular(0)
+        sing_v1 = self.is_singular(2)
+        j_start = 1 if sing_v0 else 0
+        j_end = nv - 1 if sing_v1 else nv
+        nv_grid = j_end - j_start
         result = Mesh()
+        south_pole = 0
+        north_pole = 0
+        if sing_v0:
+            south_pole = result.add_vertex(self.point_at(us[0], vs[0]))
+        if sing_v1:
+            north_pole = result.add_vertex(self.point_at(us[0], vs[nv - 1]))
         vkeys = []
         for i in range(nu):
-            for j in range(nv):
-                pt = self.point_at(us[i], vs[j])
-                vk = result.add_vertex(pt)
-                vkeys.append(vk)
+            for j in range(j_start, j_end):
+                vkeys.append(result.add_vertex(self.point_at(us[i], vs[j])))
+        def grid_idx(i, j):
+            return vkeys[i * nv_grid + (j - j_start)]
         nu_faces = nu if closed_u else nu - 1
-        nv_faces = nv if closed_v else nv - 1
-        for i in range(nu_faces):
-            for j in range(nv_faces):
+        if sing_v0:
+            for i in range(nu_faces):
                 i1 = (i + 1) % nu
-                j1 = (j + 1) % nv
-                v00 = vkeys[i * nv + j]
-                v10 = vkeys[i1 * nv + j]
-                v01 = vkeys[i * nv + j1]
-                v11 = vkeys[i1 * nv + j1]
-                if (i + j) % 2 == 0:
+                result.add_face([south_pole, grid_idx(i1, j_start), grid_idx(i, j_start)])
+        nv_interior = nv_grid - 1
+        if closed_v and not sing_v0 and not sing_v1:
+            nv_interior = nv_grid
+        for i in range(nu_faces):
+            for jj in range(nv_interior):
+                j = jj + j_start
+                i1 = (i + 1) % nu
+                j1 = ((jj + 1) % nv_grid + j_start) if (closed_v and not sing_v0 and not sing_v1) else (j + 1)
+                v00, v10 = grid_idx(i, j), grid_idx(i1, j)
+                v01, v11 = grid_idx(i, j1), grid_idx(i1, j1)
+                if (i + jj) % 2 == 0:
                     result.add_face([v00, v10, v11])
                     result.add_face([v00, v11, v01])
                 else:
                     result.add_face([v00, v10, v01])
                     result.add_face([v10, v11, v01])
-        nv_total = len(result.vertex)
+        if sing_v1:
+            j_last = j_end - 1
+            for i in range(nu_faces):
+                i1 = (i + 1) % nu
+                result.add_face([grid_idx(i, j_last), grid_idx(i1, j_last), north_pole])
         max_vkey = max(result.vertex.keys()) if result.vertex else 0
         vnx = [0.0] * (max_vkey + 1)
         vny = [0.0] * (max_vkey + 1)
@@ -1801,61 +2048,6 @@ class NurbsSurface:
             curves.append(NurbsCurve.create(True, 1, pts_3d))
         return curves
 
-    def is_planar(self, plane: Optional[Plane] = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
-        """Check if surface is planar within tolerance.
-
-        Parameters
-        ----------
-        plane : Plane, optional
-            If provided, will be set to the best-fit plane.
-        tolerance : float, optional
-            Tolerance for planarity check.
-
-        Returns
-        -------
-        bool
-            True if surface is planar, False otherwise.
-        """
-        # Simple implementation: check if all CVs are coplanar
-        if self.m_cv_count[0] < 2 or self.m_cv_count[1] < 2:
-            return False
-        
-        # For 2x2 or smaller, all points define a plane (or are collinear)
-        if self.m_cv_count[0] <= 2 and self.m_cv_count[1] <= 2:
-            return True
-        
-        # Get three non-collinear points
-        p0 = self.get_cv(0, 0)
-        p1 = self.get_cv(self.m_cv_count[0] - 1, 0)
-        p2 = self.get_cv(0, self.m_cv_count[1] - 1)
-        
-        # Create plane from these points
-        v1 = Vector(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z)
-        v2 = Vector(p2.x - p0.x, p2.y - p0.y, p2.z - p0.z)
-        normal = v1.cross(v2)
-        
-        if normal.magnitude() < 1e-14:
-            return False
-        
-        normal = normal / normal.magnitude()
-        test_plane = Plane(p0, normal)
-        
-        # Check all CVs against plane
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                pt = self.get_cv(i, j)
-                # Compute distance: |dot(pt - p0, normal)|
-                v = Vector(pt.x - p0.x, pt.y - p0.y, pt.z - p0.z)
-                dist = abs(v.dot(normal))
-                if dist > tolerance:
-                    return False
-        
-        if plane is not None:
-            plane.origin = test_plane.origin
-            plane.normal = test_plane.normal
-        
-        return True
-    
     ###########################################################################
     # JSON SERIALIZATION
     ###########################################################################
@@ -1983,143 +2175,6 @@ class NurbsSurface:
             Total number of CVs.
         """
         return self.m_cv_count[0] * self.m_cv_count[1]
-    
-    ###########################################################################
-    # GEOMETRIC QUERIES
-    ###########################################################################
-    
-    def is_closed(self, dir: int) -> bool:
-        """Check if surface is closed in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        bool
-            True if closed, False otherwise.
-        """
-        if dir < 0 or dir >= 2 or not self.is_valid():
-            return False
-        
-        # Check if first and last rows/columns are coincident
-        if dir == 0:
-            # Check u direction - compare first and last u CVs
-            for j in range(self.m_cv_count[1]):
-                pt0 = self.get_cv(0, j)
-                pt1 = self.get_cv(self.m_cv_count[0] - 1, j)
-                if pt0.distance(pt1) > 1e-12:
-                    return False
-        else:
-            # Check v direction - compare first and last v CVs
-            for i in range(self.m_cv_count[0]):
-                pt0 = self.get_cv(i, 0)
-                pt1 = self.get_cv(i, self.m_cv_count[1] - 1)
-                if pt0.distance(pt1) > 1e-12:
-                    return False
-        
-        return True
-    
-    def is_periodic(self, dir: int) -> bool:
-        """Check if surface is periodic in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        bool
-            True if periodic, False otherwise.
-        """
-        if dir < 0 or dir >= 2 or not self.is_valid():
-            return False
-        
-        # Check knot vector periodicity
-        degree = self.degree(dir)
-        kc = self.knot_count(dir)
-        
-        if kc != self.m_order[dir] + self.m_cv_count[dir] - 2:
-            return False
-        
-        # Check uniform spacing
-        delta = self.m_knot[dir][self.m_cv_count[dir] - 1] - self.m_knot[dir][degree]
-        if delta <= 0:
-            return False
-        
-        for i in range(self.m_cv_count[dir] - 1):
-            expected = self.m_knot[dir][i + degree] + delta
-            if abs(self.m_knot[dir][i + self.m_order[dir] - 1] - expected) > 1e-10:
-                return False
-        
-        # Check CV periodicity
-        i0 = self.m_order[dir] - 2
-        i1 = self.m_cv_count[dir] - 1
-        
-        for k in range(self.m_cv_count[1 - dir]):
-            for check_i in range(i0 + 1):
-                if dir == 0:
-                    pt0 = self.get_cv(check_i, k)
-                    pt1 = self.get_cv(i1 - (i0 - check_i), k)
-                else:
-                    pt0 = self.get_cv(k, check_i)
-                    pt1 = self.get_cv(k, i1 - (i0 - check_i))
-                
-                if pt0.distance(pt1) > 1e-12:
-                    return False
-        
-        return True
-    
-    def is_singular(self, side: int) -> bool:
-        """Check if surface side is singular (collapsed to a point).
-        
-        Parameters
-        ----------
-        side : int
-            Side (0=south, 1=east, 2=north, 3=west).
-        
-        Returns
-        -------
-        bool
-            True if singular, False otherwise.
-        """
-        if not self.is_valid():
-            return False
-        
-        points = []
-        
-        if side == 0:  # south (v=0)
-            if not self.is_clamped(1, 0):
-                return False
-            points = [self.get_cv(i, 0) for i in range(self.m_cv_count[0])]
-        elif side == 1:  # east (u=max)
-            if not self.is_clamped(0, 1):
-                return False
-            points = [self.get_cv(self.m_cv_count[0] - 1, j) for j in range(self.m_cv_count[1])]
-        elif side == 2:  # north (v=max)
-            if not self.is_clamped(1, 1):
-                return False
-            points = [self.get_cv(i, self.m_cv_count[1] - 1) for i in range(self.m_cv_count[0])]
-        elif side == 3:  # west (u=0)
-            if not self.is_clamped(0, 0):
-                return False
-            points = [self.get_cv(0, j) for j in range(self.m_cv_count[1])]
-        else:
-            return False
-        
-        # Check if all points are coincident
-        if len(points) < 2:
-            return False
-        
-        p0 = points[0]
-        for pt in points[1:]:
-            if p0.distance(pt) > 1e-12:
-                return False
-        
-        return True
     
     ###########################################################################
     # KNOT VECTOR OPERATIONS (ADDITIONAL)
@@ -2544,27 +2599,6 @@ class NurbsSurface:
                     self.set_weight(i, j, 1.0)
         return True
     
-    def is_duplicate(self, other: 'NurbsSurface', ignore_parameterization: bool,
-                    tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
-        """Check if this surface is duplicate of another.
-        
-        Parameters
-        ----------
-        other : NurbsSurface
-            Other surface to compare.
-        ignore_parameterization : bool
-            Whether to ignore parameterization differences.
-        tolerance : float, optional
-            Tolerance for comparison.
-        
-        Returns
-        -------
-        bool
-            True if duplicate, False otherwise.
-        """
-        # Stub - requires comprehensive comparison
-        return False
-    
     def collapse_side(self, side: int, point: Point) -> bool:
         """Collapse side of surface to a point.
         
@@ -2769,6 +2803,11 @@ class NurbsSurface:
             il = proto.inner_loops.add()
             il.ParseFromString(loop_data)
 
+        # Cached mesh
+        if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
+            mesh_data = self.m_mesh.pb_dumps()
+            proto.cached_mesh.ParseFromString(mesh_data)
+
         return proto.SerializeToString()
 
     @classmethod
@@ -2837,6 +2876,12 @@ class NurbsSurface:
         for il in proto.inner_loops:
             loop_data = il.SerializeToString()
             surface.m_inner_loops.append(NurbsCurve.pb_loads(loop_data))
+
+        # Load cached mesh
+        if proto.HasField('cached_mesh') and len(proto.cached_mesh.vertices) > 0:
+            from .mesh import Mesh
+            mesh_data = proto.cached_mesh.SerializeToString()
+            surface.m_mesh = Mesh.pb_loads(mesh_data)
 
         return surface
 

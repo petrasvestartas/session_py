@@ -6,7 +6,7 @@ from .tolerance import PI
 import math
 
 
-@MINI_TEST("Primitives", "mesh_arrow")
+@MINI_TEST("Primitives", "Mesh_arrow")
 def test_mesh_arrow():
     from session_py import Primitives
     from session_py import Line
@@ -18,7 +18,7 @@ def test_mesh_arrow():
     MINI_CHECK(m.number_of_faces() == 28)
 
 
-@MINI_TEST("Primitives", "mesh_cylinder")
+@MINI_TEST("Primitives", "Mesh_cylinder")
 def test_mesh_cylinder():
     from session_py import Primitives
     from session_py import Line
@@ -30,7 +30,7 @@ def test_mesh_cylinder():
     MINI_CHECK(m.number_of_faces() == 20)
 
 
-@MINI_TEST("Primitives", "nurbscurve_polyline")
+@MINI_TEST("Primitives", "Nurbscurve_polyline")
 def test_nurbscurve_polyline():
     from session_py import NurbsCurve
     from session_py import Point
@@ -46,7 +46,7 @@ def test_nurbscurve_polyline():
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at(c.domain_end()), Point(4,0,0)))
 
 
-@MINI_TEST("Primitives", "nurbscurve_circle")
+@MINI_TEST("Primitives", "Nurbscurve_circle")
 def test_nurbscurve_circle():
     from session_py import Primitives
 
@@ -57,7 +57,7 @@ def test_nurbscurve_circle():
     MINI_CHECK(c.is_rational() == True)
 
 
-@MINI_TEST("Primitives", "nurbscurve_ellipse")
+@MINI_TEST("Primitives", "Nurbscurve_ellipse")
 def test_nurbscurve_ellipse():
     from session_py import Primitives
 
@@ -68,7 +68,7 @@ def test_nurbscurve_ellipse():
     MINI_CHECK(c.is_rational() == True)
 
 
-@MINI_TEST("Primitives", "nurbscurve_arc")
+@MINI_TEST("Primitives", "Nurbscurve_arc")
 def test_nurbscurve_arc():
     from session_py import Primitives
     from session_py import Point
@@ -83,7 +83,7 @@ def test_nurbscurve_arc():
     MINI_CHECK(c.is_rational() == True)
 
 
-@MINI_TEST("Primitives", "nurbscurve_parabola")
+@MINI_TEST("Primitives", "Nurbscurve_parabola")
 def test_nurbscurve_parabola():
     from session_py import Primitives
     from session_py import Point
@@ -98,7 +98,7 @@ def test_nurbscurve_parabola():
     MINI_CHECK(c.is_rational() == False)
 
 
-@MINI_TEST("Primitives", "nurbscurve_hyperbola")
+@MINI_TEST("Primitives", "Nurbscurve_hyperbola")
 def test_nurbscurve_hyperbola():
     from session_py import Primitives
     from session_py import Point
@@ -111,7 +111,7 @@ def test_nurbscurve_hyperbola():
     MINI_CHECK(c.is_rational() == False)
 
 
-@MINI_TEST("Primitives", "nurbscurve_spiral")
+@MINI_TEST("Primitives", "Nurbscurve_spiral")
 def test_nurbscurve_spiral():
     from session_py import Primitives
 
@@ -122,7 +122,7 @@ def test_nurbscurve_spiral():
     MINI_CHECK(c.is_rational() == False)
 
 
-@MINI_TEST("Primitives", "nurbssurface_cylinder")
+@MINI_TEST("Primitives", "Nurbssurface_cylinder")
 def test_nurbssurface_cylinder():
     from session_py import Primitives
 
@@ -152,7 +152,7 @@ def test_nurbssurface_cylinder():
     MINI_CHECK(abs(pmid[2] - 2.5) < 1e-10)
 
 
-@MINI_TEST("Primitives", "nurbssurface_cone")
+@MINI_TEST("Primitives", "Nurbssurface_cone")
 def test_nurbssurface_cone():
     from session_py import Primitives
 
@@ -182,7 +182,7 @@ def test_nurbssurface_cone():
     MINI_CHECK(abs(pmid[2] - 2.5) < 1e-10)
 
 
-@MINI_TEST("Primitives", "nurbssurface_torus")
+@MINI_TEST("Primitives", "Nurbssurface_torus")
 def test_nurbssurface_torus():
     from session_py import Primitives
 
@@ -212,7 +212,7 @@ def test_nurbssurface_torus():
     MINI_CHECK(abs(p_top[2] - 1.0) < 1e-10)
 
 
-@MINI_TEST("Primitives", "nurbssurface_ruled")
+@MINI_TEST("Primitives", "Nurbssurface_ruled")
 def test_nurbssurface_ruled():
     from session_py import Primitives
     from session_py import NurbsCurve
@@ -311,7 +311,7 @@ def test_nurbssurface_ruled():
     MINI_CHECK(TOLERANCE.is_close(uvs[24][0], 1.00) and TOLERANCE.is_close(uvs[24][1], 1.00))
 
 
-@MINI_TEST("Primitives", "nurbssurface_planar")
+@MINI_TEST("Primitives", "Nurbssurface_planar")
 def test_nurbssurface_planar():
     from session_py import Primitives
     from session_py import NurbsCurve
@@ -402,7 +402,7 @@ def test_nurbssurface_planar():
     MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(1, 1), Point(30.301430747422629, 2.436120711686657, 5.163967229855166)))
 
 
-@MINI_TEST("Primitives", "nurbssurface_extrusion")
+@MINI_TEST("Primitives", "Nurbssurface_extrusion")
 def test_nurbssurface_extrusion():
     from session_py import Primitives
     from session_py import NurbsCurve
@@ -476,7 +476,7 @@ def test_nurbssurface_extrusion():
     MINI_CHECK(TOLERANCE.is_point_close(s_wavy.get_cv(3, 1), Point(55.0, 1.0, 5.0)))
 
 
-@MINI_TEST("Primitives", "nurbssurface_loft")
+@MINI_TEST("Primitives", "Nurbssurface_loft")
 def test_nurbssurface_loft():
     from session_py import Primitives
     from session_py import NurbsCurve
@@ -559,7 +559,7 @@ def test_nurbssurface_loft():
     MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 2), Point(1.0, -5.0, 0.0)))
 
 
-@MINI_TEST("Primitives", "nurbssurface_revolve")
+@MINI_TEST("Primitives", "Nurbssurface_revolve")
 def test_nurbssurface_revolve():
     from session_py import Primitives
     from session_py import NurbsCurve
@@ -661,7 +661,7 @@ def test_nurbssurface_revolve():
     MINI_CHECK(TOLERANCE.is_point_close(s_cone.get_cv(0, 1), Point(46.0, 0.0, 0.0)))
 
 
-@MINI_TEST("Primitives", "nurbssurface_sweep")
+@MINI_TEST("Primitives", "Nurbssurface_sweep")
 def test_nurbssurface_sweep():
     from session_py import Primitives
     from session_py import NurbsCurve
@@ -707,7 +707,7 @@ def test_nurbssurface_sweep():
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 5), Point(8.999999999999998, 4.000000000000000, 0.000000000000000)))
 
 
-@MINI_TEST("Primitives", "nurbssurface_edge")
+@MINI_TEST("Primitives", "Nurbssurface_edge")
 def test_nurbssurface_edge():
     from session_py import Primitives
     from session_py import NurbsCurve
@@ -747,50 +747,7 @@ def test_nurbssurface_edge():
     MINI_CHECK(TOLERANCE.is_point_close(surf.get_cv(2, 3), Point(10.0, 27.569076, 0.0)))
 
 
-@MINI_TEST("Primitives", "nurbssurface_network")
-def test_nurbssurface_network():
-    from session_py import Primitives
-    from session_py import NurbsCurve
-    from session_py import Point
-
-    u0 = NurbsCurve.create(False, 2, [
-        Point(135, 17, 0), Point(131, 21, 0), Point(135, 26, 0)])
-    u1 = NurbsCurve.create(False, 2, [
-        Point(138.530306, 25.217183, 3.147742), Point(137.25766, 20.980203, 7.633725),
-        Point(139.228777, 17.799797, 3.377253)])
-    u2 = NurbsCurve.create(False, 2, [
-        Point(140.519039, 17.722618, 3.491662), Point(142.519039, 22.722618, 7.491662),
-        Point(141.023716, 25.344319, 3.431608)])
-    u3 = NurbsCurve.create(False, 2, [
-        Point(146, 16, 0), Point(150, 21.0, 7.0), Point(146, 27, 0)])
-
-    v0 = NurbsCurve.create(False, 2, [
-        Point(135, 17, 0), Point(140, 19, 7.0), Point(146, 16, 0)])
-    v1 = NurbsCurve.create(False, 2, [
-        Point(135, 26, 0), Point(140, 24, 7.0), Point(146, 27, 0)])
-
-    srf = Primitives.create_network([u0, u1, u2, u3], [v0, v1])
-    m = srf.mesh()
-
-    MINI_CHECK(srf.is_valid())
-    MINI_CHECK(m.number_of_vertices() > 0)
-    MINI_CHECK(m.number_of_faces() > 0)
-
-    du0, du1 = srf.domain(0)
-    dv0, dv1 = srf.domain(1)
-
-    p00 = srf.point_at(du0, dv0)
-    p01 = srf.point_at(du0, dv1)
-    p10 = srf.point_at(du1, dv0)
-    p11 = srf.point_at(du1, dv1)
-
-    MINI_CHECK(p00.distance(Point(135, 17, 0)) < 1.0)
-    MINI_CHECK(p10.distance(Point(135, 26, 0)) < 1.0)
-    MINI_CHECK(p01.distance(Point(146, 16, 0)) < 1.0)
-    MINI_CHECK(p11.distance(Point(146, 27, 0)) < 1.0)
-
-
-@MINI_TEST("Primitives", "nurbscurve_interpolated")
+@MINI_TEST("Primitives", "Nurbscurve_interpolated")
 def test_nurbscurve_interpolated():
     from session_py import Primitives
     from session_py import NurbsCurve

@@ -5,7 +5,7 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("Color", "constructor")
+@MINI_TEST("Color", "Constructor")
 def test_color_constructor():
     from session_py import Color
 
@@ -47,7 +47,7 @@ def test_color_constructor():
     MINI_CHECK(ccopy.guid != red.guid)
 
 
-@MINI_TEST("Color", "json_roundtrip")
+@MINI_TEST("Color", "Json_roundtrip")
 def test_color_json_roundtrip():
     from session_py import Color
     from pathlib import Path
@@ -73,7 +73,7 @@ def test_color_json_roundtrip():
     MINI_CHECK(loaded[3] == 255)
 
 
-@MINI_TEST("Color", "protobuf_roundtrip")
+@MINI_TEST("Color", "Protobuf_roundtrip")
 def test_color_protobuf_roundtrip():
     from session_py import Color
     from pathlib import Path
@@ -96,7 +96,7 @@ def test_color_protobuf_roundtrip():
     MINI_CHECK(loaded[3] == 255)
 
 
-@MINI_TEST("Color", "conversion")
+@MINI_TEST("Color", "Conversion")
 def test_color_conversion():
     from session_py import Color
 
@@ -110,7 +110,7 @@ def test_color_conversion():
     MINI_CHECK(TOLERANCE.is_close(flts[3], 1.0))
     MINI_CHECK(ints == color)
 
-@MINI_TEST("Color", "presets")
+@MINI_TEST("Color", "Presets")
 def test_color_presets():
     from session_py import Color
     

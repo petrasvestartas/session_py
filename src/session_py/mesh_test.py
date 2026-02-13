@@ -5,7 +5,7 @@ from .tolerance import TOLERANCE
 import math
 
 
-@MINI_TEST("Mesh", "constructor")
+@MINI_TEST("Mesh", "Constructor")
 def test_mesh_constructor():
     from session_py import Mesh
 
@@ -26,7 +26,7 @@ def test_mesh_constructor():
     MINI_CHECK(mesh.guid)
 
 
-@MINI_TEST("Mesh", "add_vertex")
+@MINI_TEST("Mesh", "Add_vertex")
 def test_mesh_add_vertex():
     from session_py import Mesh
     from session_py import Point
@@ -45,7 +45,7 @@ def test_mesh_add_vertex():
     MINI_CHECK(mesh.number_of_vertices() == 2)
 
 
-@MINI_TEST("Mesh", "add_face")
+@MINI_TEST("Mesh", "Add_face")
 def test_mesh_add_face():
     from session_py import Mesh
     from session_py import Point
@@ -71,7 +71,7 @@ def test_mesh_add_face():
     MINI_CHECK(invalid3 is None)
 
 
-@MINI_TEST("Mesh", "face_vertices")
+@MINI_TEST("Mesh", "Face_vertices")
 def test_mesh_face_vertices():
     from session_py import Mesh
     from session_py import Point
@@ -90,7 +90,7 @@ def test_mesh_face_vertices():
     MINI_CHECK(vertices[2] == v2)
 
 
-@MINI_TEST("Mesh", "vertex_neighbors")
+@MINI_TEST("Mesh", "Vertex_neighbors")
 def test_mesh_vertex_neighbors():
     from session_py import Mesh
     from session_py import Point
@@ -108,7 +108,7 @@ def test_mesh_vertex_neighbors():
     MINI_CHECK(v2 in neighbors)
 
 
-@MINI_TEST("Mesh", "vertex_faces")
+@MINI_TEST("Mesh", "Vertex_faces")
 def test_mesh_vertex_faces():
     from session_py import Mesh
     from session_py import Point
@@ -128,7 +128,7 @@ def test_mesh_vertex_faces():
     MINI_CHECK(f2 in faces)
 
 
-@MINI_TEST("Mesh", "is_vertex_on_boundary")
+@MINI_TEST("Mesh", "Is_vertex_on_boundary")
 def test_mesh_is_vertex_on_boundary():
     from session_py import Mesh
     from session_py import Point
@@ -145,7 +145,7 @@ def test_mesh_is_vertex_on_boundary():
     MINI_CHECK(mesh.is_vertex_on_boundary(v2))
 
 
-@MINI_TEST("Mesh", "face_normal")
+@MINI_TEST("Mesh", "Face_normal")
 def test_mesh_face_normal():
     from session_py import Mesh
     from session_py import Point
@@ -163,7 +163,7 @@ def test_mesh_face_normal():
     MINI_CHECK(TOLERANCE.is_close(normal[1], 0.0))
 
 
-@MINI_TEST("Mesh", "face_area")
+@MINI_TEST("Mesh", "Face_area")
 def test_mesh_face_area():
     from session_py import Mesh
     from session_py import Point
@@ -179,7 +179,7 @@ def test_mesh_face_area():
     MINI_CHECK(TOLERANCE.is_close(area, 0.5))
 
 
-@MINI_TEST("Mesh", "from_polygons")
+@MINI_TEST("Mesh", "From_polygons")
 def test_mesh_from_polygons():
     from session_py import Mesh
     from session_py import Point
@@ -211,7 +211,7 @@ def test_mesh_from_polygons():
     MINI_CHECK(mesh2.number_of_faces() == 2)
 
 
-@MINI_TEST("Mesh", "clear")
+@MINI_TEST("Mesh", "Clear")
 def test_mesh_clear():
     from session_py import Mesh
     from session_py import Point
@@ -231,7 +231,7 @@ def test_mesh_clear():
     MINI_CHECK(mesh.number_of_faces() == 0)
 
 
-@MINI_TEST("Mesh", "transformation")
+@MINI_TEST("Mesh", "Transformation")
 def test_mesh_transformation():
     from session_py import Mesh
     from session_py import Point
@@ -255,7 +255,7 @@ def test_mesh_transformation():
     MINI_CHECK(mesh_transformed.xform == Xform.identity())
 
 
-@MINI_TEST("Mesh", "json_roundtrip")
+@MINI_TEST("Mesh", "Json_roundtrip")
 def test_mesh_json_roundtrip():
     from session_py import Mesh
     from session_py import Point
@@ -284,7 +284,7 @@ def test_mesh_json_roundtrip():
     MINI_CHECK(loaded.number_of_faces() == mesh.number_of_faces())
 
 
-@MINI_TEST("Mesh", "protobuf_roundtrip")
+@MINI_TEST("Mesh", "Protobuf_roundtrip")
 def test_mesh_protobuf_roundtrip():
     from session_py import Mesh
     from session_py import Point
@@ -312,7 +312,7 @@ def test_mesh_protobuf_roundtrip():
     MINI_CHECK(loaded.guid == mesh.guid)
 
 
-@MINI_TEST("Mesh", "vertex_position")
+@MINI_TEST("Mesh", "Vertex_position")
 def test_mesh_vertex_position():
     from session_py import Mesh
     from session_py import Point
@@ -327,7 +327,7 @@ def test_mesh_vertex_position():
     MINI_CHECK(mesh.vertex_position(999) is None)
 
 
-@MINI_TEST("Mesh", "vertex_normal")
+@MINI_TEST("Mesh", "Vertex_normal")
 def test_mesh_vertex_normal():
     from session_py import Mesh
     from session_py import Point
@@ -345,7 +345,7 @@ def test_mesh_vertex_normal():
     MINI_CHECK(abs(normal[2]) == 1.0)
 
 
-@MINI_TEST("Mesh", "to_vertices_and_faces")
+@MINI_TEST("Mesh", "To_vertices_and_faces")
 def test_mesh_to_vertices_and_faces():
     from session_py import Mesh
     from session_py import Point

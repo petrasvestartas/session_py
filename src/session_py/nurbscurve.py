@@ -525,7 +525,7 @@ class NurbsCurve:
 
 
     ###########################################################################################
-    # Validation
+    # Boolean Queries
     ###########################################################################################
 
     def is_valid(self) -> bool:
@@ -548,497 +548,14 @@ class NurbsCurve:
         
         return True
 
-
-    ###########################################################################################
-    # Accessors
-    ###########################################################################################
-
-    def dimension(self) -> int:
-        return self.m_dim
-
     def is_rational(self) -> bool:
         return self.m_is_rat != 0
-
-    def order(self) -> int:
-        return self.m_order
-
-    def degree(self) -> int:
-        return self.m_order - 1
-
-    def cv_count(self) -> int:
-        return self.m_cv_count
-
-    def cv_size(self) -> int:
-        """Size of each control vertex"""
-        return (self.m_dim + 1) if self.m_is_rat else self.m_dim
-
-    def knot_count(self) -> int:
-        return self.m_order + self.m_cv_count - 2
-
-    def span_count(self) -> int:
-        return self.m_cv_count - self.m_order + 1
-
-    def get_knots(self) -> np.ndarray:
-        """Get all knot values"""
-        return self.m_knot.copy()
-
-    def knot_array(self) -> np.ndarray:
-        """Get pointer to knot array"""
-        return self.m_knot
-
-    def cv_array(self) -> np.ndarray:
-        """Get pointer to CV array"""
-        return self.m_cv
-
-
-    ###########################################################################################
-    # Control Vertex Access
-    ###########################################################################################
-
-    def get_cv(self, cv_index: int) -> Optional[Point]:
-        """Get control point at index as Point (Euclidean coordinates)"""
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return None
-
-        idx = cv_index * self.m_cv_stride
-        x = self.m_cv[idx] if self.m_dim > 0 else 0.0
-        y = self.m_cv[idx + 1] if self.m_dim > 1 else 0.0
-        z = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
-        if self.m_is_rat:
-            w = self.m_cv[idx + self.m_dim]
-            if abs(w) < 1e-14:
-                return Point(0.0, 0.0, 0.0)
-            return Point(x / w, y / w, z / w)
-        return Point(x, y, z)
-
-    def cv(self, cv_index: int) -> Optional[List[float]]:
-        """Get raw CV data at index (like C++ double* cv(int))"""
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return None
-        idx = cv_index * self.m_cv_stride
-        return list(self.m_cv[idx:idx + self.m_cv_stride])
-
-    def set_cv(self, cv_index: int, point: Point) -> bool:
-        """Set control point at index from Point"""
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return False
-
-        idx = cv_index * self.m_cv_stride
-        if self.m_dim > 0:
-            self.m_cv[idx] = point.x
-        if self.m_dim > 1:
-            self.m_cv[idx + 1] = point.y
-        if self.m_dim > 2:
-            self.m_cv[idx + 2] = point.z
-
-        if self.m_is_rat:
-            w = self.m_cv[idx + self.m_dim]
-            if self.m_dim > 0:
-                self.m_cv[idx] *= w
-            if self.m_dim > 1:
-                self.m_cv[idx + 1] *= w
-            if self.m_dim > 2:
-                self.m_cv[idx + 2] *= w
-
-        self._invalidate_rmf_cache()
-        return True
-
-    def get_cv_4d(self, cv_index: int) -> Optional[Tuple[float, float, float, float]]:
-        """Get control point as homogeneous coordinates (x, y, z, w)"""
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return None
-        
-        idx = cv_index * self.m_cv_stride
-        x = self.m_cv[idx] if self.m_dim > 0 else 0.0
-        y = self.m_cv[idx + 1] if self.m_dim > 1 else 0.0
-        z = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
-        w = self.m_cv[idx + self.m_dim] if self.m_is_rat else 1.0
-        
-        return (x, y, z, w)
-
-    def set_cv_4d(self, cv_index: int, x: float, y: float, z: float, w: float) -> bool:
-        """Set control point from homogeneous coordinates"""
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return False
-
-        # Make rational if w != 1.0 (matches C++ implementation)
-        if not self.m_is_rat and w != 1.0:
-            self.make_rational()
-
-        idx = cv_index * self.m_cv_stride
-        if self.m_dim > 0:
-            self.m_cv[idx] = x
-        if self.m_dim > 1:
-            self.m_cv[idx + 1] = y
-        if self.m_dim > 2:
-            self.m_cv[idx + 2] = z
-        if self.m_is_rat:
-            self.m_cv[idx + self.m_dim] = w
-
-        self._invalidate_rmf_cache()
-        return True
-
-    def weight(self, cv_index: int) -> float:
-        """Get weight at control vertex index"""
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return 1.0
-        
-        if not self.m_is_rat:
-            return 1.0
-        
-        idx = cv_index * self.m_cv_stride
-        return self.m_cv[idx + self.m_dim]
-
-    def set_weight(self, cv_index: int, weight: float) -> bool:
-        """Set weight at control vertex index"""
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return False
-
-        if not self.m_is_rat:
-            if abs(weight - 1.0) > Tolerance.ZERO_TOLERANCE:
-                self.make_rational()
-
-        if self.m_is_rat:
-            idx = cv_index * self.m_cv_stride
-            self.m_cv[idx + self.m_dim] = weight
-
-        self._invalidate_rmf_cache()
-        return True
-
-
-    ###########################################################################################
-    # Knot Access
-    ###########################################################################################
-
-    def knot(self, knot_index: int) -> float:
-        """Get knot value at index"""
-        if knot_index < 0 or knot_index >= len(self.m_knot):
-            return 0.0
-        return self.m_knot[knot_index]
-
-    def set_knot(self, knot_index: int, knot_value: float) -> bool:
-        """Set knot value at index"""
-        if knot_index < 0 or knot_index >= len(self.m_knot):
-            return False
-        self.m_knot[knot_index] = knot_value
-        self._invalidate_rmf_cache()
-        return True
-
-    def knot_multiplicity(self, knot_index: int) -> int:
-        """Get knot multiplicity at index"""
-        if knot_index < 0 or knot_index >= len(self.m_knot):
-            return 0
-        
-        knot_value = self.m_knot[knot_index]
-        mult = 1
-        
-        # Count after
-        for i in range(knot_index + 1, len(self.m_knot)):
-            if abs(self.m_knot[i] - knot_value) < Tolerance.ZERO_TOLERANCE:
-                mult += 1
-            else:
-                break
-        
-        # Count before
-        for i in range(knot_index - 1, -1, -1):
-            if abs(self.m_knot[i] - knot_value) < Tolerance.ZERO_TOLERANCE:
-                mult += 1
-            else:
-                break
-        
-        return mult
-
-    def superfluous_knot(self, end: int) -> float:
-        """Get superfluous knot value at end.
-
-        Parameters
-        ----------
-        end : int
-            0 for start, 1 for end.
-
-        Returns
-        -------
-        float
-            The superfluous knot value.
-        """
-        if not self.is_valid():
-            return 0.0
-
-        kc = self.knot_count()
-        if end == 0:
-            # First superfluous knot: reflect first knot across knot[order-2]
-            return 2.0 * self.m_knot[0] - self.m_knot[self.m_order - 2]
-        else:
-            # Last superfluous knot: reflect last knot across knot[cv_count-order]
-            return 2.0 * self.m_knot[kc - 1] - self.m_knot[self.m_cv_count - self.m_order]
-
-    def is_valid_knot_vector(self) -> bool:
-        """Check if knot vector is valid"""
-        if len(self.m_knot) != self.knot_count():
-            return False
-        
-        for i in range(len(self.m_knot) - 1):
-            if self.m_knot[i] > self.m_knot[i + 1] + Tolerance.ZERO_TOLERANCE:
-                return False
-        
-        return True
-
-    def insert_knot(self, knot_value: float, knot_multiplicity: int = 1) -> bool:
-        if not self.is_valid():
-            return False
-
-        p = self.degree()
-        if knot_multiplicity < 1 or knot_multiplicity > p:
-            return False
-
-        d0, d1 = self.domain()
-        if knot_value < d0 or knot_value > d1:
-            return False
-
-        # Handle end knots
-        if knot_value == d0:
-            if knot_multiplicity == p:
-                return self.clamp_end(0)
-            if knot_multiplicity == 1:
-                return True
-            return False
-        if knot_value == d1:
-            if knot_multiplicity == p:
-                return self.clamp_end(1)
-            if knot_multiplicity == 1:
-                return True
-            return False
-
-        import numpy as np
-        import math
-
-        n = self.m_cv_count - 1
-        full_knot_count = self.m_cv_count + self.m_order
-
-        for insert_iter in range(knot_multiplicity):
-            # Build full knot vector
-            U = np.zeros(full_knot_count)
-            U[0] = self.m_knot[0]
-            for i in range(len(self.m_knot)):
-                U[i + 1] = self.m_knot[i]
-            U[full_knot_count - 1] = self.m_knot[-1]
-
-            # Count current multiplicity
-            tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
-            mult = sum(1 for i in range(full_knot_count) if abs(U[i] - knot_value) <= tol)
-            if mult >= p:
-                return False
-
-            # Find span
-            span = self._find_span(knot_value)
-            k = span + self.m_order - 1
-
-            # Single-knot insertion
-            m_full = full_knot_count - 1
-            new_full_knot_count = full_knot_count + 1
-            new_cv_count = self.m_cv_count + 1
-
-            U_new = np.zeros(new_full_knot_count)
-            cv_new = np.zeros(new_cv_count * self.m_cv_stride)
-
-            # Copy unaffected knots
-            for i in range(k + 1):
-                U_new[i] = U[i]
-            U_new[k + 1] = knot_value
-            for i in range(k + 1, m_full + 1):
-                U_new[i + 1] = U[i]
-
-            # Copy unaffected CVs before
-            for i in range(k - p + 1):
-                src = i * self.m_cv_stride
-                dst = i * self.m_cv_stride
-                cv_new[dst:dst + self.m_cv_stride] = self.m_cv[src:src + self.m_cv_stride]
-
-            # Copy unaffected CVs after
-            for i in range(k + 1, n + 2):
-                src = (i - 1) * self.m_cv_stride
-                dst = i * self.m_cv_stride
-                cv_new[dst:dst + self.m_cv_stride] = self.m_cv[src:src + self.m_cv_stride]
-
-            # Compute new CVs in affected region
-            for i in range(k - p + 1, k + 1):
-                denom = U[i + p] - U[i]
-                alpha = (knot_value - U[i]) / denom if denom != 0.0 else 0.0
-
-                src_prev = (i - 1) * self.m_cv_stride
-                src_curr = i * self.m_cv_stride
-                dst = i * self.m_cv_stride
-
-                for d in range(self.m_cv_stride):
-                    cv_new[dst + d] = (1.0 - alpha) * self.m_cv[src_prev + d] + alpha * self.m_cv[src_curr + d]
-
-            # Update internal state
-            self.m_cv_count = new_cv_count
-            self.m_cv = cv_new
-
-            new_compressed_knot_count = self.m_order + self.m_cv_count - 2
-            self.m_knot = np.array([U_new[i + 1] for i in range(new_compressed_knot_count)])
-
-            full_knot_count = new_full_knot_count
-            n = self.m_cv_count - 1
-
-        return True
-
-    def is_clamped(self, end: int = 2) -> bool:
-        """Check if knot vector is clamped at ends.
-        
-        Parameters
-        ----------
-        end : int, optional
-            0 for start, 1 for end, 2 for both. Defaults to 2.
-            
-        Returns
-        -------
-        bool
-            True if clamped at specified end(s).
-        """
-        if not self.is_valid():
-            return False
-        
-        # Use knot module function
-        return knot.is_clamped(self.m_order, self.m_cv_count, self.m_knot, end)
-
-    def greville_abcissa(self, cv_index: int) -> float:
-        """Get Greville abcissa for a control point.
-
-        Parameters
-        ----------
-        cv_index : int
-            Index of the control vertex.
-
-        Returns
-        -------
-        float
-            The Greville abcissa parameter value.
-        """
-        if cv_index < 0 or cv_index >= self.m_cv_count:
-            return 0.0
-
-        knot = self.m_knot[cv_index:]
-        order = self.m_order
-
-        if order <= 2 or knot[0] == knot[order - 2]:
-            return float(knot[0])
-
-        p = order - 1
-        k0 = knot[0]
-        k = knot[p // 2]
-        k1 = knot[p - 1]
-        tol = (k1 - k0) * 1.490116119385e-8
-
-        g = sum(knot[i] for i in range(p)) / p
-
-        if abs(2.0 * k - (k0 + k1)) <= tol and abs(g - k) <= (abs(g) * 1.490116119385e-8 + tol):
-            g = k
-
-        return float(g)
-
-    def get_greville_abcissae(self) -> List[float]:
-        """Get all Greville abcissae.
-        
-        Returns
-        -------
-        list of float
-            Greville parameters for all control vertices.
-        """
-        return [self.greville_abcissa(i) for i in range(self.m_cv_count)]
-
-
-    ###########################################################################################
-    # Domain & Parameterization
-    ###########################################################################################
-
-    def domain(self) -> Tuple[float, float]:
-        """Get curve domain [start_param, end_param]"""
-        if not self.is_valid():
-            return (0.0, 0.0)
-        return (self.m_knot[self.m_order - 2], self.m_knot[self.m_cv_count - 1])
-
-    def domain_start(self) -> float:
-        """Get start of domain"""
-        t0, _ = self.domain()
-        return t0
-
-    def domain_end(self) -> float:
-        """Get end of domain"""
-        _, t1 = self.domain()
-        return t1
-
-    def domain_middle(self) -> float:
-        """Get middle of domain"""
-        t0, t1 = self.domain()
-        return (t0 + t1) * 0.5
-
-    def set_domain(self, t0: float, t1: float) -> bool:
-        """Set curve domain"""
-        if not self.is_valid():
-            return False
-        if t0 >= t1:
-            return False
-
-        old_t0, old_t1 = self.domain()
-        if abs(old_t1 - old_t0) < Tolerance.ZERO_TOLERANCE:
-            return False
-
-        scale = (t1 - t0) / (old_t1 - old_t0)
-        for i in range(len(self.m_knot)):
-            self.m_knot[i] = t0 + (self.m_knot[i] - old_t0) * scale
-
-        self._invalidate_rmf_cache()
-        return True
-
-    def get_span_vector(self) -> List[float]:
-        """Get span (distinct knot intervals) values"""
-        if not self.is_valid():
-            return []
-        
-        spans = []
-        for i in range(self.m_order - 2, self.m_cv_count):
-            if i == self.m_order - 2 or abs(self.m_knot[i] - self.m_knot[i-1]) > Tolerance.ZERO_TOLERANCE:
-                spans.append(self.m_knot[i])
-        
-        return spans
-
-    ###########################################################################################
-    # Geometric Queries
-    ###########################################################################################
-
-    def get_next_discontinuity(self, continuity_type: int, t0: float, t1: float):
-        if not self.is_valid():
-            return False, 0.0
-        d0, d1 = self.domain()
-        t0 = max(t0, d0)
-        t1 = min(t1, d1)
-        if t0 >= t1:
-            return False, 0.0
-        for i in range(self.m_order - 1, self.m_cv_count - 1):
-            t = float(self.m_knot[i])
-            if t <= t0 or t >= t1:
-                continue
-            mult = self.knot_multiplicity(i)
-            found = False
-            if continuity_type == 0 and mult >= self.m_order:
-                found = True
-            elif continuity_type == 1 and mult >= self.m_order - 1:
-                found = True
-            elif continuity_type == 2 and mult >= self.m_order - 2:
-                found = True
-            elif continuity_type in (3, 4) and mult >= self.m_order - 1:
-                found = True
-            if found:
-                return True, t
-        return False, 0.0
 
     def is_closed(self) -> bool:
         """Check if curve is closed"""
         if not self.is_valid():
             return False
-        
+
         p_start = self.point_at_start()
         p_end = self.point_at_end()
         return p_start.distance(p_end) < Tolerance.ZERO_TOLERANCE
@@ -1047,18 +564,18 @@ class NurbsCurve:
         """Check if curve is periodic"""
         if not self.is_valid():
             return False
-        
+
         # Check if knots and CVs wrap around
         if not self.is_closed():
             return False
-        
+
         # Check if first order-1 CVs match last order-1 CVs
         for i in range(self.m_order - 1):
             p1 = self.get_cv(i)
             p2 = self.get_cv(self.m_cv_count - self.m_order + 1 + i)
             if p1 and p2 and p1.distance(p2) > Tolerance.ZERO_TOLERANCE:
                 return False
-        
+
         return True
 
     def is_linear(self, tolerance: float = None) -> bool:
@@ -1326,7 +843,7 @@ class NurbsCurve:
 
     def is_polyline(self) -> Tuple[bool, List[Point], List[float]]:
         """Check if curve can be represented as a polyline.
-        
+
         Returns
         -------
         tuple of (bool, list of Point, list of float)
@@ -1334,47 +851,19 @@ class NurbsCurve:
         """
         if not self.is_valid():
             return False, [], []
-        
+
         # Check if curve is linear
         if self.is_linear():
             points = [self.point_at_start(), self.point_at_end()]
             t0, t1 = self.domain()
             params = [t0, t1]
             return True, points, params
-        
-        return False, [], []
 
-    def _span_is_singular(self, span_index: int) -> bool:
-        """Check if span is singular (collapsed to a point).
-        
-        Parameters
-        ----------
-        span_index : int
-            Index of the span.
-            
-        Returns
-        -------
-        bool
-            True if span is singular.
-        """
-        if not self.is_valid():
-            return False
-        
-        spans = self.get_span_vector()
-        if span_index < 0 or span_index >= len(spans) - 1:
-            return False
-        
-        t0 = spans[span_index]
-        t1 = spans[span_index + 1]
-        
-        p0 = self.point_at(t0)
-        p1 = self.point_at(t1)
-        
-        return p0.distance(p1) < Tolerance.ZERO_TOLERANCE
+        return False, [], []
 
     def is_singular(self) -> bool:
         """Check if entire curve is singular (collapsed to a point).
-        
+
         Returns
         -------
         bool
@@ -1382,20 +871,20 @@ class NurbsCurve:
         """
         if not self.is_valid():
             return False
-        
+
         p_first = self.point_at_start()
-        
+
         # Check if all sample points are at same location
         t0, t1 = self.domain()
         num_samples = max(10, self.m_cv_count)
         dt = (t1 - t0) / num_samples
-        
+
         for i in range(1, num_samples + 1):
             t = t0 + i * dt
             p = self.point_at(t)
             if p_first.distance(p) > Tolerance.ZERO_TOLERANCE:
                 return False
-        
+
         return True
 
     def is_duplicate(self, other, ignore_parameterization: bool = False, tolerance: float = None) -> bool:
@@ -1449,6 +938,517 @@ class NurbsCurve:
             return mult < self.m_order - 2
         else:
             return mult < self.m_order - 1
+
+    def is_valid_knot_vector(self) -> bool:
+        """Check if knot vector is valid"""
+        if len(self.m_knot) != self.knot_count():
+            return False
+
+        for i in range(len(self.m_knot) - 1):
+            if self.m_knot[i] > self.m_knot[i + 1] + Tolerance.ZERO_TOLERANCE:
+                return False
+
+        return True
+
+    def is_clamped(self, end: int = 2) -> bool:
+        """Check if knot vector is clamped at ends.
+
+        Parameters
+        ----------
+        end : int, optional
+            0 for start, 1 for end, 2 for both. Defaults to 2.
+
+        Returns
+        -------
+        bool
+            True if clamped at specified end(s).
+        """
+        if not self.is_valid():
+            return False
+
+        # Use knot module function
+        return knot.is_clamped(self.m_order, self.m_cv_count, self.m_knot, end)
+
+
+    ###########################################################################################
+    # Accessors
+    ###########################################################################################
+
+    def dimension(self) -> int:
+        return self.m_dim
+
+    def order(self) -> int:
+        return self.m_order
+
+    def degree(self) -> int:
+        return self.m_order - 1
+
+    def cv_count(self) -> int:
+        return self.m_cv_count
+
+    def cv_size(self) -> int:
+        """Size of each control vertex"""
+        return (self.m_dim + 1) if self.m_is_rat else self.m_dim
+
+    def knot_count(self) -> int:
+        return self.m_order + self.m_cv_count - 2
+
+    def span_count(self) -> int:
+        return self.m_cv_count - self.m_order + 1
+
+    def get_knots(self) -> np.ndarray:
+        """Get all knot values"""
+        return self.m_knot.copy()
+
+    def knot_array(self) -> np.ndarray:
+        """Get pointer to knot array"""
+        return self.m_knot
+
+    def cv_array(self) -> np.ndarray:
+        """Get pointer to CV array"""
+        return self.m_cv
+
+
+    ###########################################################################################
+    # Control Vertex Access
+    ###########################################################################################
+
+    def get_cv(self, cv_index: int) -> Optional[Point]:
+        """Get control point at index as Point (Euclidean coordinates)"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return None
+
+        idx = cv_index * self.m_cv_stride
+        x = self.m_cv[idx] if self.m_dim > 0 else 0.0
+        y = self.m_cv[idx + 1] if self.m_dim > 1 else 0.0
+        z = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
+        if self.m_is_rat:
+            w = self.m_cv[idx + self.m_dim]
+            if abs(w) < 1e-14:
+                return Point(0.0, 0.0, 0.0)
+            return Point(x / w, y / w, z / w)
+        return Point(x, y, z)
+
+    def cv(self, cv_index: int) -> Optional[List[float]]:
+        """Get raw CV data at index (like C++ double* cv(int))"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return None
+        idx = cv_index * self.m_cv_stride
+        return list(self.m_cv[idx:idx + self.m_cv_stride])
+
+    def set_cv(self, cv_index: int, point: Point) -> bool:
+        """Set control point at index from Point"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return False
+
+        idx = cv_index * self.m_cv_stride
+        if self.m_dim > 0:
+            self.m_cv[idx] = point.x
+        if self.m_dim > 1:
+            self.m_cv[idx + 1] = point.y
+        if self.m_dim > 2:
+            self.m_cv[idx + 2] = point.z
+
+        if self.m_is_rat:
+            w = self.m_cv[idx + self.m_dim]
+            if self.m_dim > 0:
+                self.m_cv[idx] *= w
+            if self.m_dim > 1:
+                self.m_cv[idx + 1] *= w
+            if self.m_dim > 2:
+                self.m_cv[idx + 2] *= w
+
+        self._invalidate_rmf_cache()
+        return True
+
+    def get_cv_4d(self, cv_index: int) -> Optional[Tuple[float, float, float, float]]:
+        """Get control point as homogeneous coordinates (x, y, z, w)"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return None
+        
+        idx = cv_index * self.m_cv_stride
+        x = self.m_cv[idx] if self.m_dim > 0 else 0.0
+        y = self.m_cv[idx + 1] if self.m_dim > 1 else 0.0
+        z = self.m_cv[idx + 2] if self.m_dim > 2 else 0.0
+        w = self.m_cv[idx + self.m_dim] if self.m_is_rat else 1.0
+        
+        return (x, y, z, w)
+
+    def set_cv_4d(self, cv_index: int, x: float, y: float, z: float, w: float) -> bool:
+        """Set control point from homogeneous coordinates"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return False
+
+        # Make rational if w != 1.0 (matches C++ implementation)
+        if not self.m_is_rat and w != 1.0:
+            self.make_rational()
+
+        idx = cv_index * self.m_cv_stride
+        if self.m_dim > 0:
+            self.m_cv[idx] = x
+        if self.m_dim > 1:
+            self.m_cv[idx + 1] = y
+        if self.m_dim > 2:
+            self.m_cv[idx + 2] = z
+        if self.m_is_rat:
+            self.m_cv[idx + self.m_dim] = w
+
+        self._invalidate_rmf_cache()
+        return True
+
+    def weight(self, cv_index: int) -> float:
+        """Get weight at control vertex index"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return 1.0
+        
+        if not self.m_is_rat:
+            return 1.0
+        
+        idx = cv_index * self.m_cv_stride
+        return self.m_cv[idx + self.m_dim]
+
+    def set_weight(self, cv_index: int, weight: float) -> bool:
+        """Set weight at control vertex index"""
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return False
+
+        if not self.m_is_rat:
+            if abs(weight - 1.0) > Tolerance.ZERO_TOLERANCE:
+                self.make_rational()
+
+        if self.m_is_rat:
+            idx = cv_index * self.m_cv_stride
+            self.m_cv[idx + self.m_dim] = weight
+
+        self._invalidate_rmf_cache()
+        return True
+
+
+    ###########################################################################################
+    # Knot Access
+    ###########################################################################################
+
+    def knot(self, knot_index: int) -> float:
+        """Get knot value at index"""
+        if knot_index < 0 or knot_index >= len(self.m_knot):
+            return 0.0
+        return self.m_knot[knot_index]
+
+    def set_knot(self, knot_index: int, knot_value: float) -> bool:
+        """Set knot value at index"""
+        if knot_index < 0 or knot_index >= len(self.m_knot):
+            return False
+        self.m_knot[knot_index] = knot_value
+        self._invalidate_rmf_cache()
+        return True
+
+    def knot_multiplicity(self, knot_index: int) -> int:
+        """Get knot multiplicity at index"""
+        if knot_index < 0 or knot_index >= len(self.m_knot):
+            return 0
+        
+        knot_value = self.m_knot[knot_index]
+        mult = 1
+        
+        # Count after
+        for i in range(knot_index + 1, len(self.m_knot)):
+            if abs(self.m_knot[i] - knot_value) < Tolerance.ZERO_TOLERANCE:
+                mult += 1
+            else:
+                break
+        
+        # Count before
+        for i in range(knot_index - 1, -1, -1):
+            if abs(self.m_knot[i] - knot_value) < Tolerance.ZERO_TOLERANCE:
+                mult += 1
+            else:
+                break
+        
+        return mult
+
+    def superfluous_knot(self, end: int) -> float:
+        """Get superfluous knot value at end.
+
+        Parameters
+        ----------
+        end : int
+            0 for start, 1 for end.
+
+        Returns
+        -------
+        float
+            The superfluous knot value.
+        """
+        if not self.is_valid():
+            return 0.0
+
+        kc = self.knot_count()
+        if end == 0:
+            # First superfluous knot: reflect first knot across knot[order-2]
+            return 2.0 * self.m_knot[0] - self.m_knot[self.m_order - 2]
+        else:
+            # Last superfluous knot: reflect last knot across knot[cv_count-order]
+            return 2.0 * self.m_knot[kc - 1] - self.m_knot[self.m_cv_count - self.m_order]
+
+    def insert_knot(self, knot_value: float, knot_multiplicity: int = 1) -> bool:
+        if not self.is_valid():
+            return False
+
+        p = self.degree()
+        if knot_multiplicity < 1 or knot_multiplicity > p:
+            return False
+
+        d0, d1 = self.domain()
+        if knot_value < d0 or knot_value > d1:
+            return False
+
+        # Handle end knots
+        if knot_value == d0:
+            if knot_multiplicity == p:
+                return self.clamp_end(0)
+            if knot_multiplicity == 1:
+                return True
+            return False
+        if knot_value == d1:
+            if knot_multiplicity == p:
+                return self.clamp_end(1)
+            if knot_multiplicity == 1:
+                return True
+            return False
+
+        import numpy as np
+        import math
+
+        n = self.m_cv_count - 1
+        full_knot_count = self.m_cv_count + self.m_order
+
+        for insert_iter in range(knot_multiplicity):
+            # Build full knot vector
+            U = np.zeros(full_knot_count)
+            U[0] = self.m_knot[0]
+            for i in range(len(self.m_knot)):
+                U[i + 1] = self.m_knot[i]
+            U[full_knot_count - 1] = self.m_knot[-1]
+
+            # Count current multiplicity
+            tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
+            mult = sum(1 for i in range(full_knot_count) if abs(U[i] - knot_value) <= tol)
+            if mult >= p:
+                return False
+
+            # Find span
+            span = self._find_span(knot_value)
+            k = span + self.m_order - 1
+
+            # Single-knot insertion
+            m_full = full_knot_count - 1
+            new_full_knot_count = full_knot_count + 1
+            new_cv_count = self.m_cv_count + 1
+
+            U_new = np.zeros(new_full_knot_count)
+            cv_new = np.zeros(new_cv_count * self.m_cv_stride)
+
+            # Copy unaffected knots
+            for i in range(k + 1):
+                U_new[i] = U[i]
+            U_new[k + 1] = knot_value
+            for i in range(k + 1, m_full + 1):
+                U_new[i + 1] = U[i]
+
+            # Copy unaffected CVs before
+            for i in range(k - p + 1):
+                src = i * self.m_cv_stride
+                dst = i * self.m_cv_stride
+                cv_new[dst:dst + self.m_cv_stride] = self.m_cv[src:src + self.m_cv_stride]
+
+            # Copy unaffected CVs after
+            for i in range(k + 1, n + 2):
+                src = (i - 1) * self.m_cv_stride
+                dst = i * self.m_cv_stride
+                cv_new[dst:dst + self.m_cv_stride] = self.m_cv[src:src + self.m_cv_stride]
+
+            # Compute new CVs in affected region
+            for i in range(k - p + 1, k + 1):
+                denom = U[i + p] - U[i]
+                alpha = (knot_value - U[i]) / denom if denom != 0.0 else 0.0
+
+                src_prev = (i - 1) * self.m_cv_stride
+                src_curr = i * self.m_cv_stride
+                dst = i * self.m_cv_stride
+
+                for d in range(self.m_cv_stride):
+                    cv_new[dst + d] = (1.0 - alpha) * self.m_cv[src_prev + d] + alpha * self.m_cv[src_curr + d]
+
+            # Update internal state
+            self.m_cv_count = new_cv_count
+            self.m_cv = cv_new
+
+            new_compressed_knot_count = self.m_order + self.m_cv_count - 2
+            self.m_knot = np.array([U_new[i + 1] for i in range(new_compressed_knot_count)])
+
+            full_knot_count = new_full_knot_count
+            n = self.m_cv_count - 1
+
+        return True
+
+    def greville_abcissa(self, cv_index: int) -> float:
+        """Get Greville abcissa for a control point.
+
+        Parameters
+        ----------
+        cv_index : int
+            Index of the control vertex.
+
+        Returns
+        -------
+        float
+            The Greville abcissa parameter value.
+        """
+        if cv_index < 0 or cv_index >= self.m_cv_count:
+            return 0.0
+
+        knot = self.m_knot[cv_index:]
+        order = self.m_order
+
+        if order <= 2 or knot[0] == knot[order - 2]:
+            return float(knot[0])
+
+        p = order - 1
+        k0 = knot[0]
+        k = knot[p // 2]
+        k1 = knot[p - 1]
+        tol = (k1 - k0) * 1.490116119385e-8
+
+        g = sum(knot[i] for i in range(p)) / p
+
+        if abs(2.0 * k - (k0 + k1)) <= tol and abs(g - k) <= (abs(g) * 1.490116119385e-8 + tol):
+            g = k
+
+        return float(g)
+
+    def get_greville_abcissae(self) -> List[float]:
+        """Get all Greville abcissae.
+        
+        Returns
+        -------
+        list of float
+            Greville parameters for all control vertices.
+        """
+        return [self.greville_abcissa(i) for i in range(self.m_cv_count)]
+
+
+    ###########################################################################################
+    # Domain & Parameterization
+    ###########################################################################################
+
+    def domain(self) -> Tuple[float, float]:
+        """Get curve domain [start_param, end_param]"""
+        if not self.is_valid():
+            return (0.0, 0.0)
+        return (self.m_knot[self.m_order - 2], self.m_knot[self.m_cv_count - 1])
+
+    def domain_start(self) -> float:
+        """Get start of domain"""
+        t0, _ = self.domain()
+        return t0
+
+    def domain_end(self) -> float:
+        """Get end of domain"""
+        _, t1 = self.domain()
+        return t1
+
+    def domain_middle(self) -> float:
+        """Get middle of domain"""
+        t0, t1 = self.domain()
+        return (t0 + t1) * 0.5
+
+    def set_domain(self, t0: float, t1: float) -> bool:
+        """Set curve domain"""
+        if not self.is_valid():
+            return False
+        if t0 >= t1:
+            return False
+
+        old_t0, old_t1 = self.domain()
+        if abs(old_t1 - old_t0) < Tolerance.ZERO_TOLERANCE:
+            return False
+
+        scale = (t1 - t0) / (old_t1 - old_t0)
+        for i in range(len(self.m_knot)):
+            self.m_knot[i] = t0 + (self.m_knot[i] - old_t0) * scale
+
+        self._invalidate_rmf_cache()
+        return True
+
+    def get_span_vector(self) -> List[float]:
+        """Get span (distinct knot intervals) values"""
+        if not self.is_valid():
+            return []
+        
+        spans = []
+        for i in range(self.m_order - 2, self.m_cv_count):
+            if i == self.m_order - 2 or abs(self.m_knot[i] - self.m_knot[i-1]) > Tolerance.ZERO_TOLERANCE:
+                spans.append(self.m_knot[i])
+        
+        return spans
+
+    ###########################################################################################
+    # Geometric Queries
+    ###########################################################################################
+
+    def get_next_discontinuity(self, continuity_type: int, t0: float, t1: float):
+        if not self.is_valid():
+            return False, 0.0
+        d0, d1 = self.domain()
+        t0 = max(t0, d0)
+        t1 = min(t1, d1)
+        if t0 >= t1:
+            return False, 0.0
+        for i in range(self.m_order - 1, self.m_cv_count - 1):
+            t = float(self.m_knot[i])
+            if t <= t0 or t >= t1:
+                continue
+            mult = self.knot_multiplicity(i)
+            found = False
+            if continuity_type == 0 and mult >= self.m_order:
+                found = True
+            elif continuity_type == 1 and mult >= self.m_order - 1:
+                found = True
+            elif continuity_type == 2 and mult >= self.m_order - 2:
+                found = True
+            elif continuity_type in (3, 4) and mult >= self.m_order - 1:
+                found = True
+            if found:
+                return True, t
+        return False, 0.0
+
+    def _span_is_singular(self, span_index: int) -> bool:
+        """Check if span is singular (collapsed to a point).
+
+        Parameters
+        ----------
+        span_index : int
+            Index of the span.
+
+        Returns
+        -------
+        bool
+            True if span is singular.
+        """
+        if not self.is_valid():
+            return False
+
+        spans = self.get_span_vector()
+        if span_index < 0 or span_index >= len(spans) - 1:
+            return False
+
+        t0 = spans[span_index]
+        t1 = spans[span_index + 1]
+
+        p0 = self.point_at(t0)
+        p1 = self.point_at(t1)
+
+        return p0.distance(p1) < Tolerance.ZERO_TOLERANCE
 
 
     ###########################################################################################

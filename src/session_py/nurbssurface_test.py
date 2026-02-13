@@ -5,7 +5,7 @@ from .tolerance import TOLERANCE
 from .tolerance import PI
 
 
-@MINI_TEST("NurbsSurface", "constructor")
+@MINI_TEST("NurbsSurface", "Constructor")
 def test_nurbssurface_constructor():
     from session_py import NurbsSurface
     from session_py import Point
@@ -102,34 +102,54 @@ def test_nurbssurface_constructor():
     MINI_CHECK(TOLERANCE.is_point_close(v[4][6], Point(5.000000000000000, 5.000000000000000, 0.000000000000000)))
 
 
-@MINI_TEST("NurbsSurface", "create_operations")
-def test_create_operations():
+@MINI_TEST("NurbsSurface", "Booleans Queries")
+def test_booleans_queries():
+    from session_py import NurbsSurface
+    from session_py import Plane
+    from session_py import Primitives
+
+    s = Primitives.sphere_surface(0, 0, 0, 5.0)
+
+    # Validity surface and knots
+    is_valid = s.is_valid()
+    are_knots_valid = s.is_valid_knot_vector(0) and s.is_valid_knot_vector(1)
+
+    # Are control points weights enabled?
+    is_rational = s.is_rational()
+
+    # Sphere has one seam that is closed, but two poles
+    is_closed = s.is_closed(0) == True and s.is_closed(1) == False
+
+    # sphere cannot be truly periodic because it has poles
+    is_periodic = s.is_periodic(0) and s.is_periodic(1)
+
+    # Planarity
+    plane = Plane.xy_plane()
+    is_planar = s.is_planar(plane)
+
+    # Surface is collapsed to a point
+    is_point = s.is_singular(0) and s.is_singular(1) and s.is_singular(2) and s.is_singular(3)
+
+    # Most surfaces are clamped except periodic surfaces
+    is_clamped = s.is_clamped(0, 2) and s.is_clamped(1, 2)
+
+    MINI_CHECK(is_valid)
+    MINI_CHECK(are_knots_valid)
+    MINI_CHECK(is_rational)
+    MINI_CHECK(is_closed)
+    MINI_CHECK(not is_periodic)
+    MINI_CHECK(not is_planar)
+    MINI_CHECK(not is_point)
+    MINI_CHECK(is_clamped)
+
+
+@MINI_TEST("NurbsSurface", "Accessors")
+def test_accessors():
     from session_py import NurbsSurface
     from session_py import Point
 
-    # Create a simple 2x2 bilinear surface
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    # Set corner control points
-    surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
-    surf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
-    surf.set_cv(0, 1, Point(0.0, 1.0, 0.0))
-    surf.set_cv(1, 1, Point(1.0, 1.0, 0.0))
-
-    # Check knot vectors
-    u0, u1 = surf.domain(0)
-    v0, v1 = surf.domain(1)
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(u0 == 0.0)
-    MINI_CHECK(v0 == 0.0)
-
-
-@MINI_TEST("NurbsSurface", "accessors")
-def test_accessors():
-    from session_py import NurbsSurface
-
-    surf = NurbsSurface.create_raw(3, False, 4, 3, 5, 4, False, False, 1.0, 1.0)
+    points = [Point(float(i), float(j), 0.0) for i in range(5) for j in range(4)]
+    surf = NurbsSurface.create(False, False, 3, 2, 5, 4, points)
 
     # Test knot access
     knot_val = surf.knot(0, 2)
@@ -155,11 +175,13 @@ def test_accessors():
     MINI_CHECK(new_val == 5.0)
 
 
-@MINI_TEST("NurbsSurface", "knot_operations")
+@MINI_TEST("NurbsSurface", "Knot_operations")
 def test_knot_operations():
     from session_py import NurbsSurface
+    from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 4, 4, 4, 4, False, False, 1.0, 1.0)
+    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(4)]
+    surf = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
     # Verify domain
     u0, u1 = surf.domain(0)
@@ -173,13 +195,14 @@ def test_knot_operations():
     MINI_CHECK(surf.is_clamped(1, 0))
 
 
-@MINI_TEST("NurbsSurface", "rational_operations")
+@MINI_TEST("NurbsSurface", "Rational_operations")
 def test_rational_operations():
     from session_py import NurbsSurface
     from session_py import Point
 
-    # Create non-rational surface
-    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
+    # Create non-rational surface, then make rational
+    points = [Point(0.0, 0.0, 0.0)] * 9
+    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
 
     # Make it rational
     surf.make_rational()
@@ -196,19 +219,17 @@ def test_rational_operations():
     MINI_CHECK(w == 2.0)
 
 
-@MINI_TEST("NurbsSurface", "evaluation")
+@MINI_TEST("NurbsSurface", "Evaluation")
 def test_evaluation():
     from session_py import NurbsSurface
     from session_py import Point
 
     # Create simple bilinear surface
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    # Set corner control points
-    surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
-    surf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
-    surf.set_cv(0, 1, Point(0.0, 1.0, 0.0))
-    surf.set_cv(1, 1, Point(1.0, 1.0, 0.0))
+    points = [
+        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
+        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
     # Evaluate at corner
     u0, u1 = surf.domain(0)
@@ -237,18 +258,17 @@ def test_evaluation():
     MINI_CHECK(TOLERANCE.is_close(abs(normal[2]), 1.0))
 
 
-@MINI_TEST("NurbsSurface", "geometric_queries")
+@MINI_TEST("NurbsSurface", "Geometric_queries")
 def test_geometric_queries():
     from session_py import NurbsSurface
     from session_py import Point
 
     # Create and setup surface
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
-    surf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
-    surf.set_cv(0, 1, Point(0.0, 1.0, 0.0))
-    surf.set_cv(1, 1, Point(1.0, 1.0, 0.0))
+    points = [
+        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
+        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
     MINI_CHECK(surf.is_valid())
     MINI_CHECK(not surf.is_closed(0))
@@ -260,18 +280,17 @@ def test_geometric_queries():
     MINI_CHECK(surf.is_planar(None, 1e-6))
 
 
-@MINI_TEST("NurbsSurface", "modification")
+@MINI_TEST("NurbsSurface", "Modification")
 def test_modification():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 3, 2, False, False, 1.0, 1.0)
-
-    # Set some CVs
-    surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
-    surf.set_cv(2, 0, Point(2.0, 0.0, 0.0))
-    surf.set_cv(0, 1, Point(0.0, 1.0, 0.0))
-    surf.set_cv(2, 1, Point(2.0, 1.0, 0.0))
+    points = [
+        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 0.0), Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0), Point(2.0, 1.0, 0.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 3, 2, points)
 
     cv_before = surf.get_cv(0, 0)
 
@@ -292,18 +311,14 @@ def test_modification():
     MINI_CHECK(surf.order(1) == order_u_before)
 
 
-@MINI_TEST("NurbsSurface", "isocurve")
+@MINI_TEST("NurbsSurface", "Isocurve")
 def test_isocurve():
     from session_py import NurbsSurface
     from session_py import Point
 
     # Create surface
-    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
-
-    # Set up a grid of control points
-    for i in range(3):
-        for j in range(3):
-            surf.set_cv(i, j, Point(float(i), float(j), 0.0))
+    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
+    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
 
     # Extract iso-u curve (v varies)
     u0, u1 = surf.domain(0)
@@ -322,19 +337,18 @@ def test_isocurve():
     MINI_CHECK(iso_v.is_valid())
 
 
-@MINI_TEST("NurbsSurface", "transformation")
+@MINI_TEST("NurbsSurface", "Transformation")
 def test_transformation():
     from session_py import NurbsSurface
     from session_py import Point
     from session_py import Xform
 
     # Create simple surface
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
-    surf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
-    surf.set_cv(0, 1, Point(0.0, 1.0, 0.0))
-    surf.set_cv(1, 1, Point(1.0, 1.0, 0.0))
+    points = [
+        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
+        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
     # Apply translation
     xf = Xform.translation(1.0, 2.0, 3.0)
@@ -348,23 +362,20 @@ def test_transformation():
     MINI_CHECK(TOLERANCE.is_close(pt[2], 3.0))
 
 
-@MINI_TEST("NurbsSurface", "json_roundtrip")
+@MINI_TEST("NurbsSurface", "Json_roundtrip")
 def test_json_roundtrip():
     from session_py import NurbsSurface
     from session_py import Point
     from session_py import Color
     from pathlib import Path
 
-    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
+    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
+    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
     surf.facecolors = [Color(255, 128, 64, 255)]
     surf.pointcolors = [Color(0, 255, 0, 255)]
     surf.linecolors = [Color(0, 0, 255, 255)]
-
-    for i in range(3):
-        for j in range(3):
-            surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
     # JSON object
     json_obj = surf.__jsondump__()
@@ -384,23 +395,20 @@ def test_json_roundtrip():
     MINI_CHECK(loaded_from_file == surf)
 
 
-@MINI_TEST("NurbsSurface", "protobuf_roundtrip")
+@MINI_TEST("NurbsSurface", "Protobuf_roundtrip")
 def test_protobuf_roundtrip():
     from session_py import NurbsSurface
     from session_py import Point
     from session_py import Color
     from pathlib import Path
 
-    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
+    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
+    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
     surf.name = "test_nurbssurface"
     surf.width = 2.0
     surf.facecolors = [Color(255, 128, 64, 255)]
     surf.pointcolors = [Color(0, 255, 0, 255)]
     surf.linecolors = [Color(0, 0, 255, 255)]
-
-    for i in range(3):
-        for j in range(3):
-            surf.set_cv(i, j, Point(float(i), float(j), 0.0))
 
     #   pb_dumps()      │ bytes        │ to protobuf bytes
     #   pb_loads(b)     │ bytes        │ from protobuf bytes
@@ -420,13 +428,15 @@ def test_protobuf_roundtrip():
     MINI_CHECK(loaded == surf)
 
 
-@MINI_TEST("NurbsSurface", "advanced_accessors")
+@MINI_TEST("NurbsSurface", "Advanced_accessors")
 def test_advanced_accessors():
     from session_py import NurbsSurface
     from session_py import Point
 
     # Create rational surface for testing get_cv_4d/set_cv_4d
-    surf = NurbsSurface.create_raw(3, True, 3, 3, 3, 3, False, False, 1.0, 1.0)
+    points = [Point(0.0, 0.0, 0.0)] * 9
+    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
+    surf.make_rational()
 
     # Test set_cv_4d with homogeneous coordinates
     x, y, z, w = 2.0, 3.0, 4.0, 2.0
@@ -468,17 +478,13 @@ def test_advanced_accessors():
     MINI_CHECK(first_knot_mult > 0)
 
 
-@MINI_TEST("NurbsSurface", "clamp_operations")
+@MINI_TEST("NurbsSurface", "Clamp_operations")
 def test_clamp_operations():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 4, 4, 4, 4, False, False, 1.0, 1.0)
-
-    # Set up control points
-    for i in range(4):
-        for j in range(4):
-            surf.set_cv(i, j, Point(float(i), float(j), 0.0))
+    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(4)]
+    surf = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
     # Test clamp_end
     was_clamped_before = surf.is_clamped(0, 2)
@@ -489,19 +495,17 @@ def test_clamp_operations():
     MINI_CHECK(is_clamped_after)
 
 
-@MINI_TEST("NurbsSurface", "singularity")
+@MINI_TEST("NurbsSurface", "Singularity")
 def test_singularity():
     from session_py import NurbsSurface
     from session_py import Point
 
-    # Create a simple surface
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    # Set all CVs to different points (non-singular)
-    surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
-    surf.set_cv(1, 0, Point(1.0, 0.0, 0.0))
-    surf.set_cv(0, 1, Point(0.0, 1.0, 0.0))
-    surf.set_cv(1, 1, Point(1.0, 1.0, 0.0))
+    # Create a simple surface with all CVs at different points (non-singular)
+    points = [
+        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
+        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
     # Test is_singular for each side
     is_singular_south = surf.is_singular(0)
@@ -516,17 +520,13 @@ def test_singularity():
     MINI_CHECK(not is_singular_west)
 
 
-@MINI_TEST("NurbsSurface", "bounding_box")
+@MINI_TEST("NurbsSurface", "Bounding_box")
 def test_bounding_box():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 3, 3, False, False, 1.0, 1.0)
-
-    # Set CVs in a known range
-    for i in range(3):
-        for j in range(3):
-            surf.set_cv(i, j, Point(float(i), float(j), 0.0))
+    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
+    surf = NurbsSurface.create(False, False, 1, 1, 3, 3, points)
 
     # Get bounding box
     bbox = surf.get_bounding_box()
@@ -534,11 +534,13 @@ def test_bounding_box():
     MINI_CHECK(surf.is_valid())
 
 
-@MINI_TEST("NurbsSurface", "domain_operations")
+@MINI_TEST("NurbsSurface", "Domain_operations")
 def test_domain_operations():
     from session_py import NurbsSurface
+    from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 3, 3, 3, 3, False, False, 1.0, 1.0)
+    points = [Point(0.0, 0.0, 0.0)] * 9
+    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
 
     # Get initial domain
     dom_u = surf.domain(0)
@@ -565,18 +567,16 @@ def test_domain_operations():
     MINI_CHECK(len(span_v) > 0)
 
 
-@MINI_TEST("NurbsSurface", "corner_points")
+@MINI_TEST("NurbsSurface", "Corner_points")
 def test_corner_points():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    # Set corner control points
-    surf.set_cv(0, 0, Point(0.0, 0.0, 0.0))
-    surf.set_cv(1, 0, Point(10.0, 0.0, 0.0))
-    surf.set_cv(0, 1, Point(0.0, 10.0, 0.0))
-    surf.set_cv(1, 1, Point(10.0, 10.0, 0.0))
+    points = [
+        Point(0.0, 0.0, 0.0), Point(0.0, 10.0, 0.0),
+        Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
     # Get corner points
     p00 = surf.point_at_corner(0, 0)
@@ -590,15 +590,16 @@ def test_corner_points():
     MINI_CHECK(TOLERANCE.is_close(p11[0], 10.0) and TOLERANCE.is_close(p11[1], 10.0))
 
 
-@MINI_TEST("NurbsSurface", "swap_coordinates")
+@MINI_TEST("NurbsSurface", "Swap_coordinates")
 def test_swap_coordinates():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    # Set a control point with distinct coordinates
-    surf.set_cv(0, 0, Point(1.0, 2.0, 3.0))
+    points = [
+        Point(1.0, 2.0, 3.0), Point(0.0, 0.0, 0.0),
+        Point(0.0, 0.0, 0.0), Point(0.0, 0.0, 0.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
     # Swap X and Y
     surf.swap_coordinates(0, 1)
@@ -610,16 +611,16 @@ def test_swap_coordinates():
     MINI_CHECK(TOLERANCE.is_close(pt[2], 3.0))
 
 
-@MINI_TEST("NurbsSurface", "zero_cvs")
+@MINI_TEST("NurbsSurface", "Zero_cvs")
 def test_zero_cvs():
     from session_py import NurbsSurface
     from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-
-    # Set non-zero control points
-    surf.set_cv(0, 0, Point(1.0, 2.0, 3.0))
-    surf.set_cv(1, 1, Point(4.0, 5.0, 6.0))
+    points = [
+        Point(1.0, 2.0, 3.0), Point(0.0, 0.0, 0.0),
+        Point(0.0, 0.0, 0.0), Point(4.0, 5.0, 6.0),
+    ]
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
     # Zero all CVs
     surf.zero_cvs()
@@ -635,11 +636,13 @@ def test_zero_cvs():
                TOLERANCE.is_close(pt1[2], 0.0))
 
 
-@MINI_TEST("NurbsSurface", "get_knots")
+@MINI_TEST("NurbsSurface", "Get_knots")
 def test_get_knots():
     from session_py import NurbsSurface
+    from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 4, 3, 4, 3, False, False, 1.0, 2.0)
+    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(3)]
+    surf = NurbsSurface.create(False, False, 3, 2, 4, 3, points)
 
     knots_u = surf.get_knots(0)
     knots_v = surf.get_knots(1)
@@ -650,18 +653,19 @@ def test_get_knots():
     MINI_CHECK(len(knots_v) > 0)
 
 
-@MINI_TEST("NurbsSurface", "make_non_rational")
+@MINI_TEST("NurbsSurface", "Make_non_rational")
 def test_make_non_rational():
     from session_py import NurbsSurface
     from session_py import Point
 
-    # Create rational surface with all weights = 1
-    surf = NurbsSurface.create_raw(3, True, 3, 3, 3, 3, False, False, 1.0, 1.0)
+    # Create surface, then make rational with all weights = 1
+    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
+    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
+    surf.make_rational()
 
     # Set all weights to 1.0
     for i in range(3):
         for j in range(3):
-            surf.set_cv(i, j, Point(float(i), float(j), 0.0))
             surf.set_weight(i, j, 1.0)
 
     was_rational = surf.is_rational()
@@ -672,7 +676,7 @@ def test_make_non_rational():
     MINI_CHECK(not is_rational_after)
 
 
-@MINI_TEST("NurbsSurface", "create_clamped_uniform")
+@MINI_TEST("NurbsSurface", "Create_clamped_uniform")
 def test_create_clamped_uniform():
     from session_py import NurbsSurface
 
@@ -692,11 +696,13 @@ def test_create_clamped_uniform():
     MINI_CHECK(surf.is_clamped(1, 0) and surf.is_clamped(1, 1))
 
 
-@MINI_TEST("NurbsSurface", "knot_multiplicity")
+@MINI_TEST("NurbsSurface", "Knot_multiplicity")
 def test_knot_multiplicity():
     from session_py import NurbsSurface
+    from session_py import Point
 
-    surf = NurbsSurface.create_raw(3, False, 4, 4, 4, 4, False, False, 1.0, 1.0)
+    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(4)]
+    surf = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
     # Check first knot multiplicity (should be equal to degree for clamped)
     mult_u_start = surf.knot_multiplicity(0, 0)
@@ -714,7 +720,7 @@ def test_knot_multiplicity():
     MINI_CHECK(mult_v_end >= surf.degree(1))
 
 
-@MINI_TEST("NurbsSurface", "sphere")
+@MINI_TEST("NurbsSurface", "Sphere")
 def test_sphere():
     import math
     from session_py import NurbsSurface
@@ -777,7 +783,7 @@ def test_sphere():
     MINI_CHECK(TOLERANCE.is_close(north[2], radius))
 
 
-@MINI_TEST("NurbsSurface", "cylinder")
+@MINI_TEST("NurbsSurface", "Cylinder")
 def test_cylinder():
     import math
     from session_py import NurbsSurface
@@ -843,7 +849,7 @@ def test_cylinder():
     MINI_CHECK(TOLERANCE.is_close(pt_mid[2], height * 0.5))
 
 
-@MINI_TEST("NurbsSurface", "torus")
+@MINI_TEST("NurbsSurface", "Torus")
 def test_torus():
     import math
     from session_py import NurbsSurface
@@ -911,7 +917,7 @@ def test_torus():
     MINI_CHECK(TOLERANCE.is_close(pt_opp[1], 0.0))
 
 
-@MINI_TEST("NurbsSurface", "cone")
+@MINI_TEST("NurbsSurface", "Cone")
 def test_cone():
     import math
     from session_py import NurbsSurface

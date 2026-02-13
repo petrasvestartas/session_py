@@ -5,7 +5,7 @@ from .tolerance import TOLERANCE
 from .tolerance import PI
 
 
-@MINI_TEST("Plane", "constructor")
+@MINI_TEST("Plane", "Constructor")
 def test_plane_constructor():
     from session_py import Plane
     from session_py import Point
@@ -95,7 +95,7 @@ def test_plane_constructor():
     MINI_CHECK(TOLERANCE.is_close(pl_sub.origin[2], -3.0))
 
 
-@MINI_TEST("Plane", "reverse")
+@MINI_TEST("Plane", "Reverse")
 def test_plane_reverse():
     from session_py import Plane
 
@@ -108,7 +108,7 @@ def test_plane_reverse():
     MINI_CHECK(TOLERANCE.is_close(pl.c, -1.0))
 
 
-@MINI_TEST("Plane", "rotate")
+@MINI_TEST("Plane", "Rotate")
 def test_plane_rotate():
     from session_py import Plane
 
@@ -119,7 +119,7 @@ def test_plane_rotate():
     MINI_CHECK(TOLERANCE.is_close(pl.x_axis[1], 1.0))
 
 
-@MINI_TEST("Plane", "is_right_hand")
+@MINI_TEST("Plane", "Is_right_hand")
 def test_plane_is_right_hand():
     from session_py import Plane
 
@@ -150,7 +150,7 @@ def test_plane_is_right_hand():
     MINI_CHECK(rotated_rh == True)
 
 
-@MINI_TEST("Plane", "is_coplanar")
+@MINI_TEST("Plane", "Is_coplanar")
 def test_plane_is_coplanar():
     from session_py import Plane
     from session_py import Vector
@@ -191,7 +191,7 @@ def test_plane_is_coplanar():
     MINI_CHECK(not_coplanar == False)
 
 
-@MINI_TEST("Plane", "transform")
+@MINI_TEST("Plane", "Transform")
 def test_plane_transform():
     from session_py import Plane
     from session_py import Xform
@@ -211,7 +211,7 @@ def test_plane_transform():
     MINI_CHECK(TOLERANCE.is_close(pl2.origin[0], 0.0) and TOLERANCE.is_close(pl2.origin[1], 0.0) and TOLERANCE.is_close(pl2.origin[2], 0.0))
 
 
-@MINI_TEST("Plane", "json_roundtrip")
+@MINI_TEST("Plane", "Json_roundtrip")
 def test_plane_json_roundtrip():
     from session_py import Plane
     from pathlib import Path
@@ -235,7 +235,7 @@ def test_plane_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.d, 0.0))
 
 
-@MINI_TEST("Plane", "protobuf_roundtrip")
+@MINI_TEST("Plane", "Protobuf_roundtrip")
 def test_plane_protobuf_roundtrip():
     from session_py import Plane
     from pathlib import Path

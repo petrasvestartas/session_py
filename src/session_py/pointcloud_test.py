@@ -4,7 +4,7 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("PointCloud", "constructor")
+@MINI_TEST("PointCloud", "Constructor")
 def test_pointcloud_constructor():
     from session_py import PointCloud
     from session_py import Point
@@ -91,7 +91,7 @@ def test_pointcloud_constructor():
     MINI_CHECK(TOLERANCE.is_close(pc4.get_normal(1)[0], 0.0) and TOLERANCE.is_close(pc4.get_normal(1)[1], 0.0) and TOLERANCE.is_close(pc4.get_normal(1)[2], 1.0))
 
 
-@MINI_TEST("PointCloud", "transform")
+@MINI_TEST("PointCloud", "Transform")
 def test_pointcloud_transform():
     from session_py import PointCloud
     from session_py import Point
@@ -112,7 +112,7 @@ def test_pointcloud_transform():
     MINI_CHECK(TOLERANCE.is_close(pc2.get_point(0)[0], 1.0) and TOLERANCE.is_close(pc2.get_point(0)[1], 2.0) and TOLERANCE.is_close(pc2.get_point(0)[2], 3.0))
 
 
-@MINI_TEST("PointCloud", "json_roundtrip")
+@MINI_TEST("PointCloud", "Json_roundtrip")
 def test_pointcloud_json_roundtrip():
     from session_py import PointCloud
     from session_py import Point
@@ -145,7 +145,7 @@ def test_pointcloud_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_normal(0)[2], 1.0))
 
 
-@MINI_TEST("PointCloud", "protobuf_roundtrip")
+@MINI_TEST("PointCloud", "Protobuf_roundtrip")
 def test_pointcloud_protobuf_roundtrip():
     from session_py import PointCloud
     from session_py import Point

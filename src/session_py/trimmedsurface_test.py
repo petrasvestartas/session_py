@@ -5,7 +5,7 @@ from .tolerance import TOLERANCE
 from .tolerance import PI
 
 
-@MINI_TEST("TrimmedSurface", "constructor")
+@MINI_TEST("TrimmedSurface", "Constructor")
 def test_trimmedsurface_constructor():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -45,7 +45,7 @@ def test_trimmedsurface_constructor():
     MINI_CHECK(tscopy == ts)
 
 
-@MINI_TEST("TrimmedSurface", "constructor_planar")
+@MINI_TEST("TrimmedSurface", "Constructor_planar")
 def test_trimmedsurface_constructor_planar():
     from session_py import NurbsCurve
     from session_py import Point
@@ -89,7 +89,7 @@ def test_trimmedsurface_constructor_planar():
     ])
 
 
-@MINI_TEST("TrimmedSurface", "constructor_hole")
+@MINI_TEST("TrimmedSurface", "Constructor_hole")
 def test_trimmedsurface_constructor_hole():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -129,7 +129,7 @@ def test_trimmedsurface_constructor_hole():
     MINI_CHECK(ts.inner_loop_count() == 1)
 
 
-@MINI_TEST("TrimmedSurface", "accessors")
+@MINI_TEST("TrimmedSurface", "Accessors")
 def test_trimmedsurface_accessors():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -163,7 +163,7 @@ def test_trimmedsurface_accessors():
     MINI_CHECK(ts.inner_loop_count() == 0)
 
 
-@MINI_TEST("TrimmedSurface", "add_inner_loop")
+@MINI_TEST("TrimmedSurface", "Add_inner_loop")
 def test_trimmedsurface_add_inner_loop():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -204,7 +204,7 @@ def test_trimmedsurface_add_inner_loop():
     MINI_CHECK(ts.inner_loop_count() == 0)
 
 
-@MINI_TEST("TrimmedSurface", "point_at")
+@MINI_TEST("TrimmedSurface", "Point_at")
 def test_trimmedsurface_point_at():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -237,7 +237,7 @@ def test_trimmedsurface_point_at():
     MINI_CHECK(TOLERANCE.is_close(abs(nm[2]), 1.0))
 
 
-@MINI_TEST("TrimmedSurface", "mesh")
+@MINI_TEST("TrimmedSurface", "Mesh")
 def test_trimmedsurface_mesh():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -263,7 +263,7 @@ def test_trimmedsurface_mesh():
     MINI_CHECK(m.number_of_faces() > 0)
 
 
-@MINI_TEST("TrimmedSurface", "transformation")
+@MINI_TEST("TrimmedSurface", "Transformation")
 def test_trimmedsurface_transformation():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -294,7 +294,7 @@ def test_trimmedsurface_transformation():
     MINI_CHECK(TOLERANCE.is_close(pt[2], 30.0))
 
 
-@MINI_TEST("TrimmedSurface", "json_roundtrip")
+@MINI_TEST("TrimmedSurface", "Json_roundtrip")
 def test_trimmedsurface_json_roundtrip():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -337,7 +337,7 @@ def test_trimmedsurface_json_roundtrip():
     MINI_CHECK(loaded_from_file == ts)
 
 
-@MINI_TEST("TrimmedSurface", "protobuf_roundtrip")
+@MINI_TEST("TrimmedSurface", "Protobuf_roundtrip")
 def test_trimmedsurface_protobuf_roundtrip():
     from session_py import NurbsSurface
     from session_py import NurbsCurve

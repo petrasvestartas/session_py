@@ -3,7 +3,7 @@ from session_py.mini_test import MINI_TEST, MINI_CHECK
 from session_py.tolerance import TOLERANCE
 
 
-@MINI_TEST("NurbsCurve", "constructor")
+@MINI_TEST("NurbsCurve", "Constructor")
 def test_nurbscurve_constructor():
     from session_py import NurbsCurve
     from session_py import Point
@@ -45,7 +45,7 @@ def test_nurbscurve_constructor():
     MINI_CHECK(ccopy.guid != curve.guid)
 
 
-@MINI_TEST("NurbsCurve", "attributes")
+@MINI_TEST("NurbsCurve", "Attributes")
 def test_nurbscurve_attributes():
     from session_py import NurbsCurve
     from session_py import Point
@@ -510,7 +510,7 @@ def test_nurbscurve_modifications():
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at_start(), expected_start))
 
 
-@MINI_TEST("NurbsCurve", "json_roundtrip")
+@MINI_TEST("NurbsCurve", "Json_roundtrip")
 def test_nurbscurve_json_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
@@ -549,7 +549,7 @@ def test_nurbscurve_json_roundtrip():
     MINI_CHECK(loaded_from_file == curve)
 
 
-@MINI_TEST("NurbsCurve", "protobuf_roundtrip")
+@MINI_TEST("NurbsCurve", "Protobuf_roundtrip")
 def test_nurbscurve_protobuf_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
@@ -581,7 +581,7 @@ def test_nurbscurve_protobuf_roundtrip():
     MINI_CHECK(loaded == curve)
 
 
-@MINI_TEST("NurbsCurve", "transformations")
+@MINI_TEST("NurbsCurve", "Transformations")
 def test_nurbscurve_transformations():
     from session_py import NurbsCurve
     from session_py import Point
@@ -624,7 +624,7 @@ def test_nurbscurve_transformations():
     MINI_CHECK(curve4_transformed.cv(0)[2] == 10.0)
 
 
-@MINI_TEST("NurbsCurve", "create_interpolated")
+@MINI_TEST("NurbsCurve", "Create_interpolated")
 def test_nurbscurve_create_interpolated():
     from session_py import NurbsCurve
     from session_py import Point

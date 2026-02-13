@@ -5,7 +5,7 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("Vector", "constructor")
+@MINI_TEST("Vector", "Constructor")
 def test_vector_constructor():
     from session_py import Vector, Point
 
@@ -76,7 +76,7 @@ def test_vector_constructor():
     MINI_CHECK(vzero[0] == 0.0 and vzero[1] == 0.0 and vzero[2] == 0.0)
 
 
-@MINI_TEST("Vector", "magnitude")
+@MINI_TEST("Vector", "Magnitude")
 def test_vector_magnitude():
     from session_py import Vector
 
@@ -88,7 +88,7 @@ def test_vector_magnitude():
     MINI_CHECK(len_squared == 25.0)
 
 
-@MINI_TEST("Vector", "normalize")
+@MINI_TEST("Vector", "Normalize")
 def test_vector_normalize():
     from session_py import Vector
 
@@ -102,7 +102,7 @@ def test_vector_normalize():
     MINI_CHECK(TOLERANCE.is_close(v2.magnitude(), 1.0))
 
 
-@MINI_TEST("Vector", "reverse")
+@MINI_TEST("Vector", "Reverse")
 def test_vector_reverse():
     from session_py import Vector
 
@@ -112,7 +112,7 @@ def test_vector_reverse():
     MINI_CHECK(v[0] == -1.0 and v[1] == 2.0 and v[2] == -3.0)
 
 
-@MINI_TEST("Vector", "dot_product")
+@MINI_TEST("Vector", "Dot_product")
 def test_vector_dot_product():
     from session_py import Vector
 
@@ -142,7 +142,7 @@ def test_vector_dot_product():
     MINI_CHECK(TOLERANCE.is_close(proj_coeff, 1.5))
 
 
-@MINI_TEST("Vector", "cross_product")
+@MINI_TEST("Vector", "Cross_product")
 def test_vector_cross_product():
     from session_py import Vector
 
@@ -161,7 +161,7 @@ def test_vector_cross_product():
     MINI_CHECK(TOLERANCE.is_close(area, 12.0))
 
 
-@MINI_TEST("Vector", "angle")
+@MINI_TEST("Vector", "Angle")
 def test_vector_angle():
     from session_py import Vector
 
@@ -202,7 +202,7 @@ def test_vector_angle():
     MINI_CHECK(TOLERANCE.is_close(pt[1], 45.0))
 
 
-@MINI_TEST("Vector", "projection")
+@MINI_TEST("Vector", "Projection")
 def test_vector_projection():
     from session_py import Vector
 
@@ -221,7 +221,7 @@ def test_vector_projection():
     MINI_CHECK(proj_z[0] == 0.0 and proj_z[1] == 0.0 and proj_z[2] == 1.0)
 
 
-@MINI_TEST("Vector", "is_parallel_to")
+@MINI_TEST("Vector", "Is_parallel_to")
 def test_vector_is_parallel_to():
     from session_py import Vector
 
@@ -236,7 +236,7 @@ def test_vector_is_parallel_to():
     MINI_CHECK(v1.is_parallel_to(v4) == 0)
 
 
-@MINI_TEST("Vector", "is_perpendicular_to")
+@MINI_TEST("Vector", "Is_perpendicular_to")
 def test_vector_is_perpendicular_to():
     from session_py import Vector
 
@@ -264,7 +264,7 @@ def test_vector_is_perpendicular_to():
     MINI_CHECK(perp.is_perpendicular_to(arbitrary))
 
 
-@MINI_TEST("Vector", "get_leveled_vector")
+@MINI_TEST("Vector", "Get_leveled_vector")
 def test_vector_get_leveled_vector():
     from session_py import Vector
 
@@ -276,7 +276,7 @@ def test_vector_get_leveled_vector():
     MINI_CHECK(TOLERANCE.is_close(v_leveled.magnitude(), math.sqrt(3.0)))
 
 
-@MINI_TEST("Vector", "cos_sin_laws")
+@MINI_TEST("Vector", "Cos_sin_laws")
 def test_vector_cos_sin_laws():
     from session_py import Vector
 
@@ -324,7 +324,7 @@ def test_vector_cos_sin_laws():
     MINI_CHECK(TOLERANCE.is_close(computed_side_a, a))
 
 
-@MINI_TEST("Vector", "sum_of_vectors")
+@MINI_TEST("Vector", "Sum_of_vectors")
 def test_vector_sum_of_vectors():
     from session_py import Vector
 
@@ -347,7 +347,7 @@ def test_vector_sum_of_vectors():
     MINI_CHECK(zero[2] == 0.0)
 
 
-@MINI_TEST("Vector", "average")
+@MINI_TEST("Vector", "Average")
 def test_vector_average():
     from session_py import Vector
 
@@ -363,7 +363,7 @@ def test_vector_average():
     MINI_CHECK(avg[2] == 5.0)
 
 
-@MINI_TEST("Vector", "is_zero")
+@MINI_TEST("Vector", "Is_zero")
 def test_vector_is_zero():
     from session_py import Vector
 
@@ -376,7 +376,7 @@ def test_vector_is_zero():
     MINI_CHECK(tiny.is_zero())
 
 
-@MINI_TEST("Vector", "json_roundtrip")
+@MINI_TEST("Vector", "Json_roundtrip")
 def test_vector_json_roundtrip():
     from session_py import Vector
     from pathlib import Path
@@ -402,7 +402,7 @@ def test_vector_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[2], 126.3))
 
 
-@MINI_TEST("Vector", "protobuf_roundtrip")
+@MINI_TEST("Vector", "Protobuf_roundtrip")
 def test_vector_protobuf_roundtrip():
     from session_py import Vector
     from pathlib import Path

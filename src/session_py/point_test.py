@@ -6,7 +6,7 @@ from .tolerance import TOLERANCE
 # /home/petras/code/code_session/uvsession/bin/python -m session_py.point_test
 
 
-@MINI_TEST("Point", "constructor")
+@MINI_TEST("Point", "Constructor")
 def test_point_constructor():
     from session_py import Point
     from session_py import Vector
@@ -80,7 +80,7 @@ def test_point_constructor():
     MINI_CHECK(pdif[0] == 3.0 and pdif[1] == 3.0 and pdif[2] == 3.0)
 
 
-@MINI_TEST("Point", "transformation")
+@MINI_TEST("Point", "Transformation")
 def test_transformation():
     from session_py import Point
     from session_py import Xform
@@ -95,7 +95,7 @@ def test_transformation():
     MINI_CHECK(p.xform == Xform.identity())
 
 
-@MINI_TEST("Point", "json_roundtrip")
+@MINI_TEST("Point", "Json_roundtrip")
 def test_point_json_roundtrip():
     from session_py import Point
     from session_py import Color
@@ -130,7 +130,7 @@ def test_point_json_roundtrip():
     MINI_CHECK(loaded.pointcolor[3] == 255)
 
 
-@MINI_TEST("Point", "protobuf_roundtrip")
+@MINI_TEST("Point", "Protobuf_roundtrip")
 def test_point_protobuf_roundtrip():
     from session_py import Point
     from session_py import Color
@@ -162,7 +162,7 @@ def test_point_protobuf_roundtrip():
     MINI_CHECK(loaded.pointcolor[3] == 255)
 
 
-@MINI_TEST("Point", "is_ccw")
+@MINI_TEST("Point", "Is_ccw")
 def test_is_ccw():
     from session_py import Point
     
@@ -178,7 +178,7 @@ def test_is_ccw():
     MINI_CHECK(not is_clock_wise)
 
 
-@MINI_TEST("Point", "mid_point")
+@MINI_TEST("Point", "Mid_point")
 def test_mid_point():
     from session_py import Point
     
@@ -189,7 +189,7 @@ def test_mid_point():
     MINI_CHECK(mid[0] == 0.5 and mid[1] == 3.5 and mid[2] == 2.0)
 
 
-@MINI_TEST("Point", "distance")
+@MINI_TEST("Point", "Distance")
 def test_distance():
     from session_py import Point
 
@@ -200,7 +200,7 @@ def test_distance():
     MINI_CHECK(TOLERANCE.is_close(d, 3.741657))
 
 
-@MINI_TEST("Point", "squared_distance")
+@MINI_TEST("Point", "Squared_distance")
 def test_squared_distance():
     from session_py import Point
 
@@ -211,7 +211,7 @@ def test_squared_distance():
     MINI_CHECK(TOLERANCE.is_close(d, 14.0))
 
 
-@MINI_TEST("Point", "area")
+@MINI_TEST("Point", "Area")
 def test_area():
     from session_py import Point
     
@@ -224,7 +224,7 @@ def test_area():
     MINI_CHECK(area == 4.0)
 
 
-@MINI_TEST("Point", "centroid_quad")
+@MINI_TEST("Point", "Centroid_quad")
 def test_centroid_quad():
     from session_py import Point
 

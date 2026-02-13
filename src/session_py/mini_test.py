@@ -378,7 +378,7 @@ def run_all(language: str = "python") -> None:
 def MINI_TEST(class_name: str, test_name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:
     """Uppercase alias for :func:`mini_test` for API parity with C++.
 
-    This allows using ``@MINI_TEST("Point", "constructor")`` in Python
+    This allows using ``@MINI_TEST("Point", "Constructor")`` in Python
     test files while reusing the same registration implementation.
     """
 
