@@ -189,6 +189,17 @@ class Mesh:
         """Check if the mesh is empty."""
         return len(self.vertex) == 0
 
+    def is_valid(self) -> bool:
+        if not self.vertex or not self.face:
+            return False
+        for fkey, vkeys in self.face.items():
+            if len(vkeys) < 3:
+                return False
+            for vk in vkeys:
+                if vk not in self.vertex:
+                    return False
+        return True
+
     def euler(self) -> int:
         """Calculate Euler characteristic (V - E + F)."""
         return (

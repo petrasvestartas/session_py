@@ -210,6 +210,62 @@ def test_nurbssurface_attributes():
     MINI_CHECK(s_count_1)
 
 
+@MINI_TEST("NurbsSurface", "Control Vertices Access")
+def test_control_vertices_access():
+    from session_py import NurbsSurface
+    from session_py import Point
+
+    points = [
+        # i=0
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        # i=1
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        # i=2
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        # i=3
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
+
+    s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+    s.make_rational()
+
+    # Raw CV access - cv() returns view of internal storage
+    cv_arr = s.cv(0, 0)
+    MINI_CHECK(cv_arr[2] == 0)
+    cv_arr[2] = 10.0
+    MINI_CHECK(cv_arr[2] == 10)
+
+    # Point and Weight
+    # NOTE
+    # point is (Xw, Yw, Zw, w)
+    # cv pointer is (X, Y, Z)
+    cv = s.get_cv(0, 0)
+    MINI_CHECK(cv == Point(0, 0, 10))
+    ok, x, y, z, w = s.get_cv_4d(0, 0)
+    MINI_CHECK(x == 0 and y == 0 and z == 10 and w == 1)
+
+    s.set_cv(0, 0, Point(0, 0, 5))
+    MINI_CHECK(s.get_cv(0, 0) == Point(0, 0, 5))
+    s.set_cv_4d(0, 0, 0, 0, 4, 0.5)
+    MINI_CHECK(s.get_cv(0, 0) == Point(0, 0, 8) and s.cv(0, 0)[2] == 4 and s.weight(0, 0) == 0.5)
+
+    w = s.weight(0, 0)
+    s.set_weight(0, 0, 1)
+    MINI_CHECK(s.weight(0, 0) == 1)
+
+
 @MINI_TEST("NurbsSurface", "Accessors")
 def test_accessors():
     from session_py import NurbsSurface

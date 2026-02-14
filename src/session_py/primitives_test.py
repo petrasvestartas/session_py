@@ -182,6 +182,71 @@ def test_nurbssurface_cone():
     MINI_CHECK(abs(pmid[2] - 2.5) < 1e-10)
 
 
+@MINI_TEST("Primitives", "Nurbssurface_sphere")
+def test_nurbssurface_sphere():
+    from session_py import Primitives
+
+    s = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
+
+    MINI_CHECK(s.is_valid())
+    MINI_CHECK(s.is_rational())
+    MINI_CHECK(s.cv_count_dir(0) == 9)
+    MINI_CHECK(s.cv_count_dir(1) == 5)
+    MINI_CHECK(s.order(0) == 3)
+    MINI_CHECK(s.order(1) == 3)
+
+    p00 = s.point_at(0.0, 0.0)
+    MINI_CHECK(abs(p00[0] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p00[1] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p00[2] - (-2.0)) < 1e-10)
+
+    p_top = s.point_at(0.0, 2.0)
+    MINI_CHECK(abs(p_top[0] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p_top[1] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p_top[2] - 2.0) < 1e-10)
+
+    p_eq = s.point_at(0.0, 1.0)
+    MINI_CHECK(abs(p_eq[0] - 2.0) < 1e-10)
+    MINI_CHECK(abs(p_eq[1] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p_eq[2] - 0.0) < 1e-10)
+
+    p_eq2 = s.point_at(1.0, 1.0)
+    MINI_CHECK(abs(p_eq2[0] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p_eq2[1] - 2.0) < 1e-10)
+    MINI_CHECK(abs(p_eq2[2] - 0.0) < 1e-10)
+
+
+@MINI_TEST("Primitives", "Nurbssurface_quad_sphere")
+def test_nurbssurface_quad_sphere():
+    from session_py import Primitives
+    import math
+
+    R = 5.0
+    faces = Primitives.quad_sphere(0.0, 0.0, 0.0, R)
+
+    MINI_CHECK(len(faces) == 6)
+    for f in range(6):
+        MINI_CHECK(faces[f].is_valid())
+        MINI_CHECK(faces[f].is_rational())
+        MINI_CHECK(faces[f].order(0) == 3)
+        MINI_CHECK(faces[f].order(1) == 3)
+        MINI_CHECK(faces[f].cv_count_dir(0) == 3)
+        MINI_CHECK(faces[f].cv_count_dir(1) == 3)
+
+    max_err = 0.0
+    for f in range(6):
+        for i in range(5):
+            u = i / 4.0
+            for j in range(5):
+                v = j / 4.0
+                p = faces[f].point_at(u, v)
+                dist = math.sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2])
+                err = abs(dist - R)
+                if err > max_err:
+                    max_err = err
+    MINI_CHECK(max_err < 0.02 * R)
+
+
 @MINI_TEST("Primitives", "Nurbssurface_torus")
 def test_nurbssurface_torus():
     from session_py import Primitives
@@ -358,7 +423,7 @@ def test_nurbssurface_planar():
     m_nurbs = s_nurbs.mesh()
 
     MINI_CHECK(s_quad.is_valid())
-    MINI_CHECK(s_quad.is_planar(1e-6))
+    MINI_CHECK(s_quad.is_planar())
     MINI_CHECK(s_quad.cv_count_dir(0) == 2)
     MINI_CHECK(s_quad.cv_count_dir(1) == 2)
     MINI_CHECK(m_quad.number_of_vertices() == 4)
@@ -369,7 +434,7 @@ def test_nurbssurface_planar():
     MINI_CHECK(TOLERANCE.is_point_close(s_quad.get_cv(1, 1), Point(4.0, 2.294526561853465, 1.932653061713073)))
 
     MINI_CHECK(s_triangle.is_valid())
-    MINI_CHECK(s_triangle.is_planar(1e-6))
+    MINI_CHECK(s_triangle.is_planar())
     MINI_CHECK(s_triangle.cv_count_dir(0) == 2)
     MINI_CHECK(s_triangle.cv_count_dir(1) == 2)
     MINI_CHECK(m_triangle.number_of_vertices() == 3)
@@ -380,7 +445,7 @@ def test_nurbssurface_planar():
     MINI_CHECK(TOLERANCE.is_point_close(s_triangle.get_cv(1, 1), Point(9.147039972144913, 3.0, 1.638383136601997)))
 
     MINI_CHECK(s_polygon.is_valid())
-    MINI_CHECK(s_polygon.is_planar(1e-6))
+    MINI_CHECK(s_polygon.is_planar())
     MINI_CHECK(s_polygon.cv_count_dir(0) == 2)
     MINI_CHECK(s_polygon.cv_count_dir(1) == 2)
     MINI_CHECK(m_polygon.number_of_vertices() == 4)
@@ -391,7 +456,7 @@ def test_nurbssurface_planar():
     MINI_CHECK(TOLERANCE.is_point_close(s_polygon.get_cv(1, 1), Point(18.488826292121008, -1.262183694895731, 0.0)))
 
     MINI_CHECK(s_nurbs.is_valid())
-    MINI_CHECK(s_nurbs.is_planar(1e-6))
+    MINI_CHECK(s_nurbs.is_planar())
     MINI_CHECK(s_nurbs.cv_count_dir(0) == 2)
     MINI_CHECK(s_nurbs.cv_count_dir(1) == 2)
     MINI_CHECK(m_nurbs.number_of_vertices() == 4)
@@ -747,42 +812,6 @@ def test_nurbssurface_edge():
     MINI_CHECK(TOLERANCE.is_point_close(surf.get_cv(2, 3), Point(10.0, 27.569076, 0.0)))
 
 
-@MINI_TEST("Primitives", "Nurbssurface_schwarz_p")
-def test_nurbssurface_schwarz_p():
-    from session_py import Primitives
-    from session_py import Point
-
-    S = 10.0
-    patches = Primitives.schwarz_p(0.0, 0.0, 0.0, S)
-
-    MINI_CHECK(len(patches) == 48)
-    for f in range(48):
-        MINI_CHECK(patches[f].is_valid())
-        MINI_CHECK(patches[f].is_rational() == False)
-        MINI_CHECK(patches[f].degree(0) == 2)
-        MINI_CHECK(patches[f].degree(1) == 2)
-        MINI_CHECK(patches[f].cv_count(0) == 3)
-        MINI_CHECK(patches[f].cv_count(1) == 3)
-
-    PI2 = 2.0 * PI
-    max_err = 0.0
-    for f in range(48):
-        for i in range(5):
-            u = i / 4.0
-            for j in range(5):
-                v = j / 4.0
-                p = patches[f].point_at(u, v)
-                val = math.cos(PI2 * p[0] / S) + math.cos(PI2 * p[1] / S) + math.cos(PI2 * p[2] / S)
-                err = abs(val)
-                if err > max_err:
-                    max_err = err
-    MINI_CHECK(max_err < 0.15)
-
-    mid = patches[0].point_at(0.5, 0.5)
-    mid_val = math.cos(PI2 * mid[0] / S) + math.cos(PI2 * mid[1] / S) + math.cos(PI2 * mid[2] / S)
-    MINI_CHECK(abs(mid_val) < 0.15)
-
-
 ###########################################################################################
 # Surface-to-mesh subdivision
 ###########################################################################################
@@ -791,44 +820,74 @@ def test_nurbssurface_schwarz_p():
 def test_mesh_quad_mesh():
     from session_py import Primitives
 
-    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
-    m = Primitives.quad_mesh(srf, 8, 4)
-
-    MINI_CHECK(m.number_of_vertices() == 45)
+    cyl = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
+    m = Primitives.quad_mesh(cyl, 8, 4)
+    MINI_CHECK(m.number_of_vertices() == 40)
     MINI_CHECK(m.number_of_faces() == 32)
+    MINI_CHECK(m.is_valid())
+
+    sph = Primitives.sphere_surface(0, 0, 0, 3.0)
+    m2 = Primitives.quad_mesh(sph, 8, 4)
+    MINI_CHECK(m2.number_of_vertices() == 26)
+    MINI_CHECK(m2.number_of_faces() == 32)
+    MINI_CHECK(m2.is_valid())
 
 
 @MINI_TEST("Primitives", "Mesh_diamond_mesh")
 def test_mesh_diamond_mesh():
     from session_py import Primitives
 
-    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
-    m = Primitives.diamond_mesh(srf, 8, 4)
+    cyl = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
+    m = Primitives.diamond_mesh(cyl, 8, 4)
+    MINI_CHECK(m.number_of_vertices() == 40)
+    MINI_CHECK(m.number_of_faces() == 20)
+    MINI_CHECK(m.is_valid())
 
-    MINI_CHECK(m.number_of_vertices() == 45)
-    MINI_CHECK(m.number_of_faces() == 23)
+    sph = Primitives.sphere_surface(0, 0, 0, 3.0)
+    m2 = Primitives.diamond_mesh(sph, 8, 4)
+    MINI_CHECK(m2.number_of_vertices() == 26)
+    MINI_CHECK(m2.number_of_faces() == 12)
+    MINI_CHECK(m2.is_valid())
 
 
 @MINI_TEST("Primitives", "Mesh_hex_mesh")
 def test_mesh_hex_mesh():
     from session_py import Primitives
 
-    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
-    m = Primitives.hex_mesh(srf, 6, 4, 1.0/3.0)
+    cyl = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
+    m = Primitives.hex_mesh(cyl, 6, 4, 1.0/3.0)
+    MINI_CHECK(m.number_of_vertices() == 78)
+    MINI_CHECK(m.number_of_faces() == 15)
+    MINI_CHECK(m.is_valid())
 
-    MINI_CHECK(m.number_of_vertices() == 91)
-    MINI_CHECK(m.number_of_faces() == 32)
+    sph = Primitives.sphere_surface(0, 0, 0, 3.0)
+    m2 = Primitives.hex_mesh(sph, 6, 4, 1.0/3.0)
+    MINI_CHECK(m2.number_of_vertices() == 68)
+    MINI_CHECK(m2.number_of_faces() == 15)
+    MINI_CHECK(m2.is_valid())
 
 
-@MINI_TEST("Primitives", "Mesh_hex_mesh2")
-def test_mesh_hex_mesh2():
+
+@MINI_TEST("Primitives", "Mesh_cone_subdivisions")
+def test_mesh_cone_subdivisions():
     from session_py import Primitives
 
-    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
-    m = Primitives.hex_mesh2(srf, 6, 4, 2.0/3.0)
+    cone = Primitives.cone_surface(0, 0, 0, 3.0, 5.0)
 
-    MINI_CHECK(m.number_of_vertices() == 91)
-    MINI_CHECK(m.number_of_faces() == 54)
+    m1 = Primitives.quad_mesh(cone, 8, 4)
+    MINI_CHECK(m1.number_of_vertices() == 33)
+    MINI_CHECK(m1.number_of_faces() == 32)
+    MINI_CHECK(m1.is_valid())
+
+    m2 = Primitives.diamond_mesh(cone, 8, 4)
+    MINI_CHECK(m2.number_of_vertices() == 33)
+    MINI_CHECK(m2.number_of_faces() == 16)
+    MINI_CHECK(m2.is_valid())
+
+    m3 = Primitives.hex_mesh(cone, 6, 4, 1.0/3.0)
+    MINI_CHECK(m3.number_of_vertices() == 73)
+    MINI_CHECK(m3.number_of_faces() == 15)
+    MINI_CHECK(m3.is_valid())
 
 
 @MINI_TEST("Primitives", "Nurbscurve_interpolated")

@@ -396,24 +396,37 @@ class NurbsSurface:
         bool
             True if surface is planar, False otherwise.
         """
-        # Simple implementation: check if all CVs are coplanar
         if self.m_cv_count[0] < 2 or self.m_cv_count[1] < 2:
             return False
 
-        # Get three non-collinear points
         p0 = self.get_cv(0, 0)
-        p1 = self.get_cv(self.m_cv_count[0] - 1, 0)
-        p2 = self.get_cv(0, self.m_cv_count[1] - 1)
+        normal = Vector(0, 0, 0)
+        n_len = 0.0
+        found = False
+        for i in range(self.m_cv_count[0]):
+            if found:
+                break
+            for j in range(self.m_cv_count[1]):
+                if found:
+                    break
+                for ii in range(i, self.m_cv_count[0]):
+                    if found:
+                        break
+                    jj_start = j + 1 if ii == i else 0
+                    for jj in range(jj_start, self.m_cv_count[1]):
+                        pa = self.get_cv(i, j)
+                        pb = self.get_cv(ii, jj)
+                        va = Vector(pa.x - p0.x, pa.y - p0.y, pa.z - p0.z)
+                        vb = Vector(pb.x - p0.x, pb.y - p0.y, pb.z - p0.z)
+                        normal = va.cross(vb)
+                        n_len = normal.magnitude()
+                        if n_len >= 1e-14:
+                            found = True
+                            break
+        if n_len < 1e-14:
+            return True
 
-        # Create plane from these points
-        v1 = Vector(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z)
-        v2 = Vector(p2.x - p0.x, p2.y - p0.y, p2.z - p0.z)
-        normal = v1.cross(v2)
-
-        if normal.magnitude() < 1e-14:
-            return False
-
-        normal = normal / normal.magnitude()
+        normal = normal / n_len
         test_plane = Plane(p0, normal)
 
         # Check all CVs against plane

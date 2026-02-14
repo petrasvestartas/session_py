@@ -501,64 +501,43 @@ class Primitives:
         return srf
 
     @staticmethod
-    def schwarz_p(cx, cy, cz, size):
-        half = size / 2.0
-        PI = math.pi
+    def quad_sphere(cx, cy, cz, radius):
+        R = radius
+        a = R / math.sqrt(3.0)
+        e = R * math.sqrt(3.0) / 2.0
+        wk = math.sqrt(2.0 / 3.0)
+        wc = (-72.0 - 32.0*math.sqrt(6.0) + 48.0*math.sqrt(3.0) + 56.0*math.sqrt(2.0)) \
+           / (48.0*(1.0 + math.sqrt(2.0/3.0) - 1.0/math.sqrt(3.0) - 1.0/math.sqrt(2.0)))
+        K = R * (1.0 - 1.0/math.sqrt(3.0) + 2.0*math.sqrt(2.0/3.0) - math.sqrt(2.0))
+        h = R + K / wc
 
-        # Sample 3x3 grid on level set cos(pi*x)+cos(pi*y)+cos(pi*z)=0
-        # Fundamental patch in region 0<=y<=x<=z<=1 (1/48 of cube)
-        # Parametrization: y=u*x, z=1-v*(1-x), solve for x via Newton
-        pts = [[None]*3 for _ in range(3)]
-        for iv in range(3):
-            v = iv * 0.5
-            xp = 0.5
-            for iu in range(3):
-                u = iu * 0.5
-                x = xp
-                for _ in range(50):
-                    f = math.cos(PI*x) + math.cos(PI*u*x) - math.cos(PI*v*(1.0-x))
-                    fp = -PI*math.sin(PI*x) - PI*u*math.sin(PI*u*x) - PI*v*math.sin(PI*v*(1.0-x))
-                    if abs(fp) < 1e-14:
-                        break
-                    dx = f / fp
-                    x -= dx
-                    x = max(0.01, min(0.99, x))
-                    if abs(dx) < 1e-12:
-                        break
-                xp = x
-                pts[iu][iv] = (x * half, u * x * half, (1.0 - v * (1.0 - x)) * half)
+        zf = [
+            [(-a,-a, a, 1), (-e, 0, e, wk), (-a, a, a, 1)],
+            [( 0,-e, e, wk),( 0, 0, h, wc), ( 0, e, e, wk)],
+            [( a,-a, a, 1), ( e, 0, e, wk), ( a, a, a, 1)]
+        ]
 
-        # Degree-2 interpolation: compute CVs from M_inv = [[1,0,0],[-0.5,2,-0.5],[0,0,1]]
-        mi = [[1.0, 0.0, 0.0], [-0.5, 2.0, -0.5], [0.0, 0.0, 1.0]]
-        cvs = []
-        for iu in range(3):
-            for iv in range(3):
-                px, py, pz = 0.0, 0.0, 0.0
-                for k in range(3):
-                    for l in range(3):
-                        w = mi[iu][k] * mi[iv][l]
-                        if abs(w) > 1e-15:
-                            px += w * pts[k][l][0]
-                            py += w * pts[k][l][1]
-                            pz += w * pts[k][l][2]
-                cvs.append(Point(px, py, pz))
+        rot = [
+            [[ 1, 0, 0],[ 0, 1, 0],[ 0, 0, 1]],
+            [[ 1, 0, 0],[ 0,-1, 0],[ 0, 0,-1]],
+            [[ 0, 0, 1],[ 0, 1, 0],[-1, 0, 0]],
+            [[ 0, 0,-1],[ 0, 1, 0],[ 1, 0, 0]],
+            [[ 1, 0, 0],[ 0, 0, 1],[ 0,-1, 0]],
+            [[ 1, 0, 0],[ 0, 0,-1],[ 0, 1, 0]]
+        ]
 
-        base = NurbsSurface.create(False, False, 2, 2, 3, 3, cvs)
-
-        perms = [(0,1,2),(0,2,1),(1,0,2),(1,2,0),(2,0,1),(2,1,0)]
-        patches = []
-        for perm in perms:
-            for s0 in [1, -1]:
-                for s1 in [1, -1]:
-                    for s2 in [1, -1]:
-                        srf = base.duplicate()
-                        for i in range(3):
-                            for j in range(3):
-                                p = srf.get_cv(i, j)
-                                c = [p[0], p[1], p[2]]
-                                srf.set_cv(i, j, Point(cx + s0*c[perm[0]], cy + s1*c[perm[1]], cz + s2*c[perm[2]]))
-                        patches.append(srf)
-        return patches
+        faces = []
+        for f in range(6):
+            srf = NurbsSurface.create_raw(3, True, 3, 3, 3, 3)
+            for i in range(3):
+                for j in range(3):
+                    p = zf[i][j]
+                    rx = rot[f][0][0]*p[0] + rot[f][0][1]*p[1] + rot[f][0][2]*p[2] + cx
+                    ry = rot[f][1][0]*p[0] + rot[f][1][1]*p[1] + rot[f][1][2]*p[2] + cy
+                    rz = rot[f][2][0]*p[0] + rot[f][2][1]*p[1] + rot[f][2][2]*p[2] + cz
+                    srf.set_cv_4d(i, j, rx*p[3], ry*p[3], rz*p[3], p[3])
+            faces.append(srf)
+        return faces
 
     @staticmethod
     def create_ruled(curveA, curveB):
@@ -1446,16 +1425,34 @@ class Primitives:
         du = surface.domain(0)
         dv = surface.domain(1)
         nu, nv = u_count + 1, v_count + 1
+        closed_u = surface.is_closed(0)
+        singular_south = surface.is_singular(0)
+        singular_north = surface.is_singular(2)
 
         vkeys = [[0]*nv for _ in range(nu)]
         for i in range(nu):
             u = du[0] + (du[1] - du[0]) * i / u_count
             for j in range(nv):
+                if closed_u and i == u_count:
+                    vkeys[i][j] = vkeys[0][j]; continue
+                if singular_south and j == 0 and i > 0:
+                    vkeys[i][j] = vkeys[0][0]; continue
+                if singular_north and j == v_count and i > 0:
+                    vkeys[i][j] = vkeys[0][v_count]; continue
                 v = dv[0] + (dv[1] - dv[0]) * j / v_count
                 vkeys[i][j] = mesh.add_vertex(surface.point_at(u, v))
 
+        if singular_south:
+            for i in range(u_count):
+                mesh.add_face([vkeys[0][0], vkeys[i+1][1], vkeys[i][1]])
+        if singular_north:
+            for i in range(u_count):
+                mesh.add_face([vkeys[0][v_count], vkeys[i][v_count-1], vkeys[i+1][v_count-1]])
+
+        j0 = 1 if singular_south else 0
+        j1 = v_count - 1 if singular_north else v_count
         for i in range(u_count):
-            for j in range(v_count):
+            for j in range(j0, j1):
                 mesh.add_face([vkeys[i][j], vkeys[i+1][j], vkeys[i+1][j+1], vkeys[i][j+1]])
         return mesh
 
@@ -1467,20 +1464,31 @@ class Primitives:
         su = (du[1] - du[0]) / u_count
         sv = (dv[1] - dv[0]) / v_count
         nu, nv = u_count + 1, v_count + 1
+        closed_u = surface.is_closed(0)
+        singular_south = surface.is_singular(0)
+        singular_north = surface.is_singular(2)
 
         grid = [[0]*nv for _ in range(nu)]
         for i in range(nu):
             u = du[0] + su * i
             for j in range(nv):
+                if closed_u and i == u_count:
+                    grid[i][j] = grid[0][j]; continue
+                if singular_south and j == 0 and i > 0:
+                    grid[i][j] = grid[0][0]; continue
+                if singular_north and j == v_count and i > 0:
+                    grid[i][j] = grid[0][v_count]; continue
                 v = dv[0] + sv * j
                 grid[i][j] = mesh.add_vertex(surface.point_at(u, v))
 
-        for i in range(nu):
+        u_end = u_count - 1 if closed_u else u_count
+        for i in range(u_end + 1):
             for j in range(nv):
                 if (i + j) % 2 != 0:
                     continue
                 center = grid[i][j]
-                left   = grid[i-1][j] if i > 0 else center
+                il = i - 1 if i > 0 else (u_count - 1 if closed_u else -1)
+                left   = grid[il][j] if il >= 0 else center
                 bottom = grid[i][j-1] if j > 0 else center
                 right  = grid[i+1][j] if i < u_count else center
                 top    = grid[i][j+1] if j < v_count else center
@@ -1502,10 +1510,20 @@ class Primitives:
         sv = (dv[1] - dv[0]) / v_count
 
         nu, nv = u_count + 1, v_count + 1
+        closed_u = surface.is_closed(0)
+        singular_south = surface.is_singular(0)
+        singular_north = surface.is_singular(2)
+
         grid = [[0]*nv for _ in range(nu)]
         for i in range(nu):
             u = du[0] + su * i
             for j in range(nv):
+                if closed_u and i == u_count:
+                    grid[i][j] = grid[0][j]; continue
+                if singular_south and j == 0 and i > 0:
+                    grid[i][j] = grid[0][0]; continue
+                if singular_north and j == v_count and i > 0:
+                    grid[i][j] = grid[0][v_count]; continue
                 v = dv[0] + sv * j
                 grid[i][j] = mesh.add_vertex(surface.point_at(u, v))
 
@@ -1513,6 +1531,8 @@ class Primitives:
         for i in range(nu):
             u = du[0] + su * i
             for j in range(v_count):
+                if closed_u and i == u_count:
+                    mid_a[i][j] = mid_a[0][j]; continue
                 v = dv[0] + sv * (j + t)
                 mid_a[i][j] = mesh.add_vertex(surface.point_at(u, v))
 
@@ -1520,6 +1540,8 @@ class Primitives:
         for i in range(nu):
             u = du[0] + su * i
             for j in range(v_count):
+                if closed_u and i == u_count:
+                    mid_b[i][j] = mid_b[0][j]; continue
                 v = dv[0] + sv * (j + (1.0 - t))
                 mid_b[i][j] = mesh.add_vertex(surface.point_at(u, v))
 
@@ -1531,66 +1553,22 @@ class Primitives:
                     r.append(v[k])
             return r
 
-        for i in range(nu):
+        u_end = u_count - 1 if closed_u else u_count
+        for i in range(u_end + 1):
             for j in range(nv):
                 if (i + j) % 2 != 0:
                     continue
                 center = grid[i][j]
-                ul = mid_a[i-1][j]   if (i > 0 and j < v_count)          else (grid[i-1][j] if i > 0 else center)
-                ll = mid_b[i-1][j-1] if (i > 0 and j > 0)                else (grid[i-1][j] if i > 0 else center)
-                bt = mid_a[i][j-1]   if j > 0                            else center
+                il = i - 1 if i > 0 else (u_count - 1 if closed_u else -1)
+                ul = mid_a[il][j]   if (il >= 0 and j < v_count)         else (grid[il][j] if il >= 0 else center)
+                ll = mid_b[il][j-1] if (il >= 0 and j > 0)               else (grid[il][j] if il >= 0 else center)
+                bt = mid_a[i][j-1]  if j > 0                             else center
                 lr = mid_b[i+1][j-1] if (i < u_count and j > 0)          else (grid[i+1][j] if i < u_count else center)
                 ur = mid_a[i+1][j]   if (i < u_count and j < v_count)    else (grid[i+1][j] if i < u_count else center)
                 tp = mid_b[i][j]     if j < v_count                      else center
 
-                lq = dedup_face([bt, ll, ul, tp])
-                if len(lq) >= 3:
-                    mesh.add_face(lq)
-                rq = dedup_face([ur, lr, bt, tp])
-                if len(rq) >= 3:
-                    mesh.add_face(rq)
+                face = dedup_face([ul, ll, bt, lr, ur, tp])
+                if len(face) >= 3:
+                    mesh.add_face(face)
         return mesh
 
-    @staticmethod
-    def hex_mesh2(surface, u_count, v_count, t=2.0/3.0):
-        mesh = Mesh()
-        du = surface.domain(0)
-        dv = surface.domain(1)
-        su = (du[1] - du[0]) / u_count
-        sv = (dv[1] - dv[0]) / v_count
-
-        nu, nv = u_count + 1, v_count + 1
-        grid = [[0]*nv for _ in range(nu)]
-        for i in range(nu):
-            u = du[0] + su * i
-            for j in range(nv):
-                v = dv[0] + sv * j
-                grid[i][j] = mesh.add_vertex(surface.point_at(u, v))
-
-        h_pts = [[[0, 0] for _ in range(v_count)] for _ in range(nu)]
-        for i in range(nu):
-            u = du[0] + su * i
-            for j in range(v_count):
-                v0 = dv[0] + sv * j
-                v1 = dv[0] + sv * (j + 1)
-                va = v0 + (v1 - v0) * (1.0 - t) * 0.5
-                vb = v0 + (v1 - v0) * (1.0 + t) * 0.5
-                h_pts[i][j][0] = mesh.add_vertex(surface.point_at(u, va))
-                h_pts[i][j][1] = mesh.add_vertex(surface.point_at(u, vb))
-
-        for i in range(u_count):
-            for j in range(v_count):
-                mesh.add_face([
-                    h_pts[i][j][0], h_pts[i][j][1],
-                    h_pts[i+1][j][1], h_pts[i+1][j][0]
-                ])
-
-        for i in range(u_count):
-            for j in range(v_count):
-                if j == 0:
-                    mesh.add_face([grid[i][0], h_pts[i][0][0], h_pts[i+1][0][0], grid[i+1][0]])
-                else:
-                    mesh.add_face([h_pts[i][j-1][1], h_pts[i][j][0], h_pts[i+1][j][0], h_pts[i+1][j-1][1]])
-            jj = v_count - 1
-            mesh.add_face([h_pts[i][jj][1], grid[i][nv-1], grid[i+1][nv-1], h_pts[i+1][jj][1]])
-        return mesh
