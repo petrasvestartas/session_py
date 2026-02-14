@@ -143,6 +143,73 @@ def test_booleans_queries():
     MINI_CHECK(is_clamped)
 
 
+@MINI_TEST("NurbsSurface", "Attributes")
+def test_nurbssurface_attributes():
+    from session_py import NurbsSurface
+    from session_py import Point
+
+    points = [
+        # i=0
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        # i=1
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        # i=2
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        # i=3
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
+
+    s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+
+    # Check the dimentions of a surface
+    # Mostly 3d
+    # But 2d can be used for: scalar field over parameter space e.g. czrvatzre map, distance field
+    # Planar geometry: texture coordinates
+    dimensions = s.dimension()
+
+    # Degree types 1 - linear, 2 - quadratic, 3 - cubic
+    order_u = s.order(0)
+    order_v = s.order(1)
+
+    # Control vertex count
+    cv_count_u = s.cv_count_dir(0)
+    cv_count_v = s.cv_count_dir(1)
+    cv_count = s.cv_count_dir(None)
+    cv_size = s.cv_size()
+
+    # Number of knots
+    k_count_0 = s.knot_count(0)
+    k_count_1 = s.knot_count(1)
+
+    # Span count
+    s_count_0 = s.span_count(0)
+    s_count_1 = s.span_count(1)
+
+    MINI_CHECK(dimensions == 3)
+    MINI_CHECK(order_u == 4)
+    MINI_CHECK(order_v == 4)
+    MINI_CHECK(cv_count_u)
+    MINI_CHECK(cv_count_v)
+    MINI_CHECK(cv_count)
+    MINI_CHECK(cv_size)
+    MINI_CHECK(k_count_0)
+    MINI_CHECK(k_count_1)
+    MINI_CHECK(s_count_0)
+    MINI_CHECK(s_count_1)
+
+
 @MINI_TEST("NurbsSurface", "Accessors")
 def test_accessors():
     from session_py import NurbsSurface

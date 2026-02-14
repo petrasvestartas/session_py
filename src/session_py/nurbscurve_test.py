@@ -61,7 +61,7 @@ def test_nurbscurve_attributes():
     curve = NurbsCurve.create(False, 2, points)
 
     #############################################
-    # Validation
+    # Boolean Queries
     #############################################
 
     # Whole curve
@@ -75,6 +75,48 @@ def test_nurbscurve_attributes():
     is_valid_knot_vector = curve.is_valid_knot_vector()
     MINI_CHECK(is_valid_knot_vector == True)
 
+    # Check if the curve is clamped at start, end, or both
+    is_clamped_start = curve.is_clamped(0)
+    is_clamped_end = curve.is_clamped(1)
+    is_clamped_both = curve.is_clamped(2)
+    MINI_CHECK(is_clamped_start == True and is_clamped_end == True and is_clamped_both == True)
+
+    # Is rational is related to control points having weights
+    # is_rational = false means control points [x, y, z]
+    # is_rational = false means control points [xw, yw, zw]
+    # Rational curves are used to represent:
+    # circles, ellipses, parabolas, hyperbolas exactly
+    is_rational = curve.is_rational()
+    closed = curve.is_closed()
+    periodic = curve.is_periodic()
+    linear = curve.is_linear()
+    planar = curve.is_planar()
+    arc = curve.is_arc()
+    plane = Plane.xy_plane()
+    on_plane = curve.is_in_plane(plane)
+    is_open = curve.is_natural()
+    is_polyline, _, _ = curve.is_polyline()
+    is_singular = curve.is_singular()
+    is_duplicate = curve.is_duplicate(curve, False)
+    is_continuous = curve.is_continuous(1, curve.domain_middle())
+
+    MINI_CHECK(is_rational == False)
+    MINI_CHECK(closed == False)
+    MINI_CHECK(periodic == False)
+    MINI_CHECK(linear == False)
+    MINI_CHECK(planar == True)
+    MINI_CHECK(arc == False)
+    MINI_CHECK(on_plane == True)
+    MINI_CHECK(is_open == False)
+    MINI_CHECK(is_polyline == False)
+    MINI_CHECK(is_singular == False)
+    MINI_CHECK(is_duplicate == True)
+    MINI_CHECK(is_continuous == True)
+
+    #############################################
+    # Knot Operations
+    #############################################
+
     # Insert knot into curve
     # Useful for splitting curves at a parameter
     # Increase local control without changing shape
@@ -82,12 +124,6 @@ def test_nurbscurve_attributes():
     before_pt = copy_curve.point_at(1.5)
     copy_curve.insert_knot(1.5, 1)
     MINI_CHECK(TOLERANCE.is_point_close(before_pt, copy_curve.point_at(1.5)))
-
-    # Check if the curve is clamped at start, end, or both
-    is_clamped_start = curve.is_clamped(0)
-    is_clamped_end = curve.is_clamped(1)
-    is_clamped_both = curve.is_clamped(2)
-    MINI_CHECK(is_clamped_start == True and is_clamped_end == True and is_clamped_both == True)
 
     # Useful for controlling curve by cv on lying on it
     greville0 = curve.greville_abcissa(0)
@@ -240,38 +276,6 @@ def test_nurbscurve_attributes():
 
     found, t_out = curve.get_next_discontinuity(2, curve.domain_start(), curve.domain_end())
     MINI_CHECK(found == True and t_out == 0.5)
-
-    # Is rational is related to control points having weights
-    # is_rational = false means control points [x, y, z]
-    # is_rational = false means control points [xw, yw, zw]
-    # Rational curves are used to represent:
-    # circles, ellipses, parabolas, hyperbolas exactly
-    is_rational = curve.is_rational()
-    closed = curve.is_closed()
-    periodic = curve.is_periodic()
-    linear = curve.is_linear()
-    planar = curve.is_planar()
-    arc = curve.is_arc()
-    plane = Plane.xy_plane()
-    on_plane = curve.is_in_plane(plane)
-    is_open = curve.is_natural()
-    is_polyline, _, _ = curve.is_polyline()
-    is_singular = curve.is_singular()
-    is_duplicate = curve.is_duplicate(curve, False)
-    is_continuous = curve.is_continuous(1, curve.domain_middle())
-
-    MINI_CHECK(is_rational == True)
-    MINI_CHECK(closed == False)
-    MINI_CHECK(periodic == False)
-    MINI_CHECK(linear == False)
-    MINI_CHECK(planar == False)
-    MINI_CHECK(arc == False)
-    MINI_CHECK(on_plane == False)
-    MINI_CHECK(is_open == False)
-    MINI_CHECK(is_polyline == False)
-    MINI_CHECK(is_singular == False)
-    MINI_CHECK(is_duplicate == True)
-    MINI_CHECK(is_continuous == True)
 
 
 @MINI_TEST("NurbsCurve", "Conversions")

@@ -747,6 +747,90 @@ def test_nurbssurface_edge():
     MINI_CHECK(TOLERANCE.is_point_close(surf.get_cv(2, 3), Point(10.0, 27.569076, 0.0)))
 
 
+@MINI_TEST("Primitives", "Nurbssurface_schwarz_p")
+def test_nurbssurface_schwarz_p():
+    from session_py import Primitives
+    from session_py import Point
+
+    S = 10.0
+    patches = Primitives.schwarz_p(0.0, 0.0, 0.0, S)
+
+    MINI_CHECK(len(patches) == 48)
+    for f in range(48):
+        MINI_CHECK(patches[f].is_valid())
+        MINI_CHECK(patches[f].is_rational() == False)
+        MINI_CHECK(patches[f].degree(0) == 2)
+        MINI_CHECK(patches[f].degree(1) == 2)
+        MINI_CHECK(patches[f].cv_count(0) == 3)
+        MINI_CHECK(patches[f].cv_count(1) == 3)
+
+    PI2 = 2.0 * PI
+    max_err = 0.0
+    for f in range(48):
+        for i in range(5):
+            u = i / 4.0
+            for j in range(5):
+                v = j / 4.0
+                p = patches[f].point_at(u, v)
+                val = math.cos(PI2 * p[0] / S) + math.cos(PI2 * p[1] / S) + math.cos(PI2 * p[2] / S)
+                err = abs(val)
+                if err > max_err:
+                    max_err = err
+    MINI_CHECK(max_err < 0.15)
+
+    mid = patches[0].point_at(0.5, 0.5)
+    mid_val = math.cos(PI2 * mid[0] / S) + math.cos(PI2 * mid[1] / S) + math.cos(PI2 * mid[2] / S)
+    MINI_CHECK(abs(mid_val) < 0.15)
+
+
+###########################################################################################
+# Surface-to-mesh subdivision
+###########################################################################################
+
+@MINI_TEST("Primitives", "Mesh_quad_mesh")
+def test_mesh_quad_mesh():
+    from session_py import Primitives
+
+    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
+    m = Primitives.quad_mesh(srf, 8, 4)
+
+    MINI_CHECK(m.number_of_vertices() == 45)
+    MINI_CHECK(m.number_of_faces() == 32)
+
+
+@MINI_TEST("Primitives", "Mesh_diamond_mesh")
+def test_mesh_diamond_mesh():
+    from session_py import Primitives
+
+    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
+    m = Primitives.diamond_mesh(srf, 8, 4)
+
+    MINI_CHECK(m.number_of_vertices() == 45)
+    MINI_CHECK(m.number_of_faces() == 23)
+
+
+@MINI_TEST("Primitives", "Mesh_hex_mesh")
+def test_mesh_hex_mesh():
+    from session_py import Primitives
+
+    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
+    m = Primitives.hex_mesh(srf, 6, 4, 1.0/3.0)
+
+    MINI_CHECK(m.number_of_vertices() == 91)
+    MINI_CHECK(m.number_of_faces() == 32)
+
+
+@MINI_TEST("Primitives", "Mesh_hex_mesh2")
+def test_mesh_hex_mesh2():
+    from session_py import Primitives
+
+    srf = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
+    m = Primitives.hex_mesh2(srf, 6, 4, 2.0/3.0)
+
+    MINI_CHECK(m.number_of_vertices() == 91)
+    MINI_CHECK(m.number_of_faces() == 54)
+
+
 @MINI_TEST("Primitives", "Nurbscurve_interpolated")
 def test_nurbscurve_interpolated():
     from session_py import Primitives
