@@ -1251,7 +1251,69 @@ class NurbsSurface:
             N[N_idx + j + 1] = x
 
         return N[0:order]
-    
+
+    def _basis_functions_derivatives(self, dir: int, span: int, t: float, deriv_order: int) -> list:
+        if dir < 0 or dir >= 2:
+            return []
+        order = self.m_order[dir]
+        degree = order - 1
+        kv = self.m_knot[dir]
+        knot_base = span + degree
+
+        ders = [[0.0] * order for _ in range(deriv_order + 1)]
+
+        if kv[knot_base - 1] == kv[knot_base]:
+            return ders
+
+        ndu = [[0.0] * order for _ in range(order)]
+        ndu[0][0] = 1.0
+        left = [0.0] * (degree + 1)
+        right = [0.0] * (degree + 1)
+
+        for j in range(1, degree + 1):
+            left[j] = t - kv[knot_base - j]
+            right[j] = kv[knot_base + j - 1] - t
+            saved = 0.0
+            for r in range(j):
+                ndu[j][r] = right[r + 1] + left[j - r]
+                temp = ndu[r][j - 1] / ndu[j][r]
+                ndu[r][j] = saved + right[r + 1] * temp
+                saved = left[j - r] * temp
+            ndu[j][j] = saved
+
+        for j in range(degree + 1):
+            ders[0][j] = ndu[j][degree]
+
+        a = [[0.0] * order for _ in range(2)]
+        for r in range(degree + 1):
+            s1, s2 = 0, 1
+            a[0][0] = 1.0
+            for k in range(1, deriv_order + 1):
+                d = 0.0
+                rk = r - k
+                pk = degree - k
+                if r >= k:
+                    a[s2][0] = a[s1][0] / ndu[pk + 1][rk]
+                    d = a[s2][0] * ndu[rk][pk]
+                j1 = 1 if rk >= -1 else -rk
+                j2 = k - 1 if r - 1 <= pk else degree - r
+                for j in range(j1, j2 + 1):
+                    a[s2][j] = (a[s1][j] - a[s1][j - 1]) / ndu[pk + 1][rk + j]
+                    d += a[s2][j] * ndu[rk + j][pk]
+                if r <= pk:
+                    a[s2][k] = -a[s1][k - 1] / ndu[pk + 1][r]
+                    d += a[s2][k] * ndu[r][pk]
+                ders[k][r] = d
+                s1, s2 = s2, s1
+
+        factorial = degree
+        for k in range(1, deriv_order + 1):
+            for j in range(degree + 1):
+                ders[k][j] *= factorial
+            factorial *= (degree - k)
+
+        return ders
+
     ###########################################################################
     # EVALUATION
     ###########################################################################
@@ -1356,62 +1418,81 @@ class NurbsSurface:
         return normal / mag
     
     def evaluate(self, u: float, v: float, num_derivs: int = 0) -> List[Vector]:
-        """Evaluate point and derivatives on surface.
-        
-        Parameters
-        ----------
-        u : float
-            Parameter in u direction.
-        v : float
-            Parameter in v direction.
-        num_derivs : int, optional
-            Number of derivatives to compute. Defaults to 0.
-        
-        Returns
-        -------
-        list of Vector
-            [point, du, dv, duu, duv, dvv, ...] depending on num_derivs.
-        """
-        if not self.is_valid():
-            return [Vector(0, 0, 0)]
-        
-        # For now, implement basic evaluation (point only)
-        # Full derivative implementation would require basis_functions_derivatives
-        pt = self.point_at(u, v)
-        result = [Vector(pt.x, pt.y, pt[2])]
-        
-        if num_derivs > 0:
-            # Approximate derivatives with finite differences
-            h = 1e-6
-            u0, u1 = self.domain(0)
-            v0, v1 = self.domain(1)
-            
-            # du derivative
-            if u + h <= u1:
-                pt_u = self.point_at(u + h, v)
-                du = Vector((pt_u.x - pt.x) / h,
-                           (pt_u.y - pt.y) / h,
-                           (pt_u.z - pt.z) / h)
-            else:
-                pt_u = self.point_at(u - h, v)
-                du = Vector((pt.x - pt_u.x) / h,
-                           (pt.y - pt_u.y) / h,
-                           (pt.z - pt_u.z) / h)
-            result.append(du)
-            
-            # dv derivative
-            if v + h <= v1:
-                pt_v = self.point_at(u, v + h)
-                dv = Vector((pt_v.x - pt.x) / h,
-                           (pt_v.y - pt.y) / h,
-                           (pt_v.z - pt.z) / h)
-            else:
-                pt_v = self.point_at(u, v - h)
-                dv = Vector((pt.x - pt_v.x) / h,
-                           (pt.y - pt_v.y) / h,
-                           (pt.z - pt_v.z) / h)
-            result.append(dv)
-        
+        if not self.is_valid() or num_derivs < 0:
+            return []
+        max_derivs = min(num_derivs, 2)
+        span_u = self._find_span(0, u)
+        span_v = self._find_span(1, v)
+        ders_u = self._basis_functions_derivatives(0, span_u, u, max_derivs)
+        ders_v = self._basis_functions_derivatives(1, span_v, v, max_derivs)
+
+        cv_size_val = (self.m_dim + 1) if self.m_is_rat else self.m_dim
+
+        # Compute all homogeneous derivatives
+        skl_all = []
+        for k in range(max_derivs + 1):
+            for l in range(max_derivs - k + 1):
+                skl = [0.0] * cv_size_val
+                for i in range(self.m_order[0]):
+                    cv_i = span_u + i
+                    for j in range(self.m_order[1]):
+                        cv_j = span_v + j
+                        coeff = ders_u[k][i] * ders_v[l][j]
+                        cv_data = self.cv(cv_i, cv_j)
+                        if cv_data is not None:
+                            for d in range(cv_size_val):
+                                skl[d] += coeff * cv_data[d]
+                skl_all.append((k, l, skl))
+
+        if not self.m_is_rat:
+            result = []
+            for k, l, skl in skl_all:
+                result.append(Vector(
+                    skl[0],
+                    skl[1] if self.m_dim > 1 else 0,
+                    skl[2] if self.m_dim > 2 else 0
+                ))
+            return result
+
+        # Rational: proper quotient rule (NURBS Book A4.2)
+        w00 = skl_all[0][2][self.m_dim]
+        if abs(w00) < 1e-14:
+            return [Vector(0, 0, 0)] * len(skl_all)
+        dim = self.m_dim
+        pt = Vector(skl_all[0][2][0] / w00,
+                    skl_all[0][2][1] / w00 if dim > 1 else 0,
+                    skl_all[0][2][2] / w00 if dim > 2 else 0)
+        result = [pt]
+
+        # Build lookup for weight derivatives
+        wders = {}
+        for k, l, skl in skl_all:
+            wders[(k, l)] = skl[dim]
+
+        # Cartesian derivatives lookup
+        aders = {(0, 0): pt}
+        for k, l, skl in skl_all[1:]:
+            a = [skl[0], skl[1] if dim > 1 else 0, skl[2] if dim > 2 else 0]
+            for i in range(1, k + 1):
+                from math import comb
+                prev = aders.get((k - i, l))
+                if prev is not None:
+                    c = comb(k, i) * wders.get((i, 0), 0)
+                    a[0] -= c * prev[0]
+                    a[1] -= c * prev[1]
+                    a[2] -= c * prev[2]
+            for j in range(1, l + 1):
+                from math import comb
+                prev = aders.get((k, l - j))
+                if prev is not None:
+                    c = comb(l, j) * wders.get((0, j), 0)
+                    a[0] -= c * prev[0]
+                    a[1] -= c * prev[1]
+                    a[2] -= c * prev[2]
+            v = Vector(a[0] / w00, a[1] / w00, a[2] / w00)
+            aders[(k, l)] = v
+            result.append(v)
+
         return result
     
     ###########################################################################
@@ -1742,6 +1823,70 @@ class NurbsSurface:
 
         return grid, params
 
+    def divide_by_count_points(self, nu: int, nv: int):
+        if not self.is_valid():
+            return [], [], []
+
+        u0, u1 = self.domain(0)
+        v0, v1 = self.domain(1)
+
+        grid = []
+        grid_vector = []
+        params = []
+        for i in range(nu + 1):
+            row = []
+            row_vector = []
+            param_row = []
+            u = u0 + (u1 - u0) * (i / nu) if nu > 0 else u0
+            for j in range(nv + 1):
+                v = v0 + (v1 - v0) * (j / nv) if nv > 0 else v0
+                row.append(self.point_at(u, v))
+                row_vector.append(self.normal_at(u, v))
+                param_row.append((u, v))
+            grid.append(row)
+            grid_vector.append(row_vector)
+            params.append(param_row)
+
+        return grid, grid_vector, params
+
+    def divide_by_count_planes(self, nu: int, nv: int):
+        if not self.is_valid():
+            return [], []
+
+        u0, u1 = self.domain(0)
+        v0, v1 = self.domain(1)
+
+        grid = []
+        params = []
+        for i in range(nu + 1):
+            row = []
+            param_row = []
+            u = u0 + (u1 - u0) * (i / nu) if nu > 0 else u0
+            for j in range(nv + 1):
+                v = v0 + (v1 - v0) * (j / nv) if nv > 0 else v0
+                origin = self.point_at(u, v)
+                derivs = self.evaluate(u, v, 1)
+                su = derivs[2]
+                sv = derivs[1]
+                x_axis = su.duplicate()
+                if x_axis.magnitude() > 1e-14:
+                    x_axis.normalize_self()
+                y_axis = sv.duplicate()
+                if y_axis.magnitude() > 1e-14:
+                    y_axis.normalize_self()
+                n = self.normal_at(u, v)
+                plane = Plane()
+                plane._origin = origin
+                plane._x_axis = x_axis
+                plane._y_axis = y_axis
+                plane._z_axis = n
+                plane._update_equation()
+                row.append(plane)
+                param_row.append((u, v))
+            grid.append(row)
+            params.append(param_row)
+
+        return grid, params
 
     def set_outer_loop(self, loop):
         self.m_outer_loop = loop
@@ -2102,7 +2247,7 @@ class NurbsSurface:
         for i in range(self.m_cv_count[0]):
             for j in range(self.m_cv_count[1]):
                 p = self.get_cv(i, j)
-                result += f"    {p[0]}, {p[1]}, {p[2]}\n"
+                result += f"    {p[0]:g}, {p[1]:g}, {p[2]:g}\n"
         result += "  ]\n)"
         return result
 

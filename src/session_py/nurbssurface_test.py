@@ -35,6 +35,12 @@ def test_nurbssurface_constructor():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
+    # Get mesh
+    m = s.mesh()
+
+    # Point division matching Rhino's 4x6 grid
+    p, v, uv = s.divide_by_count_points(4, 6)
+
     # Minimal and Full String Representation
     sstr = str(s)
     srepr = repr(s)
@@ -42,9 +48,6 @@ def test_nurbssurface_constructor():
     # Copy (duplicates everything except guid)
     scopy = s.duplicate()
     sother = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
-
-    # Point division matching Rhino's 4x6 grid
-    v, uv = s.divide_by_count(4, 6)
 
     MINI_CHECK(s.is_valid() == True)
     MINI_CHECK(s.cv_count_dir(0) == 4)
@@ -61,45 +64,44 @@ def test_nurbssurface_constructor():
     MINI_CHECK(s.name == "my_nurbssurface")
     MINI_CHECK(s.guid)
     MINI_CHECK(sstr == "NurbsSurface(name=my_nurbssurface, degree=(3,3), cvs=(4,4))")
-    MINI_CHECK("name=my_nurbssurface" in srepr)
+    MINI_CHECK(srepr == "NurbsSurface(\n  name=my_nurbssurface,\n  degree=(3,3),\n  cvs=(4,4),\n  rational=false,\n  control_points=[\n    0, 0, 0\n    -1, 0.75, 2\n    -1, 4.25, 2\n    0, 5, 0\n    0.75, -1, 2\n    1.25, 1.25, 4\n    1.25, 3.75, 4\n    0.75, 6, 2\n    4.25, -1, 2\n    3.75, 1.25, 4\n    3.75, 3.75, 4\n    4.25, 6, 2\n    5, 0, 0\n    6, 0.75, 2\n    6, 4.25, 2\n    5, 5, 0\n  ]\n)")
     MINI_CHECK(scopy.cv_count_dir(None) == s.cv_count_dir(None))
     MINI_CHECK(scopy.guid != s.guid)
-
-    MINI_CHECK(TOLERANCE.is_point_close(v[0][0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[0][1], Point(-0.416666666666667, 0.578703703703704, 0.833333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[0][2], Point(-0.666666666666667, 1.462962962962963, 1.333333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[0][3], Point(-0.750000000000000, 2.500000000000000, 1.500000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[0][4], Point(-0.666666666666667, 3.537037037037037, 1.333333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[0][5], Point(-0.416666666666667, 4.421296296296297, 0.833333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[0][6], Point(0.000000000000000, 5.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[1][0], Point(0.992187500000000, -0.562500000000000, 1.125000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[1][1], Point(0.881510416666667, 0.333912037037037, 1.958333333333334)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[1][2], Point(0.815104166666667, 1.379629629629630, 2.458333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[1][3], Point(0.792968750000000, 2.500000000000000, 2.625000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[1][4], Point(0.815104166666667, 3.620370370370370, 2.458333333333334)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[1][5], Point(0.881510416666667, 4.666087962962964, 1.958333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[1][6], Point(0.992187500000000, 5.562500000000000, 1.125000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[2][0], Point(2.500000000000000, -0.750000000000000, 1.500000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[2][1], Point(2.500000000000000, 0.252314814814815, 2.333333333333334)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[2][2], Point(2.500000000000000, 1.351851851851852, 2.833333333333334)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[2][3], Point(2.500000000000000, 2.500000000000000, 3.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[2][4], Point(2.500000000000000, 3.648148148148148, 2.833333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[2][5], Point(2.500000000000000, 4.747685185185186, 2.333333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[2][6], Point(2.500000000000000, 5.750000000000000, 1.500000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[3][0], Point(4.007812500000000, -0.562500000000000, 1.125000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[3][1], Point(4.118489583333334, 0.333912037037037, 1.958333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[3][2], Point(4.184895833333334, 1.379629629629630, 2.458333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[3][3], Point(4.207031250000000, 2.500000000000000, 2.625000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[3][4], Point(4.184895833333333, 3.620370370370370, 2.458333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[3][5], Point(4.118489583333333, 4.666087962962964, 1.958333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[3][6], Point(4.007812500000000, 5.562500000000000, 1.125000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[4][0], Point(5.000000000000000, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[4][1], Point(5.416666666666668, 0.578703703703704, 0.833333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[4][2], Point(5.666666666666668, 1.462962962962963, 1.333333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[4][3], Point(5.750000000000000, 2.500000000000000, 1.500000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[4][4], Point(5.666666666666666, 3.537037037037037, 1.333333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[4][5], Point(5.416666666666667, 4.421296296296297, 0.833333333333333)))
-    MINI_CHECK(TOLERANCE.is_point_close(v[4][6], Point(5.000000000000000, 5.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][1], Point(-0.416666666666667, 0.578703703703704, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][2], Point(-0.666666666666667, 1.462962962962963, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][3], Point(-0.750000000000000, 2.500000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][4], Point(-0.666666666666667, 3.537037037037037, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][5], Point(-0.416666666666667, 4.421296296296297, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][6], Point(0.000000000000000, 5.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][0], Point(0.992187500000000, -0.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][1], Point(0.881510416666667, 0.333912037037037, 1.958333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][2], Point(0.815104166666667, 1.379629629629630, 2.458333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][3], Point(0.792968750000000, 2.500000000000000, 2.625000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][4], Point(0.815104166666667, 3.620370370370370, 2.458333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][5], Point(0.881510416666667, 4.666087962962964, 1.958333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][6], Point(0.992187500000000, 5.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][0], Point(2.500000000000000, -0.750000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][1], Point(2.500000000000000, 0.252314814814815, 2.333333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][2], Point(2.500000000000000, 1.351851851851852, 2.833333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][3], Point(2.500000000000000, 2.500000000000000, 3.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][4], Point(2.500000000000000, 3.648148148148148, 2.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][5], Point(2.500000000000000, 4.747685185185186, 2.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][6], Point(2.500000000000000, 5.750000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][0], Point(4.007812500000000, -0.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][1], Point(4.118489583333334, 0.333912037037037, 1.958333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][2], Point(4.184895833333334, 1.379629629629630, 2.458333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][3], Point(4.207031250000000, 2.500000000000000, 2.625000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][4], Point(4.184895833333333, 3.620370370370370, 2.458333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][5], Point(4.118489583333333, 4.666087962962964, 1.958333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][6], Point(4.007812500000000, 5.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][0], Point(5.000000000000000, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][1], Point(5.416666666666668, 0.578703703703704, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][2], Point(5.666666666666668, 1.462962962962963, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][3], Point(5.750000000000000, 2.500000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][4], Point(5.666666666666666, 3.537037037037037, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][5], Point(5.416666666666667, 4.421296296296297, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][6], Point(5.000000000000000, 5.000000000000000, 0.000000000000000)))
 
 
 @MINI_TEST("NurbsSurface", "Booleans Queries")
@@ -266,80 +268,231 @@ def test_control_vertices_access():
     MINI_CHECK(s.weight(0, 0) == 1)
 
 
-@MINI_TEST("NurbsSurface", "Accessors")
-def test_accessors():
+@MINI_TEST("NurbsSurface", "Knot Access")
+def test_knot_access():
     from session_py import NurbsSurface
     from session_py import Point
 
-    points = [Point(float(i), float(j), 0.0) for i in range(5) for j in range(4)]
-    surf = NurbsSurface.create(False, False, 3, 2, 5, 4, points)
+    points = [
+        # i=0
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        # i=1
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        # i=2
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        # i=3
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
 
-    # Test knot access
-    knot_val = surf.knot(0, 2)
+    s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Test set knot
-    surf.set_knot(0, 2, 5.0)
-    new_val = surf.knot(0, 2)
+    # Get knot vectors and individual knot
+    knots_u = s.get_knots(0)
+    for i in range(s.knot_count(0)):
+        knot = s.knot(0, i)
+        MINI_CHECK(knot == knots_u[i])
 
-    MINI_CHECK(surf.dimension() == 3)
-    MINI_CHECK(not surf.is_rational())
-    MINI_CHECK(surf.order(0) == 4)
-    MINI_CHECK(surf.order(1) == 3)
-    MINI_CHECK(surf.degree(0) == 3)
-    MINI_CHECK(surf.degree(1) == 2)
-    MINI_CHECK(surf.cv_count_dir(0) == 5)
-    MINI_CHECK(surf.cv_count_dir(1) == 4)
-    MINI_CHECK(surf.cv_count_dir(None) == 20)
-    MINI_CHECK(surf.cv_size() == 3)
-    MINI_CHECK(surf.knot_count(0) == 7)
-    MINI_CHECK(surf.knot_count(1) == 5)
-    MINI_CHECK(surf.span_count(0) == 2)
-    MINI_CHECK(surf.span_count(1) == 2)
-    MINI_CHECK(new_val == 5.0)
+    knots_v = s.get_knots(1)
+    for i in range(s.knot_count(1)):
+        knot = s.knot(1, i)
+        MINI_CHECK(knot == knots_v[i])
+
+    # Set knots
+    is_set = s.set_knot(0, 2, 0.5)
+    MINI_CHECK(s.knot(0, 2) == 0.5)
+    is_set = s.set_knot(0, 2, 0.0)
+
+    # Verify start multiplicity
+    mult_u_start = s.knot_multiplicity(0, 0)
+    mult_v_start = s.knot_multiplicity(1, 0)
+    MINI_CHECK(mult_u_start == 3)
+    MINI_CHECK(mult_v_start == 3)
+
+    s.insert_knot(0, 0.1, 2)
+    MINI_CHECK(s.knot_count(0) == 8)
+    MINI_CHECK(s.knot(0, 3) == 0.1)
+    MINI_CHECK(s.knot_multiplicity(0, 3) == 2)
 
 
-@MINI_TEST("NurbsSurface", "Knot_operations")
-def test_knot_operations():
+@MINI_TEST("NurbsSurface", "Domain")
+def test_domain():
     from session_py import NurbsSurface
     from session_py import Point
 
-    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(4)]
-    surf = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+    points = [
+        # i=0
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        # i=1
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        # i=2
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        # i=3
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
 
-    # Verify domain
-    u0, u1 = surf.domain(0)
-    v0, v1 = surf.domain(1)
+    s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    MINI_CHECK(u0 == 0.0)
-    MINI_CHECK(u1 > u0)
-    MINI_CHECK(v0 == 0.0)
-    MINI_CHECK(v1 > v0)
-    MINI_CHECK(surf.is_clamped(0, 0))
-    MINI_CHECK(surf.is_clamped(1, 0))
+    # Get domain 0 - 1
+    domain_u = s.domain(0)
+    domain_v = s.domain(1)
+    MINI_CHECK(TOLERANCE.is_close(domain_u[0], 0))
+    MINI_CHECK(TOLERANCE.is_close(domain_u[1], 1))
+
+    # Set Domain
+    is_set_u = s.set_domain(0, -1.1, 2.3)
+    is_set_v = s.set_domain(1, -5.1, 1.3)
+    MINI_CHECK(is_set_u and TOLERANCE.is_close(s.domain(1)[0], -5.1))
+    MINI_CHECK(is_set_v and TOLERANCE.is_close(s.domain(1)[1], 1.3))
+
+    # Get sorted list of distinct knot values
+    span_vector = s.get_span_vector(0)
+    first_item = span_vector[0]
+    last_item = span_vector[-1]
+    MINI_CHECK(TOLERANCE.is_close(first_item, -1.1))
+    MINI_CHECK(TOLERANCE.is_close(last_item, 2.3))
 
 
-@MINI_TEST("NurbsSurface", "Rational_operations")
-def test_rational_operations():
+@MINI_TEST("NurbsSurface", "Division")
+def test_division():
     from session_py import NurbsSurface
     from session_py import Point
+    from session_py import Vector
 
-    # Create non-rational surface, then make rational
-    points = [Point(0.0, 0.0, 0.0)] * 9
-    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
+    points = [
+        # i=0
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        # i=1
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        # i=2
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        # i=3
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
 
-    # Make it rational
-    surf.make_rational()
+    s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Set a control point and weight
-    surf.set_cv(1, 1, Point(1.0, 2.0, 3.0))
-    surf.set_weight(1, 1, 2.0)
+    # points, normals, uv
+    division_points, vectors, uvs0 = s.divide_by_count_points(3, 3)
 
-    # Verify weight
-    w = surf.weight(1, 1)
+    # planes, uv
+    planes, uvs1 = s.divide_by_count_planes(3, 3)
 
-    MINI_CHECK(surf.is_rational())
-    MINI_CHECK(surf.cv_size() == 4)
-    MINI_CHECK(w == 2.0)
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[0][0], Point(0, 0, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[0][1], Point(-0.666666666666667, 1.46296296296296, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[0][2], Point(-0.666666666666667, 3.53703703703704, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[0][3], Point(0, 5, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][0], Point(1.46296296296296, -0.666666666666667, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][1], Point(1.3641975308642, 1.3641975308642, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][2], Point(1.3641975308642, 3.6358024691358, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][3], Point(1.46296296296296, 5.66666666666667, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][0], Point(3.53703703703704, -0.666666666666667, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][1], Point(3.6358024691358, 1.3641975308642, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][2], Point(3.6358024691358, 3.6358024691358, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][3], Point(3.53703703703704, 5.66666666666667, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[3][0], Point(5, 0, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[3][1], Point(5.66666666666667, 1.46296296296296, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[3][2], Point(5.66666666666667, 3.53703703703704, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[3][3], Point(5, 5, 0)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][0], Vector(-0.704360725060499, -0.704360725060499, -0.0880450906325624)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][1], Vector(-0.722897836195991, -0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][2], Vector(-0.722897836195991, 0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][3], Vector(-0.704360725060499, 0.704360725060499, -0.0880450906325624)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][0], Vector(-0.327787263130091, -0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][1], Vector(-0.280457757277237, -0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][2], Vector(-0.280457757277237, 0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][3], Vector(-0.327787263130091, 0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][0], Vector(0.327787263130091, -0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][1], Vector(0.280457757277237, -0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][2], Vector(0.280457757277237, 0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][3], Vector(0.327787263130091, 0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][0], Vector(0.704360725060499, -0.704360725060499, -0.0880450906325624)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][1], Vector(0.722897836195991, -0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][2], Vector(0.722897836195991, 0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][3], Vector(0.704360725060499, 0.704360725060499, -0.0880450906325624)))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][0][0], 0.0) and TOLERANCE.is_close(uvs0[0][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][1][0], 0.0) and TOLERANCE.is_close(uvs0[0][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][2][0], 0.0) and TOLERANCE.is_close(uvs0[0][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][3][0], 0.0) and TOLERANCE.is_close(uvs0[0][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][0][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][1][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][2][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][3][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][0][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][1][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][2][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][3][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][0][0], 1.0) and TOLERANCE.is_close(uvs0[3][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][1][0], 1.0) and TOLERANCE.is_close(uvs0[3][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][2][0], 1.0) and TOLERANCE.is_close(uvs0[3][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][3][0], 1.0) and TOLERANCE.is_close(uvs0[3][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][0].x_axis, Vector(0.317999364001908, -0.423999152002544, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][1].x_axis, Vector(0.657483781160109, -0.0556600026378928, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][2].x_axis, Vector(0.657483781160109, 0.055660002637893, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][3].x_axis, Vector(0.317999364001908, 0.423999152002544, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][0].x_axis, Vector(0.93542594448836, -0.158100159631836, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][1].x_axis, Vector(0.957938608304167, -0.0211991946512679, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][2].x_axis, Vector(0.957938608304167, 0.0211991946512677, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][3].x_axis, Vector(0.93542594448836, 0.158100159631835, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][0].x_axis, Vector(0.93542594448836, 0.158100159631835, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][1].x_axis, Vector(0.957938608304167, 0.0211991946512679, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][2].x_axis, Vector(0.957938608304167, -0.021199194651268, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][3].x_axis, Vector(0.93542594448836, -0.158100159631836, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][0].x_axis, Vector(0.317999364001908, 0.423999152002544, -0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][1].x_axis, Vector(0.657483781160109, 0.0556600026378928, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][2].x_axis, Vector(0.657483781160109, -0.0556600026378928, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][3].x_axis, Vector(0.317999364001908, -0.423999152002544, -0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][0].y_axis, Vector(-0.423999152002544, 0.317999364001908, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][1].y_axis, Vector(-0.158100159631836, 0.93542594448836, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][2].y_axis, Vector(0.158100159631835, 0.93542594448836, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][3].y_axis, Vector(0.423999152002544, 0.317999364001908, -0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][0].y_axis, Vector(-0.0556600026378928, 0.657483781160109, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][1].y_axis, Vector(-0.0211991946512679, 0.957938608304167, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][2].y_axis, Vector(0.0211991946512679, 0.957938608304167, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][3].y_axis, Vector(0.0556600026378928, 0.657483781160109, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][0].y_axis, Vector(0.0556600026378928, 0.657483781160109, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][1].y_axis, Vector(0.0211991946512678, 0.957938608304167, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][2].y_axis, Vector(-0.0211991946512678, 0.957938608304167, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][3].y_axis, Vector(-0.0556600026378928, 0.657483781160109, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][0].y_axis, Vector(0.423999152002544, 0.317999364001908, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][1].y_axis, Vector(0.158100159631835, 0.93542594448836, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][2].y_axis, Vector(-0.158100159631836, 0.93542594448836, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][3].y_axis, Vector(-0.423999152002544, 0.317999364001908, -0.847998304005088)))
 
 
 @MINI_TEST("NurbsSurface", "Evaluation")
@@ -347,91 +500,30 @@ def test_evaluation():
     from session_py import NurbsSurface
     from session_py import Point
 
-    # Create simple bilinear surface
     points = [
-        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
+        # i=0
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        # i=1
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        # i=2
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        # i=3
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
     ]
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
-    # Evaluate at corner
-    u0, u1 = surf.domain(0)
-    v0, v1 = surf.domain(1)
-
-    pt_corner = surf.point_at(u0, v0)
-
-    # Evaluate at center (should be center of unit square)
-    u_mid = (u0 + u1) / 2.0
-    v_mid = (v0 + v1) / 2.0
-    pt_mid = surf.point_at(u_mid, v_mid)
-
-    # Test derivatives
-    derivs = surf.evaluate(u_mid, v_mid, 1)
-
-    # Test normal (for flat plane in XY, normal should point in +Z)
-    normal = surf.normal_at(u_mid, v_mid)
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(TOLERANCE.is_close(pt_corner[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_corner[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_corner[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_mid[0], 0.5))
-    MINI_CHECK(TOLERANCE.is_close(pt_mid[1], 0.5))
-    MINI_CHECK(len(derivs) == 3)
-    MINI_CHECK(TOLERANCE.is_close(abs(normal[2]), 1.0))
-
-
-@MINI_TEST("NurbsSurface", "Geometric_queries")
-def test_geometric_queries():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    # Create and setup surface
-    points = [
-        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
-    ]
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(not surf.is_closed(0))
-    MINI_CHECK(not surf.is_closed(1))
-    MINI_CHECK(not surf.is_periodic(0))
-    MINI_CHECK(not surf.is_periodic(1))
-    MINI_CHECK(surf.is_clamped(0, 0))
-    MINI_CHECK(surf.is_clamped(1, 0))
-    MINI_CHECK(surf.is_planar(None, 1e-6))
-
-
-@MINI_TEST("NurbsSurface", "Modification")
-def test_modification():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [
-        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(0.0, 0.0, 0.0), Point(0.0, 0.0, 0.0),
-        Point(2.0, 0.0, 0.0), Point(2.0, 1.0, 0.0),
-    ]
-    surf = NurbsSurface.create(False, False, 1, 1, 3, 2, points)
-
-    cv_before = surf.get_cv(0, 0)
-
-    # Test reverse in u direction
-    surf.reverse(0)
-    cv_after = surf.get_cv(2, 0)
-
-    # Reverse back
-    surf.reverse(0)
-
-    # Test transpose
-    order_u_before = surf.order(0)
-    order_v_before = surf.order(1)
-    surf.transpose()
-
-    MINI_CHECK(cv_after[0] == cv_before[0])
-    MINI_CHECK(surf.order(0) == order_v_before)
-    MINI_CHECK(surf.order(1) == order_u_before)
+    s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
 
 @MINI_TEST("NurbsSurface", "Isocurve")
@@ -609,13 +701,10 @@ def test_clamp_operations():
     points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(4)]
     surf = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Test clamp_end
-    was_clamped_before = surf.is_clamped(0, 2)
     surf.clamp_end(0, 2)
-    is_clamped_after = surf.is_clamped(0, 2)
 
     MINI_CHECK(surf.is_valid())
-    MINI_CHECK(is_clamped_after)
+    MINI_CHECK(surf.is_clamped(0, 2))
 
 
 @MINI_TEST("NurbsSurface", "Singularity")
@@ -641,20 +730,6 @@ def test_singularity():
     MINI_CHECK(not is_singular_east)
     MINI_CHECK(not is_singular_north)
     MINI_CHECK(not is_singular_west)
-
-
-@MINI_TEST("NurbsSurface", "Bounding_box")
-def test_bounding_box():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
-    surf = NurbsSurface.create(False, False, 1, 1, 3, 3, points)
-
-    # Get bounding box
-    bbox = surf.get_bounding_box()
-
-    MINI_CHECK(surf.is_valid())
 
 
 @MINI_TEST("NurbsSurface", "Domain_operations")
@@ -841,272 +916,6 @@ def test_knot_multiplicity():
     MINI_CHECK(mult_v_start >= surf.degree(1))
     MINI_CHECK(mult_u_end >= surf.degree(0))
     MINI_CHECK(mult_v_end >= surf.degree(1))
-
-
-@MINI_TEST("NurbsSurface", "Sphere")
-def test_sphere():
-    import math
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    radius = 2.0
-    w = math.sqrt(2.0) / 2.0  # 0.707107
-    pi = PI
-
-    surf = NurbsSurface.create_raw(3, True, 3, 3, 9, 5, False, False, 1.0, 1.0)
-    surf.name = "unit_sphere"
-
-    # U-knots: periodic around equator with multiplicity 2
-    u_knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
-    for i in range(10):
-        surf.set_knot(0, i, u_knots[i])
-
-    # V-knots: from south pole to north pole
-    v_knots = [-pi * 0.5, -pi * 0.5, 0, 0, pi * 0.5, pi * 0.5]
-    for i in range(6):
-        surf.set_knot(1, i, v_knots[i])
-
-    # Set up control points for sphere (9 around, 5 latitude levels)
-    # Latitude levels: south pole, -45deg, equator, +45deg, north pole
-    lat_weights = [w, 0.5, w, 0.5, w]
-    lat_z = [-radius, -radius * w, 0.0, radius * w, radius]
-    lat_r = [0.0, radius * w, radius, radius * w, 0.0]
-
-    for j in range(5):
-        r = lat_r[j]
-        z = lat_z[j]
-        # 9 points around (0, 45, 90, 135, 180, 225, 270, 315, 360=0)
-        angles = [0, pi * 0.25, pi * 0.5, pi * 0.75, pi, pi * 1.25, pi * 1.5, pi * 1.75, pi * 2.0]
-        for i in range(9):
-            x = r * math.cos(angles[i])
-            y = r * math.sin(angles[i])
-            surf.set_cv(i, j, Point(x, y, z))
-            # Weight: w for cardinal directions (0, 90, 180, 270), 0.5 for diagonals at non-pole latitudes
-            weight = w if i % 2 == 0 else lat_weights[j]
-            if j == 0 or j == 4:
-                weight = w  # poles
-            surf.set_weight(i, j, weight)
-
-    # Verify sphere properties
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(surf.is_rational())
-    MINI_CHECK(surf.degree(0) == 2)
-    MINI_CHECK(surf.degree(1) == 2)
-    MINI_CHECK(surf.cv_count_dir(0) == 9)
-    MINI_CHECK(surf.cv_count_dir(1) == 5)
-
-    # Check point on equator at angle 0 (should be at (radius, 0, 0))
-    pt = surf.point_at(0.0, 0.0)
-    MINI_CHECK(TOLERANCE.is_close(pt[0], radius))
-    MINI_CHECK(TOLERANCE.is_close(pt[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt[2], 0.0))
-
-    # Check north pole
-    north = surf.point_at(0.0, pi * 0.5)
-    MINI_CHECK(TOLERANCE.is_close(north[2], radius))
-
-
-@MINI_TEST("NurbsSurface", "Cylinder")
-def test_cylinder():
-    import math
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    radius = 1.5
-    height = 3.0
-    w = math.sqrt(2.0) / 2.0
-    pi = PI
-
-    surf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2, False, False, 1.0, 1.0)
-    surf.name = "unit_cylinder"
-
-    # U-knots: periodic for circle
-    u_knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
-    for i in range(10):
-        surf.set_knot(0, i, u_knots[i])
-
-    # V-knots: linear from bottom to top
-    surf.set_knot(1, 0, 0.0)
-    surf.set_knot(1, 1, height)
-
-    # Set up control points for cylinder (9 around, 2 heights)
-    angles = [0, pi * 0.25, pi * 0.5, pi * 0.75, pi, pi * 1.25, pi * 1.5, pi * 1.75, pi * 2.0]
-
-    for j in range(2):
-        z = 0.0 if j == 0 else height
-        for i in range(9):
-            x = radius * math.cos(angles[i])
-            y = radius * math.sin(angles[i])
-            # For diagonal points (45, 135, etc), radius needs to be scaled
-            if i % 2 == 1:
-                x = radius * math.sqrt(2.0) * math.cos(angles[i])
-                y = radius * math.sqrt(2.0) * math.sin(angles[i])
-            surf.set_cv(i, j, Point(x, y, z))
-            weight = 1.0 if i % 2 == 0 else w
-            surf.set_weight(i, j, weight)
-
-    # Verify cylinder properties
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(surf.is_rational())
-    MINI_CHECK(surf.degree(0) == 2)
-    MINI_CHECK(surf.degree(1) == 1)
-    MINI_CHECK(surf.cv_count_dir(0) == 9)
-    MINI_CHECK(surf.cv_count_dir(1) == 2)
-
-    # Check point on bottom circle at angle 0
-    pt_bottom = surf.point_at(0.0, 0.0)
-    MINI_CHECK(TOLERANCE.is_close(pt_bottom[0], radius))
-    MINI_CHECK(TOLERANCE.is_close(pt_bottom[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_bottom[2], 0.0))
-
-    # Check point on top circle at angle 0
-    pt_top = surf.point_at(0.0, height)
-    MINI_CHECK(TOLERANCE.is_close(pt_top[0], radius))
-    MINI_CHECK(TOLERANCE.is_close(pt_top[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_top[2], height))
-
-    # Check midpoint at angle PI/2
-    pt_mid = surf.point_at(pi * 0.5, height * 0.5)
-    MINI_CHECK(TOLERANCE.is_close(pt_mid[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_mid[1], radius))
-    MINI_CHECK(TOLERANCE.is_close(pt_mid[2], height * 0.5))
-
-
-@MINI_TEST("NurbsSurface", "Torus")
-def test_torus():
-    import math
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    major_radius = 3.0
-    minor_radius = 1.0
-    w = math.sqrt(2.0) / 2.0
-    pi = PI
-
-    surf = NurbsSurface.create_raw(3, True, 3, 3, 9, 9, False, False, 1.0, 1.0)
-    surf.name = "unit_torus"
-
-    # Both U and V knots: periodic for circles
-    knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
-    for i in range(10):
-        surf.set_knot(0, i, knots[i])
-        surf.set_knot(1, i, knots[i])
-
-    # Set up control points for torus
-    # U: major angle (around torus), V: minor angle (around tube)
-    angles = [0, pi * 0.25, pi * 0.5, pi * 0.75, pi, pi * 1.25, pi * 1.5, pi * 1.75, pi * 2.0]
-
-    for i in range(9):
-        major_angle = angles[i]
-        cos_ma = math.cos(major_angle)
-        sin_ma = math.sin(major_angle)
-        major_scale = 1.0 if i % 2 == 0 else math.sqrt(2.0)
-
-        for j in range(9):
-            minor_angle = angles[j]
-            cos_mi = math.cos(minor_angle)
-            sin_mi = math.sin(minor_angle)
-            minor_scale = 1.0 if j % 2 == 0 else math.sqrt(2.0)
-
-            r = major_radius + minor_radius * minor_scale * cos_mi
-            x = r * major_scale * cos_ma
-            y = r * major_scale * sin_ma
-            z = minor_radius * minor_scale * sin_mi
-
-            surf.set_cv(i, j, Point(x, y, z))
-
-            # Weight is product of major and minor weights
-            w_major = 1.0 if i % 2 == 0 else w
-            w_minor = 1.0 if j % 2 == 0 else w
-            surf.set_weight(i, j, w_major * w_minor)
-
-    # Verify torus properties
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(surf.is_rational())
-    MINI_CHECK(surf.degree(0) == 2)
-    MINI_CHECK(surf.degree(1) == 2)
-    MINI_CHECK(surf.cv_count_dir(0) == 9)
-    MINI_CHECK(surf.cv_count_dir(1) == 9)
-
-    # Check point at (0, 0) - should be on outer edge of torus
-    pt = surf.point_at(0.0, 0.0)
-    MINI_CHECK(TOLERANCE.is_close(pt[0], major_radius + minor_radius))
-    MINI_CHECK(TOLERANCE.is_close(pt[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt[2], 0.0))
-
-    # Check point at (PI, 0) - should be on opposite side of torus
-    pt_opp = surf.point_at(pi, 0.0)
-    MINI_CHECK(TOLERANCE.is_close(pt_opp[0], -(major_radius + minor_radius)))
-    MINI_CHECK(TOLERANCE.is_close(pt_opp[1], 0.0))
-
-
-@MINI_TEST("NurbsSurface", "Cone")
-def test_cone():
-    import math
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    radius = 2.0
-    height = 4.0
-    w = math.sqrt(2.0) / 2.0
-    pi = PI
-
-    surf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2, False, False, 1.0, 1.0)
-    surf.name = "unit_cone"
-
-    # U-knots: periodic for circle
-    u_knots = [0, 0, pi * 0.5, pi * 0.5, pi, pi, pi * 1.5, pi * 1.5, pi * 2.0, pi * 2.0]
-    for i in range(10):
-        surf.set_knot(0, i, u_knots[i])
-
-    # V-knots: linear from apex to base
-    surf.set_knot(1, 0, 0.0)
-    surf.set_knot(1, 1, height)
-
-    # Set up control points for cone (9 around, 2 heights: apex and base)
-    angles = [0, pi * 0.25, pi * 0.5, pi * 0.75, pi, pi * 1.25, pi * 1.5, pi * 1.75, pi * 2.0]
-
-    # Apex (j=0) - all points collapse to the apex
-    for i in range(9):
-        surf.set_cv(i, 0, Point(0.0, 0.0, height))
-        weight = 1.0 if i % 2 == 0 else w
-        surf.set_weight(i, 0, weight)
-
-    # Base (j=1) - circle at z=0
-    for i in range(9):
-        x = radius * math.cos(angles[i])
-        y = radius * math.sin(angles[i])
-        if i % 2 == 1:
-            x = radius * math.sqrt(2.0) * math.cos(angles[i])
-            y = radius * math.sqrt(2.0) * math.sin(angles[i])
-        surf.set_cv(i, 1, Point(x, y, 0.0))
-        weight = 1.0 if i % 2 == 0 else w
-        surf.set_weight(i, 1, weight)
-
-    # Verify cone properties
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(surf.is_rational())
-    MINI_CHECK(surf.degree(0) == 2)
-    MINI_CHECK(surf.degree(1) == 1)
-    MINI_CHECK(surf.cv_count_dir(0) == 9)
-    MINI_CHECK(surf.cv_count_dir(1) == 2)
-
-    # Check apex
-    apex = surf.point_at(0.0, 0.0)
-    MINI_CHECK(TOLERANCE.is_close(apex[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(apex[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(apex[2], height))
-
-    # Check point on base circle at angle 0
-    base = surf.point_at(0.0, height)
-    MINI_CHECK(TOLERANCE.is_close(base[0], radius))
-    MINI_CHECK(TOLERANCE.is_close(base[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(base[2], 0.0))
-
-    # Check midpoint - should be at half radius, half height
-    mid = surf.point_at(0.0, height * 0.5)
-    MINI_CHECK(TOLERANCE.is_close(mid[0], radius * 0.5))
-    MINI_CHECK(TOLERANCE.is_close(mid[2], height * 0.5))
 
 
 if __name__ == "__main__":

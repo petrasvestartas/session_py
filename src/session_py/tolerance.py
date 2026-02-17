@@ -1,4 +1,5 @@
 import math
+from contextlib import contextmanager
 
 
 # Mathematical constants
@@ -336,6 +337,27 @@ class Tolerance:
 
             return abs(int(decimal.Decimal(str(tol)).as_tuple().exponent))
         raise NotImplementedError
+
+    @contextmanager
+    def temporary(self, **kwargs):
+        """Context manager for temporarily changing tolerance settings."""
+        saved = {
+            "_unit": self._unit,
+            "_absolute": self._absolute,
+            "_relative": self._relative,
+            "_angular": self._angular,
+            "_approximation": self._approximation,
+            "_precision": self._precision,
+            "_lineardeflection": self._lineardeflection,
+            "_angulardeflection": self._angulardeflection,
+        }
+        try:
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+            yield self
+        finally:
+            for k, v in saved.items():
+                setattr(self, k, v)
 
     @staticmethod
     def round_to(value, ndigits):
