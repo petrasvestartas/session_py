@@ -194,9 +194,9 @@ def line_plane(line: Line, plane, is_finite: bool = True) -> Optional[Point]:
     s = 1.0 - t
 
     output = Point(
-        pt0.x if line.x0 == line.x1 else s * line.x0 + t * line.x1,
-        pt0.y if line.y0 == line.y1 else s * line.y0 + t * line.y1,
-        pt0.z if line.z0 == line.z1 else s * line.z0 + t * line.z1,
+        pt0.x if line[0] == line[3] else s * line[0] + t * line[3],
+        pt0.y if line[1] == line[4] else s * line[1] + t * line[4],
+        pt0.z if line[2] == line[5] else s * line[2] + t * line[5],
     )
 
     if is_finite and (t < 0.0 or t > 1.0):

@@ -499,6 +499,7 @@ def test_division():
 def test_evaluation():
     from session_py import NurbsSurface
     from session_py import Point
+    from session_py import Vector
 
     points = [
         # i=0
@@ -524,6 +525,27 @@ def test_evaluation():
     ]
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+
+    u = 0.5
+    v = 0.5
+
+    # point_at(u, v) - returns Point
+    p1 = s.point_at(u, v)
+    MINI_CHECK(TOLERANCE.is_point_close(p1, Point(2.5, 2.5, 3.0)))
+
+    # normal_at(u, v) - returns Vector
+    n1 = s.normal_at(u, v)
+    MINI_CHECK(TOLERANCE.is_vector_close(n1, Vector(0, 0, 1)))
+
+    # evaluate(u, v, num_derivs) - returns vector of derivatives
+    derivs = s.evaluate(u, v, 1)
+    MINI_CHECK(TOLERANCE.is_vector_close(derivs[0], Vector(2.5, 2.5, 3.0)))
+    MINI_CHECK(TOLERANCE.is_vector_close(derivs[1], Vector(0.0, 6.9375, 0.0)))
+    MINI_CHECK(TOLERANCE.is_vector_close(derivs[2], Vector(6.9375, 0.0, 0.0)))
+
+    # point_at_corner(u_end, v_end) - corner point
+    p_corner = s.point_at_corner(1, 1)
+    MINI_CHECK(TOLERANCE.is_point_close(p_corner, Point(5.0, 5.0, 0.0)))
 
 
 @MINI_TEST("NurbsSurface", "Isocurve")
