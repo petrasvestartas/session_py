@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from session_py.mini_test import MINI_TEST, MINI_CHECK
 from session_py.tolerance import TOLERANCE
@@ -665,6 +666,34 @@ def test_nurbscurve_create_interpolated():
     MINI_CHECK(cp.degree() == 3)
     MINI_CHECK(cp.cv_count() == 13)
     MINI_CHECK(cp.is_closed())
+
+
+@MINI_TEST("NurbsCurve", "Create_fitted")
+def test_nurbscurve_create_fitted():
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py.tolerance import PI
+
+    # Open: 21 points on sine wave → fit with 8 CVs
+    pts = [Point(i * 2.0 * PI / 20.0, 3.0 * math.sin(i * 2.0 * PI / 20.0), 0.0) for i in range(21)]
+
+    c = NurbsCurve.create_fitted(pts, 8, 3, False)
+
+    MINI_CHECK(c.is_valid())
+    MINI_CHECK(c.degree() == 3)
+    MINI_CHECK(c.cv_count() == 8)
+    d0, d1 = c.domain()
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), pts[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), pts[20]))
+
+    # Periodic: 24 points on circle → fit with 10 free CVs
+    cpts = [Point(math.cos(i * 2.0 * PI / 24.0), math.sin(i * 2.0 * PI / 24.0), 0.0) for i in range(24)]
+
+    cp = NurbsCurve.create_fitted(cpts, 10, 3, True)
+
+    MINI_CHECK(cp.is_valid())
+    MINI_CHECK(cp.is_closed())
+    MINI_CHECK(cp.cv_count() == 13)
 
 
 if __name__ == "__main__":

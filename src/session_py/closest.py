@@ -88,7 +88,7 @@ class Closest:
             if abs(df) < 1e-12:
                 break
 
-            dt_step = -f / df
+            dt_step = f / df
 
             if abs(dt_step) > (t1 - t0) * 0.5:
                 dt_step = math.copysign((t1 - t0) * 0.5, dt_step)
@@ -178,7 +178,7 @@ class Closest:
         tuple of (Point, float, float)
             (closest_point, parameter, distance).
         """
-        points = polyline.points()
+        points = polyline.get_points()
 
         if not points:
             return (Point(0, 0, 0), 0.0, float('inf'))
@@ -285,8 +285,8 @@ class Closest:
                 break
 
             pt = surface.point_at(u, v)
-            du_vec = derivs[1]
-            dv_vec = derivs[2]
+            du_vec = derivs[2]  # evaluate returns [S, Sv, Su, ...]
+            dv_vec = derivs[1]
 
             delta = Vector(
                 test_point[0] - pt[0],
@@ -329,3 +329,186 @@ class Closest:
         final_dist = surface.point_at(u, v).distance(test_point)
 
         return (u, v, final_dist)
+
+    @staticmethod
+    def _closest_point_on_triangle(p, a, b, c):
+        abx, aby, abz = b[0]-a[0], b[1]-a[1], b[2]-a[2]
+        acx, acy, acz = c[0]-a[0], c[1]-a[1], c[2]-a[2]
+        apx, apy, apz = p[0]-a[0], p[1]-a[1], p[2]-a[2]
+
+        d1 = abx*apx + aby*apy + abz*apz
+        d2 = acx*apx + acy*apy + acz*apz
+        if d1 <= 0.0 and d2 <= 0.0:
+            return a
+
+        bpx, bpy, bpz = p[0]-b[0], p[1]-b[1], p[2]-b[2]
+        d3 = abx*bpx + aby*bpy + abz*bpz
+        d4 = acx*bpx + acy*bpy + acz*bpz
+        if d3 >= 0.0 and d4 <= d3:
+            return b
+
+        vc = d1*d4 - d3*d2
+        if vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
+            v = d1 / (d1 - d3)
+            return Point(a[0] + v*abx, a[1] + v*aby, a[2] + v*abz)
+
+        cpx, cpy, cpz = p[0]-c[0], p[1]-c[1], p[2]-c[2]
+        d5 = abx*cpx + aby*cpy + abz*cpz
+        d6 = acx*cpx + acy*cpy + acz*cpz
+        if d6 >= 0.0 and d5 <= d6:
+            return c
+
+        vb = d5*d2 - d1*d6
+        if vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
+            w = d2 / (d2 - d6)
+            return Point(a[0] + w*acx, a[1] + w*acy, a[2] + w*acz)
+
+        va = d3*d6 - d5*d4
+        if va <= 0.0 and (d4-d3) >= 0.0 and (d5-d6) >= 0.0:
+            w = (d4-d3) / ((d4-d3) + (d5-d6))
+            return Point(b[0] + w*(c[0]-b[0]), b[1] + w*(c[1]-b[1]), b[2] + w*(c[2]-b[2]))
+
+        denom = 1.0 / (va + vb + vc)
+        v = vb * denom
+        w = vc * denom
+        return Point(a[0] + abx*v + acx*w, a[1] + aby*v + acy*w, a[2] + abz*v + acz*w)
+
+    @staticmethod
+    def mesh_point(mesh, test_point):
+        if mesh.number_of_faces() == 0:
+            return (Point(0, 0, 0), 0, float('inf'))
+
+        vertices, faces = mesh.to_vertices_and_faces()
+        sorted_face_keys = sorted(mesh.face.keys())
+
+        best_point = Point(0, 0, 0)
+        best_face_key = 0
+        best_dist = float('inf')
+
+        for fi, fv in enumerate(faces):
+            if len(fv) < 3:
+                continue
+            v0 = vertices[fv[0]]
+            for j in range(1, len(fv) - 1):
+                v1 = vertices[fv[j]]
+                v2 = vertices[fv[j + 1]]
+                cp = Closest._closest_point_on_triangle(test_point, v0, v1, v2)
+                dist = cp.distance(test_point)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_point = cp
+                    best_face_key = sorted_face_keys[fi]
+
+        return (best_point, best_face_key, best_dist)
+
+    @staticmethod
+    def mesh_point_aabb(mesh, test_point):
+        if mesh.number_of_faces() == 0:
+            return (Point(0, 0, 0), 0, float('inf'))
+
+        vertices, faces = mesh.to_vertices_and_faces()
+        sorted_face_keys = sorted(mesh.face.keys())
+
+        tris = []
+        tri_face_idx = []
+        for fi, fv in enumerate(faces):
+            if len(fv) < 3:
+                continue
+            v0 = vertices[fv[0]]
+            for j in range(1, len(fv) - 1):
+                tris.append((v0, vertices[fv[j]], vertices[fv[j + 1]]))
+                tri_face_idx.append(fi)
+
+        if not tris:
+            return (Point(0, 0, 0), 0, float('inf'))
+
+        boxes = []
+        for v0, v1, v2 in tris:
+            lx = min(v0.x, v1.x, v2.x)
+            ly = min(v0.y, v1.y, v2.y)
+            lz = min(v0.z, v1.z, v2.z)
+            hx = max(v0.x, v1.x, v2.x)
+            hy = max(v0.y, v1.y, v2.y)
+            hz = max(v0.z, v1.z, v2.z)
+            boxes.append(((lx+hx)*0.5, (ly+hy)*0.5, (lz+hz)*0.5,
+                          (hx-lx)*0.5, (hy-ly)*0.5, (hz-lz)*0.5))
+
+        nodes = []
+
+        def build_node(ids):
+            ni = len(nodes)
+            nodes.append([None, -1, -1])
+            lx = ly = lz = 1e308
+            hx = hy = hz = -1e308
+            for i in ids:
+                b = boxes[i]
+                lx = min(lx, b[0]-b[3]); hx = max(hx, b[0]+b[3])
+                ly = min(ly, b[1]-b[4]); hy = max(hy, b[1]+b[4])
+                lz = min(lz, b[2]-b[5]); hz = max(hz, b[2]+b[5])
+            nodes[ni][0] = ((lx+hx)*0.5, (ly+hy)*0.5, (lz+hz)*0.5,
+                            (hx-lx)*0.5, (hy-ly)*0.5, (hz-lz)*0.5)
+            if len(ids) == 1:
+                nodes[ni][2] = ids[0]
+                return
+            dx, dy, dz = hx-lx, hy-ly, hz-lz
+            axis = 0 if dx >= dy and dx >= dz else (1 if dy >= dz else 2)
+            ids.sort(key=lambda i: boxes[i][axis])
+            mid = len(ids) // 2
+            build_node(ids[:mid])
+            nodes[ni][1] = len(nodes)
+            build_node(ids[mid:])
+
+        build_node(list(range(len(tris))))
+
+        def aabb_min_dist(aabb, pt):
+            dx = max(0.0, abs(pt.x - aabb[0]) - aabb[3])
+            dy = max(0.0, abs(pt.y - aabb[1]) - aabb[4])
+            dz = max(0.0, abs(pt.z - aabb[2]) - aabb[5])
+            return (dx*dx + dy*dy + dz*dz) ** 0.5
+
+        best = [Point(0, 0, 0), 0, float('inf')]
+
+        def dfs(ni):
+            aabb, right, obj = nodes[ni]
+            if aabb_min_dist(aabb, test_point) >= best[2]:
+                return
+            if obj >= 0:
+                v0, v1, v2 = tris[obj]
+                cp = Closest._closest_point_on_triangle(test_point, v0, v1, v2)
+                d = cp.distance(test_point)
+                if d < best[2]:
+                    best[0] = cp
+                    best[1] = sorted_face_keys[tri_face_idx[obj]]
+                    best[2] = d
+                return
+            left = ni + 1
+            ld = aabb_min_dist(nodes[left][0], test_point)
+            rd = aabb_min_dist(nodes[right][0], test_point)
+            if ld <= rd:
+                if ld < best[2]: dfs(left)
+                if rd < best[2]: dfs(right)
+            else:
+                if rd < best[2]: dfs(right)
+                if ld < best[2]: dfs(left)
+
+        dfs(0)
+        return tuple(best)
+
+    @staticmethod
+    def pointcloud_point(cloud, test_point):
+        if cloud.point_count() == 0:
+            return (Point(0, 0, 0), 0, float('inf'))
+
+        best_point = cloud.get_point(0)
+        best_index = 0
+        best_dist = best_point.distance(test_point)
+
+        for i in range(1, cloud.point_count()):
+            p = cloud.get_point(i)
+            dist = p.distance(test_point)
+            if dist < best_dist:
+                best_dist = dist
+                best_point = p
+                best_index = i
+
+        return (best_point, best_index, best_dist)

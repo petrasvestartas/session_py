@@ -363,6 +363,153 @@ class NurbsCurve:
 
         return curve
 
+    @staticmethod
+    def create_fitted(points, num_cvs, degree=3, is_periodic=False):
+        m = len(points)
+        dim = 3
+        order = degree + 1
+
+        def pdist(a, b):
+            dx, dy, dz = a[0]-b[0], a[1]-b[1], a[2]-b[2]
+            return math.sqrt(dx*dx + dy*dy + dz*dz)
+
+        if is_periodic:
+            n = m
+            if n >= 2 and pdist(points[0], points[n-1]) < 1e-10:
+                n -= 1
+            if n <= num_cvs or num_cvs < order:
+                if n < 3:
+                    return NurbsCurve()
+                return NurbsCurve.create_interpolated(points[:n], knot.CurveKnotStyle.ChordPeriodic)
+
+            cv_count = num_cvs + degree
+            kc = cv_count + order - 2
+
+            params = [0.0] * (n + 1)
+            for i in range(1, n):
+                params[i] = params[i-1] + pdist(points[i-1], points[i])
+            params[n] = params[n-1] + pdist(points[n-1], points[0])
+            T = params[n]
+            if T < 1e-14:
+                return NurbsCurve()
+
+            ppts = []
+            for i in range(n):
+                ppts.extend([points[i][0], points[i][1], points[i][2]])
+            knots_vec = knot.build_fitted_knots_periodic_adaptive(params, ppts, n, dim, num_cvs, degree)
+
+            NtN = [[0.0] * num_cvs for _ in range(num_cvs)]
+            NtQ = [0.0] * (num_cvs * dim)
+
+            for k in range(n):
+                span = knot.find_span(order, cv_count, knots_vec, params[k])
+                basis = knot.eval_basis(order, knots_vec, span, params[k])
+                for a in range(order):
+                    ci = (span + a) % num_cvs
+                    for d in range(dim):
+                        NtQ[ci * dim + d] += basis[a] * points[k][d]
+                    for b in range(order):
+                        cj = (span + b) % num_cvs
+                        NtN[ci][cj] += basis[a] * basis[b]
+
+            cv = list(NtQ)
+
+            for col in range(num_cvs):
+                pivot = col
+                for row in range(col + 1, num_cvs):
+                    if abs(NtN[row][col]) > abs(NtN[pivot][col]):
+                        pivot = row
+                if pivot != col:
+                    NtN[col], NtN[pivot] = NtN[pivot], NtN[col]
+                    for d in range(dim):
+                        cv[col*dim+d], cv[pivot*dim+d] = cv[pivot*dim+d], cv[col*dim+d]
+                if abs(NtN[col][col]) < 1e-300:
+                    return NurbsCurve()
+                for row in range(col + 1, num_cvs):
+                    factor = NtN[row][col] / NtN[col][col]
+                    for j in range(col, num_cvs):
+                        NtN[row][j] -= factor * NtN[col][j]
+                    for d in range(dim):
+                        cv[row*dim+d] -= factor * cv[col*dim+d]
+            for i in range(num_cvs - 1, -1, -1):
+                for d in range(dim):
+                    s = cv[i*dim+d]
+                    for j in range(i + 1, num_cvs):
+                        s -= NtN[i][j] * cv[j*dim+d]
+                    cv[i*dim+d] = s / NtN[i][i]
+
+            curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=cv_count)
+            curve.m_knot = np.array(knots_vec, dtype=np.float64)
+            curve.m_cv = np.zeros(cv_count * dim, dtype=np.float64)
+            for i in range(num_cvs):
+                curve.set_cv(i, Point(cv[i*3], cv[i*3+1], cv[i*3+2]))
+            for i in range(degree):
+                curve.set_cv(num_cvs + i, curve.get_cv(i))
+            return curve
+
+        # Open fitting
+        if m <= num_cvs or num_cvs < order:
+            return NurbsCurve.create_interpolated(points)
+
+        pts = np.zeros((m, dim))
+        for i in range(m):
+            pts[i, 0] = points[i][0]
+            pts[i, 1] = points[i][1]
+            pts[i, 2] = points[i][2]
+
+        params = knot.compute_parameters(pts, knot.CurveKnotStyle.Chord)
+        flat_pts = []
+        for i in range(m):
+            flat_pts.extend([points[i][0], points[i][1], points[i][2]])
+        knots_vec = knot.build_fitted_knots_adaptive(params, flat_pts, m, dim, num_cvs, degree)
+        n = num_cvs - 1
+        sys_n = num_cvs - 2
+        bw = degree
+        bw1 = bw + 1
+
+        band = [0.0] * (sys_n * bw1)
+        rhs = [0.0] * (sys_n * dim)
+
+        for k in range(1, m - 1):
+            span = knot.find_span(order, num_cvs, knots_vec, params[k])
+            basis = knot.eval_basis(order, knots_vec, span, params[k])
+
+            rk = [points[k][d] for d in range(dim)]
+            for a in range(order):
+                ci = span + a
+                if ci == 0:
+                    for d in range(dim):
+                        rk[d] -= basis[a] * points[0][d]
+                if ci == n:
+                    for d in range(dim):
+                        rk[d] -= basis[a] * points[m-1][d]
+
+            for a in range(order):
+                ci = span + a
+                if ci < 1 or ci > n - 1:
+                    continue
+                ri = ci - 1
+                for d in range(dim):
+                    rhs[ri * dim + d] += basis[a] * rk[d]
+                for b in range(a, order):
+                    cj = span + b
+                    if cj < 1 or cj > n - 1:
+                        continue
+                    rj = cj - 1
+                    band[rj * bw1 + (rj - ri)] += basis[a] * basis[b]
+
+        if not knot.solve_banded_spd(dim, sys_n, bw, band, rhs):
+            return NurbsCurve.create_interpolated(points)
+
+        curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=num_cvs)
+        curve.m_knot = np.array(knots_vec, dtype=np.float64)
+        curve.m_cv = np.zeros(num_cvs * dim, dtype=np.float64)
+        curve.set_cv(0, points[0])
+        for i in range(sys_n):
+            curve.set_cv(i + 1, Point(rhs[i*3], rhs[i*3+1], rhs[i*3+2]))
+        curve.set_cv(n, points[m-1])
+        return curve
+
     ###########################################################################################
     # Constructors & Destructor
     ###########################################################################################

@@ -124,6 +124,25 @@ class BoundingBox:
         return cls.from_points(vertices, inflate)
 
     @classmethod
+    def from_pointcloud(cls, pointcloud, inflate: float = 0.0, plane=None):
+        points = pointcloud.get_points()
+        if plane is not None:
+            return cls.from_points_with_plane(points, plane, inflate)
+        return cls.from_points(points, inflate)
+
+    @classmethod
+    def from_nurbssurface(cls, surface, inflate: float = 0.0, plane=None):
+        if not surface.is_valid() or surface.cv_count(0) == 0 or surface.cv_count(1) == 0:
+            return cls()
+        points = []
+        for i in range(surface.cv_count(0)):
+            for j in range(surface.cv_count(1)):
+                points.append(surface.get_cv(i, j))
+        if plane is not None:
+            return cls.from_points_with_plane(points, plane, inflate)
+        return cls.from_points(points, inflate)
+
+    @classmethod
     def from_nurbscurve(cls, curve, inflate: float = 0.0, tight: bool = False, plane=None):
         if not curve.is_valid() or curve.cv_count() == 0:
             return cls()
@@ -253,6 +272,13 @@ class BoundingBox:
         world_center = xy_to_plane.transformed_point(local_center)
 
         return cls(world_center, x_axis, y_axis, z_axis, half_size)
+
+    def aabb(self):
+        ex, ey, ez = self.half_size[0], self.half_size[1], self.half_size[2]
+        hx = abs(self.x_axis[0]) * ex + abs(self.y_axis[0]) * ey + abs(self.z_axis[0]) * ez
+        hy = abs(self.x_axis[1]) * ex + abs(self.y_axis[1]) * ey + abs(self.z_axis[1]) * ez
+        hz = abs(self.x_axis[2]) * ex + abs(self.y_axis[2]) * ey + abs(self.z_axis[2]) * ez
+        return BoundingBox(self.center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz))
 
     def point_at(self, x: float, y: float, z: float) -> Point:
         return Point(

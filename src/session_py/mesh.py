@@ -105,6 +105,14 @@ class VertexData:
         self.attributes["ny"] = ny
         self.attributes["nz"] = nz
 
+    def __eq__(self, other):
+        if not isinstance(other, VertexData):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y and self.z == other.z and self.attributes == other.attributes
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
 
 class Mesh:
     """A halfedge mesh data structure for representing polygonal surfaces.
@@ -160,6 +168,51 @@ class Mesh:
         self.linecolors = []
         self.widths = []
         self.xform = Xform.identity()
+
+    def __copy__(self):
+        m = Mesh()
+        m.name = self.name
+        m.halfedge = {u: dict(v) for u, v in self.halfedge.items()}
+        m.vertex = {k: VertexData(v.position()) for k, v in self.vertex.items()}
+        for k, v in self.vertex.items():
+            m.vertex[k].attributes = dict(v.attributes)
+        m.face = {k: list(v) for k, v in self.face.items()}
+        m.facedata = {k: dict(v) for k, v in self.facedata.items()}
+        m.edgedata = {k: dict(v) for k, v in self.edgedata.items()}
+        m.default_vertex_attributes = dict(self.default_vertex_attributes)
+        m.default_face_attributes = dict(self.default_face_attributes)
+        m.default_edge_attributes = dict(self.default_edge_attributes)
+        m.triangulation = {k: list(v) for k, v in self.triangulation.items()}
+        m._max_vertex = self._max_vertex
+        m._max_face = self._max_face
+        m.pointcolors = list(self.pointcolors)
+        m.facecolors = list(self.facecolors)
+        m.linecolors = list(self.linecolors)
+        m.widths = list(self.widths)
+        m.xform = self.xform
+        return m
+
+    def __eq__(self, other):
+        if not isinstance(other, Mesh):
+            return NotImplemented
+        if self.name != other.name:
+            return False
+        if self.vertex != other.vertex:
+            return False
+        if self.face != other.face:
+            return False
+        if self.xform != other.xform:
+            return False
+        return True
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __str__(self):
+        return f"Mesh(name={self.name}, vertices={self.number_of_vertices()}, faces={self.number_of_faces()})"
+
+    def __repr__(self):
+        return f"Mesh(\n  name={self.name},\n  vertices={self.number_of_vertices()},\n  faces={self.number_of_faces()},\n  edges={self.number_of_edges()}\n)"
 
     ###########################################################################################
     # Basic Queries
@@ -503,7 +556,7 @@ class Mesh:
     ###########################################################################################
 
     @staticmethod
-    def from_polygons(
+    def from_polylines(
         polygons: List[List[Point]], precision: Optional[float] = None
     ) -> "Mesh":
         """Create a mesh from a list of polygons.
@@ -549,6 +602,115 @@ class Mesh:
             vkeys = [get_vkey(p) for p in poly]
             mesh.add_face(vkeys)
 
+        return mesh
+
+    @staticmethod
+    def from_vertices_and_faces(
+        vertices: List[Point], faces: List[List[int]]
+    ) -> "Mesh":
+        mesh = Mesh()
+        vkeys = []
+        for pt in vertices:
+            vkeys.append(mesh.add_vertex(pt))
+        for f in faces:
+            mesh.add_face([vkeys[i] for i in f])
+        return mesh
+
+    @staticmethod
+    def from_lines(
+        lines: List, delete_boundary_face: bool = False, precision: Optional[float] = None
+    ) -> "Mesh":
+        if not lines:
+            return Mesh()
+
+        all_pts = []
+        for ln in lines:
+            all_pts.append(ln.start())
+            all_pts.append(ln.end())
+
+        eps = precision if precision is not None else 0.0
+        if eps <= 0.0:
+            xs = [p.x for p in all_pts]
+            ys = [p.y for p in all_pts]
+            zs = [p.z for p in all_pts]
+            dx = max(xs) - min(xs)
+            dy = max(ys) - min(ys)
+            dz = max(zs) - min(zs)
+            diag = math.sqrt(dx*dx + dy*dy + dz*dz)
+            eps = diag * 1e-6
+            if eps < 1e-12:
+                eps = 1e-12
+
+        vmap = {}
+        verts = []
+        def get_vid(p):
+            kx = round(p.x / eps)
+            ky = round(p.y / eps)
+            kz = round(p.z / eps)
+            key = (kx, ky, kz)
+            if key in vmap:
+                return vmap[key]
+            vid = len(verts)
+            verts.append(p)
+            vmap[key] = vid
+            return vid
+
+        adj = {}
+        for ln in lines:
+            a = get_vid(ln.start())
+            b = get_vid(ln.end())
+            if a == b:
+                continue
+            adj.setdefault(a, []).append(b)
+            adj.setdefault(b, []).append(a)
+
+        nv = len(verts)
+
+        for v in adj:
+            nbrs = sorted(set(adj[v]))
+            vx, vy = verts[v].x, verts[v].y
+            nbrs.sort(key=lambda n: math.atan2(verts[n].y - vy, verts[n].x - vx))
+            adj[v] = nbrs
+
+        visited = set()
+        face_cycles = []
+
+        for u in adj:
+            for v in adj[u]:
+                if (u, v) in visited:
+                    continue
+                cycle = []
+                cu, cv = u, v
+                valid = True
+                while True:
+                    if (cu, cv) in visited:
+                        break
+                    visited.add((cu, cv))
+                    cycle.append(cu)
+                    cv_nbrs = adj.get(cv, [])
+                    if cu not in cv_nbrs:
+                        valid = False
+                        break
+                    idx = cv_nbrs.index(cu)
+                    prev_idx = (idx - 1) % len(cv_nbrs)
+                    nxt = cv_nbrs[prev_idx]
+                    cu, cv = cv, nxt
+                    if len(cycle) > nv * 2:
+                        valid = False
+                        break
+                if valid and len(cycle) >= 3:
+                    face_cycles.append(cycle)
+
+        if delete_boundary_face and face_cycles:
+            max_idx = max(range(len(face_cycles)), key=lambda i: len(face_cycles[i]))
+            face_cycles.pop(max_idx)
+
+        mesh = Mesh()
+        vkeys = []
+        for pt in verts:
+            vkeys.append(mesh.add_vertex(pt))
+        for cycle in face_cycles:
+            mesh.add_face([vkeys[i] for i in cycle])
         return mesh
 
     ###########################################################################################

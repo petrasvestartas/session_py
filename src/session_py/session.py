@@ -118,6 +118,8 @@ class Session:
             session.lookup[nurbscurve.guid] = nurbscurve
         for nurbssurface in session.objects.nurbssurfaces:
             session.lookup[nurbssurface.guid] = nurbssurface
+        for brep in session.objects.breps:
+            session.lookup[brep.guid] = brep
 
         return session
 
@@ -179,6 +181,8 @@ class Session:
             session.lookup[nurbscurve.guid] = nurbscurve
         for nurbssurface in session.objects.nurbssurfaces:
             session.lookup[nurbssurface.guid] = nurbssurface
+        for brep in session.objects.breps:
+            session.lookup[brep.guid] = brep
         return session
 
     def pb_dump(self, filepath):
@@ -310,6 +314,12 @@ class Session:
         self.lookup[nurbssurface.guid] = nurbssurface
         self.graph.add_node(nurbssurface.guid, f"nurbssurface_{nurbssurface.name}")
         return TreeNode(name=nurbssurface.guid)
+
+    def add_brep(self, brep) -> TreeNode:
+        self.objects.breps.append(brep)
+        self.lookup[brep.guid] = brep
+        self.graph.add_node(brep.guid, f"brep_{brep.name}")
+        return TreeNode(name=brep.guid)
 
     def add(self, node: TreeNode, parent: TreeNode = None) -> None:
         """Add a TreeNode to the tree hierarchy.

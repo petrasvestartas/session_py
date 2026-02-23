@@ -29,6 +29,7 @@ from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .primitives import Primitives
 from .trimmedsurface import TrimmedSurface
+from .brep import BRep
 from .ray_box_intersection import ray_box
 from .closest import Closest
 
@@ -63,6 +64,7 @@ __all__ = [
     "NurbsSurface",
     "Primitives",
     "TrimmedSurface",
+    "BRep",
     "ray_box",
     "Closest",
 ]

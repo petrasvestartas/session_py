@@ -938,3 +938,575 @@ def curve_plane_production(curve, plane, tolerance=None):
 def curve_closest_point(curve, test_point, t0=0.0, t1=0.0):
     """Find closest point on NURBS curve to test point."""
     return Closest.curve_point(curve, test_point, t0, t1)
+
+
+def surface_plane(surface, plane, tolerance=None):
+    """Find intersection curves between a NURBS surface and a plane."""
+    import math
+    from .nurbscurve import NurbsCurve
+    from .nurbssurface import NurbsSurface
+    from .knot import CurveKnotStyle
+
+    if not surface.is_valid():
+        return []
+    if tolerance is None or tolerance <= 0.0:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    range_u = u1 - u0
+    range_v = v1 - v0
+    closed_u = surface.is_closed(0)
+    closed_v = surface.is_closed(1)
+
+    def wrap_u(u):
+        if closed_u:
+            t = math.fmod(u - u0, range_u)
+            if t < 0:
+                t += range_u
+            return u0 + t
+        return max(u0, min(u, u1))
+
+    def wrap_v(v):
+        if closed_v:
+            t = math.fmod(v - v0, range_v)
+            if t < 0:
+                t += range_v
+            return v0 + t
+        return max(v0, min(v, v1))
+
+    pn = plane.z_axis
+    p0 = plane.origin
+
+    def g(u, v):
+        p = surface.point_at(wrap_u(u), wrap_v(v))
+        return (p[0]-p0[0])*pn[0] + (p[1]-p0[1])*pn[1] + (p[2]-p0[2])*pn[2]
+
+    def g_and_grad(u, v):
+        derivs = surface.evaluate(wrap_u(u), wrap_v(v), 1)
+        S = derivs[0]
+        Su = derivs[2]
+        Sv = derivs[1]
+        val = (S[0]-p0[0])*pn[0] + (S[1]-p0[1])*pn[1] + (S[2]-p0[2])*pn[2]
+        gu = Su[0]*pn[0] + Su[1]*pn[1] + Su[2]*pn[2]
+        gv = Sv[0]*pn[0] + Sv[1]*pn[1] + Sv[2]*pn[2]
+        return val, gu, gv
+
+    def newton_correct(uv):
+        u, v = uv
+        for _ in range(10):
+            val, gu, gv = g_and_grad(u, v)
+            if abs(val) < tolerance:
+                uv[0], uv[1] = u, v
+                return True
+            mag2 = gu * gu + gv * gv
+            if mag2 < 1e-28:
+                uv[0], uv[1] = u, v
+                return False
+            u -= val * gu / mag2
+            v -= val * gv / mag2
+            u = wrap_u(u)
+            v = wrap_v(v)
+        uv[0], uv[1] = u, v
+        return abs(g(u, v)) < tolerance * 10.0
+
+    # 1. Find seeds: coarse UV grid, detect sign changes, Newton-refine
+    spans_u = surface.get_span_vector(0)
+    spans_v = surface.get_span_vector(1)
+    nu = max(len(spans_u) - 1, 1) * 4
+    nv = max(len(spans_v) - 1, 1) * 4
+    du = range_u / nu
+    dv = range_v / nv
+
+    mu = (u0 + u1) * 0.5
+    mv = (v0 + v1) * 0.5
+    pmid = surface.point_at(mu, mv)
+    uv_to_3d_u = pmid.distance(surface.point_at(wrap_u(mu + du), mv)) / du
+    uv_to_3d_v = pmid.distance(surface.point_at(mu, wrap_v(mv + dv))) / dv
+    uv_to_3d = max(uv_to_3d_u, uv_to_3d_v)
+    uv_to_3d_min = min(uv_to_3d_u, uv_to_3d_v)
+    if uv_to_3d < 1e-10:
+        uv_to_3d = 1.0
+    if uv_to_3d_min < 1e-10:
+        uv_to_3d_min = 1.0
+
+    cols = nv + 1
+    dist = [0.0] * ((nu + 1) * cols)
+    for i in range(nu + 1):
+        u = u0 + du * i
+        for j in range(nv + 1):
+            v = v0 + dv * j
+            d = g(u, v)
+            if d == 0.0:
+                d = -1e-14
+            dist[i * cols + j] = d
+
+    seeds = []  # list of [u, v, used]
+
+    h_jmax = nv - 1 if closed_v else nv
+    for i in range(nu):
+        for j in range(h_jmax + 1):
+            d0 = dist[i * cols + j]
+            d1 = dist[(i + 1) * cols + j]
+            if d0 * d1 < 0:
+                t = d0 / (d0 - d1)
+                su = u0 + du * (i + t)
+                sv = v0 + dv * j
+                uv = [su, sv]
+                if newton_correct(uv):
+                    seeds.append([uv[0], uv[1], False])
+
+    v_imax = nu - 1 if closed_u else nu
+    for i in range(v_imax + 1):
+        for j in range(nv):
+            d0 = dist[i * cols + j]
+            d1 = dist[i * cols + j + 1]
+            if d0 * d1 < 0:
+                t = d0 / (d0 - d1)
+                su = u0 + du * i
+                sv = v0 + dv * (j + t)
+                uv = [su, sv]
+                if newton_correct(uv):
+                    seeds.append([uv[0], uv[1], False])
+
+    # Deduplicate seeds (3D distance)
+    seed_tol_3d = max(du, dv) * uv_to_3d
+    for i in range(len(seeds)):
+        if seeds[i][2]:
+            continue
+        pi = surface.point_at(seeds[i][0], seeds[i][1])
+        for j in range(i + 1, len(seeds)):
+            if seeds[j][2]:
+                continue
+            if pi.distance(surface.point_at(seeds[j][0], seeds[j][1])) < seed_tol_3d:
+                seeds[j][2] = True
+
+    # 2. Trace intersection curves via predictor-corrector marching
+    step = min(du, dv) * 0.25
+    max_steps = nu * nv * 32
+    close_tol_3d = step * 4.0 * uv_to_3d_min
+    consume_tol_3d = step * uv_to_3d * 2.0
+
+    result = []
+
+    for seed in seeds:
+        if seed[2]:
+            continue
+        seed[2] = True
+
+        def tangent_at_uv(u, v, dir_sign):
+            val, gu, gv = g_and_grad(u, v)
+            mag = math.hypot(gu, gv)
+            if mag < 1e-14:
+                return None
+            return (-gv / mag * dir_sign, gu / mag * dir_sign)
+
+        def trace_dir(su, sv, dir_sign):
+            out = []
+            u, v = su, sv
+            prev_tu, prev_tv = 0.0, 0.0
+            p_start = surface.point_at(su, sv)
+            p_prev = p_start
+            dist_traveled = 0.0
+            for s in range(max_steps):
+                tang = tangent_at_uv(u, v, dir_sign)
+                if tang is None:
+                    if math.hypot(prev_tu, prev_tv) < 1e-14:
+                        break
+                    tu, tv = prev_tu, prev_tv
+                else:
+                    tu, tv = tang
+
+                local_step = step
+                if math.hypot(prev_tu, prev_tv) > 1e-14:
+                    dot = tu * prev_tu + tv * prev_tv
+                    dot = max(-1.0, min(1.0, dot))
+                    if dot < 0.95:
+                        local_step = step * 0.25
+                    elif dot < 0.985:
+                        local_step = step * 0.5
+
+                u_mid = u + local_step * 0.5 * tu
+                v_mid = v + local_step * 0.5 * tv
+                tang2 = tangent_at_uv(u_mid, v_mid, dir_sign)
+                if tang2 is not None:
+                    tu, tv = tang2
+                prev_tu, prev_tv = tu, tv
+
+                un = u + local_step * tu
+                vn = v + local_step * tv
+
+                hit_boundary = False
+                if (not closed_u and (un < u0 or un > u1)) or \
+                   (not closed_v and (vn < v0 or vn > v1)):
+                    tc = 1.0
+                    if not closed_u and tu > 0 and un > u1:
+                        tc = min(tc, (u1 - u) / (local_step * tu))
+                    if not closed_u and tu < 0 and un < u0:
+                        tc = min(tc, (u0 - u) / (local_step * tu))
+                    if not closed_v and tv > 0 and vn > v1:
+                        tc = min(tc, (v1 - v) / (local_step * tv))
+                    if not closed_v and tv < 0 and vn < v0:
+                        tc = min(tc, (v0 - v) / (local_step * tv))
+                    un = u + tc * local_step * tu
+                    vn = v + tc * local_step * tv
+                    hit_boundary = True
+                un = wrap_u(un)
+                vn = wrap_v(vn)
+
+                uv = [un, vn]
+                if not newton_correct(uv):
+                    break
+                un, vn = uv[0], uv[1]
+
+                p_cur = surface.point_at(un, vn)
+                dist_traveled += p_prev.distance(p_cur)
+
+                if dist_traveled > close_tol_3d * 3.0 and \
+                   p_start.distance(p_cur) < close_tol_3d:
+                    out.append((un, vn))
+                    return out, True
+
+                out.append((un, vn))
+                u, v = un, vn
+                p_prev = p_cur
+
+                if hit_boundary:
+                    break
+
+                for other in seeds:
+                    if not other[2]:
+                        if p_cur.distance(surface.point_at(other[0], other[1])) < consume_tol_3d:
+                            other[2] = True
+
+            return out, False
+
+        fwd, fwd_closed = trace_dir(seed[0], seed[1], +1)
+        if not fwd_closed:
+            bwd, _ = trace_dir(seed[0], seed[1], -1)
+        else:
+            bwd = []
+
+        # Assemble UV trace: reverse(bwd) + seed + fwd
+        uv_trace = []
+        for i in range(len(bwd) - 1, -1, -1):
+            uv_trace.append(bwd[i])
+        uv_trace.append((seed[0], seed[1]))
+        for p in fwd:
+            uv_trace.append(p)
+
+        if len(uv_trace) < 4:
+            continue
+
+        p_first = surface.point_at(uv_trace[0][0], uv_trace[0][1])
+        p_last = surface.point_at(uv_trace[-1][0], uv_trace[-1][1])
+        is_loop = fwd_closed or (len(uv_trace) >= 6 and p_first.distance(p_last) < close_tol_3d)
+        if is_loop:
+            uv_trace.pop()
+        if len(uv_trace) < 4:
+            continue
+
+        # Unwrap UV trace for smooth interpolation across seams
+        uv_unwrapped = [list(p) for p in uv_trace]
+        for i in range(1, len(uv_unwrapped)):
+            du_jump = uv_unwrapped[i][0] - uv_unwrapped[i - 1][0]
+            dv_jump = uv_unwrapped[i][1] - uv_unwrapped[i - 1][1]
+            if closed_u:
+                if du_jump > range_u * 0.5:
+                    uv_unwrapped[i][0] -= range_u
+                elif du_jump < -range_u * 0.5:
+                    uv_unwrapped[i][0] += range_u
+            if closed_v:
+                if dv_jump > range_v * 0.5:
+                    uv_unwrapped[i][1] -= range_v
+                elif dv_jump < -range_v * 0.5:
+                    uv_unwrapped[i][1] += range_v
+
+        # 3. Evaluate all trace points to 3D
+        all_pts = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
+
+        # 4. Circle detection: if points lie on a circle -> exact rational NURBS
+        crv = NurbsCurve()
+        if is_loop and len(all_pts) >= 6:
+            ax = plane.x_axis
+            ay = plane.y_axis
+            po = plane.origin
+
+            def to2d_circle(p):
+                dx = p[0] - po[0]
+                dy = p[1] - po[1]
+                dz = p[2] - po[2]
+                return (dx*ax[0] + dy*ax[1] + dz*ax[2],
+                        dx*ay[0] + dy*ay[1] + dz*ay[2])
+
+            n = len(all_pts)
+            x1, y1 = to2d_circle(all_pts[0])
+            x2, y2 = to2d_circle(all_pts[n // 3])
+            x3, y3 = to2d_circle(all_pts[2 * n // 3])
+
+            ax_ = x2 - x1
+            ay_ = y2 - y1
+            bx_ = x3 - x1
+            by_ = y3 - y1
+            D = 2.0 * (ax_ * by_ - ay_ * bx_)
+
+            if abs(D) > 1e-10:
+                a2 = ax_ * ax_ + ay_ * ay_
+                b2 = bx_ * bx_ + by_ * by_
+                ccx = x1 + (by_ * a2 - ay_ * b2) / D
+                ccy = y1 + (ax_ * b2 - bx_ * a2) / D
+                radius = math.hypot(x1 - ccx, y1 - ccy)
+
+                max_dev = 0.0
+                for p in all_pts:
+                    px, py = to2d_circle(p)
+                    max_dev = max(max_dev, abs(math.hypot(px - ccx, py - ccy) - radius))
+
+                circle_tol = max(radius * 1e-4, 1e-6)
+                if radius > 1e-10 and max_dev < circle_tol:
+                    cx3d = po[0] + ccx * ax[0] + ccy * ay[0]
+                    cy3d = po[1] + ccx * ax[1] + ccy * ay[1]
+                    cz3d = po[2] + ccx * ax[2] + ccy * ay[2]
+
+                    w = math.sqrt(2.0) / 2.0
+                    cx_ = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+                    cy_ = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+                    wts = [1, w, 1, w, 1, w, 1, w, 1]
+                    crv = NurbsCurve(3, True, 3, 9)
+                    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+                    for i in range(10):
+                        crv.set_knot(i, knots[i])
+                    for i in range(9):
+                        px = cx3d + radius * (cx_[i] * ax[0] + cy_[i] * ay[0])
+                        py = cy3d + radius * (cx_[i] * ax[1] + cy_[i] * ay[1])
+                        pz = cz3d + radius * (cx_[i] * ax[2] + cy_[i] * ay[2])
+                        crv.set_cv_4d(i, px * wts[i], py * wts[i], pz * wts[i], wts[i])
+
+        # 4b. Ellipse (conic) detection for non-circular closed curves
+        if not crv.is_valid() and is_loop and len(all_pts) >= 8:
+            ax = plane.x_axis
+            ay = plane.y_axis
+            po = plane.origin
+
+            def to2d_ellipse(p):
+                dx = p[0] - po[0]
+                dy = p[1] - po[1]
+                dz = p[2] - po[2]
+                return (dx*ax[0] + dy*ax[1] + dz*ax[2],
+                        dx*ay[0] + dy*ay[1] + dz*ay[2])
+
+            n = len(all_pts)
+            AtA = [[0.0]*5 for _ in range(5)]
+            Atb = [0.0]*5
+            for i in range(n):
+                x, y = to2d_ellipse(all_pts[i])
+                row = [x*x, x*y, y*y, x, y]
+                for r in range(5):
+                    Atb[r] += row[r]
+                    for c in range(5):
+                        AtA[r][c] += row[r] * row[c]
+
+            M = [[0.0]*6 for _ in range(5)]
+            for r in range(5):
+                for c in range(5):
+                    M[r][c] = AtA[r][c]
+                M[r][5] = Atb[r]
+
+            ok = True
+            for col in range(5):
+                if not ok:
+                    break
+                pivot = col
+                for r in range(col + 1, 5):
+                    if math.fabs(M[r][col]) > math.fabs(M[pivot][col]):
+                        pivot = r
+                if math.fabs(M[pivot][col]) < 1e-20:
+                    ok = False
+                    break
+                if pivot != col:
+                    M[col], M[pivot] = M[pivot], M[col]
+                for r in range(col + 1, 5):
+                    f = M[r][col] / M[col][col]
+                    for j in range(col, 6):
+                        M[r][j] -= f * M[col][j]
+
+            coef = [0.0]*5
+            if ok:
+                for i in range(4, -1, -1):
+                    s = M[i][5]
+                    for j in range(i + 1, 5):
+                        s -= M[i][j] * coef[j]
+                    coef[i] = s / M[i][i]
+
+            A_c = coef[0]
+            B_c = coef[1]
+            C_c = coef[2]
+            D_c = coef[3]
+            E_c = coef[4]
+            disc = B_c * B_c - 4 * A_c * C_c
+
+            if ok and disc < -1e-10 and math.fabs(A_c) > 1e-14:
+                max_conic_dev = 0.0
+                for p in all_pts:
+                    x, y = to2d_ellipse(p)
+                    val = A_c*x*x + B_c*x*y + C_c*y*y + D_c*x + E_c*y - 1.0
+                    max_conic_dev = max(max_conic_dev, math.fabs(val))
+
+                scale = max(math.fabs(A_c), math.fabs(C_c))
+                norm_dev = max_conic_dev / max(scale, 1e-10)
+
+                if norm_dev < 0.01:
+                    det = 4*A_c*C_c - B_c*B_c
+                    cx = (B_c*E_c - 2*C_c*D_c) / det
+                    cy = (B_c*D_c - 2*A_c*E_c) / det
+
+                    theta = 0.5 * math.atan2(B_c, A_c - C_c)
+                    cos_t = math.cos(theta)
+                    sin_t = math.sin(theta)
+                    A2 = A_c*cos_t*cos_t + B_c*cos_t*sin_t + C_c*sin_t*sin_t
+                    C2 = A_c*sin_t*sin_t - B_c*cos_t*sin_t + C_c*cos_t*cos_t
+                    f_val = A_c*cx*cx + B_c*cx*cy + C_c*cy*cy + D_c*cx + E_c*cy - 1.0
+                    rhs = -f_val
+
+                    if rhs > 1e-14 and A2 > 1e-14 and C2 > 1e-14:
+                        semi_a = math.sqrt(rhs / A2)
+                        semi_b = math.sqrt(rhs / C2)
+
+                        cx3d = po[0] + cx*ax[0] + cy*ay[0]
+                        cy3d = po[1] + cx*ax[1] + cy*ay[1]
+                        cz3d = po[2] + cx*ax[2] + cy*ay[2]
+
+                        ea = Vector(cos_t*ax[0]+sin_t*ay[0], cos_t*ax[1]+sin_t*ay[1], cos_t*ax[2]+sin_t*ay[2])
+                        eb = Vector(-sin_t*ax[0]+cos_t*ay[0], -sin_t*ax[1]+cos_t*ay[1], -sin_t*ax[2]+cos_t*ay[2])
+
+                        w = math.sqrt(2.0) / 2.0
+                        cx_ = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+                        cy_ = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+                        wts = [1, w, 1, w, 1, w, 1, w, 1]
+                        crv = NurbsCurve(3, True, 3, 9)
+                        knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+                        for i in range(10):
+                            crv.set_knot(i, knots[i])
+                        for i in range(9):
+                            px = cx3d + semi_a*cx_[i]*ea[0] + semi_b*cy_[i]*eb[0]
+                            py = cy3d + semi_a*cx_[i]*ea[1] + semi_b*cy_[i]*eb[1]
+                            pz = cz3d + semi_a*cx_[i]*ea[2] + semi_b*cy_[i]*eb[2]
+                            crv.set_cv_4d(i, px*wts[i], py*wts[i], pz*wts[i], wts[i])
+
+                        et0, et1 = crv.domain()
+                        max_ell_dev = 0.0
+                        for p in all_pts:
+                            px2, py2 = to2d_ellipse(p)
+                            lx = cos_t*(px2-cx) + sin_t*(py2-cy)
+                            ly = -sin_t*(px2-cx) + cos_t*(py2-cy)
+                            ang = math.atan2(ly/semi_b, lx/semi_a)
+                            ex = cx + semi_a*math.cos(ang)*cos_t - semi_b*math.sin(ang)*sin_t
+                            ey = cy + semi_a*math.cos(ang)*sin_t + semi_b*math.sin(ang)*cos_t
+                            dev = math.hypot(px2-ex, py2-ey)
+                            max_ell_dev = max(max_ell_dev, dev)
+                        ell_tol = max(semi_a, semi_b) * 5e-3
+                        if max_ell_dev > ell_tol:
+                            crv = NurbsCurve()
+
+        # 5. 2D plane-constrained fitting for non-circular/elliptical curves
+        if not crv.is_valid():
+            m = len(all_pts)
+            if m < 4:
+                continue
+
+            ax = plane.x_axis
+            ay = plane.y_axis
+            po = plane.origin
+            pts_2d = []
+            for i in range(m):
+                dx = all_pts[i][0]-po[0]
+                dy = all_pts[i][1]-po[1]
+                dz = all_pts[i][2]-po[2]
+                px = dx*ax[0] + dy*ax[1] + dz*ax[2]
+                py = dx*ay[0] + dy*ay[1] + dz*ay[2]
+                pts_2d.append(Point(px, py, 0))
+
+            chords = [0.0]*m
+            total_len = 0.0
+            for i in range(1, m):
+                total_len += pts_2d[i].distance(pts_2d[i-1])
+                chords[i] = total_len
+            if is_loop and m > 1:
+                total_len += pts_2d[0].distance(pts_2d[m-1])
+            if total_len > 1e-14:
+                for i in range(1, m):
+                    chords[i] /= total_len
+
+            fit_tol = step * (uv_to_3d + uv_to_3d_min) * 0.5
+            total_turning = 0.0
+            for i in range(1, m - 1):
+                dx1 = pts_2d[i][0]-pts_2d[i-1][0]
+                dy1 = pts_2d[i][1]-pts_2d[i-1][1]
+                dx2 = pts_2d[i+1][0]-pts_2d[i][0]
+                dy2 = pts_2d[i+1][1]-pts_2d[i][1]
+                l1 = math.hypot(dx1, dy1)
+                l2 = math.hypot(dx2, dy2)
+                if l1 > 1e-14 and l2 > 1e-14:
+                    c = (dx1*dx2+dy1*dy2) / (l1*l2)
+                    c = max(-1.0, min(1.0, c))
+                    total_turning += math.acos(c)
+
+            target_cvs = max(8, int(total_turning / 0.5) + 6)
+            max_cvs = m - 1
+            crv_2d = NurbsCurve()
+            for attempt in range(5):
+                if target_cvs > max_cvs:
+                    break
+                crv_2d = NurbsCurve.create_fitted(pts_2d, target_cvs, 3, is_loop)
+                if not crv_2d.is_valid():
+                    break
+                ft0, ft1 = crv_2d.domain()
+                max_dev = 0.0
+                for i in range(m):
+                    t = ft0 + (ft1 - ft0) * chords[i]
+                    max_dev = max(max_dev, crv_2d.point_at(t).distance(pts_2d[i]))
+                if max_dev < fit_tol:
+                    break
+                target_cvs = min(target_cvs * 2, max_cvs)
+
+            if not crv_2d.is_valid():
+                if is_loop:
+                    crv_2d = NurbsCurve.create_interpolated(pts_2d, CurveKnotStyle.ChordPeriodic)
+                else:
+                    crv_2d = NurbsCurve.create_interpolated(pts_2d)
+
+            if crv_2d.is_valid():
+                crv = crv_2d
+                for i in range(crv.cv_count()):
+                    cv2 = crv.get_cv(i)
+                    cx_l = cv2[0]
+                    cy_l = cv2[1]
+                    crv.set_cv(i, Point(po[0] + cx_l*ax[0] + cy_l*ay[0],
+                                        po[1] + cx_l*ax[1] + cy_l*ay[1],
+                                        po[2] + cx_l*ax[2] + cy_l*ay[2]))
+
+        if not crv.is_valid():
+            continue
+
+        # Deduplicate: skip if ALL sample points are close to an existing curve
+        ct0, ct1 = crv.domain()
+        dup_tol = step * uv_to_3d * 3.0
+        dup = False
+        for existing in result:
+            et0, et1 = existing.domain()
+            all_close = True
+            for f in [0.25, 0.5, 0.75]:
+                cp = crv.point_at(ct0 + (ct1 - ct0) * f)
+                ep = existing.point_at(et0 + (et1 - et0) * f)
+                em = existing.point_at((et0 + et1) * 0.5)
+                d = min(cp.distance(ep), cp.distance(em))
+                if d > dup_tol:
+                    all_close = False
+                    break
+            if all_close:
+                dup = True
+                break
+        if not dup:
+            result.append(crv)
+
+    return result

@@ -1099,7 +1099,7 @@ def test_cross_connectors():
         if len(poly) > 3 and poly[0].distance(poly[-1]) < 1e-6:
             poly.pop()
 
-    m = Mesh.from_polygons(polys, 1.0)
+    m = Mesh.from_polylines(polys, 1.0)
 
     cc = CrossConnectors(m, 2.0, [0.0], 2, 10.0, 10.0, 2.0, 0.0)
 

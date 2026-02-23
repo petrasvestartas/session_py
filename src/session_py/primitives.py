@@ -1589,7 +1589,7 @@ class Primitives:
             [Point(0, 0, z1), Point(0, r, z0), Point(-a, -r/2.0, z0)],
             [Point(0, 0, z1), Point(a, -r/2.0, z0), Point(0, r, z0)],
         ]
-        return Mesh.from_polygons(faces, 1e-10)
+        return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
     def cube(edge=2.0):
@@ -1601,7 +1601,7 @@ class Primitives:
             [v0, v1, v5, v4], [v2, v3, v7, v6],
             [v0, v4, v7, v3], [v1, v2, v6, v5],
         ]
-        return Mesh.from_polygons(faces, 1e-10)
+        return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
     def octahedron(edge=2.0):
@@ -1613,7 +1613,7 @@ class Primitives:
             [pz, px, py], [pz, py, nx], [pz, nx, ny], [pz, ny, px],
             [nz, py, px], [nz, nx, py], [nz, ny, nx], [nz, px, ny],
         ]
-        return Mesh.from_polygons(faces, 1e-10)
+        return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
     def icosahedron(edge=2.0):
@@ -1632,7 +1632,7 @@ class Primitives:
             [4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1],
         ]
         faces = [[verts[f[0]], verts[f[1]], verts[f[2]]] for f in idx]
-        return Mesh.from_polygons(faces, 1e-10)
+        return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
     def dodecahedron(edge=2.0):
@@ -1656,7 +1656,7 @@ class Primitives:
             [4,18, 6,10, 8], [5, 9,11, 7,19], [6,18,19, 7,15],
         ]
         faces = [[verts[f[0]], verts[f[1]], verts[f[2]], verts[f[3]], verts[f[4]]] for f in idx]
-        return Mesh.from_polygons(faces, 1e-10)
+        return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
     def wave_surface(size, amplitude):
@@ -1788,7 +1788,7 @@ class Primitives:
 
             ctU += StepU
 
-        return Mesh.from_polygons(polygons, 0.01)
+        return Mesh.from_polylines(polygons, 0.01)
 
     @staticmethod
     def annen_surfaces():
@@ -1956,7 +1956,7 @@ class FoldedPlates:
                 vv += sv
             uu += su
 
-        self.mesh = Mesh.from_polygons(tris, 1e-6)
+        self.mesh = Mesh.from_polylines(tris, 1e-6)
 
     def _build_topology(self):
         self._fkeys = sorted(self.mesh.face.keys())

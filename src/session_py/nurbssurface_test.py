@@ -547,6 +547,94 @@ def test_evaluation():
     p_corner = s.point_at_corner(1, 1)
     MINI_CHECK(TOLERANCE.is_point_close(p_corner, Point(5.0, 5.0, 0.0)))
 
+    # get isocurve - returns NurbsCurve
+    iso_u = s.iso_curve(0, v)
+    iso_v = s.iso_curve(1, u)
+    MINI_CHECK(TOLERANCE.is_point_close(iso_u.point_at(0.5), Point(2.5, 2.5, 3.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(iso_v.point_at(0.5), Point(2.5, 2.5, 3.0)))
+
+
+@MINI_TEST("NurbsSurface", "Modification")
+def test_modification():
+    import copy
+    from session_py import NurbsSurface
+    from session_py import Point
+    from session_py import Vector
+
+    points = [
+        # i=0
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        # i=1
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        # i=2
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        # i=3
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
+
+    s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+
+
+    # Reverse one direction
+    s_rev = copy.deepcopy(s)
+    s_rev.reverse(0)
+    MINI_CHECK(s_rev.point_at_corner(0, 0) == s.point_at_corner(1, 0))
+    MINI_CHECK(s_rev.normal_at(0.5, 0.5) == s.normal_at(0.5, 0.5) * -1)
+
+    # Swap u and v direction
+    s_tr = copy.deepcopy(s)
+    s_tr.transpose()
+    MINI_CHECK(s.point_at(0, 0.5) == s_tr.point_at(0.5, 0))
+
+    # Swap coordinates - swap x and z
+    s_swap = copy.deepcopy(s)
+    s_swap.swap_coordinates(0, 2)
+    MINI_CHECK(s.point_at(0.5, 0.5)[0] == s_swap.point_at(0.5, 0.5)[2])
+    MINI_CHECK(s.point_at(0.5, 0.5)[2] == s_swap.point_at(0.5, 0.5)[0])
+
+    # Trim surface, domain changed but parametrization preserved
+    s_trim = copy.deepcopy(s)
+    s_trim.trim(0, (0.25, 0.75))
+    MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[0], 0.25) and TOLERANCE.is_close(s_trim.domain(0)[1], 0.75))
+    MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.25, 0.5), s_trim.point_at(0.25, 0.5)))
+
+    # Split surface into 4 quadrants, check shared corner point is the same
+    west, east = s.split(0, 0.5)
+    ww, we = west.split(1, (west.domain(1)[0] + west.domain(1)[1]) / 2.0)
+    ew, ee = east.split(1, (east.domain(1)[0] + east.domain(1)[1]) / 2.0)
+    center = s.point_at(0.5, 0.5)
+    MINI_CHECK(TOLERANCE.is_point_close(ww.point_at_corner(1, 1), center))
+    MINI_CHECK(TOLERANCE.is_point_close(we.point_at_corner(1, 0), center))
+    MINI_CHECK(TOLERANCE.is_point_close(ew.point_at_corner(0, 1), center))
+    MINI_CHECK(TOLERANCE.is_point_close(ee.point_at_corner(0, 0), center))
+
+    # Make rational and change weight
+    s_rat = copy.deepcopy(s)
+    s_rat.make_rational()
+    s_rat.set_weight(2, 2, 3.0)
+    MINI_CHECK(s.point_at(0.5, 0.5) != s_rat.point_at(0.5, 0.5))
+    s_rat.make_non_rational()
+    MINI_CHECK(s.point_at(0.5, 0.5) == s_rat.point_at(0.5, 0.5))
+
+    # Increase degree
+    s_deg = copy.deepcopy(s)
+    s_deg.increase_degree(0, 6)
+    s_deg.increase_degree(1, 6)
+    MINI_CHECK(s.cv_count(0) == 4 and s.cv_count(1) == 4)
+    MINI_CHECK(s_deg.cv_count(0) == 7 and s_deg.cv_count(1) == 7)
+
 
 @MINI_TEST("NurbsSurface", "Isocurve")
 def test_isocurve():
@@ -715,20 +803,6 @@ def test_advanced_accessors():
     MINI_CHECK(first_knot_mult > 0)
 
 
-@MINI_TEST("NurbsSurface", "Clamp_operations")
-def test_clamp_operations():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(4)]
-    surf = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
-
-    surf.clamp_end(0, 2)
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(surf.is_clamped(0, 2))
-
-
 @MINI_TEST("NurbsSurface", "Singularity")
 def test_singularity():
     from session_py import NurbsSurface
@@ -829,31 +903,6 @@ def test_swap_coordinates():
     MINI_CHECK(TOLERANCE.is_close(pt[0], 2.0))
     MINI_CHECK(TOLERANCE.is_close(pt[1], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pt[2], 3.0))
-
-
-@MINI_TEST("NurbsSurface", "Zero_cvs")
-def test_zero_cvs():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [
-        Point(1.0, 2.0, 3.0), Point(0.0, 0.0, 0.0),
-        Point(0.0, 0.0, 0.0), Point(4.0, 5.0, 6.0),
-    ]
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
-
-    # Zero all CVs
-    surf.zero_cvs()
-
-    pt0 = surf.get_cv(0, 0)
-    pt1 = surf.get_cv(1, 1)
-
-    MINI_CHECK(TOLERANCE.is_close(pt0[0], 0.0) and
-               TOLERANCE.is_close(pt0[1], 0.0) and
-               TOLERANCE.is_close(pt0[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pt1[0], 0.0) and
-               TOLERANCE.is_close(pt1[1], 0.0) and
-               TOLERANCE.is_close(pt1[2], 0.0))
 
 
 @MINI_TEST("NurbsSurface", "Get_knots")

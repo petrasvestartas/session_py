@@ -7,6 +7,7 @@ from .pointcloud import PointCloud
 from .mesh import Mesh
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
+from .brep import BRep
 import uuid
 
 
@@ -47,6 +48,7 @@ class Objects:
         self.meshes: list[Mesh] = []
         self.nurbscurves: list[NurbsCurve] = []
         self.nurbssurfaces: list[NurbsSurface] = []
+        self.breps: list[BRep] = []
 
     def __str__(self):
         return f"Objects(points={len(self.points)})"
@@ -80,6 +82,7 @@ class Objects:
             "meshes": [m.__jsondump__() for m in self.meshes],
             "nurbscurves": [nc.__jsondump__() for nc in self.nurbscurves],
             "nurbssurfaces": [ns.__jsondump__() for ns in self.nurbssurfaces],
+            "breps": [b.__jsondump__() for b in self.breps],
         }
 
     @classmethod
@@ -116,6 +119,7 @@ class Objects:
         obj.meshes = [decode_node(m) for m in data.get("meshes", [])]
         obj.nurbscurves = [decode_node(nc) for nc in data.get("nurbscurves", [])]
         obj.nurbssurfaces = [decode_node(ns) for ns in data.get("nurbssurfaces", [])]
+        obj.breps = [decode_node(b) for b in data.get("breps", [])]
 
         return obj
 
@@ -162,6 +166,8 @@ class Objects:
             proto.nurbscurves.add().ParseFromString(nc.pb_dumps())
         for ns in self.nurbssurfaces:
             proto.nurbssurfaces.add().ParseFromString(ns.pb_dumps())
+        for b in self.breps:
+            proto.breps.add().ParseFromString(b.pb_dumps())
         return proto.SerializeToString()
 
     @classmethod
@@ -190,6 +196,8 @@ class Objects:
             objects.nurbscurves.append(NurbsCurve.pb_loads(nc.SerializeToString()))
         for ns in proto.nurbssurfaces:
             objects.nurbssurfaces.append(NurbsSurface.pb_loads(ns.SerializeToString()))
+        for b in proto.breps:
+            objects.breps.append(BRep.pb_loads(b.SerializeToString()))
         return objects
 
     def pb_dump(self, filepath):

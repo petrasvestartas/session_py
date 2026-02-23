@@ -66,8 +66,6 @@ class NurbsSurface:
         # Data arrays
         self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
-        self.m_outer_loop = NurbsCurve()
-        self.m_inner_loops = []
         self.m_mesh = None
 
         # Create if parameters provided
@@ -165,10 +163,15 @@ class NurbsSurface:
                degree_u: int, degree_v: int,
                cv_count_u: int, cv_count_v: int,
                points: List['Point']) -> 'NurbsSurface':
-        if cv_count_u < 2 or cv_count_v < 2:
-            return NurbsSurface()
-        if len(points) != cv_count_u * cv_count_v:
-            return NurbsSurface()
+        if degree_u < 1 or degree_v < 1:
+            raise ValueError(f"NurbsSurface.create: degree must be >= 1, got degree_u={degree_u}, degree_v={degree_v}")
+        if cv_count_u < degree_u + 1:
+            raise ValueError(f"NurbsSurface.create: cv_count_u ({cv_count_u}) must be >= degree_u+1 ({degree_u + 1})")
+        if cv_count_v < degree_v + 1:
+            raise ValueError(f"NurbsSurface.create: cv_count_v ({cv_count_v}) must be >= degree_v+1 ({degree_v + 1})")
+        expected = cv_count_u * cv_count_v
+        if len(points) != expected:
+            raise ValueError(f"NurbsSurface.create: expected {expected} points ({cv_count_u}x{cv_count_v}), got {len(points)}")
         order0 = degree_u + 1
         order1 = degree_v + 1
         surf = NurbsSurface.create_raw(3, False, order0, order1, cv_count_u, cv_count_v,
@@ -516,6 +519,35 @@ class NurbsSurface:
         # Use knot module function
         return knot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], end)
 
+    def is_duplicate(self, other, ignore_parameterization: bool = False, tolerance: float = None) -> bool:
+        if tolerance is None:
+            tolerance = Tolerance.ZERO_TOLERANCE
+        if not self.is_valid() or not other.is_valid():
+            return False
+        if self.m_dim != other.m_dim:
+            return False
+        if self.m_is_rat != other.m_is_rat:
+            return False
+        if self.m_order[0] != other.m_order[0] or self.m_order[1] != other.m_order[1]:
+            return False
+        if self.m_cv_count[0] != other.m_cv_count[0] or self.m_cv_count[1] != other.m_cv_count[1]:
+            return False
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                p1 = self.get_cv(i, j)
+                p2 = other.get_cv(i, j)
+                if p1.distance(p2) > tolerance:
+                    return False
+                if self.m_is_rat:
+                    if abs(self.weight(i, j) - other.weight(i, j)) > tolerance:
+                        return False
+        if not ignore_parameterization:
+            for dir in range(2):
+                for i in range(self.knot_count(dir)):
+                    if abs(self.knot(dir, i) - other.knot(dir, i)) > tolerance:
+                        return False
+        return True
+
     def is_valid_knot_vector(self, dir: int) -> bool:
         """Check if knot vector is valid in specified direction.
 
@@ -539,30 +571,6 @@ class NurbsSurface:
             if self.m_knot[dir][i] < self.m_knot[dir][i-1]:
                 return False
         return True
-
-    def is_trimmed(self):
-        return self.m_outer_loop.is_valid()
-
-    def is_duplicate(self, other: 'NurbsSurface', ignore_parameterization: bool,
-                    tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
-        """Check if this surface is duplicate of another.
-
-        Parameters
-        ----------
-        other : NurbsSurface
-            Other surface to compare.
-        ignore_parameterization : bool
-            Whether to ignore parameterization differences.
-        tolerance : float, optional
-            Tolerance for comparison.
-
-        Returns
-        -------
-        bool
-            True if duplicate, False otherwise.
-        """
-        # Stub - requires comprehensive comparison
-        return False
 
     def __eq__(self, other) -> bool:
         """Check equality with another NurbsSurface (compares all attributes except guid)."""
@@ -1888,27 +1896,6 @@ class NurbsSurface:
 
         return grid, params
 
-    def set_outer_loop(self, loop):
-        self.m_outer_loop = loop
-
-    def get_outer_loop(self):
-        return self.m_outer_loop
-
-    def clear_outer_loop(self):
-        self.m_outer_loop = NurbsCurve()
-
-    def add_inner_loop(self, loop):
-        self.m_inner_loops.append(loop)
-
-    def get_inner_loop(self, index):
-        return self.m_inner_loops[index]
-
-    def inner_loop_count(self):
-        return len(self.m_inner_loops)
-
-    def clear_inner_loops(self):
-        self.m_inner_loops = []
-
     def _compute_bbox_diagonal(self):
         import math
         minx = miny = minz = 1e30
@@ -2125,12 +2112,19 @@ class NurbsSurface:
         north_pole = 0
         if sing_v0:
             south_pole = result.add_vertex(self.point_at(us[0], vs[0]))
+            result.vertex[south_pole].attributes["u"] = us[0]
+            result.vertex[south_pole].attributes["v"] = vs[0]
         if sing_v1:
             north_pole = result.add_vertex(self.point_at(us[0], vs[nv - 1]))
+            result.vertex[north_pole].attributes["u"] = us[0]
+            result.vertex[north_pole].attributes["v"] = vs[nv - 1]
         vkeys = []
         for i in range(nu):
             for j in range(j_start, j_end):
-                vkeys.append(result.add_vertex(self.point_at(us[i], vs[j])))
+                vk = result.add_vertex(self.point_at(us[i], vs[j]))
+                result.vertex[vk].attributes["u"] = us[i]
+                result.vertex[vk].attributes["v"] = vs[j]
+                vkeys.append(vk)
         def grid_idx(i, j):
             return vkeys[i * nv_grid + (j - j_start)]
         nu_faces = nu if closed_u else nu - 1
@@ -2187,24 +2181,6 @@ class NurbsSurface:
             result.vertex[vk].set_normal(vnx[vk], vny[vk], vnz[vk])
         self.m_mesh = result
         return self.m_mesh
-
-    def boundary_curves_3d(self):
-        """Return 3D boundary curves evaluated on the surface.
-
-        Returns list of NurbsCurves: [outer_boundary, hole0, hole1, ...]
-        The outer_loop and inner_loops are stored in UV parameter space.
-        This method evaluates them on the surface to produce 3D curves.
-        """
-        if not self.is_trimmed():
-            return []
-        curves = []
-        for loop in [self.m_outer_loop] + self.m_inner_loops:
-            pts_3d = []
-            for i in range(loop.cv_count()):
-                uv = loop.get_cv(i)
-                pts_3d.append(self.point_at(uv[0], uv[1]))
-            curves.append(NurbsCurve.create(True, 1, pts_3d))
-        return curves
 
     ###########################################################################
     # JSON SERIALIZATION
@@ -2421,96 +2397,55 @@ class NurbsSurface:
     
     def trim(self, dir: int, domain: Tuple[float, float]) -> bool:
         """Trim surface to sub-domain in specified direction.
-        
+
         Parameters
         ----------
         dir : int
             Direction (0 for u, 1 for v).
         domain : tuple
             (start, end) domain.
-        
+
         Returns
         -------
         bool
             True if successful, False otherwise.
         """
-        # Stub - requires knot insertion and removal
-        return False
+        if dir < 0 or dir > 1 or not self.is_valid():
+            return False
+        crv = self._to_curve_internal(dir)
+        if crv is None:
+            return False
+        if not crv.trim(domain[0], domain[1]):
+            return False
+        return self._from_curve_internal(crv, dir)
     
     def split(self, dir: int, c: float) -> Tuple[Optional['NurbsSurface'], Optional['NurbsSurface']]:
         """Split surface at parameter in specified direction.
-        
+
         Parameters
         ----------
         dir : int
             Direction (0 for u, 1 for v).
         c : float
             Parameter value to split at.
-        
+
         Returns
         -------
         tuple
             (west_or_south_side, east_or_north_side) or (None, None) on failure.
         """
-        # Stub - requires knot insertion
-        return (None, None)
+        import copy
+        if dir < 0 or dir > 1 or not self.is_valid():
+            return (None, None)
+        t0, t1 = self.domain(dir)
+        if c <= t0 or c >= t1:
+            return (None, None)
+        lo = copy.deepcopy(self)
+        hi = copy.deepcopy(self)
+        if not lo.trim(dir, (t0, c)) or not hi.trim(dir, (c, t1)):
+            return (None, None)
+        return (lo, hi)
     
-    def extend(self, dir: int, domain: Tuple[float, float]) -> bool:
-        """Extend surface to include domain in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        domain : tuple
-            (start, end) domain to extend to.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        # Stub - requires curve extension algorithms
-        return False
-    
-    def make_non_rational(self) -> bool:
-        """Make surface non-rational if all weights are equal.
-        
-        Returns
-        -------
-        bool
-            True if successful, False if weights are non-uniform.
-        """
-        if not self.m_is_rat:
-            return True
-        
-        # Check if all weights are 1.0
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                w = self.weight(i, j)
-                if abs(w - 1.0) > 1e-10:
-                    return False  # Cannot make non-rational
-        
-        # Convert to non-rational by removing weights
-        old_cv_size = self.m_dim + 1
-        new_cv_size = self.m_dim
-        new_cv = np.zeros(self.m_cv_count[0] * self.m_cv_count[1] * new_cv_size)
-        
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                old_index = i * self.m_cv_stride[0] + j * self.m_cv_stride[1]
-                new_index = i * (new_cv_size * self.m_cv_count[1]) + j * new_cv_size
-                
-                # Copy coordinates (not weight)
-                new_cv[new_index:new_index + self.m_dim] = self.m_cv[old_index:old_index + self.m_dim]
-        
-        self.m_cv = new_cv
-        self.m_is_rat = 0
-        self.m_cv_stride[1] = new_cv_size
-        self.m_cv_stride[0] = new_cv_size * self.m_cv_count[1]
-
-        return True
-
     def clamp_end(self, dir: int, end: int) -> bool:
         """Clamp knot vector end(s) (OpenNURBS implementation).
         
@@ -2578,22 +2513,6 @@ class NurbsSurface:
     # GEOMETRIC OPERATIONS (ADDITIONAL)
     ###########################################################################
     
-    def area(self, tolerance: float = 1e-6) -> float:
-        """Get surface area (approximate).
-        
-        Parameters
-        ----------
-        tolerance : float, optional
-            Tolerance for approximation.
-        
-        Returns
-        -------
-        float
-            Approximate surface area.
-        """
-        # Stub - requires numerical integration
-        return 0.0
-    
     def iso_curve(self, dir: int, c: float) -> Optional['NurbsCurve']:
         """Get isoparametric curve at parameter.
         
@@ -2640,10 +2559,10 @@ class NurbsSurface:
             for k in range(self.m_order[1 - dir]):
                 if dir == 0:
                     # iso-u: v varies, u is constant at c
-                    cv_ptr = self.cv(span_index - self.m_order[1 - dir] + 1 + k, i)
+                    cv_ptr = self.cv(span_index + k, i)
                 else:
                     # iso-v: u varies, v is constant at c
-                    cv_ptr = self.cv(i, span_index - self.m_order[1 - dir] + 1 + k)
+                    cv_ptr = self.cv(i, span_index + k)
                 
                 if cv_ptr is not None:
                     cv_sum += basis[k] * cv_ptr
@@ -2664,80 +2583,7 @@ class NurbsSurface:
                 nurbs_crv.set_cv(i, pt)
         
         return nurbs_crv
-    
-    def closest_point(self, point):
-        dom_u = self.domain(0)
-        dom_v = self.domain(1)
-        nu, nv = 16, 16
-        best_dist2 = 1e300
-        best_u = (dom_u[0] + dom_u[1]) * 0.5
-        best_v = (dom_v[0] + dom_v[1]) * 0.5
-        for i in range(nu + 1):
-            u = dom_u[0] + (dom_u[1] - dom_u[0]) * i / nu
-            for j in range(nv + 1):
-                v = dom_v[0] + (dom_v[1] - dom_v[0]) * j / nv
-                pt = self.point_at(u, v)
-                dx = pt[0] - point[0]
-                dy = pt[1] - point[1]
-                dz = pt[2] - point[2]
-                d2 = dx * dx + dy * dy + dz * dz
-                if d2 < best_dist2:
-                    best_dist2 = d2
-                    best_u = u
-                    best_v = v
-        u, v = best_u, best_v
-        for _ in range(20):
-            derivs = self.evaluate(u, v, 1)
-            if len(derivs) < 3:
-                break
-            dx = derivs[0][0] - point[0]
-            dy = derivs[0][1] - point[1]
-            dz = derivs[0][2] - point[2]
-            su0, su1, su2 = derivs[1][0], derivs[1][1], derivs[1][2]
-            sv0, sv1, sv2 = derivs[2][0], derivs[2][1], derivs[2][2]
-            fu = dx * su0 + dy * su1 + dz * su2
-            fv = dx * sv0 + dy * sv1 + dz * sv2
-            if abs(fu) < 1e-14 and abs(fv) < 1e-14:
-                break
-            juu = su0 * su0 + su1 * su1 + su2 * su2
-            juv = su0 * sv0 + su1 * sv1 + su2 * sv2
-            jvv = sv0 * sv0 + sv1 * sv1 + sv2 * sv2
-            det = juu * jvv - juv * juv
-            if abs(det) < 1e-30:
-                break
-            du = -(jvv * fu - juv * fv) / det
-            dv = -(juu * fv - juv * fu) / det
-            u += du
-            v += dv
-            u = max(dom_u[0], min(dom_u[1], u))
-            v = max(dom_v[0], min(dom_v[1], v))
-            if du * du + dv * dv < 1e-28:
-                break
-        return (self.point_at(u, v), u, v)
 
-    def add_hole(self, curve_3d):
-        dom = curve_3d.domain()
-        sdom_u = self.domain(0)
-        sdom_v = self.domain(1)
-        range_u = sdom_u[1] - sdom_u[0]
-        range_v = sdom_v[1] - sdom_v[0]
-        n_samples = max(curve_3d.cv_count() * 4, 32)
-        uv_pts = []
-        for i in range(n_samples):
-            t = dom[0] + (dom[1] - dom[0]) * i / n_samples
-            pt3d = curve_3d.point_at(t)
-            _, u, v = self.closest_point(pt3d)
-            nu = (u - sdom_u[0]) / range_u
-            nv = (v - sdom_v[0]) / range_v
-            uv_pts.append(Point(nu, nv, 0.0))
-        if len(uv_pts) >= 3:
-            from .nurbscurve import NurbsCurve
-            self.add_inner_loop(NurbsCurve.create(True, 1, uv_pts))
-
-    def add_holes(self, curves_3d):
-        for crv in curves_3d:
-            self.add_hole(crv)
-    
     ###########################################################################
     # ADVANCED OPERATIONS
     ###########################################################################
@@ -2756,24 +2602,6 @@ class NurbsSurface:
                 if self.m_is_rat:
                     self.set_weight(i, j, 1.0)
         return True
-    
-    def collapse_side(self, side: int, point: Point) -> bool:
-        """Collapse side of surface to a point.
-        
-        Parameters
-        ----------
-        side : int
-            Side (0=SW, 1=SE, 2=NE, 3=NW).
-        point : Point
-            Point to collapse to.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        # Stub - requires knot manipulation
-        return False
     
     ###########################################################################
     # JSON SERIALIZATION
@@ -2800,12 +2628,8 @@ class NurbsSurface:
             'width': self.width,
             'xform': self.xform.__jsondump__(),
         }
-        if self.m_inner_loops:
-            d['inner_loops'] = [l.__jsondump__() for l in self.m_inner_loops]
         if self.m_mesh is not None:
             d['mesh'] = self.m_mesh.__jsondump__()
-        if self.is_trimmed():
-            d['outer_loop'] = self.m_outer_loop.__jsondump__()
         return d
     
     @classmethod
@@ -2848,10 +2672,6 @@ class NurbsSurface:
             from .xform import Xform
             srf.xform = Xform.__jsonload__(data['xform'])
 
-        if 'outer_loop' in data:
-            srf.m_outer_loop = NurbsCurve.__jsonload__(data['outer_loop'])
-        if 'inner_loops' in data:
-            srf.m_inner_loops = [NurbsCurve.__jsonload__(l) for l in data['inner_loops']]
         if data.get('mesh'):
             from .mesh import Mesh
             srf.m_mesh = Mesh.__jsonload__(data['mesh'])
@@ -2950,17 +2770,6 @@ class NurbsSurface:
         proto.xform.name = self.xform.name
         proto.xform.matrix.extend(self.xform.m)
 
-        # Outer loop
-        if self.is_trimmed():
-            loop_data = self.m_outer_loop.pb_dumps()
-            proto.outer_loop.ParseFromString(loop_data)
-
-        # Inner loops
-        for inner in self.m_inner_loops:
-            loop_data = inner.pb_dumps()
-            il = proto.inner_loops.add()
-            il.ParseFromString(loop_data)
-
         # Cached mesh
         if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
             mesh_data = self.m_mesh.pb_dumps()
@@ -3024,16 +2833,6 @@ class NurbsSurface:
         surface.xform = Xform()
         surface.xform.name = proto.xform.name
         surface.xform.m = list(proto.xform.matrix)
-
-        # Load outer loop
-        if proto.HasField('outer_loop') and proto.outer_loop.cv_count > 0:
-            loop_data = proto.outer_loop.SerializeToString()
-            surface.m_outer_loop = NurbsCurve.pb_loads(loop_data)
-
-        # Load inner loops
-        for il in proto.inner_loops:
-            loop_data = il.SerializeToString()
-            surface.m_inner_loops.append(NurbsCurve.pb_loads(loop_data))
 
         # Load cached mesh
         if proto.HasField('cached_mesh') and len(proto.cached_mesh.vertices) > 0:

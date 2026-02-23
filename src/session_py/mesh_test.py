@@ -8,8 +8,30 @@ import math
 @MINI_TEST("Mesh", "Constructor")
 def test_mesh_constructor():
     from session_py import Mesh
+    from session_py import Point
 
-    mesh = Mesh()
+    sides = 6
+
+    # Create hexagon vertices in XY plane
+    vertices = []
+    for i in range(sides):
+        angle = 2.0 * TOLERANCE.PI * i / sides
+        x = 1.0 * math.cos(angle)
+        y = 1.0 * math.sin(angle)
+        vertices.append(Point(x, y, 0.0))
+
+    # Add center point as last vertex
+    vertices.append(Point(0.0, 0.0, 0.0))
+    faces = [
+        [0, 1, 6],
+        [1, 2, 6],
+        [2, 3, 6],
+        [3, 4, 6],
+        [4, 5, 6],
+        [5, 0, 6],
+    ]
+
+    mesh = Mesh.from_vertices_and_faces(vertices, faces)
 
     num_vertices = mesh.number_of_vertices()
     num_faces = mesh.number_of_faces()
@@ -17,13 +39,26 @@ def test_mesh_constructor():
     is_empty = mesh.is_empty()
     euler = mesh.euler()
 
-    MINI_CHECK(num_vertices == 0)
-    MINI_CHECK(num_faces == 0)
-    MINI_CHECK(num_edges == 0)
-    MINI_CHECK(is_empty)
-    MINI_CHECK(euler == 0)
+    # String representations
+    sstr = str(mesh)
+    srepr = repr(mesh)
+
+    # Copy (new guid)
+    import copy
+    mcopy = copy.copy(mesh)
+
+    MINI_CHECK(num_vertices == 7)
+    MINI_CHECK(num_faces == 6)
+    MINI_CHECK(num_edges == 12)
+    MINI_CHECK(not is_empty)
+    MINI_CHECK(euler == 1)
     MINI_CHECK(mesh.name == "my_mesh")
     MINI_CHECK(mesh.guid)
+    MINI_CHECK("Mesh" in sstr)
+    MINI_CHECK("name=my_mesh" in srepr)
+    MINI_CHECK(mcopy.guid != mesh.guid)
+    MINI_CHECK(mcopy == mesh)
+    MINI_CHECK(not (mcopy != mesh))
 
 
 @MINI_TEST("Mesh", "Add_vertex")
@@ -179,8 +214,8 @@ def test_mesh_face_area():
     MINI_CHECK(TOLERANCE.is_close(area, 0.5))
 
 
-@MINI_TEST("Mesh", "From_polygons")
-def test_mesh_from_polygons():
+@MINI_TEST("Mesh", "From_polylines")
+def test_mesh_from_polylines():
     from session_py import Mesh
     from session_py import Point
 
@@ -190,7 +225,7 @@ def test_mesh_from_polygons():
         Point(0.0, 1.0, 0.0),
     ]
 
-    mesh = Mesh.from_polygons([triangle])
+    mesh = Mesh.from_polylines([triangle])
     MINI_CHECK(mesh.number_of_vertices() == 3)
     MINI_CHECK(mesh.number_of_faces() == 1)
     MINI_CHECK(mesh.number_of_edges() == 3)
@@ -206,7 +241,7 @@ def test_mesh_from_polygons():
         Point(1.0, 1.0, 0.0),
     ]
 
-    mesh2 = Mesh.from_polygons([tri1, tri2])
+    mesh2 = Mesh.from_polylines([tri1, tri2])
     MINI_CHECK(mesh2.number_of_vertices() == 4)
     MINI_CHECK(mesh2.number_of_faces() == 2)
 
@@ -362,6 +397,23 @@ def test_mesh_to_vertices_and_faces():
     MINI_CHECK(len(vertices) == 3)
     MINI_CHECK(len(faces) == 1)
     MINI_CHECK(len(faces[0]) == 3)
+
+
+@MINI_TEST("Mesh", "From_lines")
+def test_mesh_from_lines():
+    from session_py import Mesh
+    from session_py import Line
+    from session_py import Point
+
+    # Grid of unit segments forming 4 quads (3x3 grid)
+    lines = []
+    for i in range(3):
+        for j in range(2):
+            lines.append(Line.from_points(Point(i,j,0), Point(i,j+1,0)))
+            lines.append(Line.from_points(Point(j,i,0), Point(j+1,i,0)))
+    mesh = Mesh.from_lines(lines, True)
+    MINI_CHECK(mesh.number_of_vertices() == 9)
+    MINI_CHECK(mesh.number_of_faces() == 4)
 
 
 if __name__ == "__main__":

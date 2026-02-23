@@ -969,3 +969,158 @@ def eval_basis(order: int, knot: np.ndarray, span: int, t: float) -> List[float]
         basis[j] = saved
 
     return basis
+
+
+def build_fitted_knots(params, num_cvs: int, degree: int):
+    m = len(params)
+    n_interior = num_cvs - degree - 1
+    order = degree + 1
+    kc = knot_count(order, num_cvs)
+    knots = [0.0] * kc
+
+    for i in range(degree):
+        knots[i] = params[0]
+
+    d = float(m) / (num_cvs - degree)
+    for j in range(1, n_interior + 1):
+        i = int(j * d)
+        alpha = j * d - i
+        knots[degree - 1 + j] = (1.0 - alpha) * params[i - 1] + alpha * params[i]
+
+    for i in range(num_cvs - 1, kc):
+        knots[i] = params[m - 1]
+
+    return knots
+
+
+def build_fitted_knots_adaptive(params, points, point_count, dim, num_cvs, degree, scale=3.0):
+    m = point_count
+    if m < 3 or points is None:
+        return build_fitted_knots(params, num_cvs, degree)
+
+    turn = [0.0] * m
+    for i in range(1, m - 1):
+        dot, len1sq, len2sq = 0.0, 0.0, 0.0
+        for d in range(dim):
+            a = points[i*dim+d] - points[(i-1)*dim+d]
+            b = points[(i+1)*dim+d] - points[i*dim+d]
+            dot += a * b; len1sq += a * a; len2sq += b * b
+        len1, len2 = math.sqrt(len1sq), math.sqrt(len2sq)
+        if len1 > 1e-14 and len2 > 1e-14:
+            c = max(-1.0, min(1.0, dot / (len1 * len2)))
+            turn[i] = math.acos(c)
+
+    cum = [0.0] * m
+    for i in range(m - 1):
+        chord = params[i+1] - params[i]
+        if chord < 1e-14: chord = 1e-14
+        cum[i+1] = cum[i] + chord * (1.0 + scale * (turn[i] + turn[i+1]) * 0.5)
+    total = cum[m-1]
+
+    n_interior = num_cvs - degree - 1
+    order = degree + 1
+    kc = knot_count(order, num_cvs)
+    knots = [0.0] * kc
+    for i in range(degree): knots[i] = params[0]
+
+    for j in range(1, n_interior + 1):
+        target = total * j / (n_interior + 1)
+        lo, hi = 0, m - 2
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if cum[mid+1] < target: lo = mid + 1
+            else: hi = mid
+        frac = (target - cum[lo]) / (cum[lo+1] - cum[lo]) if cum[lo+1] > cum[lo] else 0.0
+        knots[degree - 1 + j] = params[lo] + frac * (params[lo+1] - params[lo])
+
+    for i in range(num_cvs - 1, kc): knots[i] = params[m-1]
+    return knots
+
+
+def build_fitted_knots_periodic_adaptive(params, points, n, dim, num_cvs, degree, scale=3.0):
+    cv_count = num_cvs + degree
+    order = degree + 1
+    kc = cv_count + order - 2
+    T = params[n]
+
+    if n < 3 or points is None:
+        delta = T / num_cvs
+        return [(i - degree + 1) * delta for i in range(kc)]
+
+    turn = [0.0] * n
+    for i in range(n):
+        prev, nxt = (i - 1 + n) % n, (i + 1) % n
+        dot, len1sq, len2sq = 0.0, 0.0, 0.0
+        for d in range(dim):
+            a = points[i*dim+d] - points[prev*dim+d]
+            b = points[nxt*dim+d] - points[i*dim+d]
+            dot += a * b; len1sq += a * a; len2sq += b * b
+        len1, len2 = math.sqrt(len1sq), math.sqrt(len2sq)
+        if len1 > 1e-14 and len2 > 1e-14:
+            c = max(-1.0, min(1.0, dot / (len1 * len2)))
+            turn[i] = math.acos(c)
+
+    cum = [0.0] * (n + 1)
+    for i in range(n):
+        chord = params[i+1] - params[i]
+        if chord < 1e-14: chord = 1e-14
+        nxt = (i + 1) % n
+        cum[i+1] = cum[i] + chord * (1.0 + scale * (turn[i] + turn[nxt]) * 0.5)
+    total = cum[n]
+
+    base = [0.0] * num_cvs
+    for j in range(num_cvs):
+        target = total * j / num_cvs
+        lo, hi = 0, n - 1
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if cum[mid+1] < target: lo = mid + 1
+            else: hi = mid
+        frac = (target - cum[lo]) / (cum[lo+1] - cum[lo]) if cum[lo+1] > cum[lo] else 0.0
+        base[j] = params[lo] + frac * (params[lo+1] - params[lo])
+
+    intervals = [0.0] * num_cvs
+    for j in range(num_cvs - 1): intervals[j] = base[j+1] - base[j]
+    intervals[num_cvs - 1] = T - base[num_cvs - 1]
+
+    knots = [0.0] * kc
+    knots[degree - 1] = 0.0
+    for i in range(1, degree):
+        knots[degree - 1 - i] = knots[degree - i] - intervals[num_cvs - i]
+    for i in range(kc - degree):
+        knots[degree + i] = knots[degree - 1 + i] + intervals[i % num_cvs]
+
+    return knots
+
+
+def solve_banded_spd(dim: int, n: int, half_bw: int, band, rhs):
+    bw1 = half_bw + 1
+
+    for i in range(n):
+        for j in range(max(0, i - half_bw), i + 1):
+            s = 0.0
+            for k in range(max(0, i - half_bw), j):
+                s += band[i * bw1 + (i - k)] * band[j * bw1 + (j - k)]
+            if i == j:
+                val = band[i * bw1] - s
+                if val <= 1e-30:
+                    return False
+                band[i * bw1] = math.sqrt(val)
+            else:
+                band[i * bw1 + (i - j)] = (band[i * bw1 + (i - j)] - s) / band[j * bw1]
+
+    for i in range(n):
+        for d in range(dim):
+            s = 0.0
+            for k in range(max(0, i - half_bw), i):
+                s += band[i * bw1 + (i - k)] * rhs[k * dim + d]
+            rhs[i * dim + d] = (rhs[i * dim + d] - s) / band[i * bw1]
+
+    for i in range(n - 1, -1, -1):
+        for d in range(dim):
+            s = 0.0
+            for k in range(i + 1, min(n, i + half_bw + 1)):
+                s += band[k * bw1 + (k - i)] * rhs[k * dim + d]
+            rhs[i * dim + d] = (rhs[i * dim + d] - s) / band[i * bw1]
+
+    return True

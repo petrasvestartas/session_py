@@ -1,16 +1,16 @@
 {
     "type": "Objects",
-    "guid": "b4ab4a91-f9c1-49c1-bc83-0d7459f23ff9",
+    "guid": "6863225e-61a2-49b6-bc01-9bcd45b1ffe7",
     "name": "test_objects",
     "points": [
         {
-            "guid": "20681c9b-606b-4334-aed9-fbbc6e065a14",
+            "guid": "d7d1778a-3397-4a0c-8395-7f485585a31c",
             "name": "my_point",
             "pointcolor": {
                 "a": 255,
                 "b": 255,
                 "g": 0,
-                "guid": "7c1485e6-88b3-43c7-880a-6ea49b02e37a",
+                "guid": "e7ba9a76-6728-41b4-8ff2-12634184e463",
                 "name": "blue",
                 "r": 0,
                 "type": "Color"
@@ -19,7 +19,7 @@
             "width": 1.0,
             "x": 1.0,
             "xform": {
-                "guid": "41ce870d-7473-4325-8b1d-ea42921fbef3",
+                "guid": "0623297f-9d0a-4ea9-9c71-e9a817577208",
                 "m": [
                     1.0,
                     0.0,
@@ -52,5 +52,6 @@
     "pointclouds": [],
     "meshes": [],
     "nurbscurves": [],
-    "nurbssurfaces": []
+    "nurbssurfaces": [],
+    "breps": []
 }
