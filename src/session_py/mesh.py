@@ -7,6 +7,7 @@ from .vector import Vector
 from .tolerance import Tolerance
 from .color import Color
 from .xform import Xform
+from .triangulation_2d import triangulate as _tri2d_triangulate
 
 
 class NormalWeighting(Enum):
@@ -710,7 +711,10 @@ class Mesh:
         for pt in verts:
             vkeys.append(mesh.add_vertex(pt))
         for cycle in face_cycles:
-            mesh.add_face([vkeys[i] for i in cycle])
+            pts = [verts[i] for i in cycle]
+            tris = _tri2d_triangulate(pts)
+            for t in tris:
+                mesh.add_face([vkeys[cycle[t[0]]], vkeys[cycle[t[1]]], vkeys[cycle[t[2]]]])
         return mesh
 
     ###########################################################################################

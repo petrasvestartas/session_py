@@ -413,7 +413,7 @@ def test_mesh_from_lines():
             lines.append(Line.from_points(Point(j,i,0), Point(j+1,i,0)))
     mesh = Mesh.from_lines(lines, True)
     MINI_CHECK(mesh.number_of_vertices() == 9)
-    MINI_CHECK(mesh.number_of_faces() == 4)
+    MINI_CHECK(mesh.number_of_faces() == 8)
 
 
 if __name__ == "__main__":
