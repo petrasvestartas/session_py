@@ -180,6 +180,166 @@ def test_mesh_is_vertex_on_boundary():
     MINI_CHECK(mesh.is_vertex_on_boundary(v2))
 
 
+@MINI_TEST("Mesh", "Vertex_edges")
+def test_mesh_vertex_edges():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    v3 = mesh.add_vertex(Point(0,1,0))
+    v4 = mesh.add_vertex(Point(2,0,0))
+    f0 = mesh.add_face([v0,v1,v2,v3])
+    f1 = mesh.add_face([v1,v4,v2])
+
+    edges = mesh.vertex_edges(v1)
+    MINI_CHECK(len(edges) == 3)
+    MINI_CHECK((v1,v0) in edges)
+    MINI_CHECK((v1,v2) in edges)
+    MINI_CHECK((v1,v4) in edges)
+
+
+@MINI_TEST("Mesh", "Face_edges")
+def test_mesh_face_edges():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    v3 = mesh.add_vertex(Point(0,1,0))
+    v4 = mesh.add_vertex(Point(2,0,0))
+    f0 = mesh.add_face([v0,v1,v2,v3])
+    mesh.add_face([v1,v4,v2])
+
+    edges = mesh.face_edges(f0)
+    MINI_CHECK(len(edges) == 4)
+    MINI_CHECK(edges[0] == (v0,v1))
+    MINI_CHECK(edges[1] == (v1,v2))
+    MINI_CHECK(edges[2] == (v2,v3))
+    MINI_CHECK(edges[3] == (v3,v0))
+
+
+@MINI_TEST("Mesh", "Face_neighbors")
+def test_mesh_face_neighbors():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    v3 = mesh.add_vertex(Point(0,1,0))
+    v4 = mesh.add_vertex(Point(2,0,0))
+    f0 = mesh.add_face([v0,v1,v2,v3])
+    f1 = mesh.add_face([v1,v4,v2])
+
+    nb0 = mesh.face_neighbors(f0)
+    MINI_CHECK(len(nb0) == 1)
+    MINI_CHECK(nb0[0] == f1)
+
+    nb1 = mesh.face_neighbors(f1)
+    MINI_CHECK(len(nb1) == 1)
+    MINI_CHECK(nb1[0] == f0)
+
+
+@MINI_TEST("Mesh", "Edge_vertices")
+def test_mesh_edge_vertices():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    mesh.add_face([v0,v1,v2])
+
+    ev = mesh.edge_vertices(v0, v1)
+    MINI_CHECK(ev[0] == v0)
+    MINI_CHECK(ev[1] == v1)
+
+
+@MINI_TEST("Mesh", "Edge_faces")
+def test_mesh_edge_faces():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    v3 = mesh.add_vertex(Point(0,1,0))
+    v4 = mesh.add_vertex(Point(2,0,0))
+    f0 = mesh.add_face([v0,v1,v2,v3])
+    f1 = mesh.add_face([v1,v4,v2])
+
+    a, b = mesh.edge_faces(v1, v2)
+    MINI_CHECK(a is not None and b is not None)
+    MINI_CHECK((a == f0 and b == f1) or (a == f1 and b == f0))
+
+    c, d = mesh.edge_faces(v0, v1)
+    MINI_CHECK((c is not None) != (d is not None))
+
+
+@MINI_TEST("Mesh", "Edge_edges")
+def test_mesh_edge_edges():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    v3 = mesh.add_vertex(Point(0,1,0))
+    v4 = mesh.add_vertex(Point(2,0,0))
+    mesh.add_face([v0,v1,v2,v3])
+    mesh.add_face([v1,v4,v2])
+
+    ee = mesh.edge_edges(v1, v2)
+    MINI_CHECK(len(ee) == 4)
+    MINI_CHECK((v1,v2) not in ee)
+    MINI_CHECK((v2,v1) not in ee)
+
+
+@MINI_TEST("Mesh", "Is_edge_on_boundary")
+def test_mesh_is_edge_on_boundary():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    v3 = mesh.add_vertex(Point(0,1,0))
+    v4 = mesh.add_vertex(Point(2,0,0))
+    mesh.add_face([v0,v1,v2,v3])
+    mesh.add_face([v1,v4,v2])
+
+    MINI_CHECK(mesh.is_edge_on_boundary(v0, v1))
+    MINI_CHECK(not mesh.is_edge_on_boundary(v1, v2))
+
+
+@MINI_TEST("Mesh", "Is_face_on_boundary")
+def test_mesh_is_face_on_boundary():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0,0,0))
+    v1 = mesh.add_vertex(Point(1,0,0))
+    v2 = mesh.add_vertex(Point(1,1,0))
+    v3 = mesh.add_vertex(Point(0,1,0))
+    v4 = mesh.add_vertex(Point(2,0,0))
+    f0 = mesh.add_face([v0,v1,v2,v3])
+    f1 = mesh.add_face([v1,v4,v2])
+
+    MINI_CHECK(mesh.is_face_on_boundary(f0))
+    MINI_CHECK(mesh.is_face_on_boundary(f1))
+
+
 @MINI_TEST("Mesh", "Face_normal")
 def test_mesh_face_normal():
     from session_py import Mesh
@@ -264,6 +424,30 @@ def test_mesh_clear():
     MINI_CHECK(mesh.is_empty())
     MINI_CHECK(mesh.number_of_vertices() == 0)
     MINI_CHECK(mesh.number_of_faces() == 0)
+
+
+@MINI_TEST("Mesh", "Unify_winding")
+def test_mesh_unify_winding():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
+    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
+    v2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
+    v3 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
+
+    f0 = mesh.add_face([v0, v1, v2])
+    f1 = mesh.add_face([v0, v3, v2])
+
+    changed = mesh.unify_winding()
+
+    n0 = mesh.face_normal(f0)
+    n1 = mesh.face_normal(f1)
+    dot = n0[0]*n1[0] + n0[1]*n1[1] + n0[2]*n1[2]
+
+    MINI_CHECK(changed)
+    MINI_CHECK(TOLERANCE.is_close(dot, 1.0))
 
 
 @MINI_TEST("Mesh", "Transformation")
@@ -397,6 +581,27 @@ def test_mesh_to_vertices_and_faces():
     MINI_CHECK(len(vertices) == 3)
     MINI_CHECK(len(faces) == 1)
     MINI_CHECK(len(faces[0]) == 3)
+
+
+@MINI_TEST("Mesh", "From_polygon_with_holes")
+def test_mesh_from_polygon_with_holes():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh.from_polygon_with_holes([
+        [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
+        [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)],
+    ], False)
+    MINI_CHECK(mesh.number_of_vertices() == 8)
+    MINI_CHECK(mesh.number_of_faces() > 0)
+    MINI_CHECK(mesh.is_valid())
+
+    mesh_sorted = Mesh.from_polygon_with_holes([
+        [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)],
+        [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
+    ], True)
+    MINI_CHECK(mesh_sorted.number_of_vertices() == 8)
+    MINI_CHECK(mesh_sorted.number_of_faces() == mesh.number_of_faces())
 
 
 @MINI_TEST("Mesh", "From_lines")

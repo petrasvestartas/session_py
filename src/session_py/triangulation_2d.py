@@ -120,6 +120,18 @@ def _ear_clip(coords, indices):
                     removed = True
                     break
             if not removed:
+                split_first = -1
+                coord_map = {}
+                for pos in range(len(indices)):
+                    key = (round(coords[indices[pos]*2], 8), round(coords[indices[pos]*2+1], 8))
+                    if key in coord_map:
+                        split_first = coord_map[key]
+                        poly_a = indices[split_first:pos]
+                        poly_b = indices[pos:] + indices[:split_first]
+                        triangles.extend(_ear_clip(coords, poly_a))
+                        triangles.extend(_ear_clip(coords, poly_b))
+                        break
+                    coord_map[key] = pos
                 break
         it += 1
     if len(indices) == 3:
@@ -232,6 +244,32 @@ def triangulate(outer_pts, hole_pts_list=None):
     if bn > 1 and abs(outer_pts[0][0]-outer_pts[bn-1][0]) < 1e-12 and \
        abs(outer_pts[0][1]-outer_pts[bn-1][1]) < 1e-12:
         bn -= 1
+    no_holes = not hole_pts_list
+    if no_holes:
+        if bn == 3:
+            return [(0, 1, 2)]
+        if bn == 4:
+            d02 = (outer_pts[0][0]-outer_pts[2][0])**2 + (outer_pts[0][1]-outer_pts[2][1])**2
+            d13 = (outer_pts[1][0]-outer_pts[3][0])**2 + (outer_pts[1][1]-outer_pts[3][1])**2
+            if d02 <= d13:
+                return [(0, 1, 2), (0, 2, 3)]
+            else:
+                return [(0, 1, 3), (1, 2, 3)]
+        convex = True
+        first_cross = 0.0
+        for i in range(bn):
+            j = (i + 1) % bn
+            k = (i + 2) % bn
+            c = _cross_2d(outer_pts[i][0], outer_pts[i][1], outer_pts[j][0], outer_pts[j][1], outer_pts[k][0], outer_pts[k][1])
+            if abs(c) < 1e-12:
+                continue
+            if first_cross == 0.0:
+                first_cross = c
+            elif (c > 0) != (first_cross > 0):
+                convex = False
+                break
+        if convex and bn >= 5:
+            return [(0, i, i + 1) for i in range(1, bn - 1)]
     boundary_indices = []
     for i in range(bn):
         idx = len(coords) // 2

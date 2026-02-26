@@ -275,6 +275,67 @@ class Mesh:
         self.linecolors.clear()
         self.widths.clear()
 
+    def unify_winding(self) -> bool:
+        """Unify face winding by BFS over face adjacency; returns True if any face was flipped."""
+        if len(self.face) < 2:
+            return False
+
+        edge_faces = {}
+        for fkey, verts in self.face.items():
+            n = len(verts)
+            for i in range(n):
+                u = verts[i]
+                v = verts[(i + 1) % n]
+                edge = (min(u, v), max(u, v))
+                if edge not in edge_faces:
+                    edge_faces[edge] = []
+                edge_faces[edge].append((fkey, u, v))
+
+        visited = set()
+        flipped = set()
+        for seed in self.face:
+            if seed in visited:
+                continue
+            visited.add(seed)
+            queue = [seed]
+            while queue:
+                f = queue.pop()
+                is_flipped = f in flipped
+                verts = self.face[f]
+                n = len(verts)
+                for i in range(n):
+                    u_orig = verts[i]
+                    v_orig = verts[(i + 1) % n]
+                    eff_u = v_orig if is_flipped else u_orig
+                    eff_v = u_orig if is_flipped else v_orig
+                    edge = (min(u_orig, v_orig), max(u_orig, v_orig))
+                    for adj_key, adj_u, adj_v in edge_faces.get(edge, []):
+                        if adj_key == f or adj_key in visited:
+                            continue
+                        if not (adj_u == eff_v and adj_v == eff_u):
+                            flipped.add(adj_key)
+                        visited.add(adj_key)
+                        queue.append(adj_key)
+
+        if not flipped:
+            return False
+
+        for fkey in flipped:
+            self.face[fkey].reverse()
+
+        for u in self.halfedge:
+            self.halfedge[u].clear()
+        for fkey, verts in self.face.items():
+            n = len(verts)
+            for i in range(n):
+                u = verts[i]
+                v = verts[(i + 1) % n]
+                self.halfedge[u][v] = fkey
+                if u not in self.halfedge[v]:
+                    self.halfedge[v][u] = None
+
+        return True
+
     ###########################################################################################
     # Vertex and Face Operations
     ###########################################################################################
@@ -388,11 +449,61 @@ class Mesh:
 
     def vertex_faces(self, vertex_key: int) -> List[int]:
         """Get the faces incident to a vertex."""
-        faces = []
-        for face_key, face_vertices in self.face.items():
-            if vertex_key in face_vertices:
-                faces.append(face_key)
-        return faces
+        if vertex_key not in self.halfedge:
+            return []
+        return [f for f in self.halfedge[vertex_key].values() if f is not None]
+
+    def vertex_edges(self, vertex_key: int) -> List[Tuple[int, int]]:
+        """Get edges incident to a vertex as (vertex_key, neighbor) pairs."""
+        if vertex_key not in self.halfedge:
+            return []
+        return [(vertex_key, u) for u in self.halfedge[vertex_key]]
+
+    def face_edges(self, face_key: int) -> List[Tuple[int, int]]:
+        """Get edges of a face as (vi, vi+1) pairs."""
+        verts = self.face.get(face_key)
+        if verts is None:
+            return []
+        n = len(verts)
+        return [(verts[i], verts[(i + 1) % n]) for i in range(n)]
+
+    def face_neighbors(self, face_key: int) -> List[int]:
+        """Get faces adjacent to a face (sharing an edge)."""
+        neighbors = []
+        for u, v in self.face_edges(face_key):
+            f = self.halfedge.get(v, {}).get(u)
+            if f is not None:
+                neighbors.append(f)
+        return neighbors
+
+    def edge_vertices(self, u: int, v: int) -> List[int]:
+        """Get the two vertices of an edge."""
+        return [u, v]
+
+    def edge_faces(self, u: int, v: int) -> Tuple[Optional[int], Optional[int]]:
+        """Get the faces on each side of an edge."""
+        f0 = self.halfedge.get(u, {}).get(v)
+        f1 = self.halfedge.get(v, {}).get(u)
+        return (f0, f1)
+
+    def edge_edges(self, u: int, v: int) -> List[Tuple[int, int]]:
+        """Get all edges sharing a vertex with (u,v), excluding (u,v) and (v,u)."""
+        edges = []
+        for w in self.halfedge.get(u, {}):
+            if w != v:
+                edges.append((u, w))
+        for w in self.halfedge.get(v, {}):
+            if w != u:
+                edges.append((v, w))
+        return edges
+
+    def is_edge_on_boundary(self, u: int, v: int) -> bool:
+        """Check if an edge is on the boundary."""
+        return self.halfedge.get(u, {}).get(v) is None or self.halfedge.get(v, {}).get(u) is None
+
+    def is_face_on_boundary(self, face_key: int) -> bool:
+        """Check if a face is on the boundary."""
+        return any(self.is_edge_on_boundary(u, v) for u, v in self.face_edges(face_key))
 
     def is_vertex_on_boundary(self, vertex_key: int) -> bool:
         """Check if a vertex is on the boundary."""
@@ -715,6 +826,83 @@ class Mesh:
             tris = _tri2d_triangulate(pts)
             for t in tris:
                 mesh.add_face([vkeys[cycle[t[0]]], vkeys[cycle[t[1]]], vkeys[cycle[t[2]]]])
+        return mesh
+
+    @staticmethod
+    def from_polygon_with_holes(
+        polylines: List[List[Point]], sort_by_bbox: bool = False
+    ) -> "Mesh":
+        if not polylines:
+            return Mesh()
+        border_idx = 0
+        if sort_by_bbox and len(polylines) > 1:
+            max_diag = 0.0
+            for i, poly in enumerate(polylines):
+                if len(poly) < 3:
+                    continue
+                xs = [p.x for p in poly]
+                ys = [p.y for p in poly]
+                zs = [p.z for p in poly]
+                dx = max(xs) - min(xs)
+                dy = max(ys) - min(ys)
+                dz = max(zs) - min(zs)
+                diag = math.sqrt(dx*dx + dy*dy + dz*dz)
+                if diag > max_diag:
+                    max_diag = diag
+                    border_idx = i
+        def strip_close(pts):
+            if len(pts) > 1:
+                f, b = pts[0], pts[-1]
+                if abs(f.x-b.x) < 1e-12 and abs(f.y-b.y) < 1e-12 and abs(f.z-b.z) < 1e-12:
+                    return pts[:-1]
+            return pts
+        border = strip_close(polylines[border_idx])
+        if len(border) < 3:
+            return Mesh()
+        from .polyline import Polyline as _Polyline
+        origin, xaxis, yaxis, zaxis = _Polyline(border).get_average_plane()
+        def project_2d(p):
+            dx = p.x - origin.x
+            dy = p.y - origin.y
+            dz = p.z - origin.z
+            u = dx * xaxis.x + dy * xaxis.y + dz * xaxis.z
+            v = dx * yaxis.x + dy * yaxis.y + dz * yaxis.z
+            return Point(u, v, 0.0)
+        boundary_2d = [project_2d(p) for p in border]
+        def signed_area(pts):
+            a = 0.0
+            n = len(pts)
+            for i in range(n):
+                j = (i + 1) % n
+                a += pts[i].x * pts[j].y - pts[j].x * pts[i].y
+            return a * 0.5
+        if signed_area(boundary_2d) < 0.0:
+            border.reverse()
+            boundary_2d.reverse()
+        holes_2d = []
+        hole_pts_3d = []
+        for i, poly in enumerate(polylines):
+            if i == border_idx:
+                continue
+            hole = strip_close(poly)
+            if len(hole) < 3:
+                continue
+            hole_2d = [project_2d(p) for p in hole]
+            if signed_area(hole_2d) > 0.0:
+                hole.reverse()
+                hole_2d.reverse()
+            holes_2d.append(hole_2d)
+            hole_pts_3d.append(hole)
+        tris = _tri2d_triangulate(boundary_2d, holes_2d if holes_2d else None)
+        all_pts = list(border)
+        for h in hole_pts_3d:
+            all_pts.extend(h)
+        mesh = Mesh()
+        vkeys = []
+        for p in all_pts:
+            vkeys.append(mesh.add_vertex(p))
+        for t in tris:
+            mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
         return mesh
 
     ###########################################################################################
