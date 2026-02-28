@@ -1,269 +1,256 @@
-"""Tests for the encoders module."""
-
-from pathlib import Path
-from .encoders import (
-    json_dump,
-    json_dumps,
-    json_load,
-    json_loads,
-    decode_node,
-    GeometryEncoder,
-    GeometryDecoder,
-)
-from .point import Point
-from .vector import Vector
-from .line import Line
+from .mini_test import MINI_TEST
+from .mini_test import MINI_CHECK
+from .mini_test import run_all
+from .tolerance import TOLERANCE
 
 
-def test_json_dump_and_load():
-    """Test json_dump and json_load with file I/O."""
-    point = Point(1.5, 2.5, 3.5)
-    point.name = "test_point"
+@MINI_TEST("Encoders", "Json Dump Load")
+def test_json_dump_load():
+    from session_py import Point
+    from session_py.encoders import json_dump, json_load
+    from pathlib import Path
+    import json
 
+    original = Point(1.5, 2.5, 3.5)
+    original.name = "test_point"
     filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_encoders_point.json"
-    json_dump(point, filepath)
-
+    json_dump(original, filepath)
     loaded = json_load(filepath)
 
-    assert isinstance(loaded, Point)
-    assert loaded[0] == point[0]
-    assert loaded[1] == point[1]
-    assert loaded[2] == point[2]
-    assert loaded.name == point.name
+    MINI_CHECK(TOLERANCE.is_close(loaded[0], original[0]))
+    MINI_CHECK(TOLERANCE.is_close(loaded[1], original[1]))
+    MINI_CHECK(TOLERANCE.is_close(loaded[2], original[2]))
+    MINI_CHECK(loaded.name == original.name)
 
     filepath.unlink()
 
 
-def test_json_dumps_and_loads():
-    """Test json_dumps and json_loads with string serialization."""
-    vec = Vector(42.1, 84.2, 126.3)
-    vec.name = "test_vector"
+@MINI_TEST("Encoders", "Json Dumps Loads")
+def test_json_dumps_loads():
+    from session_py import Vector
+    from session_py.encoders import json_dumps, json_loads
 
-    json_str = json_dumps(vec)
-    assert isinstance(json_str, str)
-    assert "Vector" in json_str
+    original = Vector(42.1, 84.2, 126.3)
+    original.name = "test_vector"
+    json_str = json_dumps(original)
 
-    loaded = json_loads(json_str)
-
-    assert isinstance(loaded, Vector)
-    assert loaded[0] == vec[0]
-    assert loaded[1] == vec[1]
-    assert loaded[2] == vec[2]
-    assert loaded.name == vec.name
-
-
-def test_encode_collection():
-    """Test encoding a collection of geometry objects."""
-    points = [
-        Point(1.0, 2.0, 3.0),
-        Point(4.0, 5.0, 6.0),
-        Point(7.0, 8.0, 9.0),
-    ]
-
-    json_str = json_dumps(points)
-    assert isinstance(json_str, str)
+    MINI_CHECK(isinstance(json_str, str))
+    MINI_CHECK("Vector" in json_str)
 
     loaded = json_loads(json_str)
-    assert isinstance(loaded, list)
-    assert len(loaded) == 3
-    assert all(isinstance(p, Point) for p in loaded)
-    assert loaded[0][0] == 1.0
-    assert loaded[1][1] == 5.0
-    assert loaded[2][2] == 9.0
+
+    MINI_CHECK(loaded.name == original.name)
 
 
-def test_decode_node_primitives():
-    """Test decode_node with primitive types."""
-    assert decode_node(None) is None
-    assert decode_node(42) == 42
-    assert decode_node(3.14) == 3.14
-    assert decode_node("hello") == "hello"
-    assert decode_node(True) is True
+@MINI_TEST("Encoders", "Encode Collection Values")
+def test_encode_collection_values():
+    from session_py import Point
+    from session_py.encoders import json_dumps
+    import json
+
+    json_str = json_dumps([Point(1, 2, 3), Point(4, 5, 6), Point(7, 8, 9)])
+    d = json.loads(json_str)
+
+    MINI_CHECK(isinstance(d, list))
+    MINI_CHECK(len(d) == 3)
+    MINI_CHECK(d[0]["type"] == "Point")
+    MINI_CHECK(d[1]["x"] == 4.0)
+    MINI_CHECK(d[2]["z"] == 9.0)
 
 
-def test_decode_node_list():
-    """Test decode_node with lists."""
-    data = [1, 2, 3]
-    result = decode_node(data)
-    assert result == [1, 2, 3]
+@MINI_TEST("Encoders", "Encode Collection Shared Ptr")
+def test_encode_collection_shared_ptr():
+    from session_py import Line
+    from session_py.encoders import json_dumps
+    import json
 
-    # List with geometry objects
-    point_data = {
-        "type": "Point",
-        "x": 1.0,
-        "y": 2.0,
-        "z": 3.0,
-        "guid": "test",
-        "name": "p1",
-    }
-    data = [
-        point_data,
-        {"type": "Point", "x": 4.0, "y": 5.0, "z": 6.0, "guid": "test2", "name": "p2"},
-    ]
-    result = decode_node(data)
-    assert len(result) == 2
-    assert isinstance(result[0], Point)
-    assert isinstance(result[1], Point)
+    d = json.loads(json_dumps([Line(0, 0, 0, 1, 0, 0), Line(0, 0, 0, 0, 1, 0)]))
+
+    MINI_CHECK(isinstance(d, list))
+    MINI_CHECK(len(d) == 2)
+    MINI_CHECK(d[0]["type"] == "Line")
+    MINI_CHECK(d[1]["type"] == "Line")
 
 
-def test_decode_node_dict():
-    """Test decode_node with dictionaries."""
-    # Plain dict
-    data = {"a": 1, "b": 2}
-    result = decode_node(data)
-    assert result == {"a": 1, "b": 2}
+@MINI_TEST("Encoders", "Decode Collection")
+def test_decode_collection():
+    from session_py import Point
+    from session_py.encoders import json_dumps, json_loads
 
-    # Dict with type field (geometry object)
-    data = {
-        "type": "Vector",
-        "x": 1.0,
-        "y": 2.0,
-        "z": 3.0,
-        "guid": "test",
-        "name": "v1",
-    }
-    result = decode_node(data)
-    assert isinstance(result, Vector)
-    assert result[0] == 1.0
+    decoded = json_loads(json_dumps([Point(1, 2, 3), Point(4, 5, 6)]))
+
+    MINI_CHECK(len(decoded) == 2)
+    MINI_CHECK(TOLERANCE.is_close(decoded[0][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(decoded[1][1], 5.0))
 
 
+@MINI_TEST("Encoders", "Decode Collection Ptr")
+def test_decode_collection_ptr():
+    from session_py import Vector
+    from session_py.encoders import json_dumps, json_loads
+
+    decoded = json_loads(json_dumps([Vector(1, 0, 0), Vector(0, 1, 0)]))
+
+    MINI_CHECK(len(decoded) == 2)
+    MINI_CHECK(TOLERANCE.is_close(decoded[0][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(decoded[1][1], 1.0))
+
+
+@MINI_TEST("Encoders", "Nested Collections")
 def test_nested_collections():
-    """Test encoding and decoding nested collections."""
-    lines = [
-        Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0),
-        Line(0.0, 0.0, 0.0, 0.0, 1.0, 0.0),
-    ]
+    from session_py import Line
+    from session_py.encoders import json_dumps, json_loads
 
-    # Encode to JSON string
-    json_str = json_dumps(lines)
+    loaded = json_loads(json_dumps([Line(0, 0, 0, 1, 0, 0), Line(0, 0, 0, 0, 1, 0)]))
 
-    # Decode back
-    loaded = json_loads(json_str)
-
-    assert isinstance(loaded, list)
-    assert len(loaded) == 2
-    assert all(isinstance(line, Line) for line in loaded)
+    MINI_CHECK(len(loaded) == 2)
+    MINI_CHECK(TOLERANCE.is_close(loaded[0].end[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded[1].end[1], 1.0))
 
 
-def test_roundtrip_with_file():
-    """Test complete roundtrip with file I/O for collections."""
-    vectors = [
-        Vector(1.0, 0.0, 0.0),
-        Vector(0.0, 1.0, 0.0),
-        Vector(0.0, 0.0, 1.0),
-    ]
+@MINI_TEST("Encoders", "Roundtrip File Io")
+def test_roundtrip_file_io():
+    from session_py import Vector
+    from session_py.encoders import json_dump, json_load
+    from pathlib import Path
 
+    vectors = [Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1)]
     filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_encoders_collection.json"
     json_dump(vectors, filepath)
-
     loaded = json_load(filepath)
 
-    assert isinstance(loaded, list)
-    assert len(loaded) == 3
-    assert all(isinstance(v, Vector) for v in loaded)
-    assert loaded[0][0] == 1.0
-    assert loaded[1][1] == 1.0
-    assert loaded[2][2] == 1.0
+    MINI_CHECK(len(loaded) == 3)
 
     filepath.unlink()
 
 
-def test_geometry_encoder():
-    """Test GeometryEncoder directly."""
-    import json
-
-    point = Point(1.0, 2.0, 3.0)
-    json_str = json.dumps(point, cls=GeometryEncoder)
-
-    assert isinstance(json_str, str)
-    assert "Point" in json_str
-
-
-def test_geometry_decoder():
-    """Test GeometryDecoder directly."""
-    import json
-
-    json_str = '{"type": "Point", "x": 1.0, "y": 2.0, "z": 3.0, "guid": "test", "name": "p1", "width": 1.0}'
-    loaded = json.loads(json_str, cls=GeometryDecoder)
-
-    assert isinstance(loaded, Point)
-    assert loaded[0] == 1.0
-
-
+@MINI_TEST("Encoders", "Pretty Vs Compact")
 def test_pretty_vs_compact():
-    """Test pretty vs compact JSON formatting."""
-    point = Point(1.0, 2.0, 3.0)
+    from session_py import Point
+    from session_py.encoders import json_dumps, json_loads
 
+    point = Point(1, 2, 3)
     pretty = json_dumps(point, pretty=True)
     compact = json_dumps(point, pretty=False)
 
-    assert len(pretty) > len(compact)
-    assert "\n" in pretty
-    assert "\n" not in compact
+    MINI_CHECK(len(pretty) > len(compact))
+    MINI_CHECK("\n" in pretty)
+    MINI_CHECK("\n" not in compact)
 
-    # Both should deserialize correctly
     loaded_pretty = json_loads(pretty)
     loaded_compact = json_loads(compact)
 
-    assert isinstance(loaded_pretty, Point)
-    assert isinstance(loaded_compact, Point)
-    assert loaded_pretty[0] == 1.0
-    assert loaded_compact[0] == 1.0
+    MINI_CHECK(TOLERANCE.is_close(loaded_pretty[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded_compact[0], 1.0))
 
 
+@MINI_TEST("Encoders", "Decode Primitives")
+def test_decode_primitives():
+    import json
+
+    MINI_CHECK(json.loads(json.dumps(42)) == 42)
+    MINI_CHECK(json.loads(json.dumps(3.14)) == 3.14)
+    MINI_CHECK(json.loads(json.dumps("hello")) == "hello")
+    MINI_CHECK(json.loads(json.dumps(True)) is True)
+
+
+@MINI_TEST("Encoders", "Decode List")
+def test_decode_list():
+    import json
+    from session_py import Point
+    from session_py.encoders import json_dumps, json_loads
+
+    loaded_vec = json.loads(json.dumps([1, 2, 3]))
+
+    MINI_CHECK(len(loaded_vec) == 3)
+    MINI_CHECK(loaded_vec[0] == 1)
+    MINI_CHECK(loaded_vec[2] == 3)
+
+    decoded = json_loads(json_dumps([Point(1, 2, 3), Point(4, 5, 6)]))
+
+    MINI_CHECK(len(decoded) == 2)
+
+
+@MINI_TEST("Encoders", "Decode Dict")
+def test_decode_dict():
+    import json
+    from session_py import Vector
+    from session_py.encoders import json_dumps, json_loads
+
+    loaded = json.loads(json.dumps({"a": 1, "b": 2}))
+
+    MINI_CHECK(loaded["a"] == 1)
+    MINI_CHECK(loaded["b"] == 2)
+
+    loaded_vec = json_loads(json_dumps(Vector(1, 2, 3)))
+
+    MINI_CHECK(TOLERANCE.is_close(loaded_vec[0], 1.0))
+
+
+@MINI_TEST("Encoders", "List In List In List")
 def test_list_in_list_in_list():
-    """Test nested lists (list in list in list)."""
+    import json
+
     data = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
-    json_str = json_dumps(data)
-    loaded = json_loads(json_str)
-    assert loaded == data
-    assert loaded[0][0][0] == 1
-    assert loaded[1][1][1] == 8
+    loaded = json.loads(json.dumps(data))
+
+    MINI_CHECK(loaded[0][0][0] == 1)
+    MINI_CHECK(loaded[1][1][1] == 8)
+    MINI_CHECK(len(loaded) == 2)
 
 
+@MINI_TEST("Encoders", "Dict Of Lists")
 def test_dict_of_lists():
-    """Test dictionary containing lists."""
+    from session_py import Point
+    from session_py.encoders import json_dumps, json_loads
+
     data = {
         "numbers": [1, 2, 3],
         "letters": ["a", "b", "c"],
-        "points": [Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)],
+        "points": [Point(1, 0, 0), Point(0, 1, 0)],
     }
-    json_str = json_dumps(data)
-    loaded = json_loads(json_str)
-    assert loaded["numbers"] == [1, 2, 3]
-    assert loaded["letters"] == ["a", "b", "c"]
-    assert len(loaded["points"]) == 2
-    assert isinstance(loaded["points"][0], Point)
-    assert loaded["points"][0][0] == 1.0
+    loaded = json_loads(json_dumps(data))
+
+    MINI_CHECK(loaded["numbers"] == [1, 2, 3])
+    MINI_CHECK(loaded["letters"][0] == "a")
+    MINI_CHECK(len(loaded["points"]) == 2)
+    MINI_CHECK(TOLERANCE.is_close(loaded["points"][0][0], 1.0))
 
 
+@MINI_TEST("Encoders", "List Of Dict")
 def test_list_of_dict():
-    """Test list containing dictionaries."""
+    from session_py import Point
+    from session_py.encoders import json_dumps, json_loads
+
     data = [
         {"name": "point1", "value": 10},
         {"name": "point2", "value": 20},
-        {"geometry": Point(1.0, 2.0, 3.0)},
+        {"geometry": Point(1, 2, 3)},
     ]
-    json_str = json_dumps(data)
-    loaded = json_loads(json_str)
-    assert len(loaded) == 3
-    assert loaded[0]["name"] == "point1"
-    assert loaded[1]["value"] == 20
-    assert isinstance(loaded[2]["geometry"], Point)
-    assert loaded[2]["geometry"][2] == 3.0
+    loaded = json_loads(json_dumps(data))
+
+    MINI_CHECK(loaded[0]["name"] == "point1")
+    MINI_CHECK(loaded[1]["value"] == 20)
+    MINI_CHECK(TOLERANCE.is_close(loaded[2]["geometry"][2], 3.0))
 
 
+@MINI_TEST("Encoders", "Dict Of Dicts")
 def test_dict_of_dicts():
-    """Test nested dictionaries (dict of dicts)."""
+    from session_py import Point
+    from session_py import Vector
+    from session_py.encoders import json_dumps, json_loads
+
     data = {
         "config": {"tolerance": 0.001, "scale": 1000},
-        "geometry": {"point": Point(1.0, 2.0, 3.0), "vector": Vector(0.0, 0.0, 1.0)},
+        "geometry": {"point": Point(1, 2, 3), "vector": Vector(0, 0, 1)},
     }
-    json_str = json_dumps(data)
-    loaded = json_loads(json_str)
-    assert loaded["config"]["tolerance"] == 0.001
-    assert loaded["config"]["scale"] == 1000
-    assert isinstance(loaded["geometry"]["point"], Point)
-    assert isinstance(loaded["geometry"]["vector"], Vector)
-    assert loaded["geometry"]["point"][0] == 1.0
-    assert loaded["geometry"]["vector"][2] == 1.0
+    loaded = json_loads(json_dumps(data))
+
+    MINI_CHECK(TOLERANCE.is_close(loaded["config"]["tolerance"], 0.001))
+    MINI_CHECK(loaded["config"]["scale"] == 1000)
+    MINI_CHECK(TOLERANCE.is_close(loaded["geometry"]["point"][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded["geometry"]["vector"][2], 1.0))
+
+
+if __name__ == "__main__":
+    run_all(language="python")

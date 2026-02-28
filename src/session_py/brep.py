@@ -279,7 +279,12 @@ class BRep:
             brep.m_topology_vertices.append(tv)
         for i, ev in enumerate(edge_verts):
             brep.add_edge(i, ev[0], ev[1])
-        uv_corners = [Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0)]
+        uv_corners = [
+            Point(0, 0, 0),
+            Point(1, 0, 0),
+            Point(1, 1, 0),
+            Point(0, 1, 0),
+        ]
         for fi in range(6):
             fv = face_verts[fi]
             p00, p10 = corners[fv[0]], corners[fv[1]]
@@ -345,19 +350,19 @@ class BRep:
         si_top = brep.add_surface(cap_top)
         fi_body = brep.add_face(si_body, False)
         li_body = brep.add_loop(fi_body, BRepLoopType.Outer)
-        c2d_bot = NurbsCurve.create(False, 1, [Point(dom_u[0],dom_v[0],0), Point(dom_u[1],dom_v[0],0)])
+        c2d_bot = NurbsCurve.create(False, 1, [Point(dom_u[0], dom_v[0], 0), Point(dom_u[1], dom_v[0], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_bot), ei_bot, li_body, False, BRepTrimType.Mated)
-        c2d_sr = NurbsCurve.create(False, 1, [Point(dom_u[1],dom_v[0],0), Point(dom_u[1],dom_v[1],0)])
+        c2d_sr = NurbsCurve.create(False, 1, [Point(dom_u[1], dom_v[0], 0), Point(dom_u[1], dom_v[1], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_sr), ei_seam, li_body, False, BRepTrimType.Seam)
-        c2d_top = NurbsCurve.create(False, 1, [Point(dom_u[1],dom_v[1],0), Point(dom_u[0],dom_v[1],0)])
+        c2d_top = NurbsCurve.create(False, 1, [Point(dom_u[1], dom_v[1], 0), Point(dom_u[0], dom_v[1], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_top), ei_top, li_body, True, BRepTrimType.Mated)
-        c2d_sl = NurbsCurve.create(False, 1, [Point(dom_u[0],dom_v[1],0), Point(dom_u[0],dom_v[0],0)])
+        c2d_sl = NurbsCurve.create(False, 1, [Point(dom_u[0], dom_v[1], 0), Point(dom_u[0], dom_v[0], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_sl), ei_seam, li_body, True, BRepTrimType.Seam)
         # Circular 2D trim in UV space: circle at (0.5,0.5) radius 0.5
         import math as _m
         _w = _m.sqrt(2.0) / 2.0
-        _cx = [1,1,0,-1,-1,-1,0,1,1]; _cy = [0,1,1,1,0,-1,-1,-1,0]
-        _cw = [1,_w,1,_w,1,_w,1,_w,1]; _kn = [0,0,1,1,2,2,3,3,4,4]
+        _cx = [1, 1, 0, -1, -1, -1, 0, 1, 1]; _cy = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+        _cw = [1, _w, 1, _w, 1, _w, 1, _w, 1]; _kn = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
         def _cap_circle():
             import numpy as np
             c = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
@@ -398,13 +403,13 @@ class BRep:
         si = brep.add_surface(srf)
         fi = brep.add_face(si, False)
         li = brep.add_loop(fi, BRepLoopType.Outer)
-        c2d_south = NurbsCurve.create(False, 1, [Point(dom_u[0],dom_v[0],0), Point(dom_u[1],dom_v[0],0)])
+        c2d_south = NurbsCurve.create(False, 1, [Point(dom_u[0], dom_v[0], 0), Point(dom_u[1], dom_v[0], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_south), -1, li, False, BRepTrimType.Singular)
-        c2d_sr = NurbsCurve.create(False, 1, [Point(dom_u[1],dom_v[0],0), Point(dom_u[1],dom_v[1],0)])
+        c2d_sr = NurbsCurve.create(False, 1, [Point(dom_u[1], dom_v[0], 0), Point(dom_u[1], dom_v[1], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_sr), ei_seam, li, False, BRepTrimType.Seam)
-        c2d_north = NurbsCurve.create(False, 1, [Point(dom_u[1],dom_v[1],0), Point(dom_u[0],dom_v[1],0)])
+        c2d_north = NurbsCurve.create(False, 1, [Point(dom_u[1], dom_v[1], 0), Point(dom_u[0], dom_v[1], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_north), -1, li, False, BRepTrimType.Singular)
-        c2d_sl = NurbsCurve.create(False, 1, [Point(dom_u[0],dom_v[1],0), Point(dom_u[0],dom_v[0],0)])
+        c2d_sl = NurbsCurve.create(False, 1, [Point(dom_u[0], dom_v[1], 0), Point(dom_u[0], dom_v[0], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_sl), ei_seam, li, True, BRepTrimType.Seam)
         for ei, e in enumerate(brep.m_topology_edges):
             brep.m_topology_vertices[e.start_vertex].edge_indices.append(ei)
@@ -445,7 +450,12 @@ class BRep:
                 if (edge_verts[e][0]==v0 and edge_verts[e][1]==v1) or (edge_verts[e][0]==v1 and edge_verts[e][1]==v0):
                     return e
             return -1
-        uv = [Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0)]
+        uv = [
+            Point(0, 0, 0),
+            Point(1, 0, 0),
+            Point(1, 1, 0),
+            Point(0, 1, 0),
+        ]
         for fv in side_faces:
             p00, p10, p01, p11 = corners[fv[0]], corners[fv[1]], corners[fv[3]], corners[fv[2]]
             srf = NurbsSurface(3, False, 2, 2, 2, 2)
@@ -481,17 +491,17 @@ class BRep:
         ei_bot = brep.add_edge(ci_bot, 8, 8)
         ei_top = brep.add_edge(ci_top, 9, 9)
         ei_seam = brep.add_edge(ci_seam, 8, 9)
-        c2d_bot = NurbsCurve.create(False, 1, [Point(dom_u[0],dom_v[0],0), Point(dom_u[1],dom_v[0],0)])
+        c2d_bot = NurbsCurve.create(False, 1, [Point(dom_u[0], dom_v[0], 0), Point(dom_u[1], dom_v[0], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_bot), ei_bot, li_cyl, False, BRepTrimType.Mated)
-        c2d_sr = NurbsCurve.create(False, 1, [Point(dom_u[1],dom_v[0],0), Point(dom_u[1],dom_v[1],0)])
+        c2d_sr = NurbsCurve.create(False, 1, [Point(dom_u[1], dom_v[0], 0), Point(dom_u[1], dom_v[1], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_sr), ei_seam, li_cyl, False, BRepTrimType.Seam)
-        c2d_top = NurbsCurve.create(False, 1, [Point(dom_u[1],dom_v[1],0), Point(dom_u[0],dom_v[1],0)])
+        c2d_top = NurbsCurve.create(False, 1, [Point(dom_u[1], dom_v[1], 0), Point(dom_u[0], dom_v[1], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_top), ei_top, li_cyl, True, BRepTrimType.Mated)
-        c2d_sl = NurbsCurve.create(False, 1, [Point(dom_u[0],dom_v[1],0), Point(dom_u[0],dom_v[0],0)])
+        c2d_sl = NurbsCurve.create(False, 1, [Point(dom_u[0], dom_v[1], 0), Point(dom_u[0], dom_v[0], 0)])
         brep.add_trim(brep.add_curve_2d(c2d_sl), ei_seam, li_cyl, True, BRepTrimType.Seam)
         _w = _m.sqrt(2.0) / 2.0
-        _cx = [1,1,0,-1,-1,-1,0,1,1]; _cy = [0,1,1,1,0,-1,-1,-1,0]
-        _cw = [1,_w,1,_w,1,_w,1,_w,1]; _kn = [0,0,1,1,2,2,3,3,4,4]
+        _cx = [1, 1, 0, -1, -1, -1, 0, 1, 1]; _cy = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+        _cw = [1, _w, 1, _w, 1, _w, 1, _w, 1]; _kn = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
         def make_cap(z, reversed, circle_edge_idx):
             r = max(hx, hy)
             cap = NurbsSurface(3, False, 2, 2, 2, 2)
@@ -599,7 +609,7 @@ class BRep:
                 j = (i + 1) % n
                 u0 = (us[i] - umin) / du; v0 = (vs_list[i] - vmin) / dv
                 u1 = (us[j] - umin) / du; v1 = (vs_list[j] - vmin) / dv
-                tc = NurbsCurve.create(False, 1, [Point(u0,v0,0), Point(u1,v1,0)])
+                tc = NurbsCurve.create(False, 1, [Point(u0, v0, 0), Point(u1, v1, 0)])
                 c2d = brep.add_curve_2d(tc)
                 ei, rev = get_edge(vi[i], vi[j])
                 tt = BRepTrimType.Boundary if not brep.m_topology_edges[ei].trim_indices else BRepTrimType.Mated

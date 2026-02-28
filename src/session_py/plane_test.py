@@ -74,24 +74,46 @@ def test_plane_constructor():
     pl_sub = pl_base - offset
 
     MINI_CHECK(pl.name == "my_plane" and pl.guid != "")
-    MINI_CHECK(TOLERANCE.is_close(origin[0], 0.0) and TOLERANCE.is_close(origin[1], 0.0) and TOLERANCE.is_close(origin[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(x_axis[0], 1.0) and TOLERANCE.is_close(x_axis[1], 0.0) and TOLERANCE.is_close(x_axis[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(y_axis[0], 0.0) and TOLERANCE.is_close(y_axis[1], 1.0) and TOLERANCE.is_close(y_axis[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(z_axis[0], 0.0) and TOLERANCE.is_close(z_axis[1], 0.0) and TOLERANCE.is_close(z_axis[2], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(a, 0.0) and TOLERANCE.is_close(b, 0.0) and TOLERANCE.is_close(c, 1.0) and TOLERANCE.is_close(d, 0.0))
-    MINI_CHECK(TOLERANCE.is_close(ax0[0], 1.0) and TOLERANCE.is_close(ax1[1], 1.0) and TOLERANCE.is_close(ax2[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(origin[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(origin[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(origin[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(x_axis[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(x_axis[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(x_axis[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(y_axis[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(y_axis[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(y_axis[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(z_axis[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(z_axis[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(z_axis[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(a, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(b, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(c, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(d, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(ax0[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(ax1[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(ax2[2], 1.0))
     MINI_CHECK(plstr == "0.000000, 0.000000, 0.000000\n1.000000, 0.000000, 0.000000\n0.000000, 1.000000, 0.000000\n0.000000, 0.000000, 1.000000")
     MINI_CHECK(plrepr == "Plane(my_plane, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)")
     MINI_CHECK(plcopy == pl and plcopy.guid != pl.guid)
-    MINI_CHECK(TOLERANCE.is_close(pl_pn.origin[2], 5.0) and TOLERANCE.is_close(pl_pn.z_axis[2], 1.0) and TOLERANCE.is_close(pl_pn.d, -5.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_pts.c, 1.0) and TOLERANCE.is_close(pl_pts.d, 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_2pts.origin[0], 0.0) and TOLERANCE.is_close(pl_2pts.x_axis[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_pn.origin[2], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_pn.z_axis[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_pn.d, -5.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_pts.c, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_pts.d, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_2pts.origin[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_2pts.x_axis[0], 1.0))
     MINI_CHECK(xy.name == "xy_plane" and TOLERANCE.is_close(xy.c, 1.0))
     MINI_CHECK(yz.name == "yz_plane" and TOLERANCE.is_close(yz.a, 1.0))
     MINI_CHECK(xz.name == "xz_plane" and TOLERANCE.is_close(xz.b, 1.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_iadd.origin[0], 1.0) and TOLERANCE.is_close(pl_iadd.origin[1], 2.0) and TOLERANCE.is_close(pl_iadd.origin[2], 3.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_isub.origin[0], -1.0) and TOLERANCE.is_close(pl_isub.origin[1], -2.0) and TOLERANCE.is_close(pl_isub.origin[2], -3.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_add.origin[2], 3.0) and TOLERANCE.is_close(pl_base.origin[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_iadd.origin[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_iadd.origin[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_iadd.origin[2], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_isub.origin[0], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_isub.origin[1], -2.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_isub.origin[2], -3.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_add.origin[2], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_base.origin[2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(pl_sub.origin[2], -3.0))
 
 
@@ -103,8 +125,12 @@ def test_plane_reverse():
     pl = Plane.xy_plane()
     pl.reverse()
 
-    MINI_CHECK(TOLERANCE.is_close(pl.x_axis[0], 0.0) and TOLERANCE.is_close(pl.x_axis[1], 1.0) and TOLERANCE.is_close(pl.x_axis[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(pl.y_axis[0], 1.0) and TOLERANCE.is_close(pl.y_axis[1], 0.0) and TOLERANCE.is_close(pl.y_axis[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.x_axis[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.x_axis[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.x_axis[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.y_axis[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.y_axis[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.y_axis[2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(pl.c, -1.0))
 
 
@@ -119,7 +145,7 @@ def test_plane_rotate():
     MINI_CHECK(TOLERANCE.is_close(pl.x_axis[1], 1.0))
 
 
-@MINI_TEST("Plane", "Is_right_hand")
+@MINI_TEST("Plane", "Is Right Hand")
 def test_plane_is_right_hand():
     from session_py import Plane
 
@@ -150,7 +176,7 @@ def test_plane_is_right_hand():
     MINI_CHECK(rotated_rh == True)
 
 
-@MINI_TEST("Plane", "Is_coplanar")
+@MINI_TEST("Plane", "Is Coplanar")
 def test_plane_is_coplanar():
     from session_py import Plane
     from session_py import Vector
@@ -206,12 +232,18 @@ def test_plane_transform():
     pl2.xform = Xform.translation(1.0, 2.0, 3.0)
     pl3 = pl2.transformed()
 
-    MINI_CHECK(TOLERANCE.is_close(pl.origin[0], 1.0) and TOLERANCE.is_close(pl.origin[1], 2.0) and TOLERANCE.is_close(pl.origin[2], 3.0))
-    MINI_CHECK(TOLERANCE.is_close(pl3.origin[0], 1.0) and TOLERANCE.is_close(pl3.origin[1], 2.0) and TOLERANCE.is_close(pl3.origin[2], 3.0))
-    MINI_CHECK(TOLERANCE.is_close(pl2.origin[0], 0.0) and TOLERANCE.is_close(pl2.origin[1], 0.0) and TOLERANCE.is_close(pl2.origin[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.origin[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.origin[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.origin[2], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(pl3.origin[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl3.origin[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(pl3.origin[2], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(pl2.origin[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl2.origin[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl2.origin[2], 0.0))
 
 
-@MINI_TEST("Plane", "Json_roundtrip")
+@MINI_TEST("Plane", "Json Roundtrip")
 def test_plane_json_roundtrip():
     from session_py import Plane
     from pathlib import Path
@@ -235,7 +267,7 @@ def test_plane_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.d, 0.0))
 
 
-@MINI_TEST("Plane", "Protobuf_roundtrip")
+@MINI_TEST("Plane", "Protobuf Roundtrip")
 def test_plane_protobuf_roundtrip():
     from session_py import Plane
     from pathlib import Path

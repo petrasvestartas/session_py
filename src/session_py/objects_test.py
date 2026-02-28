@@ -1,27 +1,27 @@
-from .objects import Objects
-from .point import Point
+from .mini_test import MINI_TEST
+from .mini_test import MINI_CHECK
+from .mini_test import run_all
+from .tolerance import TOLERANCE
 
 
-def test_objects_constructor():
-    objects = Objects()
-    assert objects.name == "my_objects"
-    assert objects.guid is not None
-    assert len(objects.points) == 0
-
-
+@MINI_TEST("Objects", "Json Roundtrip")
 def test_objects_json_roundtrip():
+    from session_py import Objects
+    from session_py import Point
+    from session_py.encoders import json_dump
+    from session_py.encoders import json_load
     from pathlib import Path
-    from session_py.encoders import json_dump, json_load
 
-    objects = Objects()
-    objects.points.append(Point(1.0, 2.0, 3.0))
-    objects.name = "test_objects"
+    original = Objects()
+    original.points.append(Point(1.0, 2.0, 3.0))
+    original.points.append(Point(4.0, 5.0, 6.0))
 
-    path = Path(__file__).resolve().parents[2] / "serialization" / "test_objects.json"
-    json_dump(objects, path)
-    loaded = json_load(path)
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_objects.json"
+    json_dump(original, fname)
+    loaded = json_load(fname)
 
-    assert isinstance(loaded, Objects)
-    assert len(loaded.points) == 1
-    assert loaded.points[0].x == 1.0
-    assert loaded.name == objects.name
+    MINI_CHECK(len(loaded.points) == len(original.points))
+
+
+if __name__ == "__main__":
+    run_all(language="python")

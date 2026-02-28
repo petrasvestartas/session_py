@@ -23,7 +23,12 @@ def test_xform_constructor():
     is_id = x.is_identity()
 
     # From matrix constructor
-    xfrom = Xform.from_matrix([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 5.0, 10.0, 15.0, 1.0])
+    xfrom = Xform.from_matrix([
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        5.0, 10.0, 15.0, 1.0,
+    ])
 
     # Minimal and Full String Representation
     xstr = str(x)
@@ -58,8 +63,12 @@ def test_xform_constructor():
     MINI_CHECK(xcopy == x and xcopy.guid != x.guid)
     MINI_CHECK(x_eq == True and x_ne == True)
     # (1,0,0) * scale(2,1,1) = (2,0,0), then translate(10,0,0) = (12,0,0)
-    MINI_CHECK(TOLERANCE.is_close(result[0], 12.0) and TOLERANCE.is_close(result[1], 0.0) and TOLERANCE.is_close(result[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(result2[0], 12.0) and TOLERANCE.is_close(result2[1], 0.0) and TOLERANCE.is_close(result2[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(result[0], 12.0))
+    MINI_CHECK(TOLERANCE.is_close(result[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(result[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(result2[0], 12.0))
+    MINI_CHECK(TOLERANCE.is_close(result2[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(result2[2], 0.0))
 
 
 @MINI_TEST("Xform", "Translation")
@@ -128,10 +137,18 @@ def test_xform_rotation():
     p = Point(1.0, 0.0, 0.0)
     rp = r.transformed_point(p)
 
-    MINI_CHECK(TOLERANCE.is_close(rpx[0], 0.0) and TOLERANCE.is_close(rpx[1], 0.0) and TOLERANCE.is_close(rpx[2], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(rpy[0], 1.0) and TOLERANCE.is_close(rpy[1], 0.0) and TOLERANCE.is_close(rpy[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rpz[0], 0.0) and TOLERANCE.is_close(rpz[1], 1.0) and TOLERANCE.is_close(rpz[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rp[0], 0.0) and TOLERANCE.is_close(rp[1], 1.0) and TOLERANCE.is_close(rp[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rpx[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rpx[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rpx[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rpy[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rpy[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rpy[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rpz[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rpz[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rpz[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rp[2], 0.0))
 
 
 @MINI_TEST("Xform", "Inverse")
@@ -152,7 +169,7 @@ def test_xform_inverse():
     MINI_CHECK(result.is_identity())
 
 
-@MINI_TEST("Xform", "Transform_geometry")
+@MINI_TEST("Xform", "Transform Geometry")
 def test_xform_transform_geometry():
     from session_py import Xform
     from session_py import Point
@@ -189,17 +206,33 @@ def test_xform_transform_geometry():
     poly_transformed = poly.transformed()
     pts = poly_transformed.get_points()
 
-    MINI_CHECK(TOLERANCE.is_close(pt_transformed[0], 11.0) and TOLERANCE.is_close(pt_transformed[1], 22.0) and TOLERANCE.is_close(pt_transformed[2], 33.0))
-    MINI_CHECK(TOLERANCE.is_close(v_transformed[0], 1.0) and TOLERANCE.is_close(v_transformed[1], 0.0) and TOLERANCE.is_close(v_transformed[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[0], 10.0) and TOLERANCE.is_close(ln_transformed[1], 20.0) and TOLERANCE.is_close(ln_transformed[2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[3], 11.0) and TOLERANCE.is_close(ln_transformed[4], 20.0) and TOLERANCE.is_close(ln_transformed[5], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_transformed.origin[0], 10.0) and TOLERANCE.is_close(pl_transformed.origin[1], 20.0) and TOLERANCE.is_close(pl_transformed.origin[2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[0][0], 10.0) and TOLERANCE.is_close(pts[0][1], 20.0) and TOLERANCE.is_close(pts[0][2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[1][0], 11.0) and TOLERANCE.is_close(pts[1][1], 20.0) and TOLERANCE.is_close(pts[1][2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[2][0], 11.0) and TOLERANCE.is_close(pts[2][1], 21.0) and TOLERANCE.is_close(pts[2][2], 30.0))
+    MINI_CHECK(TOLERANCE.is_close(pt_transformed[0], 11.0))
+    MINI_CHECK(TOLERANCE.is_close(pt_transformed[1], 22.0))
+    MINI_CHECK(TOLERANCE.is_close(pt_transformed[2], 33.0))
+    MINI_CHECK(TOLERANCE.is_close(v_transformed[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(v_transformed[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(v_transformed[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(ln_transformed[0], 10.0))
+    MINI_CHECK(TOLERANCE.is_close(ln_transformed[1], 20.0))
+    MINI_CHECK(TOLERANCE.is_close(ln_transformed[2], 30.0))
+    MINI_CHECK(TOLERANCE.is_close(ln_transformed[3], 11.0))
+    MINI_CHECK(TOLERANCE.is_close(ln_transformed[4], 20.0))
+    MINI_CHECK(TOLERANCE.is_close(ln_transformed[5], 30.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_transformed.origin[0], 10.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_transformed.origin[1], 20.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_transformed.origin[2], 30.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[0][0], 10.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[0][1], 20.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[0][2], 30.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[1][0], 11.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[1][1], 20.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[1][2], 30.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[2][0], 11.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[2][1], 21.0))
+    MINI_CHECK(TOLERANCE.is_close(pts[2][2], 30.0))
 
 
-@MINI_TEST("Xform", "Change_basis")
+@MINI_TEST("Xform", "Change Basis")
 def test_xform_change_basis():
     from session_py import Xform
     from session_py import Point
@@ -218,7 +251,9 @@ def test_xform_change_basis():
     z_axis_1 = Vector(0.0, 0.0, 1.0)
 
     # Transform maps points FROM system 1 TO system 0
-    xform = Xform.change_basis(origin_1, x_axis_1, y_axis_1, z_axis_1, origin_0, x_axis_0, y_axis_0, z_axis_0)
+    xform = Xform.change_basis(
+        origin_1, x_axis_1, y_axis_1, z_axis_1,
+        origin_0, x_axis_0, y_axis_0, z_axis_0)
 
     # Point at origin_1 should map to origin_0
     p = Point(10.0, 20.0, 0.0)
@@ -229,7 +264,7 @@ def test_xform_change_basis():
     MINI_CHECK(TOLERANCE.is_close(tp[2], 0.0))
 
 
-@MINI_TEST("Xform", "Plane_to_plane")
+@MINI_TEST("Xform", "Plane To Plane")
 def test_xform_plane_to_plane():
     from session_py import Xform
     from session_py import Point
@@ -253,7 +288,7 @@ def test_xform_plane_to_plane():
     MINI_CHECK(TOLERANCE.is_close(tp[2], 0.0))
 
 
-@MINI_TEST("Xform", "Look_at_rh")
+@MINI_TEST("Xform", "Look At Rh")
 def test_xform_look_at_rh():
     from session_py import Xform
     from session_py import Point
@@ -274,7 +309,7 @@ def test_xform_look_at_rh():
     MINI_CHECK(TOLERANCE.is_close(tp[2], -10.0))
 
 
-@MINI_TEST("Xform", "Json_roundtrip")
+@MINI_TEST("Xform", "Json Roundtrip")
 def test_xform_json_roundtrip():
     from session_py import Xform
     from pathlib import Path
@@ -301,7 +336,7 @@ def test_xform_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.m[14], 3.0))
 
 
-@MINI_TEST("Xform", "Protobuf_roundtrip")
+@MINI_TEST("Xform", "Protobuf Roundtrip")
 def test_xform_protobuf_roundtrip():
     from session_py import Xform
     from pathlib import Path

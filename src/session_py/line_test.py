@@ -79,7 +79,8 @@ def test_line_constructor():
     lc.width = 2.5
 
     MINI_CHECK(l.name == "my_line" and l[0] == 10.0 and l[1] == 20.0 and l[2] == 30.0 and l.guid)
-    MINI_CHECK(x0 == 10.0 and y0 == 20.0 and z0 == 30.0 and x1 == 40.0 and y1 == 50.0 and z1 == 60.0)
+    MINI_CHECK(x0 == 10.0 and y0 == 20.0 and z0 == 30.0)
+    MINI_CHECK(x1 == 40.0 and y1 == 50.0 and z1 == 60.0)
     MINI_CHECK("10.0" in lstr and "20.0" in lstr and "60.0" in lstr)
     MINI_CHECK("my_line" in lrepr and "10.0" in lrepr and "Color" in lrepr)
     MINI_CHECK(lcopy.guid != l.guid)
@@ -91,9 +92,11 @@ def test_line_constructor():
     MINI_CHECK(rdiv[0] == 5.0 and rdiv[3] == 20.0)
     MINI_CHECK(radd[0] == 11.0 and radd[3] == 41.0)
     MINI_CHECK(rdif[0] == 9.0 and rdif[3] == 39.0)
-    MINI_CHECK(neg[0] == 4.0 and neg[1] == 5.0 and neg[2] == 6.0 and neg[3] == 1.0 and neg[4] == 2.0 and neg[5] == 3.0)
+    MINI_CHECK(neg[0] == 4.0 and neg[1] == 5.0 and neg[2] == 6.0)
+    MINI_CHECK(neg[3] == 1.0 and neg[4] == 2.0 and neg[5] == 3.0)
     MINI_CHECK(l2p[0] == 1.0 and l2p[3] == 4.0)
-    MINI_CHECK(l_pv[0] == 1.0 and l_pv[1] == 2.0 and l_pv[2] == 3.0 and l_pv[3] == 4.0 and l_pv[4] == 6.0 and l_pv[5] == 8.0)
+    MINI_CHECK(l_pv[0] == 1.0 and l_pv[1] == 2.0 and l_pv[2] == 3.0)
+    MINI_CHECK(l_pv[3] == 4.0 and l_pv[4] == 6.0 and l_pv[5] == 8.0)
     MINI_CHECK(l_pdl[0] == 0.0 and l_pdl[3] == 5.0)
     MINI_CHECK(lc.linecolor[0] == 255 and lc.linecolor[1] == 0 and lc.width == 2.5)
 
@@ -113,7 +116,7 @@ def test_line_transformation():
     MINI_CHECK(l.xform == Xform.identity())
 
 
-@MINI_TEST("Line", "Json_roundtrip")
+@MINI_TEST("Line", "Json Roundtrip")
 def test_line_json_roundtrip():
     from session_py import Line
     from pathlib import Path
@@ -142,7 +145,7 @@ def test_line_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[5], 252.6))
 
 
-@MINI_TEST("Line", "Protobuf_roundtrip")
+@MINI_TEST("Line", "Protobuf Roundtrip")
 def test_line_protobuf_roundtrip():
     from session_py import Line
     from pathlib import Path
@@ -181,7 +184,7 @@ def test_line_length():
     MINI_CHECK(TOLERANCE.is_close(lsq, 25.0))
 
 
-@MINI_TEST("Line", "To_vector")
+@MINI_TEST("Line", "To Vector")
 def test_line_to_vector():
     from session_py import Line
 
@@ -191,7 +194,7 @@ def test_line_to_vector():
     MINI_CHECK(v[0] == 3.0 and v[1] == 4.0 and v[2] == 6.0)
 
 
-@MINI_TEST("Line", "To_direction")
+@MINI_TEST("Line", "To Direction")
 def test_line_to_direction():
     from session_py import Line
 
@@ -204,7 +207,7 @@ def test_line_to_direction():
     MINI_CHECK(TOLERANCE.is_close(d.magnitude(), 1.0))
 
 
-@MINI_TEST("Line", "Point_at")
+@MINI_TEST("Line", "Point At")
 def test_line_point_at():
     from session_py import Line
 
@@ -218,7 +221,7 @@ def test_line_point_at():
     MINI_CHECK(pe[0] == 10.0 and pe[1] == 10.0 and pe[2] == 10.0)
 
 
-@MINI_TEST("Line", "Closest_point")
+@MINI_TEST("Line", "Closest Point")
 def test_line_closest_point():
     from session_py import Line
     from session_py import Point
@@ -236,7 +239,7 @@ def test_line_closest_point():
     MINI_CHECK(cp3[0] == 10.0 and cp3[1] == 0.0 and cp3[2] == 0.0)
 
 
-@MINI_TEST("Line", "Start_end_center")
+@MINI_TEST("Line", "Start End Center")
 def test_line_start_end_center():
     from session_py import Line
 
@@ -250,12 +253,15 @@ def test_line_start_end_center():
     MINI_CHECK(center[0] == 2.5 and center[1] == 3.5 and center[2] == 4.5)
 
 
-@MINI_TEST("Line", "Fit_points")
+@MINI_TEST("Line", "Fit Points")
 def test_line_fit_points():
     from session_py import Line
     from session_py import Point
 
-    fit_pts = [Point(0.0, 0.0, 0.0), Point(1.0, 1.0, 0.5), Point(2.0, 2.0, 1.0), Point(3.0, 3.0, 1.5)]
+    fit_pts = [
+        Point(0.0, 0.0, 0.0), Point(1.0, 1.0, 0.5),
+        Point(2.0, 2.0, 1.0), Point(3.0, 3.0, 1.5),
+    ]
     l_fit = Line.fit_points(fit_pts)
 
     MINI_CHECK(l_fit.length() > 0.0)

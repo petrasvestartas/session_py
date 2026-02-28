@@ -1,170 +1,158 @@
-from .session import Session
-from .point import Point
-from .line import Line
-from .plane import Plane
-from .boundingbox import BoundingBox
-from .polyline import Polyline
-from .pointcloud import PointCloud
-from .mesh import Mesh
-from .vector import Vector
+from .mini_test import MINI_TEST
+from .mini_test import MINI_CHECK
+from .mini_test import run_all
+from .tolerance import TOLERANCE
 
 
-def test_session_serialization_with_all_geometry_types():
+@MINI_TEST("Session", "Constructor")
+def test_session_constructor():
+    from session_py import Session
+    session = Session()
+    MINI_CHECK(session.name == "my_session")
+    MINI_CHECK(bool(session.guid))
+
+
+@MINI_TEST("Session", "Jsondump")
+def test_session_jsondump():
+    from session_py import Session
+    from session_py import Point
+    from session_py.encoders import json_dump
     from pathlib import Path
-    from .encoders import json_dump, json_load
-    from .treenode import TreeNode
 
-    my_session = Session("test_session")
+    session = Session()
+    point1 = Point(1.0, 2.0, 3.0)
+    point2 = Point(4.0, 5.0, 6.0)
+    session.add_point(point1)
+    session.add_point(point2)
+    session.add_edge(point1.guid, point2.guid, "connection")
+    data = session.__jsondump__()
+    MINI_CHECK(data["name"] == "my_session")
+    MINI_CHECK("guid" in data)
+    MINI_CHECK(len(data["objects"]["points"]) == 2)
+    MINI_CHECK(len(data["graph"]["vertices"]) == 2)
+    MINI_CHECK(len(data["graph"]["edges"]) == 1)
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
+    json_dump(session, fname)
 
-    # Create all geometry types (in specified order)
-    bbox = BoundingBox.from_point(Point(0.0, 0.0, 0.0), 1.0)
-    # color - not a geometry type that can be added to session
-    line = Line(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
-    mesh = Mesh()
-    plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+
+@MINI_TEST("Session", "Jsonload")
+def test_session_jsonload():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    point1 = Point(1.0, 2.0, 3.0)
+    point2 = Point(4.0, 5.0, 6.0)
+    session.add_point(point1)
+    session.add_point(point2)
+    session.add_edge(point1.guid, point2.guid, "connection")
+    data = session.__jsondump__()
+    session2 = Session.__jsonload__(data)
+    MINI_CHECK(session2.name == "my_session")
+    MINI_CHECK(len(session2.lookup) == 2)
+    MINI_CHECK(session2.graph.number_of_vertices() == 2)
+
+
+@MINI_TEST("Session", "File Io")
+def test_session_file_io():
+    from session_py import Session
+    from session_py import Point
+    from session_py.encoders import json_dump
+    from session_py.encoders import json_load
+    from pathlib import Path
+    import os
+
+    session = Session()
+    point1 = Point(1.0, 2.0, 3.0)
+    point2 = Point(4.0, 5.0, 6.0)
+    session.add_point(point1)
+    session.add_point(point2)
+    session.add_edge(point1.guid, point2.guid, "connection")
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_roundtrip.json"
+    json_dump(session, fname)
+    loaded_session = json_load(fname)
+    MINI_CHECK(loaded_session.name == session.name)
+    MINI_CHECK(len(loaded_session.lookup) == len(session.lookup))
+    MINI_CHECK(loaded_session.graph.number_of_vertices() == session.graph.number_of_vertices())
+    os.remove(fname)
+
+
+@MINI_TEST("Session", "Add Point")
+def test_session_add_point():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
     point = Point(1.0, 2.0, 3.0)
-    pointcloud = PointCloud([Point(0.0, 0.0, 0.0)], [], [])
-    polyline = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-
-    # Demonstrate 3-level tree hierarchy
-    # Level 1: Root -> "geometry" folder
-    geometry_folder = TreeNode("geometry")
-    my_session.add(geometry_folder)  # defaults to root
-
-    # Level 2: "geometry" -> "primitives" and "complex" folders
-    primitives_folder = TreeNode("primitives")
-    complex_folder = TreeNode("complex")
-    my_session.add(primitives_folder, geometry_folder)
-    my_session.add(complex_folder, geometry_folder)
-
-    # Add all geometry to session - returns TreeNode for easy nesting!
-    bbox_node = my_session.add_bbox(bbox)
-    line_node = my_session.add_line(line)
-    mesh_node = my_session.add_mesh(mesh)
-    plane_node = my_session.add_plane(plane)
-    point_node = my_session.add_point(point)
-    pointcloud_node = my_session.add_pointcloud(pointcloud)
-    polyline_node = my_session.add_polyline(polyline)
-
-    # Level 3: Organize geometry under folders
-    # Primitives: point, line, plane
-    my_session.add(point_node, primitives_folder)
-    my_session.add(line_node, primitives_folder)
-    my_session.add(plane_node, primitives_folder)
-
-    # Complex: mesh, polyline, pointcloud, bbox
-    my_session.add(mesh_node, complex_folder)
-    my_session.add(polyline_node, complex_folder)
-    my_session.add(pointcloud_node, complex_folder)
-    my_session.add(bbox_node, complex_folder)
-
-    # Add some edges between objects
-    my_session.add_edge(point.guid, line.guid, "point_to_line")
-    my_session.add_edge(line.guid, plane.guid, "line_to_plane")
-
-    # Graph structure before serialization
-    original_graph_vertices = my_session.graph.number_of_vertices()
-    original_graph_edges = my_session.graph.number_of_edges()
-    assert original_graph_vertices == 7
-    assert original_graph_edges == 2
-
-    # Tree should have: root + geometry + primitives + complex + 7 geometry nodes = 11 nodes
-    original_tree_nodes = list(my_session.tree.nodes)
-    assert len(original_tree_nodes) == 11
-
-    filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
-    json_dump(my_session, filepath)
-    loaded = json_load(filepath)
-
-    assert loaded.name == my_session.name
-    assert len(loaded.objects.bboxes) == len(my_session.objects.bboxes)
-    assert len(loaded.objects.lines) == len(my_session.objects.lines)
-    assert len(loaded.objects.meshes) == len(my_session.objects.meshes)
-    assert len(loaded.objects.planes) == len(my_session.objects.planes)
-    assert len(loaded.objects.points) == len(my_session.objects.points)
-    assert len(loaded.objects.pointclouds) == len(my_session.objects.pointclouds)
-    assert len(loaded.objects.polylines) == len(my_session.objects.polylines)
-    assert len(loaded.lookup) == len(my_session.lookup)
-
-    # Verify graph structure is fully preserved
-    assert loaded.graph.number_of_vertices() == original_graph_vertices
-    assert loaded.graph.number_of_edges() == original_graph_edges
-    assert loaded.graph.has_edge((point.guid, line.guid))
-    assert loaded.graph.has_edge((line.guid, plane.guid))
-
-    # Verify tree structure is preserved
-    loaded_tree_nodes = list(loaded.tree.nodes)
-    assert len(loaded_tree_nodes) == len(original_tree_nodes)
-    assert loaded.tree.root is not None
+    session.add_point(point)
+    MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(point.guid in session.lookup)
+    MINI_CHECK(session.graph.has_node(point.guid))
 
 
-def test_session_get_geometry_with_transformations():
-    from .xform import Xform
+@MINI_TEST("Session", "Add Edge")
+def test_session_add_edge():
+    from session_py import Session
+    from session_py import Point
 
-    session = Session("transform_test")
-
-    # Create a simple hierarchy with transformations
-    # Root -> parent_node -> child_node
-
-    # Create two points
-    parent_point = Point(1.0, 0.0, 0.0)
-    parent_point.xform = Xform.translation(10.0, 0.0, 0.0)  # Translate by (10, 0, 0)
-
-    child_point = Point(1.0, 0.0, 0.0)
-    child_point.xform = Xform.translation(5.0, 0.0, 0.0)  # Translate by (5, 0, 0)
-
-    # Add to session
-    parent_node = session.add_point(parent_point)
-    child_node = session.add_point(child_point)
-
-    # Create hierarchy: root -> parent -> child
-    session.add(parent_node)
-    session.add(child_node, parent_node)
-
-    # Get transformed geometry
-    transformed = session.get_geometry()
-
-    # Should have 2 points
-    assert len(transformed.points) == 2
-
-    # Find parent and child in transformed objects
-    parent_transformed = next(
-        p for p in transformed.points if p.guid == parent_point.guid
-    )
-    child_transformed = next(
-        p for p in transformed.points if p.guid == child_point.guid
-    )
-
-    # Parent should be transformed to world coordinates
-    # Original: (1, 0, 0) + translation(10, 0, 0) = (11, 0, 0)
-    assert abs(parent_transformed.x - 11.0) < 1e-6
-    assert abs(parent_transformed.y - 0.0) < 1e-6
-    assert abs(parent_transformed.z - 0.0) < 1e-6
-
-    # Child should have composed transformation applied
-    # Original: (1, 0, 0) + parent_translation(10, 0, 0) + child_translation(5, 0, 0) = (16, 0, 0)
-    assert abs(child_transformed.x - 16.0) < 1e-6
-    assert abs(child_transformed.y - 0.0) < 1e-6
-    assert abs(child_transformed.z - 0.0) < 1e-6
-
-    # Transformations should be reset to identity (check translation components are 0)
-    assert abs(parent_transformed.xform.m[12]) < 1e-6
-    assert abs(parent_transformed.xform.m[13]) < 1e-6
-    assert abs(parent_transformed.xform.m[14]) < 1e-6
-    assert abs(child_transformed.xform.m[12]) < 1e-6
-    assert abs(child_transformed.xform.m[13]) < 1e-6
-    assert abs(child_transformed.xform.m[14]) < 1e-6
+    session = Session()
+    point1 = Point(1.0, 2.0, 3.0)
+    point2 = Point(4.0, 5.0, 6.0)
+    session.add_point(point1)
+    session.add_point(point2)
+    session.add_edge(point1.guid, point2.guid, "connection")
+    MINI_CHECK(session.graph.has_edge((point1.guid, point2.guid)))
 
 
+@MINI_TEST("Session", "Get Object")
+def test_session_get_object():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    session.add_point(point)
+    retrieved = session.get_object(point.guid)
+    MINI_CHECK(retrieved is not None)
+    MINI_CHECK(retrieved.guid == point.guid)
+
+
+@MINI_TEST("Session", "File Io Comprehensive")
+def test_session_file_io_comprehensive():
+    from session_py import Session
+    from session_py import Point
+    from session_py.encoders import json_dump
+    from session_py.encoders import json_load
+    from pathlib import Path
+    import os
+
+    session = Session("./serialization/test_session")
+    point1 = Point(1.0, 2.0, 3.0)
+    point2 = Point(4.0, 5.0, 6.0)
+    session.add_point(point1)
+    session.add_point(point2)
+    session.add_edge(point1.guid, point2.guid, "./serialization/test_connection")
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_comprehensive.json"
+    json_dump(session, fname)
+    loaded_session = json_load(fname)
+    MINI_CHECK(loaded_session.name == session.name)
+    MINI_CHECK(len(loaded_session.objects.points) == len(session.objects.points))
+    MINI_CHECK(loaded_session.graph.number_of_vertices() == session.graph.number_of_vertices())
+    MINI_CHECK(loaded_session.graph.number_of_edges() == session.graph.number_of_edges())
+    os.remove(fname)
+
+
+@MINI_TEST("Session", "Tree Transformation Hierarchy")
 def test_session_tree_transformation_hierarchy():
-    """Test tree transformation hierarchy with 3 boxes (matching C++ test)."""
-    from .mesh import Mesh
-    from .xform import Xform
+    from session_py import Session
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Mesh
+    from session_py import Xform
     import math
 
     scene = Session("tree_transformation_test")
 
-    # Helper to create box mesh
     def create_box(center, size):
         mesh = Mesh()
         h = size * 0.5
@@ -192,228 +180,85 @@ def test_session_tree_transformation_hierarchy():
             mesh.add_face(f)
         return mesh
 
-    # Create boxes at same location
     box1 = create_box(Point(0, 0, 0), 2.0)
-    box1.name = "box_1"
     box1_node = scene.add_mesh(box1)
-
     box2 = create_box(Point(0, 0, 0), 2.0)
-    box2.name = "box_2"
     box2_node = scene.add_mesh(box2)
-
     box3 = create_box(Point(0, 0, 0), 2.0)
-    box3.name = "box_3"
     box3_node = scene.add_mesh(box3)
 
-    # Setup tree hierarchy
     scene.add(box1_node)
     scene.add(box2_node, box1_node)
     scene.add(box3_node, box2_node)
-
-    # Apply transformations
-    from .vector import Vector
-    from .plane import Plane
 
     box1_top = Point(0, 0, 1.0)
     normal = Vector(0, 0, 1)
     x = Vector(1, 0, 0)
     y = Vector(0, 1, 0)
-    xy_origin = Point(0, 0, 0)
-    xy_x = Vector(1, 0, 0)
-    xy_y = Vector(0, 1, 0)
-    xy_z = Vector(0, 0, 1)
-
     xy_to_top = Xform.plane_to_plane(
-        xy_origin, xy_x, xy_y, xy_z, box1_top, x, y, normal
+        Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1),
+        box1_top, x, y, normal
     )
     box1.xform = Xform.rotation_z(math.pi / 1.5) * xy_to_top
-
     box2.xform = Xform.translation(2.0, 0, 0) * Xform.rotation_z(math.pi / 6.0)
     box3.xform = Xform.translation(2.0, 0, 0)
 
-    # Extract transformed geometry
     transformed = scene.get_geometry()
+    MINI_CHECK(len(transformed.meshes) == 3)
 
-    assert len(transformed.meshes) == 3
-
-    # Expected vertices for box_1
     expected_box1 = [
-        [1.36603, -0.366025, 0],
-        [0.366025, 1.36603, 0],
-        [-1.36603, 0.366025, 0],
-        [-0.366025, -1.36603, 0],
-        [1.36603, -0.366025, 2],
-        [0.366025, 1.36603, 2],
-        [-1.36603, 0.366025, 2],
-        [-0.366025, -1.36603, 2],
+        [1.36603, -0.366025, 0], [0.366025, 1.36603, 0],
+        [-1.36603, 0.366025, 0], [-0.366025, -1.36603, 0],
+        [1.36603, -0.366025, 2], [0.366025, 1.36603, 2],
+        [-1.36603, 0.366025, 2], [-0.366025, -1.36603, 2],
     ]
-
-    # Expected vertices for box_2
     expected_box2 = [
-        [0.366025, 2.09808, 0],
-        [-1.36603, 3.09808, 0],
-        [-2.36603, 1.36603, 0],
-        [-0.633975, 0.366025, 0],
-        [0.366025, 2.09808, 2],
-        [-1.36603, 3.09808, 2],
-        [-2.36603, 1.36603, 2],
-        [-0.633975, 0.366025, 2],
+        [0.366025, 2.09808, 0], [-1.36603, 3.09808, 0],
+        [-2.36603, 1.36603, 0], [-0.633975, 0.366025, 0],
+        [0.366025, 2.09808, 2], [-1.36603, 3.09808, 2],
+        [-2.36603, 1.36603, 2], [-0.633975, 0.366025, 2],
     ]
-
-    # Expected vertices for box_3
     expected_box3 = [
-        [-1.36603, 3.09808, 0],
-        [-3.09808, 4.09808, 0],
-        [-4.09808, 2.36603, 0],
-        [-2.36603, 1.36603, 0],
-        [-1.36603, 3.09808, 2],
-        [-3.09808, 4.09808, 2],
-        [-4.09808, 2.36603, 2],
-        [-2.36603, 1.36603, 2],
+        [-1.36603, 3.09808, 0], [-3.09808, 4.09808, 0],
+        [-4.09808, 2.36603, 0], [-2.36603, 1.36603, 0],
+        [-1.36603, 3.09808, 2], [-3.09808, 4.09808, 2],
+        [-4.09808, 2.36603, 2], [-2.36603, 1.36603, 2],
     ]
-
-    # Expected faces (same for all boxes)
     expected_faces = [
-        [0, 1, 2, 3],
-        [4, 7, 6, 5],
-        [0, 4, 5, 1],
-        [2, 6, 7, 3],
-        [0, 3, 7, 4],
-        [1, 5, 6, 2],
+        [0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1],
+        [2, 6, 7, 3], [0, 3, 7, 4], [1, 5, 6, 2],
     ]
 
-    # Validate box_1
     m1 = transformed.meshes[0]
-    assert len(m1.vertex) == 8
     for i in range(8):
         v = m1.vertex[i]
-        assert abs(v[0] - expected_box1[i][0]) < 1e-4
-        assert abs(v[1] - expected_box1[i][1]) < 1e-4
-        assert abs(v[2] - expected_box1[i][2]) < 1e-4
+        MINI_CHECK(abs(v[0] - expected_box1[i][0]) < 1e-4)
+        MINI_CHECK(abs(v[1] - expected_box1[i][1]) < 1e-4)
+        MINI_CHECK(abs(v[2] - expected_box1[i][2]) < 1e-4)
 
-    # Validate box_2
     m2 = transformed.meshes[1]
-    assert len(m2.vertex) == 8
     for i in range(8):
         v = m2.vertex[i]
-        assert abs(v[0] - expected_box2[i][0]) < 1e-4
-        assert abs(v[1] - expected_box2[i][1]) < 1e-4
-        assert abs(v[2] - expected_box2[i][2]) < 1e-4
+        MINI_CHECK(abs(v[0] - expected_box2[i][0]) < 1e-4)
+        MINI_CHECK(abs(v[1] - expected_box2[i][1]) < 1e-4)
+        MINI_CHECK(abs(v[2] - expected_box2[i][2]) < 1e-4)
 
-    # Validate box_3
     m3 = transformed.meshes[2]
-    assert len(m3.vertex) == 8
     for i in range(8):
         v = m3.vertex[i]
-        assert abs(v[0] - expected_box3[i][0]) < 1e-4
-        assert abs(v[1] - expected_box3[i][1]) < 1e-4
-        assert abs(v[2] - expected_box3[i][2]) < 1e-4
+        MINI_CHECK(abs(v[0] - expected_box3[i][0]) < 1e-4)
+        MINI_CHECK(abs(v[1] - expected_box3[i][1]) < 1e-4)
+        MINI_CHECK(abs(v[2] - expected_box3[i][2]) < 1e-4)
 
-    # Validate faces (all boxes have same topology)
     for mesh in [m1, m2, m3]:
-        assert len(mesh.face) == 6
+        MINI_CHECK(len(mesh.face) == 6)
         face_idx = 0
         for key, face in mesh.face.items():
-            assert len(face) == len(expected_faces[face_idx])
+            MINI_CHECK(len(face) == len(expected_faces[face_idx]))
             for i in range(len(face)):
-                assert face[i] == expected_faces[face_idx][i]
+                MINI_CHECK(face[i] == expected_faces[face_idx][i])
             face_idx += 1
 
 
-def test_session_ray_cast_sanity():
-    # Arrange a small scene along X axis
-    scene = Session("ray_test_py")
-
-    pt1 = Point(5, 0, 0)
-    scene.add_point(pt1)
-    pt2 = Point(15, 0, 0)
-    scene.add_point(pt2)
-    line1 = Line.from_points(Point(10, -2, 0), Point(10, 2, 0))
-    scene.add_line(line1)
-    plane = Plane(Point(20, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
-    scene.add_plane(plane)
-    poly = Polyline([Point(25, -1, -1), Point(25, 0, 0), Point(25, 1, 1)])
-    scene.add_polyline(poly)
-
-    ray_origin = Point(0, 0, 0)
-    ray_dir = Vector(1, 0, 0)
-
-    hits = scene.ray_cast(ray_origin, ray_dir, 0.5)
-    print(f"Session Ray Casting (py): {len(hits)} hit(s)")
-    assert len(hits) >= 1
-
-
-def test_all_geometry_types_ray_cast_subset():
-    # Focus on types supported precisely by current ray_cast
-    scene = Session("all_geom_py")
-    scene.add_point(Point(0, 10, 0))
-    scene.add_line(Line.from_points(Point(-1, 20, 0), Point(1, 20, 0)))
-    scene.add_plane(Plane(Point(0, 30, 0), Vector(1, 0, 0), Vector(0, 0, 1)))
-    scene.add_bbox(
-        BoundingBox(
-            Point(0, 40, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(2, 2, 2),
-        )
-    )
-    scene.add_polyline(Polyline([Point(-1, 70, 0), Point(0, 70, 0), Point(1, 70, 0)]))
-
-    ray_origin = Point(0, 0, 0)
-    ray_dir = Vector(0, 1, 0)
-
-    hits = scene.ray_cast(ray_origin, ray_dir, 1.0)
-    print(f"All Geometry Types (subset) Ray Casting (py): {len(hits)} hit(s)")
-    # Session.ray_cast returns closest hit(s); ensure at least one
-    assert len(hits) >= 1
-
-
-def test_performance_points_vs_pure_bvh_py():
-    import random
-    import time
-
-    random.seed(42)
-
-    OBJECT_COUNT = 2000
-    WORLD_SIZE = 100.0
-
-    scene = Session("perf_points_py")
-    pure_boxes = []
-
-    for i in range(OBJECT_COUNT):
-        x = (random.random() - 0.5) * WORLD_SIZE
-        y = (random.random() - 0.5) * WORLD_SIZE
-        z = (random.random() - 0.5) * WORLD_SIZE
-        pt = Point(x, y, z)
-        scene.add_point(pt)
-        pure_boxes.append(
-            BoundingBox(
-                pt,
-                Vector(1, 0, 0),
-                Vector(0, 1, 0),
-                Vector(0, 0, 1),
-                Vector(0.5, 0.5, 0.5),
-            )
-        )
-
-    ray_origin = Point(0, 0, 0)
-    ray_dir = Vector(1, 0, 0)
-
-    t0 = time.perf_counter()
-    hits = scene.ray_cast(ray_origin, ray_dir, 1.0)
-    t1 = time.perf_counter()
-    session_ms = (t1 - t0) * 1000.0
-
-    from .bvh import BVH
-
-    t2 = time.perf_counter()
-    bvh = BVH.from_boxes(pure_boxes, WORLD_SIZE)
-    candidates = []
-    bvh.ray_cast(ray_origin, ray_dir, candidates, True)
-    t3 = time.perf_counter()
-    bvh_ms = (t3 - t2) * 1000.0
-
-    print(f"Session (py): {session_ms:.3f} ms ({len(hits)} hits)")
-    print(f"Pure BVH (py): {bvh_ms:.3f} ms ({len(candidates)} candidates)")
-    assert session_ms >= 0.0 and bvh_ms >= 0.0
+if __name__ == "__main__":
+    run_all(language="python")

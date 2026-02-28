@@ -4,7 +4,7 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("Closest", "Line_point")
+@MINI_TEST("Closest", "Line Point")
 def test_closest_line_point():
     from session_py import Closest
     from session_py import Line
@@ -29,7 +29,7 @@ def test_closest_line_point():
     MINI_CHECK(TOLERANCE.is_close(d3, 5.0))
 
 
-@MINI_TEST("Closest", "Polyline_point")
+@MINI_TEST("Closest", "Polyline Point")
 def test_closest_polyline_point():
     from session_py import Closest
     from session_py import Polyline
@@ -46,7 +46,7 @@ def test_closest_polyline_point():
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
 
 
-@MINI_TEST("Closest", "Curve_point")
+@MINI_TEST("Closest", "Curve Point")
 def test_closest_curve_point():
     from session_py import Closest
     from session_py import NurbsCurve
@@ -67,17 +67,29 @@ def test_closest_curve_point():
     MINI_CHECK(dist2 < 0.01)
 
 
-@MINI_TEST("Closest", "Surface_point")
+@MINI_TEST("Closest", "Surface Point")
 def test_closest_surface_point():
     from session_py import Closest
     from session_py import NurbsSurface
     from session_py import Point
 
     pts = [
-        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0),
-        Point(0.0, 1.0, 0.0), Point(1.0, 1.0, 1.0), Point(2.0, 1.0, 1.0), Point(3.0, 1.0, 0.0),
-        Point(0.0, 2.0, 0.0), Point(1.0, 2.0, 1.0), Point(2.0, 2.0, 1.0), Point(3.0, 2.0, 0.0),
-        Point(0.0, 3.0, 0.0), Point(1.0, 3.0, 0.0), Point(2.0, 3.0, 0.0), Point(3.0, 3.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 0.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(1.0, 1.0, 1.0),
+        Point(2.0, 1.0, 1.0),
+        Point(3.0, 1.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(1.0, 2.0, 1.0),
+        Point(2.0, 2.0, 1.0),
+        Point(3.0, 2.0, 0.0),
+        Point(0.0, 3.0, 0.0),
+        Point(1.0, 3.0, 0.0),
+        Point(2.0, 3.0, 0.0),
+        Point(3.0, 3.0, 0.0),
     ]
     srf = NurbsSurface.create(False, False, 3, 3, 4, 4, pts)
 
@@ -90,7 +102,7 @@ def test_closest_surface_point():
     MINI_CHECK(dist2 < 0.01)
 
 
-@MINI_TEST("Closest", "Mesh_point")
+@MINI_TEST("Closest", "Mesh Point")
 def test_closest_mesh_point():
     from session_py import Closest
     from session_py import Primitives
@@ -106,13 +118,16 @@ def test_closest_mesh_point():
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
 
 
-@MINI_TEST("Closest", "Pointcloud_point")
+@MINI_TEST("Closest", "Pointcloud Point")
 def test_closest_pointcloud_point():
     from session_py import Closest
     from session_py import PointCloud
     from session_py import Point
 
-    pc = PointCloud([Point(0.0, 0.0, 0.0), Point(5.0, 0.0, 0.0), Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0)])
+    pc = PointCloud([
+        Point(0.0, 0.0, 0.0), Point(5.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0),
+    ])
 
     cp1, i1, d1 = Closest.pointcloud_point(pc, Point(4.0, 0.0, 0.0))
     MINI_CHECK(TOLERANCE.is_close(cp1[0], 5.0))

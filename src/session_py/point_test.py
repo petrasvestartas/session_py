@@ -95,7 +95,7 @@ def test_transformation():
     MINI_CHECK(p.xform == Xform.identity())
 
 
-@MINI_TEST("Point", "Json_roundtrip")
+@MINI_TEST("Point", "Json Roundtrip")
 def test_point_json_roundtrip():
     from session_py import Point
     from session_py import Color
@@ -130,7 +130,7 @@ def test_point_json_roundtrip():
     MINI_CHECK(loaded.pointcolor[3] == 255)
 
 
-@MINI_TEST("Point", "Protobuf_roundtrip")
+@MINI_TEST("Point", "Protobuf Roundtrip")
 def test_point_protobuf_roundtrip():
     from session_py import Point
     from session_py import Color
@@ -162,7 +162,7 @@ def test_point_protobuf_roundtrip():
     MINI_CHECK(loaded.pointcolor[3] == 255)
 
 
-@MINI_TEST("Point", "Is_ccw")
+@MINI_TEST("Point", "Is Ccw")
 def test_is_ccw():
     from session_py import Point
     
@@ -178,7 +178,7 @@ def test_is_ccw():
     MINI_CHECK(not is_clock_wise)
 
 
-@MINI_TEST("Point", "Mid_point")
+@MINI_TEST("Point", "Mid Point")
 def test_mid_point():
     from session_py import Point
     
@@ -200,7 +200,7 @@ def test_distance():
     MINI_CHECK(TOLERANCE.is_close(d, 3.741657))
 
 
-@MINI_TEST("Point", "Squared_distance")
+@MINI_TEST("Point", "Squared Distance")
 def test_squared_distance():
     from session_py import Point
 
@@ -224,7 +224,7 @@ def test_area():
     MINI_CHECK(area == 4.0)
 
 
-@MINI_TEST("Point", "Centroid_quad")
+@MINI_TEST("Point", "Centroid Quad")
 def test_centroid_quad():
     from session_py import Point
 

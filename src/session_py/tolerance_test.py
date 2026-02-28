@@ -4,37 +4,37 @@ from .mini_test import run_all
 from session_py.tolerance import TOLERANCE, Tolerance
 
 
-@MINI_TEST("Tolerance", "Is_zero")
+@MINI_TEST("Tolerance", "Is Zero")
 def test_tolerance_is_zero():
     result = TOLERANCE.is_zero(1e-10)
     MINI_CHECK(result == True)
 
 
-@MINI_TEST("Tolerance", "Is_close")
+@MINI_TEST("Tolerance", "Is Close")
 def test_tolerance_is_close():
     result = TOLERANCE.is_close(1.0, 1.0 + 1e-7)
     MINI_CHECK(result == True)
 
 
-@MINI_TEST("Tolerance", "Is_positive")
+@MINI_TEST("Tolerance", "Is Positive")
 def test_tolerance_is_positive():
     result = TOLERANCE.is_positive(1.0)
     MINI_CHECK(result == True)
 
 
-@MINI_TEST("Tolerance", "Is_negative")
+@MINI_TEST("Tolerance", "Is Negative")
 def test_tolerance_is_negative():
     result = TOLERANCE.is_negative(-1.0)
     MINI_CHECK(result == True)
 
 
-@MINI_TEST("Tolerance", "Is_between")
+@MINI_TEST("Tolerance", "Is Between")
 def test_tolerance_is_between():
     result = TOLERANCE.is_between(0.5, 0.0, 1.0)
     MINI_CHECK(result == True)
 
 
-@MINI_TEST("Tolerance", "Format_number")
+@MINI_TEST("Tolerance", "Format Number")
 def test_tolerance_format_number():
     result = TOLERANCE.format_number(3.14159, precision=2)
     MINI_CHECK(result == "3.14")
@@ -46,7 +46,7 @@ def test_tolerance_key():
     MINI_CHECK(result == "1.000,2.000,3.000")
 
 
-@MINI_TEST("Tolerance", "Runtime_modification")
+@MINI_TEST("Tolerance", "Runtime Modification")
 def test_tolerance_runtime_modification():
     # Get current default values
     original_absolute = TOLERANCE.absolute

@@ -46,6 +46,81 @@ def test_nurbscurve_constructor():
     MINI_CHECK(ccopy.guid != curve.guid)
 
 
+@MINI_TEST("NurbsCurve", "Create Interpolated")
+def test_nurbscurve_create_interpolated():
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py.knot import CurveKnotStyle
+
+    points = [
+        Point(14, 9, 0), Point(21, 22, 0), Point(26, 10, 0),
+        Point(35, 19, 0), Point(41, 13, 0)
+    ]
+
+    c = NurbsCurve.create_interpolated(points, CurveKnotStyle.Chord)
+
+    MINI_CHECK(c.is_valid())
+    MINI_CHECK(c.degree() == 3)
+    MINI_CHECK(c.order() == 4)
+    MINI_CHECK(c.cv_count() == 7)
+    MINI_CHECK(c.is_rational() == False)
+
+    d0, d1 = c.domain()
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), points[4]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(6), points[4]))
+
+    # Periodic closed curve
+    closed_pts = [
+        Point(4, 20, 0),
+        Point(-2, 20, 0),
+        Point(-2, 25, 0),
+        Point(-3, 28, 0),
+        Point(-10, 28, 0),
+        Point(-10, 21, 0),
+        Point(-13, 16, 0),
+        Point(-8, 14, 0),
+        Point(-6, 11, 0),
+        Point(0, 15, 0),
+    ]
+
+    cp = NurbsCurve.create_interpolated(closed_pts, CurveKnotStyle.ChordPeriodic)
+
+    MINI_CHECK(cp.is_valid())
+    MINI_CHECK(cp.degree() == 3)
+    MINI_CHECK(cp.cv_count() == 13)
+    MINI_CHECK(cp.is_closed())
+
+
+@MINI_TEST("NurbsCurve", "Create Fitted")
+def test_nurbscurve_create_fitted():
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py.tolerance import PI
+
+    # Open: 21 points on sine wave → fit with 8 CVs
+    pts = [Point(i * 2.0 * PI / 20.0, 3.0 * math.sin(i * 2.0 * PI / 20.0), 0.0) for i in range(21)]
+
+    c = NurbsCurve.create_fitted(pts, 8, 3, False)
+
+    MINI_CHECK(c.is_valid())
+    MINI_CHECK(c.degree() == 3)
+    MINI_CHECK(c.cv_count() == 8)
+    d0, d1 = c.domain()
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), pts[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), pts[20]))
+
+    # Periodic: 24 points on circle → fit with 10 free CVs
+    cpts = [Point(math.cos(i * 2.0 * PI / 24.0), math.sin(i * 2.0 * PI / 24.0), 0.0) for i in range(24)]
+
+    cp = NurbsCurve.create_fitted(cpts, 10, 3, True)
+
+    MINI_CHECK(cp.is_valid())
+    MINI_CHECK(cp.is_closed())
+    MINI_CHECK(cp.cv_count() == 13)
+
+
 @MINI_TEST("NurbsCurve", "Attributes")
 def test_nurbscurve_attributes():
     from session_py import NurbsCurve
@@ -80,7 +155,9 @@ def test_nurbscurve_attributes():
     is_clamped_start = curve.is_clamped(0)
     is_clamped_end = curve.is_clamped(1)
     is_clamped_both = curve.is_clamped(2)
-    MINI_CHECK(is_clamped_start == True and is_clamped_end == True and is_clamped_both == True)
+    MINI_CHECK(is_clamped_start == True)
+    MINI_CHECK(is_clamped_end == True)
+    MINI_CHECK(is_clamped_both == True)
 
     # Is rational is related to control points having weights
     # is_rational = false means control points [x, y, z]
@@ -189,7 +266,9 @@ def test_nurbscurve_attributes():
 
     # Use for regular points on curve, Polyline, B-Spline
     curve.set_cv(2, Point(2.0, 0.0, 0.5))
-    MINI_CHECK(curve.get_cv(2)[0] == 2.0 and curve.get_cv(2)[1] == 0.0 and curve.get_cv(2)[2] == 0.5)
+    MINI_CHECK(curve.get_cv(2)[0] == 2.0)
+    MINI_CHECK(curve.get_cv(2)[1] == 0.0)
+    MINI_CHECK(curve.get_cv(2)[2] == 0.5)
 
     # Use for rational curvers like circles, ellipses
     curve.set_cv_4d(2, 2.0, 0.0, 0.5, 0.707)
@@ -240,9 +319,11 @@ def test_nurbscurve_attributes():
     k0 = knots[0]
     knot_vector = curve.get_knots()
     MINI_CHECK(k0 == 0.0)
-    MINI_CHECK(TOLERANCE.is_close(knot_vector[0], 0.0) and TOLERANCE.is_close(knot_vector[1], 0.0) and
-               TOLERANCE.is_close(knot_vector[2], 1.759744335478134) and TOLERANCE.is_close(knot_vector[3], 3.519488670956267) and
-               TOLERANCE.is_close(knot_vector[4], 3.519488670956267))
+    MINI_CHECK(TOLERANCE.is_close(knot_vector[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(knot_vector[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(knot_vector[2], 1.759744335478134))
+    MINI_CHECK(TOLERANCE.is_close(knot_vector[3], 3.519488670956267))
+    MINI_CHECK(TOLERANCE.is_close(knot_vector[4], 3.519488670956267))
 
     # Control vertex array access
     cvs = curve.cv_array()
@@ -261,11 +342,15 @@ def test_nurbscurve_attributes():
     start = curve.domain_start()
     middle = curve.domain_middle()
     end = curve.domain_end()
-    MINI_CHECK(TOLERANCE.is_close(start, 0.0) and TOLERANCE.is_close(middle, 1.759744335478134) and TOLERANCE.is_close(end, 3.519488670956267))
+    MINI_CHECK(TOLERANCE.is_close(start, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(middle, 1.759744335478134))
+    MINI_CHECK(TOLERANCE.is_close(end, 3.519488670956267))
 
     # Change curve domain
     curve.set_domain(0.0, 1.0)
-    MINI_CHECK(curve.domain_start() == 0.0 and curve.domain_middle() == 0.5 and curve.domain_end() == 1.0)
+    MINI_CHECK(curve.domain_start() == 0.0)
+    MINI_CHECK(curve.domain_middle() == 0.5)
+    MINI_CHECK(curve.domain_end() == 1.0)
 
     # Span of distict knot intervals
     intervals = curve.get_span_vector()
@@ -354,25 +439,43 @@ def test_nurbscurve_evaluation():
 
     # Get point at parameter t
     point_at = curve.point_at(0.5)
-    MINI_CHECK(TOLERANCE.is_close(point_at[0], 1.463452399002842) and TOLERANCE.is_close(point_at[1], 1.680997287875395) and TOLERANCE.is_close(point_at[2], -0.124474565996108))
+    MINI_CHECK(TOLERANCE.is_close(point_at[0], 1.463452399002842))
+    MINI_CHECK(TOLERANCE.is_close(point_at[1], 1.680997287875395))
+    MINI_CHECK(TOLERANCE.is_close(point_at[2], -0.124474565996108))
 
     # Get point and derivatives at parameter t
     derivatives = curve.evaluate(0.5, 2)
     MINI_CHECK(len(derivatives) == 3)
-    MINI_CHECK(TOLERANCE.is_close(derivatives[0][0], 1.463452399002842) and TOLERANCE.is_close(derivatives[0][1], 1.680997287875395) and TOLERANCE.is_close(derivatives[0][2], -0.124474565996108))
-    MINI_CHECK(TOLERANCE.is_close(derivatives[1][0], -0.311619416021204) and TOLERANCE.is_close(derivatives[1][1], 0.974021205471335) and TOLERANCE.is_close(derivatives[1][2], -0.037441955449586))
-    MINI_CHECK(TOLERANCE.is_close(derivatives[2][0], 2.706815143892446) and TOLERANCE.is_close(derivatives[2][1], -0.429869481117820) and TOLERANCE.is_close(derivatives[2][2], -0.684219293829483))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[0][0], 1.463452399002842))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[0][1], 1.680997287875395))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[0][2], -0.124474565996108))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[1][0], -0.311619416021204))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[1][1], 0.974021205471335))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[1][2], -0.037441955449586))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[2][0], 2.706815143892446))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[2][1], -0.429869481117820))
+    MINI_CHECK(TOLERANCE.is_close(derivatives[2][2], -0.684219293829483))
 
     # Tangent vector at parameter t
     tangent = curve.tangent_at(0.5)
-    MINI_CHECK(TOLERANCE.is_close(tangent[0], -0.304511941745027) and TOLERANCE.is_close(tangent[1], 0.951805546117607) and TOLERANCE.is_close(tangent[2], -0.036587972264639))
+    MINI_CHECK(TOLERANCE.is_close(tangent[0], -0.304511941745027))
+    MINI_CHECK(TOLERANCE.is_close(tangent[1], 0.951805546117607))
+    MINI_CHECK(TOLERANCE.is_close(tangent[2], -0.036587972264639))
 
     # normalized=true (default): t in [0,1] mapped to domain
     f = curve.plane_at(0.5, True)
-    MINI_CHECK(TOLERANCE.is_close(f.origin[0], 3.156927375) and TOLERANCE.is_close(f.origin[1], 1.3351115) and TOLERANCE.is_close(f.origin[2], 0.130488875))
-    MINI_CHECK(TOLERANCE.is_close(f.x_axis[0], 0.701806140304030) and TOLERANCE.is_close(f.x_axis[1], 0.697509131556264) and TOLERANCE.is_close(f.x_axis[2], 0.144738221721788))
-    MINI_CHECK(TOLERANCE.is_close(f.y_axis[0], -0.513930504714161) and TOLERANCE.is_close(f.y_axis[1], 0.355053088776962) and TOLERANCE.is_close(f.y_axis[2], 0.780905077761815))
-    MINI_CHECK(TOLERANCE.is_close(f.z_axis[0], 0.493298669931115) and TOLERANCE.is_close(f.z_axis[1], -0.622429365908747) and TOLERANCE.is_close(f.z_axis[2], 0.607649657861031))
+    MINI_CHECK(TOLERANCE.is_close(f.origin[0], 3.156927375))
+    MINI_CHECK(TOLERANCE.is_close(f.origin[1], 1.3351115))
+    MINI_CHECK(TOLERANCE.is_close(f.origin[2], 0.130488875))
+    MINI_CHECK(TOLERANCE.is_close(f.x_axis[0], 0.701806140304030))
+    MINI_CHECK(TOLERANCE.is_close(f.x_axis[1], 0.697509131556264))
+    MINI_CHECK(TOLERANCE.is_close(f.x_axis[2], 0.144738221721788))
+    MINI_CHECK(TOLERANCE.is_close(f.y_axis[0], -0.513930504714161))
+    MINI_CHECK(TOLERANCE.is_close(f.y_axis[1], 0.355053088776962))
+    MINI_CHECK(TOLERANCE.is_close(f.y_axis[2], 0.780905077761815))
+    MINI_CHECK(TOLERANCE.is_close(f.z_axis[0], 0.493298669931115))
+    MINI_CHECK(TOLERANCE.is_close(f.z_axis[1], -0.622429365908747))
+    MINI_CHECK(TOLERANCE.is_close(f.z_axis[2], 0.607649657861031))
 
     MINI_CHECK(curve.plane_at(-0.1, True).is_valid() == False)
     MINI_CHECK(curve.plane_at(1.1, True).is_valid() == False)
@@ -415,9 +518,15 @@ def test_nurbscurve_evaluation():
     p0 = curve.point_at_start()
     p1 = curve.point_at_middle()
     p2 = curve.point_at_end()
-    MINI_CHECK(TOLERANCE.is_close(p0[0], 1.957614) and TOLERANCE.is_close(p0[1], 1.140253) and TOLERANCE.is_close(p0[2], -0.191281))
-    MINI_CHECK(TOLERANCE.is_close(p1[0], 3.156927375) and TOLERANCE.is_close(p1[1], 1.3351115) and TOLERANCE.is_close(p1[2], 0.130488875))
-    MINI_CHECK(TOLERANCE.is_close(p2[0], 2.15032) and TOLERANCE.is_close(p2[1], 1.868606) and TOLERANCE.is_close(p2[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(p0[0], 1.957614))
+    MINI_CHECK(TOLERANCE.is_close(p0[1], 1.140253))
+    MINI_CHECK(TOLERANCE.is_close(p0[2], -0.191281))
+    MINI_CHECK(TOLERANCE.is_close(p1[0], 3.156927375))
+    MINI_CHECK(TOLERANCE.is_close(p1[1], 1.3351115))
+    MINI_CHECK(TOLERANCE.is_close(p1[2], 0.130488875))
+    MINI_CHECK(TOLERANCE.is_close(p2[0], 2.15032))
+    MINI_CHECK(TOLERANCE.is_close(p2[1], 1.868606))
+    MINI_CHECK(TOLERANCE.is_close(p2[2], 0.0))
 
     curve.set_start_point(Point(1.957614, 1.140253, 2.0))
     curve.set_end_point(Point(2.15032, 1.868606, 2.0))
@@ -500,7 +609,8 @@ def test_nurbscurve_modifications():
     # Increase degree without change the shape
     raised = curve.duplicate()
     raised.increase_degree(3)
-    MINI_CHECK(curve.degree() != raised.degree() and TOLERANCE.is_point_close(curve.point_at_middle(), raised.point_at_middle()))
+    MINI_CHECK(curve.degree() != raised.degree())
+    MINI_CHECK(TOLERANCE.is_point_close(curve.point_at_middle(), raised.point_at_middle()))
 
     # Change closed curve seam
     closed_pts = [
@@ -513,77 +623,6 @@ def test_nurbscurve_modifications():
     expected_start = c.point_at(c.domain_middle())
     c.change_closed_curve_seam(c.domain_middle())
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at_start(), expected_start))
-
-
-@MINI_TEST("NurbsCurve", "Json_roundtrip")
-def test_nurbscurve_json_roundtrip():
-    from session_py import NurbsCurve
-    from session_py import Point
-
-    points = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 2.0, 0.0),
-        Point(2.0, 0.0, 0.0),
-        Point(3.0, 2.0, 0.0),
-        Point(4.0, 0.0, 0.0)
-    ]
-    curve = NurbsCurve.create(False, 2, points)
-
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
-
-    # JSON object
-    json_obj = curve.__jsondump__()
-    loaded_json = NurbsCurve.__jsonload__(json_obj)
-
-    # String
-    json_string = curve.json_dumps()
-    loaded_json_string = NurbsCurve.json_loads(json_string)
-
-    # File
-    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
-    curve.json_dump(filename)
-    loaded_from_file = NurbsCurve.json_load(filename)
-
-    MINI_CHECK(loaded_json == curve)
-    MINI_CHECK(loaded_json_string == curve)
-    MINI_CHECK(loaded_from_file == curve)
-
-
-@MINI_TEST("NurbsCurve", "Protobuf_roundtrip")
-def test_nurbscurve_protobuf_roundtrip():
-    from session_py import NurbsCurve
-    from session_py import Point
-
-    points = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 2.0, 0.0),
-        Point(2.0, 0.0, 0.0),
-        Point(3.0, 2.0, 0.0),
-        Point(4.0, 0.0, 0.0)
-    ]
-    curve = NurbsCurve.create(False, 2, points)
-
-    #   pb_dumps()      │ bytes        │ to protobuf bytes
-    #   pb_loads(b)     │ bytes        │ from protobuf bytes
-    #   pb_dump(path)   │ file         │ write to file
-    #   pb_load(path)   │ file         │ read from file
-
-    # String
-    proto_string = curve.pb_dumps()
-    loaded_proto_string = NurbsCurve.pb_loads(proto_string)
-
-    # File
-    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
-    curve.pb_dump(filename)
-    loaded = NurbsCurve.pb_load(filename)
-
-    MINI_CHECK(loaded_proto_string == curve)
-    MINI_CHECK(loaded == curve)
 
 
 @MINI_TEST("NurbsCurve", "Transformations")
@@ -629,71 +668,75 @@ def test_nurbscurve_transformations():
     MINI_CHECK(curve4_transformed.cv(0)[2] == 10.0)
 
 
-@MINI_TEST("NurbsCurve", "Create_interpolated")
-def test_nurbscurve_create_interpolated():
+@MINI_TEST("NurbsCurve", "Json Roundtrip")
+def test_nurbscurve_json_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.knot import CurveKnotStyle
 
     points = [
-        Point(14, 9, 0), Point(21, 22, 0), Point(26, 10, 0),
-        Point(35, 19, 0), Point(41, 13, 0)
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 2.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 2.0, 0.0),
+        Point(4.0, 0.0, 0.0)
     ]
+    curve = NurbsCurve.create(False, 2, points)
 
-    c = NurbsCurve.create_interpolated(points, CurveKnotStyle.Chord)
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
 
-    MINI_CHECK(c.is_valid())
-    MINI_CHECK(c.degree() == 3)
-    MINI_CHECK(c.order() == 4)
-    MINI_CHECK(c.cv_count() == 7)
-    MINI_CHECK(c.is_rational() == False)
+    # JSON object
+    json_obj = curve.__jsondump__()
+    loaded_json = NurbsCurve.__jsonload__(json_obj)
 
-    d0, d1 = c.domain()
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), points[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), points[4]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), points[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(6), points[4]))
+    # String
+    json_string = curve.json_dumps()
+    loaded_json_string = NurbsCurve.json_loads(json_string)
 
-    # Periodic closed curve
-    closed_pts = [
-        Point(4, 20, 0), Point(-2, 20, 0), Point(-2, 25, 0), Point(-3, 28, 0), Point(-10, 28, 0),
-        Point(-10, 21, 0), Point(-13, 16, 0), Point(-8, 14, 0), Point(-6, 11, 0), Point(0, 15, 0)
-    ]
+    # File
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
+    curve.json_dump(filename)
+    loaded_from_file = NurbsCurve.json_load(filename)
 
-    cp = NurbsCurve.create_interpolated(closed_pts, CurveKnotStyle.ChordPeriodic)
-
-    MINI_CHECK(cp.is_valid())
-    MINI_CHECK(cp.degree() == 3)
-    MINI_CHECK(cp.cv_count() == 13)
-    MINI_CHECK(cp.is_closed())
+    MINI_CHECK(loaded_json == curve)
+    MINI_CHECK(loaded_json_string == curve)
+    MINI_CHECK(loaded_from_file == curve)
 
 
-@MINI_TEST("NurbsCurve", "Create_fitted")
-def test_nurbscurve_create_fitted():
+@MINI_TEST("NurbsCurve", "Protobuf Roundtrip")
+def test_nurbscurve_protobuf_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.tolerance import PI
 
-    # Open: 21 points on sine wave → fit with 8 CVs
-    pts = [Point(i * 2.0 * PI / 20.0, 3.0 * math.sin(i * 2.0 * PI / 20.0), 0.0) for i in range(21)]
+    points = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 2.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 2.0, 0.0),
+        Point(4.0, 0.0, 0.0)
+    ]
+    curve = NurbsCurve.create(False, 2, points)
 
-    c = NurbsCurve.create_fitted(pts, 8, 3, False)
+    #   pb_dumps()      │ bytes        │ to protobuf bytes
+    #   pb_loads(b)     │ bytes        │ from protobuf bytes
+    #   pb_dump(path)   │ file         │ write to file
+    #   pb_load(path)   │ file         │ read from file
 
-    MINI_CHECK(c.is_valid())
-    MINI_CHECK(c.degree() == 3)
-    MINI_CHECK(c.cv_count() == 8)
-    d0, d1 = c.domain()
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), pts[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), pts[20]))
+    # String
+    proto_string = curve.pb_dumps()
+    loaded_proto_string = NurbsCurve.pb_loads(proto_string)
 
-    # Periodic: 24 points on circle → fit with 10 free CVs
-    cpts = [Point(math.cos(i * 2.0 * PI / 24.0), math.sin(i * 2.0 * PI / 24.0), 0.0) for i in range(24)]
+    # File
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
+    curve.pb_dump(filename)
+    loaded = NurbsCurve.pb_load(filename)
 
-    cp = NurbsCurve.create_fitted(cpts, 10, 3, True)
-
-    MINI_CHECK(cp.is_valid())
-    MINI_CHECK(cp.is_closed())
-    MINI_CHECK(cp.cv_count() == 13)
+    MINI_CHECK(loaded_proto_string == curve)
+    MINI_CHECK(loaded == curve)
 
 
 if __name__ == "__main__":

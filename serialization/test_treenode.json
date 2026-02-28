@@ -1,33 +1,13 @@
 {
     "type": "TreeNode",
-    "guid": "78485b07-3c27-4d53-b7b1-bcf9155ad478",
-    "name": "project_root",
+    "guid": "48c565d9-85ad-4cf8-9c5e-e63ccd756e4c",
+    "name": "test_node",
     "children": [
         {
             "type": "TreeNode",
-            "guid": "70d0959b-040c-4a32-8445-96008864cedc",
-            "name": "src",
-            "children": [
-                {
-                    "type": "TreeNode",
-                    "guid": "4e2381a6-0fb7-469e-9752-a4cd2ea5dccd",
-                    "name": "main.py",
-                    "children": []
-                }
-            ]
-        },
-        {
-            "type": "TreeNode",
-            "guid": "5b3ccbd9-4a17-406a-9e3b-e9aa416b9c4b",
-            "name": "docs",
-            "children": [
-                {
-                    "type": "TreeNode",
-                    "guid": "a72df778-3e6f-47f9-9972-265af93d24a8",
-                    "name": "README.md",
-                    "children": []
-                }
-            ]
+            "guid": "610bb0d0-1470-4b86-80be-0386afb3be62",
+            "name": "child_node",
+            "children": []
         }
     ]
 }

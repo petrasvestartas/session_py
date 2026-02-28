@@ -164,7 +164,12 @@ class Color:
             A new Color with values converted to 0-255 range.
 
         """
-        return cls(int(arr[0] * 255.0 + 0.5), int(arr[1] * 255.0 + 0.5), int(arr[2] * 255.0 + 0.5), int(arr[3] * 255.0 + 0.5))
+        return cls(
+            int(arr[0] * 255.0 + 0.5),
+            int(arr[1] * 255.0 + 0.5),
+            int(arr[2] * 255.0 + 0.5),
+            int(arr[3] * 255.0 + 0.5),
+        )
 
     ###########################################################################################
     # Presets

@@ -1,9 +1,9 @@
 {
     "type": "Edge",
-    "guid": "f023d978-ac9f-430a-8ea9-aeb81fafa84a",
+    "guid": "946bc93e-f954-4f4a-ae34-b0a219cd87ad",
     "name": "my_edge",
     "v0": "v0",
     "v1": "v1",
-    "attribute": "attribute",
+    "attribute": "./serialization/test_edge",
     "index": null
 }

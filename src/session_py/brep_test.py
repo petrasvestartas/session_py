@@ -26,7 +26,7 @@ def test_brep_constructor():
     MINI_CHECK(not (bcopy != b))
 
 
-@MINI_TEST("BRep", "Create_box")
+@MINI_TEST("BRep", "Create Box")
 def test_brep_create_box():
     from session_py import BRep
     from session_py import Point
@@ -61,7 +61,7 @@ def test_brep_accessors():
     MINI_CHECK(len(b.m_trims) == 24)
 
 
-@MINI_TEST("BRep", "Add_face")
+@MINI_TEST("BRep", "Add Face")
 def test_brep_add_face():
     from session_py import BRep
     from session_py import NurbsSurface
@@ -70,8 +70,10 @@ def test_brep_add_face():
 
     b = BRep()
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-    srf.set_cv(0, 0, Point(0, 0, 0)); srf.set_cv(1, 0, Point(1, 0, 0))
-    srf.set_cv(0, 1, Point(0, 1, 0)); srf.set_cv(1, 1, Point(1, 1, 0))
+    srf.set_cv(0, 0, Point(0, 0, 0))
+    srf.set_cv(1, 0, Point(1, 0, 0))
+    srf.set_cv(0, 1, Point(0, 1, 0))
+    srf.set_cv(1, 1, Point(1, 1, 0))
 
     si = b.add_surface(srf)
     fi = b.add_face(si, False)
@@ -100,7 +102,7 @@ def test_brep_mesh():
     MINI_CHECK(m.number_of_faces() > 0)
 
 
-@MINI_TEST("BRep", "Point_at")
+@MINI_TEST("BRep", "Point At")
 def test_brep_point_at():
     from session_py import BRep
     from session_py import Point
@@ -113,7 +115,7 @@ def test_brep_point_at():
             or abs(pt[0] + 1.0) < 0.01 or abs(pt[0] - 1.0) < 0.01)
 
 
-@MINI_TEST("BRep", "Is_solid")
+@MINI_TEST("BRep", "Is Solid")
 def test_brep_is_solid():
     from session_py import BRep
     from session_py import NurbsSurface
@@ -124,8 +126,10 @@ def test_brep_is_solid():
 
     single = BRep()
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
-    srf.set_cv(0, 0, Point(0, 0, 0)); srf.set_cv(1, 0, Point(1, 0, 0))
-    srf.set_cv(0, 1, Point(0, 1, 0)); srf.set_cv(1, 1, Point(1, 1, 0))
+    srf.set_cv(0, 0, Point(0, 0, 0))
+    srf.set_cv(1, 0, Point(1, 0, 0))
+    srf.set_cv(0, 1, Point(0, 1, 0))
+    srf.set_cv(1, 1, Point(1, 1, 0))
     si = single.add_surface(srf)
     single.add_face(si, False)
     single.add_vertex(Point(0, 0, 0))
@@ -152,7 +156,7 @@ def test_brep_transformation():
     MINI_CHECK(abs(pt[2] - pt_orig[2] - 30.0) < 0.01)
 
 
-@MINI_TEST("BRep", "Json_roundtrip")
+@MINI_TEST("BRep", "Json Roundtrip")
 def test_json_roundtrip():
     from session_py import BRep
     from session_py import Color
@@ -181,7 +185,7 @@ def test_json_roundtrip():
     MINI_CHECK(loaded_from_file == b)
 
 
-@MINI_TEST("BRep", "Create_cylinder")
+@MINI_TEST("BRep", "Create Cylinder")
 def test_brep_create_cylinder():
     from session_py import BRep
     from session_py import Mesh
@@ -197,7 +201,7 @@ def test_brep_create_cylinder():
     MINI_CHECK(m.number_of_vertices() > 0)
 
 
-@MINI_TEST("BRep", "Create_sphere")
+@MINI_TEST("BRep", "Create Sphere")
 def test_brep_create_sphere():
     from session_py import BRep
     from session_py import Mesh
@@ -213,7 +217,7 @@ def test_brep_create_sphere():
     MINI_CHECK(m.number_of_vertices() > 0)
 
 
-@MINI_TEST("BRep", "From_polylines")
+@MINI_TEST("BRep", "From Polylines")
 def test_brep_from_polylines():
     from session_py import BRep
     from session_py import Polyline
@@ -222,18 +226,18 @@ def test_brep_from_polylines():
 
     hx, hy, hz = 1.0, 1.5, 2.0
     c = [
-        Point(-hx,-hy,-hz), Point( hx,-hy,-hz),
-        Point( hx, hy,-hz), Point(-hx, hy,-hz),
-        Point(-hx,-hy, hz), Point( hx,-hy, hz),
-        Point( hx, hy, hz), Point(-hx, hy, hz),
+        Point(-hx, -hy, -hz), Point(hx, -hy, -hz),
+        Point(hx, hy, -hz), Point(-hx, hy, -hz),
+        Point(-hx, -hy, hz), Point(hx, -hy, hz),
+        Point(hx, hy, hz), Point(-hx, hy, hz),
     ]
 
-    bottom = Polyline([c[0],c[3],c[2],c[1],c[0]])
-    top = Polyline([c[4],c[5],c[6],c[7],c[4]])
-    front = Polyline([c[0],c[1],c[5],c[4],c[0]])
-    right = Polyline([c[1],c[2],c[6],c[5],c[1]])
-    back = Polyline([c[2],c[3],c[7],c[6],c[2]])
-    left = Polyline([c[3],c[0],c[4],c[7],c[3]])
+    bottom = Polyline([c[0], c[3], c[2], c[1], c[0]])
+    top = Polyline([c[4], c[5], c[6], c[7], c[4]])
+    front = Polyline([c[0], c[1], c[5], c[4], c[0]])
+    right = Polyline([c[1], c[2], c[6], c[5], c[1]])
+    back = Polyline([c[2], c[3], c[7], c[6], c[2]])
+    left = Polyline([c[3], c[0], c[4], c[7], c[3]])
 
     b = BRep.from_polylines([bottom, top, front, right, back, left])
     m = b.mesh()
@@ -247,7 +251,7 @@ def test_brep_from_polylines():
     MINI_CHECK(m.number_of_faces() > 0)
 
 
-@MINI_TEST("BRep", "From_nurbscurves")
+@MINI_TEST("BRep", "From Nurbscurves")
 def test_brep_from_nurbscurves():
     from session_py import BRep
     from session_py import NurbsCurve
@@ -256,18 +260,18 @@ def test_brep_from_nurbscurves():
 
     hx, hy, hz = 1.0, 1.5, 2.0
     c = [
-        Point(-hx,-hy,-hz), Point( hx,-hy,-hz),
-        Point( hx, hy,-hz), Point(-hx, hy,-hz),
-        Point(-hx,-hy, hz), Point( hx,-hy, hz),
-        Point( hx, hy, hz), Point(-hx, hy, hz),
+        Point(-hx, -hy, -hz), Point(hx, -hy, -hz),
+        Point(hx, hy, -hz), Point(-hx, hy, -hz),
+        Point(-hx, -hy, hz), Point(hx, -hy, hz),
+        Point(hx, hy, hz), Point(-hx, hy, hz),
     ]
 
-    bottom = NurbsCurve.create(False, 1, [c[0],c[3],c[2],c[1],c[0]])
-    top = NurbsCurve.create(False, 1, [c[4],c[5],c[6],c[7],c[4]])
-    front = NurbsCurve.create(False, 1, [c[0],c[1],c[5],c[4],c[0]])
-    right = NurbsCurve.create(False, 1, [c[1],c[2],c[6],c[5],c[1]])
-    back = NurbsCurve.create(False, 1, [c[2],c[3],c[7],c[6],c[2]])
-    left = NurbsCurve.create(False, 1, [c[3],c[0],c[4],c[7],c[3]])
+    bottom = NurbsCurve.create(False, 1, [c[0], c[3], c[2], c[1], c[0]])
+    top = NurbsCurve.create(False, 1, [c[4], c[5], c[6], c[7], c[4]])
+    front = NurbsCurve.create(False, 1, [c[0], c[1], c[5], c[4], c[0]])
+    right = NurbsCurve.create(False, 1, [c[1], c[2], c[6], c[5], c[1]])
+    back = NurbsCurve.create(False, 1, [c[2], c[3], c[7], c[6], c[2]])
+    left = NurbsCurve.create(False, 1, [c[3], c[0], c[4], c[7], c[3]])
 
     b = BRep.from_nurbscurves([bottom, top, front, right, back, left])
     m = b.mesh()
@@ -278,7 +282,7 @@ def test_brep_from_nurbscurves():
     MINI_CHECK(m.number_of_faces() > 0)
 
 
-@MINI_TEST("BRep", "From_nurbscurves_holes")
+@MINI_TEST("BRep", "From Nurbscurves Holes")
 def test_brep_from_nurbscurves_holes():
     from session_py import BRep
     from session_py import NurbsCurve
@@ -286,7 +290,9 @@ def test_brep_from_nurbscurves_holes():
     from session_py import Point
     from session_py import Primitives
 
-    outer = NurbsCurve.create(False, 1, [Point(-5,-5,0), Point(5,-5,0), Point(5,5,0), Point(-5,5,0), Point(-5,-5,0)])
+    outer = NurbsCurve.create(False, 1, [
+        Point(-5, -5, 0), Point(5, -5, 0), Point(5, 5, 0), Point(-5, 5, 0), Point(-5, -5, 0),
+    ])
     hole = Primitives.circle(0.0, 0.0, 0.0, 2.0)
 
     b = BRep.from_nurbscurves([outer], [[hole]])
@@ -301,7 +307,23 @@ def test_brep_from_nurbscurves_holes():
     MINI_CHECK(m.number_of_faces() > 0)
 
 
-@MINI_TEST("BRep", "Protobuf_roundtrip")
+@MINI_TEST("BRep", "Create Block With Hole")
+def test_brep_create_block_with_hole():
+    from session_py.brep import BRep
+    from session_py import Mesh
+
+    bh = BRep.create_block_with_hole(8.0, 6.0, 4.0, 1.5)
+    m = bh.mesh()
+
+    MINI_CHECK(bh.is_valid())
+    MINI_CHECK(bh.face_count() == 7)
+    MINI_CHECK(bh.name == "block_with_hole")
+    MINI_CHECK(not m.is_empty())
+    MINI_CHECK(m.number_of_vertices() > 0)
+    MINI_CHECK(m.number_of_faces() > 0)
+
+
+@MINI_TEST("BRep", "Protobuf Roundtrip")
 def test_protobuf_roundtrip():
     from session_py import BRep
     from session_py import Color

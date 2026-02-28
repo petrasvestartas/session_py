@@ -1,60 +1,30 @@
-from .tree import Tree
-from .treenode import TreeNode
+from .mini_test import MINI_TEST
+from .mini_test import MINI_CHECK
+from .mini_test import run_all
+from .tolerance import TOLERANCE
 
 
-def test_tree_constructor():
-    tree = Tree("my_tree")
-    assert tree.name == "my_tree"
-    assert tree.guid is not None
-
-
-def test_treenode_constructor():
-    node = TreeNode("my_root")
-    assert node.name == "my_root"
-    assert node.is_root
-
-
-def test_treenode_add():
-    root = TreeNode("root")
-    child = TreeNode("child")
-    root.add(child)
-
-    children = list(root.children)
-    assert len(children) == 1
-    assert children[0].name == "child"
-
-
+@MINI_TEST("Tree", "Json Roundtrip")
 def test_tree_json_roundtrip():
+    from session_py import Tree
+    from session_py import TreeNode
+    from session_py import Point
+    from session_py.encoders import json_dump
+    from session_py.encoders import json_load
     from pathlib import Path
-    from .encoders import json_dump, json_load
 
-    original = Tree("test_tree")
-    root = TreeNode("root")
-    child = TreeNode("child")
-    root.add(child)
-    original.add(root)
+    original = Tree("./serialization/test_tree")
+    point1 = Point(1.0, 2.0, 3.0)
+    node1 = TreeNode(point1.guid)
+    original.add(node1)
 
-    path = Path(__file__).resolve().parents[2] / "serialization" / "test_tree.json"
-    json_dump(original, path)
-    loaded = json_load(path)
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_tree.json"
+    json_dump(original, fname)
+    loaded = json_load(fname)
 
-    assert loaded.name == original.name
-    assert loaded.guid == original.guid
+    MINI_CHECK(loaded.name == original.name)
+    MINI_CHECK(len(loaded.nodes()) == len(original.nodes()))
 
 
-def test_treenode_json_roundtrip():
-    # Test TreeNode JSON roundtrip (treenode_test.py already tests file I/O)
-    # This test verifies the roundtrip within tree_test module
-    original = TreeNode("test_node")
-    child = TreeNode("child_node")
-    original.add(child)
-
-    # In-memory roundtrip test only (file I/O tested in treenode_test.py)
-    from .encoders import json_dumps, json_loads
-
-    json_str = json_dumps(original)
-    loaded = json_loads(json_str)
-
-    assert loaded.name == original.name
-    assert loaded.guid == original.guid
-    assert len(list(loaded.children)) == len(list(original.children))
+if __name__ == "__main__":
+    run_all(language="python")

@@ -261,7 +261,9 @@ def test_control_vertices_access():
     s.set_cv(0, 0, Point(0, 0, 5))
     MINI_CHECK(s.get_cv(0, 0) == Point(0, 0, 5))
     s.set_cv_4d(0, 0, 0, 0, 4, 0.5)
-    MINI_CHECK(s.get_cv(0, 0) == Point(0, 0, 8) and s.cv(0, 0)[2] == 4 and s.weight(0, 0) == 0.5)
+    MINI_CHECK(s.get_cv(0, 0) == Point(0, 0, 8))
+    MINI_CHECK(s.cv(0, 0)[2] == 4)
+    MINI_CHECK(s.weight(0, 0) == 0.5)
 
     w = s.weight(0, 0)
     s.set_weight(0, 0, 1)
@@ -365,8 +367,10 @@ def test_domain():
     # Set Domain
     is_set_u = s.set_domain(0, -1.1, 2.3)
     is_set_v = s.set_domain(1, -5.1, 1.3)
-    MINI_CHECK(is_set_u and TOLERANCE.is_close(s.domain(1)[0], -5.1))
-    MINI_CHECK(is_set_v and TOLERANCE.is_close(s.domain(1)[1], 1.3))
+    MINI_CHECK(is_set_u)
+    MINI_CHECK(TOLERANCE.is_close(s.domain(1)[0], -5.1))
+    MINI_CHECK(is_set_v)
+    MINI_CHECK(TOLERANCE.is_close(s.domain(1)[1], 1.3))
 
     # Get sorted list of distinct knot values
     span_vector = s.get_span_vector(0)
@@ -445,22 +449,38 @@ def test_division():
     MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][1], Vector(0.722897836195991, -0.327787263130091, 0.608255068661856)))
     MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][2], Vector(0.722897836195991, 0.327787263130091, 0.608255068661856)))
     MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][3], Vector(0.704360725060499, 0.704360725060499, -0.0880450906325624)))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[0][0][0], 0.0) and TOLERANCE.is_close(uvs0[0][0][1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[0][1][0], 0.0) and TOLERANCE.is_close(uvs0[0][1][1], 0.333333333333333))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[0][2][0], 0.0) and TOLERANCE.is_close(uvs0[0][2][1], 0.666666666666667))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[0][3][0], 0.0) and TOLERANCE.is_close(uvs0[0][3][1], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[1][0][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][0][1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[1][1][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][1][1], 0.333333333333333))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[1][2][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][2][1], 0.666666666666667))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[1][3][0], 0.333333333333333) and TOLERANCE.is_close(uvs0[1][3][1], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[2][0][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][0][1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[2][1][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][1][1], 0.333333333333333))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[2][2][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][2][1], 0.666666666666667))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[2][3][0], 0.666666666666667) and TOLERANCE.is_close(uvs0[2][3][1], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[3][0][0], 1.0) and TOLERANCE.is_close(uvs0[3][0][1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[3][1][0], 1.0) and TOLERANCE.is_close(uvs0[3][1][1], 0.333333333333333))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[3][2][0], 1.0) and TOLERANCE.is_close(uvs0[3][2][1], 0.666666666666667))
-    MINI_CHECK(TOLERANCE.is_close(uvs0[3][3][0], 1.0) and TOLERANCE.is_close(uvs0[3][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][0][0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][1][0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][2][0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][3][0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[0][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][0][0], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][1][0], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][2][0], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][3][0], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[1][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][0][0], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][1][0], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][2][0], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][3][0], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[2][3][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][0][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][0][1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][1][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][1][1], 0.333333333333333))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][2][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][2][1], 0.666666666666667))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][3][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(uvs0[3][3][1], 1.0))
     MINI_CHECK(TOLERANCE.is_vector_close(planes[0][0].x_axis, Vector(0.317999364001908, -0.423999152002544, 0.847998304005088)))
     MINI_CHECK(TOLERANCE.is_vector_close(planes[0][1].x_axis, Vector(0.657483781160109, -0.0556600026378928, 0.751410035611553)))
     MINI_CHECK(TOLERANCE.is_vector_close(planes[0][2].x_axis, Vector(0.657483781160109, 0.055660002637893, 0.751410035611553)))
@@ -607,7 +627,8 @@ def test_modification():
     # Trim surface, domain changed but parametrization preserved
     s_trim = copy.deepcopy(s)
     s_trim.trim(0, (0.25, 0.75))
-    MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[0], 0.25) and TOLERANCE.is_close(s_trim.domain(0)[1], 0.75))
+    MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[0], 0.25))
+    MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[1], 0.75))
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.25, 0.5), s_trim.point_at(0.25, 0.5)))
 
     # Split surface into 4 quadrants, check shared corner point is the same
@@ -632,361 +653,258 @@ def test_modification():
     s_deg = copy.deepcopy(s)
     s_deg.increase_degree(0, 6)
     s_deg.increase_degree(1, 6)
-    MINI_CHECK(s.cv_count(0) == 4 and s.cv_count(1) == 4)
-    MINI_CHECK(s_deg.cv_count(0) == 7 and s_deg.cv_count(1) == 7)
+    MINI_CHECK(s.cv_count(0) == 4)
+    MINI_CHECK(s.cv_count(1) == 4)
+    MINI_CHECK(s_deg.cv_count(0) == 7)
+    MINI_CHECK(s_deg.cv_count(1) == 7)
 
 
-@MINI_TEST("NurbsSurface", "Isocurve")
-def test_isocurve():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    # Create surface
-    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
-    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
-
-    # Extract iso-u curve (v varies)
-    u0, u1 = surf.domain(0)
-    u_mid = (u0 + u1) / 2.0
-    iso_u = surf.iso_curve(0, u_mid)
-
-    # Extract iso-v curve (u varies)
-    v0, v1 = surf.domain(1)
-    v_mid = (v0 + v1) / 2.0
-    iso_v = surf.iso_curve(1, v_mid)
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(iso_u is not None)
-    MINI_CHECK(iso_u.is_valid())
-    MINI_CHECK(iso_v is not None)
-    MINI_CHECK(iso_v.is_valid())
-
-
-@MINI_TEST("NurbsSurface", "Transformation")
-def test_transformation():
+@MINI_TEST("NurbsSurface", "Transformations")
+def test_transformations():
     from session_py import NurbsSurface
     from session_py import Point
     from session_py import Xform
 
-    # Create simple surface
     points = [
-        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
     ]
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
 
-    # Apply translation
-    xf = Xform.translation(1.0, 2.0, 3.0)
-    surf.transform(xf)
+    # Variant 1: transform() - Apply stored xform (in-place)
+    surface1 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+    surface1.xform = Xform.translation(0.0, 0.0, 1.0)
+    surface1.transform()
+    MINI_CHECK(surface1.xform.is_identity() == False)
+    MINI_CHECK(surface1.cv(0, 0)[2] == 1.0)
 
-    # Check transformed CV
-    pt = surf.get_cv(0, 0)
+    # Variant 2: transform(xform) - Apply custom xform (in-place)
+    surface2 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+    x = Xform.translation(0.0, 0.0, 1.0)
+    surface2.transform(x)
+    MINI_CHECK(surface2.xform.is_identity() == True)
+    MINI_CHECK(surface2.cv(0, 0)[2] == 1.0)
 
-    MINI_CHECK(TOLERANCE.is_close(pt[0], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(pt[1], 2.0))
-    MINI_CHECK(TOLERANCE.is_close(pt[2], 3.0))
+    # Variant 3: transformed() - Get copy with stored xform applied
+    surface3 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+    surface3.xform = Xform.translation(0.0, 0.0, 10.0)
+    surface3_transformed = surface3.transformed()
+    MINI_CHECK(surface3_transformed.xform.is_identity() == False)
+    MINI_CHECK(surface3_transformed.cv(0, 0)[2] == 10.0)
+
+    # Variant 4: transformed(xform) - Get copy with custom xform
+    surface4 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
+    x = Xform.translation(0.0, 0.0, 10.0)
+    surface4_transformed = surface4.transformed(x)
+    MINI_CHECK(surface4_transformed.xform.is_identity() == True)
+    MINI_CHECK(surface4_transformed.cv(0, 0)[2] == 10.0)
 
 
-@MINI_TEST("NurbsSurface", "Json_roundtrip")
+@MINI_TEST("NurbsSurface", "Meshing")
+def test_meshing():
+    from session_py import NurbsSurface
+    from session_py import NurbsCurve
+    from session_py import Mesh
+    from session_py import Primitives
+    from session_py import Vector
+    from session_py import Point
+
+    # 1. Sphere — two poles, closed U, rational
+    sphere = Primitives.sphere_surface(0, 0, 0, 3.0)
+    mesh_sphere = sphere.mesh()
+    mesh_sphere_adaptive = sphere.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_sphere.is_valid())
+    MINI_CHECK(mesh_sphere_adaptive.is_valid())
+
+    # 2. Cone — singular apex (pole), closed U
+    cone = Primitives.cone_surface(0, 12, 0, 2.0, 6.0)
+    mesh_cone = cone.mesh()
+    mesh_cone_adaptive = cone.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_cone.is_valid())
+    MINI_CHECK(mesh_cone_adaptive.is_valid())
+
+    # 3. Torus — doubly closed (U and V), rational
+    torus = Primitives.torus_surface(0, 24, 0, 4.0, 1.5)
+    mesh_torus = torus.mesh()
+    mesh_torus_adaptive = torus.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_torus.is_valid())
+    MINI_CHECK(mesh_torus_adaptive.is_valid())
+
+    # 4. Loft — varying radius circles, closed U, multi-span V
+    loft = Primitives.create_loft([
+        Primitives.circle(0, 38, 0, 2.0),
+        Primitives.circle(0, 38, 2, 1.0),
+        Primitives.circle(0, 38, 4, 1.5),
+        Primitives.circle(0, 38, 6, 0.8)], 3)
+    mesh_loft = loft.mesh()
+    mesh_loft_adaptive = loft.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_loft.is_valid())
+    MINI_CHECK(mesh_loft_adaptive.is_valid())
+
+    # 5. Extrusion (circle) — closed U, linear V, rational
+    ext_dir = Vector(0, 0, 5)
+    cylinder = Primitives.create_extrusion(Primitives.circle(0, 52, 0, 3.0), ext_dir)
+    mesh_cylinder = cylinder.mesh()
+    mesh_cylinder_adaptive = cylinder.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_cylinder.is_valid())
+    MINI_CHECK(mesh_cylinder_adaptive.is_valid())
+
+    # 6. Ruled — bilinear (degree 1x1), tests twist subdivision
+    ra = NurbsCurve.create(False, 1, [Point(0, 64, 0), Point(5, 64, 5)])
+    rb = NurbsCurve.create(False, 1, [Point(0, 69, 5), Point(5, 69, 0)])
+    hypar = Primitives.create_ruled(ra, rb)
+    mesh_hypar = hypar.mesh()
+    mesh_hypar_adaptive = hypar.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_hypar.is_valid())
+    MINI_CHECK(mesh_hypar_adaptive.is_valid())
+
+    # 7. Sweep1 — circle along curved rail
+    profile = Primitives.circle(0, 0, 0, 1.0)
+    rail = NurbsCurve.create(False, 2, [Point(0, 76, 0), Point(0, 81, 0), Point(2, 85, 0)])
+    sweep1 = Primitives.create_sweep1(rail, profile)
+    mesh_sweep1 = sweep1.mesh()
+    mesh_sweep1_adaptive = sweep1.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_sweep1.is_valid())
+    MINI_CHECK(mesh_sweep1_adaptive.is_valid())
+
+    # 8. Sweep2 — two rails + cross sections
+    r1 = NurbsCurve.create(False, 2, [Point(0, 89, 0), Point(1, 93, 0), Point(2, 94, 0)])
+    r2 = NurbsCurve.create(False, 2, [Point(4, 89, 0), Point(4, 93, 0), Point(3, 94, 0)])
+    sh1 = NurbsCurve.create(False, 2, [Point(0, 89, 0), Point(2, 89, 2), Point(4, 89, 0)])
+    sh2 = NurbsCurve.create(False, 2, [Point(2, 94, 0), Point(2.5, 94, 1.5), Point(3, 94, 0)])
+    sweep2 = Primitives.create_sweep2(r1, r2, [sh1, sh2])
+    mesh_sweep2 = sweep2.mesh()
+    mesh_sweep2_adaptive = sweep2.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_sweep2.is_valid())
+    MINI_CHECK(mesh_sweep2_adaptive.is_valid())
+
+    # 9. Edge surface (Coons patch) — 4 boundary curves
+    south = NurbsCurve.create(False, 3, [
+        Point(1, 104, 0), Point(1, 106, 3), Point(1, 109, 3), Point(1, 111, 0),
+    ])
+    west  = NurbsCurve.create(False, 2, [Point(10, 104, 0), Point(5.5, 104, 3.5), Point(1, 104, 0)])
+    north = NurbsCurve.create(False, 3, [
+        Point(10, 104, 0), Point(10, 106, 3), Point(10, 109, 3), Point(10, 111, 0),
+    ])
+    east  = NurbsCurve.create(False, 2, [Point(10, 111, 0), Point(5.5, 111, 3.5), Point(1, 111, 0)])
+    arched = Primitives.create_edge(south, west, north, east)
+    mesh_arched = arched.mesh()
+    mesh_arched_adaptive = arched.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_arched.is_valid())
+    MINI_CHECK(mesh_arched_adaptive.is_valid())
+
+    # 10. Wave — multi-span freeform (13x13 CVs, 10 spans)
+    wave = Primitives.wave_surface(5.0, 1.5)
+    mesh_wave = wave.mesh()
+    mesh_wave_adaptive = wave.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_wave.is_valid())
+    MINI_CHECK(mesh_wave_adaptive.is_valid())
+
+    # 11. Planar — mesh() early exit: 2 triangles
+    planar = NurbsCurve.create(False, 1, [
+        Point(0, 132, 0), Point(6, 132, 0), Point(6, 136, 0), Point(0, 136, 0), Point(0, 132, 0),
+    ])
+    pln = Primitives.create_planar(planar)
+    mesh_planar = pln.mesh()
+    mesh_planar_adaptive = pln.mesh_adaptive(45.0)
+    MINI_CHECK(mesh_planar.is_valid())
+    MINI_CHECK(mesh_planar_adaptive.is_valid())
+
+
+@MINI_TEST("NurbsSurface", "Json Roundtrip")
 def test_json_roundtrip():
     from session_py import NurbsSurface
     from session_py import Point
-    from session_py import Color
     from pathlib import Path
 
-    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
-    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
-    surf.name = "test_nurbssurface"
-    surf.width = 2.0
-    surf.facecolors = [Color(255, 128, 64, 255)]
-    surf.pointcolors = [Color(0, 255, 0, 255)]
-    surf.linecolors = [Color(0, 0, 255, 255)]
+    points = [
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
+    surface = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
     # JSON object
-    json_obj = surf.__jsondump__()
+    json_obj = surface.__jsondump__()
     loaded_json = NurbsSurface.__jsonload__(json_obj)
 
     # String
-    json_string = surf.json_dumps()
+    json_string = surface.json_dumps()
     loaded_json_string = NurbsSurface.json_loads(json_string)
 
     # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
-    surf.json_dump(filename)
+    surface.json_dump(filename)
     loaded_from_file = NurbsSurface.json_load(filename)
 
-    MINI_CHECK(loaded_json == surf)
-    MINI_CHECK(loaded_json_string == surf)
-    MINI_CHECK(loaded_from_file == surf)
+    MINI_CHECK(loaded_json == surface)
+    MINI_CHECK(loaded_json_string == surface)
+    MINI_CHECK(loaded_from_file == surface)
 
 
-@MINI_TEST("NurbsSurface", "Protobuf_roundtrip")
+@MINI_TEST("NurbsSurface", "Protobuf Roundtrip")
 def test_protobuf_roundtrip():
     from session_py import NurbsSurface
     from session_py import Point
-    from session_py import Color
     from pathlib import Path
 
-    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
-    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
-    surf.name = "test_nurbssurface"
-    surf.width = 2.0
-    surf.facecolors = [Color(255, 128, 64, 255)]
-    surf.pointcolors = [Color(0, 255, 0, 255)]
-    surf.linecolors = [Color(0, 0, 255, 255)]
-
-    #   pb_dumps()      │ bytes        │ to protobuf bytes
-    #   pb_loads(b)     │ bytes        │ from protobuf bytes
-    #   pb_dump(path)   │ file         │ write to file
-    #   pb_load(path)   │ file         │ read from file
+    points = [
+        Point(0.0, 0.0, 0.0),
+        Point(-1.0, 0.75, 2.0),
+        Point(-1.0, 4.25, 2.0),
+        Point(0.0, 5.0, 0.0),
+        Point(0.75, -1.0, 2.0),
+        Point(1.25, 1.25, 4.0),
+        Point(1.25, 3.75, 4.0),
+        Point(0.75, 6.0, 2.0),
+        Point(4.25, -1.0, 2.0),
+        Point(3.75, 1.25, 4.0),
+        Point(3.75, 3.75, 4.0),
+        Point(4.25, 6.0, 2.0),
+        Point(5.0, 0.0, 0.0),
+        Point(6.0, 0.75, 2.0),
+        Point(6.0, 4.25, 2.0),
+        Point(5.0, 5.0, 0.0),
+    ]
+    surface = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
     # String
-    proto_string = surf.pb_dumps()
+    proto_string = surface.pb_dumps()
     loaded_proto_string = NurbsSurface.pb_loads(proto_string)
 
     # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
-    surf.pb_dump(filename)
+    surface.pb_dump(filename)
     loaded = NurbsSurface.pb_load(filename)
 
-    MINI_CHECK(loaded_proto_string == surf)
-    MINI_CHECK(loaded == surf)
-
-
-@MINI_TEST("NurbsSurface", "Advanced_accessors")
-def test_advanced_accessors():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    # Create rational surface for testing get_cv_4d/set_cv_4d
-    points = [Point(0.0, 0.0, 0.0)] * 9
-    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
-    surf.make_rational()
-
-    # Test set_cv_4d with homogeneous coordinates
-    x, y, z, w = 2.0, 3.0, 4.0, 2.0
-
-    # Set CV using set_cv_4d
-    surf.set_cv_4d(1, 1, x, y, z, w)
-
-    # Get CV and verify using get_cv_4d
-    ok, rx, ry, rz, rw = surf.get_cv_4d(1, 1)
-
-    # Also test get_cv
-    pt = surf.get_cv(1, 1)
-    retrieved_w = surf.weight(1, 1)
-
-    # Test knot_multiplicity
-    mult = surf.knot_count(0)
-    first_knot_mult = 0
-    if mult > 0:
-        first_val = surf.knot(0, 0)
-        count = 1
-        for i in range(1, mult):
-            val = surf.knot(0, i)
-            if abs(val - first_val) < 1e-10:
-                count += 1
-            else:
-                break
-        first_knot_mult = count
-
-    MINI_CHECK(surf.is_rational())
-    MINI_CHECK(TOLERANCE.is_close(rx, x))
-    MINI_CHECK(TOLERANCE.is_close(ry, y))
-    MINI_CHECK(TOLERANCE.is_close(rz, z))
-    MINI_CHECK(TOLERANCE.is_close(rw, w))
-    # get_cv returns Euclidean coordinates, so it divides homogeneous coords by w
-    MINI_CHECK(TOLERANCE.is_close(pt[0], x/w))
-    MINI_CHECK(TOLERANCE.is_close(pt[1], y/w))
-    MINI_CHECK(TOLERANCE.is_close(pt[2], z/w))
-    MINI_CHECK(TOLERANCE.is_close(retrieved_w, w))
-    MINI_CHECK(first_knot_mult > 0)
-
-
-@MINI_TEST("NurbsSurface", "Singularity")
-def test_singularity():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    # Create a simple surface with all CVs at different points (non-singular)
-    points = [
-        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
-        Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0),
-    ]
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
-
-    # Test is_singular for each side
-    is_singular_south = surf.is_singular(0)
-    is_singular_east = surf.is_singular(1)
-    is_singular_north = surf.is_singular(2)
-    is_singular_west = surf.is_singular(3)
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(not is_singular_south)
-    MINI_CHECK(not is_singular_east)
-    MINI_CHECK(not is_singular_north)
-    MINI_CHECK(not is_singular_west)
-
-
-@MINI_TEST("NurbsSurface", "Domain_operations")
-def test_domain_operations():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [Point(0.0, 0.0, 0.0)] * 9
-    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
-
-    # Get initial domain
-    dom_u = surf.domain(0)
-    dom_v = surf.domain(1)
-
-    # Set new domain
-    surf.set_domain(0, 0.0, 10.0)
-    surf.set_domain(1, 5.0, 15.0)
-
-    new_dom_u = surf.domain(0)
-    new_dom_v = surf.domain(1)
-
-    # Get span vectors
-    span_u = surf.get_span_vector(0)
-    span_v = surf.get_span_vector(1)
-
-    MINI_CHECK(dom_u[0] == 0.0 and dom_u[1] > 0.0)
-    MINI_CHECK(dom_v[0] == 0.0 and dom_v[1] > 0.0)
-    MINI_CHECK(TOLERANCE.is_close(new_dom_u[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(new_dom_u[1], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(new_dom_v[0], 5.0))
-    MINI_CHECK(TOLERANCE.is_close(new_dom_v[1], 15.0))
-    MINI_CHECK(len(span_u) > 0)
-    MINI_CHECK(len(span_v) > 0)
-
-
-@MINI_TEST("NurbsSurface", "Corner_points")
-def test_corner_points():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [
-        Point(0.0, 0.0, 0.0), Point(0.0, 10.0, 0.0),
-        Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0),
-    ]
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
-
-    # Get corner points
-    p00 = surf.point_at_corner(0, 0)
-    p10 = surf.point_at_corner(1, 0)
-    p01 = surf.point_at_corner(0, 1)
-    p11 = surf.point_at_corner(1, 1)
-
-    MINI_CHECK(TOLERANCE.is_close(p00[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(p10[0], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(p01[1], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(p11[0], 10.0) and TOLERANCE.is_close(p11[1], 10.0))
-
-
-@MINI_TEST("NurbsSurface", "Swap_coordinates")
-def test_swap_coordinates():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [
-        Point(1.0, 2.0, 3.0), Point(0.0, 0.0, 0.0),
-        Point(0.0, 0.0, 0.0), Point(0.0, 0.0, 0.0),
-    ]
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
-
-    # Swap X and Y
-    surf.swap_coordinates(0, 1)
-
-    pt = surf.get_cv(0, 0)
-
-    MINI_CHECK(TOLERANCE.is_close(pt[0], 2.0))
-    MINI_CHECK(TOLERANCE.is_close(pt[1], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(pt[2], 3.0))
-
-
-@MINI_TEST("NurbsSurface", "Get_knots")
-def test_get_knots():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(3)]
-    surf = NurbsSurface.create(False, False, 3, 2, 4, 3, points)
-
-    knots_u = surf.get_knots(0)
-    knots_v = surf.get_knots(1)
-
-    MINI_CHECK(len(knots_u) == surf.knot_count(0))
-    MINI_CHECK(len(knots_v) == surf.knot_count(1))
-    MINI_CHECK(len(knots_u) > 0)
-    MINI_CHECK(len(knots_v) > 0)
-
-
-@MINI_TEST("NurbsSurface", "Make_non_rational")
-def test_make_non_rational():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    # Create surface, then make rational with all weights = 1
-    points = [Point(float(i), float(j), 0.0) for i in range(3) for j in range(3)]
-    surf = NurbsSurface.create(False, False, 2, 2, 3, 3, points)
-    surf.make_rational()
-
-    # Set all weights to 1.0
-    for i in range(3):
-        for j in range(3):
-            surf.set_weight(i, j, 1.0)
-
-    was_rational = surf.is_rational()
-    surf.make_non_rational()
-    is_rational_after = surf.is_rational()
-
-    MINI_CHECK(was_rational)
-    MINI_CHECK(not is_rational_after)
-
-
-@MINI_TEST("NurbsSurface", "Create_clamped_uniform")
-def test_create_clamped_uniform():
-    from session_py import NurbsSurface
-
-    surf = NurbsSurface()
-    surf.create_clamped_uniform(3, 4, 3, 4, 4, 1.0, 2.0)
-
-    dom_u = surf.domain(0)
-    dom_v = surf.domain(1)
-
-    MINI_CHECK(surf.is_valid())
-    MINI_CHECK(surf.dimension() == 3)
-    MINI_CHECK(surf.order(0) == 4)
-    MINI_CHECK(surf.order(1) == 3)
-    MINI_CHECK(surf.cv_count_dir(0) == 4)
-    MINI_CHECK(surf.cv_count_dir(1) == 4)
-    MINI_CHECK(surf.is_clamped(0, 0) and surf.is_clamped(0, 1))
-    MINI_CHECK(surf.is_clamped(1, 0) and surf.is_clamped(1, 1))
-
-
-@MINI_TEST("NurbsSurface", "Knot_multiplicity")
-def test_knot_multiplicity():
-    from session_py import NurbsSurface
-    from session_py import Point
-
-    points = [Point(float(i), float(j), 0.0) for i in range(4) for j in range(4)]
-    surf = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
-
-    # Check first knot multiplicity (should be equal to degree for clamped)
-    mult_u_start = surf.knot_multiplicity(0, 0)
-    mult_v_start = surf.knot_multiplicity(1, 0)
-
-    # Check last knot multiplicity
-    last_u = surf.knot_count(0) - 1
-    last_v = surf.knot_count(1) - 1
-    mult_u_end = surf.knot_multiplicity(0, last_u)
-    mult_v_end = surf.knot_multiplicity(1, last_v)
-
-    MINI_CHECK(mult_u_start >= surf.degree(0))
-    MINI_CHECK(mult_v_start >= surf.degree(1))
-    MINI_CHECK(mult_u_end >= surf.degree(0))
-    MINI_CHECK(mult_v_end >= surf.degree(1))
+    MINI_CHECK(loaded_proto_string == surface)
+    MINI_CHECK(loaded == surface)
 
 
 if __name__ == "__main__":

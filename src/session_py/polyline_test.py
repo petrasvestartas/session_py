@@ -32,7 +32,10 @@ def test_polyline_constructor():
 
     # Copy (duplicates everything except guid)
     plcopy = pl.duplicate()
-    plother = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    plother = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
 
     # No-copy operators
     plmult = pl.duplicate()
@@ -51,11 +54,17 @@ def test_polyline_constructor():
     rdif = pl - Vector(1.0, 1.0, 1.0)
 
     # Negation (reverse point order)
-    plneg = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0)])
+    plneg = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0),
+    ])
     neg = -plneg
 
     # Polyline with custom color and width
-    plc = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    plc = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
     plc.linecolor = Color(255, 0, 0, 255, "red")
     plc.width = 2.5
 
@@ -84,7 +93,10 @@ def test_polyline_transformation():
     from session_py import Point
     from session_py import Xform
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
     pl.xform = Xform.translation(10.0, 0.0, 0.0)
     pl_transformed = pl.transformed()
     pl.transform()
@@ -94,13 +106,16 @@ def test_polyline_transformation():
     MINI_CHECK(pl.xform == Xform.identity())
 
 
-@MINI_TEST("Polyline", "Json_roundtrip")
+@MINI_TEST("Polyline", "Json Roundtrip")
 def test_polyline_json_roundtrip():
     from session_py import Polyline
     from session_py import Point
     from pathlib import Path
 
-    pl = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0), Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0)])
+    pl = Polyline([
+        Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0),
+        Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0),
+    ])
     pl.name = "test_polyline"
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
@@ -122,13 +137,16 @@ def test_polyline_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
 
 
-@MINI_TEST("Polyline", "Protobuf_roundtrip")
+@MINI_TEST("Polyline", "Protobuf Roundtrip")
 def test_polyline_protobuf_roundtrip():
     from session_py import Polyline
     from session_py import Point
     from pathlib import Path
 
-    pl = Polyline([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0), Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0)])
+    pl = Polyline([
+        Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0),
+        Point(7.0, 8.0, 9.0), Point(10.0, 11.0, 12.0),
+    ])
     pl.name = "test_polyline"
 
     #   pb_dumps()      │ bytes        │ to protobuf bytes
@@ -154,7 +172,10 @@ def test_polyline_length():
     from session_py import Point
 
     # L-shaped polyline: 1 unit right, 1 unit up, 1 unit left = 3 units total
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
     ln = pl.length()
     mag_sq = pl.magnitude_squared()
 
@@ -181,7 +202,7 @@ def test_polyline_center():
     MINI_CHECK(TOLERANCE.is_close(c[2], 0.0))
 
 
-@MINI_TEST("Polyline", "Is_closed")
+@MINI_TEST("Polyline", "Is Closed")
 def test_polyline_is_closed():
     from session_py import Polyline
     from session_py import Point
@@ -213,7 +234,10 @@ def test_polyline_reverse():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0),
+    ])
 
     # Test reversed() returns new polyline
     rev = pl.reversed()
@@ -229,12 +253,15 @@ def test_polyline_reverse():
     MINI_CHECK(in_place_first == 3.0)
 
 
-@MINI_TEST("Polyline", "Closest_point")
+@MINI_TEST("Polyline", "Closest Point")
 def test_polyline_closest_point():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(2.0, 2.0, 0.0), Point(0.0, 2.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0),
+        Point(2.0, 2.0, 0.0), Point(0.0, 2.0, 0.0),
+    ])
     test_pt = Point(1.0, 1.0, 0.0)
     distance, edge_id, closest = pl.closest_distance_and_point(test_pt)
 
@@ -244,12 +271,15 @@ def test_polyline_closest_point():
     MINI_CHECK(TOLERANCE.is_close(distance, 1.0))
 
 
-@MINI_TEST("Polyline", "Extend_segment")
+@MINI_TEST("Polyline", "Extend Segment")
 def test_polyline_extend_segment():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0),
+    ])
     pl.extend_segment(0, 0.5, 0.5)
     first = pl.get_point(0)[0]
     second = pl.get_point(1)[0]
@@ -258,12 +288,15 @@ def test_polyline_extend_segment():
     MINI_CHECK(TOLERANCE.is_close(second, 1.5))
 
 
-@MINI_TEST("Polyline", "Extend_segment_equally")
+@MINI_TEST("Polyline", "Extend Segment Equally")
 def test_polyline_extend_segment_equally():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0),
+    ])
     pl.extend_segment_equally(0, 0.5)
     first = pl.get_point(0)[0]
     second = pl.get_point(1)[0]
@@ -272,12 +305,15 @@ def test_polyline_extend_segment_equally():
     MINI_CHECK(TOLERANCE.is_close(second, 1.5))
 
 
-@MINI_TEST("Polyline", "Get_points")
+@MINI_TEST("Polyline", "Get Points")
 def test_polyline_get_points():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
     points = pl.get_points()
 
     MINI_CHECK(len(points) == 4)
@@ -292,7 +328,10 @@ def test_polyline_shift():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0),
+    ])
     pl.shift(1)
     first_after_shift = pl.get_point(0)[0]
     pl.shift(-1)
@@ -302,7 +341,7 @@ def test_polyline_shift():
     MINI_CHECK(TOLERANCE.is_close(first_after_unshift, 0.0))
 
 
-@MINI_TEST("Polyline", "Point_at")
+@MINI_TEST("Polyline", "Point At")
 def test_polyline_point_at():
     from session_py import Polyline
     from session_py import Point
@@ -316,29 +355,38 @@ def test_polyline_point_at():
     MINI_CHECK(TOLERANCE.is_close(quarter[0], 0.5))
 
 
-@MINI_TEST("Polyline", "Is_clockwise")
+@MINI_TEST("Polyline", "Is Clockwise")
 def test_polyline_is_clockwise():
     from session_py import Polyline
     from session_py import Point
     from session_py import Plane
 
     # Clockwise square (when viewed from +Z)
-    cw_pl = Polyline([Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0), Point(1.0, 1.0, 0.0), Point(1.0, 0.0, 0.0)])
+    cw_pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(0.0, 1.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(1.0, 0.0, 0.0),
+    ])
     # Counter-clockwise square
-    ccw_pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    ccw_pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
     plane = Plane()
 
     MINI_CHECK(cw_pl.is_clockwise(plane) == True)
     MINI_CHECK(ccw_pl.is_clockwise(plane) == False)
 
 
-@MINI_TEST("Polyline", "Convex_corners")
+@MINI_TEST("Polyline", "Convex Corners")
 def test_polyline_convex_corners():
     from session_py import Polyline
     from session_py import Point
 
     # L-shaped polyline with one concave corner
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
     corners = pl.get_convex_corners()
 
     MINI_CHECK(len(corners) == 4)
@@ -350,20 +398,29 @@ def test_polyline_tween():
     from session_py import Polyline
     from session_py import Point
 
-    pl0 = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
-    pl1 = Polyline([Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0), Point(3.0, 1.0, 0.0), Point(2.0, 1.0, 0.0)])
+    pl0 = Polyline([
+        Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0),
+    ])
+    pl1 = Polyline([
+        Point(2.0, 0.0, 0.0), Point(3.0, 0.0, 0.0),
+        Point(3.0, 1.0, 0.0), Point(2.0, 1.0, 0.0),
+    ])
     tweened = Polyline.tween_two_polylines(pl0, pl1, 0.5)
 
     MINI_CHECK(TOLERANCE.is_close(tweened.get_point(0)[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(tweened.get_point(1)[0], 2.0))
 
 
-@MINI_TEST("Polyline", "Average_plane")
+@MINI_TEST("Polyline", "Average Plane")
 def test_polyline_average_plane():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(2.0, 2.0, 0.0), Point(0.0, 2.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0),
+        Point(2.0, 2.0, 0.0), Point(0.0, 2.0, 0.0),
+    ])
     origin, x_axis, y_axis, z_axis = pl.get_average_plane()
     fast_origin, fast_plane = pl.get_fast_plane()
     avg_normal = pl._average_normal()

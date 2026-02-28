@@ -120,7 +120,6 @@ def _ear_clip(coords, indices):
                     removed = True
                     break
             if not removed:
-                split_first = -1
                 coord_map = {}
                 for pos in range(len(indices)):
                     key = (round(coords[indices[pos]*2], 8), round(coords[indices[pos]*2+1], 8))

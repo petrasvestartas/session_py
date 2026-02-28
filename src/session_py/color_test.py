@@ -47,7 +47,7 @@ def test_color_constructor():
     MINI_CHECK(ccopy.guid != red.guid)
 
 
-@MINI_TEST("Color", "Json_roundtrip")
+@MINI_TEST("Color", "Json Roundtrip")
 def test_color_json_roundtrip():
     from session_py import Color
     from pathlib import Path
@@ -73,7 +73,7 @@ def test_color_json_roundtrip():
     MINI_CHECK(loaded[3] == 255)
 
 
-@MINI_TEST("Color", "Protobuf_roundtrip")
+@MINI_TEST("Color", "Protobuf Roundtrip")
 def test_color_protobuf_roundtrip():
     from session_py import Color
     from pathlib import Path

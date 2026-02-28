@@ -1,16 +1,16 @@
 {
     "type": "Objects",
-    "guid": "6863225e-61a2-49b6-bc01-9bcd45b1ffe7",
-    "name": "test_objects",
+    "guid": "2a29f183-3edf-476c-8cc1-ab97c9692ea4",
+    "name": "my_objects",
     "points": [
         {
-            "guid": "d7d1778a-3397-4a0c-8395-7f485585a31c",
+            "guid": "5434f3c6-2d51-48f6-b37a-124bf2b34393",
             "name": "my_point",
             "pointcolor": {
                 "a": 255,
                 "b": 255,
                 "g": 0,
-                "guid": "e7ba9a76-6728-41b4-8ff2-12634184e463",
+                "guid": "57db6280-02f6-419a-89ae-8161d580040e",
                 "name": "blue",
                 "r": 0,
                 "type": "Color"
@@ -19,7 +19,7 @@
             "width": 1.0,
             "x": 1.0,
             "xform": {
-                "guid": "0623297f-9d0a-4ea9-9c71-e9a817577208",
+                "guid": "f51a90ba-27c4-4ec2-bff9-7a51390def73",
                 "m": [
                     1.0,
                     0.0,
@@ -43,6 +43,47 @@
             },
             "y": 2.0,
             "z": 3.0
+        },
+        {
+            "guid": "85180008-021b-4a9f-b8e8-c18b50f1235d",
+            "name": "my_point",
+            "pointcolor": {
+                "a": 255,
+                "b": 255,
+                "g": 0,
+                "guid": "cd688855-a5da-4608-b81b-b1456f6b7648",
+                "name": "blue",
+                "r": 0,
+                "type": "Color"
+            },
+            "type": "Point",
+            "width": 1.0,
+            "x": 4.0,
+            "xform": {
+                "guid": "cbe1c586-992a-46a8-9050-fbba2682d6c7",
+                "m": [
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ],
+                "name": "my_xform",
+                "type": "Xform"
+            },
+            "y": 5.0,
+            "z": 6.0
         }
     ],
     "lines": [],

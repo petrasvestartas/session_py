@@ -5,7 +5,7 @@ from .mini_test import MINI_CHECK
 from .mini_test import run_all
 
 
-@MINI_TEST("Knot", "Knot_count")
+@MINI_TEST("Knot", "Knot Count")
 def test_knot_count():
     from session_py import knot
 
@@ -23,7 +23,7 @@ def test_knot_count():
     MINI_CHECK(count5 == 5)
 
 
-@MINI_TEST("Knot", "Make_clamped_uniform")
+@MINI_TEST("Knot", "Make Clamped Uniform")
 def test_make_clamped_uniform():
     from session_py import knot
 
@@ -52,7 +52,7 @@ def test_make_clamped_uniform():
     MINI_CHECK(k_invalid2 is None)
 
 
-@MINI_TEST("Knot", "Make_periodic_uniform")
+@MINI_TEST("Knot", "Make Periodic Uniform")
 def test_make_periodic_uniform():
     from session_py import knot
     import numpy as np
@@ -83,7 +83,7 @@ def test_clamp():
     MINI_CHECK(last_clamped)
 
 
-@MINI_TEST("Knot", "Is_valid")
+@MINI_TEST("Knot", "Is Valid")
 def test_is_valid():
     from session_py import knot
     import numpy as np
@@ -100,7 +100,7 @@ def test_is_valid():
     MINI_CHECK(not invalid)
 
 
-@MINI_TEST("Knot", "Is_clamped")
+@MINI_TEST("Knot", "Is Clamped")
 def test_is_clamped():
     from session_py import knot
 
@@ -120,7 +120,7 @@ def test_is_clamped():
     MINI_CHECK(not not_clamped)
 
 
-@MINI_TEST("Knot", "Is_periodic")
+@MINI_TEST("Knot", "Is Periodic")
 def test_is_periodic():
     from session_py import knot
 
@@ -136,7 +136,7 @@ def test_is_periodic():
     MINI_CHECK(not not_periodic)
 
 
-@MINI_TEST("Knot", "Get_domain")
+@MINI_TEST("Knot", "Get Domain")
 def test_get_domain():
     from session_py import knot
 
@@ -148,7 +148,7 @@ def test_get_domain():
     MINI_CHECK(t1 == 1.0)
 
 
-@MINI_TEST("Knot", "Set_domain")
+@MINI_TEST("Knot", "Set Domain")
 def test_set_domain():
     from session_py import knot
 
@@ -194,7 +194,7 @@ def test_multiplicity():
     MINI_CHECK(mult_last == 3)
 
 
-@MINI_TEST("Knot", "Span_count")
+@MINI_TEST("Knot", "Span Count")
 def test_span_count():
     from session_py import knot
 
@@ -210,7 +210,7 @@ def test_span_count():
     MINI_CHECK(span2 == 3)
 
 
-@MINI_TEST("Knot", "Find_span")
+@MINI_TEST("Knot", "Find Span")
 def test_find_span():
     from session_py import knot
 
@@ -230,7 +230,7 @@ def test_find_span():
     MINI_CHECK(span2_0 == 0 and span2_mid == 1 and span2_end == 2)
 
 
-@MINI_TEST("Knot", "Greville_abcissae")
+@MINI_TEST("Knot", "Greville Abcissae")
 def test_greville_abcissae():
     from session_py import knot
 
@@ -242,7 +242,7 @@ def test_greville_abcissae():
     MINI_CHECK(g_len == 4)
 
 
-@MINI_TEST("Knot", "Domain_tolerance")
+@MINI_TEST("Knot", "Domain Tolerance")
 def test_domain_tolerance():
     from session_py import knot
 

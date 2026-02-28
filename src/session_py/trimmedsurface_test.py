@@ -45,7 +45,7 @@ def test_trimmedsurface_constructor():
     MINI_CHECK(tscopy == ts)
 
 
-@MINI_TEST("TrimmedSurface", "Constructor_planar")
+@MINI_TEST("TrimmedSurface", "Constructor Planar")
 def test_trimmedsurface_constructor_planar():
     from session_py import NurbsCurve
     from session_py import Point
@@ -53,27 +53,36 @@ def test_trimmedsurface_constructor_planar():
     import math
 
     # Planar curve boundary
-    pts = [Point(0,0,0), Point(3,1,0), Point(5,0.5,0), Point(6,3,0), Point(4,5,0), Point(1,4,0)]
+    pts = [
+        Point(0, 0, 0), Point(3, 1, 0), Point(5, 0.5, 0),
+        Point(6, 3, 0), Point(4, 5, 0), Point(1, 4, 0),
+    ]
     bnd = NurbsCurve.create(True, 3, pts)
     ts = TrimmedSurface.create_planar(bnd)
 
     # Rotated planar
-    pts = [Point(0,0,0), Point(3,1,-2), Point(5,2,-3), Point(4,4,0), Point(1,3,2)]
+    pts = [Point(0, 0, 0), Point(3, 1, -2), Point(5, 2, -3), Point(4, 4, 0), Point(1, 3, 2)]
     bnd = NurbsCurve.create(True, 3, pts)
     ts = TrimmedSurface.create_planar(bnd)
 
     # Triangle
-    bnd = NurbsCurve.create(True, 1, [Point(0,0,0), Point(6,3,3), Point(2,5,1)])
+    bnd = NurbsCurve.create(True, 1, [Point(0, 0, 0), Point(6, 3, 3), Point(2, 5, 1)])
     ts = TrimmedSurface.create_planar(bnd)
 
     # Trapezoid
-    bnd = NurbsCurve.create(True, 1, [Point(0,0,6), Point(5,0,6), Point(4,4,2), Point(1,4,2)])
+    bnd = NurbsCurve.create(True, 1, [
+        Point(0, 0, 6), Point(5, 0, 6), Point(4, 4, 2), Point(1, 4, 2),
+    ])
     ts = TrimmedSurface.create_planar(bnd)
 
     # Rectangle with a hole
-    bnd = NurbsCurve.create(True, 1, [Point(0,0,0), Point(6,0,0), Point(6,6,0), Point(0,6,0)])
+    bnd = NurbsCurve.create(True, 1, [
+        Point(0, 0, 0), Point(6, 0, 0), Point(6, 6, 0), Point(0, 6, 0),
+    ])
     ts = TrimmedSurface.create_planar(bnd)
-    ts.add_hole(NurbsCurve.create(True, 1, [Point(2,2,0), Point(4,2,0), Point(4,4,0), Point(2,4,0)]))
+    ts.add_hole(NurbsCurve.create(True, 1, [
+        Point(2, 2, 0), Point(4, 2, 0), Point(4, 4, 0), Point(2, 4, 0),
+    ]))
 
     # Hexagon with 2 holes
     R = 4.0
@@ -84,12 +93,16 @@ def test_trimmedsurface_constructor_planar():
     bnd = NurbsCurve.create(True, 1, pts)
     ts = TrimmedSurface.create_planar(bnd)
     ts.add_holes([
-        NurbsCurve.create(True, 1, [Point(1.5,0.5,0.75), Point(2.5,0.5,1.25), Point(2.0,1.5,1.0)]),
-        NurbsCurve.create(True, 1, [Point(-2,-0.5,-1), Point(-1,-0.5,-0.5), Point(-1,-1.5,-0.5), Point(-2,-1.5,-1)]),
+        NurbsCurve.create(True, 1, [
+            Point(1.5, 0.5, 0.75), Point(2.5, 0.5, 1.25), Point(2.0, 1.5, 1.0),
+        ]),
+        NurbsCurve.create(True, 1, [
+            Point(-2, -0.5, -1), Point(-1, -0.5, -0.5), Point(-1, -1.5, -0.5), Point(-2, -1.5, -1),
+        ]),
     ])
 
 
-@MINI_TEST("TrimmedSurface", "Constructor_hole")
+@MINI_TEST("TrimmedSurface", "Constructor Hole")
 def test_trimmedsurface_constructor_hole():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -163,7 +176,7 @@ def test_trimmedsurface_accessors():
     MINI_CHECK(ts.inner_loop_count() == 0)
 
 
-@MINI_TEST("TrimmedSurface", "Add_inner_loop")
+@MINI_TEST("TrimmedSurface", "Add Inner Loop")
 def test_trimmedsurface_add_inner_loop():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -204,7 +217,7 @@ def test_trimmedsurface_add_inner_loop():
     MINI_CHECK(ts.inner_loop_count() == 0)
 
 
-@MINI_TEST("TrimmedSurface", "Point_at")
+@MINI_TEST("TrimmedSurface", "Point At")
 def test_trimmedsurface_point_at():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -294,7 +307,7 @@ def test_trimmedsurface_transformation():
     MINI_CHECK(TOLERANCE.is_close(pt[2], 30.0))
 
 
-@MINI_TEST("TrimmedSurface", "Json_roundtrip")
+@MINI_TEST("TrimmedSurface", "Json Roundtrip")
 def test_trimmedsurface_json_roundtrip():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
@@ -337,7 +350,7 @@ def test_trimmedsurface_json_roundtrip():
     MINI_CHECK(loaded_from_file == ts)
 
 
-@MINI_TEST("TrimmedSurface", "Protobuf_roundtrip")
+@MINI_TEST("TrimmedSurface", "Protobuf Roundtrip")
 def test_trimmedsurface_protobuf_roundtrip():
     from session_py import NurbsSurface
     from session_py import NurbsCurve

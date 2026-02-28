@@ -1,7 +1,7 @@
 {
     "type": "Vertex",
-    "guid": "51ed5ab8-bd1f-4748-ae0d-dca3b1ca63c9",
+    "guid": "647bd42a-97d1-4812-9ffb-65911c59ff67",
     "name": "v0",
-    "attribute": "attribute",
+    "attribute": "./serialization/test_attribute",
     "index": null
 }

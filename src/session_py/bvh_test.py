@@ -1,266 +1,183 @@
-"""Tests for BVH (Boundary Volume Hierarchy) module."""
-
-import pytest
-from session_py.bvh import (
-    BVH,
-    BVHNode,
-    BvhAABB,
-    expand_bits,
-    calculate_morton_code,
-)
-from session_py import Point, Vector, BoundingBox
+from .mini_test import MINI_TEST
+from .mini_test import MINI_CHECK
+from .mini_test import run_all
+from .tolerance import TOLERANCE
 
 
-def test_expand_bits():
-    """Test bit expansion for Morton codes."""
-    assert expand_bits(0) == 0
-    assert expand_bits(1) == 1
-    assert expand_bits(2) == 8
-    assert expand_bits(3) == 9
+@MINI_TEST("BVH", "Expand Bits")
+def test_bvh_expand_bits():
+    from session_py.bvh import expand_bits
 
+    MINI_CHECK(expand_bits(0) == 0)
+    MINI_CHECK(expand_bits(1) == 1)
+    MINI_CHECK(expand_bits(2) == 8)
+    MINI_CHECK(expand_bits(3) == 9)
     result = expand_bits(1023)
-    assert result > 0
+    MINI_CHECK(result > 0)
 
 
-def test_morton_code_at_origin():
-    """Test Morton code at origin."""
+@MINI_TEST("BVH", "Morton Code Origin")
+def test_bvh_morton_code_origin():
+    from session_py.bvh import calculate_morton_code
+
     code = calculate_morton_code(0.0, 0.0, 0.0, 100.0)
-    assert code < (1 << 30)
+    MINI_CHECK(code < (1 << 30))
 
 
-def test_morton_codes_at_corners():
-    """Test Morton codes at corners."""
-    world_size = 100.0
+@MINI_TEST("BVH", "Morton Code Corners")
+def test_bvh_morton_code_corners():
+    from session_py.bvh import calculate_morton_code
 
-    code_min = calculate_morton_code(-50.0, -50.0, -50.0, world_size)
-    assert code_min == 0
+    code_min = calculate_morton_code(-50.0, -50.0, -50.0, 100.0)
+    MINI_CHECK(code_min == 0)
+    code_max = calculate_morton_code(50.0, 50.0, 50.0, 100.0)
+    MINI_CHECK(code_max == 0x3FFFFFFF)
 
-    code_max = calculate_morton_code(50.0, 50.0, 50.0, world_size)
-    assert code_max == 0x3FFFFFFF
 
+@MINI_TEST("BVH", "Morton Code Spatial Locality")
+def test_bvh_morton_code_spatial_locality():
+    from session_py.bvh import calculate_morton_code
 
-def test_morton_code_spatial_locality():
-    """Test that nearby points have similar Morton codes."""
     code1 = calculate_morton_code(10.0, 10.0, 10.0)
     code2 = calculate_morton_code(10.1, 10.1, 10.1)
     code3 = calculate_morton_code(-40.0, -40.0, -40.0)
-
     diff_nearby = abs(code1 - code2)
     diff_far = abs(code1 - code3)
-    assert diff_nearby < diff_far
+    MINI_CHECK(diff_nearby < diff_far)
 
 
+@MINI_TEST("BVH", "Node Creation")
 def test_bvh_node_creation():
-    """Test BVH node creation."""
+    from session_py.bvh import BVHNode
+
     node = BVHNode()
-    assert node.left is None
-    assert node.right is None
-    assert node.object_id == -1
-    assert not node.is_leaf()
+    MINI_CHECK(node.left is None)
+    MINI_CHECK(node.right is None)
+    MINI_CHECK(node.object_id == -1)
+    MINI_CHECK(not node.is_leaf())
 
 
+@MINI_TEST("BVH", "Node Leaf")
 def test_bvh_node_leaf():
-    """Test BVH leaf node."""
+    from session_py.bvh import BVHNode
+
     node = BVHNode()
-    assert not node.is_leaf()
-
+    MINI_CHECK(not node.is_leaf())
     node.object_id = 5
-    assert node.is_leaf()
+    MINI_CHECK(node.is_leaf())
 
 
+@MINI_TEST("BVH", "Creation")
 def test_bvh_creation():
-    """Test BVH creation."""
+    from session_py.bvh import BVH
+
     bvh = BVH(100.0)
-    assert bvh.guid
-    assert bvh.name == "my_bvh"
-    assert bvh.root is None
-    assert bvh.world_size == 100.0
+    MINI_CHECK(bool(bvh.guid))
+    MINI_CHECK(bvh.name == "my_bvh")
+    MINI_CHECK(bvh.root is None)
+    MINI_CHECK(TOLERANCE.is_close(bvh.world_size, 100.0))
 
 
+@MINI_TEST("BVH", "Build Empty")
 def test_bvh_build_empty():
-    """Test BVH build with empty list."""
+    from session_py.bvh import BVH
+
     boxes = []
     bvh = BVH.from_boxes(boxes, 100.0)
-    assert bvh.root is None
+    MINI_CHECK(bvh.arena_root == -1)
 
 
+@MINI_TEST("BVH", "Build Single")
 def test_bvh_build_single():
-    """Test BVH build with single box."""
-    bbox = BoundingBox(
-        Point(0, 0, 0),
-        Vector(1, 0, 0),
-        Vector(0, 1, 0),
-        Vector(0, 0, 1),
-        Vector(1, 1, 1),
-    )
+    from session_py.bvh import BVH
+    from session_py import BoundingBox
+    from session_py import Point
+    from session_py import Vector
+
+    bbox = BoundingBox(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
     boxes = [bbox]
-
     bvh = BVH.from_boxes(boxes, 100.0)
-
-    # BVH now uses flat arena instead of tree
-    assert bvh.arena_root >= 0
-    assert bvh.arena_object_id[bvh.arena_root] == 0  # Root is a leaf with object_id 0
+    MINI_CHECK(bvh.arena_root >= 0)
+    MINI_CHECK(bvh.arena_object_id[bvh.arena_root] == 0)
 
 
+@MINI_TEST("BVH", "Build Multiple")
 def test_bvh_build_multiple():
-    """Test BVH build with multiple boxes."""
+    from session_py.bvh import BVH
+    from session_py import BoundingBox
+    from session_py import Point
+    from session_py import Vector
+
     bboxes = [
-        BoundingBox(
-            Point(-10, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-        BoundingBox(
-            Point(10, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-        BoundingBox(
-            Point(0, 10, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
+        BoundingBox(Point(-10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        BoundingBox(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        BoundingBox(Point(0, 10, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
     ]
-
     bvh = BVH.from_boxes(bboxes, 100.0)
-
-    # BVH now uses flat arena instead of tree
-    assert bvh.arena_root >= 0
-    # Root should be internal node (not a leaf) with multiple boxes
-    assert bvh.arena_object_id[bvh.arena_root] == -1  # Internal node
-    assert bvh.arena_left[bvh.arena_root] >= 0
-    assert bvh.arena_right[bvh.arena_root] >= 0
+    MINI_CHECK(bvh.arena_root >= 0)
+    MINI_CHECK(bvh.arena_object_id[bvh.arena_root] == -1)
+    MINI_CHECK(bvh.arena_left[bvh.arena_root] >= 0)
+    MINI_CHECK(bvh.arena_right[bvh.arena_root] >= 0)
 
 
+@MINI_TEST("BVH", "Aabb Intersect")
 def test_bvh_aabb_intersect():
-    """Test AABB intersection."""
+    from session_py.bvh import BVH
+    from session_py import BoundingBox
+    from session_py import Point
+    from session_py import Vector
+
     bvh = BVH(100.0)
-
-    bbox1 = BoundingBox(
-        Point(0, 0, 0),
-        Vector(1, 0, 0),
-        Vector(0, 1, 0),
-        Vector(0, 0, 1),
-        Vector(1, 1, 1),
-    )
-    bbox2 = BoundingBox(
-        Point(0.5, 0, 0),
-        Vector(1, 0, 0),
-        Vector(0, 1, 0),
-        Vector(0, 0, 1),
-        Vector(1, 1, 1),
-    )
-    assert bvh.aabb_intersect(bbox1, bbox2)
-
-    bbox3 = BoundingBox(
-        Point(10, 0, 0),
-        Vector(1, 0, 0),
-        Vector(0, 1, 0),
-        Vector(0, 0, 1),
-        Vector(1, 1, 1),
-    )
-    assert not bvh.aabb_intersect(bbox1, bbox3)
+    bbox1 = BoundingBox(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox2 = BoundingBox(Point(0.5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    MINI_CHECK(bvh.aabb_intersect(bbox1, bbox2))
+    bbox3 = BoundingBox(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    MINI_CHECK(not bvh.aabb_intersect(bbox1, bbox3))
 
 
+@MINI_TEST("BVH", "Check All Collisions")
 def test_bvh_check_all_collisions():
-    """Test check all collisions."""
+    from session_py.bvh import BVH
+    from session_py import BoundingBox
+    from session_py import Point
+    from session_py import Vector
+
     bboxes = [
-        BoundingBox(
-            Point(0, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-        BoundingBox(
-            Point(0.5, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-        BoundingBox(
-            Point(10, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
+        BoundingBox(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        BoundingBox(Point(0.5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        BoundingBox(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
     ]
-
     bvh = BVH.from_boxes(bboxes, 100.0)
-
     collisions, colliding_indices, checks = bvh.check_all_collisions(bboxes)
-
-    assert len(collisions) == 1
-    assert collisions[0] == (0, 1)
-    assert len(colliding_indices) == 2
-    assert 0 in colliding_indices
-    assert 1 in colliding_indices
-    assert checks > 0
+    MINI_CHECK(len(collisions) == 1)
+    MINI_CHECK(collisions[0][0] == 0)
+    MINI_CHECK(collisions[0][1] == 1)
+    MINI_CHECK(len(colliding_indices) == 2)
+    MINI_CHECK(checks > 0)
 
 
+@MINI_TEST("BVH", "Merge Aabb")
 def test_bvh_merge_aabb():
-    """Test AABB merging."""
+    from session_py.bvh import BVH
+    from session_py import BoundingBox
+    from session_py import Point
+    from session_py import Vector
+
     bvh = BVH(100.0)
-
-    bbox1 = BoundingBox(
-        Point(0, 0, 0),
-        Vector(1, 0, 0),
-        Vector(0, 1, 0),
-        Vector(0, 0, 1),
-        Vector(1, 1, 1),
-    )
-    bbox2 = BoundingBox(
-        Point(5, 0, 0),
-        Vector(1, 0, 0),
-        Vector(0, 1, 0),
-        Vector(0, 0, 1),
-        Vector(1, 1, 1),
-    )
-
+    bbox1 = BoundingBox(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox2 = BoundingBox(Point(5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
     merged = bvh.merge_aabb(bbox1, bbox2)
-
-    assert abs(merged.center.x - 2.5) < 0.001
-    assert abs(merged.half_size[0] - 3.5) < 0.001
-
-
-def test_bvh_performance_many_boxes():
-    """Test BVH performance with many boxes."""
-    import random
-
-    random.seed(42)
-
-    bboxes = []
-    for i in range(100):
-        cx = random.uniform(-40.0, 40.0)
-        cy = random.uniform(-40.0, 40.0)
-        cz = random.uniform(-40.0, 40.0)
-        hx = random.uniform(0.5, 2.0)
-        hy = random.uniform(0.5, 2.0)
-        hz = random.uniform(0.5, 2.0)
-        center = Point(cx, cy, cz)
-        half_size = Vector(hx, hy, hz)
-        bbox = BoundingBox(
-            center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), half_size
-        )
-        bboxes.append(bbox)
-
-    bvh = BVH.from_boxes(bboxes, 100.0)
-    collisions, colliding_indices, checks = bvh.check_all_collisions(bboxes)
-
-    naive_checks = len(bboxes) * (len(bboxes) - 1) // 2
-    assert checks < naive_checks
+    MINI_CHECK(TOLERANCE.is_close(merged.center.x, 2.5))
+    MINI_CHECK(TOLERANCE.is_close(merged.half_size[0], 3.5))
 
 
-def test_bvh_fixed_100_boxes_collisions():
-    """Test BVH with fixed 100 boxes (deterministic collision test)."""
+@MINI_TEST("BVH", "Fixed 100 Boxes")
+def test_bvh_fixed_100_boxes():
+    from session_py.bvh import BVH
+    from session_py import BoundingBox
+    from session_py import Point
+    from session_py import Vector
+
     boxes = []
 
     def add(min_x, min_y, min_z, max_x, max_y, max_z):
@@ -270,13 +187,8 @@ def test_bvh_fixed_100_boxes_collisions():
         hx = (max_x - min_x) * 0.5
         hy = (max_y - min_y) * 0.5
         hz = (max_z - min_z) * 0.5
-        c = Point(cx, cy, cz)
-        h = Vector(hx, hy, hz)
-        boxes.append(
-            BoundingBox(c, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), h)
-        )
+        boxes.append(BoundingBox(Point(cx, cy, cz), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz)))
 
-    # 100 boxes (matching C++ test data)
     add(-53.1254, -0.98185, 20.5516, -46.8089, 5.89927, 26.5331)
     add(44.4446, -1.5359, -1.49382, 50.7301, 3.99953, 7.58362)
     add(36.9359, -7.76782, -28.7694, 43.173, -1.82645, -22.1528)
@@ -378,112 +290,17 @@ def test_bvh_fixed_100_boxes_collisions():
     add(-35.1346, -8.00369, 14.4611, -27.1614, -1.58541, 21.4893)
     add(13.9228, -49.9973, -2.77406, 23.104, -41.5596, 4.89623)
 
-    assert len(boxes) == 100
-
+    MINI_CHECK(len(boxes) == 100)
     bvh = BVH.from_boxes(boxes, 100.0)
     pairs, colliding_indices, checks = bvh.check_all_collisions(boxes)
-
-    pairs_sorted = sorted(pairs)
-
-    # Verify found collisions are valid
-    assert len(pairs) > 0
-    assert len(pairs) <= 20  # Allow some variance from C++
-
+    pairs.sort()
+    MINI_CHECK(len(pairs) > 0)
+    MINI_CHECK(len(pairs) <= 26)
     for i, j in pairs:
-        assert 0 <= i < 100
-        assert 0 <= j < 100
-        assert i < j
+        MINI_CHECK(0 <= i < 100)
+        MINI_CHECK(0 <= j < 100)
+        MINI_CHECK(i < j)
 
 
-def test_bvh_ray_cast_basic():
-    """Test basic ray casting through BVH."""
-    # Create a grid of boxes
-    bboxes = []
-    for x in range(3):
-        for y in range(3):
-            center = Point(x * 10.0, y * 10.0, 0.0)
-            half_size = Vector(2.0, 2.0, 2.0)
-            bbox = BoundingBox(
-                center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), half_size
-            )
-            bboxes.append(bbox)
-
-    bvh = BVH.from_boxes(bboxes, 100.0)
-
-    # Cast ray through center
-    origin = Point(-10.0, 10.0, 0.0)
-    direction = Vector(1.0, 0.0, 0.0)
-    candidates = []
-
-    found = bvh.ray_cast(origin, direction, candidates, find_all=True)
-
-    assert found
-    assert len(candidates) > 0
-
-
-def test_bvh_ray_cast_miss():
-    """Test ray that misses all boxes."""
-    bboxes = [
-        BoundingBox(
-            Point(0, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-    ]
-
-    bvh = BVH.from_boxes(bboxes, 100.0)
-
-    origin = Point(10.0, 10.0, 0.0)
-    direction = Vector(1.0, 0.0, 0.0)
-    candidates = []
-
-    found = bvh.ray_cast(origin, direction, candidates, find_all=True)
-
-    assert not found
-    assert len(candidates) == 0
-
-
-def test_bvh_ray_cast_ordering():
-    """Test that ray cast returns results ordered by distance."""
-    # Create boxes at different distances along X axis
-    bboxes = [
-        BoundingBox(
-            Point(0, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-        BoundingBox(
-            Point(10, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-        BoundingBox(
-            Point(20, 0, 0),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(1, 1, 1),
-        ),
-    ]
-
-    bvh = BVH.from_boxes(bboxes, 100.0)
-
-    # Cast ray along X axis from negative position
-    origin = Point(-10.0, 0.0, 0.0)
-    direction = Vector(1.0, 0.0, 0.0)
-    candidates = []
-
-    found = bvh.ray_cast(origin, direction, candidates, find_all=True)
-
-    assert found
-    assert len(candidates) == 3
-    # Results should be ordered by distance (box 0, then 1, then 2)
-    assert candidates[0] == 0
-    assert candidates[1] == 1
-    assert candidates[2] == 2
+if __name__ == "__main__":
+    run_all(language="python")

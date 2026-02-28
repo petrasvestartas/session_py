@@ -1594,8 +1594,8 @@ class Primitives:
     @staticmethod
     def cube(edge=2.0):
         a = edge / 2.0
-        v0, v1, v2, v3 = Point(-a,-a,-a), Point(a,-a,-a), Point(a,a,-a), Point(-a,a,-a)
-        v4, v5, v6, v7 = Point(-a,-a,a), Point(a,-a,a), Point(a,a,a), Point(-a,a,a)
+        v0, v1, v2, v3 = Point(-a, -a, -a), Point(a, -a, -a), Point(a, a, -a), Point(-a, a, -a)
+        v4, v5, v6, v7 = Point(-a, -a, a), Point(a, -a, a), Point(a, a, a), Point(-a, a, a)
         faces = [
             [v3, v2, v1, v0], [v4, v5, v6, v7],
             [v0, v1, v5, v4], [v2, v3, v7, v6],
@@ -1606,9 +1606,9 @@ class Primitives:
     @staticmethod
     def octahedron(edge=2.0):
         a = edge / math.sqrt(2.0)
-        px, nx = Point(a,0,0), Point(-a,0,0)
-        py, ny = Point(0,a,0), Point(0,-a,0)
-        pz, nz = Point(0,0,a), Point(0,0,-a)
+        px, nx = Point(a, 0, 0), Point(-a, 0, 0)
+        py, ny = Point(0, a, 0), Point(0, -a, 0)
+        pz, nz = Point(0, 0, a), Point(0, 0, -a)
         faces = [
             [pz, px, py], [pz, py, nx], [pz, nx, ny], [pz, ny, px],
             [nz, py, px], [nz, nx, py], [nz, ny, nx], [nz, px, ny],
@@ -1621,9 +1621,9 @@ class Primitives:
         s = edge / 2.0
         sp = s * phi
         verts = [
-            Point(-s, sp, 0), Point(s, sp, 0), Point(-s,-sp, 0), Point(s,-sp, 0),
-            Point(0,-s, sp), Point(0, s, sp), Point(0,-s,-sp), Point(0, s,-sp),
-            Point(sp, 0,-s), Point(sp, 0, s), Point(-sp, 0,-s), Point(-sp, 0, s),
+            Point(-s, sp, 0), Point(s, sp, 0), Point(-s, -sp, 0), Point(s, -sp, 0),
+            Point(0, -s, sp), Point(0, s, sp), Point(0, -s, -sp), Point(0, s, -sp),
+            Point(sp, 0, -s), Point(sp, 0, s), Point(-sp, 0, -s), Point(-sp, 0, s),
         ]
         idx = [
             [0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],
