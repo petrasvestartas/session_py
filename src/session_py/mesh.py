@@ -521,32 +521,70 @@ class Mesh:
                 a += xi*yj - xj*yi
             return a * 0.5
         order = [border_idx] + [i for i in range(len(polylines0)) if i != border_idx]
-        poly_infos = []
+        poly_infos = []  # (bot_off, bot_n, top_off, top_n)
         all_bot = []; all_top = []
         for oi, idx in enumerate(order):
             bot = get_open(polylines0[idx]); top = get_open(polylines1[idx])
-            n = min(len(bot), len(top)); bot = bot[:n]; top = top[:n]
             if (oi == 0 and sarea(bot) < 0) or (oi != 0 and sarea(bot) > 0):
                 bot.reverse(); top.reverse()
-            poly_infos.append((len(all_bot), n))
+            poly_infos.append((len(all_bot), len(bot), len(all_top), len(top)))
             all_bot.extend(bot); all_top.extend(top)
         mesh = Mesh()
         bvk = [mesh.add_vertex(p) for p in all_bot]
         tvk = [mesh.add_vertex(p) for p in all_top]
         if cap:
-            off0, n0 = poly_infos[0]
-            bpts = [Point(*proj(all_bot[i]), 0.0) for i in range(off0, off0 + n0)]
-            hpts = [[Point(*proj(all_bot[i]), 0.0) for i in range(off, off + cnt)] for off, cnt in poly_infos[1:]]
-            cap_tris = _cdt_triangulate(bpts, hpts if hpts else None)
-            for t in cap_tris:
+            _, bot_n0, _, top_n0 = poly_infos[0]
+            bpts = [Point(*proj(all_bot[i]), 0.0) for i in range(bot_n0)]
+            b_hpts = [[Point(*proj(all_bot[i]), 0.0) for i in range(off, off+cnt)] for off, cnt, _, _ in poly_infos[1:]]
+            for t in _cdt_triangulate(bpts, b_hpts if b_hpts else None):
                 mesh.add_face([bvk[t[0]], bvk[t[2]], bvk[t[1]]])
-            for t in cap_tris:
+            tpts = [Point(*proj(all_top[i]), 0.0) for i in range(top_n0)]
+            t_hpts = [[Point(*proj(all_top[i]), 0.0) for i in range(off, off+cnt)] for _, _, off, cnt in poly_infos[1:]]
+            for t in _cdt_triangulate(tpts, t_hpts if t_hpts else None):
                 mesh.add_face([tvk[t[0]], tvk[t[1]], tvk[t[2]]])
-        for pi, (off, n) in enumerate(poly_infos):
-            for i in range(n):
-                j = (i + 1) % n
-                bi, bj = off + i, off + j
-                mesh.add_face([bvk[bi], bvk[bj], tvk[bj], tvk[bi]])
+        def side_faces(bot_off, bot_n, top_off, top_n, bpts, tpts):
+            def edsq(pts, i):
+                j = (i + 1) % len(pts)
+                dx = pts[j].x - pts[i].x; dy = pts[j].y - pts[i].y; dz = pts[j].z - pts[i].z
+                return dx*dx + dy*dy + dz*dz
+            ia = max(range(bot_n), key=lambda i: edsq(bpts, i))
+            ib = max(range(top_n), key=lambda i: edsq(tpts, i))
+            if bot_n == top_n:
+                for k in range(bot_n):
+                    cb = bot_off + (ia + k) % bot_n; ct = top_off + (ib + k) % top_n
+                    nb = bot_off + (ia + k + 1) % bot_n; nt = top_off + (ib + k + 1) % top_n
+                    mesh.add_face([bvk[cb], bvk[nb], tvk[nt], tvk[ct]])
+                return
+            b_arcs = [0.0] * (bot_n + 1)
+            for k in range(bot_n):
+                i = (ia + k) % bot_n; j = (ia + k + 1) % bot_n
+                dx = bpts[j].x - bpts[i].x; dy = bpts[j].y - bpts[i].y; dz = bpts[j].z - bpts[i].z
+                b_arcs[k + 1] = b_arcs[k] + math.sqrt(dx*dx + dy*dy + dz*dz)
+            t_arcs = [0.0] * (top_n + 1)
+            for k in range(top_n):
+                i = (ib + k) % top_n; j = (ib + k + 1) % top_n
+                dx = tpts[j].x - tpts[i].x; dy = tpts[j].y - tpts[i].y; dz = tpts[j].z - tpts[i].z
+                t_arcs[k + 1] = t_arcs[k] + math.sqrt(dx*dx + dy*dy + dz*dz)
+            inv_b = 1.0 / b_arcs[bot_n] if b_arcs[bot_n] > 0 else 1.0
+            inv_t = 1.0 / t_arcs[top_n] if t_arcs[top_n] > 0 else 1.0
+            bi = ti = 0
+            while bi < bot_n or ti < top_n:
+                cb = bot_off + (ia + bi) % bot_n; ct = top_off + (ib + ti) % top_n
+                nb = bot_off + (ia + bi + 1) % bot_n; nt = top_off + (ib + ti + 1) % top_n
+                if bi >= bot_n:
+                    mesh.add_face([bvk[cb], tvk[ct], tvk[nt]]); ti += 1
+                elif ti >= top_n:
+                    mesh.add_face([bvk[cb], bvk[nb], tvk[ct]]); bi += 1
+                else:
+                    bp = b_arcs[bi + 1] * inv_b; tp = t_arcs[ti + 1] * inv_t
+                    if abs(bp - tp) < 1e-9:
+                        mesh.add_face([bvk[cb], bvk[nb], tvk[nt], tvk[ct]]); bi += 1; ti += 1
+                    elif bp < tp:
+                        mesh.add_face([bvk[cb], bvk[nb], tvk[ct]]); bi += 1
+                    else:
+                        mesh.add_face([bvk[cb], tvk[ct], tvk[nt]]); ti += 1
+        for bot_off, bot_n, top_off, top_n in poly_infos:
+            side_faces(bot_off, bot_n, top_off, top_n, all_bot[bot_off:bot_off+bot_n], all_top[top_off:top_off+top_n])
         return mesh
 
     @staticmethod
@@ -638,6 +676,14 @@ class Mesh:
                     count += 1
         return count
 
+    def edges(self):
+        result = []
+        for u in sorted(self.halfedge.keys()):
+            for v in sorted(self.halfedge[u].keys()):
+                if self.halfedge[u][v] is None:
+                    result.append((u, v))
+        return result
+
     def euler(self) -> int:
         """Calculate Euler characteristic (V - E + F)."""
         return (
@@ -719,6 +765,16 @@ class Mesh:
                     self.halfedge[v][u] = None
 
         return True
+
+    def unweld(self) -> "Mesh":
+        m = Mesh()
+        for fkey in sorted(self.face):
+            new_vkeys = []
+            for vk in self.face[fkey]:
+                pt = self.vertex[vk]
+                new_vkeys.append(m.add_vertex(Point(pt[0], pt[1], pt[2])))
+            m.add_face(new_vkeys)
+        return m
 
     ###########################################################################################
     # Vertex and Face Operations

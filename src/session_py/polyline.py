@@ -494,6 +494,42 @@ class Polyline:
             return False
         return self.points[0].distance(self.points[-1]) < Tolerance.ZERO_TOLERANCE
 
+    def merge_collinear(self, tol: float = Tolerance.APPROXIMATION) -> None:
+        """Merge consecutive collinear segments in-place; closed polyline wraps around."""
+        closed = self.is_closed()
+        pts = self.get_points()
+        if closed and len(pts) > 1:
+            pts.pop()
+        zt2 = Tolerance.ZERO_TOLERANCE ** 2
+        changed = True
+        while changed:
+            changed = False
+            m = len(pts)
+            if m < 3:
+                break
+            out = []
+            for i in range(m):
+                p, nx = (i - 1) % m, (i + 1) % m
+                if not closed and (i == 0 or i == m - 1):
+                    out.append(pts[i])
+                    continue
+                ax, ay, az = pts[i][0]-pts[p][0], pts[i][1]-pts[p][1], pts[i][2]-pts[p][2]
+                bx, by, bz = pts[nx][0]-pts[i][0], pts[nx][1]-pts[i][1], pts[nx][2]-pts[i][2]
+                cx, cy, cz = ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx
+                a2, b2 = ax*ax+ay*ay+az*az, bx*bx+by*by+bz*bz
+                if a2 < zt2 or b2 < zt2 or cx*cx+cy*cy+cz*cz < tol*tol*a2*b2:
+                    changed = True
+                else:
+                    out.append(pts[i])
+            pts = out
+        self._coords = []
+        for p in pts:
+            self._coords.extend([p[0], p[1], p[2]])
+        if closed and pts:
+            self._coords.extend([pts[0][0], pts[0][1], pts[0][2]])
+        if self.point_count() >= 3:
+            self.plane = Plane.from_points(self.get_points())
+
     def center(self) -> Point:
         """Calculate center point of polyline."""
         if not self.points:

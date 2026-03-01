@@ -78,6 +78,14 @@ def test_line_constructor():
     lc.linecolor = Color(255, 0, 0, 255, "red")
     lc.width = 2.5
 
+    # with_name constructor
+    lwn = Line.with_name("custom", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+    # get_middle_line
+    ms, me = Line.get_middle_line(
+        Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0),
+        Point(0.0, 2.0, 0.0), Point(2.0, 2.0, 0.0))
+
     MINI_CHECK(l.name == "my_line" and l[0] == 10.0 and l[1] == 20.0 and l[2] == 30.0 and l.guid)
     MINI_CHECK(x0 == 10.0 and y0 == 20.0 and z0 == 30.0)
     MINI_CHECK(x1 == 40.0 and y1 == 50.0 and z1 == 60.0)
@@ -99,6 +107,8 @@ def test_line_constructor():
     MINI_CHECK(l_pv[3] == 4.0 and l_pv[4] == 6.0 and l_pv[5] == 8.0)
     MINI_CHECK(l_pdl[0] == 0.0 and l_pdl[3] == 5.0)
     MINI_CHECK(lc.linecolor[0] == 255 and lc.linecolor[1] == 0 and lc.width == 2.5)
+    MINI_CHECK(lwn.name == "custom" and lwn[3] == 1.0)
+    MINI_CHECK(TOLERANCE.is_close(ms[1], 1.0) and TOLERANCE.is_close(me[1], 1.0))
 
 
 @MINI_TEST("Line", "Transformation")
@@ -131,7 +141,18 @@ def test_line_json_roundtrip():
     #   json_dump(path) │ file         │ write to file
     #   json_load(path) │ file         │ read from file
 
-    # json_dump(fname) / json_load(fname) - file-based serialization
+    # JSON object
+    d = l.__jsondump__()
+    loaded_j = Line.__jsonload__(d)
+    MINI_CHECK(loaded_j.name == "test_line")
+
+    # String
+    s = l.json_dumps()
+    loaded_s = Line.json_loads(s)
+    MINI_CHECK(loaded_s.name == "test_line")
+    MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
+
+    # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.json"
     l.json_dump(fname)
     loaded = Line.json_load(fname)
@@ -158,7 +179,14 @@ def test_line_protobuf_roundtrip():
     #   pb_dump(path)   │ file         │ write to file
     #   pb_load(path)   │ file         │ read from file
 
-    # pb_dump(fname) / pb_load(fname) - file-based serialization
+    # Bytes
+    b = l.pb_dumps()
+    loaded_s = Line.pb_loads(b)
+    MINI_CHECK(loaded_s.name == "test_line")
+    MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
+    MINI_CHECK(loaded_s.guid == l.guid)
+
+    # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.bin"
     l.pb_dump(fname)
     loaded = Line.pb_load(fname)
@@ -170,6 +198,7 @@ def test_line_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[3], 168.4))
     MINI_CHECK(TOLERANCE.is_close(loaded[4], 210.5))
     MINI_CHECK(TOLERANCE.is_close(loaded[5], 252.6))
+    MINI_CHECK(loaded.guid == l.guid)
 
 
 @MINI_TEST("Line", "Length")

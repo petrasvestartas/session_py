@@ -118,6 +118,22 @@ def test_closest_mesh_point():
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
 
 
+@MINI_TEST("Closest", "Mesh Point AABB")
+def test_closest_mesh_point_aabb():
+    from session_py import Closest
+    from session_py import Primitives
+    from session_py import Point
+
+    m = Primitives.cube(2.0)
+
+    cp1, fk1, d1 = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 2.0))
+    MINI_CHECK(TOLERANCE.is_close(cp1[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
+
+    cp2, fk2, d2 = Closest.mesh_point_aabb(m, Point(1.0, 1.0, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
+
+
 @MINI_TEST("Closest", "Pointcloud Point")
 def test_closest_pointcloud_point():
     from session_py import Closest

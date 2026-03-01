@@ -261,6 +261,23 @@ class Primitives:
         return Primitives._transform_geometry(unit_cyl, xform)
 
     @staticmethod
+    def edge_pipes(mesh, radius):
+        from session_py.line import Line
+        edges = mesh.edges()
+        result = []
+        for i, (u, v) in enumerate(edges):
+            if i >= len(mesh.linecolors):
+                break
+            start = mesh.vertex[u].position()
+            end = mesh.vertex[v].position()
+            line = Line(start[0], start[1], start[2], end[0], end[1], end[2])
+            pipe = Primitives.cylinder_mesh(line, radius)
+            for j in range(len(pipe.facecolors)):
+                pipe.facecolors[j] = mesh.linecolors[i]
+            result.append(pipe)
+        return result
+
+    @staticmethod
     def arrow_mesh(line, radius):
         start = line.start()
         line_vec = line.to_vector()

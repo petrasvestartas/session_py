@@ -30,6 +30,27 @@ def test_mesh_cylinder():
     MINI_CHECK(m.number_of_faces() == 20)
 
 
+@MINI_TEST("Primitives", "Mesh Edge Pipes")
+def test_mesh_edge_pipes():
+    from session_py import Primitives
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Color
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
+    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
+    v2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
+    v3 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
+    mesh.add_face([v0, v1, v2, v3])
+    mesh.linecolors[0] = Color.red()
+
+    pipes = Primitives.edge_pipes(mesh, 0.1)
+    MINI_CHECK(len(pipes) == 4)
+    MINI_CHECK(isinstance(pipes[0], Mesh))
+    MINI_CHECK(pipes[0].facecolors[0][0] == Color.red()[0])
+
+
 @MINI_TEST("Primitives", "Nurbscurve Polyline")
 def test_nurbscurve_polyline():
     from session_py import NurbsCurve

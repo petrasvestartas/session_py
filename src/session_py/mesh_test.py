@@ -335,6 +335,24 @@ def test_mesh_attributes():
     MINI_CHECK(vindex[7] == 7)
 
 
+@MINI_TEST("Mesh", "Edges")
+def test_mesh_edges():
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
+    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
+    v2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
+    v3 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
+    mesh.add_face([v0, v1, v2, v3])
+
+    edges = mesh.edges()
+    MINI_CHECK(len(edges) == 4)
+    MINI_CHECK(isinstance(edges[0], tuple))
+    MINI_CHECK(edges[0] == (0, 3))
+
+
 @MINI_TEST("Mesh", "Vertex and Face Operations")
 def test_mesh_vertex_and_face_operations():
     from session_py import Mesh
@@ -384,6 +402,19 @@ def test_mesh_vertex_and_face_operations():
     n1_after = mesh.face_normal(f1)
     MINI_CHECK(n0_after is not None and n1_after is not None)
     MINI_CHECK(n0_after[0]*n1_after[0] + n0_after[1]*n1_after[1] + n0_after[2]*n1_after[2] > 0.0)
+
+
+@MINI_TEST("Mesh", "Unweld")
+def test_unweld():
+    from session_py.mesh import Mesh
+
+    box = Mesh.create_box(1.0, 1.0, 1.0)
+    u = box.unweld()
+
+    MINI_CHECK(u.number_of_faces() == box.number_of_faces())
+    MINI_CHECK(u.number_of_vertices() == 24)
+    for vk in u.vertex:
+        MINI_CHECK(len(u.vertex_faces(vk)) == 1)
 
 
 @MINI_TEST("Mesh", "Connectivity Queries")

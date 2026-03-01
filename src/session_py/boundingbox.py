@@ -481,8 +481,8 @@ class BoundingBox:
         half_size = decode_node(data["half_size"])
 
         bbox = cls(center, x_axis, y_axis, z_axis, half_size)
-        bbox.guid = guid
-        bbox.name = name
+        bbox.guid = guid if guid is not None else data.get("guid", bbox.guid)
+        bbox.name = name if name is not None else data.get("name", bbox.name)
 
         if "xform" in data:
             bbox.xform = decode_node(data["xform"])
