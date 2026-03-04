@@ -21,7 +21,7 @@
     255
   ],
   "facedata": {},
-  "guid": "4d362cc3-4c6e-4f6b-8e97-73b7bba97cc2",
+  "guid": "ba3d9046-1edb-44ec-9933-3c71a2f699d5",
   "halfedge": {
     "0": {
       "1": 1,
@@ -53,6 +53,16 @@
   "max_face": 1,
   "max_vertex": 3,
   "name": "test_mesh",
+  "objectcolor": {
+    "a": 255,
+    "b": 255,
+    "g": 255,
+    "guid": "bda61ad4-b2aa-48c2-a24c-c9c5bcab32d1",
+    "name": "white",
+    "r": 255,
+    "type": "Color"
+  },
+  "color_mode": "objectcolor",
   "pointcolors": [
     255,
     255,

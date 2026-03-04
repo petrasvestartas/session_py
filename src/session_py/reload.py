@@ -41,6 +41,10 @@ def reload_package(package_name, verbose=True):
         module = sys.modules.get(mod_name)
         if module is None:
             continue
+        if mod_name.endswith("_pb2"):
+            if verbose:
+                print(f"  ~ {mod_name}")
+            continue
         try:
             importlib.reload(module)
             reloaded.append(mod_name)

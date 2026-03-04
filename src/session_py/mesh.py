@@ -11,6 +11,13 @@ from .triangulation_2d import triangulate as _tri2d_triangulate
 from .trimesh_cdt import cdt_triangulate as _cdt_triangulate
 
 
+class ColorMode(Enum):
+    OBJECTCOLOR = "objectcolor"
+    POINTCOLORS = "pointcolors"
+    FACECOLORS = "facecolors"
+    NONE = "none"
+
+
 class NormalWeighting(Enum):
     AREA = "area"
     ANGLE = "angle"
@@ -165,10 +172,12 @@ class Mesh:
         self._max_face = 0
         self.guid = str(uuid.uuid4())
         self.name = "my_mesh"
-        self.pointcolors = []
-        self.facecolors = []
-        self.linecolors = []
-        self.widths = []
+        self._pointcolors = []
+        self._facecolors = []
+        self._linecolors = []
+        self._widths = []
+        self._objectcolor = Color.white()
+        self.color_mode = ColorMode.OBJECTCOLOR
         self.xform = Xform.identity()
 
     def duplicate(self) -> "Mesh":
@@ -193,10 +202,12 @@ class Mesh:
         m.triangulation = {k: list(v) for k, v in self.triangulation.items()}
         m._max_vertex = self._max_vertex
         m._max_face = self._max_face
-        m.pointcolors = list(self.pointcolors)
-        m.facecolors = list(self.facecolors)
-        m.linecolors = list(self.linecolors)
-        m.widths = list(self.widths)
+        m._pointcolors = list(self._pointcolors)
+        m._facecolors = list(self._facecolors)
+        m._linecolors = list(self._linecolors)
+        m._widths = list(self._widths)
+        m._objectcolor = self._objectcolor
+        m.color_mode = self.color_mode
         m.xform = self.xform
         return m
 
@@ -700,10 +711,56 @@ class Mesh:
         self.triangulation.clear()
         self._max_vertex = 0
         self._max_face = 0
-        self.pointcolors.clear()
-        self.facecolors.clear()
-        self.linecolors.clear()
-        self.widths.clear()
+        self._pointcolors.clear()
+        self._facecolors.clear()
+        self._linecolors.clear()
+        self._widths.clear()
+        self._objectcolor = Color.white()
+        self.color_mode = ColorMode.OBJECTCOLOR
+
+    def set_pointcolors(self, colors):
+        self._pointcolors = list(colors)
+        self.color_mode = ColorMode.POINTCOLORS
+
+    def set_facecolors(self, colors):
+        self._facecolors = list(colors)
+        self.color_mode = ColorMode.FACECOLORS
+
+    def set_linecolors(self, colors, widths=None):
+        self._linecolors = list(colors)
+        if widths is not None:
+            self._widths = list(widths)
+
+    def set_objectcolor(self, color):
+        self._objectcolor = color
+
+    @property
+    def pointcolors(self): return self._pointcolors
+    @property
+    def facecolors(self): return self._facecolors
+    @property
+    def linecolors(self): return self._linecolors
+    def get_pointcolors(self): return self._pointcolors
+    def get_facecolors(self): return self._facecolors
+    def get_linecolors(self): return self._linecolors
+    @property
+    def widths(self): return self._widths
+    @property
+    def objectcolor(self): return self._objectcolor
+
+    def clear_pointcolors(self):
+        self._pointcolors.clear()
+        if self.color_mode == ColorMode.POINTCOLORS:
+            self.color_mode = ColorMode.OBJECTCOLOR
+
+    def clear_facecolors(self):
+        self._facecolors.clear()
+        if self.color_mode == ColorMode.FACECOLORS:
+            self.color_mode = ColorMode.OBJECTCOLOR
+
+    def clear_linecolors(self):
+        self._linecolors.clear()
+        self._widths.clear()
 
     def unify_winding(self) -> bool:
         """Unify face winding by BFS over face adjacency; returns True if any face was flipped."""
@@ -805,7 +862,7 @@ class Mesh:
 
         self.vertex[vertex_key] = VertexData(position)
         self.halfedge[vertex_key] = {}
-        self.pointcolors.append(Color.white())
+        self._pointcolors.append(Color.white())
 
         return vertex_key
 
@@ -845,7 +902,7 @@ class Mesh:
 
         self.face[face_key] = vertices.copy()
         self.triangulation.pop(face_key, None)
-        self.facecolors.append(Color.white())
+        self._facecolors.append(Color.white())
 
         for i in range(len(vertices)):
             u = vertices[i]
@@ -862,8 +919,8 @@ class Mesh:
 
             if is_new_edge:
                 self.halfedge[v][u] = None
-                self.linecolors.append(Color.white())
-                self.widths.append(1.0)
+                self._linecolors.append(Color.white())
+                self._widths.append(1.0)
 
         return face_key
 
@@ -1201,15 +1258,15 @@ class Mesh:
 
         # Colors as flat RGBA arrays
         pointcolors_flat = []
-        for c in self.pointcolors:
+        for c in self._pointcolors:
             pointcolors_flat.extend([c[0], c[1], c[2], c[3]])
 
         facecolors_flat = []
-        for c in self.facecolors:
+        for c in self._facecolors:
             facecolors_flat.extend([c[0], c[1], c[2], c[3]])
 
         linecolors_flat = []
-        for c in self.linecolors:
+        for c in self._linecolors:
             linecolors_flat.extend([c[0], c[1], c[2], c[3]])
 
         # Return fields in alphabetical order to match Rust's serde_json
@@ -1227,10 +1284,12 @@ class Mesh:
             "max_face": self._max_face,
             "max_vertex": self._max_vertex,
             "name": self.name,
+            "objectcolor": self._objectcolor.__jsondump__(),
+            "color_mode": self.color_mode.value,
             "pointcolors": pointcolors_flat,
             "type": f"{self.__class__.__name__}",
             "vertex": vertex_data,
-            "widths": self.widths,
+            "widths": self._widths,
         }
 
     @classmethod
@@ -1319,18 +1378,23 @@ class Mesh:
         # Load colors from flat RGBA arrays
         if "pointcolors" in data:
             arr = data["pointcolors"]
-            mesh.pointcolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
+            mesh._pointcolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
 
         if "facecolors" in data:
             arr = data["facecolors"]
-            mesh.facecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
+            mesh._facecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
 
         if "linecolors" in data:
             arr = data["linecolors"]
-            mesh.linecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
+            mesh._linecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
 
         if "widths" in data:
-            mesh.widths = data["widths"]
+            mesh._widths = data["widths"]
+
+        if "objectcolor" in data:
+            mesh._objectcolor = Color.__jsonload__(data["objectcolor"])
+        if "color_mode" in data:
+            mesh.color_mode = ColorMode(data["color_mode"]) if data["color_mode"] in {m.value for m in ColorMode} else ColorMode.OBJECTCOLOR
 
         return mesh
 
@@ -1413,7 +1477,7 @@ class Mesh:
 
         # Colors
         from .proto import color_pb2
-        for c in self.pointcolors:
+        for c in self._pointcolors:
             color_proto = color_pb2.Color()
             color_proto.guid = c.guid
             color_proto.name = c.name
@@ -1423,7 +1487,7 @@ class Mesh:
             color_proto.a = c[3]
             proto.pointcolors.append(color_proto)
 
-        for c in self.facecolors:
+        for c in self._facecolors:
             color_proto = color_pb2.Color()
             color_proto.guid = c.guid
             color_proto.name = c.name
@@ -1433,7 +1497,7 @@ class Mesh:
             color_proto.a = c[3]
             proto.facecolors.append(color_proto)
 
-        for c in self.linecolors:
+        for c in self._linecolors:
             color_proto = color_pb2.Color()
             color_proto.guid = c.guid
             color_proto.name = c.name
@@ -1444,7 +1508,17 @@ class Mesh:
             proto.linecolors.append(color_proto)
 
         # Widths
-        proto.widths.extend(self.widths)
+        proto.widths.extend(self._widths)
+
+        # Object color
+        proto.objectcolor.guid = self._objectcolor.guid
+        proto.objectcolor.name = self._objectcolor.name
+        proto.objectcolor.r = self._objectcolor[0]
+        proto.objectcolor.g = self._objectcolor[1]
+        proto.objectcolor.b = self._objectcolor[2]
+        proto.objectcolor.a = self._objectcolor[3]
+        _cm_map = {"objectcolor": 0, "pointcolors": 1, "facecolors": 2, "none": 3}
+        proto.color_mode = _cm_map.get(self.color_mode.value, 0)
 
         # Xform
         from .proto import xform_pb2
@@ -1500,29 +1574,37 @@ class Mesh:
         mesh.default_edge_attributes = dict(proto.default_edge_attributes)
 
         # Colors
-        mesh.pointcolors = []
+        mesh._pointcolors = []
         for c in proto.pointcolors:
             color = Color(c.r, c.g, c.b, c.a)
             color.guid = c.guid
             color.name = c.name
-            mesh.pointcolors.append(color)
+            mesh._pointcolors.append(color)
 
-        mesh.facecolors = []
+        mesh._facecolors = []
         for c in proto.facecolors:
             color = Color(c.r, c.g, c.b, c.a)
             color.guid = c.guid
             color.name = c.name
-            mesh.facecolors.append(color)
+            mesh._facecolors.append(color)
 
-        mesh.linecolors = []
+        mesh._linecolors = []
         for c in proto.linecolors:
             color = Color(c.r, c.g, c.b, c.a)
             color.guid = c.guid
             color.name = c.name
-            mesh.linecolors.append(color)
+            mesh._linecolors.append(color)
 
         # Widths
-        mesh.widths = list(proto.widths)
+        mesh._widths = list(proto.widths)
+
+        # Object color
+        oc = proto.objectcolor
+        mesh._objectcolor = Color(oc.r, oc.g, oc.b, oc.a)
+        mesh._objectcolor.guid = oc.guid
+        mesh._objectcolor.name = oc.name
+        _cm_map = {0: "objectcolor", 1: "pointcolors", 2: "facecolors", 3: "none"}
+        mesh.color_mode = ColorMode(_cm_map.get(getattr(proto, 'color_mode', 0), "objectcolor"))
 
         # Xform
         mesh.xform = Xform()
@@ -1557,20 +1639,20 @@ class Mesh:
 
     def set_vertex_color(self, index: int, color: Color):
         """Set color for a specific vertex."""
-        if 0 <= index < len(self.pointcolors):
-            self.pointcolors[index] = color
+        if 0 <= index < len(self._pointcolors):
+            self._pointcolors[index] = color
 
     def set_face_color(self, index: int, color: Color):
         """Set color for a specific face."""
-        if 0 <= index < len(self.facecolors):
-            self.facecolors[index] = color
+        if 0 <= index < len(self._facecolors):
+            self._facecolors[index] = color
 
     def set_edge_color(self, index: int, color: Color):
         """Set color for a specific edge."""
-        if 0 <= index < len(self.linecolors):
-            self.linecolors[index] = color
+        if 0 <= index < len(self._linecolors):
+            self._linecolors[index] = color
 
     def set_edge_width(self, index: int, width: float):
         """Set width for a specific edge."""
-        if 0 <= index < len(self.widths):
-            self.widths[index] = width
+        if 0 <= index < len(self._widths):
+            self._widths[index] = width

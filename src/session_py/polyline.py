@@ -65,6 +65,18 @@ class Polyline:
         """Returns the number of points."""
         return len(self._coords) // 3
 
+    @classmethod
+    def from_sides(cls, sides: int, radius: float = 1.0, close: bool = False) -> "Polyline":
+        """Create a regular polygon with given number of sides and radius."""
+        import math
+        pts = []
+        for i in range(sides):
+            angle = 2.0 * Tolerance.PI * i / sides
+            pts.append(Point(radius * math.cos(angle), radius * math.sin(angle), 0.0))
+        if close:
+            pts.append(pts[0])
+        return cls(pts)
+
     def get_points(self) -> List[Point]:
         """Returns all points as Point objects."""
         points = []

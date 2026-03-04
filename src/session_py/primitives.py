@@ -201,6 +201,62 @@ class Primitives:
         return vertices, triangles
 
     @staticmethod
+    def _capsule_geometry(start_pt, end_pt, radius):
+        n = 10
+        lat = math.pi / 4
+        r_hemi = radius * math.sin(lat)
+        off = radius * math.cos(lat)
+        ax = end_pt[0] - start_pt[0]
+        ay = end_pt[1] - start_pt[1]
+        az = end_pt[2] - start_pt[2]
+        length = math.sqrt(ax*ax + ay*ay + az*az)
+        if length < 1e-12:
+            ax, ay, az = 0.0, 0.0, 1.0
+        else:
+            ax, ay, az = ax/length, ay/length, az/length
+        if abs(az) < 0.9:
+            tx, ty, tz = 0.0, 0.0, 1.0
+        else:
+            tx, ty, tz = 1.0, 0.0, 0.0
+        xx = ty*az - tz*ay; xy = tz*ax - tx*az; xz = tx*ay - ty*ax
+        xlen = math.sqrt(xx*xx + xy*xy + xz*xz)
+        xx, xy, xz = xx/xlen, xy/xlen, xz/xlen
+        yx = ay*xz - az*xy; yy = az*xx - ax*xz; yz = ax*xy - ay*xx
+
+        def ring(cx, cy, cz, axis_off, ring_r):
+            pts = []
+            for i in range(n):
+                a = 2 * math.pi * i / n
+                ca, sa = math.cos(a), math.sin(a)
+                pts.append(Point(
+                    cx + axis_off*ax + ring_r*(ca*xx + sa*yx),
+                    cy + axis_off*ay + ring_r*(ca*xy + sa*yy),
+                    cz + axis_off*az + ring_r*(ca*xz + sa*yz),
+                ))
+            return pts
+
+        sx, sy, sz = start_pt[0], start_pt[1], start_pt[2]
+        ex, ey, ez = end_pt[0], end_pt[1], end_pt[2]
+        vertices = []
+        vertices.extend(ring(sx, sy, sz, 0.0, radius))       # 0-9:  base ring
+        vertices.extend(ring(ex, ey, ez, 0.0, radius))       # 10-19: top ring
+        vertices.extend(ring(sx, sy, sz, -off, r_hemi))      # 20-29: bottom hemi ring
+        vertices.append(Point(sx - radius*ax, sy - radius*ay, sz - radius*az))  # 30: bottom pole
+        vertices.extend(ring(ex, ey, ez, off, r_hemi))       # 31-40: top hemi ring
+        vertices.append(Point(ex + radius*ax, ey + radius*ay, ez + radius*az))  # 41: top pole
+        triangles = []
+        for i in range(n):
+            ni = (i + 1) % n
+            triangles.append([i, ni, 10+ni]); triangles.append([i, 10+ni, 10+i])
+            triangles.append([20+i, ni, i]); triangles.append([20+i, 20+ni, ni])
+            triangles.append([10+i, 10+ni, 31+ni]); triangles.append([10+i, 31+ni, 31+i])
+        for i in range(n):
+            ni = (i + 1) % n
+            triangles.append([30, 20+ni, 20+i])
+            triangles.append([41, 31+i, 31+ni])
+        return vertices, triangles
+
+    @staticmethod
     def _unit_cone_geometry():
         vertices = [
             Point(0.0, 0.0, 0.5),
@@ -256,9 +312,13 @@ class Primitives:
 
     @staticmethod
     def cylinder_mesh(line, radius):
-        unit_cyl = Primitives._unit_cylinder_geometry()
-        xform = Primitives._line_to_cylinder_transform(line, radius)
-        return Primitives._transform_geometry(unit_cyl, xform)
+        return Primitives._transform_geometry(Primitives._unit_cylinder_geometry(), Primitives._line_to_cylinder_transform(line, radius))
+
+    @staticmethod
+    def capsule_mesh(line, radius):
+        start, end = line.start(), line.end()
+        return Primitives._transform_geometry(
+            Primitives._capsule_geometry(start, end, radius), Xform.identity())
 
     @staticmethod
     def edge_pipes(mesh, radius):
@@ -271,9 +331,8 @@ class Primitives:
             start = mesh.vertex[u].position()
             end = mesh.vertex[v].position()
             line = Line(start[0], start[1], start[2], end[0], end[1], end[2])
-            pipe = Primitives.cylinder_mesh(line, radius)
-            for j in range(len(pipe.facecolors)):
-                pipe.facecolors[j] = mesh.linecolors[i]
+            pipe = Primitives.capsule_mesh(line, radius)
+            pipe.set_facecolors([mesh.linecolors[i]] * pipe.number_of_faces())
             result.append(pipe)
         return result
 

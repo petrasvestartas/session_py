@@ -329,6 +329,11 @@ class Color:
         color.name = "silver"
         return color
 
+    @classmethod
+    def palette(cls):
+        """Return a palette of 12 spectral colors in order."""
+        return [cls.red(), cls.orange(), cls.yellow(), cls.lime(), cls.green(), cls.mint(), cls.cyan(), cls.azure(), cls.blue(), cls.violet(), cls.magenta(), cls.pink()]
+
     ###########################################################################################
     # JSON Serialization
     ###########################################################################################

@@ -8,29 +8,67 @@ import math
 @MINI_TEST("Mesh", "Constructor")
 def test_mesh_constructor():
     from session_py import Mesh
-    from session_py import Point
+    from session_py import Polyline
+    from session_py import Color
+    from session_py.mesh import ColorMode
 
-    sides = 6
-
-    # Create hexagon vertices in XY plane
-    vertices = []
-    for i in range(sides):
-        angle = 2.0 * TOLERANCE.PI * i / sides
-        x = 1.0 * math.cos(angle)
-        y = 1.0 * math.sin(angle)
-        vertices.append(Point(x, y, 0.0))
-
-    faces = [[0, 1, 2, 3, 4, 5]]
-
-    mesh = Mesh.from_vertices_and_faces(vertices, faces)
-
+    vertices = Polyline.from_sides(6, 1.0, False).get_points()
+    mesh = Mesh.from_vertices_and_faces(vertices, [[0, 1, 2, 3, 4, 5]])
     sstr = str(mesh)
     srepr = repr(mesh)
-
-    # Copy (new guid)
     mcopy = mesh.duplicate()
-
     MINI_CHECK(mesh.is_valid())
+    mesh.name = "hexagon"
+
+    palette = Color.palette()
+
+    # set_objectcolor does not change color_mode
+    mesh.set_objectcolor(Color.grey())
+    MINI_CHECK(mesh.color_mode == ColorMode.OBJECTCOLOR)
+
+    # set_pointcolors → color_mode = PointColors
+    pc = []
+    for i in range(mesh.number_of_vertices()):
+        pc.append(palette[i % len(palette)])
+    mesh.set_pointcolors(pc)
+    MINI_CHECK(mesh.color_mode == ColorMode.POINTCOLORS)
+    MINI_CHECK(len(mesh.get_pointcolors()) == mesh.number_of_vertices())
+
+    # set_facecolors → color_mode = FaceColors
+    fc = []
+    for i in range(mesh.number_of_faces()):
+        fc.append(palette[i % len(palette)])
+    mesh.set_facecolors(fc)
+    MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
+    MINI_CHECK(len(mesh.get_facecolors()) == mesh.number_of_faces())
+
+    # set_linecolors does not change color_mode
+    lc = []
+    lw = [0.1] * mesh.number_of_edges()
+    for i in range(mesh.number_of_edges()):
+        lc.append(palette[i % len(palette)])
+    mesh.set_linecolors(lc, lw)
+    MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
+    MINI_CHECK(len(mesh.get_linecolors()) == mesh.number_of_edges())
+
+    # clear_facecolors reverts color_mode only if currently FaceColors
+    mesh.color_mode = ColorMode.FACECOLORS
+    MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
+    mesh.clear_facecolors()
+    MINI_CHECK(mesh.color_mode == ColorMode.OBJECTCOLOR)
+    MINI_CHECK(len(mesh.get_facecolors()) == 0)
+
+    # clear_pointcolors does not revert if color_mode != PointColors
+    mesh.color_mode = ColorMode.FACECOLORS
+    MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
+    mesh.clear_pointcolors()
+    MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
+
+    # clear_linecolors does not change color_mode
+    mesh.color_mode = ColorMode.POINTCOLORS
+    mesh.clear_linecolors()
+    MINI_CHECK(mesh.color_mode == ColorMode.POINTCOLORS)
+    MINI_CHECK(len(mesh.get_linecolors()) == 0)
 
 
 @MINI_TEST("Mesh", "From Polylines")
