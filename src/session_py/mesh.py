@@ -415,10 +415,12 @@ class Mesh:
         for pt in verts:
             vkeys.append(mesh.add_vertex(pt))
         for cycle in face_cycles:
-            pts = [verts[i] for i in cycle]
-            tris = _tri2d_triangulate(pts)
-            for t in tris:
-                mesh.add_face([vkeys[cycle[t[0]]], vkeys[cycle[t[1]]], vkeys[cycle[t[2]]]])
+            mapped = [vkeys[i] for i in cycle]
+            fk = mesh.add_face(mapped)
+            if len(cycle) > 3:
+                pts = [verts[i] for i in cycle]
+                tris = _tri2d_triangulate(pts)
+                mesh.triangulation[fk] = [[mapped[t[0]], mapped[t[1]], mapped[t[2]]] for t in tris]
         return mesh
 
     @staticmethod
