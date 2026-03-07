@@ -26,7 +26,7 @@ from . import color_pb2 as color__pb2
 from . import xform_pb2 as xform__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nmesh.proto\x12\rsession_proto\x1a\x0b\x63olor.proto\x1a\x0bxform.proto\"\x9f\x01\n\nVertexData\x12\t\n\x01x\x18\x01 \x01(\x01\x12\t\n\x01y\x18\x02 \x01(\x01\x12\t\n\x01z\x18\x03 \x01(\x01\x12=\n\nattributes\x18\x04 \x03(\x0b\x32).session_proto.VertexData.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"}\n\x0bHalfedgeMap\x12<\n\tneighbors\x18\x01 \x03(\x0b\x32).session_proto.HalfedgeMap.NeighborsEntry\x1a\x30\n\x0eNeighborsEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12\r\n\x05value\x18\x02 \x01(\x04:\x02\x38\x01\"\x8c\x01\n\x08\x46\x61\x63\x65\x44\x61ta\x12\x10\n\x08vertices\x18\x01 \x03(\x04\x12;\n\nattributes\x18\x02 \x03(\x0b\x32\'.session_proto.FaceData.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\x9c\x01\n\x08\x45\x64geData\x12\x0f\n\x07vertex1\x18\x01 \x01(\x04\x12\x0f\n\x07vertex2\x18\x02 \x01(\x04\x12;\n\nattributes\x18\x03 \x03(\x0b\x32\'.session_proto.EdgeData.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\xf0\x08\n\x04Mesh\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x33\n\x08vertices\x18\x03 \x03(\x0b\x32!.session_proto.Mesh.VerticesEntry\x12-\n\x05\x66\x61\x63\x65s\x18\x04 \x03(\x0b\x32\x1e.session_proto.Mesh.FacesEntry\x12\x35\n\thalfedges\x18\x05 \x03(\x0b\x32\".session_proto.Mesh.HalfedgesEntry\x12*\n\tedge_data\x18\x06 \x03(\x0b\x32\x17.session_proto.EdgeData\x12S\n\x19\x64\x65\x66\x61ult_vertex_attributes\x18\x07 \x03(\x0b\x32\x30.session_proto.Mesh.DefaultVertexAttributesEntry\x12O\n\x17\x64\x65\x66\x61ult_face_attributes\x18\x08 \x03(\x0b\x32..session_proto.Mesh.DefaultFaceAttributesEntry\x12O\n\x17\x64\x65\x66\x61ult_edge_attributes\x18\t \x03(\x0b\x32..session_proto.Mesh.DefaultEdgeAttributesEntry\x12)\n\x0bpointcolors\x18\n \x03(\x0b\x32\x14.session_proto.Color\x12(\n\nfacecolors\x18\x0b \x03(\x0b\x32\x14.session_proto.Color\x12(\n\nlinecolors\x18\x0c \x03(\x0b\x32\x14.session_proto.Color\x12\x0e\n\x06widths\x18\r \x03(\x01\x12#\n\x05xform\x18\x0e \x01(\x0b\x32\x14.session_proto.Xform\x12)\n\x0bobjectcolor\x18\x0f \x01(\x0b\x32\x14.session_proto.Color\x12\x12\n\ncolor_mode\x18\x10 \x01(\x05\x1aJ\n\rVerticesEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12(\n\x05value\x18\x02 \x01(\x0b\x32\x19.session_proto.VertexData:\x02\x38\x01\x1a\x45\n\nFacesEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12&\n\x05value\x18\x02 \x01(\x0b\x32\x17.session_proto.FaceData:\x02\x38\x01\x1aL\n\x0eHalfedgesEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x1a.session_proto.HalfedgeMap:\x02\x38\x01\x1a>\n\x1c\x44\x65\x66\x61ultVertexAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x1a<\n\x1a\x44\x65\x66\x61ultFaceAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x1a<\n\x1a\x44\x65\x66\x61ultEdgeAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nmesh.proto\x12\rsession_proto\x1a\x0b\x63olor.proto\x1a\x0bxform.proto\"\x9f\x01\n\nVertexData\x12\t\n\x01x\x18\x01 \x01(\x01\x12\t\n\x01y\x18\x02 \x01(\x01\x12\t\n\x01z\x18\x03 \x01(\x01\x12=\n\nattributes\x18\x04 \x03(\x0b\x32).session_proto.VertexData.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"}\n\x0bHalfedgeMap\x12<\n\tneighbors\x18\x01 \x03(\x0b\x32).session_proto.HalfedgeMap.NeighborsEntry\x1a\x30\n\x0eNeighborsEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12\r\n\x05value\x18\x02 \x01(\x04:\x02\x38\x01\"\x8c\x01\n\x08\x46\x61\x63\x65\x44\x61ta\x12\x10\n\x08vertices\x18\x01 \x03(\x04\x12;\n\nattributes\x18\x02 \x03(\x0b\x32\'.session_proto.FaceData.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\x9c\x01\n\x08\x45\x64geData\x12\x0f\n\x07vertex1\x18\x01 \x01(\x04\x12\x0f\n\x07vertex2\x18\x02 \x01(\x04\x12;\n\nattributes\x18\x03 \x03(\x0b\x32\'.session_proto.EdgeData.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\"\x1b\n\x07TriList\x12\x10\n\x08vertices\x18\x01 \x03(\x04\"\xfd\t\n\x04Mesh\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x33\n\x08vertices\x18\x03 \x03(\x0b\x32!.session_proto.Mesh.VerticesEntry\x12-\n\x05\x66\x61\x63\x65s\x18\x04 \x03(\x0b\x32\x1e.session_proto.Mesh.FacesEntry\x12\x35\n\thalfedges\x18\x05 \x03(\x0b\x32\".session_proto.Mesh.HalfedgesEntry\x12*\n\tedge_data\x18\x06 \x03(\x0b\x32\x17.session_proto.EdgeData\x12S\n\x19\x64\x65\x66\x61ult_vertex_attributes\x18\x07 \x03(\x0b\x32\x30.session_proto.Mesh.DefaultVertexAttributesEntry\x12O\n\x17\x64\x65\x66\x61ult_face_attributes\x18\x08 \x03(\x0b\x32..session_proto.Mesh.DefaultFaceAttributesEntry\x12O\n\x17\x64\x65\x66\x61ult_edge_attributes\x18\t \x03(\x0b\x32..session_proto.Mesh.DefaultEdgeAttributesEntry\x12)\n\x0bpointcolors\x18\n \x03(\x0b\x32\x14.session_proto.Color\x12(\n\nfacecolors\x18\x0b \x03(\x0b\x32\x14.session_proto.Color\x12(\n\nlinecolors\x18\x0c \x03(\x0b\x32\x14.session_proto.Color\x12\x0e\n\x06widths\x18\r \x03(\x01\x12#\n\x05xform\x18\x0e \x01(\x0b\x32\x14.session_proto.Xform\x12)\n\x0bobjectcolor\x18\x0f \x01(\x0b\x32\x14.session_proto.Color\x12\x12\n\ncolor_mode\x18\x10 \x01(\x05\x12=\n\rtriangulation\x18\x11 \x03(\x0b\x32&.session_proto.Mesh.TriangulationEntry\x1aJ\n\rVerticesEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12(\n\x05value\x18\x02 \x01(\x0b\x32\x19.session_proto.VertexData:\x02\x38\x01\x1a\x45\n\nFacesEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12&\n\x05value\x18\x02 \x01(\x0b\x32\x17.session_proto.FaceData:\x02\x38\x01\x1aL\n\x0eHalfedgesEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x1a.session_proto.HalfedgeMap:\x02\x38\x01\x1a>\n\x1c\x44\x65\x66\x61ultVertexAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x1a<\n\x1a\x44\x65\x66\x61ultFaceAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x1a<\n\x1a\x44\x65\x66\x61ultEdgeAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x1aL\n\x12TriangulationEntry\x12\x0b\n\x03key\x18\x01 \x01(\x04\x12%\n\x05value\x18\x02 \x01(\x0b\x32\x16.session_proto.TriList:\x02\x38\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -53,6 +53,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_MESH_DEFAULTFACEATTRIBUTESENTRY']._serialized_options = b'8\001'
   _globals['_MESH_DEFAULTEDGEATTRIBUTESENTRY']._loaded_options = None
   _globals['_MESH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_options = b'8\001'
+  _globals['_MESH_TRIANGULATIONENTRY']._loaded_options = None
+  _globals['_MESH_TRIANGULATIONENTRY']._serialized_options = b'8\001'
   _globals['_VERTEXDATA']._serialized_start=56
   _globals['_VERTEXDATA']._serialized_end=215
   _globals['_VERTEXDATA_ATTRIBUTESENTRY']._serialized_start=166
@@ -69,18 +71,22 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_EDGEDATA']._serialized_end=644
   _globals['_EDGEDATA_ATTRIBUTESENTRY']._serialized_start=166
   _globals['_EDGEDATA_ATTRIBUTESENTRY']._serialized_end=215
-  _globals['_MESH']._serialized_start=647
-  _globals['_MESH']._serialized_end=1783
-  _globals['_MESH_VERTICESENTRY']._serialized_start=1372
-  _globals['_MESH_VERTICESENTRY']._serialized_end=1446
-  _globals['_MESH_FACESENTRY']._serialized_start=1448
-  _globals['_MESH_FACESENTRY']._serialized_end=1517
-  _globals['_MESH_HALFEDGESENTRY']._serialized_start=1519
-  _globals['_MESH_HALFEDGESENTRY']._serialized_end=1595
-  _globals['_MESH_DEFAULTVERTEXATTRIBUTESENTRY']._serialized_start=1597
-  _globals['_MESH_DEFAULTVERTEXATTRIBUTESENTRY']._serialized_end=1659
-  _globals['_MESH_DEFAULTFACEATTRIBUTESENTRY']._serialized_start=1661
-  _globals['_MESH_DEFAULTFACEATTRIBUTESENTRY']._serialized_end=1721
-  _globals['_MESH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_start=1723
-  _globals['_MESH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_end=1783
+  _globals['_TRILIST']._serialized_start=646
+  _globals['_TRILIST']._serialized_end=673
+  _globals['_MESH']._serialized_start=676
+  _globals['_MESH']._serialized_end=1953
+  _globals['_MESH_VERTICESENTRY']._serialized_start=1464
+  _globals['_MESH_VERTICESENTRY']._serialized_end=1538
+  _globals['_MESH_FACESENTRY']._serialized_start=1540
+  _globals['_MESH_FACESENTRY']._serialized_end=1609
+  _globals['_MESH_HALFEDGESENTRY']._serialized_start=1611
+  _globals['_MESH_HALFEDGESENTRY']._serialized_end=1687
+  _globals['_MESH_DEFAULTVERTEXATTRIBUTESENTRY']._serialized_start=1689
+  _globals['_MESH_DEFAULTVERTEXATTRIBUTESENTRY']._serialized_end=1751
+  _globals['_MESH_DEFAULTFACEATTRIBUTESENTRY']._serialized_start=1753
+  _globals['_MESH_DEFAULTFACEATTRIBUTESENTRY']._serialized_end=1813
+  _globals['_MESH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_start=1815
+  _globals['_MESH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_end=1875
+  _globals['_MESH_TRIANGULATIONENTRY']._serialized_start=1877
+  _globals['_MESH_TRIANGULATIONENTRY']._serialized_end=1953
 # @@protoc_insertion_point(module_scope)

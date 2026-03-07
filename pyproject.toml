@@ -22,13 +22,15 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.20.0",
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
     "protobuf>=5.0.0",
     "grpcio-tools>=1.60.0",
 ]
 
 [project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
 performance = ["numba>=0.56.0"]
 
 [dependency-groups]
@@ -46,8 +48,8 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/petrasvestartas/session"
-Repository = "https://github.com/petrasvestartas/session"
+Homepage = "https://github.com/petrasvestartas/session_py"
+Repository = "https://github.com/petrasvestartas/session_py"
 
 [tool.hatch.build.targets.wheel]
 

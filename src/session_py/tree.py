@@ -91,6 +91,11 @@ class Tree:
             proto_node.guid = node.guid
             proto_node.name = node.name
             proto_node.parent_guid = ""
+            if node.color is not None:
+                proto_node.color.r = node.color[0]
+                proto_node.color.g = node.color[1]
+                proto_node.color.b = node.color[2]
+                proto_node.color.a = node.color[3]
             for child in node.children:
                 child_proto = node_to_proto(child)
                 proto_node.children.append(child_proto)
@@ -112,8 +117,12 @@ class Tree:
         proto.ParseFromString(data)
 
         def proto_to_node(proto_node):
+            from .color import Color
             node = TreeNode(name=proto_node.name)
             node.guid = proto_node.guid
+            if proto_node.HasField("color") and proto_node.color.a > 0:
+                node.color = Color(proto_node.color.r, proto_node.color.g,
+                                   proto_node.color.b, proto_node.color.a)
             for child_proto in proto_node.children:
                 child = proto_to_node(child_proto)
                 node.add(child)

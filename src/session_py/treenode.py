@@ -34,6 +34,7 @@ class TreeNode:
     def __init__(self, name="my_node"):
         self.name = name
         self.guid = str(uuid.uuid4())
+        self.color = None
         self._parent = None
         self._children = []
         self._tree = None
@@ -51,20 +52,26 @@ class TreeNode:
 
     def __jsondump__(self) -> dict:
         """Serialize to polymorphic JSON format with type field."""
-        return {
+        d = {
             "type": f"{self.__class__.__name__}",
             "guid": self.guid,
             "name": self.name,
             "children": [child.__jsondump__() for child in self.children],
         }
+        if self.color is not None:
+            d["color"] = self.color.__jsondump__()
+        return d
 
     @classmethod
     def __jsonload__(
         cls, data: dict, guid: Optional[str] = None, name: Optional[str] = None
     ) -> "TreeNode":
         """Deserialize from polymorphic JSON format."""
+        from .color import Color
         node = cls(name=data["name"])
         node.guid = guid if guid is not None else data.get("guid", node.guid)
+        if "color" in data and data["color"] is not None:
+            node.color = Color.__jsonload__(data["color"])
         for child_data in data.get("children", []):
             # Children are polymorphic nodes themselves
             from .encoders import decode_node

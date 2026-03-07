@@ -407,20 +407,30 @@ class Mesh:
                     face_cycles.append(cycle)
 
         if delete_boundary_face and face_cycles:
-            max_idx = max(range(len(face_cycles)), key=lambda i: len(face_cycles[i]))
-            face_cycles.pop(max_idx)
+            min_idx = 0
+            min_area = float('inf')
+            for i, cyc in enumerate(face_cycles):
+                cn = len(cyc)
+                area = 0.0
+                for j in range(cn):
+                    a, b = cyc[j], cyc[(j+1)%cn]
+                    area += verts[a][0]*verts[b][1] - verts[b][0]*verts[a][1]
+                area *= 0.5
+                if area < min_area:
+                    min_area = area
+                    min_idx = i
+            face_cycles.pop(min_idx)
 
         mesh = Mesh()
         vkeys = []
         for pt in verts:
             vkeys.append(mesh.add_vertex(pt))
         for cycle in face_cycles:
-            mapped = [vkeys[i] for i in cycle]
-            fk = mesh.add_face(mapped)
-            if len(cycle) > 3:
-                pts = [verts[i] for i in cycle]
-                tris = _tri2d_triangulate(pts)
-                mesh.triangulation[fk] = [[mapped[t[0]], mapped[t[1]], mapped[t[2]]] for t in tris]
+            fvkeys = [vkeys[i] for i in cycle]
+            fkey = mesh.add_face(fvkeys)
+            pts = [verts[i] for i in cycle]
+            tris = _tri2d_triangulate(pts)
+            mesh.triangulation[fkey] = [[vkeys[cycle[t[0]]], vkeys[cycle[t[1]]], vkeys[cycle[t[2]]]] for t in tris]
         return mesh
 
     @staticmethod
@@ -1454,6 +1464,14 @@ class Mesh:
                 for k, v in self.facedata[fkey].items():
                     face_proto.attributes[k] = v
 
+        # Triangulation
+        for fkey, tris in self.triangulation.items():
+            tri_list = proto.triangulation[fkey]
+            for t in tris:
+                tri_list.vertices.append(t[0])
+                tri_list.vertices.append(t[1])
+                tri_list.vertices.append(t[2])
+
         # Halfedges
         for u, neighbors in self.halfedge.items():
             hmap = proto.halfedges[u]
@@ -1557,6 +1575,13 @@ class Mesh:
             mesh.face[fkey] = list(fdata.vertices)
             if fdata.attributes:
                 mesh.facedata[fkey] = dict(fdata.attributes)
+
+        # Triangulation
+        if hasattr(proto, 'triangulation'):
+            for fkey, tri_list in proto.triangulation.items():
+                vlist = list(tri_list.vertices)
+                tris = [[vlist[i], vlist[i+1], vlist[i+2]] for i in range(0, len(vlist) - 2, 3)]
+                mesh.triangulation[fkey] = tris
 
         # Halfedges
         for u, hmap in proto.halfedges.items():

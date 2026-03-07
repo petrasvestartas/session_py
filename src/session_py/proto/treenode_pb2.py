@@ -22,15 +22,16 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from . import color_pb2 as color__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0etreenode.proto\x12\rsession_proto\"f\n\x08TreeNode\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x0bparent_guid\x18\x03 \x01(\t\x12)\n\x08\x63hildren\x18\x04 \x03(\x0b\x32\x17.session_proto.TreeNodeb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0etreenode.proto\x12\rsession_proto\x1a\x0b\x63olor.proto\"\x8b\x01\n\x08TreeNode\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x0bparent_guid\x18\x03 \x01(\t\x12)\n\x08\x63hildren\x18\x04 \x03(\x0b\x32\x17.session_proto.TreeNode\x12#\n\x05\x63olor\x18\x05 \x01(\x0b\x32\x14.session_proto.Colorb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'treenode_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_TREENODE']._serialized_start=33
-  _globals['_TREENODE']._serialized_end=135
+  _globals['_TREENODE']._serialized_start=47
+  _globals['_TREENODE']._serialized_end=186
 # @@protoc_insertion_point(module_scope)

@@ -248,12 +248,26 @@ def triangulate(outer_pts, hole_pts_list=None):
         if bn == 3:
             return [(0, 1, 2)]
         if bn == 4:
-            d02 = (outer_pts[0][0]-outer_pts[2][0])**2 + (outer_pts[0][1]-outer_pts[2][1])**2
-            d13 = (outer_pts[1][0]-outer_pts[3][0])**2 + (outer_pts[1][1]-outer_pts[3][1])**2
-            if d02 <= d13:
-                return [(0, 1, 2), (0, 2, 3)]
-            else:
-                return [(0, 1, 3), (1, 2, 3)]
+            quad_convex = True
+            qfirst = 0.0
+            for qi in range(4):
+                c = _cross_2d(outer_pts[qi%4][0], outer_pts[qi%4][1],
+                              outer_pts[(qi+1)%4][0], outer_pts[(qi+1)%4][1],
+                              outer_pts[(qi+2)%4][0], outer_pts[(qi+2)%4][1])
+                if abs(c) < 1e-12:
+                    continue
+                if qfirst == 0.0:
+                    qfirst = c
+                elif (c > 0) != (qfirst > 0):
+                    quad_convex = False
+                    break
+            if quad_convex:
+                d02 = (outer_pts[0][0]-outer_pts[2][0])**2 + (outer_pts[0][1]-outer_pts[2][1])**2
+                d13 = (outer_pts[1][0]-outer_pts[3][0])**2 + (outer_pts[1][1]-outer_pts[3][1])**2
+                if d02 <= d13:
+                    return [(0, 1, 2), (0, 2, 3)]
+                else:
+                    return [(0, 1, 3), (1, 2, 3)]
         convex = True
         first_cross = 0.0
         for i in range(bn):
