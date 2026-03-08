@@ -282,7 +282,33 @@ class Mesh:
             if len(poly) < 3:
                 continue
             vkeys = [get_vkey(p) for p in poly]
-            mesh.add_face(vkeys)
+            if len(vkeys) > 1 and vkeys[-1] == vkeys[0]:
+                vkeys = vkeys[:-1]
+            if len(vkeys) < 3:
+                continue
+            fkey = mesh.add_face(vkeys)
+            if len(vkeys) >= 4:
+                np_ = len(vkeys)
+                nx, ny, nz = 0.0, 0.0, 0.0
+                for i in range(np_):
+                    a, b = poly[i], poly[(i + 1) % np_]
+                    nx += (a[1] - b[1]) * (a[2] + b[2])
+                    ny += (a[2] - b[2]) * (a[0] + b[0])
+                    nz += (a[0] - b[0]) * (a[1] + b[1])
+                nlen = (nx*nx + ny*ny + nz*nz) ** 0.5
+                if nlen > 1e-12:
+                    nx /= nlen; ny /= nlen; nz /= nlen
+                    ux, uy, uz = 1.0, 0.0, 0.0
+                    if abs(nx) > 0.9:
+                        ux, uy = 0.0, 1.0
+                    vx = ny*uz - nz*uy; vy = nz*ux - nx*uz; vz = nx*uy - ny*ux
+                    vlen = (vx*vx + vy*vy + vz*vz) ** 0.5
+                    vx /= vlen; vy /= vlen; vz /= vlen
+                    wx = ny*vz - nz*vy; wy = nz*vx - nx*vz; wz = nx*vy - ny*vx
+                    pts2d = [Point(poly[i][0]*wx + poly[i][1]*wy + poly[i][2]*wz,
+                                   poly[i][0]*vx + poly[i][1]*vy + poly[i][2]*vz, 0.0) for i in range(np_)]
+                    tris = _cdt_triangulate(pts2d, None)
+                    mesh.triangulation[fkey] = [[vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]] for t in tris]
 
         return mesh
 
@@ -506,8 +532,22 @@ class Mesh:
         vkeys = []
         for p in all_pts:
             vkeys.append(mesh.add_vertex(p))
-        for t in tris:
-            mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+        if not holes_2d:
+            fkey = mesh.add_face(list(vkeys))
+            tri_list = []
+            for t in tris:
+                if vkeys[t[0]] == vkeys[t[1]] or vkeys[t[1]] == vkeys[t[2]] or vkeys[t[2]] == vkeys[t[0]]:
+                    continue
+                tri_list.append([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+            n_vk = len(vkeys)
+            covered = set(k for t in tri_list for k in t)
+            for m in range(n_vk):
+                if vkeys[m] not in covered:
+                    tri_list.append([vkeys[(m - 1) % n_vk], vkeys[m], vkeys[(m + 1) % n_vk]])
+            mesh.triangulation[fkey] = tri_list
+        else:
+            for t in tris:
+                mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
         return mesh
 
     @staticmethod
@@ -532,7 +572,11 @@ class Mesh:
                 if abs(f.x-b.x) < 1e-12 and abs(f.y-b.y) < 1e-12 and abs(f.z-b.z) < 1e-12:
                     return pts[:-1]
             return pts
-        origin, xaxis, yaxis, _ = polylines0[border_idx].get_average_plane()
+        origin, xaxis, yaxis, zaxis = polylines0[border_idx].get_average_plane()
+        c0 = polylines0[border_idx].center(); c1 = polylines1[border_idx].center()
+        btt = Vector(c1.x - c0.x, c1.y - c0.y, c1.z - c0.z)
+        if zaxis.dot(btt) < 0:
+            yaxis = Vector(-yaxis.x, -yaxis.y, -yaxis.z)
         def proj(p):
             dx = p.x - origin.x; dy = p.y - origin.y; dz = p.z - origin.z
             return (dx*xaxis.x + dy*xaxis.y + dz*xaxis.z, dx*yaxis.x + dy*yaxis.y + dz*yaxis.z)
@@ -1299,6 +1343,10 @@ class Mesh:
             "objectcolor": self._objectcolor.__jsondump__(),
             "color_mode": self.color_mode.value,
             "pointcolors": pointcolors_flat,
+            "triangulation": {
+                str(fk): [[t[0], t[1], t[2]] for t in tris]
+                for fk, tris in self.triangulation.items()
+            },
             "type": f"{self.__class__.__name__}",
             "vertex": vertex_data,
             "widths": self._widths,
@@ -1371,6 +1419,10 @@ class Mesh:
             for edge_str, attrs in data["edgedata"].items():
                 u, v = map(int, edge_str.split(","))
                 mesh.edgedata[(u, v)] = attrs
+
+        if data.get("triangulation"):
+            for fk_str, tris_json in data["triangulation"].items():
+                mesh.triangulation[int(fk_str)] = [[t[0], t[1], t[2]] for t in tris_json]
 
         if "default_vertex_attributes" in data:
             mesh.default_vertex_attributes = data["default_vertex_attributes"]

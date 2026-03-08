@@ -676,6 +676,14 @@ def test_mesh_json_roundtrip():
     MINI_CHECK(loaded_file.number_of_vertices() == mesh.number_of_vertices())
     MINI_CHECK(loaded_file.number_of_faces() == mesh.number_of_faces())
 
+    # Triangulation roundtrip
+    pmesh = Mesh.from_polylines([[Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)]])
+    MINI_CHECK(len(pmesh.triangulation) > 0)
+    loaded_tri = Mesh.__jsonload__(pmesh.__jsondump__())
+    fk = sorted(pmesh.triangulation.keys())[0]
+    MINI_CHECK(len(loaded_tri.triangulation) > 0)
+    MINI_CHECK(fk in loaded_tri.triangulation)
+
 
 @MINI_TEST("Mesh", "Protobuf Roundtrip")
 def test_mesh_protobuf_roundtrip():
@@ -704,6 +712,14 @@ def test_mesh_protobuf_roundtrip():
     MINI_CHECK(loaded_file.number_of_vertices() == mesh.number_of_vertices())
     MINI_CHECK(loaded_file.number_of_faces() == mesh.number_of_faces())
     MINI_CHECK(loaded_file.guid == mesh.guid)
+
+    # Triangulation roundtrip
+    pmesh = Mesh.from_polylines([[Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)]])
+    MINI_CHECK(len(pmesh.triangulation) > 0)
+    loaded_tri = Mesh.pb_loads(pmesh.pb_dumps())
+    fk = sorted(pmesh.triangulation.keys())[0]
+    MINI_CHECK(len(loaded_tri.triangulation) > 0)
+    MINI_CHECK(fk in loaded_tri.triangulation)
 
 
 if __name__ == "__main__":
