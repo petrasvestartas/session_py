@@ -684,6 +684,16 @@ def test_mesh_json_roundtrip():
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
     MINI_CHECK(fk in loaded_tri.triangulation)
 
+    # Face holes roundtrip
+    hmesh = Mesh.from_polygon_with_holes([
+        [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
+        [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)]], True)
+    MINI_CHECK(len(hmesh.face_holes) > 0)
+    loaded_holes = Mesh.__jsonload__(hmesh.__jsondump__())
+    hfk = sorted(hmesh.face_holes.keys())[0]
+    MINI_CHECK(len(loaded_holes.face_holes) > 0)
+    MINI_CHECK(loaded_holes.face_holes[hfk] == hmesh.face_holes[hfk])
+
 
 @MINI_TEST("Mesh", "Protobuf Roundtrip")
 def test_mesh_protobuf_roundtrip():
@@ -720,6 +730,16 @@ def test_mesh_protobuf_roundtrip():
     fk = sorted(pmesh.triangulation.keys())[0]
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
     MINI_CHECK(fk in loaded_tri.triangulation)
+
+    # Face holes roundtrip
+    hmesh = Mesh.from_polygon_with_holes([
+        [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
+        [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)]], True)
+    MINI_CHECK(len(hmesh.face_holes) > 0)
+    loaded_holes = Mesh.pb_loads(hmesh.pb_dumps())
+    hfk = sorted(hmesh.face_holes.keys())[0]
+    MINI_CHECK(len(loaded_holes.face_holes) > 0)
+    MINI_CHECK(loaded_holes.face_holes[hfk] == hmesh.face_holes[hfk])
 
 
 if __name__ == "__main__":

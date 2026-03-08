@@ -168,6 +168,7 @@ class Mesh:
         self.default_face_attributes = {}
         self.default_edge_attributes = {}
         self.triangulation = {}
+        self.face_holes = {}
         self._max_vertex = 0
         self._max_face = 0
         self.guid = str(uuid.uuid4())
@@ -200,6 +201,7 @@ class Mesh:
         m.default_face_attributes = dict(self.default_face_attributes)
         m.default_edge_attributes = dict(self.default_edge_attributes)
         m.triangulation = {k: list(v) for k, v in self.triangulation.items()}
+        m.face_holes = {k: [list(r) for r in v] for k, v in self.face_holes.items()}
         m._max_vertex = self._max_vertex
         m._max_face = self._max_face
         m._pointcolors = list(self._pointcolors)
@@ -300,12 +302,13 @@ class Mesh:
                     nx /= nlen; ny /= nlen; nz /= nlen
                     ux, uy, uz = 1.0, 0.0, 0.0
                     if abs(nx) > 0.9:
-                        ux, uy = 0.0, 1.0
+                        ux, uy, uz = 0.0, 1.0, 0.0
+                    dot = ux*nx + uy*ny + uz*nz
+                    ux -= dot*nx; uy -= dot*ny; uz -= dot*nz
+                    um = (ux*ux + uy*uy + uz*uz) ** 0.5
+                    ux /= um; uy /= um; uz /= um
                     vx = ny*uz - nz*uy; vy = nz*ux - nx*uz; vz = nx*uy - ny*ux
-                    vlen = (vx*vx + vy*vy + vz*vz) ** 0.5
-                    vx /= vlen; vy /= vlen; vz /= vlen
-                    wx = ny*vz - nz*vy; wy = nz*vx - nx*vz; wz = nx*vy - ny*vx
-                    pts2d = [Point(poly[i][0]*wx + poly[i][1]*wy + poly[i][2]*wz,
+                    pts2d = [Point(poly[i][0]*ux + poly[i][1]*uy + poly[i][2]*uz,
                                    poly[i][0]*vx + poly[i][1]*vy + poly[i][2]*vz, 0.0) for i in range(np_)]
                     tris = _cdt_triangulate(pts2d, None)
                     mesh.triangulation[fkey] = [[vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]] for t in tris]
@@ -546,8 +549,20 @@ class Mesh:
                     tri_list.append([vkeys[(m - 1) % n_vk], vkeys[m], vkeys[(m + 1) % n_vk]])
             mesh.triangulation[fkey] = tri_list
         else:
-            for t in tris:
-                mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+            fkey = mesh.add_face(list(vkeys[:len(border)]))
+            if fkey is not None:
+                hole_rings = []
+                off = len(border)
+                for h in hole_pts_3d:
+                    hole_rings.append(list(vkeys[off:off+len(h)]))
+                    off += len(h)
+                mesh.face_holes[fkey] = hole_rings
+                tri_list = []
+                for t in tris:
+                    if vkeys[t[0]] == vkeys[t[1]] or vkeys[t[1]] == vkeys[t[2]] or vkeys[t[2]] == vkeys[t[0]]:
+                        continue
+                    tri_list.append([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+                mesh.triangulation[fkey] = tri_list
         return mesh
 
     @staticmethod
@@ -603,12 +618,20 @@ class Mesh:
             _, bot_n0, _, top_n0 = poly_infos[0]
             bpts = [Point(*proj(all_bot[i]), 0.0) for i in range(bot_n0)]
             b_hpts = [[Point(*proj(all_bot[i]), 0.0) for i in range(off, off+cnt)] for off, cnt, _, _ in poly_infos[1:]]
-            for t in _cdt_triangulate(bpts, b_hpts if b_hpts else None):
-                mesh.add_face([bvk[t[0]], bvk[t[2]], bvk[t[1]]])
+            bot_tris = _cdt_triangulate(bpts, b_hpts if b_hpts else None)
+            fk_bot = mesh.add_face([bvk[i] for i in range(bot_n0)])
+            if fk_bot is not None:
+                if b_hpts:
+                    mesh.face_holes[fk_bot] = [[bvk[off + j] for j in range(cnt)] for off, cnt, _, _ in poly_infos[1:]]
+                mesh.triangulation[fk_bot] = [[bvk[t[0]], bvk[t[2]], bvk[t[1]]] for t in bot_tris]
             tpts = [Point(*proj(all_top[i]), 0.0) for i in range(top_n0)]
             t_hpts = [[Point(*proj(all_top[i]), 0.0) for i in range(off, off+cnt)] for _, _, off, cnt in poly_infos[1:]]
-            for t in _cdt_triangulate(tpts, t_hpts if t_hpts else None):
-                mesh.add_face([tvk[t[0]], tvk[t[1]], tvk[t[2]]])
+            top_tris = _cdt_triangulate(tpts, t_hpts if t_hpts else None)
+            fk_top = mesh.add_face([tvk[i] for i in range(top_n0)])
+            if fk_top is not None:
+                if t_hpts:
+                    mesh.face_holes[fk_top] = [[tvk[off + j] for j in range(cnt)] for _, _, off, cnt in poly_infos[1:]]
+                mesh.triangulation[fk_top] = [[tvk[t[0]], tvk[t[1]], tvk[t[2]]] for t in top_tris]
         def side_faces(bot_off, bot_n, top_off, top_n, bpts, tpts):
             def edsq(pts, i):
                 j = (i + 1) % len(pts)
@@ -765,6 +788,7 @@ class Mesh:
         self.facedata.clear()
         self.edgedata.clear()
         self.triangulation.clear()
+        self.face_holes.clear()
         self._max_vertex = 0
         self._max_face = 0
         self._pointcolors.clear()
@@ -1332,6 +1356,7 @@ class Mesh:
             "default_vertex_attributes": self.default_vertex_attributes,
             "edgedata": edgedata_json,
             "face": face_data,
+            "face_holes": {str(fk): [list(r) for r in rings] for fk, rings in self.face_holes.items()},
             "facecolors": facecolors_flat,
             "facedata": facedata_json,
             "guid": self.guid,
@@ -1419,6 +1444,10 @@ class Mesh:
             for edge_str, attrs in data["edgedata"].items():
                 u, v = map(int, edge_str.split(","))
                 mesh.edgedata[(u, v)] = attrs
+
+        if data.get("face_holes"):
+            for fk_str, rings in data["face_holes"].items():
+                mesh.face_holes[int(fk_str)] = [list(r) for r in rings]
 
         if data.get("triangulation"):
             for fk_str, tris_json in data["triangulation"].items():
@@ -1515,6 +1544,11 @@ class Mesh:
             if fkey in self.facedata:
                 for k, v in self.facedata[fkey].items():
                     face_proto.attributes[k] = v
+            if fkey in self.face_holes:
+                for ring in self.face_holes[fkey]:
+                    hole_proto = mesh_pb2.HoleRing()
+                    hole_proto.vertices.extend(ring)
+                    face_proto.holes.append(hole_proto)
 
         # Triangulation
         for fkey, tris in self.triangulation.items():
@@ -1627,6 +1661,8 @@ class Mesh:
             mesh.face[fkey] = list(fdata.vertices)
             if fdata.attributes:
                 mesh.facedata[fkey] = dict(fdata.attributes)
+            if fdata.holes:
+                mesh.face_holes[fkey] = [list(h.vertices) for h in fdata.holes]
 
         # Triangulation
         if hasattr(proto, 'triangulation'):

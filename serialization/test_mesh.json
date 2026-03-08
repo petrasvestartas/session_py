@@ -14,6 +14,7 @@
       2
     ]
   },
+  "face_holes": {},
   "facecolors": [
     255,
     255,
@@ -21,7 +22,7 @@
     255
   ],
   "facedata": {},
-  "guid": "8458a310-4929-465b-a562-021f64348585",
+  "guid": "ff4275b0-969e-46cb-beb1-bdf8cebeba3b",
   "halfedge": {
     "0": {
       "1": 1,
@@ -57,7 +58,7 @@
     "a": 255,
     "b": 255,
     "g": 255,
-    "guid": "89274f29-3c22-45c2-b42b-0786776dd9bd",
+    "guid": "61f22d97-1310-49ef-8eb9-3a36a81cee1f",
     "name": "white",
     "r": 255,
     "type": "Color"
