@@ -84,10 +84,8 @@ class Tree:
 
     def pb_dumps(self):
         from .proto import tree_pb2
-        from .proto import treenode_pb2
 
-        def node_to_proto(node):
-            proto_node = treenode_pb2.TreeNode()
+        def fill_node(proto_node, node):
             proto_node.guid = node.guid
             proto_node.name = node.name
             proto_node.parent_guid = ""
@@ -97,15 +95,13 @@ class Tree:
                 proto_node.color.b = node.color[2]
                 proto_node.color.a = node.color[3]
             for child in node.children:
-                child_proto = node_to_proto(child)
-                proto_node.children.append(child_proto)
-            return proto_node
+                fill_node(proto_node.children.add(), child)
 
         proto = tree_pb2.Tree()
         proto.guid = self.guid
         proto.name = self.name
         if self.root:
-            proto.root.CopyFrom(node_to_proto(self.root))
+            fill_node(proto.root, self.root)
         return proto.SerializeToString()
 
     @classmethod

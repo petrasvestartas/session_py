@@ -877,6 +877,20 @@ class Polyline:
 
         return proto.SerializeToString()
 
+    def pb_fill(self, proto):
+        """Fill an existing Polyline proto message directly (avoids serialize/deserialize cycle)."""
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.coords.extend(self._coords)
+        proto.width = self.width
+        proto.linecolor.name = self.linecolor.name
+        proto.linecolor.r = self.linecolor[0]
+        proto.linecolor.g = self.linecolor[1]
+        proto.linecolor.b = self.linecolor[2]
+        proto.linecolor.a = self.linecolor[3]
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
     @classmethod
     def pb_loads(cls, data):
         """Create Polyline from protobuf binary data.

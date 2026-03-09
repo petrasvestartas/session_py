@@ -3419,6 +3419,28 @@ class NurbsCurve:
         proto.xform.matrix.extend(self.xform.m.flatten().tolist() if hasattr(self.xform.m, 'flatten') else list(self.xform.m))
         return proto.SerializeToString()
 
+    def pb_fill(self, proto):
+        """Fill an existing NurbsCurve proto message directly (avoids serialize/deserialize cycle)."""
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.dimension = int(self.m_dim)
+        proto.is_rational = bool(self.m_is_rat)
+        proto.order = int(self.m_order)
+        proto.cv_count = int(self.m_cv_count)
+        proto.cv_stride = int(self.m_cv_stride)
+        proto.knots.extend(self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot))
+        proto.cvs.extend(self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv))
+        proto.width = float(self.width)
+        for c in self.pointcolors:
+            cp = proto.pointcolors.add()
+            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
+        for c in self.linecolors:
+            cp = proto.linecolors.add()
+            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
+        proto.xform.guid = self.xform.guid
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m if isinstance(self.xform.m, list) else self.xform.m.flatten().tolist())
+
     @classmethod
     def pb_loads(cls, data):
         """Load from protobuf binary bytes."""

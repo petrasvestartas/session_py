@@ -157,15 +157,15 @@ class Objects:
         for b in self.bboxes:
             proto.bboxes.add().ParseFromString(b.pb_dumps())
         for pl in self.polylines:
-            proto.polylines.add().ParseFromString(pl.pb_dumps())
+            pl.pb_fill(proto.polylines.add())
         for pc in self.pointclouds:
             proto.pointclouds.add().ParseFromString(pc.pb_dumps())
         for m in self.meshes:
-            proto.meshes.add().ParseFromString(m.pb_dumps())
+            m.pb_fill(proto.meshes.add())
         for nc in self.nurbscurves:
-            proto.nurbscurves.add().ParseFromString(nc.pb_dumps())
+            nc.pb_fill(proto.nurbscurves.add())
         for ns in self.nurbssurfaces:
-            proto.nurbssurfaces.add().ParseFromString(ns.pb_dumps())
+            ns.pb_fill(proto.nurbssurfaces.add())
         for b in self.breps:
             proto.breps.add().ParseFromString(b.pb_dumps())
         return proto.SerializeToString()

@@ -1881,6 +1881,75 @@ class Mesh:
 
         return proto.SerializeToString()
 
+    def pb_fill(self, proto):
+        """Fill an existing Mesh proto message directly (avoids serialize/deserialize cycle)."""
+        from .proto import mesh_pb2, color_pb2
+        proto.guid = self.guid
+        proto.name = self.name
+        for vkey, vdata in self.vertex.items():
+            vp = proto.vertices[vkey]
+            vp.x = vdata.x; vp.y = vdata.y; vp.z = vdata.z
+            for k, v in vdata.attributes.items():
+                vp.attributes[k] = v
+        for fkey, fverts in self.face.items():
+            fp = proto.faces[fkey]
+            fp.vertices.extend(fverts)
+            if fkey in self.facedata:
+                for k, v in self.facedata[fkey].items():
+                    fp.attributes[k] = v
+            if fkey in self.face_holes:
+                for ring in self.face_holes[fkey]:
+                    hp = mesh_pb2.HoleRing()
+                    hp.vertices.extend(ring)
+                    fp.holes.append(hp)
+        for fkey, tris in self.triangulation.items():
+            tl = proto.triangulation[fkey]
+            for t in tris:
+                tl.vertices.append(t[0]); tl.vertices.append(t[1]); tl.vertices.append(t[2])
+        for u, neighbors in self.halfedge.items():
+            hmap = proto.halfedges[u]
+            for v, fkey_opt in neighbors.items():
+                hmap.neighbors[v] = fkey_opt if fkey_opt is not None else 0xFFFFFFFFFFFFFFFF
+        for (v1, v2), attrs in self.edgedata.items():
+            ep = mesh_pb2.EdgeData()
+            ep.vertex1 = v1; ep.vertex2 = v2
+            for k, v in attrs.items():
+                ep.attributes[k] = v
+            proto.edge_data.append(ep)
+        for k, v in self.default_vertex_attributes.items():
+            proto.default_vertex_attributes[k] = v
+        for k, v in self.default_face_attributes.items():
+            proto.default_face_attributes[k] = v
+        for k, v in self.default_edge_attributes.items():
+            proto.default_edge_attributes[k] = v
+        for c in self._pointcolors:
+            cp = color_pb2.Color()
+            cp.guid = c.guid; cp.name = c.name
+            cp.r = c[0]; cp.g = c[1]; cp.b = c[2]; cp.a = c[3]
+            proto.pointcolors.append(cp)
+        for c in self._facecolors:
+            cp = color_pb2.Color()
+            cp.guid = c.guid; cp.name = c.name
+            cp.r = c[0]; cp.g = c[1]; cp.b = c[2]; cp.a = c[3]
+            proto.facecolors.append(cp)
+        for c in self._linecolors:
+            cp = color_pb2.Color()
+            cp.guid = c.guid; cp.name = c.name
+            cp.r = c[0]; cp.g = c[1]; cp.b = c[2]; cp.a = c[3]
+            proto.linecolors.append(cp)
+        proto.widths.extend(self._widths)
+        proto.objectcolor.guid = self._objectcolor.guid
+        proto.objectcolor.name = self._objectcolor.name
+        proto.objectcolor.r = self._objectcolor[0]
+        proto.objectcolor.g = self._objectcolor[1]
+        proto.objectcolor.b = self._objectcolor[2]
+        proto.objectcolor.a = self._objectcolor[3]
+        _cm_map = {"objectcolor": 0, "pointcolors": 1, "facecolors": 2, "none": 3}
+        proto.color_mode = _cm_map.get(self.color_mode.value, 0)
+        proto.xform.guid = self.xform.guid
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
     @classmethod
     def pb_loads(cls, data):
         """Create Mesh from protobuf binary data."""

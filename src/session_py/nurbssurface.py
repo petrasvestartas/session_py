@@ -2793,6 +2793,36 @@ class NurbsSurface:
 
         return proto.SerializeToString()
 
+    def pb_fill(self, proto):
+        """Fill an existing NurbsSurface proto message directly (avoids serialize/deserialize cycle)."""
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.dimension = self.m_dim
+        proto.is_rational = bool(self.m_is_rat)
+        proto.order_u = self.m_order[0]
+        proto.order_v = self.m_order[1]
+        proto.cv_count_u = self.m_cv_count[0]
+        proto.cv_count_v = self.m_cv_count[1]
+        proto.cv_stride_u = self.m_cv_stride[0]
+        proto.cv_stride_v = self.m_cv_stride[1]
+        proto.knots_u.extend(self.m_knot[0].tolist())
+        proto.knots_v.extend(self.m_knot[1].tolist())
+        proto.cvs.extend(self.m_cv.tolist())
+        proto.width = self.width
+        for c in self.pointcolors:
+            cp = proto.pointcolors.add()
+            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
+        for c in self.facecolors:
+            cp = proto.facecolors.add()
+            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
+        for c in self.linecolors:
+            cp = proto.linecolors.add()
+            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+        if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
+            proto.cached_mesh.ParseFromString(self.m_mesh.pb_dumps())
+
     @classmethod
     def pb_loads(cls, data):
         """Create NurbsSurface from protobuf binary data.

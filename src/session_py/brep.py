@@ -634,8 +634,12 @@ class BRep:
 
     @staticmethod
     def from_nurbscurves(curves, holes=None):
-        brep = BRep()
-        brep.name = "polysurface"
+        brep = BRep.__new__(BRep)
+        brep.guid = _ZERO_GUID; brep.name = "polysurface"; brep.width = 1.0
+        brep.surfacecolor = _BLACK_COLOR; brep.xform = _IDENTITY_XFORM
+        brep.m_surfaces = []; brep.m_curves_3d = []; brep.m_curves_2d = []
+        brep.m_vertices = []; brep.m_topology_vertices = []; brep.m_topology_edges = []
+        brep.m_trims = []; brep.m_loops = []; brep.m_faces = []
         tol = 1e-6
         if holes is None:
             holes = []
@@ -653,28 +657,35 @@ class BRep:
             return idx
 
         def project_curve_to_uv(crv, org, xa, ya, umin, vmin, du, dv):
-            nc = crv.cv_count()
+            nc = crv.m_cv_count
             c2d = NurbsCurve.__new__(NurbsCurve)
             c2d.guid = _ZERO_GUID; c2d.name = ""; c2d.width = 1.0
             c2d.pointcolors = []; c2d.linecolors = []; c2d.xform = _IDENTITY_XFORM; c2d._rmf_cache = None
             c2d.m_dim = 3; c2d.m_is_rat = crv.m_is_rat; c2d.m_order = crv.m_order
             c2d.m_cv_count = nc; c2d.m_cv_stride = (4 if crv.m_is_rat else 3)
-            c2d.m_knot = crv.m_knot.copy()
+            c2d.m_knot = crv.m_knot
+            ox=float(org[0]); oy=float(org[1]); oz=float(org[2])
+            xa0=float(xa[0]); xa1=float(xa[1]); xa2=float(xa[2])
+            ya0=float(ya[0]); ya1=float(ya[1]); ya2=float(ya[2])
             if crv.m_is_rat:
-                wxyz = crv.m_cv.reshape(nc, 4)
-                ws = wxyz[:, 3]
-                dx = wxyz[:, 0]/ws - org[0]; dy = wxyz[:, 1]/ws - org[1]; dz = wxyz[:, 2]/ws - org[2]
-                us = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
-                vs = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
-                out = _np.zeros(nc * 4)
-                out[0::4] = us*ws; out[1::4] = vs*ws; out[3::4] = ws
+                cl = crv.m_cv.tolist()
+                out = _np.empty(nc * 4, dtype=_np.float64)
+                for ki in range(nc):
+                    k4 = ki * 4
+                    w = cl[k4+3]
+                    _x = cl[k4]/w - ox; _y = cl[k4+1]/w - oy; _z = cl[k4+2]/w - oz
+                    out[k4] = (_x*xa0+_y*xa1+_z*xa2 - umin)/du * w
+                    out[k4+1] = (_x*ya0+_y*ya1+_z*ya2 - vmin)/dv * w
+                    out[k4+2] = 0.0; out[k4+3] = w
             else:
-                cvs = crv.m_cv.reshape(nc, 3)
-                dx = cvs[:, 0]-org[0]; dy = cvs[:, 1]-org[1]; dz = cvs[:, 2]-org[2]
-                us = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
-                vs = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
-                out = _np.zeros(nc * 3)
-                out[0::3] = us; out[1::3] = vs
+                cl = crv.m_cv.tolist()
+                out = _np.empty(nc * 3, dtype=_np.float64)
+                for ki in range(nc):
+                    k3 = ki * 3
+                    _x = cl[k3] - ox; _y = cl[k3+1] - oy; _z = cl[k3+2] - oz
+                    out[k3] = (_x*xa0+_y*xa1+_z*xa2 - umin)/du
+                    out[k3+1] = (_x*ya0+_y*ya1+_z*ya2 - vmin)/dv
+                    out[k3+2] = 0.0
             c2d.m_cv = out
             return c2d
 
@@ -683,15 +694,14 @@ class BRep:
             ci3d = brep.add_curve_3d(crv)
             crv2d = project_curve_to_uv(crv, org, xa, ya, umin, vmin, du, dv)
             c2d = brep.add_curve_2d(crv2d)
-            nc = crv.cv_count()
+            c = crv.m_cv
             if crv.m_is_rat:
-                cv4 = crv.m_cv.reshape(nc, 4)
-                w0 = cv4[0, 3]; sp = (float(cv4[0, 0]/w0), float(cv4[0, 1]/w0), float(cv4[0, 2]/w0))
-                wn = cv4[-1, 3]; ep = (float(cv4[-1, 0]/wn), float(cv4[-1, 1]/wn), float(cv4[-1, 2]/wn))
+                w0 = float(c[3]); sp = (float(c[0])/w0, float(c[1])/w0, float(c[2])/w0)
+                n4 = crv.m_cv_count * 4
+                wn = float(c[n4-1]); ep = (float(c[n4-4])/wn, float(c[n4-3])/wn, float(c[n4-2])/wn)
             else:
-                cv3 = crv.m_cv.reshape(nc, 3)
-                sp = (float(cv3[0, 0]), float(cv3[0, 1]), float(cv3[0, 2]))
-                ep = (float(cv3[-1, 0]), float(cv3[-1, 1]), float(cv3[-1, 2]))
+                sp = (float(c[0]), float(c[1]), float(c[2]))
+                ep = (float(c[-3]), float(c[-2]), float(c[-1]))
             vi_s = find_or_add(sp)
             sdx = sp[0]-ep[0]; sdy = sp[1]-ep[1]; sdz = sp[2]-ep[2]
             vi_e = vi_s if sdx*sdx+sdy*sdy+sdz*sdz < tol*tol else find_or_add(ep)
@@ -701,7 +711,7 @@ class BRep:
 
         for ci_idx, crv in enumerate(curves):
             if crv.order() == 2:
-                pts = crv.m_cv.reshape(-1, 3)
+                pts = crv.m_cv.reshape(-1, 3).tolist()
             else:
                 pts, _ = crv.divide_by_count(max(crv.cv_count() * 2, 4))
             dx0 = float(pts[0][0]-pts[-1][0]); dy0 = float(pts[0][1]-pts[-1][1]); dz0 = float(pts[0][2]-pts[-1][2])
@@ -743,17 +753,25 @@ class BRep:
                 if _v>vmax: vmax=_v
             if ci_idx < len(holes):
                 for hcrv in holes[ci_idx]:
-                    nc = hcrv.cv_count()
-                    if hcrv.is_rational():
-                        wxyz = hcrv.m_cv.reshape(nc, 4)
-                        hcvs = wxyz[:, :3] / wxyz[:, 3:4]
+                    _c = hcrv.m_cv.tolist(); _nc = hcrv.m_cv_count
+                    if hcrv.m_is_rat:
+                        for _ki in range(_nc):
+                            _w = _c[_ki*4+3]
+                            _dx = _c[_ki*4+0]/_w - ox; _dy = _c[_ki*4+1]/_w - oy; _dz = _c[_ki*4+2]/_w - oz
+                            _u = _dx*xa0+_dy*xa1+_dz*xa2; _v = _dx*ya0+_dy*ya1+_dz*ya2
+                            if _u<umin: umin=_u
+                            if _u>umax: umax=_u
+                            if _v<vmin: vmin=_v
+                            if _v>vmax: vmax=_v
                     else:
-                        hcvs = hcrv.m_cv.reshape(nc, 3)
-                    hdxs = hcvs[:, 0]-ox; hdys = hcvs[:, 1]-oy; hdzs = hcvs[:, 2]-oz
-                    hus = hdxs*xa[0]+hdys*xa[1]+hdzs*xa[2]
-                    hvs = hdxs*ya[0]+hdys*ya[1]+hdzs*ya[2]
-                    umin = min(umin, float(hus.min())); umax = max(umax, float(hus.max()))
-                    vmin = min(vmin, float(hvs.min())); vmax = max(vmax, float(hvs.max()))
+                        _st = hcrv.m_cv_stride
+                        for _ki in range(_nc):
+                            _dx = _c[_ki*_st+0] - ox; _dy = _c[_ki*_st+1] - oy; _dz = _c[_ki*_st+2] - oz
+                            _u = _dx*xa0+_dy*xa1+_dz*xa2; _v = _dx*ya0+_dy*ya1+_dz*ya2
+                            if _u<umin: umin=_u
+                            if _u>umax: umax=_u
+                            if _v<vmin: vmin=_v
+                            if _v>vmax: vmax=_v
             pad = max(umax - umin, vmax - vmin) * 0.01
             umin -= pad; umax += pad; vmin -= pad; vmax += pad
             du, dv = umax - umin, vmax - vmin
@@ -1005,11 +1023,11 @@ class BRep:
         proto.name = self.name
         proto.width = self.width
         for c in self.m_curves_2d:
-            proto.curves_2d.add().ParseFromString(c.pb_dumps())
+            c.pb_fill(proto.curves_2d.add())
         for c in self.m_curves_3d:
-            proto.curves_3d.add().ParseFromString(c.pb_dumps())
+            c.pb_fill(proto.curves_3d.add())
         for s in self.m_surfaces:
-            proto.surfaces.add().ParseFromString(s.pb_dumps())
+            s.pb_fill(proto.surfaces.add())
         for v in self.m_vertices:
             p = proto.vertices.add()
             p.x = v[0]; p.y = v[1]; p.z = v[2]
