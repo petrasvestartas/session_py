@@ -123,6 +123,76 @@ class VertexData:
         return not self.__eq__(other)
 
 
+def _lp_newell_normal(pts):
+    nx = ny = nz = 0.0
+    n = len(pts)
+    for i in range(n):
+        a = pts[i]; b = pts[(i+1)%n]
+        nx += (a[1]-b[1]) * (a[2]+b[2])
+        ny += (a[2]-b[2]) * (a[0]+b[0])
+        nz += (a[0]-b[0]) * (a[1]+b[1])
+    return nx, ny, nz
+
+
+def _lp_merge_collinear(pts, vkeys):
+    tol = Tolerance.APPROXIMATION
+    zt2 = Tolerance.ZERO_TOLERANCE * Tolerance.ZERO_TOLERANCE
+    changed = True
+    while changed:
+        changed = False
+        m = len(pts)
+        if m < 3: break
+        np_, nk = [], []
+        for i in range(m):
+            p = (i-1+m)%m; nxt = (i+1)%m
+            ax = pts[i][0]-pts[p][0]; ay = pts[i][1]-pts[p][1]; az = pts[i][2]-pts[p][2]
+            bx = pts[nxt][0]-pts[i][0]; by = pts[nxt][1]-pts[i][1]; bz = pts[nxt][2]-pts[i][2]
+            cx = ay*bz-az*by; cy = az*bx-ax*bz; cz = ax*by-ay*bx
+            a2 = ax*ax+ay*ay+az*az; b2 = bx*bx+by*by+bz*bz
+            if a2 < zt2 or b2 < zt2 or cx*cx+cy*cy+cz*cz < tol*tol*a2*b2:
+                changed = True
+            else:
+                np_.append(pts[i]); nk.append(vkeys[i])
+        pts, vkeys = np_, nk
+    return pts, vkeys
+
+
+def _lp_offset_toward(p, cx, cy, cz, gap):
+    dx = cx-p[0]; dy = cy-p[1]; dz = cz-p[2]
+    length = math.sqrt(dx*dx+dy*dy+dz*dz)
+    if length > 1e-10: dx *= gap/length; dy *= gap/length; dz *= gap/length
+    return Point(p[0]+dx, p[1]+dy, p[2]+dz)
+
+
+def _lp_face_centroid(m, fk):
+    vkeys = m.face_vertices(fk)
+    cx = cy = cz = 0.0
+    for vk in vkeys: p = m.vertex_position(vk); cx += p[0]; cy += p[1]; cz += p[2]
+    n = len(vkeys)
+    return Point(cx/n, cy/n, cz/n)
+
+
+class LoftWallFace:
+    def __init__(self):
+        self.face_key = 0
+        self.is_quad = False
+        self.top_v0 = 0
+        self.top_v1 = 0
+        self.bot_v0 = 0
+        self.bot_v1 = 0
+
+
+class LoftPanel:
+    def __init__(self):
+        self.mesh = Mesh()
+        self.top_face_key = 0
+        self.bot_face_key = 0
+        self.wall_faces = []
+        self.orig_top_to_local = {}
+        self.orig_bot_to_local = {}
+        self.bot_pts = []
+
+
 class Mesh:
     """A halfedge mesh data structure for representing polygonal surfaces.
 
@@ -676,6 +746,175 @@ class Mesh:
         for bot_off, bot_n, top_off, top_n in poly_infos:
             side_faces(bot_off, bot_n, top_off, top_n, all_bot[bot_off:bot_off+bot_n], all_top[top_off:top_off+top_n])
         return mesh
+
+    @staticmethod
+    def loft_panels(
+        top_polygons: List[List[Point]],
+        bot_polygons: List[List[Point]],
+        merge_precision: float,
+        edge_gap: float = 0.0,
+        edge_match_threshold: float = 2.0,
+        add_caps: bool = True,
+        skip_triangles: bool = False) -> List["LoftPanel"]:
+        top_mesh = Mesh.from_polylines(top_polygons, merge_precision)
+        bot_mesh = Mesh.from_polylines(bot_polygons, merge_precision)
+        tfks = list(top_mesh.face.keys())
+        bfks = list(bot_mesh.face.keys())
+        dists = []
+        for ti, tfk in enumerate(tfks):
+            for bi, bfk in enumerate(bfks):
+                d = _lp_face_centroid(top_mesh, tfk).distance(_lp_face_centroid(bot_mesh, bfk))
+                dists.append((d, ti, bi))
+        dists.sort()
+        top_used = [False] * len(tfks)
+        bot_used = [False] * len(bfks)
+        face_match = []
+        for d, ti, bi in dists:
+            if top_used[ti] or bot_used[bi]: continue
+            face_match.append((tfks[ti], bfks[bi]))
+            top_used[ti] = True; bot_used[bi] = True
+        face_match.sort()
+        panels = []
+        for tfk, bfk in face_match:
+            panel = LoftPanel()
+            top_vkeys = list(top_mesh.face_vertices(tfk))
+            bot_vkeys = list(bot_mesh.face_vertices(bfk))
+            top_pts = [top_mesh.vertex_position(vk) for vk in top_vkeys]
+            bot_pts = [bot_mesh.vertex_position(vk) for vk in bot_vkeys]
+            top_pts, top_vkeys = _lp_merge_collinear(top_pts, top_vkeys)
+            bot_pts, bot_vkeys = _lp_merge_collinear(bot_pts, bot_vkeys)
+            max_te = 0.0
+            sz = len(top_pts)
+            for i in range(sz): max_te = max(max_te, top_pts[i].distance(top_pts[(i+1)%sz]))
+            stol = max_te * 0.001
+            tp, tk = [], []
+            for i in range(len(top_pts)):
+                if not tp or tp[-1].distance(top_pts[i]) > stol:
+                    tp.append(top_pts[i]); tk.append(top_vkeys[i])
+            while len(tp) >= 3 and tp[-1].distance(tp[0]) <= stol: tp.pop(); tk.pop()
+            if len(tp) >= 3: top_pts, top_vkeys = tp, tk
+            n = len(top_pts); m = len(bot_pts)
+            tcx = tcy = tcz = bcx = bcy = bcz = 0.0
+            for p in top_pts: tcx += p[0]; tcy += p[1]; tcz += p[2]
+            for p in bot_pts: bcx += p[0]; bcy += p[1]; bcz += p[2]
+            tcx /= n; tcy /= n; tcz /= n
+            bcx /= m; bcy /= m; bcz /= m
+            ax = tcx-bcx; ay = tcy-bcy; az = tcz-bcz
+            alen = math.sqrt(ax*ax+ay*ay+az*az)
+            if alen > 1e-12: ax /= alen; ay /= alen; az /= alen
+            tnx, tny, tnz = _lp_newell_normal(top_pts)
+            if tnx*ax+tny*ay+tnz*az < 0: top_pts.reverse(); top_vkeys.reverse()
+            bnx, bny, bnz = _lp_newell_normal(bot_pts)
+            if bnx*ax+bny*ay+bnz*az > 0: bot_pts.reverse(); bot_vkeys.reverse()
+            panel.bot_pts = bot_pts
+            for i in range(n):
+                lk = panel.mesh.add_vertex(top_pts[i]); panel.orig_top_to_local[top_vkeys[i]] = lk
+            for j in range(m):
+                lk = panel.mesh.add_vertex(bot_pts[j]); panel.orig_bot_to_local[bot_vkeys[j]] = lk
+            if add_caps:
+                top_cap = [panel.orig_top_to_local[vk] for vk in top_vkeys]
+                fk = panel.mesh.add_face(top_cap)
+                if fk is not None: panel.top_face_key = fk
+                if fk is not None and len(top_cap) >= 3:
+                    nx, ny, nz = _lp_newell_normal(top_pts)
+                    mag = math.sqrt(nx*nx+ny*ny+nz*nz)
+                    if mag > 1e-12:
+                        nx /= mag; ny /= mag; nz /= mag
+                        ux, uy, uz = (0.0, 1.0, 0.0) if abs(nx) > 0.9 else (1.0, 0.0, 0.0)
+                        dot = ux*nx+uy*ny+uz*nz
+                        ux -= dot*nx; uy -= dot*ny; uz -= dot*nz
+                        um = math.sqrt(ux*ux+uy*uy+uz*uz); ux /= um; uy /= um; uz /= um
+                        vx = ny*uz-nz*uy; vy = nz*ux-nx*uz; vz = nx*uy-ny*ux
+                        bpts = [Point(p[0]*ux+p[1]*uy+p[2]*uz, p[0]*vx+p[1]*vy+p[2]*vz, 0.0) for p in top_pts]
+                        tris = _cdt_triangulate(bpts, None)
+                        if tris:
+                            panel.mesh.triangulation[fk] = [[top_cap[t[0]], top_cap[t[1]], top_cap[t[2]]] for t in tris]
+            top_mids = [Point((top_pts[i][0]+top_pts[(i+1)%n][0])*0.5,
+                              (top_pts[i][1]+top_pts[(i+1)%n][1])*0.5,
+                              (top_pts[i][2]+top_pts[(i+1)%n][2])*0.5) for i in range(n)]
+            bot_mids = [Point((bot_pts[j][0]+bot_pts[(j+1)%m][0])*0.5,
+                              (bot_pts[j][1]+bot_pts[(j+1)%m][1])*0.5,
+                              (bot_pts[j][2]+bot_pts[(j+1)%m][2])*0.5) for j in range(m)]
+            bot_to_top = [-1] * m; bot_dist = [1e300] * m
+            for j in range(m):
+                for i in range(n):
+                    d = bot_mids[j].distance(top_mids[i])
+                    if d < bot_dist[j]: bot_dist[j] = d; bot_to_top[j] = i
+            top_to_bot = [-1] * n; top_dist = [1e300] * n
+            for i in range(n):
+                for j in range(m):
+                    d = top_mids[i].distance(bot_mids[j])
+                    if d < top_dist[i]: top_dist[i] = d; top_to_bot[i] = j
+            avg = sum(bot_dist) / m
+            threshold = avg * edge_match_threshold
+            top_used_edge = [False] * n
+            for j in range(m):
+                b0 = panel.orig_bot_to_local[bot_vkeys[j]]
+                b1 = panel.orig_bot_to_local[bot_vkeys[(j+1)%m]]
+                ti = bot_to_top[j]
+                if ti >= 0 and bot_dist[j] <= threshold and top_to_bot[ti] == j:
+                    t0 = panel.orig_top_to_local[top_vkeys[ti]]
+                    t1 = panel.orig_top_to_local[top_vkeys[(ti+1)%n]]
+                    if edge_gap > 0.0:
+                        pb0 = panel.mesh.vertex_position(b0); pb1 = panel.mesh.vertex_position(b1)
+                        pt0 = panel.mesh.vertex_position(t0); pt1 = panel.mesh.vertex_position(t1)
+                        cx = (pb0[0]+pb1[0]+pt0[0]+pt1[0])*0.25
+                        cy = (pb0[1]+pb1[1]+pt0[1]+pt1[1])*0.25
+                        cz = (pb0[2]+pb1[2]+pt0[2]+pt1[2])*0.25
+                        nb0 = panel.mesh.add_vertex(_lp_offset_toward(pb0, cx, cy, cz, edge_gap))
+                        nb1 = panel.mesh.add_vertex(_lp_offset_toward(pb1, cx, cy, cz, edge_gap))
+                        fk = panel.mesh.add_face([nb0, t1, t0, nb1])
+                    else:
+                        fk = panel.mesh.add_face([b0, t1, t0, b1])
+                    if fk is not None:
+                        w = LoftWallFace(); w.face_key = fk; w.is_quad = True
+                        w.top_v0 = top_vkeys[ti]; w.top_v1 = top_vkeys[(ti+1)%n]
+                        w.bot_v0 = bot_vkeys[(j+1)%m]; w.bot_v1 = bot_vkeys[j]
+                        panel.wall_faces.append(w)
+                    top_used_edge[ti] = True
+                elif not skip_triangles:
+                    best_d = 1e300; best_tv = 0
+                    for i in range(n):
+                        d = bot_mids[j].distance(top_pts[i])
+                        if d < best_d: best_d = d; best_tv = i
+                    tv = panel.orig_top_to_local[top_vkeys[best_tv]]
+                    fk = panel.mesh.add_face([b0, tv, b1])
+                    if fk is not None:
+                        w = LoftWallFace(); w.face_key = fk; w.is_quad = False; panel.wall_faces.append(w)
+            if not skip_triangles:
+                for i in range(n):
+                    if top_used_edge[i]: continue
+                    t0 = panel.orig_top_to_local[top_vkeys[i]]
+                    t1 = panel.orig_top_to_local[top_vkeys[(i+1)%n]]
+                    best_d = 1e300; best_bv = 0
+                    for j in range(m):
+                        d = top_mids[i].distance(bot_pts[j])
+                        if d < best_d: best_d = d; best_bv = j
+                    bv = panel.orig_bot_to_local[bot_vkeys[best_bv]]
+                    fk = panel.mesh.add_face([t1, t0, bv])
+                    if fk is not None:
+                        w = LoftWallFace(); w.face_key = fk; w.is_quad = False; panel.wall_faces.append(w)
+            if add_caps:
+                bot_cap = [panel.orig_bot_to_local[bot_vkeys[j]] for j in range(m)]
+                bot_cap_fk = panel.mesh.add_face(bot_cap)
+                if bot_cap_fk is not None: panel.bot_face_key = bot_cap_fk
+                if bot_cap_fk is not None and len(bot_cap) >= 3:
+                    bcnx, bcny, bcnz = _lp_newell_normal(bot_pts)
+                    bcmag = math.sqrt(bcnx*bcnx+bcny*bcny+bcnz*bcnz)
+                    if bcmag > 1e-12:
+                        bcnx /= bcmag; bcny /= bcmag; bcnz /= bcmag
+                        bcux, bcuy, bcuz = (0.0, 1.0, 0.0) if abs(bcnx) > 0.9 else (1.0, 0.0, 0.0)
+                        bcdot = bcux*bcnx+bcuy*bcny+bcuz*bcnz
+                        bcux -= bcdot*bcnx; bcuy -= bcdot*bcny; bcuz -= bcdot*bcnz
+                        bcum = math.sqrt(bcux*bcux+bcuy*bcuy+bcuz*bcuz)
+                        bcux /= bcum; bcuy /= bcum; bcuz /= bcum
+                        bcvx = bcny*bcuz-bcnz*bcuy; bcvy = bcnz*bcux-bcnx*bcuz; bcvz = bcnx*bcuy-bcny*bcux
+                        bpts2 = [Point(p[0]*bcux+p[1]*bcuy+p[2]*bcuz, p[0]*bcvx+p[1]*bcvy+p[2]*bcvz, 0.0) for p in bot_pts]
+                        btris = _cdt_triangulate(bpts2, None)
+                        if btris:
+                            panel.mesh.triangulation[bot_cap_fk] = [[bot_cap[t[0]], bot_cap[t[1]], bot_cap[t[2]]] for t in btris]
+            panels.append(panel)
+        return panels
 
     @staticmethod
     def from_polygon_with_holes_many(inputs: List, sort_by_bbox: bool = False, parallel: bool = True) -> List["Mesh"]:
