@@ -764,19 +764,34 @@ class Mesh:
         bot_mesh = Mesh.from_polylines(bot_polygons, merge_precision)
         tfks = list(top_mesh.face.keys())
         bfks = list(bot_mesh.face.keys())
-        dists = []
-        for ti, tfk in enumerate(tfks):
-            for bi, bfk in enumerate(bfks):
-                d = _lp_face_centroid(top_mesh, tfk).distance(_lp_face_centroid(bot_mesh, bfk))
-                dists.append((d, ti, bi))
-        dists.sort()
+        import numpy as np
+        top_cents = np.zeros((len(tfks), 3))
+        for i, fk in enumerate(tfks):
+            vkeys = top_mesh.face_vertices(fk)
+            for vk in vkeys:
+                p = top_mesh.vertex_position(vk)
+                top_cents[i, 0] += p[0]; top_cents[i, 1] += p[1]; top_cents[i, 2] += p[2]
+            top_cents[i] /= len(vkeys)
+        bot_cents = np.zeros((len(bfks), 3))
+        for i, fk in enumerate(bfks):
+            vkeys = bot_mesh.face_vertices(fk)
+            for vk in vkeys:
+                p = bot_mesh.vertex_position(vk)
+                bot_cents[i, 0] += p[0]; bot_cents[i, 1] += p[1]; bot_cents[i, 2] += p[2]
+            bot_cents[i] /= len(vkeys)
+        diff = top_cents[:, np.newaxis, :] - bot_cents[np.newaxis, :, :]
+        dist_mat = np.sqrt((diff * diff).sum(axis=2))
+        flat_order = np.argsort(dist_mat, axis=None)
         top_used = [False] * len(tfks)
         bot_used = [False] * len(bfks)
         face_match = []
-        for d, ti, bi in dists:
-            if top_used[ti] or bot_used[bi]: continue
+        for flat_idx in flat_order:
+            ti, bi = divmod(int(flat_idx), len(bfks))
+            if top_used[ti] or bot_used[bi]:
+                continue
             face_match.append((tfks[ti], bfks[bi]))
-            top_used[ti] = True; bot_used[bi] = True
+            top_used[ti] = True
+            bot_used[bi] = True
         face_match.sort()
         panels = []
         for tfk, bfk in face_match:
@@ -833,22 +848,15 @@ class Mesh:
                         tris = _cdt_triangulate(bpts, None)
                         if tris:
                             panel.mesh.triangulation[fk] = [[top_cap[t[0]], top_cap[t[1]], top_cap[t[2]]] for t in tris]
-            top_mids = [Point((top_pts[i][0]+top_pts[(i+1)%n][0])*0.5,
-                              (top_pts[i][1]+top_pts[(i+1)%n][1])*0.5,
-                              (top_pts[i][2]+top_pts[(i+1)%n][2])*0.5) for i in range(n)]
-            bot_mids = [Point((bot_pts[j][0]+bot_pts[(j+1)%m][0])*0.5,
-                              (bot_pts[j][1]+bot_pts[(j+1)%m][1])*0.5,
-                              (bot_pts[j][2]+bot_pts[(j+1)%m][2])*0.5) for j in range(m)]
-            bot_to_top = [-1] * m; bot_dist = [1e300] * m
-            for j in range(m):
-                for i in range(n):
-                    d = bot_mids[j].distance(top_mids[i])
-                    if d < bot_dist[j]: bot_dist[j] = d; bot_to_top[j] = i
-            top_to_bot = [-1] * n; top_dist = [1e300] * n
-            for i in range(n):
-                for j in range(m):
-                    d = top_mids[i].distance(bot_mids[j])
-                    if d < top_dist[i]: top_dist[i] = d; top_to_bot[i] = j
+            top_arr = np.array([[p[0], p[1], p[2]] for p in top_pts])
+            bot_arr = np.array([[p[0], p[1], p[2]] for p in bot_pts])
+            top_mids_arr = (top_arr + np.roll(top_arr, -1, axis=0)) * 0.5
+            bot_mids_arr = (bot_arr + np.roll(bot_arr, -1, axis=0)) * 0.5
+            diff = bot_mids_arr[:, np.newaxis, :] - top_mids_arr[np.newaxis, :, :]
+            mid_dist = np.sqrt((diff * diff).sum(axis=2))
+            bot_to_top = mid_dist.argmin(axis=1).tolist()
+            bot_dist = mid_dist[np.arange(m), bot_to_top].tolist()
+            top_to_bot = mid_dist.argmin(axis=0).tolist()
             avg = sum(bot_dist) / m
             threshold = avg * edge_match_threshold
             top_used_edge = [False] * n
@@ -877,10 +885,8 @@ class Mesh:
                         panel.wall_faces.append(w)
                     top_used_edge[ti] = True
                 elif not skip_triangles:
-                    best_d = 1e300; best_tv = 0
-                    for i in range(n):
-                        d = bot_mids[j].distance(top_pts[i])
-                        if d < best_d: best_d = d; best_tv = i
+                    diff_j = top_arr - bot_mids_arr[j]
+                    best_tv = int((diff_j * diff_j).sum(axis=1).argmin())
                     tv = panel.orig_top_to_local[top_vkeys[best_tv]]
                     fk = panel.mesh.add_face([b0, tv, b1])
                     if fk is not None:
@@ -890,10 +896,8 @@ class Mesh:
                     if top_used_edge[i]: continue
                     t0 = panel.orig_top_to_local[top_vkeys[i]]
                     t1 = panel.orig_top_to_local[top_vkeys[(i+1)%n]]
-                    best_d = 1e300; best_bv = 0
-                    for j in range(m):
-                        d = top_mids[i].distance(bot_pts[j])
-                        if d < best_d: best_d = d; best_bv = j
+                    diff_i = bot_arr - top_mids_arr[i]
+                    best_bv = int((diff_i * diff_i).sum(axis=1).argmin())
                     bv = panel.orig_bot_to_local[bot_vkeys[best_bv]]
                     fk = panel.mesh.add_face([t1, t0, bv])
                     if fk is not None:

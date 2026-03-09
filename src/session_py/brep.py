@@ -546,14 +546,16 @@ class BRep:
         brep.name = "polysurface"
         tol = 1e-6
 
+        _vertex_map = {}
         def find_or_add(p):
-            for i, v in enumerate(brep.m_vertices):
-                dx, dy, dz = p[0] - v[0], p[1] - v[1], p[2] - v[2]
-                if dx*dx + dy*dy + dz*dz < tol*tol:
-                    return i
+            key = (round(p[0], 6), round(p[1], 6), round(p[2], 6))
+            existing = _vertex_map.get(key)
+            if existing is not None:
+                return existing
             idx = brep.add_vertex(p)
             tv = BRepVertex(); tv.point_index = idx
             brep.m_topology_vertices.append(tv)
+            _vertex_map[key] = idx
             return idx
 
         poly_vi = []
@@ -633,14 +635,16 @@ class BRep:
         if holes is None:
             holes = []
 
+        _vertex_map = {}
         def find_or_add(p):
-            for i, v in enumerate(brep.m_vertices):
-                dx, dy, dz = p[0] - v[0], p[1] - v[1], p[2] - v[2]
-                if dx*dx + dy*dy + dz*dz < tol*tol:
-                    return i
+            key = (round(p[0], 6), round(p[1], 6), round(p[2], 6))
+            existing = _vertex_map.get(key)
+            if existing is not None:
+                return existing
             idx = brep.add_vertex(p)
             tv = BRepVertex(); tv.point_index = idx
             brep.m_topology_vertices.append(tv)
+            _vertex_map[key] = idx
             return idx
 
         def project_curve_to_uv(crv, org, xa, ya, umin, vmin, du, dv):
@@ -679,7 +683,10 @@ class BRep:
             brep.add_trim(c2d, ei, li, False, BRepTrimType.Boundary)
 
         for ci_idx, crv in enumerate(curves):
-            pts, _ = crv.divide_by_count(max(crv.cv_count() * 2, 4))
+            if crv.order() == 2:
+                pts = [crv.get_cv(i) for i in range(crv.cv_count())]
+            else:
+                pts, _ = crv.divide_by_count(max(crv.cv_count() * 2, 4))
             n = len(pts) - 1 if crv.is_closed() else len(pts)
             if n < 3:
                 continue
@@ -699,7 +706,10 @@ class BRep:
                 vmin = min(vmin, v); vmax = max(vmax, v)
             if ci_idx < len(holes):
                 for hcrv in holes[ci_idx]:
-                    hpts, _ = hcrv.divide_by_count(max(hcrv.cv_count() * 2, 4))
+                    if hcrv.order() == 2:
+                        hpts = [hcrv.get_cv(i) for i in range(hcrv.cv_count())]
+                    else:
+                        hpts, _ = hcrv.divide_by_count(max(hcrv.cv_count() * 2, 4))
                     for hp in hpts:
                         dx = hp[0]-org[0]; dy = hp[1]-org[1]; dz = hp[2]-org[2]
                         hu = dx*xa[0]+dy*xa[1]+dz*xa[2]; hv = dx*ya[0]+dy*ya[1]+dz*ya[2]
