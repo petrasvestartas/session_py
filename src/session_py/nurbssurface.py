@@ -2182,6 +2182,22 @@ class NurbsSurface:
         self.m_mesh = result
         return self.m_mesh
 
+    def mesh_adaptive(self, max_angle: float = 20.0, max_edge_length: float = 0.0,
+                      min_edge_length: float = 0.0, max_chord_height: float = 0.0):
+        if self.m_mesh is not None:
+            return self.m_mesh
+        if not self.is_valid():
+            from .mesh import Mesh
+            return Mesh()
+        from .trimesh_adaptive import TrimeshAdaptive
+        mesher = TrimeshAdaptive(self)
+        mesher.set_max_angle(max_angle)
+        mesher.set_max_edge_length(max_edge_length)
+        mesher.set_min_edge_length(min_edge_length)
+        mesher.set_max_chord_height(max_chord_height)
+        self.m_mesh = mesher.mesh()
+        return self.m_mesh
+
     ###########################################################################
     # JSON SERIALIZATION
     ###########################################################################

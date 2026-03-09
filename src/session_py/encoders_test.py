@@ -104,8 +104,8 @@ def test_nested_collections():
     loaded = json_loads(json_dumps([Line(0, 0, 0, 1, 0, 0), Line(0, 0, 0, 0, 1, 0)]))
 
     MINI_CHECK(len(loaded) == 2)
-    MINI_CHECK(TOLERANCE.is_close(loaded[0].end[0], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(loaded[1].end[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded[0].end()[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded[1].end()[1], 1.0))
 
 
 @MINI_TEST("Encoders", "Roundtrip File Io")

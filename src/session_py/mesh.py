@@ -689,7 +689,7 @@ class Mesh:
             bpts = [Point(*proj(all_bot[i]), 0.0) for i in range(bot_n0)]
             b_hpts = [[Point(*proj(all_bot[i]), 0.0) for i in range(off, off+cnt)] for off, cnt, _, _ in poly_infos[1:]]
             bot_tris = _cdt_triangulate(bpts, b_hpts if b_hpts else None)
-            fk_bot = mesh.add_face([bvk[i] for i in range(bot_n0)])
+            fk_bot = mesh.add_face([bvk[bot_n0 - 1 - i] for i in range(bot_n0)])
             if fk_bot is not None:
                 if b_hpts:
                     mesh.face_holes[fk_bot] = [[bvk[off + j] for j in range(cnt)] for off, cnt, _, _ in poly_infos[1:]]
@@ -702,6 +702,10 @@ class Mesh:
                 if t_hpts:
                     mesh.face_holes[fk_top] = [[tvk[off + j] for j in range(cnt)] for _, _, off, cnt in poly_infos[1:]]
                 mesh.triangulation[fk_top] = [[tvk[t[0]], tvk[t[1]], tvk[t[2]]] for t in top_tris]
+            for off, cnt, _, _ in poly_infos[1:]:
+                mesh.add_face([bvk[off + cnt - 1 - j] for j in range(cnt)])
+            for _, _, off, cnt in poly_infos[1:]:
+                mesh.add_face([tvk[off + j] for j in range(cnt)])
         def side_faces(bot_off, bot_n, top_off, top_n, bpts, tpts):
             def edsq(pts, i):
                 j = (i + 1) % len(pts)

@@ -23,7 +23,7 @@ def test_tree_json_roundtrip():
     loaded = json_load(fname)
 
     MINI_CHECK(loaded.name == original.name)
-    MINI_CHECK(len(loaded.nodes()) == len(original.nodes()))
+    MINI_CHECK(len(list(loaded.nodes)) == len(list(original.nodes)))
 
 
 if __name__ == "__main__":

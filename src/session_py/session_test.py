@@ -149,6 +149,7 @@ def test_session_tree_transformation_hierarchy():
     from session_py import Vector
     from session_py import Mesh
     from session_py import Xform
+    from session_py import Plane
     import math
 
     scene = Session("tree_transformation_test")
@@ -195,10 +196,9 @@ def test_session_tree_transformation_hierarchy():
     normal = Vector(0, 0, 1)
     x = Vector(1, 0, 0)
     y = Vector(0, 1, 0)
-    xy_to_top = Xform.plane_to_plane(
-        Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1),
-        box1_top, x, y, normal
-    )
+    plane_from = Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
+    plane_to = Plane(box1_top, x, y)
+    xy_to_top = Xform.plane_to_plane(plane_from, plane_to)
     box1.xform = Xform.rotation_z(math.pi / 1.5) * xy_to_top
     box2.xform = Xform.translation(2.0, 0, 0) * Xform.rotation_z(math.pi / 6.0)
     box3.xform = Xform.translation(2.0, 0, 0)

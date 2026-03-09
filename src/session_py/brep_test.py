@@ -177,6 +177,7 @@ def test_json_roundtrip():
 
     # File
     filename = str(Path(__file__).parent.parent.parent.parent / "serialization" / "test_brep.json")
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
     b.json_dump(filename)
     loaded_from_file = BRep.json_load(filename)
 
@@ -340,6 +341,7 @@ def test_protobuf_roundtrip():
 
     # File
     filename = str(Path(__file__).parent.parent.parent.parent / "serialization" / "test_brep.bin")
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
     b.pb_dump(filename)
     loaded = BRep.pb_load(filename)
 
