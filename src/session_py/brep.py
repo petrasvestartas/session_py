@@ -75,6 +75,7 @@ class BRepFace:
         self.surface_index = -1
         self.loop_indices = []
         self.reversed = False
+        self.facecolor = None
 
 
 class BRep:
@@ -828,7 +829,10 @@ class BRep:
         j["curves_3d"] = [c.__jsondump__() for c in self.m_curves_3d]
         faces = []
         for f in self.m_faces:
-            faces.append({"loop_indices": f.loop_indices, "reversed": f.reversed, "surface_index": f.surface_index})
+            d = {"loop_indices": f.loop_indices, "reversed": f.reversed, "surface_index": f.surface_index}
+            if f.facecolor is not None:
+                d = {"facecolor": f.facecolor.__jsondump__(), **d}
+            faces.append(d)
         j["faces"] = faces
         j["guid"] = self.guid
         loops = []
@@ -910,6 +914,8 @@ class BRep:
                 bf.surface_index = f["surface_index"]
                 bf.loop_indices = list(f["loop_indices"])
                 bf.reversed = f["reversed"]
+                if "facecolor" in f:
+                    bf.facecolor = Color.__jsonload__(f["facecolor"])
                 b.m_faces.append(bf)
         return b
 
@@ -979,6 +985,11 @@ class BRep:
             p.surface_index = f.surface_index
             p.loop_indices.extend(f.loop_indices)
             p.reversed = f.reversed
+            if f.facecolor is not None:
+                p.facecolor.r = f.facecolor.r
+                p.facecolor.g = f.facecolor.g
+                p.facecolor.b = f.facecolor.b
+                p.facecolor.a = f.facecolor.a
         proto.surfacecolor.name = self.surfacecolor.name
         proto.surfacecolor.r = self.surfacecolor.r
         proto.surfacecolor.g = self.surfacecolor.g
@@ -1036,6 +1047,8 @@ class BRep:
             bf.surface_index = f.surface_index
             bf.loop_indices = list(f.loop_indices)
             bf.reversed = f.reversed
+            if f.HasField('facecolor'):
+                bf.facecolor = Color(f.facecolor.r, f.facecolor.g, f.facecolor.b, f.facecolor.a)
             b.m_faces.append(bf)
         cp = proto.surfacecolor
         b.surfacecolor = Color(cp.r, cp.g, cp.b, cp.a)
