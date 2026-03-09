@@ -17,7 +17,7 @@
     5.0,
     6.0
   ],
-  "guid": "070bff36-9043-447a-83c2-274f87096df5",
+  "guid": "1c68a1e5-5809-48e8-bb2c-67894845becc",
   "name": "test_pointcloud",
   "normals": [
     0.0,
@@ -30,7 +30,7 @@
   "point_size": 1.0,
   "type": "PointCloud",
   "xform": {
-    "guid": "6024a6fb-a2b3-45b5-8305-07fd8ae47997",
+    "guid": "a431f341-fb8e-408f-99fc-187e07a44733",
     "m": [
       1.0,
       0.0,
