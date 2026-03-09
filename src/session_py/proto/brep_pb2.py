@@ -29,17 +29,17 @@ from . import nurbscurve_pb2 as nurbscurve__pb2
 from . import point_pb2 as point__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nbrep.proto\x12\rsession_proto\x1a\x0b\x63olor.proto\x1a\x0bxform.proto\x1a\x12nurbssurface.proto\x1a\x10nurbscurve.proto\x1a\x0bpoint.proto\"7\n\nBRepVertex\x12\x13\n\x0bpoint_index\x18\x01 \x01(\x05\x12\x14\n\x0c\x65\x64ge_indices\x18\x02 \x03(\x05\"b\n\x08\x42RepEdge\x12\x16\n\x0e\x63urve_3d_index\x18\x01 \x01(\x05\x12\x14\n\x0cstart_vertex\x18\x02 \x01(\x05\x12\x12\n\nend_vertex\x18\x03 \x01(\x05\x12\x14\n\x0ctrim_indices\x18\x04 \x03(\x05\"\x87\x01\n\x08\x42RepTrim\x12\x16\n\x0e\x63urve_2d_index\x18\x01 \x01(\x05\x12\x12\n\nedge_index\x18\x02 \x01(\x05\x12\x12\n\nloop_index\x18\x03 \x01(\x05\x12\x10\n\x08reversed\x18\x04 \x01(\x08\x12)\n\x04type\x18\x05 \x01(\x0e\x32\x1b.session_proto.BRepTrimType\"_\n\x08\x42RepLoop\x12\x14\n\x0ctrim_indices\x18\x01 \x03(\x05\x12\x12\n\nface_index\x18\x02 \x01(\x05\x12)\n\x04type\x18\x03 \x01(\x0e\x32\x1b.session_proto.BRepLoopType\"I\n\x08\x42RepFace\x12\x15\n\rsurface_index\x18\x01 \x01(\x05\x12\x14\n\x0cloop_indices\x18\x02 \x03(\x05\x12\x10\n\x08reversed\x18\x03 \x01(\x08\"\x94\x04\n\x04\x42Rep\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12,\n\tcurves_2d\x18\x03 \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12,\n\tcurves_3d\x18\x04 \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12-\n\x08surfaces\x18\x05 \x03(\x0b\x32\x1b.session_proto.NurbsSurface\x12&\n\x08vertices\x18\x06 \x03(\x0b\x32\x14.session_proto.Point\x12\x34\n\x11topology_vertices\x18\x07 \x03(\x0b\x32\x19.session_proto.BRepVertex\x12/\n\x0etopology_edges\x18\x08 \x03(\x0b\x32\x17.session_proto.BRepEdge\x12&\n\x05trims\x18\t \x03(\x0b\x32\x17.session_proto.BRepTrim\x12&\n\x05loops\x18\n \x03(\x0b\x32\x17.session_proto.BRepLoop\x12&\n\x05\x66\x61\x63\x65s\x18\x0b \x03(\x0b\x32\x17.session_proto.BRepFace\x12\r\n\x05width\x18\x0c \x01(\x01\x12*\n\x0csurfacecolor\x18\r \x01(\x0b\x32\x14.session_proto.Color\x12#\n\x05xform\x18\x0e \x01(\x0b\x32\x14.session_proto.Xform*S\n\x0c\x42RepTrimType\x12\x11\n\rTRIM_BOUNDARY\x10\x00\x12\x0e\n\nTRIM_MATED\x10\x01\x12\r\n\tTRIM_SEAM\x10\x02\x12\x11\n\rTRIM_SINGULAR\x10\x03*.\n\x0c\x42RepLoopType\x12\x0e\n\nLOOP_OUTER\x10\x00\x12\x0e\n\nLOOP_INNER\x10\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nbrep.proto\x12\rsession_proto\x1a\x0b\x63olor.proto\x1a\x0bxform.proto\x1a\x12nurbssurface.proto\x1a\x10nurbscurve.proto\x1a\x0bpoint.proto\"7\n\nBRepVertex\x12\x13\n\x0bpoint_index\x18\x01 \x01(\x05\x12\x14\n\x0c\x65\x64ge_indices\x18\x02 \x03(\x05\"b\n\x08\x42RepEdge\x12\x16\n\x0e\x63urve_3d_index\x18\x01 \x01(\x05\x12\x14\n\x0cstart_vertex\x18\x02 \x01(\x05\x12\x12\n\nend_vertex\x18\x03 \x01(\x05\x12\x14\n\x0ctrim_indices\x18\x04 \x03(\x05\"\x87\x01\n\x08\x42RepTrim\x12\x16\n\x0e\x63urve_2d_index\x18\x01 \x01(\x05\x12\x12\n\nedge_index\x18\x02 \x01(\x05\x12\x12\n\nloop_index\x18\x03 \x01(\x05\x12\x10\n\x08reversed\x18\x04 \x01(\x08\x12)\n\x04type\x18\x05 \x01(\x0e\x32\x1b.session_proto.BRepTrimType\"_\n\x08\x42RepLoop\x12\x14\n\x0ctrim_indices\x18\x01 \x03(\x05\x12\x12\n\nface_index\x18\x02 \x01(\x05\x12)\n\x04type\x18\x03 \x01(\x0e\x32\x1b.session_proto.BRepLoopType\"r\n\x08\x42RepFace\x12\x15\n\rsurface_index\x18\x01 \x01(\x05\x12\x14\n\x0cloop_indices\x18\x02 \x03(\x05\x12\x10\n\x08reversed\x18\x03 \x01(\x08\x12\'\n\tfacecolor\x18\x04 \x01(\x0b\x32\x14.session_proto.Color\"\x94\x04\n\x04\x42Rep\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12,\n\tcurves_2d\x18\x03 \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12,\n\tcurves_3d\x18\x04 \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12-\n\x08surfaces\x18\x05 \x03(\x0b\x32\x1b.session_proto.NurbsSurface\x12&\n\x08vertices\x18\x06 \x03(\x0b\x32\x14.session_proto.Point\x12\x34\n\x11topology_vertices\x18\x07 \x03(\x0b\x32\x19.session_proto.BRepVertex\x12/\n\x0etopology_edges\x18\x08 \x03(\x0b\x32\x17.session_proto.BRepEdge\x12&\n\x05trims\x18\t \x03(\x0b\x32\x17.session_proto.BRepTrim\x12&\n\x05loops\x18\n \x03(\x0b\x32\x17.session_proto.BRepLoop\x12&\n\x05\x66\x61\x63\x65s\x18\x0b \x03(\x0b\x32\x17.session_proto.BRepFace\x12\r\n\x05width\x18\x0c \x01(\x01\x12*\n\x0csurfacecolor\x18\r \x01(\x0b\x32\x14.session_proto.Color\x12#\n\x05xform\x18\x0e \x01(\x0b\x32\x14.session_proto.Xform*S\n\x0c\x42RepTrimType\x12\x11\n\rTRIM_BOUNDARY\x10\x00\x12\x0e\n\nTRIM_MATED\x10\x01\x12\r\n\tTRIM_SEAM\x10\x02\x12\x11\n\rTRIM_SINGULAR\x10\x03*.\n\x0c\x42RepLoopType\x12\x0e\n\nLOOP_OUTER\x10\x00\x12\x0e\n\nLOOP_INNER\x10\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'brep_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_BREPTRIMTYPE']._serialized_start=1108
-  _globals['_BREPTRIMTYPE']._serialized_end=1191
-  _globals['_BREPLOOPTYPE']._serialized_start=1193
-  _globals['_BREPLOOPTYPE']._serialized_end=1239
+  _globals['_BREPTRIMTYPE']._serialized_start=1149
+  _globals['_BREPTRIMTYPE']._serialized_end=1232
+  _globals['_BREPLOOPTYPE']._serialized_start=1234
+  _globals['_BREPLOOPTYPE']._serialized_end=1280
   _globals['_BREPVERTEX']._serialized_start=106
   _globals['_BREPVERTEX']._serialized_end=161
   _globals['_BREPEDGE']._serialized_start=163
@@ -49,7 +49,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_BREPLOOP']._serialized_start=401
   _globals['_BREPLOOP']._serialized_end=496
   _globals['_BREPFACE']._serialized_start=498
-  _globals['_BREPFACE']._serialized_end=571
-  _globals['_BREP']._serialized_start=574
-  _globals['_BREP']._serialized_end=1106
+  _globals['_BREPFACE']._serialized_end=612
+  _globals['_BREP']._serialized_start=615
+  _globals['_BREP']._serialized_end=1147
 # @@protoc_insertion_point(module_scope)
