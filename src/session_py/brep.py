@@ -1,5 +1,6 @@
 import uuid
 import copy
+import math
 
 from .point import Point
 from .vector import Vector
@@ -7,6 +8,9 @@ from .xform import Xform
 from .color import Color
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
+
+_IDENTITY_XFORM = Xform.identity()
+_ZERO_GUID = "00000000-0000-0000-0000-000000000000"
 
 
 class BRepTrimType:
@@ -628,8 +632,6 @@ class BRep:
     @staticmethod
     def from_nurbscurves(curves, holes=None):
         import numpy as np
-        from .plane import Plane
-        from .polyline import Polyline
         brep = BRep()
         brep.name = "polysurface"
         tol = 1e-6
@@ -649,23 +651,30 @@ class BRep:
             return idx
 
         def project_curve_to_uv(crv, org, xa, ya, umin, vmin, du, dv):
-            c2d = NurbsCurve(dimension=3, is_rational=crv.is_rational(), order=crv.order(), cv_count=crv.cv_count())
+            import numpy as np
+            nc = crv.cv_count()
+            c2d = NurbsCurve.__new__(NurbsCurve)
+            c2d.guid = _ZERO_GUID; c2d.name = ""; c2d.width = 1.0
+            c2d.pointcolors = []; c2d.linecolors = []; c2d.xform = _IDENTITY_XFORM; c2d._rmf_cache = None
+            c2d.m_dim = 3; c2d.m_is_rat = crv.m_is_rat; c2d.m_order = crv.m_order
+            c2d.m_cv_count = nc; c2d.m_cv_stride = (4 if crv.m_is_rat else 3)
             c2d.m_knot = crv.m_knot.copy()
-            c2d.m_cv = np.zeros(crv.cv_count() * c2d.m_cv_stride, dtype=np.float64)
-            for i in range(crv.cv_count()):
-                if crv.is_rational():
-                    wx, wy, wz, w = crv.get_cv_4d(i)
-                    x, y, z = wx/w, wy/w, wz/w
-                    dx, dy, dz = x-org[0], y-org[1], z-org[2]
-                    u = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
-                    v = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
-                    c2d.set_cv_4d(i, u*w, v*w, 0.0, w)
-                else:
-                    cv = crv.get_cv(i)
-                    dx, dy, dz = cv[0]-org[0], cv[1]-org[1], cv[2]-org[2]
-                    u = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
-                    v = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
-                    c2d.set_cv(i, Point(u, v, 0))
+            if crv.m_is_rat:
+                wxyz = crv.m_cv.reshape(nc, 4)
+                ws = wxyz[:, 3]
+                dx = wxyz[:, 0]/ws - org[0]; dy = wxyz[:, 1]/ws - org[1]; dz = wxyz[:, 2]/ws - org[2]
+                us = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
+                vs = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
+                out = np.zeros(nc * 4)
+                out[0::4] = us*ws; out[1::4] = vs*ws; out[3::4] = ws
+            else:
+                cvs = crv.m_cv.reshape(nc, 3)
+                dx = cvs[:, 0]-org[0]; dy = cvs[:, 1]-org[1]; dz = cvs[:, 2]-org[2]
+                us = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
+                vs = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
+                out = np.zeros(nc * 3)
+                out[0::3] = us; out[1::3] = vs
+            c2d.m_cv = out
             return c2d
 
         def add_curve_loop(crv, face_idx, loop_type, org, xa, ya, umin, vmin, du, dv):
@@ -673,54 +682,82 @@ class BRep:
             ci3d = brep.add_curve_3d(crv)
             crv2d = project_curve_to_uv(crv, org, xa, ya, umin, vmin, du, dv)
             c2d = brep.add_curve_2d(crv2d)
-            dom = crv.domain()
-            sp = crv.point_at(dom[0])
-            ep = crv.point_at(dom[1])
+            nc = crv.cv_count()
+            if crv.m_is_rat:
+                cv4 = crv.m_cv.reshape(nc, 4)
+                w0 = cv4[0, 3]; sp = (float(cv4[0, 0]/w0), float(cv4[0, 1]/w0), float(cv4[0, 2]/w0))
+                wn = cv4[-1, 3]; ep = (float(cv4[-1, 0]/wn), float(cv4[-1, 1]/wn), float(cv4[-1, 2]/wn))
+            else:
+                cv3 = crv.m_cv.reshape(nc, 3)
+                sp = (float(cv3[0, 0]), float(cv3[0, 1]), float(cv3[0, 2]))
+                ep = (float(cv3[-1, 0]), float(cv3[-1, 1]), float(cv3[-1, 2]))
             vi_s = find_or_add(sp)
-            vi_e = vi_s if crv.is_closed() else find_or_add(ep)
+            sdx = sp[0]-ep[0]; sdy = sp[1]-ep[1]; sdz = sp[2]-ep[2]
+            vi_e = vi_s if sdx*sdx+sdy*sdy+sdz*sdz < tol*tol else find_or_add(ep)
             lo, hi = min(vi_s, vi_e), max(vi_s, vi_e)
             ei = brep.add_edge(ci3d, lo, hi)
             brep.add_trim(c2d, ei, li, False, BRepTrimType.Boundary)
 
         for ci_idx, crv in enumerate(curves):
             if crv.order() == 2:
-                pts = [crv.get_cv(i) for i in range(crv.cv_count())]
+                pts = crv.m_cv.reshape(-1, 3)
             else:
                 pts, _ = crv.divide_by_count(max(crv.cv_count() * 2, 4))
-            n = len(pts) - 1 if crv.is_closed() else len(pts)
+            dx0 = float(pts[0][0]-pts[-1][0]); dy0 = float(pts[0][1]-pts[-1][1]); dz0 = float(pts[0][2]-pts[-1][2])
+            n = len(pts) - 1 if dx0*dx0+dy0*dy0+dz0*dz0 < tol*tol else len(pts)
             if n < 3:
                 continue
-            pl = Polyline(pts)
-            org, plane = pl.get_fast_plane()
-            if not plane.is_valid():
+            _nx = _ny = _nz = 0.0
+            for _i in range(n):
+                _a = pts[_i]; _b = pts[(_i+1) % n]
+                _nx += (_a[1]-_b[1]) * (_a[2]+_b[2])
+                _ny += (_a[2]-_b[2]) * (_a[0]+_b[0])
+                _nz += (_a[0]-_b[0]) * (_a[1]+_b[1])
+            _nlen = math.sqrt(_nx*_nx + _ny*_ny + _nz*_nz)
+            if _nlen < 1e-12:
                 continue
-            xa, ya = plane.x_axis, plane.y_axis
-            us_list, vs_list = [], []
-            umin = vmin = 1e30
-            umax = vmax = -1e30
-            for i in range(n):
-                dx = pts[i][0]-org[0]; dy = pts[i][1]-org[1]; dz = pts[i][2]-org[2]
-                u = dx*xa[0]+dy*xa[1]+dz*xa[2]; v = dx*ya[0]+dy*ya[1]+dz*ya[2]
-                us_list.append(u); vs_list.append(v)
-                umin = min(umin, u); umax = max(umax, u)
-                vmin = min(vmin, v); vmax = max(vmax, v)
+            _nx /= _nlen; _ny /= _nlen; _nz /= _nlen
+            _ax, _ay, _az = abs(_nx), abs(_ny), abs(_nz)
+            if _ay <= _ax and _ay <= _az:
+                _px, _py, _pz = -_nz, 0.0, _nx
+            elif _ax <= _ay and _ax <= _az:
+                _px, _py, _pz = 0.0, _nz, -_ny
+            else:
+                _px, _py, _pz = _ny, -_nx, 0.0
+            _pm = math.sqrt(_px*_px + _py*_py + _pz*_pz)
+            _px /= _pm; _py /= _pm; _pz /= _pm
+            org = pts[0]
+            xa = (_px, _py, _pz)
+            ya = (_ny*_pz - _nz*_py, _nz*_px - _nx*_pz, _nx*_py - _ny*_px)
+            ox = float(org[0]); oy = float(org[1]); oz = float(org[2])
+            pts_arr = pts[:n] if hasattr(pts, 'shape') else np.array([[p[0], p[1], p[2]] for p in pts[:n]])
+            dxs = pts_arr[:, 0]-ox; dys = pts_arr[:, 1]-oy; dzs = pts_arr[:, 2]-oz
+            us = dxs*xa[0]+dys*xa[1]+dzs*xa[2]; vs = dxs*ya[0]+dys*ya[1]+dzs*ya[2]
+            umin = float(us.min()); umax = float(us.max())
+            vmin = float(vs.min()); vmax = float(vs.max())
             if ci_idx < len(holes):
                 for hcrv in holes[ci_idx]:
-                    for i in range(hcrv.cv_count()):
-                        hp = hcrv.get_cv(i)
-                        dx = hp[0]-org[0]; dy = hp[1]-org[1]; dz = hp[2]-org[2]
-                        hu = dx*xa[0]+dy*xa[1]+dz*xa[2]; hv = dx*ya[0]+dy*ya[1]+dz*ya[2]
-                        umin = min(umin, hu); umax = max(umax, hu)
-                        vmin = min(vmin, hv); vmax = max(vmax, hv)
+                    nc = hcrv.cv_count()
+                    if hcrv.is_rational():
+                        wxyz = hcrv.m_cv.reshape(nc, 4)
+                        hcvs = wxyz[:, :3] / wxyz[:, 3:4]
+                    else:
+                        hcvs = hcrv.m_cv.reshape(nc, 3)
+                    hdxs = hcvs[:, 0]-ox; hdys = hcvs[:, 1]-oy; hdzs = hcvs[:, 2]-oz
+                    hus = hdxs*xa[0]+hdys*xa[1]+hdzs*xa[2]
+                    hvs = hdxs*ya[0]+hdys*ya[1]+hdzs*ya[2]
+                    umin = min(umin, float(hus.min())); umax = max(umax, float(hus.max()))
+                    vmin = min(vmin, float(hvs.min())); vmax = max(vmax, float(hvs.max()))
             pad = max(umax - umin, vmax - vmin) * 0.01
             umin -= pad; umax += pad; vmin -= pad; vmax += pad
             du, dv = umax - umin, vmax - vmin
 
-            def pt3d(u, v):
-                return Point(org[0]+u*xa[0]+v*ya[0], org[1]+u*xa[1]+v*ya[1], org[2]+u*xa[2]+v*ya[2])
             srf = NurbsSurface(3, False, 2, 2, 2, 2)
-            srf.set_cv(0, 0, pt3d(umin, vmin)); srf.set_cv(1, 0, pt3d(umax, vmin))
-            srf.set_cv(0, 1, pt3d(umin, vmax)); srf.set_cv(1, 1, pt3d(umax, vmax))
+            cv = srf.m_cv
+            cv[0]=ox+umin*xa[0]+vmin*ya[0]; cv[1]=oy+umin*xa[1]+vmin*ya[1]; cv[2]=oz+umin*xa[2]+vmin*ya[2]
+            cv[3]=ox+umin*xa[0]+vmax*ya[0]; cv[4]=oy+umin*xa[1]+vmax*ya[1]; cv[5]=oz+umin*xa[2]+vmax*ya[2]
+            cv[6]=ox+umax*xa[0]+vmin*ya[0]; cv[7]=oy+umax*xa[1]+vmin*ya[1]; cv[8]=oz+umax*xa[2]+vmin*ya[2]
+            cv[9]=ox+umax*xa[0]+vmax*ya[0]; cv[10]=oy+umax*xa[1]+vmax*ya[1]; cv[11]=oz+umax*xa[2]+vmax*ya[2]
             si = brep.add_surface(srf)
             fi = brep.add_face(si, False)
             add_curve_loop(crv, fi, BRepLoopType.Outer, org, xa, ya, umin, vmin, du, dv)
