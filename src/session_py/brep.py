@@ -627,6 +627,7 @@ class BRep:
 
     @staticmethod
     def from_nurbscurves(curves, holes=None):
+        import numpy as np
         from .plane import Plane
         from .polyline import Polyline
         brep = BRep()
@@ -648,9 +649,8 @@ class BRep:
             return idx
 
         def project_curve_to_uv(crv, org, xa, ya, umin, vmin, du, dv):
-            import numpy as np
             c2d = NurbsCurve(dimension=3, is_rational=crv.is_rational(), order=crv.order(), cv_count=crv.cv_count())
-            c2d.m_knot = np.array([crv.knot(i) for i in range(crv.knot_count())], dtype=np.float64)
+            c2d.m_knot = crv.m_knot.copy()
             c2d.m_cv = np.zeros(crv.cv_count() * c2d.m_cv_stride, dtype=np.float64)
             for i in range(crv.cv_count()):
                 if crv.is_rational():
@@ -706,11 +706,8 @@ class BRep:
                 vmin = min(vmin, v); vmax = max(vmax, v)
             if ci_idx < len(holes):
                 for hcrv in holes[ci_idx]:
-                    if hcrv.order() == 2:
-                        hpts = [hcrv.get_cv(i) for i in range(hcrv.cv_count())]
-                    else:
-                        hpts, _ = hcrv.divide_by_count(max(hcrv.cv_count() * 2, 4))
-                    for hp in hpts:
+                    for i in range(hcrv.cv_count()):
+                        hp = hcrv.get_cv(i)
                         dx = hp[0]-org[0]; dy = hp[1]-org[1]; dz = hp[2]-org[2]
                         hu = dx*xa[0]+dy*xa[1]+dz*xa[2]; hv = dx*ya[0]+dy*ya[1]+dz*ya[2]
                         umin = min(umin, hu); umax = max(umax, hu)
