@@ -9,8 +9,11 @@ from .color import Color
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 
+import numpy as _np
 _IDENTITY_XFORM = Xform.identity()
 _ZERO_GUID = "00000000-0000-0000-0000-000000000000"
+_BLACK_COLOR = Color.black()
+_KNOT_01 = _np.array([0., 1.], dtype=_np.float64)
 
 
 class BRepTrimType:
@@ -552,7 +555,7 @@ class BRep:
 
         _vertex_map = {}
         def find_or_add(p):
-            key = (round(p[0], 6), round(p[1], 6), round(p[2], 6))
+            key = (int(p[0]*1000000+0.5), int(p[1]*1000000+0.5), int(p[2]*1000000+0.5))
             existing = _vertex_map.get(key)
             if existing is not None:
                 return existing
@@ -631,7 +634,6 @@ class BRep:
 
     @staticmethod
     def from_nurbscurves(curves, holes=None):
-        import numpy as np
         brep = BRep()
         brep.name = "polysurface"
         tol = 1e-6
@@ -640,7 +642,7 @@ class BRep:
 
         _vertex_map = {}
         def find_or_add(p):
-            key = (round(p[0], 6), round(p[1], 6), round(p[2], 6))
+            key = (int(p[0]*1000000+0.5), int(p[1]*1000000+0.5), int(p[2]*1000000+0.5))
             existing = _vertex_map.get(key)
             if existing is not None:
                 return existing
@@ -651,7 +653,6 @@ class BRep:
             return idx
 
         def project_curve_to_uv(crv, org, xa, ya, umin, vmin, du, dv):
-            import numpy as np
             nc = crv.cv_count()
             c2d = NurbsCurve.__new__(NurbsCurve)
             c2d.guid = _ZERO_GUID; c2d.name = ""; c2d.width = 1.0
@@ -665,14 +666,14 @@ class BRep:
                 dx = wxyz[:, 0]/ws - org[0]; dy = wxyz[:, 1]/ws - org[1]; dz = wxyz[:, 2]/ws - org[2]
                 us = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
                 vs = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
-                out = np.zeros(nc * 4)
+                out = _np.zeros(nc * 4)
                 out[0::4] = us*ws; out[1::4] = vs*ws; out[3::4] = ws
             else:
                 cvs = crv.m_cv.reshape(nc, 3)
                 dx = cvs[:, 0]-org[0]; dy = cvs[:, 1]-org[1]; dz = cvs[:, 2]-org[2]
                 us = (dx*xa[0]+dy*xa[1]+dz*xa[2] - umin) / du
                 vs = (dx*ya[0]+dy*ya[1]+dz*ya[2] - vmin) / dv
-                out = np.zeros(nc * 3)
+                out = _np.zeros(nc * 3)
                 out[0::3] = us; out[1::3] = vs
             c2d.m_cv = out
             return c2d
@@ -730,11 +731,16 @@ class BRep:
             xa = (_px, _py, _pz)
             ya = (_ny*_pz - _nz*_py, _nz*_px - _nx*_pz, _nx*_py - _ny*_px)
             ox = float(org[0]); oy = float(org[1]); oz = float(org[2])
-            pts_arr = pts[:n] if hasattr(pts, 'shape') else np.array([[p[0], p[1], p[2]] for p in pts[:n]])
-            dxs = pts_arr[:, 0]-ox; dys = pts_arr[:, 1]-oy; dzs = pts_arr[:, 2]-oz
-            us = dxs*xa[0]+dys*xa[1]+dzs*xa[2]; vs = dxs*ya[0]+dys*ya[1]+dzs*ya[2]
-            umin = float(us.min()); umax = float(us.max())
-            vmin = float(vs.min()); vmax = float(vs.max())
+            xa0=xa[0]; xa1=xa[1]; xa2=xa[2]; ya0=ya[0]; ya1=ya[1]; ya2=ya[2]
+            umin=vmin=1e30; umax=vmax=-1e30
+            for _i in range(n):
+                _p = pts[_i]
+                _dx=float(_p[0])-ox; _dy=float(_p[1])-oy; _dz=float(_p[2])-oz
+                _u=_dx*xa0+_dy*xa1+_dz*xa2; _v=_dx*ya0+_dy*ya1+_dz*ya2
+                if _u<umin: umin=_u
+                if _u>umax: umax=_u
+                if _v<vmin: vmin=_v
+                if _v>vmax: vmax=_v
             if ci_idx < len(holes):
                 for hcrv in holes[ci_idx]:
                     nc = hcrv.cv_count()
@@ -752,8 +758,13 @@ class BRep:
             umin -= pad; umax += pad; vmin -= pad; vmax += pad
             du, dv = umax - umin, vmax - vmin
 
-            srf = NurbsSurface(3, False, 2, 2, 2, 2)
-            cv = srf.m_cv
+            srf = NurbsSurface.__new__(NurbsSurface)
+            srf.guid = _ZERO_GUID; srf.name = ""; srf.surfacecolor = _BLACK_COLOR
+            srf.width = 1.0; srf.pointcolors = []; srf.facecolors = []; srf.linecolors = []
+            srf.xform = _IDENTITY_XFORM; srf.m_mesh = None
+            srf.m_dim = 3; srf.m_is_rat = 0; srf.m_order = [2, 2]; srf.m_cv_count = [2, 2]
+            srf.m_cv_stride = [6, 3]; srf.m_knot = [_KNOT_01, _KNOT_01]
+            cv = _np.zeros(12, dtype=_np.float64); srf.m_cv = cv
             cv[0]=ox+umin*xa[0]+vmin*ya[0]; cv[1]=oy+umin*xa[1]+vmin*ya[1]; cv[2]=oz+umin*xa[2]+vmin*ya[2]
             cv[3]=ox+umin*xa[0]+vmax*ya[0]; cv[4]=oy+umin*xa[1]+vmax*ya[1]; cv[5]=oz+umin*xa[2]+vmax*ya[2]
             cv[6]=ox+umax*xa[0]+vmin*ya[0]; cv[7]=oy+umax*xa[1]+vmin*ya[1]; cv[8]=oz+umax*xa[2]+vmin*ya[2]
