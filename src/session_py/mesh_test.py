@@ -304,19 +304,198 @@ def test_mesh_loft_many():
     MINI_CHECK(meshes_seq[0].number_of_faces() == meshes[0].number_of_faces())
 
 
+@MINI_TEST("Mesh", "Loft with quads and triangles")
+def test_mesh_loft_panels():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Color
+
+    top7 = [
+        [
+            Point(250,-250,500),
+            Point(250,250,500),
+            Point(-250,250,500),
+            Point(-250,-250,500),
+            Point(250,-250,500),
+        ],
+        [
+            Point(-250,500,250),
+            Point(-250,250,500),
+            Point(250,250,500),
+            Point(250,500,250),
+            Point(-250,500,250),
+        ],
+        [
+            Point(250,-250,500),
+            Point(500,-250,250),
+            Point(500,250,250),
+            Point(250,250,500),
+            Point(250,-250,500),
+        ],
+        [
+            Point(250,500,250),
+            Point(250,250,500),
+            Point(500,250,250),
+            Point(250,500,250),
+        ],
+        [
+            Point(-250,500,250),
+            Point(250,500,250),
+            Point(250,500,-250),
+            Point(-250,500,-250),
+            Point(-250,500,250),
+        ],
+        [
+            Point(250,500,250),
+            Point(500,250,250),
+            Point(500,250,-250),
+            Point(250,500,-250),
+            Point(250,500,250),
+        ],
+        [
+            Point(500,-250,250),
+            Point(500,-250,-250),
+            Point(500,250,-250),
+            Point(500,250,250),
+            Point(500,-250,250),
+        ],
+    ]
+    bot7 = [
+        [
+            Point(270.710678,-250,550),
+            Point(270.710678,265.891862,550),
+            Point(265.891862,270.710678,550),
+            Point(-250,270.710678,550),
+            Point(-250,-250,550),
+            Point(270.710678,-250,550),
+        ],
+        [
+            Point(270.710678,-250,550),
+            Point(550,-250,270.710678),
+            Point(550,265.891862,270.710678),
+            Point(270.710678,265.891862,550),
+            Point(270.710678,-250,550),
+        ],
+        [
+            Point(-250,550,270.710678),
+            Point(-250,270.710678,550),
+            Point(265.891862,270.710678,550),
+            Point(265.891862,550,270.710678),
+            Point(-250,550,270.710678),
+        ],
+        [
+            Point(265.891862,550,270.710678),
+            Point(265.891862,270.710678,550),
+            Point(270.710678,265.891862,550),
+            Point(550,265.891862,270.710678),
+            Point(550,270.710678,265.891862),
+            Point(270.710678,550,265.891862),
+            Point(265.891862,550,270.710678),
+        ],
+        [
+            Point(-250,550,270.710678),
+            Point(265.891862,550,270.710678),
+            Point(270.710678,550,265.891862),
+            Point(270.710678,550,-250),
+            Point(-250,550,-250),
+            Point(-250,550,270.710678),
+        ],
+        [
+            Point(270.710678,550,265.891862),
+            Point(550,270.710678,265.891862),
+            Point(550,270.710678,-250),
+            Point(270.710678,550,-250),
+            Point(270.710678,550,265.891862),
+        ],
+        [
+            Point(550,-250,270.710678),
+            Point(550,-250,-250),
+            Point(550,270.710678,-250),
+            Point(550,270.710678,265.891862),
+            Point(550,265.891862,270.710678),
+            Point(550,-250,270.710678),
+        ],
+    ]
+    panels, adj, top_mesh, bot_mesh = Mesh.loft_panels(top7, bot7, 0.001)
+
+    # Color faces: blue=top cap, red=bot cap, gray=quad wall, yellow=tri wall
+    for i, panel in enumerate(panels):
+        face_colors = []
+        for fk, role in panel.face_roles.items():
+            if role == "TopCap": face_colors.append(Color.blue())
+            elif role == "BotCap": face_colors.append(Color.red())
+            elif role == "TriWall": face_colors.append(Color.yellow())
+            else: face_colors.append(Color.grey())
+        panel.mesh.set_facecolors(face_colors)
+
+    # face centroids labelled with panel index
+    for i, panel in enumerate(panels):
+        c = panel.mesh.centroid()
+        c.name = f"p{i}"
+
+    # adjacency: for each shared edge — text dot at midpoint labelled "p{i}f{idx}<->p{j}f{idx}"
+    for pair in adj:
+        w = panels[pair.pi].wall_faces[pair.wi]
+        pt = panels[pair.pi].mesh.face_centroid(w.face_key)
+        pt.name = f"p{pair.pi} f{w.face_index} - p{pair.pj} f{panels[pair.pj].wall_faces[pair.wj].face_index}"
+    MINI_CHECK(len(panels) == 7)
+    MINI_CHECK(panels[0].mesh.is_valid())
+    MINI_CHECK(panels[1].mesh.is_valid())
+    MINI_CHECK(panels[2].mesh.is_valid())
+    MINI_CHECK(panels[3].mesh.is_valid())
+    MINI_CHECK(panels[4].mesh.is_valid())
+    MINI_CHECK(panels[5].mesh.is_valid())
+    MINI_CHECK(panels[6].mesh.is_valid())
+    MINI_CHECK(len(adj) == 9)
+    MINI_CHECK(adj[0].pi == 0 and adj[0].pj == 2)
+    MINI_CHECK(adj[1].pi == 0 and adj[1].pj == 1)
+    MINI_CHECK(adj[2].pi == 1 and adj[2].pj == 3)
+    MINI_CHECK(adj[3].pi == 1 and adj[3].pj == 4)
+    MINI_CHECK(adj[4].pi == 2 and adj[4].pj == 6)
+    MINI_CHECK(adj[5].pi == 2 and adj[5].pj == 3)
+    MINI_CHECK(adj[6].pi == 3 and adj[6].pj == 5)
+    MINI_CHECK(adj[7].pi == 4 and adj[7].pj == 5)
+    MINI_CHECK(adj[8].pi == 5 and adj[8].pj == 6)
+
+
 @MINI_TEST("Mesh", "Boolean Queries")
 def test_mesh_boolean_queries():
     from session_py import Mesh
     from session_py import Point
 
-    mesh = Mesh()
-    v0 = mesh.add_vertex(Point(0, 0, 0))
-    v1 = mesh.add_vertex(Point(1, 0, 0))
-    v2 = mesh.add_vertex(Point(0, 1, 0))
-    f0 = mesh.add_face([v0, v1, v2])
+    mesh = Mesh.from_polylines([
+        [
+            Point(1.28955, 0, 1.127558),
+            Point(0.85791, 0, 0.225512),
+            Point(0.64209, -0.866025, -0.225512),
+            Point(0.85791, -1.732051, 0.225512),
+            Point(1.458565, -1.732051, 1.127558),
+            Point(1.50537, -0.866025, 1.578581),
+        ],
+        [
+            Point(0.64209, 0.866025, -0.225512),
+            Point(0.114274, 0.866025, -0.686294),
+            Point(-0.00537, 0, -1.578581),
+            Point(0.21045, -0.866025, -1.127558),
+            Point(0.64209, -0.866025, -0.225512),
+            Point(0.85791, 0, 0.225512),
+        ],
+        [
+            Point(1.28955, 1.732051, 1.127558),
+            Point(0.85791, 1.732051, 0.225512),
+            Point(0.64209, 0.866025, -0.225512),
+            Point(0.85791, 0, 0.225512),
+            Point(1.28955, -0, 1.127558),
+            Point(1.853404, 0.866025, 1.578581),
+        ],
+    ], 0.001)
+    v0 = 1
+    v1 = 2
+    v2 = 3
+    f0 = 0
 
-    not_empty = mesh.is_empty()
-    MINI_CHECK(not not_empty)
+    empty = mesh.is_empty()
+    MINI_CHECK(not empty)
 
     valid = mesh.is_valid()
     MINI_CHECK(valid)
@@ -325,9 +504,12 @@ def test_mesh_boolean_queries():
     MINI_CHECK(not closed)
 
     vertex_on_boundary = mesh.is_vertex_on_boundary(v0)
-    MINI_CHECK(vertex_on_boundary)
+    MINI_CHECK(not vertex_on_boundary)
 
-    edge_on_boundary = mesh.is_edge_on_boundary(v0, v1)
+    edge_not_on_boundary = mesh.is_edge_on_boundary(v0, v1)
+    MINI_CHECK(not edge_not_on_boundary)
+
+    edge_on_boundary = mesh.is_edge_on_boundary(v1, v2)
     MINI_CHECK(edge_on_boundary)
 
     face_on_boundary = mesh.is_face_on_boundary(f0)
@@ -371,16 +553,32 @@ def test_mesh_attributes():
     MINI_CHECK(faces[4] == [0, 4, 7, 3])
     MINI_CHECK(faces[5] == [1, 2, 6, 5])
 
-    vindex = mesh.vertex_index()
-    MINI_CHECK(len(vindex) == n_vertices)
-    MINI_CHECK(vindex[0] == 0)
-    MINI_CHECK(vindex[1] == 1)
-    MINI_CHECK(vindex[2] == 2)
-    MINI_CHECK(vindex[3] == 3)
-    MINI_CHECK(vindex[4] == 4)
-    MINI_CHECK(vindex[5] == 5)
-    MINI_CHECK(vindex[6] == 6)
-    MINI_CHECK(vindex[7] == 7)
+    vertex_to_index = mesh.vertex_index()
+    MINI_CHECK(len(vertex_to_index) == n_vertices)
+    MINI_CHECK(vertex_to_index[0] == 0)
+    MINI_CHECK(vertex_to_index[1] == 1)
+    MINI_CHECK(vertex_to_index[2] == 2)
+    MINI_CHECK(vertex_to_index[3] == 3)
+    MINI_CHECK(vertex_to_index[4] == 4)
+    MINI_CHECK(vertex_to_index[5] == 5)
+    MINI_CHECK(vertex_to_index[6] == 6)
+    MINI_CHECK(vertex_to_index[7] == 7)
+
+    # sparse keys: key != index
+    mesh2 = Mesh()
+    k0 = mesh2.add_vertex(Point(0.0, 0.0, 0.0))
+    k1 = mesh2.add_vertex(Point(1.0, 0.0, 0.0), 5)
+    k2 = mesh2.add_vertex(Point(0.0, 1.0, 0.0), 10)
+    MINI_CHECK(k0 == 0)
+    MINI_CHECK(k1 == 5)
+    MINI_CHECK(k2 == 10)
+    vertex_to_index = mesh2.vertex_index()
+    v0 = vertex_to_index[0]
+    v5 = vertex_to_index[5]
+    v10 = vertex_to_index[10]
+    MINI_CHECK(v0  == 0)
+    MINI_CHECK(v5  == 1)
+    MINI_CHECK(v10 == 2)
 
 
 @MINI_TEST("Mesh", "Edges")
@@ -436,33 +634,31 @@ def test_mesh_vertex_and_face_operations():
     p1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
     p2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
     p3 = mesh.add_vertex(Point(2.0, 1.0, 0.0))
-    f0 = mesh.add_face([p0, p1, p2])
-    f1 = mesh.add_face([p1, p2, p3])
+    f0 = mesh.add_face([p0, p1, p2])  # +z normal
+    f1 = mesh.add_face([p1, p2, p3])  # -z normal (wrong: same halfedge dir)
 
     n0_before = mesh.face_normal(f0)
     n1_before = mesh.face_normal(f1)
     MINI_CHECK(n0_before is not None and n1_before is not None)
-    MINI_CHECK(n0_before[0]*n1_before[0] + n0_before[1]*n1_before[1] + n0_before[2]*n1_before[2] < 0.0)
+    MINI_CHECK(n0_before.dot(n1_before) < 0.0)  # wrong: normals point opposite ways
 
     mesh.unify_winding()
 
     n0_after = mesh.face_normal(f0)
     n1_after = mesh.face_normal(f1)
     MINI_CHECK(n0_after is not None and n1_after is not None)
-    MINI_CHECK(n0_after[0]*n1_after[0] + n0_after[1]*n1_after[1] + n0_after[2]*n1_after[2] > 0.0)
+    MINI_CHECK(n0_after.dot(n1_after) > 0.0)  # correct: normals agree
 
-
-@MINI_TEST("Mesh", "Unweld")
-def test_unweld():
-    from session_py.mesh import Mesh
-
+    # Unweld and weld
     box = Mesh.create_box(1.0, 1.0, 1.0)
     u = box.unweld()
-
-    MINI_CHECK(u.number_of_faces() == box.number_of_faces())
     MINI_CHECK(u.number_of_vertices() == 24)
-    for vk in u.vertex:
-        MINI_CHECK(len(u.vertex_faces(vk)) == 1)
+
+    w = u.weld(0.001)
+    MINI_CHECK(w.number_of_vertices() == 8)
+    MINI_CHECK(w.number_of_faces() == 6)
+    for vk in w.vertex:
+        MINI_CHECK(len(w.vertex_faces(vk)) == 3)
 
 
 @MINI_TEST("Mesh", "Connectivity Queries")
@@ -600,6 +796,13 @@ def test_mesh_geometric_properties():
     MINI_CHECK(len(vnsw) == mesh.number_of_vertices())
     MINI_CHECK(TOLERANCE.is_close(vnsw[v0][2], 1.0))
 
+    # area
+    box = Mesh.create_box(2.0, 2.0, 2.0)
+    MINI_CHECK(TOLERANCE.is_close(box.area(), 24.0))
+
+    # volume
+    MINI_CHECK(TOLERANCE.is_close(box.volume(), 8.0))
+
 
 @MINI_TEST("Mesh", "Transformation")
 def test_mesh_transformation():
@@ -656,11 +859,14 @@ def test_mesh_json_roundtrip():
     mesh.add_face([v0, v1, v2])
 
     # JSON object
+    from session_py import Xform
+    mesh.xform = Xform.translation(1.0, 2.0, 3.0)
     d = mesh.__jsondump__()
     loaded_json = Mesh.__jsonload__(d)
     MINI_CHECK(loaded_json.name == mesh.name)
     MINI_CHECK(loaded_json.number_of_vertices() == mesh.number_of_vertices())
     MINI_CHECK(loaded_json.number_of_faces() == mesh.number_of_faces())
+    MINI_CHECK(loaded_json.xform == mesh.xform)
 
     # String
     json_string = mesh.json_dumps()

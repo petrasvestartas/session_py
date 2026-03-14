@@ -33,11 +33,21 @@ class TreeNode:
 
     def __init__(self, name="my_node"):
         self.name = name
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.color = None
         self._parent = None
         self._children = []
         self._tree = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __str__(self):
         """String representation."""

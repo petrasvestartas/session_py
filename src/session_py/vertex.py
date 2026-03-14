@@ -35,10 +35,20 @@ class Vertex:
             Vertex attribute data as string. Defaults to "".
 
         """
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = str(name)
         self.attribute = str(attribute)
         self.index = None  # Will be set internally by Graph
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __jsondump__(self):
         """Serialize to polymorphic JSON format with type field."""

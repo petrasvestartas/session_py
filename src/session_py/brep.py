@@ -87,11 +87,11 @@ class BRepFace:
 
 class BRep:
     def __init__(self):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_brep"
         self.width = 1.0
-        self.surfacecolor = Color.black()
-        self.xform = Xform.identity()
+        self._surfacecolor = None
+        self._xform = None
         self.m_surfaces = []
         self.m_curves_3d = []
         self.m_curves_2d = []
@@ -101,6 +101,36 @@ class BRep:
         self.m_trims = []
         self.m_loops = []
         self.m_faces = []
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def surfacecolor(self):
+        if self._surfacecolor is None:
+            self._surfacecolor = Color.black()
+        return self._surfacecolor
+
+    @surfacecolor.setter
+    def surfacecolor(self, value):
+        self._surfacecolor = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     def __str__(self):
         return f"BRep(name={self.name}, faces={self.face_count()}, edges={self.edge_count()}, vertices={self.vertex_count()})"

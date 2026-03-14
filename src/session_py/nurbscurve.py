@@ -516,12 +516,12 @@ class NurbsCurve:
 
     def __init__(self, dimension: int = 3, is_rational: bool = False,
                  order: int = 4, cv_count: int = 0):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_nurbscurve"
         self.width = 1.0
         self.pointcolors = []
         self.linecolors = []
-        self.xform = Xform.identity()
+        self._xform = None
 
         self.m_dim = dimension
         self.m_is_rat = 1 if is_rational else 0
@@ -538,6 +538,26 @@ class NurbsCurve:
             self.m_cv = np.array([], dtype=np.float64)
 
         self._rmf_cache = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, NurbsCurve):

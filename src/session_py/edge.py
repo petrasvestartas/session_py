@@ -16,12 +16,22 @@ class Edge:
         attribute : str, optional
             Edge attribute data as string.
         """
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_edge"
         self.v0 = str(v0)
         self.v1 = str(v1)
         self.attribute = str(attribute)
         self.index = None  # Will be set internally by Graph
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __jsondump__(self):
         """Serialize to polymorphic JSON format with type field."""

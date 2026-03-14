@@ -20,11 +20,21 @@ class Graph:
     def __init__(self, name="my_graph"):
         """Initialize a new Graph."""
         self.name = name
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.vertices = {}  # node_name -> Vertex object
         self.edges = {}  # node_name -> {neighbor_name -> Edge object}
         self.vertex_count = 0  # Track next available vertex index
         self.edge_count = 0  # Track next available edge index
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __str__(self):
         """String representation."""

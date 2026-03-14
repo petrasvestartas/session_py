@@ -9,8 +9,10 @@ from .vector import Vector
 
 
 class Xform:
+    _identity_cache = None
+
     def __init__(self, m=None):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_xform"
         if m is None:
             self.m = [
@@ -33,6 +35,16 @@ class Xform:
             ]
         else:
             self.m = list(m)
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __eq__(self, other):
         if not isinstance(other, Xform):
@@ -64,7 +76,9 @@ class Xform:
 
     @staticmethod
     def identity():
-        return Xform()
+        if Xform._identity_cache is None:
+            Xform._identity_cache = Xform()
+        return Xform._identity_cache
 
     @staticmethod
     def from_matrix(m):

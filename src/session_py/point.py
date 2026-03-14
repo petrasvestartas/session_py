@@ -33,14 +33,44 @@ class Point:
     """
 
     def __init__(self, x=0.0, y=0.0, z=0.0, name="my_point"):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = name
         self._x = x
         self._y = y
         self._z = z
         self.width = 1.0
-        self.pointcolor = Color.blue()
-        self.xform = Xform.identity()
+        self._pointcolor = None
+        self._xform = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def pointcolor(self):
+        if self._pointcolor is None:
+            self._pointcolor = Color.blue()
+        return self._pointcolor
+
+    @pointcolor.setter
+    def pointcolor(self, value):
+        self._pointcolor = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     ###########################################################################################
     # Operators

@@ -25,9 +25,19 @@ class Tree:
     """
 
     def __init__(self, name="my_tree"):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = name
         self._root = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __str__(self):
         return "<Tree with {} nodes>".format(len(list(self.nodes)))

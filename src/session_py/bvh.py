@@ -323,7 +323,7 @@ class BVH:
     """Boundary Volume Hierarchy for spatial acceleration."""
 
     def __init__(self, world_size: float = 1000.0):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_bvh"
         self.root: Optional[BVHNode] = None
         self.world_size = world_size
@@ -336,6 +336,16 @@ class BVH:
             None  # float64, shape (n, 6) for cx,cy,cz,hx,hy,hz
         )
         self.arena_root: int = -1
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     @staticmethod
     def compute_world_size(bounding_boxes: List[BoundingBox]) -> float:

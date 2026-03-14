@@ -19,8 +19,18 @@ class BoundingBox:
         self.y_axis = y_axis if y_axis is not None else Vector(0.0, 1.0, 0.0)
         self.z_axis = z_axis if z_axis is not None else Vector(0.0, 0.0, 1.0)
         self.half_size = half_size if half_size is not None else Vector(0.5, 0.5, 0.5)
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_boundingbox"
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     @classmethod
     def from_plane(cls, plane: Plane, dx: float, dy: float, dz: float):

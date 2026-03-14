@@ -23,11 +23,11 @@ class Polyline:
         Args:
             points: The collection of points (converted to flat coords internally).
         """
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_polyline"
         self.width = 1.0
-        self.linecolor = Color.black()
-        self.xform = Xform.identity()
+        self._linecolor = None
+        self._xform = None
 
         # Store coordinates as flat array [x0, y0, z0, x1, y1, z1, ...]
         self._coords: List[float] = []
@@ -40,6 +40,36 @@ class Polyline:
             self.plane = Plane.from_points(self.get_points())
         else:
             self.plane = Plane()
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def linecolor(self):
+        if self._linecolor is None:
+            self._linecolor = Color.black()
+        return self._linecolor
+
+    @linecolor.setter
+    def linecolor(self, value):
+        self._linecolor = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     @classmethod
     def from_coords(cls, coords: List[float]) -> "Polyline":

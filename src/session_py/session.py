@@ -46,7 +46,7 @@ class Session:
     """
 
     def __init__(self, name="my_session"):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = name
         self.objects = Objects()
         self.lookup: Dict[str, Any] = {}
@@ -59,6 +59,16 @@ class Session:
         # Create empty root node with session name
         root_node = TreeNode(name=self.name)
         self.tree.add(root_node)
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __str__(self) -> str:
         return f"Session(objects={self.objects.to_str()}, tree={self.tree.to_str()}, graph={self.graph.to_str()})"
@@ -320,6 +330,11 @@ class Session:
         self.lookup[brep.guid] = brep
         self.graph.add_node(brep.guid, f"brep_{brep.name}")
         return TreeNode(name=brep.guid)
+
+    def add_group(self, name: str) -> TreeNode:
+        node = TreeNode(name=name)
+        self.add(node)
+        return node
 
     def add(self, node: TreeNode, parent: TreeNode = None) -> None:
         """Add a TreeNode to the tree hierarchy.

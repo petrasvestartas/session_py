@@ -31,13 +31,23 @@ class Vector:
     """
 
     def __init__(self, x=0.0, y=0.0, z=0.0):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_vector"
         self._x = x
         self._y = y
         self._z = z
         self._magnitude = 0.0
         self._has_magnitude = False
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     @property
     def x(self):

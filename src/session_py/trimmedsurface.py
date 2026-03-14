@@ -32,14 +32,44 @@ def _point_in_polygon_2d(px, py, coords):
 class TrimmedSurface:
 
     def __init__(self):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_trimmedsurface"
         self.width = 1.0
-        self.surfacecolor = Color.black()
-        self.xform = Xform.identity()
+        self._surfacecolor = None
+        self._xform = None
         self.m_surface = NurbsSurface()
         self.m_outer_loop = NurbsCurve()
         self.m_inner_loops = []
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def surfacecolor(self):
+        if self._surfacecolor is None:
+            self._surfacecolor = Color.black()
+        return self._surfacecolor
+
+    @surfacecolor.setter
+    def surfacecolor(self, value):
+        self._surfacecolor = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     @staticmethod
     def create(surface, outer_loop):

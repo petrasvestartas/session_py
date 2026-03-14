@@ -45,10 +45,10 @@ class Plane:
     """
 
     def __init__(self, origin=None, x_axis=None, y_axis=None, name="my_plane", width=1.0):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = name
         self.width = width
-        self.xform = Xform.identity()
+        self._xform = None
 
         if origin is None:
             self._origin = Point(0.0, 0.0, 0.0)
@@ -71,6 +71,26 @@ class Plane:
         self._z_axis.normalize_self()
 
         self._update_equation()
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     def _update_equation(self):
         """Update plane equation coefficients from z_axis and origin."""

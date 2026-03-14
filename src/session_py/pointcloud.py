@@ -27,10 +27,10 @@ class PointCloud:
             normals: Collection of normals (converted to flat array internally).
             colors: Collection of colors (converted to flat array internally).
         """
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_pointcloud"
         self.point_size = 1.0
-        self.xform = Xform.identity()
+        self._xform = None
 
         # Store as flat arrays
         self._coords: List[float] = []
@@ -48,6 +48,26 @@ class PointCloud:
         if normals is not None:
             for n in normals:
                 self._normals.extend([n[0], n[1], n[2]])
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     @classmethod
     def from_coords(cls, coords: List[float],

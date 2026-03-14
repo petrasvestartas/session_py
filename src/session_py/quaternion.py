@@ -6,10 +6,20 @@ from .vector import Vector
 class Quaternion:
     def __init__(self, s=1.0, v=None):
         self.typ = "Quaternion"
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_quaternion"
         self.s = s
         self.v = v if v is not None else Vector(0.0, 0.0, 0.0)
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     @staticmethod
     def identity():

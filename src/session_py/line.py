@@ -36,7 +36,7 @@ class Line:
     """
 
     def __init__(self, x0=0.0, y0=0.0, z0=0.0, x1=0.0, y1=0.0, z1=1.0):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_line"
         self._x0 = x0
         self._y0 = y0
@@ -45,8 +45,38 @@ class Line:
         self._y1 = y1
         self._z1 = z1
         self.width = 1.0
-        self.linecolor = Color.black()
-        self.xform = Xform.identity()
+        self._linecolor = None
+        self._xform = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def linecolor(self):
+        if self._linecolor is None:
+            self._linecolor = Color.black()
+        return self._linecolor
+
+    @linecolor.setter
+    def linecolor(self, value):
+        self._linecolor = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     def duplicate(self):
         """Create a deep copy of this line with a new GUID.

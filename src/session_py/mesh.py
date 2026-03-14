@@ -7,6 +7,8 @@ from .vector import Vector
 from .tolerance import Tolerance
 from .color import Color
 from .xform import Xform
+from .boundingbox import BoundingBox
+from .bvh import BVH
 from .triangulation_2d import triangulate as _tri2d_triangulate
 from .trimesh_cdt import cdt_triangulate as _cdt_triangulate
 
@@ -175,6 +177,7 @@ def _lp_face_centroid(m, fk):
 class LoftWallFace:
     def __init__(self):
         self.face_key = 0
+        self.face_index = 0
         self.is_quad = False
         self.top_v0 = 0
         self.top_v1 = 0
@@ -190,7 +193,17 @@ class LoftPanel:
         self.wall_faces = []
         self.orig_top_to_local = {}
         self.orig_bot_to_local = {}
-        self.bot_pts = []
+        self.top_vertices = []
+        self.bot_vertices = []
+        self.face_roles = {}
+
+
+class LoftAdjPair:
+    def __init__(self, pi, wi, pj, wj):
+        self.pi = pi
+        self.wi = wi
+        self.pj = pj
+        self.wj = wj
 
 
 class Mesh:
@@ -241,15 +254,35 @@ class Mesh:
         self.face_holes = {}
         self._max_vertex = 0
         self._max_face = 0
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_mesh"
         self._pointcolors = []
         self._facecolors = []
         self._linecolors = []
         self._widths = []
-        self._objectcolor = Color.white()
+        self._objectcolor = None
         self.color_mode = ColorMode.OBJECTCOLOR
-        self.xform = Xform.identity()
+        self._xform = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     def duplicate(self) -> "Mesh":
         import copy
@@ -825,11 +858,10 @@ class Mesh:
             if tnx*ax+tny*ay+tnz*az < 0: top_pts.reverse(); top_vkeys.reverse()
             bnx, bny, bnz = _lp_newell_normal(bot_pts)
             if bnx*ax+bny*ay+bnz*az > 0: bot_pts.reverse(); bot_vkeys.reverse()
-            panel.bot_pts = bot_pts
             for i in range(n):
-                lk = panel.mesh.add_vertex(top_pts[i]); panel.orig_top_to_local[top_vkeys[i]] = lk
+                lk = panel.mesh.add_vertex(top_pts[i]); panel.orig_top_to_local[top_vkeys[i]] = lk; panel.top_vertices.append(lk)
             for j in range(m):
-                lk = panel.mesh.add_vertex(bot_pts[j]); panel.orig_bot_to_local[bot_vkeys[j]] = lk
+                lk = panel.mesh.add_vertex(bot_pts[j]); panel.orig_bot_to_local[bot_vkeys[j]] = lk; panel.bot_vertices.append(lk)
             if add_caps:
                 top_cap = [panel.orig_top_to_local[vk] for vk in top_vkeys]
                 fk = panel.mesh.add_face(top_cap)
@@ -922,10 +954,43 @@ class Mesh:
                         if btris:
                             panel.mesh.triangulation[bot_cap_fk] = [[bot_cap[t[0]], bot_cap[t[1]], bot_cap[t[2]]] for t in btris]
             panels.append(panel)
-        return panels
+        for panel in panels:
+            fkey_to_idx = {}
+            for fi, fk in enumerate(panel.mesh.face):
+                fkey_to_idx[fk] = fi
+            for w in panel.wall_faces:
+                w.face_index = fkey_to_idx[w.face_key]
+                panel.face_roles[w.face_key] = "QuadWall" if w.is_quad else "TriWall"
+            if panel.top_face_key:
+                panel.face_roles[panel.top_face_key] = "TopCap"
+            if panel.bot_face_key:
+                panel.face_roles[panel.bot_face_key] = "BotCap"
+        edge_to_wall = {}
+        for pi, panel in enumerate(panels):
+            for wi, w in enumerate(panel.wall_faces):
+                if not w.is_quad:
+                    continue
+                edge_to_wall[(w.top_v0, w.top_v1)] = (pi, wi)
+        adjacency = []
+        for pi, panel in enumerate(panels):
+            for wi, w in enumerate(panel.wall_faces):
+                if not w.is_quad:
+                    continue
+                key = (w.top_v1, w.top_v0)
+                if key in edge_to_wall and edge_to_wall[key][0] > pi:
+                    pj, wj = edge_to_wall[key]
+                    adjacency.append(LoftAdjPair(pi, wi, pj, wj))
+        top_ordered = Mesh()
+        bot_ordered = Mesh()
+        for i, panel in enumerate(panels):
+            tvks = [top_ordered.add_vertex(panel.mesh.vertex_position(lk)) for lk in panel.top_vertices]
+            bvks = [bot_ordered.add_vertex(panel.mesh.vertex_position(lk)) for lk in panel.bot_vertices]
+            top_ordered.add_face(tvks, i)
+            bot_ordered.add_face(bvks, i)
+        return panels, adjacency, top_ordered, bot_ordered
 
     @staticmethod
-    def from_polygon_with_holes_many(inputs: List, sort_by_bbox: bool = False, parallel: bool = True) -> List["Mesh"]:
+    def from_polygon_with_holes_many(inputs: List, sort_by_bbox: bool = False, parallel: bool = False) -> List["Mesh"]:
         if parallel and len(inputs) > 1:
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor() as ex:
@@ -933,7 +998,7 @@ class Mesh:
         return [Mesh.from_polygon_with_holes(x, sort_by_bbox) for x in inputs]
 
     @staticmethod
-    def loft_many(pairs: List, cap: bool = True, parallel: bool = True) -> List["Mesh"]:
+    def loft_many(pairs: List, cap: bool = True, parallel: bool = False) -> List["Mesh"]:
         if parallel and len(pairs) > 1:
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor() as ex:
@@ -1042,7 +1107,7 @@ class Mesh:
         self._facecolors.clear()
         self._linecolors.clear()
         self._widths.clear()
-        self._objectcolor = Color.white()
+        self._objectcolor = None
         self.color_mode = ColorMode.OBJECTCOLOR
 
     def set_pointcolors(self, colors):
@@ -1073,7 +1138,14 @@ class Mesh:
     @property
     def widths(self): return self._widths
     @property
-    def objectcolor(self): return self._objectcolor
+    def objectcolor(self):
+        if getattr(self, '_objectcolor', None) is None:
+            self._objectcolor = Color.white()
+        return self._objectcolor
+
+    @objectcolor.setter
+    def objectcolor(self, value):
+        self._objectcolor = value
 
     def clear_pointcolors(self):
         self._pointcolors.clear()
@@ -1160,6 +1232,54 @@ class Mesh:
             m.add_face(new_vkeys)
         return m
 
+    def weld(self, tolerance: float = 0.0) -> "Mesh":
+        if not self.vertex:
+            return Mesh()
+
+        vkeys = sorted(self.vertex.keys())
+        positions = [Point(self.vertex[k][0], self.vertex[k][1], self.vertex[k][2]) for k in vkeys]
+        n = len(vkeys)
+
+        parent = list(range(n))
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        if tolerance > 0.0:
+            boxes = [BoundingBox.from_point(p, tolerance) for p in positions]
+            ws = BVH.compute_world_size(boxes)
+            bvh = BVH.from_boxes(boxes, ws)
+            pairs, _, _ = bvh.check_all_collisions(boxes)
+            for i, j in pairs:
+                if positions[i].distance(positions[j]) <= tolerance:
+                    ri = find(i)
+                    rj = find(j)
+                    if ri != rj:
+                        parent[ri] = rj
+
+        root_to_rep = {}
+        for i in range(n):
+            root = find(i)
+            if root not in root_to_rep or vkeys[i] < root_to_rep[root]:
+                root_to_rep[root] = vkeys[i]
+        vkey_to_rep = {vkeys[i]: root_to_rep[find(i)] for i in range(n)}
+
+        m = Mesh()
+        added = set()
+        for i in range(n):
+            rep = vkey_to_rep[vkeys[i]]
+            if rep not in added:
+                added.add(rep)
+                pt = self.vertex[rep]
+                m.add_vertex(Point(pt[0], pt[1], pt[2]), rep)
+        for fk in sorted(self.face):
+            new_vkeys = [vkey_to_rep[vk] for vk in self.face[fk]]
+            m.add_face(new_vkeys, fk)
+        return m
+
     ###########################################################################################
     # Vertex and Face Operations
     ###########################################################################################
@@ -1220,8 +1340,8 @@ class Mesh:
             return None
 
         if fkey is None:
-            self._max_face += 1
             face_key = self._max_face
+            self._max_face += 1
         else:
             face_key = fkey
             if face_key >= self._max_face:
@@ -1264,6 +1384,29 @@ class Mesh:
     def face_vertices(self, face_key: int) -> Optional[List[int]]:
         """Get the vertices of a face."""
         return self.face.get(face_key)
+
+    def face_centroid(self, face_key: int) -> Optional[Point]:
+        """Get the centroid of a face."""
+        verts = self.face.get(face_key)
+        if not verts:
+            return None
+        x, y, z = 0.0, 0.0, 0.0
+        for vk in verts:
+            p = self.vertex_position(vk)
+            if p is None:
+                return None
+            x += p[0]; y += p[1]; z += p[2]
+        n = len(verts)
+        return Point(x / n, y / n, z / n)
+
+    def centroid(self) -> Point:
+        """Get the centroid of all vertices."""
+        x, y, z = 0.0, 0.0, 0.0
+        for vk in self.vertex:
+            p = self.vertex_position(vk)
+            x += p[0]; y += p[1]; z += p[2]
+        n = max(len(self.vertex), 1)
+        return Point(x / n, y / n, z / n)
 
     def vertex_neighbors(self, vertex_key: int) -> List[int]:
         """Get the neighboring vertices of a vertex."""
@@ -1389,27 +1532,63 @@ class Mesh:
 
     def face_area(self, face_key: int) -> Optional[float]:
         """Calculate the area of a face."""
-        vertices = self.face_vertices(face_key)
-        if vertices is None or len(vertices) < 3:
+        vkeys = self.face.get(face_key)
+        if vkeys is None or len(vkeys) < 3:
             return 0.0
-
-        area = 0.0
-        p0 = self.vertex_position(vertices[0])
-        if p0 is None:
+        vd0 = self.vertex.get(vkeys[0])
+        if vd0 is None:
             return None
-
-        for i in range(1, len(vertices) - 1):
-            p1 = self.vertex_position(vertices[i])
-            p2 = self.vertex_position(vertices[i + 1])
-            if p1 is None or p2 is None:
+        x0, y0, z0 = vd0.x, vd0.y, vd0.z
+        area = 0.0
+        for i in range(1, len(vkeys) - 1):
+            vd1 = self.vertex.get(vkeys[i])
+            vd2 = self.vertex.get(vkeys[i + 1])
+            if vd1 is None or vd2 is None:
                 return None
-
-            u = Vector(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z)
-            v = Vector(p2.x - p0.x, p2.y - p0.y, p2.z - p0.z)
-
-            area += u.cross(v).magnitude() * 0.5
-
+            ux = vd1.x - x0; uy = vd1.y - y0; uz = vd1.z - z0
+            vx = vd2.x - x0; vy = vd2.y - y0; vz = vd2.z - z0
+            cx = uy * vz - uz * vy; cy = uz * vx - ux * vz; cz = ux * vy - uy * vx
+            area += math.sqrt(cx*cx + cy*cy + cz*cz) * 0.5
         return area
+
+    def area(self) -> float:
+        total = 0.0
+        for vkeys in self.face.values():
+            if len(vkeys) < 3:
+                continue
+            vd0 = self.vertex.get(vkeys[0])
+            if vd0 is None:
+                continue
+            x0, y0, z0 = vd0.x, vd0.y, vd0.z
+            for i in range(1, len(vkeys) - 1):
+                vd1 = self.vertex.get(vkeys[i])
+                vd2 = self.vertex.get(vkeys[i + 1])
+                if vd1 is None or vd2 is None:
+                    continue
+                ux = vd1.x - x0; uy = vd1.y - y0; uz = vd1.z - z0
+                vx = vd2.x - x0; vy = vd2.y - y0; vz = vd2.z - z0
+                cx = uy * vz - uz * vy; cy = uz * vx - ux * vz; cz = ux * vy - uy * vx
+                total += math.sqrt(cx*cx + cy*cy + cz*cz) * 0.5
+        return total
+
+    def volume(self) -> float:
+        total = 0.0
+        for vkeys in self.face.values():
+            if len(vkeys) < 3:
+                continue
+            vd0 = self.vertex.get(vkeys[0])
+            if vd0 is None:
+                continue
+            x0, y0, z0 = vd0.x, vd0.y, vd0.z
+            for i in range(1, len(vkeys) - 1):
+                vd1 = self.vertex.get(vkeys[i])
+                vd2 = self.vertex.get(vkeys[i + 1])
+                if vd1 is None or vd2 is None:
+                    continue
+                total += (x0 * (vd1.y * vd2.z - vd1.z * vd2.y)
+                        + y0 * (vd1.z * vd2.x - vd1.x * vd2.z)
+                        + z0 * (vd1.x * vd2.y - vd1.y * vd2.x))
+        return abs(total) / 6.0
 
     def vertex_angle_in_face(self, vertex_key: int, face_key: int) -> Optional[float]:
         """Calculate the angle at a vertex in a face."""
@@ -1612,7 +1791,7 @@ class Mesh:
             "max_face": self._max_face,
             "max_vertex": self._max_vertex,
             "name": self.name,
-            "objectcolor": self._objectcolor.__jsondump__(),
+            "objectcolor": self.objectcolor.__jsondump__(),
             "color_mode": self.color_mode.value,
             "pointcolors": pointcolors_flat,
             "triangulation": {
@@ -1622,6 +1801,7 @@ class Mesh:
             "type": f"{self.__class__.__name__}",
             "vertex": vertex_data,
             "widths": self._widths,
+            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -1713,7 +1893,8 @@ class Mesh:
             mesh._max_face = data["max_face"]
 
         if "xform" in data:
-            mesh.xform = decode_node(data["xform"])
+            from .xform import Xform as _Xform
+            mesh.xform = _Xform.__jsonload__(data["xform"])
 
         # Load colors from flat RGBA arrays
         if "pointcolors" in data:
@@ -1864,12 +2045,12 @@ class Mesh:
         proto.widths.extend(self._widths)
 
         # Object color
-        proto.objectcolor.guid = self._objectcolor.guid
-        proto.objectcolor.name = self._objectcolor.name
-        proto.objectcolor.r = self._objectcolor[0]
-        proto.objectcolor.g = self._objectcolor[1]
-        proto.objectcolor.b = self._objectcolor[2]
-        proto.objectcolor.a = self._objectcolor[3]
+        proto.objectcolor.guid = self.objectcolor.guid
+        proto.objectcolor.name = self.objectcolor.name
+        proto.objectcolor.r = self.objectcolor[0]
+        proto.objectcolor.g = self.objectcolor[1]
+        proto.objectcolor.b = self.objectcolor[2]
+        proto.objectcolor.a = self.objectcolor[3]
         _cm_map = {"objectcolor": 0, "pointcolors": 1, "facecolors": 2, "none": 3}
         proto.color_mode = _cm_map.get(self.color_mode.value, 0)
 
@@ -1938,12 +2119,12 @@ class Mesh:
             cp.r = c[0]; cp.g = c[1]; cp.b = c[2]; cp.a = c[3]
             proto.linecolors.append(cp)
         proto.widths.extend(self._widths)
-        proto.objectcolor.guid = self._objectcolor.guid
-        proto.objectcolor.name = self._objectcolor.name
-        proto.objectcolor.r = self._objectcolor[0]
-        proto.objectcolor.g = self._objectcolor[1]
-        proto.objectcolor.b = self._objectcolor[2]
-        proto.objectcolor.a = self._objectcolor[3]
+        proto.objectcolor.guid = self.objectcolor.guid
+        proto.objectcolor.name = self.objectcolor.name
+        proto.objectcolor.r = self.objectcolor[0]
+        proto.objectcolor.g = self.objectcolor[1]
+        proto.objectcolor.b = self.objectcolor[2]
+        proto.objectcolor.a = self.objectcolor[3]
         _cm_map = {"objectcolor": 0, "pointcolors": 1, "facecolors": 2, "none": 3}
         proto.color_mode = _cm_map.get(self.color_mode.value, 0)
         proto.xform.guid = self.xform.guid

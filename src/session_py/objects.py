@@ -37,7 +37,7 @@ class Objects:
     """
 
     def __init__(self):
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_objects"
         self.points: list[Point] = []
         self.lines: list[Line] = []
@@ -49,6 +49,16 @@ class Objects:
         self.nurbscurves: list[NurbsCurve] = []
         self.nurbssurfaces: list[NurbsSurface] = []
         self.breps: list[BRep] = []
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
 
     def __str__(self):
         return f"Objects(points={len(self.points)})"

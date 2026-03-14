@@ -48,13 +48,13 @@ class NurbsSurface:
                  is_periodic_u: bool = False, is_periodic_v: bool = False,
                  knot_delta_u: float = 1.0, knot_delta_v: float = 1.0):
         """Initialize a NURBS surface."""
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_nurbssurface"
         self.width = 1.0
         self.pointcolors = []
         self.facecolors = []
         self.linecolors = []
-        self.xform = Xform.identity()
+        self._xform = None
 
         # Core NURBS data
         self.m_dim = 0
@@ -83,20 +83,40 @@ class NurbsSurface:
             else:
                 self.make_clamped_uniform_knot_vector(1, knot_delta_v)
     
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
+
     ###########################################################################
     # INITIALIZATION & CREATION
     ###########################################################################
-    
+
     def initialize(self):
         """Initialize all fields to zero/empty."""
-        self.guid = str(uuid.uuid4())
+        self._guid = None
         self.name = "my_nurbssurface"
         self.width = 1.0
         self.pointcolors = []
         self.facecolors = []
         self.linecolors = []
-        self.xform = Xform.identity()
-        
+        self._xform = None
+
         self.m_dim = 0
         self.m_is_rat = 0
         self.m_order = [0, 0]
