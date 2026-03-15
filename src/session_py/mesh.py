@@ -366,9 +366,9 @@ class Mesh:
 
         def get_vkey(p: Point) -> int:
             if precision is not None:
-                kx = round(p.x / precision)
-                ky = round(p.y / precision)
-                kz = round(p.z / precision)
+                kx = round(p[0] / precision)
+                ky = round(p[1] / precision)
+                kz = round(p[2] / precision)
                 key = (kx, ky, kz)
                 if key in map_eps:
                     return map_eps[key]
@@ -376,7 +376,7 @@ class Mesh:
                 map_eps[key] = vk
                 return vk
             else:
-                key = (p.x, p.y, p.z)
+                key = (p[0], p[1], p[2])
                 if key in map_exact:
                     return map_exact[key]
                 vk = mesh.add_vertex(p)
@@ -467,9 +467,9 @@ class Mesh:
 
         eps = precision if precision is not None else 0.0
         if eps <= 0.0:
-            xs = [p.x for p in all_pts]
-            ys = [p.y for p in all_pts]
-            zs = [p.z for p in all_pts]
+            xs = [p[0] for p in all_pts]
+            ys = [p[1] for p in all_pts]
+            zs = [p[2] for p in all_pts]
             dx = max(xs) - min(xs)
             dy = max(ys) - min(ys)
             dz = max(zs) - min(zs)
@@ -481,9 +481,9 @@ class Mesh:
         vmap = {}
         verts = []
         def get_vid(p):
-            kx = round(p.x / eps)
-            ky = round(p.y / eps)
-            kz = round(p.z / eps)
+            kx = round(p[0] / eps)
+            ky = round(p[1] / eps)
+            kz = round(p[2] / eps)
             key = (kx, ky, kz)
             if key in vmap:
                 return vmap[key]
@@ -505,8 +505,8 @@ class Mesh:
 
         for v in adj:
             nbrs = sorted(set(adj[v]))
-            vx, vy = verts[v].x, verts[v].y
-            nbrs.sort(key=lambda n: math.atan2(verts[n].y - vy, verts[n].x - vx))
+            vx, vy = verts[v][0], verts[v][1]
+            nbrs.sort(key=lambda n: math.atan2(verts[n][1] - vy, verts[n][0] - vx))
             adj[v] = nbrs
 
         visited = set()
@@ -577,9 +577,9 @@ class Mesh:
             for i, poly in enumerate(polylines):
                 if len(poly) < 3:
                     continue
-                xs = [p.x for p in poly]
-                ys = [p.y for p in poly]
-                zs = [p.z for p in poly]
+                xs = [p[0] for p in poly]
+                ys = [p[1] for p in poly]
+                zs = [p[2] for p in poly]
                 dx = max(xs) - min(xs)
                 dy = max(ys) - min(ys)
                 dz = max(zs) - min(zs)
@@ -590,7 +590,7 @@ class Mesh:
         def strip_close(pts):
             if len(pts) > 1:
                 f, b = pts[0], pts[-1]
-                if abs(f.x-b.x) < 1e-12 and abs(f.y-b.y) < 1e-12 and abs(f.z-b.z) < 1e-12:
+                if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
                     return pts[:-1]
             return pts
         border = strip_close(polylines[border_idx])
@@ -599,11 +599,11 @@ class Mesh:
         from .polyline import Polyline as _Polyline
         origin, xaxis, yaxis, zaxis = _Polyline(border).get_average_plane()
         def project_2d(p):
-            dx = p.x - origin.x
-            dy = p.y - origin.y
-            dz = p.z - origin.z
-            u = dx * xaxis.x + dy * xaxis.y + dz * xaxis.z
-            v = dx * yaxis.x + dy * yaxis.y + dz * yaxis.z
+            dx = p[0] - origin[0]
+            dy = p[1] - origin[1]
+            dz = p[2] - origin[2]
+            u = dx * xaxis[0] + dy * xaxis[1] + dz * xaxis[2]
+            v = dx * yaxis[0] + dy * yaxis[1] + dz * yaxis[2]
             return Point(u, v, 0.0)
         boundary_2d = [project_2d(p) for p in border]
         def signed_area(pts):
@@ -611,7 +611,7 @@ class Mesh:
             n = len(pts)
             for i in range(n):
                 j = (i + 1) % n
-                a += pts[i].x * pts[j].y - pts[j].x * pts[i].y
+                a += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1]
             return a * 0.5
         if signed_area(boundary_2d) < 0.0:
             border.reverse()
@@ -678,7 +678,7 @@ class Mesh:
             pts = pl.get_points()
             if not pts:
                 continue
-            xs = [p.x for p in pts]; ys = [p.y for p in pts]; zs = [p.z for p in pts]
+            xs = [p[0] for p in pts]; ys = [p[1] for p in pts]; zs = [p[2] for p in pts]
             dx = max(xs) - min(xs); dy = max(ys) - min(ys); dz = max(zs) - min(zs)
             diag = math.sqrt(dx*dx + dy*dy + dz*dz)
             if diag > max_diag:
@@ -687,17 +687,17 @@ class Mesh:
             pts = pl.get_points()
             if len(pts) > 1:
                 f, b = pts[0], pts[-1]
-                if abs(f.x-b.x) < 1e-12 and abs(f.y-b.y) < 1e-12 and abs(f.z-b.z) < 1e-12:
+                if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
                     return pts[:-1]
             return pts
         origin, xaxis, yaxis, zaxis = polylines0[border_idx].get_average_plane()
         c0 = polylines0[border_idx].center(); c1 = polylines1[border_idx].center()
-        btt = Vector(c1.x - c0.x, c1.y - c0.y, c1.z - c0.z)
+        btt = Vector(c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2])
         if zaxis.dot(btt) < 0:
-            yaxis = Vector(-yaxis.x, -yaxis.y, -yaxis.z)
+            yaxis = Vector(-yaxis[0], -yaxis[1], -yaxis[2])
         def proj(p):
-            dx = p.x - origin.x; dy = p.y - origin.y; dz = p.z - origin.z
-            return (dx*xaxis.x + dy*xaxis.y + dz*xaxis.z, dx*yaxis.x + dy*yaxis.y + dz*yaxis.z)
+            dx = p[0] - origin[0]; dy = p[1] - origin[1]; dz = p[2] - origin[2]
+            return (dx*xaxis[0] + dy*xaxis[1] + dz*xaxis[2], dx*yaxis[0] + dy*yaxis[1] + dz*yaxis[2])
         def sarea(pts):
             a = 0.0; n = len(pts)
             for i in range(n):
@@ -742,7 +742,7 @@ class Mesh:
         def side_faces(bot_off, bot_n, top_off, top_n, bpts, tpts):
             def edsq(pts, i):
                 j = (i + 1) % len(pts)
-                dx = pts[j].x - pts[i].x; dy = pts[j].y - pts[i].y; dz = pts[j].z - pts[i].z
+                dx = pts[j][0] - pts[i][0]; dy = pts[j][1] - pts[i][1]; dz = pts[j][2] - pts[i][2]
                 return dx*dx + dy*dy + dz*dz
             ia = max(range(bot_n), key=lambda i: edsq(bpts, i))
             ib = max(range(top_n), key=lambda i: edsq(tpts, i))
@@ -755,12 +755,12 @@ class Mesh:
             b_arcs = [0.0] * (bot_n + 1)
             for k in range(bot_n):
                 i = (ia + k) % bot_n; j = (ia + k + 1) % bot_n
-                dx = bpts[j].x - bpts[i].x; dy = bpts[j].y - bpts[i].y; dz = bpts[j].z - bpts[i].z
+                dx = bpts[j][0] - bpts[i][0]; dy = bpts[j][1] - bpts[i][1]; dz = bpts[j][2] - bpts[i][2]
                 b_arcs[k + 1] = b_arcs[k] + math.sqrt(dx*dx + dy*dy + dz*dz)
             t_arcs = [0.0] * (top_n + 1)
             for k in range(top_n):
                 i = (ib + k) % top_n; j = (ib + k + 1) % top_n
-                dx = tpts[j].x - tpts[i].x; dy = tpts[j].y - tpts[i].y; dz = tpts[j].z - tpts[i].z
+                dx = tpts[j][0] - tpts[i][0]; dy = tpts[j][1] - tpts[i][1]; dz = tpts[j][2] - tpts[i][2]
                 t_arcs[k + 1] = t_arcs[k] + math.sqrt(dx*dx + dy*dy + dz*dz)
             inv_b = 1.0 / b_arcs[bot_n] if b_arcs[bot_n] > 0 else 1.0
             inv_t = 1.0 / t_arcs[top_n] if t_arcs[top_n] > 0 else 1.0
@@ -1481,8 +1481,8 @@ class Mesh:
         if p0 is None or p1 is None or p2 is None:
             return None
 
-        u = Vector(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z)
-        v = Vector(p2.x - p0.x, p2.y - p0.y, p2.z - p0.z)
+        u = Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+        v = Vector(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2])
 
         normal = u.cross(v)
         length = normal.magnitude()
@@ -1608,8 +1608,8 @@ class Mesh:
         if center is None or prev_pos is None or next_pos is None:
             return None
 
-        u = Vector(prev_pos.x - center.x, prev_pos.y - center.y, prev_pos.z - center.z)
-        v = Vector(next_pos.x - center.x, next_pos.y - center.y, next_pos.z - center.z)
+        u = Vector(prev_pos[0] - center[0], prev_pos[1] - center[1], prev_pos[2] - center[2])
+        v = Vector(next_pos[0] - center[0], next_pos[1] - center[1], next_pos[2] - center[2])
 
         u_len = u.magnitude()
         v_len = v.magnitude()
@@ -1707,9 +1707,9 @@ class Mesh:
         for vdata in self.vertex.values():
             pos = vdata.position()
             xform.transform_point(pos)
-            vdata[0] = pos.x
-            vdata[1] = pos.y
-            vdata[2] = pos.z
+            vdata[0] = pos[0]
+            vdata[1] = pos[1]
+            vdata[2] = pos[2]
 
     def transformed(self, xf=None):
         import copy

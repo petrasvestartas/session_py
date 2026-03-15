@@ -451,7 +451,7 @@ class Session:
             return BoundingBox.from_points(geometry.points, inflate)
         elif isinstance(geometry, Mesh):
             # Extract vertices from mesh
-            points = [Point(v.x, v.y, v.z) for v in geometry.vertex.values()]
+            points = [v.position() for v in geometry.vertex.values()]
             if not points:
                 return BoundingBox.from_point(Point(0, 0, 0), inflate)
             return BoundingBox.from_points(points, inflate)
@@ -535,12 +535,12 @@ class Session:
 
         FAR = 1e6
         ray_line = Line(
-            origin.x,
-            origin.y,
-            origin.z,
-            origin.x + dir_unit.x * FAR,
-            origin.y + dir_unit.y * FAR,
-            origin.z + dir_unit.z * FAR,
+            origin[0],
+            origin[1],
+            origin[2],
+            origin[0] + dir_unit[0] * FAR,
+            origin[1] + dir_unit[1] * FAR,
+            origin[2] + dir_unit[2] * FAR,
         )
 
         boxes_with_guids: List[Tuple[BoundingBox, str]] = []
@@ -558,22 +558,22 @@ class Session:
         hits_all: List[RayHit] = []
 
         def point_hit(p: Point) -> Tuple[bool, Point, float]:
-            vx = p.x - origin.x
-            vy = p.y - origin.y
-            vz = p.z - origin.z
-            cx = vy * dir_unit.z - vz * dir_unit.y
-            cy = vz * dir_unit.x - vx * dir_unit.z
-            cz = vx * dir_unit.y - vy * dir_unit.x
+            vx = p[0] - origin[0]
+            vy = p[1] - origin[1]
+            vz = p[2] - origin[2]
+            cx = vy * dir_unit[2] - vz * dir_unit[1]
+            cy = vz * dir_unit[0] - vx * dir_unit[2]
+            cz = vx * dir_unit[1] - vy * dir_unit[0]
             dist = (cx * cx + cy * cy + cz * cz) ** 0.5
             if dist > tolerance:
                 return False, origin, 0.0
-            t = vx * dir_unit.x + vy * dir_unit.y + vz * dir_unit.z
+            t = vx * dir_unit[0] + vy * dir_unit[1] + vz * dir_unit[2]
             if t < 0.0:
                 return False, origin, 0.0
             hp = Point(
-                origin.x + dir_unit.x * t,
-                origin.y + dir_unit.y * t,
-                origin.z + dir_unit.z * t,
+                origin[0] + dir_unit[0] * t,
+                origin[1] + dir_unit[1] * t,
+                origin[2] + dir_unit[2] * t,
             )
             return True, hp, t
 
@@ -608,9 +608,9 @@ class Session:
                     if hp is None:
                         continue
                     t = (
-                        (hp.x - origin.x) * dir_unit.x
-                        + (hp.y - origin.y) * dir_unit.y
-                        + (hp.z - origin.z) * dir_unit.z
+                        (hp[0] - origin[0]) * dir_unit[0]
+                        + (hp[1] - origin[1]) * dir_unit[1]
+                        + (hp[2] - origin[2]) * dir_unit[2]
                     )
                     if t >= 0.0 and t < best_t:
                         best_t = t
@@ -630,9 +630,9 @@ class Session:
                 continue
 
             d = (
-                (hit_point.x - origin.x) * dir_unit.x
-                + (hit_point.y - origin.y) * dir_unit.y
-                + (hit_point.z - origin.z) * dir_unit.z
+                (hit_point[0] - origin[0]) * dir_unit[0]
+                + (hit_point[1] - origin[1]) * dir_unit[1]
+                + (hit_point[2] - origin[2]) * dir_unit[2]
             )
             if d >= 0.0:
                 hits_all.append(RayHit(guid, hit_point, d))

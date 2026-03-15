@@ -158,14 +158,14 @@ def test_session_tree_transformation_hierarchy():
         mesh = Mesh()
         h = size * 0.5
         verts = [
-            Point(center.x - h, center.y - h, center.z - h),
-            Point(center.x + h, center.y - h, center.z - h),
-            Point(center.x + h, center.y + h, center.z - h),
-            Point(center.x - h, center.y + h, center.z - h),
-            Point(center.x - h, center.y - h, center.z + h),
-            Point(center.x + h, center.y - h, center.z + h),
-            Point(center.x + h, center.y + h, center.z + h),
-            Point(center.x - h, center.y + h, center.z + h),
+            Point(center[0] - h, center[1] - h, center[2] - h),
+            Point(center[0] + h, center[1] - h, center[2] - h),
+            Point(center[0] + h, center[1] + h, center[2] - h),
+            Point(center[0] - h, center[1] + h, center[2] - h),
+            Point(center[0] - h, center[1] - h, center[2] + h),
+            Point(center[0] + h, center[1] - h, center[2] + h),
+            Point(center[0] + h, center[1] + h, center[2] + h),
+            Point(center[0] - h, center[1] + h, center[2] + h),
         ]
         for i, v in enumerate(verts):
             mesh.add_vertex(v, i)

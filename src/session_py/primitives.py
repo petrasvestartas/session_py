@@ -292,9 +292,9 @@ class Primitives:
         rotation.m[8] = z_axis[0]; rotation.m[9] = z_axis[1]; rotation.m[10] = z_axis[2]
 
         center = Point(
-            (start.x + end.x) * 0.5, (start.y + end.y) * 0.5, (start.z + end.z) * 0.5
+            (start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5, (start[2] + end[2]) * 0.5
         )
-        translation = Xform.translation(center.x, center.y, center.z)
+        translation = Xform.translation(center[0], center[1], center[2])
         return translation * rotation * scale
 
     @staticmethod
@@ -353,14 +353,14 @@ class Primitives:
         body_length = length * 0.8
 
         body_center = Point(
-            start.x + line_vec[0] * 0.4,
-            start.y + line_vec[1] * 0.4,
-            start.z + line_vec[2] * 0.4,
+            start[0] + line_vec[0] * 0.4,
+            start[1] + line_vec[1] * 0.4,
+            start[2] + line_vec[2] * 0.4,
         )
         cone_base_center = Point(
-            start.x + line_vec[0] * 0.9,
-            start.y + line_vec[1] * 0.9,
-            start.z + line_vec[2] * 0.9,
+            start[0] + line_vec[0] * 0.9,
+            start[1] + line_vec[1] * 0.9,
+            start[2] + line_vec[2] * 0.9,
         )
 
         body_scale = Xform.scale_xyz(radius * 2.0, radius * 2.0, body_length)
@@ -368,12 +368,12 @@ class Primitives:
         rotation.m[0] = x_axis[0]; rotation.m[1] = x_axis[1]; rotation.m[2] = x_axis[2]
         rotation.m[4] = y_axis[0]; rotation.m[5] = y_axis[1]; rotation.m[6] = y_axis[2]
         rotation.m[8] = z_axis[0]; rotation.m[9] = z_axis[1]; rotation.m[10] = z_axis[2]
-        body_translation = Xform.translation(body_center.x, body_center.y, body_center.z)
+        body_translation = Xform.translation(body_center[0], body_center[1], body_center[2])
         body_xform = body_translation * rotation * body_scale
 
         cone_scale = Xform.scale_xyz(radius * 3.0, radius * 3.0, cone_length)
         cone_translation = Xform.translation(
-            cone_base_center.x, cone_base_center.y, cone_base_center.z
+            cone_base_center[0], cone_base_center[1], cone_base_center[2]
         )
         cone_xform = cone_translation * rotation * cone_scale
 

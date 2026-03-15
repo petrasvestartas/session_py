@@ -32,22 +32,22 @@ def ray_box(
     inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else float("inf")
 
     # Calculate intersections with X slabs
-    tx1 = (box_min.x - origin.x) * inv_dir_x
-    tx2 = (box_max.x - origin.x) * inv_dir_x
+    tx1 = (box_min[0] - origin[0]) * inv_dir_x
+    tx2 = (box_max[0] - origin[0]) * inv_dir_x
 
     tmin = min(tx1, tx2)
     tmax = max(tx1, tx2)
 
     # Calculate intersections with Y slabs
-    ty1 = (box_min.y - origin.y) * inv_dir_y
-    ty2 = (box_max.y - origin.y) * inv_dir_y
+    ty1 = (box_min[1] - origin[1]) * inv_dir_y
+    ty2 = (box_max[1] - origin[1]) * inv_dir_y
 
     tmin = max(tmin, min(ty1, ty2))
     tmax = min(tmax, max(ty1, ty2))
 
     # Calculate intersections with Z slabs
-    tz1 = (box_min.z - origin.z) * inv_dir_z
-    tz2 = (box_max.z - origin.z) * inv_dir_z
+    tz1 = (box_min[2] - origin[2]) * inv_dir_z
+    tz2 = (box_max[2] - origin[2]) * inv_dir_z
 
     tmin = max(tmin, min(tz1, tz2))
     tmax = min(tmax, max(tz1, tz2))
@@ -62,15 +62,15 @@ def ray_box(
 
     # Calculate actual intersection points
     entry = Point(
-        origin.x + direction[0] * tmin,
-        origin.y + direction[1] * tmin,
-        origin.z + direction[2] * tmin,
+        origin[0] + direction[0] * tmin,
+        origin[1] + direction[1] * tmin,
+        origin[2] + direction[2] * tmin,
     )
 
     exit_point = Point(
-        origin.x + direction[0] * tmax,
-        origin.y + direction[1] * tmax,
-        origin.z + direction[2] * tmax,
+        origin[0] + direction[0] * tmax,
+        origin[1] + direction[1] * tmax,
+        origin[2] + direction[2] * tmax,
     )
 
     return [entry, exit_point]

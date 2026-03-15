@@ -167,7 +167,7 @@ def test_bvh_merge_aabb():
     bbox1 = BoundingBox(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
     bbox2 = BoundingBox(Point(5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
     merged = bvh.merge_aabb(bbox1, bbox2)
-    MINI_CHECK(TOLERANCE.is_close(merged.center.x, 2.5))
+    MINI_CHECK(TOLERANCE.is_close(merged.center[0], 2.5))
     MINI_CHECK(TOLERANCE.is_close(merged.half_size[0], 3.5))
 
 

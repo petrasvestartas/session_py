@@ -57,12 +57,12 @@ class BoundingBox:
         if not points:
             return cls()
 
-        min_x = min(p.x for p in points)
-        min_y = min(p.y for p in points)
-        min_z = min(p.z for p in points)
-        max_x = max(p.x for p in points)
-        max_y = max(p.y for p in points)
-        max_z = max(p.z for p in points)
+        min_x = min(p[0] for p in points)
+        min_y = min(p[1] for p in points)
+        min_z = min(p[2] for p in points)
+        max_x = max(p[0] for p in points)
+        max_y = max(p[1] for p in points)
+        max_z = max(p[2] for p in points)
 
         center = Point(
             (min_x + max_x) * 0.5,
@@ -264,12 +264,12 @@ class BoundingBox:
 
         for pt in points:
             local_pt = plane_to_xy.transformed_point(pt)
-            min_x = min(min_x, local_pt.x)
-            min_y = min(min_y, local_pt.y)
-            min_z = min(min_z, local_pt.z)
-            max_x = max(max_x, local_pt.x)
-            max_y = max(max_y, local_pt.y)
-            max_z = max(max_z, local_pt.z)
+            min_x = min(min_x, local_pt[0])
+            min_y = min(min_y, local_pt[1])
+            min_z = min(min_z, local_pt[2])
+            max_x = max(max_x, local_pt[0])
+            max_y = max(max_y, local_pt[1])
+            max_z = max(max_z, local_pt[2])
 
         local_center = Point((min_x + max_x) * 0.5, (min_y + max_y) * 0.5, (min_z + max_z) * 0.5)
         half_size = Vector(
@@ -292,9 +292,9 @@ class BoundingBox:
 
     def point_at(self, x: float, y: float, z: float) -> Point:
         return Point(
-            self.center.x + x * self.x_axis[0] + y * self.y_axis[0] + z * self.z_axis[0],
-            self.center.y + x * self.x_axis[1] + y * self.y_axis[1] + z * self.z_axis[1],
-            self.center.z + x * self.x_axis[2] + y * self.y_axis[2] + z * self.z_axis[2],
+            self.center[0] + x * self.x_axis[0] + y * self.y_axis[0] + z * self.z_axis[0],
+            self.center[1] + x * self.x_axis[1] + y * self.y_axis[1] + z * self.z_axis[1],
+            self.center[2] + x * self.x_axis[2] + y * self.y_axis[2] + z * self.z_axis[2],
         )
 
     def min_point(self) -> Point:
@@ -306,9 +306,9 @@ class BoundingBox:
             The point with minimum x, y, z coordinates.
         """
         return Point(
-            self.center.x - self.half_size[0],
-            self.center.y - self.half_size[1],
-            self.center.z - self.half_size[2],
+            self.center[0] - self.half_size[0],
+            self.center[1] - self.half_size[1],
+            self.center[2] - self.half_size[2],
         )
 
     def max_point(self) -> Point:
@@ -320,9 +320,9 @@ class BoundingBox:
             The point with maximum x, y, z coordinates.
         """
         return Point(
-            self.center.x + self.half_size[0],
-            self.center.y + self.half_size[1],
-            self.center.z + self.half_size[2],
+            self.center[0] + self.half_size[0],
+            self.center[1] + self.half_size[1],
+            self.center[2] + self.half_size[2],
         )
 
     def corners(self) -> List[Point]:
@@ -387,8 +387,8 @@ class BoundingBox:
         return dot_rp > (proj1 + proj2)
 
     def collides_with(self, other: "BoundingBox") -> bool:
-        center_vec = Vector(self.center.x, self.center.y, self.center.z)
-        other_center_vec = Vector(other.center.x, other.center.y, other.center.z)
+        center_vec = Vector(self.center[0], self.center[1], self.center[2])
+        other_center_vec = Vector(other.center[0], other.center[1], other.center[2])
         relative_position = Vector.from_points(center_vec, other_center_vec)
 
         return not (

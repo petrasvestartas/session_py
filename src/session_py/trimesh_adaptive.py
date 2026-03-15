@@ -373,12 +373,12 @@ class TrimeshAdaptive:
             if n == 3:
                 result.add_face([poly[0], poly[1], poly[2]])
             elif n == 4:
-                v0v = result.vertex[poly[0]]
-                v1v = result.vertex[poly[1]]
-                v2v = result.vertex[poly[2]]
-                v3v = result.vertex[poly[3]]
-                d02 = (v0v.x-v2v.x)**2 + (v0v.y-v2v.y)**2 + (v0v.z-v2v.z)**2
-                d13 = (v1v.x-v3v.x)**2 + (v1v.y-v3v.y)**2 + (v1v.z-v3v.z)**2
+                v0v = result.vertex[poly[0]].position()
+                v1v = result.vertex[poly[1]].position()
+                v2v = result.vertex[poly[2]].position()
+                v3v = result.vertex[poly[3]].position()
+                d02 = (v0v[0]-v2v[0])**2 + (v0v[1]-v2v[1])**2 + (v0v[2]-v2v[2])**2
+                d13 = (v1v[0]-v3v[0])**2 + (v1v[1]-v3v[1])**2 + (v1v[2]-v3v[2])**2
                 if d02 <= d13:
                     result.add_face([poly[0], poly[1], poly[2]])
                     result.add_face([poly[0], poly[2], poly[3]])
@@ -406,11 +406,11 @@ class TrimeshAdaptive:
             for fi, vids in result.face.items():
                 if len(vids) < 3:
                     continue
-                p0 = result.vertex[vids[0]]
-                p1 = result.vertex[vids[1]]
-                p2 = result.vertex[vids[2]]
-                e1x, e1y, e1z = p1.x-p0.x, p1.y-p0.y, p1.z-p0.z
-                e2x, e2y, e2z = p2.x-p0.x, p2.y-p0.y, p2.z-p0.z
+                p0 = result.vertex[vids[0]].position()
+                p1 = result.vertex[vids[1]].position()
+                p2 = result.vertex[vids[2]].position()
+                e1x, e1y, e1z = p1[0]-p0[0], p1[1]-p0[1], p1[2]-p0[2]
+                e2x, e2y, e2z = p2[0]-p0[0], p2[1]-p0[1], p2[2]-p0[2]
                 fnx = e1y*e2z - e1z*e2y
                 fny = e1z*e2x - e1x*e2z
                 fnz = e1x*e2y - e1y*e2x

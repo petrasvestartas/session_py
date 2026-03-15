@@ -424,12 +424,12 @@ class Closest:
 
         boxes = []
         for v0, v1, v2 in tris:
-            lx = min(v0.x, v1.x, v2.x)
-            ly = min(v0.y, v1.y, v2.y)
-            lz = min(v0.z, v1.z, v2.z)
-            hx = max(v0.x, v1.x, v2.x)
-            hy = max(v0.y, v1.y, v2.y)
-            hz = max(v0.z, v1.z, v2.z)
+            lx = min(v0[0], v1[0], v2[0])
+            ly = min(v0[1], v1[1], v2[1])
+            lz = min(v0[2], v1[2], v2[2])
+            hx = max(v0[0], v1[0], v2[0])
+            hy = max(v0[1], v1[1], v2[1])
+            hz = max(v0[2], v1[2], v2[2])
             boxes.append(((lx+hx)*0.5, (ly+hy)*0.5, (lz+hz)*0.5,
                           (hx-lx)*0.5, (hy-ly)*0.5, (hz-lz)*0.5))
 
@@ -461,9 +461,9 @@ class Closest:
         build_node(list(range(len(tris))))
 
         def aabb_min_dist(aabb, pt):
-            dx = max(0.0, abs(pt.x - aabb[0]) - aabb[3])
-            dy = max(0.0, abs(pt.y - aabb[1]) - aabb[4])
-            dz = max(0.0, abs(pt.z - aabb[2]) - aabb[5])
+            dx = max(0.0, abs(pt[0] - aabb[0]) - aabb[3])
+            dy = max(0.0, abs(pt[1] - aabb[1]) - aabb[4])
+            dz = max(0.0, abs(pt[2] - aabb[2]) - aabb[5])
             return (dx*dx + dy*dy + dz*dz) ** 0.5
 
         best = [Point(0, 0, 0), 0, float('inf')]

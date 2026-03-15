@@ -119,7 +119,7 @@ def line_line(line0: Line, line1: Line, tolerance: float) -> Optional[Point]:
     p0 = line0.point_at(t0)
     p1 = line1.point_at(t1)
 
-    return Point((p0.x + p1.x) * 0.5, (p0.y + p1.y) * 0.5, (p0.z + p1.z) * 0.5)
+    return Point((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5, (p0[2] + p1[2]) * 0.5)
 
 
 def plane_plane(plane0, plane1) -> Optional[Line]:
@@ -128,9 +128,9 @@ def plane_plane(plane0, plane1) -> Optional[Line]:
     d = plane1.z_axis.cross(plane0.z_axis)
 
     p = Point(
-        (plane0.origin.x + plane1.origin.x) * 0.5,
-        (plane0.origin.y + plane1.origin.y) * 0.5,
-        (plane0.origin.z + plane1.origin.z) * 0.5,
+        (plane0.origin[0] + plane1.origin[0]) * 0.5,
+        (plane0.origin[1] + plane1.origin[1]) * 0.5,
+        (plane0.origin[2] + plane1.origin[2]) * 0.5,
     )
 
     plane2 = Plane.from_point_normal(p, d)
@@ -140,18 +140,18 @@ def plane_plane(plane0, plane1) -> Optional[Line]:
         return None
 
     return Line(
-        output_p.x,
-        output_p.y,
-        output_p.z,
-        output_p.x + d[0],
-        output_p.y + d[1],
-        output_p.z + d[2],
+        output_p[0],
+        output_p[1],
+        output_p[2],
+        output_p[0] + d[0],
+        output_p[1] + d[1],
+        output_p[2] + d[2],
     )
 
 
 def plane_value_at(plane, point: Point) -> float:
     """Calculate the plane equation value at a point"""
-    return plane.a * point.x + plane.b * point.y + plane.c * point.z + plane.d
+    return plane.a * point[0] + plane.b * point[1] + plane.c * point[2] + plane.d
 
 
 def line_plane(line: Line, plane, is_finite: bool = True) -> Optional[Point]:
@@ -194,9 +194,9 @@ def line_plane(line: Line, plane, is_finite: bool = True) -> Optional[Point]:
     s = 1.0 - t
 
     output = Point(
-        pt0.x if line[0] == line[3] else s * line[0] + t * line[3],
-        pt0.y if line[1] == line[4] else s * line[1] + t * line[4],
-        pt0.z if line[2] == line[5] else s * line[2] + t * line[5],
+        pt0[0] if line[0] == line[3] else s * line[0] + t * line[3],
+        pt0[1] if line[1] == line[4] else s * line[1] + t * line[4],
+        pt0[2] if line[2] == line[5] else s * line[2] + t * line[5],
     )
 
     if is_finite and (t < 0.0 or t > 1.0):
@@ -234,7 +234,7 @@ def plane_plane_plane(plane0, plane1, plane2) -> Optional[Point]:
         1.0 / det
     )
 
-    return Point(p.x, p.y, p.z)
+    return Point(p[0], p[1], p[2])
 
 
 def ray_box(
@@ -265,22 +265,22 @@ def ray_box(
     inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else float("inf")
 
     # Calculate intersections with X slabs
-    tx1 = (box_min.x - origin.x) * inv_dir_x
-    tx2 = (box_max.x - origin.x) * inv_dir_x
+    tx1 = (box_min[0] - origin[0]) * inv_dir_x
+    tx2 = (box_max[0] - origin[0]) * inv_dir_x
 
     tmin = min(tx1, tx2)
     tmax = max(tx1, tx2)
 
     # Calculate intersections with Y slabs
-    ty1 = (box_min.y - origin.y) * inv_dir_y
-    ty2 = (box_max.y - origin.y) * inv_dir_y
+    ty1 = (box_min[1] - origin[1]) * inv_dir_y
+    ty2 = (box_max[1] - origin[1]) * inv_dir_y
 
     tmin = max(tmin, min(ty1, ty2))
     tmax = min(tmax, max(ty1, ty2))
 
     # Calculate intersections with Z slabs
-    tz1 = (box_min.z - origin.z) * inv_dir_z
-    tz2 = (box_max.z - origin.z) * inv_dir_z
+    tz1 = (box_min[2] - origin[2]) * inv_dir_z
+    tz2 = (box_max[2] - origin[2]) * inv_dir_z
 
     tmin = max(tmin, min(tz1, tz2))
     tmax = min(tmax, max(tz1, tz2))
@@ -295,15 +295,15 @@ def ray_box(
 
     # Calculate actual intersection points
     entry = Point(
-        origin.x + direction[0] * tmin,
-        origin.y + direction[1] * tmin,
-        origin.z + direction[2] * tmin,
+        origin[0] + direction[0] * tmin,
+        origin[1] + direction[1] * tmin,
+        origin[2] + direction[2] * tmin,
     )
 
     exit_point = Point(
-        origin.x + direction[0] * tmax,
-        origin.y + direction[1] * tmax,
-        origin.z + direction[2] * tmax,
+        origin[0] + direction[0] * tmax,
+        origin[1] + direction[1] * tmax,
+        origin[2] + direction[2] * tmax,
     )
 
     return [entry, exit_point]
@@ -326,9 +326,9 @@ def ray_sphere(line: Line, center: Point, radius: float) -> Optional[List[Point]
     direction = line.to_vector()
 
     # Vector from origin to center
-    o_x = origin.x - center.x
-    o_y = origin.y - center.y
-    o_z = origin.z - center.z
+    o_x = origin[0] - center[0]
+    o_y = origin[1] - center[1]
+    o_z = origin[2] - center[2]
 
     # Quadratic equation coefficients
     a = (
@@ -364,18 +364,18 @@ def ray_sphere(line: Line, center: Point, radius: float) -> Optional[List[Point]
 
     # First intersection
     p0 = Point(
-        origin.x + direction[0] * t0,
-        origin.y + direction[1] * t0,
-        origin.z + direction[2] * t0,
+        origin[0] + direction[0] * t0,
+        origin[1] + direction[1] * t0,
+        origin[2] + direction[2] * t0,
     )
     points.append(p0)
 
     # Second intersection (if different from first)
     if abs(t1 - t0) > 1e-10:
         p1 = Point(
-            origin.x + direction[0] * t1,
-            origin.y + direction[1] * t1,
-            origin.z + direction[2] * t1,
+            origin[0] + direction[0] * t1,
+            origin[1] + direction[1] * t1,
+            origin[2] + direction[2] * t1,
         )
         points.append(p1)
 
@@ -402,13 +402,13 @@ def ray_triangle(
     direction = line.to_vector()
 
     # Möller-Trumbore algorithm
-    edge1_x = v1.x - v0.x
-    edge1_y = v1.y - v0.y
-    edge1_z = v1.z - v0.z
+    edge1_x = v1[0] - v0[0]
+    edge1_y = v1[1] - v0[1]
+    edge1_z = v1[2] - v0[2]
 
-    edge2_x = v2.x - v0.x
-    edge2_y = v2.y - v0.y
-    edge2_z = v2.z - v0.z
+    edge2_x = v2[0] - v0[0]
+    edge2_y = v2[1] - v0[1]
+    edge2_z = v2[2] - v0[2]
 
     # pvec = direction.cross(edge2)
     pvec_x = direction[1] * edge2_z - direction[2] * edge2_y
@@ -424,9 +424,9 @@ def ray_triangle(
     inv_det = 1.0 / det
 
     # tvec = origin - v0
-    tvec_x = origin.x - v0.x
-    tvec_y = origin.y - v0.y
-    tvec_z = origin.z - v0.z
+    tvec_x = origin[0] - v0[0]
+    tvec_y = origin[1] - v0[1]
+    tvec_z = origin[2] - v0[2]
 
     # u = tvec.dot(pvec) * inv_det
     u = (tvec_x * pvec_x + tvec_y * pvec_y + tvec_z * pvec_z) * inv_det
@@ -450,9 +450,9 @@ def ray_triangle(
 
     # Calculate intersection point: origin + t * direction
     return Point(
-        origin.x + t * direction[0],
-        origin.y + t * direction[1],
-        origin.z + t * direction[2],
+        origin[0] + t * direction[0],
+        origin[1] + t * direction[1],
+        origin[2] + t * direction[2],
     )
 
 
@@ -486,9 +486,9 @@ def ray_mesh(
         if p is None:
             continue
         t = (
-            (p.x - origin.x) * direction[0]
-            + (p.y - origin.y) * direction[1]
-            + (p.z - origin.z) * direction[2]
+            (p[0] - origin[0]) * direction[0]
+            + (p[1] - origin[1]) * direction[1]
+            + (p[2] - origin[2]) * direction[2]
         )
         if t >= 0.0:
             hits.append((t, p))
@@ -533,9 +533,9 @@ def ray_mesh_bvh(
             if p is None:
                 continue
             t = (
-                (p.x - origin.x) * direction[0]
-                + (p.y - origin.y) * direction[1]
-                + (p.z - origin.z) * direction[2]
+                (p[0] - origin[0]) * direction[0]
+                + (p[1] - origin[1]) * direction[1]
+                + (p[2] - origin[2]) * direction[2]
             )
             if t >= 0.0:
                 hits.append((t, p))
@@ -560,7 +560,7 @@ from .tolerance import Tolerance
 
 def _curve_signed_distance_to_plane(pt, plane):
     """Signed distance from point to plane."""
-    v = Vector(pt.x - plane.origin.x, pt.y - plane.origin.y, pt.z - plane.origin.z)
+    v = Vector(pt[0] - plane.origin[0], pt[1] - plane.origin[1], pt[2] - plane.origin[2])
     return v.dot(plane.z_axis)
 
 
@@ -895,12 +895,12 @@ def curve_plane_production(curve, plane, tolerance=None):
             tm = (ta + tb) * 0.5
             pm = curve.point_at(tm)
 
-            v = Vector(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z)
-            w = Vector(pm.x - pa.x, pm.y - pa.y, pm.z - pa.z)
+            v = Vector(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2])
+            w = Vector(pm[0] - pa[0], pm[1] - pa[1], pm[2] - pa[2])
 
             if v.magnitude() > Tolerance.ZERO_TOLERANCE:
                 t_proj = w.dot(v) / v.dot(v)
-                p_proj = Point(pa.x + t_proj * v.x, pa.y + t_proj * v.y, pa.z + t_proj * v.z)
+                p_proj = Point(pa[0] + t_proj * v[0], pa[1] + t_proj * v[1], pa[2] + t_proj * v[2])
                 deviation = pm.distance(p_proj)
 
                 if deviation < tolerance * 10.0:
