@@ -1196,7 +1196,7 @@ class Primitives:
 
             t1x = Xform.translation(-cx, -cy, -cz)
 
-            rot = Xform.identity()
+            rot = Xform()
             rot.m[0]  = fx[0]*prof_x[0] + fy[0]*prof_y[0] + fz[0]*prof_normal[0]
             rot.m[1]  = fx[1]*prof_x[0] + fy[1]*prof_y[0] + fz[1]*prof_normal[0]
             rot.m[2]  = fx[2]*prof_x[0] + fy[2]*prof_y[0] + fz[2]*prof_normal[0]
@@ -1371,7 +1371,7 @@ class Primitives:
             if tz > 1e-14:
                 tangent = tangent * (1.0 / tz)
 
-            rot = Xform.identity()
+            rot = Xform()
             rot.m[0]  = tangent[0]*prof_side[0] + x_dir[0]*prof_dir[0] + y_dir[0]*prof_up[0]
             rot.m[1]  = tangent[1]*prof_side[0] + x_dir[1]*prof_dir[0] + y_dir[1]*prof_up[0]
             rot.m[2]  = tangent[2]*prof_side[0] + x_dir[2]*prof_dir[0] + y_dir[2]*prof_up[0]
