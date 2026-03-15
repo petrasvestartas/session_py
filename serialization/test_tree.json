@@ -1,11 +1,11 @@
 {
     "type": "Tree",
-    "guid": "1bdf8744-d9de-4f39-bd60-7ff4e0977201",
+    "guid": "4d481069-a420-437b-a0c2-f560083a286f",
     "name": "./serialization/test_tree",
     "root": {
         "type": "TreeNode",
-        "guid": "60f559b4-e5e6-4047-8d54-f3bf9d74404f",
-        "name": "637f9358-9fe7-4817-ab0d-5cf9c2ffe89f",
+        "guid": "a4e5220e-14c4-4b35-b082-d58c94b49147",
+        "name": "8177cba5-0c33-42a5-90e0-c51a7aa080e5",
         "children": []
     }
 }

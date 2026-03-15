@@ -580,6 +580,26 @@ def test_mesh_attributes():
     MINI_CHECK(v5  == 1)
     MINI_CHECK(v10 == 2)
 
+    # naked (closed box: no naked edges before removal)
+    MINI_CHECK(len(mesh.naked_edges(True)) == 0)
+    MINI_CHECK(len(mesh.naked_faces(False)) == 6)
+    # remove one face — box becomes open, check naked
+    fk0 = min(mesh.face.keys())
+    mesh.remove_face(fk0)
+    ne = mesh.naked_edges(True)
+    MINI_CHECK(len(ne) == 4)
+    MINI_CHECK(ne[0] == (0, 1))
+    ni = mesh.naked_edges(False)
+    MINI_CHECK(len(ni) == 8)
+    nv = mesh.naked_vertices(True)
+    MINI_CHECK(len(nv) == 4)
+    nvi = mesh.naked_vertices(False)
+    MINI_CHECK(len(nvi) == 4)
+    nf = mesh.naked_faces(True)
+    MINI_CHECK(len(nf) == 4)
+    nfi = mesh.naked_faces(False)
+    MINI_CHECK(len(nfi) == 1)
+
 
 @MINI_TEST("Mesh", "Edges")
 def test_mesh_edges():
@@ -596,7 +616,7 @@ def test_mesh_edges():
     edges = mesh.edges()
     MINI_CHECK(len(edges) == 4)
     MINI_CHECK(isinstance(edges[0], tuple))
-    MINI_CHECK(edges[0] == (0, 3))
+    MINI_CHECK(edges[0] == (0, 1))
 
 
 @MINI_TEST("Mesh", "Vertex and Face Operations")
@@ -659,6 +679,62 @@ def test_mesh_vertex_and_face_operations():
     MINI_CHECK(w.number_of_faces() == 6)
     for vk in w.vertex:
         MINI_CHECK(len(w.vertex_faces(vk)) == 3)
+
+    # remove_face
+    mesh3 = Mesh()
+    a0 = mesh3.add_vertex(Point(0.0, 0.0, 0.0))
+    a1 = mesh3.add_vertex(Point(1.0, 0.0, 0.0))
+    a2 = mesh3.add_vertex(Point(1.0, 1.0, 0.0))
+    a3 = mesh3.add_vertex(Point(0.0, 1.0, 0.0))
+    fa = mesh3.add_face([a0, a1, a2, a3])
+    mesh3.remove_face(fa)
+    MINI_CHECK(mesh3.number_of_faces() == 0)
+    MINI_CHECK(mesh3.number_of_edges() == 0)
+    MINI_CHECK(mesh3.number_of_vertices() == 4)
+
+    # remove_vertex
+    mesh4 = Mesh()
+    b0 = mesh4.add_vertex(Point(0.0, 0.0, 0.0))
+    b1 = mesh4.add_vertex(Point(1.0, 0.0, 0.0))
+    b2 = mesh4.add_vertex(Point(1.0, 1.0, 0.0))
+    b3 = mesh4.add_vertex(Point(0.0, 1.0, 0.0))
+    mesh4.add_face([b0, b1, b2, b3])
+    mesh4.remove_vertex(b0)
+    MINI_CHECK(b0 not in mesh4.vertex)
+    MINI_CHECK(mesh4.number_of_faces() == 0)
+    MINI_CHECK(mesh4.number_of_vertices() == 3)
+
+    # remove_edge
+    mesh5 = Mesh()
+    c0 = mesh5.add_vertex(Point(0.0, 0.0, 0.0))
+    c1 = mesh5.add_vertex(Point(1.0, 0.0, 0.0))
+    c2 = mesh5.add_vertex(Point(1.0, 1.0, 0.0))
+    c3 = mesh5.add_vertex(Point(0.0, 1.0, 0.0))
+    c4 = mesh5.add_vertex(Point(2.0, 0.0, 0.0))
+    c5 = mesh5.add_vertex(Point(2.0, 1.0, 0.0))
+    mesh5.add_face([c0, c1, c2, c3])
+    mesh5.add_face([c1, c4, c5, c2])
+    mesh5.remove_edge(c1, c2)
+    MINI_CHECK(mesh5.number_of_faces() == 0)
+    MINI_CHECK(mesh5.number_of_edges() == 0)
+    MINI_CHECK(mesh5.number_of_vertices() == 6)
+
+    # remove_face then check naked: 2-face mesh, remove one face, remaining face is naked
+    mesh6 = Mesh()
+    d0 = mesh6.add_vertex(Point(0.0, 0.0, 0.0))
+    d1 = mesh6.add_vertex(Point(1.0, 0.0, 0.0))
+    d2 = mesh6.add_vertex(Point(1.0, 1.0, 0.0))
+    d3 = mesh6.add_vertex(Point(0.0, 1.0, 0.0))
+    d4 = mesh6.add_vertex(Point(2.0, 0.0, 0.0))
+    d5 = mesh6.add_vertex(Point(2.0, 1.0, 0.0))
+    fd0 = mesh6.add_face([d0, d1, d2, d3])
+    mesh6.add_face([d1, d4, d5, d2])
+    mesh6.remove_face(fd0)
+    MINI_CHECK(mesh6.number_of_faces() == 1)
+    MINI_CHECK(len(mesh6.naked_edges(True)) == 4)
+    MINI_CHECK(len(mesh6.naked_edges(False)) == 0)
+    MINI_CHECK(len(mesh6.naked_faces(True)) == 1)
+    MINI_CHECK(len(mesh6.naked_faces(False)) == 0)
 
 
 @MINI_TEST("Mesh", "Connectivity Queries")

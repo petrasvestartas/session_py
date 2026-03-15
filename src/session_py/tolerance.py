@@ -4,6 +4,8 @@ from contextlib import contextmanager
 
 # Mathematical constants
 PI = math.pi
+TWO_PI = 2 * math.pi
+HALF_PI = math.pi / 2
 TO_DEGREES = 180.0 / math.pi
 TO_RADIANS = math.pi / 180.0
 
@@ -29,6 +31,8 @@ class Tolerance:
 
     # Mathematical constants
     PI = math.pi
+    TWO_PI = 2 * math.pi
+    HALF_PI = math.pi / 2
     TO_DEGREES = 180.0 / math.pi
     TO_RADIANS = math.pi / 180.0
 

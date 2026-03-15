@@ -1078,12 +1078,42 @@ class Mesh:
                     count += 1
         return count
 
-    def edges(self):
+    def edges(self) -> List[Tuple[int, int]]:
+        seen = set()
         result = []
         for u in sorted(self.halfedge.keys()):
             for v in sorted(self.halfedge[u].keys()):
-                if self.halfedge[u][v] is None:
-                    result.append((u, v))
+                edge = (min(u, v), max(u, v))
+                if edge not in seen:
+                    seen.add(edge)
+                    result.append(edge)
+        return result
+
+    def naked_edges(self, boundary: bool = True) -> List[Tuple[int, int]]:
+        seen = set()
+        result = []
+        for u in sorted(self.halfedge.keys()):
+            for v in sorted(self.halfedge[u].keys()):
+                edge = (min(u, v), max(u, v))
+                if edge in seen:
+                    continue
+                seen.add(edge)
+                if self.is_edge_on_boundary(u, v) == boundary:
+                    result.append(edge)
+        return result
+
+    def naked_vertices(self, boundary: bool = True) -> List[int]:
+        result = []
+        for vk in sorted(self.vertex.keys()):
+            if self.is_vertex_on_boundary(vk) == boundary:
+                result.append(vk)
+        return result
+
+    def naked_faces(self, boundary: bool = True) -> List[int]:
+        result = []
+        for fk in sorted(self.face.keys()):
+            if self.is_face_on_boundary(fk) == boundary:
+                result.append(fk)
         return result
 
     def euler(self) -> int:
@@ -1370,6 +1400,69 @@ class Mesh:
                 self._widths.append(1.0)
 
         return face_key
+
+    def remove_face(self, fkey: int) -> None:
+        if fkey not in self.face:
+            return
+        vertices = self.face[fkey]
+        n = len(vertices)
+        for i in range(n):
+            u = vertices[i]
+            v = vertices[(i + 1) % n]
+            if v in self.halfedge.get(u, {}):
+                self.halfedge[u][v] = None
+                if self.halfedge.get(v, {}).get(u) is None:
+                    del self.halfedge[u][v]
+                    del self.halfedge[v][u]
+        del self.face[fkey]
+        self.triangulation.pop(fkey, None)
+        self.facedata.pop(fkey, None)
+        self.face_holes.pop(fkey, None)
+        n_edges = self.number_of_edges()
+        if len(self._linecolors) > n_edges:
+            self._linecolors = self._linecolors[:n_edges]
+            self._widths = self._widths[:n_edges]
+        n_faces = len(self.face)
+        if len(self._facecolors) > n_faces:
+            self._facecolors = self._facecolors[:n_faces]
+
+    def remove_vertex(self, vkey: int) -> None:
+        if vkey not in self.vertex:
+            return
+        faces_to_remove = [fk for fk, verts in self.face.items() if vkey in verts]
+        for fk in faces_to_remove:
+            self.remove_face(fk)
+        if vkey in self.halfedge:
+            for v in list(self.halfedge[vkey].keys()):
+                if vkey in self.halfedge.get(v, {}):
+                    del self.halfedge[v][vkey]
+            del self.halfedge[vkey]
+        self.edgedata = {k: w for k, w in self.edgedata.items() if vkey not in k}
+        del self.vertex[vkey]
+        n_vertices = len(self.vertex)
+        if len(self._pointcolors) > n_vertices:
+            self._pointcolors = self._pointcolors[:n_vertices]
+
+    def remove_edge(self, u: int, v: int) -> None:
+        faces_to_remove = set()
+        f0 = self.halfedge.get(u, {}).get(v)
+        if f0 is not None:
+            faces_to_remove.add(f0)
+        f1 = self.halfedge.get(v, {}).get(u)
+        if f1 is not None:
+            faces_to_remove.add(f1)
+        for fk in faces_to_remove:
+            self.remove_face(fk)
+        if v in self.halfedge.get(u, {}):
+            del self.halfedge[u][v]
+        if u in self.halfedge.get(v, {}):
+            del self.halfedge[v][u]
+        self.edgedata.pop((u, v), None)
+        self.edgedata.pop((v, u), None)
+        n_edges = self.number_of_edges()
+        if len(self._linecolors) > n_edges:
+            self._linecolors = self._linecolors[:n_edges]
+            self._widths = self._widths[:n_edges]
 
     ###########################################################################################
     # Connectivity Queries

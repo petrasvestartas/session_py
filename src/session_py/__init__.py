@@ -32,6 +32,7 @@ from .trimmedsurface import TrimmedSurface
 from .brep import BRep
 from .ray_box_intersection import ray_box
 from .closest import Closest
+from .mesh_iso import MeshIso, TpmsType, TpmsMode
 
 __all__ = [
     "Color",
@@ -67,4 +68,7 @@ __all__ = [
     "BRep",
     "ray_box",
     "Closest",
+    "MeshIso",
+    "TpmsType",
+    "TpmsMode",
 ]
