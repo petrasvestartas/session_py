@@ -19,7 +19,12 @@ def _total_area(pts, tris):
 def test_triangle():
     from session_py import Point
     from session_py.triangulation_2d import triangulate
-    boundary = [Point(0, 0, 0), Point(1, 0, 0), Point(0, 1, 0), Point(0, 0, 0)]
+    boundary = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(0, 1, 0),
+        Point(0, 0, 0),
+    ]
     tris = triangulate(boundary)
     MINI_CHECK(len(tris) == 1)
     MINI_CHECK(tris[0][0] >= 0)
@@ -31,9 +36,20 @@ def test_triangle():
 def test_square():
     from session_py import Point
     from session_py.triangulation_2d import triangulate
-    boundary = [Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0), Point(0, 0, 0)]
+    boundary = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+        Point(0, 0, 0),
+    ]
     tris = triangulate(boundary)
-    pts = [Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)]
+    pts = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
     a = _total_area(pts, tris)
     MINI_CHECK(len(tris) == 2)
     MINI_CHECK(abs(a - 1.0) < 1e-10)
@@ -59,7 +75,13 @@ def test_concave_polygon():
         Point(1, 1, 0), Point(0, 2, 0), Point(0, 0, 0),
     ]
     tris = triangulate(boundary)
-    pts = [Point(0, 0, 0), Point(2, 0, 0), Point(2, 2, 0), Point(1, 1, 0), Point(0, 2, 0)]
+    pts = [
+        Point(0, 0, 0),
+        Point(2, 0, 0),
+        Point(2, 2, 0),
+        Point(1, 1, 0),
+        Point(0, 2, 0),
+    ]
     a = _total_area(pts, tris)
     expected = 3.0
     MINI_CHECK(len(tris) == 3)
@@ -70,8 +92,20 @@ def test_concave_polygon():
 def test_polygon_with_hole():
     from session_py import Point
     from session_py.triangulation_2d import triangulate
-    boundary = [Point(0, 0, 0), Point(4, 0, 0), Point(4, 4, 0), Point(0, 4, 0), Point(0, 0, 0)]
-    hole = [Point(1, 1, 0), Point(3, 1, 0), Point(3, 3, 0), Point(1, 3, 0), Point(1, 1, 0)]
+    boundary = [
+        Point(0, 0, 0),
+        Point(4, 0, 0),
+        Point(4, 4, 0),
+        Point(0, 4, 0),
+        Point(0, 0, 0),
+    ]
+    hole = [
+        Point(1, 1, 0),
+        Point(3, 1, 0),
+        Point(3, 3, 0),
+        Point(1, 3, 0),
+        Point(1, 1, 0),
+    ]
     tris = triangulate(boundary, [hole])
     all_pts = [Point(0, 0, 0), Point(4, 0, 0), Point(4, 4, 0), Point(0, 4, 0),
                Point(1, 1, 0), Point(3, 1, 0), Point(3, 3, 0), Point(1, 3, 0)]
@@ -85,9 +119,27 @@ def test_polygon_with_hole():
 def test_polygon_with_multiple_holes():
     from session_py import Point
     from session_py.triangulation_2d import triangulate
-    boundary = [Point(0, 0, 0), Point(10, 0, 0), Point(10, 8, 0), Point(0, 8, 0), Point(0, 0, 0)]
-    hole0 = [Point(1, 1, 0), Point(3, 1, 0), Point(3, 3, 0), Point(1, 3, 0), Point(1, 1, 0)]
-    hole1 = [Point(5, 4, 0), Point(9, 4, 0), Point(9, 7, 0), Point(5, 7, 0), Point(5, 4, 0)]
+    boundary = [
+        Point(0, 0, 0),
+        Point(10, 0, 0),
+        Point(10, 8, 0),
+        Point(0, 8, 0),
+        Point(0, 0, 0),
+    ]
+    hole0 = [
+        Point(1, 1, 0),
+        Point(3, 1, 0),
+        Point(3, 3, 0),
+        Point(1, 3, 0),
+        Point(1, 1, 0),
+    ]
+    hole1 = [
+        Point(5, 4, 0),
+        Point(9, 4, 0),
+        Point(9, 7, 0),
+        Point(5, 7, 0),
+        Point(5, 4, 0),
+    ]
     tris = triangulate(boundary, [hole0, hole1])
     all_pts = [Point(0, 0, 0), Point(10, 0, 0), Point(10, 8, 0), Point(0, 8, 0),
                Point(1, 1, 0), Point(3, 1, 0), Point(3, 3, 0), Point(1, 3, 0),
@@ -102,9 +154,20 @@ def test_polygon_with_multiple_holes():
 def test_winding_correction():
     from session_py import Point
     from session_py.triangulation_2d import triangulate
-    boundary = [Point(0, 1, 0), Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)]
+    boundary = [
+        Point(0, 1, 0),
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
     tris = triangulate(boundary)
-    pts = [Point(0, 1, 0), Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0)]
+    pts = [
+        Point(0, 1, 0),
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+    ]
     a = _total_area(pts, tris)
     MINI_CHECK(len(tris) == 2)
     MINI_CHECK(abs(a - 1.0) < 1e-10)

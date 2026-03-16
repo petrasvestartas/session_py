@@ -749,7 +749,13 @@ def test_mesh_connectivity_queries():
     from session_py import Mesh
     from session_py import Point
 
-    pts = [Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0), Point(2,0,0)]
+    pts = [
+        Point(0,0,0),
+        Point(1,0,0),
+        Point(1,1,0),
+        Point(0,1,0),
+        Point(2,0,0),
+    ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2,3], [1,4,2]])
     vi = mesh.vertex_index()
     vkeys = mesh.vertices()
@@ -827,7 +833,12 @@ def test_mesh_geometric_properties():
     from session_py import Point
     from session_py import NormalWeighting
 
-    pts = [Point(0,0,0), Point(1,0,0), Point(-1,0,0), Point(0,1,0)]
+    pts = [
+        Point(0,0,0),
+        Point(1,0,0),
+        Point(-1,0,0),
+        Point(0,1,0),
+    ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,3], [0,3,2]])
     vi = mesh.vertex_index()
     vkeys = mesh.vertices()
@@ -898,7 +909,11 @@ def test_mesh_transformation():
     from session_py import Point
     from session_py import Xform
 
-    pts = [Point(0,0,0), Point(1,0,0), Point(0,1,0)]
+    pts = [
+        Point(0,0,0),
+        Point(1,0,0),
+        Point(0,1,0),
+    ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2]])
     v0 = mesh.vertices()[0]
 

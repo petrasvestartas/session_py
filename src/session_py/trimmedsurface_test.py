@@ -61,7 +61,13 @@ def test_trimmedsurface_constructor_planar():
     ts = TrimmedSurface.create_planar(bnd)
 
     # Rotated planar
-    pts = [Point(0, 0, 0), Point(3, 1, -2), Point(5, 2, -3), Point(4, 4, 0), Point(1, 3, 2)]
+    pts = [
+        Point(0, 0, 0),
+        Point(3, 1, -2),
+        Point(5, 2, -3),
+        Point(4, 4, 0),
+        Point(1, 3, 2),
+    ]
     bnd = NurbsCurve.create(True, 3, pts)
     ts = TrimmedSurface.create_planar(bnd)
 

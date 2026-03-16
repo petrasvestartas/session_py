@@ -44,7 +44,11 @@ def test_plane_constructor():
     pl_pn = Plane.from_point_normal(p, n)
 
     # From three points
-    pts = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)]
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+    ]
     pl_pts = Plane.from_points(pts)
 
     # From two points

@@ -114,7 +114,11 @@ def test_roundtrip_file_io():
     from session_py.encoders import json_dump, json_load
     from pathlib import Path
 
-    vectors = [Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1)]
+    vectors = [
+        Vector(1, 0, 0),
+        Vector(0, 1, 0),
+        Vector(0, 0, 1),
+    ]
     filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_encoders_collection.json"
     json_dump(vectors, filepath)
     loaded = json_load(filepath)

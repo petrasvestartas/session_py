@@ -306,8 +306,14 @@ def test_nurbssurface_ruled():
     from session_py import Point
     from session_py import Vector
 
-    pts_a = [Point(3.0, 0.0, 0.0), Point(-2.0, 0.0, 5.0)]
-    pts_b = [Point(3.0, 5.0, 5.0), Point(-2.0, 5.0, 0.0)]
+    pts_a = [
+        Point(3.0, 0.0, 0.0),
+        Point(-2.0, 0.0, 5.0),
+    ]
+    pts_b = [
+        Point(3.0, 5.0, 5.0),
+        Point(-2.0, 5.0, 0.0),
+    ]
     crv_a = NurbsCurve.create(False, 1, pts_a)
     crv_b = NurbsCurve.create(False, 1, pts_b)
     srf = Primitives.create_ruled(crv_a, crv_b)
@@ -985,7 +991,12 @@ def test_nurbscurve_interpolated():
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), points[0]))
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(8), points[6]))
 
-    pts4 = [Point(0, 0, 0), Point(1, 2, 0), Point(3, 1, 0), Point(5, 3, 0)]
+    pts4 = [
+        Point(0, 0, 0),
+        Point(1, 2, 0),
+        Point(3, 1, 0),
+        Point(5, 3, 0),
+    ]
     c4 = Primitives.create_interpolated(pts4, knot.CurveKnotStyle.Chord)
     MINI_CHECK(c4.is_valid())
     MINI_CHECK(c4.degree() == 3)
