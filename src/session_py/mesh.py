@@ -1066,41 +1066,33 @@ class Mesh:
         """Get the number of faces."""
         return len(self.face)
 
+    def vertices(self) -> List[int]:
+        return sorted(self.vertex.keys())
+
+    def faces(self) -> List[int]:
+        return sorted(self.face.keys())
+
     def number_of_edges(self) -> int:
         """Get the number of edges."""
         seen = set()
-        count = 0
-        for u in self.halfedge:
-            for v in self.halfedge[u]:
-                edge = tuple(sorted([u, v]))
-                if edge not in seen:
-                    seen.add(edge)
-                    count += 1
-        return count
+        for u, neighbors in self.halfedge.items():
+            for v in neighbors:
+                seen.add((min(u, v), max(u, v)))
+        return len(seen)
 
     def edges(self) -> List[Tuple[int, int]]:
         seen = set()
-        result = []
-        for u in sorted(self.halfedge.keys()):
-            for v in sorted(self.halfedge[u].keys()):
-                edge = (min(u, v), max(u, v))
-                if edge not in seen:
-                    seen.add(edge)
-                    result.append(edge)
-        return result
+        for u, neighbors in self.halfedge.items():
+            for v in neighbors:
+                seen.add((min(u, v), max(u, v)))
+        return sorted(seen)
 
     def naked_edges(self, boundary: bool = True) -> List[Tuple[int, int]]:
         seen = set()
-        result = []
-        for u in sorted(self.halfedge.keys()):
-            for v in sorted(self.halfedge[u].keys()):
-                edge = (min(u, v), max(u, v))
-                if edge in seen:
-                    continue
-                seen.add(edge)
-                if self.is_edge_on_boundary(u, v) == boundary:
-                    result.append(edge)
-        return result
+        for u, neighbors in self.halfedge.items():
+            for v in neighbors:
+                seen.add((min(u, v), max(u, v)))
+        return [e for e in sorted(seen) if self.is_edge_on_boundary(e[0], e[1]) == boundary]
 
     def naked_vertices(self, boundary: bool = True) -> List[int]:
         result = []

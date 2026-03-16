@@ -535,23 +535,23 @@ def test_mesh_attributes():
     euler = mesh.euler()
     MINI_CHECK(euler == 2)
 
-    vertices, faces = mesh.to_vertices_and_faces()
-    MINI_CHECK(len(faces) == n_faces)
-    MINI_CHECK(len(vertices) == n_vertices)
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[0], Point(-0.5, -0.5, -0.5)))
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[1], Point( 0.5, -0.5, -0.5)))
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[2], Point( 0.5,  0.5, -0.5)))
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[3], Point(-0.5,  0.5, -0.5)))
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[4], Point(-0.5, -0.5,  0.5)))
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[5], Point( 0.5, -0.5,  0.5)))
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[6], Point( 0.5,  0.5,  0.5)))
-    MINI_CHECK(TOLERANCE.is_point_close(vertices[7], Point(-0.5,  0.5,  0.5)))
-    MINI_CHECK(faces[0] == [0, 3, 2, 1])
-    MINI_CHECK(faces[1] == [4, 5, 6, 7])
-    MINI_CHECK(faces[2] == [0, 1, 5, 4])
-    MINI_CHECK(faces[3] == [2, 3, 7, 6])
-    MINI_CHECK(faces[4] == [0, 4, 7, 3])
-    MINI_CHECK(faces[5] == [1, 2, 6, 5])
+    pts, fidx = mesh.to_vertices_and_faces()
+    MINI_CHECK(len(fidx) == n_faces)
+    MINI_CHECK(len(pts) == n_vertices)
+    MINI_CHECK(TOLERANCE.is_point_close(pts[0], Point(-0.5, -0.5, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[1], Point( 0.5, -0.5, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[2], Point( 0.5,  0.5, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[3], Point(-0.5,  0.5, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[4], Point(-0.5, -0.5,  0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[5], Point( 0.5, -0.5,  0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[6], Point( 0.5,  0.5,  0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[7], Point(-0.5,  0.5,  0.5)))
+    MINI_CHECK(fidx[0] == [0, 3, 2, 1])
+    MINI_CHECK(fidx[1] == [4, 5, 6, 7])
+    MINI_CHECK(fidx[2] == [0, 1, 5, 4])
+    MINI_CHECK(fidx[3] == [2, 3, 7, 6])
+    MINI_CHECK(fidx[4] == [0, 4, 7, 3])
+    MINI_CHECK(fidx[5] == [1, 2, 6, 5])
 
     vertex_to_index = mesh.vertex_index()
     MINI_CHECK(len(vertex_to_index) == n_vertices)
@@ -564,27 +564,60 @@ def test_mesh_attributes():
     MINI_CHECK(vertex_to_index[6] == 6)
     MINI_CHECK(vertex_to_index[7] == 7)
 
-    # sparse keys: key != index
-    mesh2 = Mesh()
-    k0 = mesh2.add_vertex(Point(0.0, 0.0, 0.0))
-    k1 = mesh2.add_vertex(Point(1.0, 0.0, 0.0), 5)
-    k2 = mesh2.add_vertex(Point(0.0, 1.0, 0.0), 10)
-    MINI_CHECK(k0 == 0)
-    MINI_CHECK(k1 == 5)
-    MINI_CHECK(k2 == 10)
+    # sparse keys via remove_vertex: key != index after removal
+    mesh2 = mesh.duplicate()
+    kr = mesh2.vertices()[3]
+    mesh2.remove_vertex(kr)
     vertex_to_index = mesh2.vertex_index()
-    v0 = vertex_to_index[0]
-    v5 = vertex_to_index[5]
-    v10 = vertex_to_index[10]
-    MINI_CHECK(v0  == 0)
-    MINI_CHECK(v5  == 1)
-    MINI_CHECK(v10 == 2)
+    MINI_CHECK(len(vertex_to_index) == 7)
+    MINI_CHECK(vertex_to_index[0] == 0)
+    MINI_CHECK(vertex_to_index[1] == 1)
+    MINI_CHECK(vertex_to_index[2] == 2)
+    MINI_CHECK(3 not in vertex_to_index)
+    MINI_CHECK(vertex_to_index[4] == 3)
+    MINI_CHECK(vertex_to_index[5] == 4)
+    MINI_CHECK(vertex_to_index[6] == 5)
+    MINI_CHECK(vertex_to_index[7] == 6)
+
+    # vertices / faces / edges
+    vertices = mesh.vertices()
+    MINI_CHECK(len(vertices) == 8)
+    MINI_CHECK(vertices[0] == 0)
+    MINI_CHECK(vertices[1] == 1)
+    MINI_CHECK(vertices[2] == 2)
+    MINI_CHECK(vertices[3] == 3)
+    MINI_CHECK(vertices[4] == 4)
+    MINI_CHECK(vertices[5] == 5)
+    MINI_CHECK(vertices[6] == 6)
+    MINI_CHECK(vertices[7] == 7)
+    faces = mesh.faces()
+    MINI_CHECK(len(faces) == 6)
+    MINI_CHECK(faces[0] == 0)
+    MINI_CHECK(faces[1] == 1)
+    MINI_CHECK(faces[2] == 2)
+    MINI_CHECK(faces[3] == 3)
+    MINI_CHECK(faces[4] == 4)
+    MINI_CHECK(faces[5] == 5)
+    edges = mesh.edges()
+    MINI_CHECK(len(edges) == 12)
+    MINI_CHECK(edges[0]  == (0, 1))
+    MINI_CHECK(edges[1]  == (0, 3))
+    MINI_CHECK(edges[2]  == (0, 4))
+    MINI_CHECK(edges[3]  == (1, 2))
+    MINI_CHECK(edges[4]  == (1, 5))
+    MINI_CHECK(edges[5]  == (2, 3))
+    MINI_CHECK(edges[6]  == (2, 6))
+    MINI_CHECK(edges[7]  == (3, 7))
+    MINI_CHECK(edges[8]  == (4, 5))
+    MINI_CHECK(edges[9]  == (4, 7))
+    MINI_CHECK(edges[10] == (5, 6))
+    MINI_CHECK(edges[11] == (6, 7))
 
     # naked (closed box: no naked edges before removal)
     MINI_CHECK(len(mesh.naked_edges(True)) == 0)
     MINI_CHECK(len(mesh.naked_faces(False)) == 6)
     # remove one face — box becomes open, check naked
-    fk0 = min(mesh.face.keys())
+    fk0 = mesh.faces()[0]
     mesh.remove_face(fk0)
     ne = mesh.naked_edges(True)
     MINI_CHECK(len(ne) == 4)
@@ -604,19 +637,14 @@ def test_mesh_attributes():
 @MINI_TEST("Mesh", "Edges")
 def test_mesh_edges():
     from session_py import Mesh
-    from session_py import Point
 
-    mesh = Mesh()
-    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
-    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
-    v2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
-    v3 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
-    mesh.add_face([v0, v1, v2, v3])
-
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    v0 = mesh.vertices()[0]
+    v1 = mesh.vertices()[1]
     edges = mesh.edges()
-    MINI_CHECK(len(edges) == 4)
+    MINI_CHECK(len(edges) == 12)
     MINI_CHECK(isinstance(edges[0], tuple))
-    MINI_CHECK(edges[0] == (0, 1))
+    MINI_CHECK(edges[0] == (v0, v1))
 
 
 @MINI_TEST("Mesh", "Vertex and Face Operations")
@@ -624,54 +652,47 @@ def test_mesh_vertex_and_face_operations():
     from session_py import Mesh
     from session_py import Point
 
-    # add_vertex — None key auto-assigns sequentially from 0
-    mesh = Mesh()
-    v0 = mesh.add_vertex(Point(1.0, 2.0, 3.0))
-    MINI_CHECK(v0 == 0)
-    MINI_CHECK(mesh.number_of_vertices() == 1)
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    vkeys = mesh.vertices()
+    v0 = vkeys[0]
+    v1 = vkeys[1]
     MINI_CHECK(not mesh.is_empty())
-    v1 = mesh.add_vertex(Point(4.0, 5.0, 6.0), 42)
-    MINI_CHECK(v1 == 42)
-    MINI_CHECK(mesh.number_of_vertices() == 2)
+    MINI_CHECK(mesh.number_of_vertices() == 8)
 
-    # add_face
-    v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
-    f = mesh.add_face([v0, v1, v2])
-    MINI_CHECK(f is not None)
+    # add_face: invalid (too few vertices)
     invalid1 = mesh.add_face([v0, v1])
     MINI_CHECK(invalid1 is None)
+    # add_face: invalid (duplicate vertex)
     invalid2 = mesh.add_face([v0, v1, v0])
     MINI_CHECK(invalid2 is None)
 
     # clear
-    mesh.clear()
-    MINI_CHECK(mesh.is_empty())
-    MINI_CHECK(mesh.number_of_vertices() == 0)
-    MINI_CHECK(mesh.number_of_faces() == 0)
+    mesh2 = mesh.duplicate()
+    mesh2.clear()
+    MINI_CHECK(mesh2.is_empty())
+    MINI_CHECK(mesh2.number_of_vertices() == 0)
+    MINI_CHECK(mesh2.number_of_faces() == 0)
 
-    # unify_winding — two triangles sharing edge p1-p2, f1 has same-direction halfedge (wrong winding)
-    p0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
-    p1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
-    p2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
-    p3 = mesh.add_vertex(Point(2.0, 1.0, 0.0))
-    f0 = mesh.add_face([p0, p1, p2])  # +z normal
-    f1 = mesh.add_face([p1, p2, p3])  # -z normal (wrong: same halfedge dir)
-
-    n0_before = mesh.face_normal(f0)
-    n1_before = mesh.face_normal(f1)
+    # unify_winding — from_vertices_and_faces creates 2 triangles with mismatched normals
+    pts = [Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(2,1,0)]
+    mesh3 = Mesh.from_vertices_and_faces(pts, [[0,1,2], [1,2,3]])
+    fkeys3 = mesh3.faces()
+    f0 = fkeys3[0]
+    f1 = fkeys3[1]
+    n0_before = mesh3.face_normal(f0)
+    n1_before = mesh3.face_normal(f1)
     MINI_CHECK(n0_before is not None and n1_before is not None)
     MINI_CHECK(n0_before.dot(n1_before) < 0.0)  # wrong: normals point opposite ways
 
-    mesh.unify_winding()
+    mesh3.unify_winding()
 
-    n0_after = mesh.face_normal(f0)
-    n1_after = mesh.face_normal(f1)
+    n0_after = mesh3.face_normal(f0)
+    n1_after = mesh3.face_normal(f1)
     MINI_CHECK(n0_after is not None and n1_after is not None)
     MINI_CHECK(n0_after.dot(n1_after) > 0.0)  # correct: normals agree
 
-    # Unweld and weld
-    box = Mesh.create_box(1.0, 1.0, 1.0)
-    u = box.unweld()
+    # unweld and weld
+    u = mesh.unweld()
     MINI_CHECK(u.number_of_vertices() == 24)
 
     w = u.weld(0.001)
@@ -681,60 +702,40 @@ def test_mesh_vertex_and_face_operations():
         MINI_CHECK(len(w.vertex_faces(vk)) == 3)
 
     # remove_face
-    mesh3 = Mesh()
-    a0 = mesh3.add_vertex(Point(0.0, 0.0, 0.0))
-    a1 = mesh3.add_vertex(Point(1.0, 0.0, 0.0))
-    a2 = mesh3.add_vertex(Point(1.0, 1.0, 0.0))
-    a3 = mesh3.add_vertex(Point(0.0, 1.0, 0.0))
-    fa = mesh3.add_face([a0, a1, a2, a3])
-    mesh3.remove_face(fa)
-    MINI_CHECK(mesh3.number_of_faces() == 0)
-    MINI_CHECK(mesh3.number_of_edges() == 0)
-    MINI_CHECK(mesh3.number_of_vertices() == 4)
+    mesh5 = mesh.duplicate()
+    fa = mesh5.faces()[0]
+    mesh5.remove_face(fa)
+    MINI_CHECK(mesh5.number_of_faces() == 5)
+    MINI_CHECK(mesh5.number_of_edges() == 12)
+    MINI_CHECK(mesh5.number_of_vertices() == 8)
 
     # remove_vertex
-    mesh4 = Mesh()
-    b0 = mesh4.add_vertex(Point(0.0, 0.0, 0.0))
-    b1 = mesh4.add_vertex(Point(1.0, 0.0, 0.0))
-    b2 = mesh4.add_vertex(Point(1.0, 1.0, 0.0))
-    b3 = mesh4.add_vertex(Point(0.0, 1.0, 0.0))
-    mesh4.add_face([b0, b1, b2, b3])
-    mesh4.remove_vertex(b0)
-    MINI_CHECK(b0 not in mesh4.vertex)
-    MINI_CHECK(mesh4.number_of_faces() == 0)
-    MINI_CHECK(mesh4.number_of_vertices() == 3)
+    mesh6 = mesh.duplicate()
+    vr = mesh6.vertices()[0]
+    mesh6.remove_vertex(vr)
+    vi6 = mesh6.vertex_index()
+    MINI_CHECK(vr not in vi6)
+    MINI_CHECK(mesh6.number_of_faces() == 3)
+    MINI_CHECK(mesh6.number_of_vertices() == 7)
 
     # remove_edge
-    mesh5 = Mesh()
-    c0 = mesh5.add_vertex(Point(0.0, 0.0, 0.0))
-    c1 = mesh5.add_vertex(Point(1.0, 0.0, 0.0))
-    c2 = mesh5.add_vertex(Point(1.0, 1.0, 0.0))
-    c3 = mesh5.add_vertex(Point(0.0, 1.0, 0.0))
-    c4 = mesh5.add_vertex(Point(2.0, 0.0, 0.0))
-    c5 = mesh5.add_vertex(Point(2.0, 1.0, 0.0))
-    mesh5.add_face([c0, c1, c2, c3])
-    mesh5.add_face([c1, c4, c5, c2])
-    mesh5.remove_edge(c1, c2)
-    MINI_CHECK(mesh5.number_of_faces() == 0)
-    MINI_CHECK(mesh5.number_of_edges() == 0)
-    MINI_CHECK(mesh5.number_of_vertices() == 6)
+    mesh7 = mesh.duplicate()
+    ea = mesh7.vertices()[0]
+    eb = mesh7.vertices()[1]
+    mesh7.remove_edge(ea, eb)
+    MINI_CHECK(mesh7.number_of_faces() == 4)
+    MINI_CHECK(mesh7.number_of_edges() == 11)
+    MINI_CHECK(mesh7.number_of_vertices() == 8)
 
-    # remove_face then check naked: 2-face mesh, remove one face, remaining face is naked
-    mesh6 = Mesh()
-    d0 = mesh6.add_vertex(Point(0.0, 0.0, 0.0))
-    d1 = mesh6.add_vertex(Point(1.0, 0.0, 0.0))
-    d2 = mesh6.add_vertex(Point(1.0, 1.0, 0.0))
-    d3 = mesh6.add_vertex(Point(0.0, 1.0, 0.0))
-    d4 = mesh6.add_vertex(Point(2.0, 0.0, 0.0))
-    d5 = mesh6.add_vertex(Point(2.0, 1.0, 0.0))
-    fd0 = mesh6.add_face([d0, d1, d2, d3])
-    mesh6.add_face([d1, d4, d5, d2])
-    mesh6.remove_face(fd0)
-    MINI_CHECK(mesh6.number_of_faces() == 1)
-    MINI_CHECK(len(mesh6.naked_edges(True)) == 4)
-    MINI_CHECK(len(mesh6.naked_edges(False)) == 0)
-    MINI_CHECK(len(mesh6.naked_faces(True)) == 1)
-    MINI_CHECK(len(mesh6.naked_faces(False)) == 0)
+    # remove_face then check naked: box minus one face → 5 faces with 4 naked edges
+    mesh8 = mesh.duplicate()
+    fd0 = mesh8.faces()[0]
+    mesh8.remove_face(fd0)
+    MINI_CHECK(mesh8.number_of_faces() == 5)
+    MINI_CHECK(len(mesh8.naked_edges(True)) == 4)
+    MINI_CHECK(len(mesh8.naked_edges(False)) == 8)
+    MINI_CHECK(len(mesh8.naked_faces(True)) == 4)
+    MINI_CHECK(len(mesh8.naked_faces(False)) == 1)
 
 
 @MINI_TEST("Mesh", "Connectivity Queries")
@@ -742,14 +743,18 @@ def test_mesh_connectivity_queries():
     from session_py import Mesh
     from session_py import Point
 
-    mesh = Mesh()
-    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
-    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
-    v2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
-    v3 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
-    v4 = mesh.add_vertex(Point(2.0, 0.0, 0.0))
-    f0 = mesh.add_face([v0, v1, v2, v3])
-    f1 = mesh.add_face([v1, v4, v2])
+    pts = [Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0), Point(2,0,0)]
+    mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2,3], [1,4,2]])
+    vi = mesh.vertex_index()
+    vkeys = mesh.vertices()
+    v0 = vkeys[0]
+    v1 = vkeys[1]
+    v2 = vkeys[2]
+    v3 = vkeys[3]
+    v4 = vkeys[4]
+    fkeys = mesh.faces()
+    f0 = fkeys[0]
+    f1 = fkeys[1]
 
     # vertex_position
     pos = mesh.vertex_position(v0)
@@ -816,13 +821,14 @@ def test_mesh_geometric_properties():
     from session_py import Point
     from session_py import NormalWeighting
 
-    mesh = Mesh()
-    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
-    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
-    v2 = mesh.add_vertex(Point(-1.0, 0.0, 0.0))
-    v3 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
-    f0 = mesh.add_face([v0, v1, v3])
-    f1 = mesh.add_face([v0, v3, v2])
+    pts = [Point(0,0,0), Point(1,0,0), Point(-1,0,0), Point(0,1,0)]
+    mesh = Mesh.from_vertices_and_faces(pts, [[0,1,3], [0,3,2]])
+    vi = mesh.vertex_index()
+    vkeys = mesh.vertices()
+    v0 = vkeys[0]
+    v1 = vkeys[1]
+    v3 = vkeys[3]
+    f0 = mesh.faces()[0]
 
     # face_normal
     fn = mesh.face_normal(f0)
@@ -886,11 +892,9 @@ def test_mesh_transformation():
     from session_py import Point
     from session_py import Xform
 
-    mesh = Mesh()
-    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
-    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
-    v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
-    mesh.add_face([v0, v1, v2])
+    pts = [Point(0,0,0), Point(1,0,0), Point(0,1,0)]
+    mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2]])
+    v0 = mesh.vertices()[0]
 
     # transform() — apply stored xform in-place; xform field unchanged
     mesh1 = mesh.duplicate()
@@ -927,12 +931,8 @@ def test_mesh_json_roundtrip():
     from session_py import Point
     from pathlib import Path
 
-    mesh = Mesh()
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh"
-    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
-    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
-    v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
-    mesh.add_face([v0, v1, v2])
 
     # JSON object
     from session_py import Xform
@@ -983,12 +983,8 @@ def test_mesh_protobuf_roundtrip():
     from session_py import Point
     from pathlib import Path
 
-    mesh = Mesh()
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh_proto"
-    v0 = mesh.add_vertex(Point(0.0, 0.0, 0.0))
-    v1 = mesh.add_vertex(Point(1.0, 0.0, 0.0))
-    v2 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
-    mesh.add_face([v0, v1, v2])
 
     # String
     proto_bytes = mesh.pb_dumps()
