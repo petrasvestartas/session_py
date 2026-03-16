@@ -1242,6 +1242,36 @@ class Mesh:
                 if u not in self.halfedge[v]:
                     self.halfedge[v][u] = None
 
+        self.orient_outward()
+        return True
+
+    def orient_outward(self) -> bool:
+        if not self.face or self.naked_edges(True):
+            return False
+        vol = 0.0
+        for fk, verts in self.face.items():
+            n = len(verts)
+            p0 = self.vertex_position(verts[0])
+            for i in range(1, n - 1):
+                p1 = self.vertex_position(verts[i])
+                p2 = self.vertex_position(verts[i + 1])
+                vol += (p0[0] * (p1[1] * p2[2] - p1[2] * p2[1])
+                      + p0[1] * (p1[2] * p2[0] - p1[0] * p2[2])
+                      + p0[2] * (p1[0] * p2[1] - p1[1] * p2[0]))
+        if vol >= 0.0:
+            return False
+        for fk in self.face:
+            self.face[fk] = self.face[fk][::-1]
+        for u in self.halfedge:
+            self.halfedge[u].clear()
+        for fk, verts in self.face.items():
+            n = len(verts)
+            for i in range(n):
+                u = verts[i]
+                v = verts[(i + 1) % n]
+                self.halfedge[u][v] = fk
+                if u not in self.halfedge[v]:
+                    self.halfedge[v][u] = None
         return True
 
     def unweld(self) -> "Mesh":
@@ -1254,7 +1284,7 @@ class Mesh:
             m.add_face(new_vkeys)
         return m
 
-    def weld(self, tolerance: float = 0.0) -> "Mesh":
+    def weld(self, tolerance: float = 0.001) -> "Mesh":
         if not self.vertex:
             return Mesh()
 
@@ -1455,6 +1485,27 @@ class Mesh:
         if len(self._linecolors) > n_edges:
             self._linecolors = self._linecolors[:n_edges]
             self._widths = self._widths[:n_edges]
+
+    def flip_face(self, fkey: int) -> None:
+        if fkey not in self.face:
+            return
+        fv = self.face[fkey][:]
+        self.remove_face(fkey)
+        self.add_face(fv[::-1], fkey)
+
+    def flip(self) -> None:
+        for fkey in self.face:
+            self.face[fkey].reverse()
+        for u in self.halfedge:
+            self.halfedge[u].clear()
+        for fkey, verts in self.face.items():
+            n = len(verts)
+            for i in range(n):
+                u = verts[i]
+                v = verts[(i + 1) % n]
+                self.halfedge[u][v] = fkey
+                if u not in self.halfedge[v]:
+                    self.halfedge[v][u] = None
 
     ###########################################################################################
     # Connectivity Queries
@@ -1733,11 +1784,61 @@ class Mesh:
 
     def vertex_normals_weighted(self, weighting: NormalWeighting) -> Dict[int, Vector]:
         """Calculate normals for all vertices with specified weighting."""
+        acc = {}
+        for fk, vkeys in self.face.items():
+            n = len(vkeys)
+            if n < 3:
+                continue
+            pts = []
+            ok = True
+            for vk in vkeys:
+                vd = self.vertex.get(vk)
+                if vd is None:
+                    ok = False
+                    break
+                pts.append((vd.x, vd.y, vd.z))
+            if not ok:
+                continue
+            ex = pts[1][0]-pts[0][0]; ey = pts[1][1]-pts[0][1]; ez = pts[1][2]-pts[0][2]
+            fx = pts[2][0]-pts[0][0]; fy = pts[2][1]-pts[0][1]; fz = pts[2][2]-pts[0][2]
+            cnx = ey*fz-ez*fy; cny = ez*fx-ex*fz; cnz = ex*fy-ey*fx
+            length = math.sqrt(cnx*cnx + cny*cny + cnz*cnz)
+            if length < Tolerance.ZERO_TOLERANCE:
+                continue
+            ux = cnx/length; uy = cny/length; uz = cnz/length
+            area = 0.0
+            if weighting == NormalWeighting.AREA:
+                for i in range(1, n-1):
+                    ax = pts[i][0]-pts[0][0]; ay = pts[i][1]-pts[0][1]; az = pts[i][2]-pts[0][2]
+                    bx = pts[i+1][0]-pts[0][0]; by = pts[i+1][1]-pts[0][1]; bz = pts[i+1][2]-pts[0][2]
+                    cx = ay*bz-az*by; cy = az*bx-ax*bz; cz = ax*by-ay*bx
+                    area += math.sqrt(cx*cx + cy*cy + cz*cz) * 0.5
+            for i in range(n):
+                if weighting == NormalWeighting.UNIFORM:
+                    weight = 1.0
+                elif weighting == NormalWeighting.AREA:
+                    weight = area
+                else:
+                    prev = (i + n - 1) % n; nxt = (i + 1) % n
+                    ax = pts[prev][0]-pts[i][0]; ay = pts[prev][1]-pts[i][1]; az = pts[prev][2]-pts[i][2]
+                    bx = pts[nxt][0]-pts[i][0]; by = pts[nxt][1]-pts[i][1]; bz = pts[nxt][2]-pts[i][2]
+                    a_len = math.sqrt(ax*ax + ay*ay + az*az)
+                    b_len = math.sqrt(bx*bx + by*by + bz*bz)
+                    if a_len < Tolerance.ZERO_TOLERANCE or b_len < Tolerance.ZERO_TOLERANCE:
+                        continue
+                    cos_a = max(-1.0, min(1.0, (ax*bx + ay*by + az*bz) / (a_len * b_len)))
+                    weight = math.acos(cos_a)
+                vk = vkeys[i]
+                if vk not in acc:
+                    acc[vk] = [0.0, 0.0, 0.0]
+                acc[vk][0] += ux * weight
+                acc[vk][1] += uy * weight
+                acc[vk][2] += uz * weight
         normals = {}
-        for vertex_key in self.vertex:
-            normal = self.vertex_normal_weighted(vertex_key, weighting)
-            if normal is not None:
-                normals[vertex_key] = normal
+        for vk, v in acc.items():
+            length = math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])
+            if length > Tolerance.ZERO_TOLERANCE:
+                normals[vk] = Vector(v[0]/length, v[1]/length, v[2]/length)
         return normals
 
     ###########################################################################################

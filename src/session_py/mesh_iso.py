@@ -510,7 +510,7 @@ class MeshIso:
 
     @staticmethod
     def smooth_subtract(a, b, k=8.0):
-        return MeshIso.smooth_union(a, -b, k)
+        return -MeshIso.smooth_union(-a, b, k)
 
     @staticmethod
     def smooth_intersect(a, b, k=8.0):

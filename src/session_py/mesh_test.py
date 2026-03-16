@@ -650,7 +650,6 @@ def test_mesh_edges():
 @MINI_TEST("Mesh", "Vertex and Face Operations")
 def test_mesh_vertex_and_face_operations():
     from session_py import Mesh
-    from session_py import Point
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     vkeys = mesh.vertices()
@@ -673,29 +672,19 @@ def test_mesh_vertex_and_face_operations():
     MINI_CHECK(mesh2.number_of_vertices() == 0)
     MINI_CHECK(mesh2.number_of_faces() == 0)
 
-    # unify_winding — from_vertices_and_faces creates 2 triangles with mismatched normals
-    pts = [Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(2,1,0)]
-    mesh3 = Mesh.from_vertices_and_faces(pts, [[0,1,2], [1,2,3]])
-    fkeys3 = mesh3.faces()
-    f0 = fkeys3[0]
-    f1 = fkeys3[1]
-    n0_before = mesh3.face_normal(f0)
-    n1_before = mesh3.face_normal(f1)
-    MINI_CHECK(n0_before is not None and n1_before is not None)
-    MINI_CHECK(n0_before.dot(n1_before) < 0.0)  # wrong: normals point opposite ways
-
+    # unify_winding — flip face 2 (adjacent to seed face 0) then fix it
+    mesh3 = Mesh.create_box(1.0, 1.0, 1.0)
+    f2 = mesh3.faces()[2]
+    n2_orig = mesh3.face_normal(f2)
+    mesh3.flip_face(f2)
+    MINI_CHECK(mesh3.face_normal(f2).dot(n2_orig) < 0.0)
     mesh3.unify_winding()
-
-    n0_after = mesh3.face_normal(f0)
-    n1_after = mesh3.face_normal(f1)
-    MINI_CHECK(n0_after is not None and n1_after is not None)
-    MINI_CHECK(n0_after.dot(n1_after) > 0.0)  # correct: normals agree
+    MINI_CHECK(mesh3.face_normal(f2).dot(n2_orig) > 0.0)
 
     # unweld and weld
     u = mesh.unweld()
     MINI_CHECK(u.number_of_vertices() == 24)
-
-    w = u.weld(0.001)
+    w = u.weld()
     MINI_CHECK(w.number_of_vertices() == 8)
     MINI_CHECK(w.number_of_faces() == 6)
     for vk in w.vertex:
