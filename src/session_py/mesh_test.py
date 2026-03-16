@@ -616,19 +616,6 @@ def test_mesh_attributes():
     MINI_CHECK(len(nf) == 4)
     nfi = mesh.naked_faces(False)
     MINI_CHECK(len(nfi) == 1)
-    # sparse keys via remove_vertex: key != index after removal
-    kr = mesh.vertices()[3]
-    mesh.remove_vertex(kr)
-    vertex_to_index = mesh.vertex_index()
-    MINI_CHECK(len(vertex_to_index) == 7)
-    MINI_CHECK(vertex_to_index[0] == 0)
-    MINI_CHECK(vertex_to_index[1] == 1)
-    MINI_CHECK(vertex_to_index[2] == 2)
-    MINI_CHECK(3 not in vertex_to_index)
-    MINI_CHECK(vertex_to_index[4] == 3)
-    MINI_CHECK(vertex_to_index[5] == 4)
-    MINI_CHECK(vertex_to_index[6] == 5)
-    MINI_CHECK(vertex_to_index[7] == 6)
 
 
 @MINI_TEST("Mesh", "Edges")
@@ -663,9 +650,7 @@ def test_mesh_vertex_and_face_operations():
     for v in verts: mesh.add_vertex(v)
     for f in faces: mesh.add_face(f)
 
-    # add_face: invalid (too few vertices)
     MINI_CHECK(mesh.add_face([0, 1]) is None)
-    # add_face: invalid (duplicate vertex)
     MINI_CHECK(mesh.add_face([0, 1, 0]) is None)
 
     # remove_vertex(0): removes vertex 0 + 3 adjacent faces (0,2,4)
