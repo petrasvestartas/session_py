@@ -584,5 +584,163 @@ def test_intersection_surface_plane_miss():
     MINI_CHECK(len(curves) == 0)
 
 
+@MINI_TEST("Intersection", "Remap")
+def test_intersection_remap():
+    from session_py import intersection
+    MINI_CHECK(abs(intersection.remap(5.0, 0.0, 10.0, 0.0, 1.0) - 0.5) < 1e-9)
+    MINI_CHECK(abs(intersection.remap(0.0, 0.0, 10.0, 0.0, 1.0) - 0.0) < 1e-9)
+    MINI_CHECK(abs(intersection.remap(10.0, 0.0, 10.0, 0.0, 1.0) - 1.0) < 1e-9)
+
+
+@MINI_TEST("Intersection", "Closest Point On Segment")
+def test_intersection_closest_point_on_segment():
+    from session_py import intersection
+    from session_py import Line
+    from session_py import Point
+
+    seg = Line(0.0, 0.0, 0.0, 4.0, 0.0, 0.0)
+    pt = Point(2.0, 3.0, 0.0)
+    cp, t = intersection.closest_point_on_segment(pt, seg)
+    MINI_CHECK(abs(cp[0] - 2.0) < 1e-9)
+    MINI_CHECK(abs(cp[1] - 0.0) < 1e-9)
+    MINI_CHECK(abs(t - 0.5) < 1e-9)
+
+    pt2 = Point(-2.0, 1.0, 0.0)
+    cp2, t2 = intersection.closest_point_on_segment(pt2, seg)
+    MINI_CHECK(abs(cp2[0] - 0.0) < 1e-9)
+    MINI_CHECK(abs(t2 - 0.0) < 1e-9)
+
+
+@MINI_TEST("Intersection", "Plane Plane Plane Check Parallel")
+def test_intersection_plane_plane_plane_check():
+    from session_py import intersection
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    # Three parallel planes → None
+    p0 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    p1 = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    p2 = Plane.from_point_normal(Point(0.0, 0.0, 2.0), Vector(0.0, 0.0, 1.0))
+    MINI_CHECK(intersection.plane_plane_plane_check(p0, p1, p2) is None)
+
+    # Three valid planes
+    px = Plane.from_point_normal(Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    py = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
+    pz = Plane.from_point_normal(Point(0.0, 0.0, 3.0), Vector(0.0, 0.0, 1.0))
+    pt = intersection.plane_plane_plane_check(px, py, pz)
+    MINI_CHECK(pt is not None)
+    MINI_CHECK(abs(pt[0] - 1.0) < 1e-6)
+    MINI_CHECK(abs(pt[1] - 2.0) < 1e-6)
+    MINI_CHECK(abs(pt[2] - 3.0) < 1e-6)
+
+
+@MINI_TEST("Intersection", "Plane 4 Planes Closed")
+def test_intersection_plane_4planes():
+    from session_py import intersection
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    main = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    # Cycle left→bottom→right→top so adjacent pairs are non-parallel
+    planes = [
+        Plane.from_point_normal(Point(-1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0)),  # x=-1
+        Plane.from_point_normal(Point(0.0, -1.0, 0.0), Vector(0.0, 1.0, 0.0)),  # y=-1
+        Plane.from_point_normal(Point(1.0, 0.0, 0.0),  Vector(1.0, 0.0, 0.0)),  # x= 1
+        Plane.from_point_normal(Point(0.0, 1.0, 0.0),  Vector(0.0, 1.0, 0.0)),  # y= 1
+    ]
+    result = intersection.plane_4planes(main, planes)
+    MINI_CHECK(result is not None)
+    MINI_CHECK(result.point_count() == 5)
+    for i in range(result.point_count()):
+        p = result.get_point(i)
+        MINI_CHECK(abs(p[2]) < 1e-6)
+    # First == last (closed)
+    first = result.get_point(0)
+    last = result.get_point(4)
+    MINI_CHECK(abs(first[0] - last[0]) < 1e-6)
+    MINI_CHECK(abs(first[1] - last[1]) < 1e-6)
+
+
+@MINI_TEST("Intersection", "Plane 4 Planes Open")
+def test_intersection_plane_4planes_open():
+    from session_py import intersection
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    main = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    planes = [
+        Plane.from_point_normal(Point(-1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0)),
+        Plane.from_point_normal(Point(0.0, -1.0, 0.0), Vector(0.0, 1.0, 0.0)),
+        Plane.from_point_normal(Point(1.0, 0.0, 0.0),  Vector(1.0, 0.0, 0.0)),
+        Plane.from_point_normal(Point(0.0, 1.0, 0.0),  Vector(0.0, 1.0, 0.0)),
+    ]
+    result = intersection.plane_4planes_open(main, planes)
+    MINI_CHECK(result is not None)
+    MINI_CHECK(result.point_count() == 4)
+
+
+@MINI_TEST("Intersection", "Scale Vector To Distance Of 2 Planes")
+def test_intersection_scale_vector_to_distance_of_2planes():
+    from session_py import intersection
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    p0 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    p1 = Plane.from_point_normal(Point(0.0, 0.0, 3.0), Vector(0.0, 0.0, 1.0))
+    direction = Vector(0.0, 0.0, 1.0)
+    result = intersection.scale_vector_to_distance_of_2planes(direction, p0, p1)
+    MINI_CHECK(result is not None)
+    MINI_CHECK(abs(result[2] - 3.0) < 1e-6)
+
+
+@MINI_TEST("Intersection", "Polyline Plane")
+def test_intersection_polyline_plane():
+    from session_py import intersection
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    poly = Polyline([
+        Point(-1.0, -1.0, 0.0),
+        Point(1.0,  -1.0, 0.0),
+        Point(1.0,   1.0, 0.0),
+        Point(-1.0,  1.0, 0.0),
+        Point(-1.0, -1.0, 0.0),  # closed
+    ])
+    plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    result = intersection.polyline_plane(poly, plane)
+    MINI_CHECK(result is not None)
+    pts, indices = result
+    MINI_CHECK(len(pts) == 2)
+    for p in pts:
+        MINI_CHECK(abs(p[0]) < 1e-9)
+
+
+@MINI_TEST("Intersection", "Line Line 3D")
+def test_intersection_line_line_3d():
+    from session_py import intersection
+    from session_py import Line
+    from session_py import Point
+
+    # Two lines that cross at (1, 1, 0)
+    cutter = Line(0.0, 1.0, 0.0, 2.0, 1.0, 0.0)
+    seg    = Line(1.0, 0.0, 0.0, 1.0, 2.0, 0.0)
+    result = intersection.line_line_3d(cutter, seg)
+    MINI_CHECK(result is not None)
+    MINI_CHECK(abs(result[0] - 1.0) < 1e-6)
+    MINI_CHECK(abs(result[1] - 1.0) < 1e-6)
+    MINI_CHECK(abs(result[2] - 0.0) < 1e-6)
+
+    # Parallel lines → None
+    par0 = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    par1 = Line(0.0, 1.0, 0.0, 1.0, 1.0, 0.0)
+    MINI_CHECK(intersection.line_line_3d(par0, par1) is None)
+
+
 if __name__ == "__main__":
     run_all("python")

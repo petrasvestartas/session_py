@@ -379,3 +379,53 @@ def is_finite(x):
 
 # Global tolerance instance
 TOLERANCE = Tolerance()
+
+
+# ── Math utilities (ported from cgal_math_util) ────────────────────────────
+
+def unique_from_two_int(a: int, b: int) -> int:
+    """Cantor-style hash: order-independent key from two ints.
+
+    The larger value goes into the high 32 bits; the smaller into the
+    low 32 bits.  Mirrors the C++ / Rust implementations exactly.
+    """
+    lo, hi = (a, b) if b >= a else (b, a)
+    return (hi << 32) | (lo & 0xFFFFFFFF)
+
+
+def wrap_index(index: int, n: int) -> int:
+    """Signed modulo returning a value in [0, n-1].  Returns 0 when n == 0."""
+    if n == 0:
+        return 0
+    return ((index % n) + n) % n
+
+
+def triangle_edge_by_angle(edge_length: float, angle_deg: float) -> float:
+    """Length of the opposite side in a right triangle.
+
+    = edge_length * tan(angle_deg)
+    Used in joint taper geometry.
+    """
+    return edge_length * math.tan(angle_deg * TO_RADIANS)
+
+
+def rad_to_deg(radians: float) -> float:
+    """Convert radians to degrees."""
+    return radians * TO_DEGREES
+
+
+def deg_to_rad(degrees: float) -> float:
+    """Convert degrees to radians."""
+    return degrees * TO_RADIANS
+
+
+def count_digits(n: float) -> int:
+    """Number of decimal digits of ceil(|n|).  Returns 0 for n == 0."""
+    v = int(math.ceil(abs(n)))
+    if v == 0:
+        return 0
+    count = 0
+    while v != 0:
+        v //= 10
+        count += 1
+    return count

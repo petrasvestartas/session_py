@@ -181,10 +181,8 @@ class Objects:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
-        from .proto import objects_pb2
-        proto = objects_pb2.Objects()
-        proto.ParseFromString(data)
+    def from_proto(cls, proto):
+        """Create Objects from proto message directly (no SerializeToString)."""
         objects = cls()
         objects.guid = proto.guid
         objects.name = proto.name
@@ -201,7 +199,7 @@ class Objects:
         for pc in proto.pointclouds:
             objects.pointclouds.append(PointCloud.pb_loads(pc.SerializeToString()))
         for m in proto.meshes:
-            objects.meshes.append(Mesh.pb_loads(m.SerializeToString()))
+            objects.meshes.append(Mesh.from_proto(m))
         for nc in proto.nurbscurves:
             objects.nurbscurves.append(NurbsCurve.pb_loads(nc.SerializeToString()))
         for ns in proto.nurbssurfaces:
@@ -209,6 +207,13 @@ class Objects:
         for b in proto.breps:
             objects.breps.append(BRep.pb_loads(b.SerializeToString()))
         return objects
+
+    @classmethod
+    def pb_loads(cls, data):
+        from .proto import objects_pb2
+        proto = objects_pb2.Objects()
+        proto.ParseFromString(data)
+        return cls.from_proto(proto)
 
     def pb_dump(self, filepath):
         with open(filepath, 'wb') as f:

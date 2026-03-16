@@ -431,5 +431,90 @@ def test_polyline_average_plane():
     MINI_CHECK(TOLERANCE.is_close(abs(avg_normal[2]), 1.0))
 
 
+@MINI_TEST("Polyline", "Interpolate Points")
+def test_polyline_interpolate_points():
+    from session_py import Polyline
+    from session_py import Point
+
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(4.0, 0.0, 0.0)
+
+    # kind 0: no endpoints — 3 interior points at t=0.25, 0.5, 0.75
+    pts0 = Polyline.interpolate_points(a, b, 3, 0)
+    # kind 1: both endpoints — 5 points
+    pts1 = Polyline.interpolate_points(a, b, 3, 1)
+    # kind 2: start only — 4 points (from + 3 interior)
+    pts2 = Polyline.interpolate_points(a, b, 3, 2)
+
+    MINI_CHECK(len(pts0) == 3)
+    MINI_CHECK(TOLERANCE.is_close(pts0[0][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pts0[1][0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(pts0[2][0], 3.0))
+    MINI_CHECK(len(pts1) == 5)
+    MINI_CHECK(TOLERANCE.is_close(pts1[0][0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pts1[4][0], 4.0))
+    MINI_CHECK(len(pts2) == 4)
+    MINI_CHECK(TOLERANCE.is_close(pts2[0][0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pts2[3][0], 3.0))
+
+
+@MINI_TEST("Polyline", "Quick Hull")
+def test_polyline_quick_hull():
+    from session_py import Polyline
+    from session_py import Point
+
+    # Square with one interior point — hull should be the 4 corners
+    polygon = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.5, 0.5, 0.0),
+    ])
+    hull = Polyline.quick_hull(polygon)
+
+    MINI_CHECK(hull.point_count() == 4)
+
+
+@MINI_TEST("Polyline", "Bounding Rectangle")
+def test_polyline_bounding_rectangle():
+    from session_py import Polyline
+    from session_py import Point
+
+    # Axis-aligned 4x3 rectangle
+    polygon = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+        Point(4.0, 3.0, 0.0),
+        Point(0.0, 3.0, 0.0),
+    ])
+    rect = Polyline.bounding_rectangle(polygon)
+
+    MINI_CHECK(rect is not None)
+    MINI_CHECK(rect.point_count() == 5)
+    for p in rect.get_points():
+        MINI_CHECK(abs(p[2]) < 1e-6)
+
+
+@MINI_TEST("Polyline", "Grid Of Points In Polygon")
+def test_polyline_grid_of_points():
+    from session_py import Polyline
+    from session_py import Point
+
+    # 4x4 square polygon
+    polygon = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+        Point(4.0, 4.0, 0.0),
+        Point(0.0, 4.0, 0.0),
+    ])
+    pts = Polyline.grid_of_points_in_polygon(polygon, 0.0, 1.0, 100)
+
+    MINI_CHECK(len(pts) > 0)
+    for p in pts:
+        MINI_CHECK(p[0] > 0.0 and p[0] < 4.0)
+        MINI_CHECK(p[1] > 0.0 and p[1] < 4.0)
+
+
 if __name__ == "__main__":
     run_all("python")

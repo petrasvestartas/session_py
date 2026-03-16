@@ -170,7 +170,7 @@ class Session:
         proto.ParseFromString(data)
         session = cls(name=proto.name)
         session.guid = proto.guid
-        session.objects = Objects.pb_loads(proto.objects.SerializeToString())
+        session.objects = Objects.from_proto(proto.objects)
         session.tree = Tree.pb_loads(proto.tree.SerializeToString())
         session.graph = Graph.pb_loads(proto.graph.SerializeToString())
         for point in session.objects.points:

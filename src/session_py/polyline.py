@@ -680,6 +680,21 @@ class Polyline:
             elif segment_id + 1 == self.point_count() - 1:
                 self.set_point(0, self.get_point(self.point_count() - 1))
 
+    @staticmethod
+    def extend_line_static(start: Point, end: Point, d0: float, d1: float) -> None:
+        """Extend a line segment independently at each end by a real (normalized) distance."""
+        v = end - start
+        v_norm = v.normalize()
+        start -= v_norm * d0
+        end += v_norm * d1
+
+    @staticmethod
+    def scale_line_static(start: Point, end: Point, dist: float) -> None:
+        """Shrink a line segment equally from both ends by a fraction of its length (not normalized)."""
+        v = end - start
+        start += v * dist
+        end -= v * dist
+
     def is_clockwise(self, plane: Plane) -> bool:
         """Check if polyline is clockwise oriented."""
         if len(self.points) < 3:
@@ -734,6 +749,193 @@ class Polyline:
             result_points.append(interpolated)
 
         return Polyline(result_points)
+
+    @staticmethod
+    def interpolate_points(
+        from_pt: Point, to_pt: Point, steps: int, kind: int = 0
+    ) -> List[Point]:
+        """Linear interpolation between two points.
+
+        kind: 0=no endpoints, 1=both endpoints, 2=start only
+        """
+        result = []
+        for i in range(1, steps + 1):
+            t = float(i) / float(steps + 1)
+            result.append(Point(
+                from_pt[0] + t * (to_pt[0] - from_pt[0]),
+                from_pt[1] + t * (to_pt[1] - from_pt[1]),
+                from_pt[2] + t * (to_pt[2] - from_pt[2]),
+            ))
+        if kind == 1:
+            result.insert(0, Point(from_pt[0], from_pt[1], from_pt[2]))
+            result.append(Point(to_pt[0], to_pt[1], to_pt[2]))
+        elif kind == 2:
+            result.insert(0, Point(from_pt[0], from_pt[1], from_pt[2]))
+        return result
+
+    @staticmethod
+    def quick_hull(polygon: "Polyline") -> "Polyline":
+        """2D convex hull via quickhull in the polygon's local plane."""
+        pts = polygon.get_points()
+        if len(pts) < 3:
+            return Polyline(pts[:])
+
+        origin, x_axis, y_axis, _ = polygon.get_average_plane()
+
+        def proj2d(p):
+            d = Vector(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
+            return (d.dot(x_axis), d.dot(y_axis))
+
+        def unproj(u, v):
+            return origin + x_axis * u + y_axis * v
+
+        def cross2d(o, a, b):
+            return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+        def qh_upper(a, b, points):
+            if not points:
+                return []
+            apex = max(points, key=lambda p: cross2d(a, b, p))
+            if cross2d(a, b, apex) <= 0.0:
+                return []
+            left = [p for p in points if cross2d(a, apex, p) > 0.0]
+            right = [p for p in points if cross2d(apex, b, p) > 0.0]
+            return qh_upper(a, apex, left) + [apex] + qh_upper(apex, b, right)
+
+        pts2d = [proj2d(p) for p in pts]
+        min_x = min(pts2d, key=lambda p: p[0])
+        max_x = max(pts2d, key=lambda p: p[0])
+
+        upper = [p for p in pts2d if cross2d(min_x, max_x, p) > 0.0]
+        lower = [p for p in pts2d if cross2d(max_x, min_x, p) > 0.0]
+
+        hull2d = (
+            [min_x]
+            + qh_upper(min_x, max_x, upper)
+            + [max_x]
+            + qh_upper(max_x, min_x, lower)
+        )
+
+        return Polyline([unproj(u, v) for u, v in hull2d])
+
+    @staticmethod
+    def bounding_rectangle(polygon: "Polyline") -> Optional["Polyline"]:
+        """Minimum area bounding rectangle via rotating calipers; returns closed 5-point Polyline."""
+        import math
+
+        hull = Polyline.quick_hull(polygon)
+        hull_pts = hull.get_points()
+        n = len(hull_pts)
+        if n < 3:
+            return None
+
+        origin, x_axis, y_axis, _ = polygon.get_average_plane()
+
+        def proj2d(p):
+            d = Vector(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
+            return (d.dot(x_axis), d.dot(y_axis))
+
+        def unproj(u, v):
+            return origin + x_axis * u + y_axis * v
+
+        hull2d = [proj2d(p) for p in hull_pts]
+        best_area = float("inf")
+        best_corners = None
+
+        for i in range(n):
+            ax, ay = hull2d[i]
+            bx, by = hull2d[(i + 1) % n]
+            ex, ey = bx - ax, by - ay
+            length = math.sqrt(ex * ex + ey * ey)
+            if length < 1e-12:
+                continue
+            ex /= length
+            ey /= length
+
+            min_u = min_v = float("inf")
+            max_u = max_v = float("-inf")
+            for px, py in hull2d:
+                u = px * ex + py * ey
+                v = -px * ey + py * ex
+                if u < min_u:
+                    min_u = u
+                if u > max_u:
+                    max_u = u
+                if v < min_v:
+                    min_v = v
+                if v > max_v:
+                    max_v = v
+
+            area = (max_u - min_u) * (max_v - min_v)
+            if area < best_area:
+                best_area = area
+                best_corners = [
+                    (min_u * ex - min_v * ey, min_u * ey + min_v * ex),
+                    (max_u * ex - min_v * ey, max_u * ey + min_v * ex),
+                    (max_u * ex - max_v * ey, max_u * ey + max_v * ex),
+                    (min_u * ex - max_v * ey, min_u * ey + max_v * ex),
+                ]
+
+        if best_corners is None:
+            return None
+
+        pts3d = [unproj(u, v) for u, v in best_corners]
+        pts3d.append(pts3d[0])
+        return Polyline(pts3d)
+
+    @staticmethod
+    def grid_of_points_in_polygon(
+        polygon: "Polyline",
+        offset_dist: float,
+        div_dist: float,
+        max_pts: int = 100,
+    ) -> List[Point]:
+        """Grid of interior points; offset_dist is ignored (requires Clipper2)."""
+        pts = polygon.get_points()
+        if len(pts) < 3:
+            return []
+
+        origin, x_axis, y_axis, _ = polygon.get_average_plane()
+
+        def proj2d(p):
+            d = Vector(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
+            return (d.dot(x_axis), d.dot(y_axis))
+
+        def unproj(u, v):
+            return origin + x_axis * u + y_axis * v
+
+        poly2d = [proj2d(p) for p in pts]
+        nv = len(poly2d)
+
+        def pt_in_poly(pu, pv):
+            inside = False
+            j = nv - 1
+            for i in range(nv):
+                xi, yi = poly2d[i]
+                xj, yj = poly2d[j]
+                if (yi > pv) != (yj > pv):
+                    t = (xj - xi) * (pv - yi) / (yj - yi + 1e-300) + xi
+                    if pu < t:
+                        inside = not inside
+                j = i
+            return inside
+
+        min_u = min(p[0] for p in poly2d)
+        max_u = max(p[0] for p in poly2d)
+        min_v = min(p[1] for p in poly2d)
+        max_v = max(p[1] for p in poly2d)
+
+        result = []
+        u = min_u + div_dist * 0.5
+        while u <= max_u and len(result) < max_pts:
+            v = min_v + div_dist * 0.5
+            while v <= max_v and len(result) < max_pts:
+                if pt_in_poly(u, v):
+                    result.append(unproj(u, v))
+                v += div_dist
+            u += div_dist
+
+        return result
 
     def _average_normal(self) -> Vector:
         """Calculate average normal from polyline points."""

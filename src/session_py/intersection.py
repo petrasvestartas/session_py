@@ -1510,3 +1510,247 @@ def surface_plane(surface, plane, tolerance=None):
             result.append(crv)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Group A: CGAL-equivalent intersection utilities
+# ---------------------------------------------------------------------------
+
+def _vectors_nearly_parallel(v0, v1, angle_tol: float = 0.1) -> bool:
+    import math
+    m0 = math.sqrt(v0[0]*v0[0] + v0[1]*v0[1] + v0[2]*v0[2])
+    m1 = math.sqrt(v1[0]*v1[0] + v1[1]*v1[1] + v1[2]*v1[2])
+    if m0 < 1e-10 or m1 < 1e-10:
+        return True
+    cos_angle = abs((v0[0]*v1[0] + v0[1]*v1[1] + v0[2]*v1[2]) / (m0 * m1))
+    return cos_angle > math.cos(angle_tol)
+
+
+def remap(val: float, from1: float, to1: float, from2: float, to2: float) -> float:
+    """Linear remap: map val from [from1,to1] to [from2,to2]."""
+    span = to1 - from1
+    if abs(span) < 1e-14:
+        return from2
+    t = (val - from1) / span
+    return from2 + t * (to2 - from2)
+
+
+def closest_point_on_segment(pt, seg) -> tuple:
+    """Project point onto finite segment; returns (closest_point, t in [0,1])."""
+    start = seg.start()
+    end = seg.end()
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    dz = end[2] - start[2]
+    len_sq = dx*dx + dy*dy + dz*dz
+    if len_sq < 1e-20:
+        return (Point(start[0], start[1], start[2]), 0.0)
+    vx = pt[0] - start[0]
+    vy = pt[1] - start[1]
+    vz = pt[2] - start[2]
+    t = (vx*dx + vy*dy + vz*dz) / len_sq
+    t = max(0.0, min(1.0, t))
+    return (Point(start[0] + t*dx, start[1] + t*dy, start[2] + t*dz), t)
+
+
+def plane_plane_plane_check(p0, p1, p2, angle_tol: float = 0.1) -> Optional[Point]:
+    """3-plane intersection with angle-tolerance parallelism guard."""
+    if _vectors_nearly_parallel(p0.z_axis, p1.z_axis, angle_tol):
+        return None
+    if _vectors_nearly_parallel(p0.z_axis, p2.z_axis, angle_tol):
+        return None
+    if _vectors_nearly_parallel(p1.z_axis, p2.z_axis, angle_tol):
+        return None
+    return plane_plane_plane(p0, p1, p2)
+
+
+def plane_4planes(main_plane, planes) -> Optional[object]:
+    """Intersect main plane with 4 ordered boundary planes → closed quad (5 pts)."""
+    from .polyline import Polyline
+    p0 = plane_plane_plane_check(planes[0], planes[1], main_plane)
+    if p0 is None:
+        return None
+    p1 = plane_plane_plane_check(planes[1], planes[2], main_plane)
+    if p1 is None:
+        return None
+    p2 = plane_plane_plane_check(planes[2], planes[3], main_plane)
+    if p2 is None:
+        return None
+    p3 = plane_plane_plane_check(planes[3], planes[0], main_plane)
+    if p3 is None:
+        return None
+    return Polyline([p0, p1, p2, p3, p0])
+
+
+def plane_4planes_open(main_plane, planes) -> Optional[object]:
+    """Same as plane_4planes but open (4 pts, last != first)."""
+    from .polyline import Polyline
+    p0 = plane_plane_plane_check(planes[0], planes[1], main_plane)
+    if p0 is None:
+        return None
+    p1 = plane_plane_plane_check(planes[1], planes[2], main_plane)
+    if p1 is None:
+        return None
+    p2 = plane_plane_plane_check(planes[2], planes[3], main_plane)
+    if p2 is None:
+        return None
+    p3 = plane_plane_plane_check(planes[3], planes[0], main_plane)
+    if p3 is None:
+        return None
+    return Polyline([p0, p1, p2, p3])
+
+
+def plane_4lines(plane, l0, l1, l2, l3) -> Optional[object]:
+    """Intersect plane with 4 line segments → closed quad (5 pts)."""
+    from .polyline import Polyline
+    p0 = line_plane(l0, plane, False)
+    if p0 is None:
+        return None
+    p1 = line_plane(l1, plane, False)
+    if p1 is None:
+        return None
+    p2 = line_plane(l2, plane, False)
+    if p2 is None:
+        return None
+    p3 = line_plane(l3, plane, False)
+    if p3 is None:
+        return None
+    return Polyline([p0, p1, p2, p3, p0])
+
+
+def get_quad_from_line_topbottomplanes(face_plane, line, plane0, plane1) -> Optional[object]:
+    """Build joint quad from collision face-plane and two bounding planes."""
+    from .polyline import Polyline
+    from .plane import Plane
+    l0 = plane_plane(face_plane, plane0)
+    l1 = plane_plane(face_plane, plane1)
+    if l0 is None or l1 is None:
+        return None
+    # Build side planes perpendicular to the line direction
+    seg_dir = line.to_vector()
+    seg_start = line.start()
+    seg_end = line.end()
+    side0 = Plane.from_point_normal(seg_start, seg_dir)
+    side1 = Plane.from_point_normal(seg_end, seg_dir)
+    p0 = line_plane(l0, side0, False)
+    p1 = line_plane(l0, side1, False)
+    p2 = line_plane(l1, side1, False)
+    p3 = line_plane(l1, side0, False)
+    if any(p is None for p in (p0, p1, p2, p3)):
+        return None
+    return Polyline([p0, p1, p2, p3, p0])
+
+
+def scale_vector_to_distance_of_2planes(direction, p0, p1) -> Optional[object]:
+    """Scale direction vector so it spans the distance between two parallel planes."""
+    import math
+    from .vector import Vector
+    mag = math.sqrt(direction[0]**2 + direction[1]**2 + direction[2]**2)
+    if mag < 1e-14:
+        return None
+    ray = Line(0.0, 0.0, 0.0, direction[0], direction[1], direction[2])
+    q0 = line_plane(ray, p0, False)
+    q1 = line_plane(ray, p1, False)
+    if q0 is None or q1 is None:
+        return None
+    output = Vector(q1[0] - q0[0], q1[1] - q0[1], q1[2] - q0[2])
+    # Validity: squared-distance ratio < 10 (mirrors CGAL)
+    n1 = p1.z_axis
+    n1_mag = math.sqrt(n1[0]**2 + n1[1]**2 + n1[2]**2)
+    if n1_mag < 1e-14:
+        return None
+    o0 = p0.origin
+    d = ((o0[0] - p1.origin[0]) * n1[0]
+       + (o0[1] - p1.origin[1]) * n1[1]
+       + (o0[2] - p1.origin[2]) * n1[2]) / n1_mag
+    dist_ortho_sq = d * d
+    if dist_ortho_sq < 1e-28:
+        return None
+    dist_sq = output[0]**2 + output[1]**2 + output[2]**2
+    if dist_sq / dist_ortho_sq >= 10.0:
+        return None
+    return output
+
+
+def get_orthogonal_vector_between_two_plane_pairs(pp0_0, pp1_0, pp1_1) -> Optional[object]:
+    """Shortest orthogonal vector between two infinite lines defined by plane pairs."""
+    from .vector import Vector
+    l0 = plane_plane(pp0_0, pp1_0)
+    l1 = plane_plane(pp0_0, pp1_1)
+    if l0 is None or l1 is None:
+        return None
+    result = line_line_parameters(l0, l1, 0.0, intersect_segments=False, near_parallel_as_closest=True)
+    if result is None:
+        return None
+    t0, t1 = result
+    s0 = l0.start()
+    s1 = l0.end()
+    p0 = Point(s0[0] + t0*(s1[0]-s0[0]), s0[1] + t0*(s1[1]-s0[1]), s0[2] + t0*(s1[2]-s0[2]))
+    r0 = l1.start()
+    r1 = l1.end()
+    p1 = Point(r0[0] + t1*(r1[0]-r0[0]), r0[1] + t1*(r1[1]-r0[1]), r0[2] + t1*(r1[2]-r0[2]))
+    return Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+
+
+def line_two_planes(line, p0, p1) -> Optional[object]:
+    """Clip finite segment endpoints to intersections with two planes; returns new Line or None."""
+    new_start = line_plane(line, p0, True)
+    new_end = line_plane(line, p1, True)
+    if new_start is None or new_end is None:
+        return None
+    return Line(new_start[0], new_start[1], new_start[2],
+                new_end[0], new_end[1], new_end[2])
+
+
+def polyline_plane(poly, plane) -> Optional[tuple]:
+    """Find all perimeter edge-plane intersections; returns (points, edge_indices)."""
+    n = poly.point_count()
+    if n < 2:
+        return None
+    pts_out = []
+    idx_out = []
+    for i in range(n - 1):
+        pa = poly.get_point(i)
+        pb = poly.get_point(i + 1)
+        if pa is None or pb is None:
+            continue
+        seg = Line(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2])
+        pt = line_plane(seg, plane, True)
+        if pt is not None:
+            pts_out.append(pt)
+            idx_out.append(i)
+    if not pts_out:
+        return None
+    return (pts_out, idx_out)
+
+
+def polyline_plane_to_line(poly, plane, align_start) -> Optional[object]:
+    """Intersect polyline perimeter with plane → single segment aligned to edge direction."""
+    result = polyline_plane(poly, plane)
+    if result is None:
+        return None
+    pts, _ = result
+    if len(pts) < 2:
+        return None
+    p0, p1 = pts[0], pts[1]
+    # Align so that p0 is closer to align_start
+    d0 = (p0[0]-align_start[0])**2 + (p0[1]-align_start[1])**2 + (p0[2]-align_start[2])**2
+    d1 = (p1[0]-align_start[0])**2 + (p1[1]-align_start[1])**2 + (p1[2]-align_start[2])**2
+    if d1 < d0:
+        p0, p1 = p1, p0
+    return Line(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
+
+
+def line_line_3d(cutter, seg) -> Optional[Point]:
+    """3D skew-line intersection via infinite line_line_parameters."""
+    result = line_line_parameters(cutter, seg, 0.0,
+                                  intersect_segments=False,
+                                  near_parallel_as_closest=False)
+    if result is None:
+        return None
+    t0, _ = result
+    s = cutter.start()
+    e = cutter.end()
+    return Point(s[0] + t0*(e[0]-s[0]),
+                 s[1] + t0*(e[1]-s[1]),
+                 s[2] + t0*(e[2]-s[2]))

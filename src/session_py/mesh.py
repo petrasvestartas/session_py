@@ -2418,6 +2418,92 @@ class Mesh:
 
         return mesh
 
+    @classmethod
+    def from_proto(cls, proto):
+        """Create Mesh from proto message directly (no SerializeToString)."""
+        from .color import Color
+        from .xform import Xform
+
+        mesh = cls()
+        mesh.guid = proto.guid
+        mesh.name = proto.name
+
+        for vkey, vdata in proto.vertices.items():
+            attrs = dict(vdata.attributes)
+            mesh.vertex[vkey] = VertexData(Point(vdata.x, vdata.y, vdata.z))
+            mesh.vertex[vkey].attributes = attrs
+            if vkey not in mesh.halfedge:
+                mesh.halfedge[vkey] = {}
+
+        for fkey, fdata in proto.faces.items():
+            mesh.face[fkey] = list(fdata.vertices)
+            if fdata.attributes:
+                mesh.facedata[fkey] = dict(fdata.attributes)
+            if fdata.holes:
+                mesh.face_holes[fkey] = [list(h.vertices) for h in fdata.holes]
+
+        if hasattr(proto, 'triangulation'):
+            for fkey, tri_list in proto.triangulation.items():
+                vlist = list(tri_list.vertices)
+                tris = [[vlist[i], vlist[i+1], vlist[i+2]] for i in range(0, len(vlist) - 2, 3)]
+                mesh.triangulation[fkey] = tris
+
+        for u, hmap in proto.halfedges.items():
+            neighbors = {}
+            for v, fkey in hmap.neighbors.items():
+                neighbors[v] = None if fkey == 0xFFFFFFFFFFFFFFFF else fkey
+            mesh.halfedge[u] = neighbors
+
+        for edata in proto.edge_data:
+            key = (edata.vertex1, edata.vertex2)
+            mesh.edgedata[key] = dict(edata.attributes)
+
+        mesh.default_vertex_attributes = dict(proto.default_vertex_attributes)
+        mesh.default_face_attributes = dict(proto.default_face_attributes)
+        mesh.default_edge_attributes = dict(proto.default_edge_attributes)
+
+        mesh._pointcolors = []
+        for c in proto.pointcolors:
+            color = Color(c.r, c.g, c.b, c.a)
+            color.guid = c.guid
+            color.name = c.name
+            mesh._pointcolors.append(color)
+
+        mesh._facecolors = []
+        for c in proto.facecolors:
+            color = Color(c.r, c.g, c.b, c.a)
+            color.guid = c.guid
+            color.name = c.name
+            mesh._facecolors.append(color)
+
+        mesh._linecolors = []
+        for c in proto.linecolors:
+            color = Color(c.r, c.g, c.b, c.a)
+            color.guid = c.guid
+            color.name = c.name
+            mesh._linecolors.append(color)
+
+        mesh._widths = list(proto.widths)
+
+        oc = proto.objectcolor
+        mesh._objectcolor = Color(oc.r, oc.g, oc.b, oc.a)
+        mesh._objectcolor.guid = oc.guid
+        mesh._objectcolor.name = oc.name
+        _cm_map = {0: "objectcolor", 1: "pointcolors", 2: "facecolors", 3: "none"}
+        mesh.color_mode = ColorMode(_cm_map.get(getattr(proto, 'color_mode', 0), "objectcolor"))
+
+        mesh.xform = Xform()
+        mesh.xform.guid = proto.xform.guid
+        mesh.xform.name = proto.xform.name
+        mesh.xform.m = list(proto.xform.matrix)
+
+        if mesh.vertex:
+            mesh._max_vertex = max(mesh.vertex.keys()) + 1
+        if mesh.face:
+            mesh._max_face = max(mesh.face.keys()) + 1
+
+        return mesh
+
     def pb_dump(self, filepath):
         """Write protobuf to file."""
         data = self.pb_dumps()

@@ -1,7 +1,11 @@
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
-from session_py.tolerance import TOLERANCE, Tolerance
+from session_py.tolerance import (
+    TOLERANCE, Tolerance,
+    unique_from_two_int, wrap_index, triangle_edge_by_angle,
+    rad_to_deg, deg_to_rad, count_digits, PI,
+)
 
 
 @MINI_TEST("Tolerance", "Is Zero")
@@ -72,6 +76,46 @@ def test_tolerance_runtime_modification():
     # Same test now passes with default tolerance
     close_with_default = TOLERANCE.is_close(1.0, 1.0 + 1e-11)
     MINI_CHECK(close_with_default == True)
+
+
+@MINI_TEST("Tolerance", "Unique From Two Int")
+def test_tolerance_unique_from_two_int():
+    r0 = unique_from_two_int(3, 7)
+    r1 = unique_from_two_int(7, 3)
+    MINI_CHECK(r0 == r1)
+    MINI_CHECK(r0 == (7 << 32) | 3)
+
+
+@MINI_TEST("Tolerance", "Wrap Index")
+def test_tolerance_wrap_index():
+    MINI_CHECK(wrap_index(0, 4)  == 0)
+    MINI_CHECK(wrap_index(3, 4)  == 3)
+    MINI_CHECK(wrap_index(4, 4)  == 0)
+    MINI_CHECK(wrap_index(-1, 4) == 3)
+    MINI_CHECK(wrap_index(0, 0)  == 0)
+
+
+@MINI_TEST("Tolerance", "Triangle Edge By Angle")
+def test_tolerance_triangle_edge_by_angle():
+    MINI_CHECK(abs(triangle_edge_by_angle(1.0, 45.0) - 1.0) < 1e-9)
+    MINI_CHECK(abs(triangle_edge_by_angle(5.0, 0.0)) < 1e-9)
+
+
+@MINI_TEST("Tolerance", "Rad Deg Conversion")
+def test_tolerance_rad_deg():
+    MINI_CHECK(abs(rad_to_deg(PI) - 180.0) < 1e-9)
+    MINI_CHECK(abs(deg_to_rad(180.0) - PI) < 1e-9)
+    MINI_CHECK(abs(deg_to_rad(rad_to_deg(1.234)) - 1.234) < 1e-9)
+
+
+@MINI_TEST("Tolerance", "Count Digits")
+def test_tolerance_count_digits():
+    MINI_CHECK(count_digits(0.0)   == 0)
+    MINI_CHECK(count_digits(1.0)   == 1)
+    MINI_CHECK(count_digits(9.9)   == 1)
+    MINI_CHECK(count_digits(10.0)  == 2)
+    MINI_CHECK(count_digits(100.5) == 3)
+    MINI_CHECK(count_digits(-42.0) == 2)
 
 
 if __name__ == "__main__":

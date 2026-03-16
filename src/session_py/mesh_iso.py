@@ -405,8 +405,12 @@ def _marching_cubes(fn, box, nx, ny, nz, isovalue):
                     v1 = make_vertex(tris[t + 1], i, j, k, pt, val)
                     v2 = make_vertex(tris[t + 2], i, j, k, pt, val)
                     if v0 >= 0 and v1 >= 0 and v2 >= 0:
-                        mesh.add_face([v0, v1, v2])
+                        mesh.add_face([v0, v2, v1])
                     t += 3
+    mesh.halfedge.clear()
+    mesh.clear_pointcolors()
+    mesh.clear_facecolors()
+    mesh.clear_linecolors()
     return mesh
 
 
@@ -524,4 +528,9 @@ def _merge_meshes(m1, m2):
     offset = len(v1)
     verts = v1 + v2
     faces = list(f1) + [[idx + offset for idx in f] for f in f2]
-    return Mesh.from_vertices_and_faces(verts, faces)
+    result = Mesh.from_vertices_and_faces(verts, faces)
+    result.halfedge.clear()
+    result.clear_pointcolors()
+    result.clear_facecolors()
+    result.clear_linecolors()
+    return result

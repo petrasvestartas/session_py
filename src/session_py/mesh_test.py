@@ -564,21 +564,6 @@ def test_mesh_attributes():
     MINI_CHECK(vertex_to_index[6] == 6)
     MINI_CHECK(vertex_to_index[7] == 7)
 
-    # sparse keys via remove_vertex: key != index after removal
-    mesh2 = mesh.duplicate()
-    kr = mesh2.vertices()[3]
-    mesh2.remove_vertex(kr)
-    vertex_to_index = mesh2.vertex_index()
-    MINI_CHECK(len(vertex_to_index) == 7)
-    MINI_CHECK(vertex_to_index[0] == 0)
-    MINI_CHECK(vertex_to_index[1] == 1)
-    MINI_CHECK(vertex_to_index[2] == 2)
-    MINI_CHECK(3 not in vertex_to_index)
-    MINI_CHECK(vertex_to_index[4] == 3)
-    MINI_CHECK(vertex_to_index[5] == 4)
-    MINI_CHECK(vertex_to_index[6] == 5)
-    MINI_CHECK(vertex_to_index[7] == 6)
-
     # vertices / faces / edges
     vertices = mesh.vertices()
     MINI_CHECK(len(vertices) == 8)
@@ -617,8 +602,7 @@ def test_mesh_attributes():
     MINI_CHECK(len(mesh.naked_edges(True)) == 0)
     MINI_CHECK(len(mesh.naked_faces(False)) == 6)
     # remove one face — box becomes open, check naked
-    fk0 = mesh.faces()[0]
-    mesh.remove_face(fk0)
+    mesh.remove_face(mesh.faces()[0])
     ne = mesh.naked_edges(True)
     MINI_CHECK(len(ne) == 4)
     MINI_CHECK(ne[0] == (0, 1))
@@ -632,6 +616,19 @@ def test_mesh_attributes():
     MINI_CHECK(len(nf) == 4)
     nfi = mesh.naked_faces(False)
     MINI_CHECK(len(nfi) == 1)
+    # sparse keys via remove_vertex: key != index after removal
+    kr = mesh.vertices()[3]
+    mesh.remove_vertex(kr)
+    vertex_to_index = mesh.vertex_index()
+    MINI_CHECK(len(vertex_to_index) == 7)
+    MINI_CHECK(vertex_to_index[0] == 0)
+    MINI_CHECK(vertex_to_index[1] == 1)
+    MINI_CHECK(vertex_to_index[2] == 2)
+    MINI_CHECK(3 not in vertex_to_index)
+    MINI_CHECK(vertex_to_index[4] == 3)
+    MINI_CHECK(vertex_to_index[5] == 4)
+    MINI_CHECK(vertex_to_index[6] == 5)
+    MINI_CHECK(vertex_to_index[7] == 6)
 
 
 @MINI_TEST("Mesh", "Edges")
@@ -650,81 +647,116 @@ def test_mesh_edges():
 @MINI_TEST("Mesh", "Vertex and Face Operations")
 def test_mesh_vertex_and_face_operations():
     from session_py import Mesh
+    from session_py import Point
 
-    mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    vkeys = mesh.vertices()
-    v0 = vkeys[0]
-    v1 = vkeys[1]
-    MINI_CHECK(not mesh.is_empty())
-    MINI_CHECK(mesh.number_of_vertices() == 8)
+    hx, hy, hz = 0.5, 0.5, 0.5
+    verts = [
+        Point(-hx, -hy, -hz), Point( hx, -hy, -hz), Point( hx,  hy, -hz), Point(-hx,  hy, -hz),
+        Point(-hx, -hy,  hz), Point( hx, -hy,  hz), Point( hx,  hy,  hz), Point(-hx,  hy,  hz),
+    ]
+    faces = [
+        [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [0, 4, 7, 3], [1, 2, 6, 5],
+    ]
+
+    mesh = Mesh()
+
+    for v in verts: mesh.add_vertex(v)
+    for f in faces: mesh.add_face(f)
 
     # add_face: invalid (too few vertices)
-    invalid1 = mesh.add_face([v0, v1])
-    MINI_CHECK(invalid1 is None)
+    MINI_CHECK(mesh.add_face([0, 1]) is None)
     # add_face: invalid (duplicate vertex)
-    invalid2 = mesh.add_face([v0, v1, v0])
-    MINI_CHECK(invalid2 is None)
+    MINI_CHECK(mesh.add_face([0, 1, 0]) is None)
+
+    # remove_vertex(0): removes vertex 0 + 3 adjacent faces (0,2,4)
+    # vertices → [1,2,3,4,5,6,7], faces → [1,3,5]
+    mesh.remove_vertex(0)
+    MINI_CHECK(mesh.number_of_vertices() == 7)
+    MINI_CHECK(mesh.number_of_faces() == 3)
+
+    # remove_edge(1,2): removes face 5 [1,2,6,5], faces → [1,3]
+    mesh.remove_edge(1, 2)
+    MINI_CHECK(mesh.number_of_faces() == 2)
+
+    # remove_face(1): removes face 1 [4,5,6,7], faces → [3]
+    mesh.remove_face(1)
+    MINI_CHECK(mesh.number_of_faces() == 1)
 
     # clear
-    mesh2 = mesh.duplicate()
-    mesh2.clear()
-    MINI_CHECK(mesh2.is_empty())
-    MINI_CHECK(mesh2.number_of_vertices() == 0)
-    MINI_CHECK(mesh2.number_of_faces() == 0)
+    mesh.clear()
+    MINI_CHECK(mesh.is_empty())
 
-    # unify_winding — flip face 2 (adjacent to seed face 0) then fix it
-    mesh3 = Mesh.create_box(1.0, 1.0, 1.0)
-    f2 = mesh3.faces()[2]
-    n2_orig = mesh3.face_normal(f2)
-    mesh3.flip_face(f2)
-    MINI_CHECK(mesh3.face_normal(f2).dot(n2_orig) < 0.0)
-    mesh3.unify_winding()
-    MINI_CHECK(mesh3.face_normal(f2).dot(n2_orig) > 0.0)
+    # rebuild
+    for v in verts: mesh.add_vertex(v)
+    for f in faces: mesh.add_face(f)
 
     # unweld and weld
-    u = mesh.unweld()
-    MINI_CHECK(u.number_of_vertices() == 24)
-    w = u.weld()
-    MINI_CHECK(w.number_of_vertices() == 8)
-    MINI_CHECK(w.number_of_faces() == 6)
-    for vk in w.vertex:
-        MINI_CHECK(len(w.vertex_faces(vk)) == 3)
+    mesh = mesh.unweld()
+    MINI_CHECK(mesh.number_of_vertices() == 24)
+    mesh = mesh.weld(0.001)
+    MINI_CHECK(mesh.number_of_vertices() == 8)
+    MINI_CHECK(mesh.number_of_faces() == 6)
+    # face 0: 0 1 2 3, face 1: 4 5 6 7, face 2: 0 3 5 4
+    # face 3: 2 1 7 6, face 4: 0 4 7 1, face 5: 3 2 6 5
+    fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
+    fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
+    fv4 = mesh.face_vertices(4); fv5 = mesh.face_vertices(5)
+    MINI_CHECK(fv0[0] == 0 and fv0[1] == 1 and fv0[2] == 2 and fv0[3] == 3)
+    MINI_CHECK(fv1[0] == 4 and fv1[1] == 5 and fv1[2] == 6 and fv1[3] == 7)
+    MINI_CHECK(fv2[0] == 0 and fv2[1] == 3 and fv2[2] == 5 and fv2[3] == 4)
+    MINI_CHECK(fv3[0] == 2 and fv3[1] == 1 and fv3[2] == 7 and fv3[3] == 6)
+    MINI_CHECK(fv4[0] == 0 and fv4[1] == 4 and fv4[2] == 7 and fv4[3] == 1)
+    MINI_CHECK(fv5[0] == 3 and fv5[1] == 2 and fv5[2] == 6 and fv5[3] == 5)
 
-    # remove_face
-    mesh5 = mesh.duplicate()
-    fa = mesh5.faces()[0]
-    mesh5.remove_face(fa)
-    MINI_CHECK(mesh5.number_of_faces() == 5)
-    MINI_CHECK(mesh5.number_of_edges() == 12)
-    MINI_CHECK(mesh5.number_of_vertices() == 8)
+    # flip_face(0): face 0 → [3,2,1,0], faces 1-5 unchanged
+    mesh.flip_face(0)
+    fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
+    fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
+    fv4 = mesh.face_vertices(4); fv5 = mesh.face_vertices(5)
+    MINI_CHECK(fv0[0] == 3 and fv0[1] == 2 and fv0[2] == 1 and fv0[3] == 0)
+    MINI_CHECK(fv1[0] == 4 and fv1[1] == 5 and fv1[2] == 6 and fv1[3] == 7)
+    MINI_CHECK(fv2[0] == 0 and fv2[1] == 3 and fv2[2] == 5 and fv2[3] == 4)
+    MINI_CHECK(fv3[0] == 2 and fv3[1] == 1 and fv3[2] == 7 and fv3[3] == 6)
+    MINI_CHECK(fv4[0] == 0 and fv4[1] == 4 and fv4[2] == 7 and fv4[3] == 1)
+    MINI_CHECK(fv5[0] == 3 and fv5[1] == 2 and fv5[2] == 6 and fv5[3] == 5)
 
-    # remove_vertex
-    mesh6 = mesh.duplicate()
-    vr = mesh6.vertices()[0]
-    mesh6.remove_vertex(vr)
-    vi6 = mesh6.vertex_index()
-    MINI_CHECK(vr not in vi6)
-    MINI_CHECK(mesh6.number_of_faces() == 3)
-    MINI_CHECK(mesh6.number_of_vertices() == 7)
+    # unify_winding: face 0 restored to [0,1,2,3], faces 1-5 unchanged
+    mesh.unify_winding()
+    fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
+    fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
+    fv4 = mesh.face_vertices(4); fv5 = mesh.face_vertices(5)
+    MINI_CHECK(fv0[0] == 0 and fv0[1] == 1 and fv0[2] == 2 and fv0[3] == 3)
+    MINI_CHECK(fv1[0] == 4 and fv1[1] == 5 and fv1[2] == 6 and fv1[3] == 7)
+    MINI_CHECK(fv2[0] == 0 and fv2[1] == 3 and fv2[2] == 5 and fv2[3] == 4)
+    MINI_CHECK(fv3[0] == 2 and fv3[1] == 1 and fv3[2] == 7 and fv3[3] == 6)
+    MINI_CHECK(fv4[0] == 0 and fv4[1] == 4 and fv4[2] == 7 and fv4[3] == 1)
+    MINI_CHECK(fv5[0] == 3 and fv5[1] == 2 and fv5[2] == 6 and fv5[3] == 5)
 
-    # remove_edge
-    mesh7 = mesh.duplicate()
-    ea = mesh7.vertices()[0]
-    eb = mesh7.vertices()[1]
-    mesh7.remove_edge(ea, eb)
-    MINI_CHECK(mesh7.number_of_faces() == 4)
-    MINI_CHECK(mesh7.number_of_edges() == 11)
-    MINI_CHECK(mesh7.number_of_vertices() == 8)
+    # flip: face 0 → [3,2,1,0], face 1 → [7,6,5,4], face 2 → [4,5,3,0]
+    # face 3 → [6,7,1,2], face 4 → [1,7,4,0], face 5 → [5,6,2,3]
+    mesh.flip()
+    fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
+    fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
+    fv4 = mesh.face_vertices(4); fv5 = mesh.face_vertices(5)
+    MINI_CHECK(fv0[0] == 3 and fv0[1] == 2 and fv0[2] == 1 and fv0[3] == 0)
+    MINI_CHECK(fv1[0] == 7 and fv1[1] == 6 and fv1[2] == 5 and fv1[3] == 4)
+    MINI_CHECK(fv2[0] == 4 and fv2[1] == 5 and fv2[2] == 3 and fv2[3] == 0)
+    MINI_CHECK(fv3[0] == 6 and fv3[1] == 7 and fv3[2] == 1 and fv3[3] == 2)
+    MINI_CHECK(fv4[0] == 1 and fv4[1] == 7 and fv4[2] == 4 and fv4[3] == 0)
+    MINI_CHECK(fv5[0] == 5 and fv5[1] == 6 and fv5[2] == 2 and fv5[3] == 3)
 
-    # remove_face then check naked: box minus one face → 5 faces with 4 naked edges
-    mesh8 = mesh.duplicate()
-    fd0 = mesh8.faces()[0]
-    mesh8.remove_face(fd0)
-    MINI_CHECK(mesh8.number_of_faces() == 5)
-    MINI_CHECK(len(mesh8.naked_edges(True)) == 4)
-    MINI_CHECK(len(mesh8.naked_edges(False)) == 8)
-    MINI_CHECK(len(mesh8.naked_faces(True)) == 4)
-    MINI_CHECK(len(mesh8.naked_faces(False)) == 1)
+    # orient_outward: face 0 → [0,1,2,3], face 1 → [4,5,6,7], face 2 → [0,3,5,4]
+    # face 3 → [2,1,7,6], face 4 → [0,4,7,1], face 5 → [3,2,6,5]
+    mesh.orient_outward()
+    fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
+    fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
+    fv4 = mesh.face_vertices(4); fv5 = mesh.face_vertices(5)
+    MINI_CHECK(fv0[0] == 0 and fv0[1] == 1 and fv0[2] == 2 and fv0[3] == 3)
+    MINI_CHECK(fv1[0] == 4 and fv1[1] == 5 and fv1[2] == 6 and fv1[3] == 7)
+    MINI_CHECK(fv2[0] == 0 and fv2[1] == 3 and fv2[2] == 5 and fv2[3] == 4)
+    MINI_CHECK(fv3[0] == 2 and fv3[1] == 1 and fv3[2] == 7 and fv3[3] == 6)
+    MINI_CHECK(fv4[0] == 0 and fv4[1] == 4 and fv4[2] == 7 and fv4[3] == 1)
+    MINI_CHECK(fv5[0] == 3 and fv5[1] == 2 and fv5[2] == 6 and fv5[3] == 5)
 
 
 @MINI_TEST("Mesh", "Connectivity Queries")

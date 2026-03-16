@@ -21,7 +21,9 @@ from .mesh import Mesh, NormalWeighting
 from .boundingbox import BoundingBox
 from .pointcloud import PointCloud
 from .bvh import BVH, BVHNode
+from .rtree import RTree
 from .tolerance import Tolerance
+from .session_config import SessionConfig, SESSION_CONFIG
 from . import encoders
 from .obj import load_obj, save_obj
 from . import intersection
@@ -56,7 +58,10 @@ __all__ = [
     "PointCloud",
     "BVH",
     "BVHNode",
+    "RTree",
     "Tolerance",
+    "SessionConfig",
+    "SESSION_CONFIG",
     "encoders",
     "load_obj",
     "save_obj",
