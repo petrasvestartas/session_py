@@ -53,7 +53,7 @@
   "cv_count_v": 4,
   "dimension": 3,
   "facecolors": [],
-  "guid": "72b1e6a2-7701-4472-b82f-7c747b1f3633",
+  "guid": "db04c192-4315-4245-bb47-b35411b1f9fc",
   "is_rational": false,
   "knots_u": [
     0.0,
@@ -79,7 +79,7 @@
   "type": "NurbsSurface",
   "width": 1.0,
   "xform": {
-    "guid": "c6071432-5b7d-4878-9ce0-4d2a2b4e4e4e",
+    "guid": "0b5fa510-9417-4925-87d4-840c259e6a2a",
     "m": [
       1.0,
       0.0,

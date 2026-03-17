@@ -420,8 +420,8 @@ def deg_to_rad(degrees: float) -> float:
 
 
 def count_digits(n: float) -> int:
-    """Number of decimal digits of ceil(|n|).  Returns 0 for n == 0."""
-    v = int(math.ceil(abs(n)))
+    """Number of decimal digits of the integer part of |n|.  Returns 0 for n == 0."""
+    v = int(abs(n))
     if v == 0:
         return 0
     count = 0
