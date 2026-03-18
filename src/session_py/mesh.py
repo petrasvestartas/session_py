@@ -169,7 +169,7 @@ def _lp_offset_toward(p, cx, cy, cz, gap):
 def _lp_face_centroid(m, fk):
     vkeys = m.face_vertices(fk)
     cx = cy = cz = 0.0
-    for vk in vkeys: p = m.vertex_position(vk); cx += p[0]; cy += p[1]; cz += p[2]
+    for vk in vkeys: p = m.vertex_point(vk); cx += p[0]; cy += p[1]; cz += p[2]
     n = len(vkeys)
     return Point(cx/n, cy/n, cz/n)
 
@@ -802,14 +802,14 @@ class Mesh:
         for i, fk in enumerate(tfks):
             vkeys = top_mesh.face_vertices(fk)
             for vk in vkeys:
-                p = top_mesh.vertex_position(vk)
+                p = top_mesh.vertex_point(vk)
                 top_cents[i, 0] += p[0]; top_cents[i, 1] += p[1]; top_cents[i, 2] += p[2]
             top_cents[i] /= len(vkeys)
         bot_cents = np.zeros((len(bfks), 3))
         for i, fk in enumerate(bfks):
             vkeys = bot_mesh.face_vertices(fk)
             for vk in vkeys:
-                p = bot_mesh.vertex_position(vk)
+                p = bot_mesh.vertex_point(vk)
                 bot_cents[i, 0] += p[0]; bot_cents[i, 1] += p[1]; bot_cents[i, 2] += p[2]
             bot_cents[i] /= len(vkeys)
         diff = top_cents[:, np.newaxis, :] - bot_cents[np.newaxis, :, :]
@@ -831,8 +831,8 @@ class Mesh:
             panel = LoftPanel()
             top_vkeys = list(top_mesh.face_vertices(tfk))
             bot_vkeys = list(bot_mesh.face_vertices(bfk))
-            top_pts = [top_mesh.vertex_position(vk) for vk in top_vkeys]
-            bot_pts = [bot_mesh.vertex_position(vk) for vk in bot_vkeys]
+            top_pts = [top_mesh.vertex_point(vk) for vk in top_vkeys]
+            bot_pts = [bot_mesh.vertex_point(vk) for vk in bot_vkeys]
             top_pts, top_vkeys = _lp_merge_collinear(top_pts, top_vkeys)
             bot_pts, bot_vkeys = _lp_merge_collinear(bot_pts, bot_vkeys)
             max_te = 0.0
@@ -900,8 +900,8 @@ class Mesh:
                     t0 = panel.orig_top_to_local[top_vkeys[ti]]
                     t1 = panel.orig_top_to_local[top_vkeys[(ti+1)%n]]
                     if edge_gap > 0.0:
-                        pb0 = panel.mesh.vertex_position(b0); pb1 = panel.mesh.vertex_position(b1)
-                        pt0 = panel.mesh.vertex_position(t0); pt1 = panel.mesh.vertex_position(t1)
+                        pb0 = panel.mesh.vertex_point(b0); pb1 = panel.mesh.vertex_point(b1)
+                        pt0 = panel.mesh.vertex_point(t0); pt1 = panel.mesh.vertex_point(t1)
                         cx = (pb0[0]+pb1[0]+pt0[0]+pt1[0])*0.25
                         cy = (pb0[1]+pb1[1]+pt0[1]+pt1[1])*0.25
                         cz = (pb0[2]+pb1[2]+pt0[2]+pt1[2])*0.25
@@ -983,8 +983,8 @@ class Mesh:
         top_ordered = Mesh()
         bot_ordered = Mesh()
         for i, panel in enumerate(panels):
-            tvks = [top_ordered.add_vertex(panel.mesh.vertex_position(lk)) for lk in panel.top_vertices]
-            bvks = [bot_ordered.add_vertex(panel.mesh.vertex_position(lk)) for lk in panel.bot_vertices]
+            tvks = [top_ordered.add_vertex(panel.mesh.vertex_point(lk)) for lk in panel.top_vertices]
+            bvks = [bot_ordered.add_vertex(panel.mesh.vertex_point(lk)) for lk in panel.bot_vertices]
             top_ordered.add_face(tvks, i)
             bot_ordered.add_face(bvks, i)
         return panels, adjacency, top_ordered, bot_ordered
@@ -1052,7 +1052,10 @@ class Mesh:
 
     def is_face_on_boundary(self, face_key: int) -> bool:
         """Check if a face is on the boundary."""
-        return any(self.is_edge_on_boundary(u, v) for u, v in self.face_edges(face_key))
+        fe = self.face_edges(face_key)
+        if fe is None:
+            return False
+        return any(self.is_edge_on_boundary(u, v) for u, v in fe)
 
     ###########################################################################################
     # Basic Queries
@@ -1251,10 +1254,10 @@ class Mesh:
         vol = 0.0
         for fk, verts in self.face.items():
             n = len(verts)
-            p0 = self.vertex_position(verts[0])
+            p0 = self.vertex_point(verts[0])
             for i in range(1, n - 1):
-                p1 = self.vertex_position(verts[i])
-                p2 = self.vertex_position(verts[i + 1])
+                p1 = self.vertex_point(verts[i])
+                p2 = self.vertex_point(verts[i + 1])
                 vol += (p0[0] * (p1[1] * p2[2] - p1[2] * p2[1])
                       + p0[1] * (p1[2] * p2[0] - p1[0] * p2[2])
                       + p0[2] * (p1[0] * p2[1] - p1[1] * p2[0]))
@@ -1511,15 +1514,100 @@ class Mesh:
     # Connectivity Queries
     ###########################################################################################
 
-    def vertex_position(self, vertex_key: int) -> Optional[Point]:
+    def edge_edges(self, u: int, v: int) -> Optional[List[Tuple[int, int]]]:
+        """Get all edges sharing a vertex with (u,v), excluding (u,v) and (v,u)."""
+        uv = v in self.halfedge.get(u, {})
+        vu = u in self.halfedge.get(v, {})
+        if not uv and not vu:
+            return None
+        edges = []
+        for w in self.halfedge.get(u, {}):
+            if w != v:
+                edges.append((u, w))
+        for w in self.halfedge.get(v, {}):
+            if w != u:
+                edges.append((v, w))
+        return edges
+
+    def edge_faces(self, u: int, v: int) -> Optional[List[int]]:
+        """Get the faces adjacent to an edge."""
+        f0 = self.halfedge.get(u, {}).get(v)
+        f1 = self.halfedge.get(v, {}).get(u)
+        if f0 is None and f1 is None:
+            return None
+        return [f for f in (f0, f1) if f is not None]
+
+    def edge_line(self, u: int, v: int):
+        """Get the edge as a Line."""
+        uv = v in self.halfedge.get(u, {})
+        vu = u in self.halfedge.get(v, {})
+        if not uv and not vu:
+            return None
+        from .line import Line
+        return Line.from_points(self.vertex_point(u), self.vertex_point(v))
+
+    def face_edges(self, face_key: int) -> Optional[List[Tuple[int, int]]]:
+        """Get edges of a face as (vi, vi+1) pairs."""
+        verts = self.face.get(face_key)
+        if verts is None:
+            return None
+        n = len(verts)
+        return [(verts[i], verts[(i + 1) % n]) for i in range(n)]
+
+    def face_faces(self, face_key: int) -> Optional[List[int]]:
+        """Get faces adjacent to a face (sharing an edge)."""
+        fe = self.face_edges(face_key)
+        if fe is None:
+            return None
+        neighbors = []
+        for u, v in fe:
+            f = self.halfedge.get(v, {}).get(u)
+            if f is not None:
+                neighbors.append(f)
+        return neighbors
+
+    def face_points(self, face_key: int) -> Optional[List[Point]]:
+        """Get the point positions of a face's vertices."""
+        fv = self.face_vertices(face_key)
+        if fv is None:
+            return None
+        return [self.vertex_point(vk) for vk in fv]
+
+    def face_polyline(self, face_key: int):
+        """Get the face as a Polyline."""
+        pts = self.face_points(face_key)
+        if pts is None:
+            return None
+        from .polyline import Polyline
+        return Polyline(pts)
+
+    def face_vertices(self, face_key: int) -> Optional[List[int]]:
+        """Get the vertices of a face."""
+        return self.face.get(face_key)
+
+    def vertex_edges(self, vertex_key: int) -> Optional[List[Tuple[int, int]]]:
+        """Get edges incident to a vertex as (vertex_key, neighbor) pairs."""
+        if vertex_key not in self.halfedge:
+            return None
+        return [(vertex_key, u) for u in self.halfedge[vertex_key]]
+
+    def vertex_faces(self, vertex_key: int) -> Optional[List[int]]:
+        """Get the faces incident to a vertex."""
+        if vertex_key not in self.halfedge:
+            return None
+        return [f for f in self.halfedge[vertex_key].values() if f is not None]
+
+    def vertex_point(self, vertex_key: int) -> Optional[Point]:
         """Get the position of a vertex."""
         if vertex_key not in self.vertex:
             return None
         return self.vertex[vertex_key].position()
 
-    def face_vertices(self, face_key: int) -> Optional[List[int]]:
-        """Get the vertices of a face."""
-        return self.face.get(face_key)
+    def vertex_vertices(self, vertex_key: int) -> Optional[List[int]]:
+        """Get the neighboring vertices of a vertex."""
+        if vertex_key not in self.halfedge:
+            return None
+        return list(self.halfedge[vertex_key].keys())
 
     def face_centroid(self, face_key: int) -> Optional[Point]:
         """Get the centroid of a face."""
@@ -1528,7 +1616,7 @@ class Mesh:
             return None
         x, y, z = 0.0, 0.0, 0.0
         for vk in verts:
-            p = self.vertex_position(vk)
+            p = self.vertex_point(vk)
             if p is None:
                 return None
             x += p[0]; y += p[1]; z += p[2]
@@ -1539,66 +1627,10 @@ class Mesh:
         """Get the centroid of all vertices."""
         x, y, z = 0.0, 0.0, 0.0
         for vk in self.vertex:
-            p = self.vertex_position(vk)
+            p = self.vertex_point(vk)
             x += p[0]; y += p[1]; z += p[2]
         n = max(len(self.vertex), 1)
         return Point(x / n, y / n, z / n)
-
-    def vertex_neighbors(self, vertex_key: int) -> List[int]:
-        """Get the neighboring vertices of a vertex."""
-        if vertex_key not in self.halfedge:
-            return []
-        return list(self.halfedge[vertex_key].keys())
-
-    def vertex_faces(self, vertex_key: int) -> List[int]:
-        """Get the faces incident to a vertex."""
-        if vertex_key not in self.halfedge:
-            return []
-        return [f for f in self.halfedge[vertex_key].values() if f is not None]
-
-    def vertex_edges(self, vertex_key: int) -> List[Tuple[int, int]]:
-        """Get edges incident to a vertex as (vertex_key, neighbor) pairs."""
-        if vertex_key not in self.halfedge:
-            return []
-        return [(vertex_key, u) for u in self.halfedge[vertex_key]]
-
-    def face_edges(self, face_key: int) -> List[Tuple[int, int]]:
-        """Get edges of a face as (vi, vi+1) pairs."""
-        verts = self.face.get(face_key)
-        if verts is None:
-            return []
-        n = len(verts)
-        return [(verts[i], verts[(i + 1) % n]) for i in range(n)]
-
-    def face_neighbors(self, face_key: int) -> List[int]:
-        """Get faces adjacent to a face (sharing an edge)."""
-        neighbors = []
-        for u, v in self.face_edges(face_key):
-            f = self.halfedge.get(v, {}).get(u)
-            if f is not None:
-                neighbors.append(f)
-        return neighbors
-
-    def edge_vertices(self, u: int, v: int) -> List[int]:
-        """Get the two vertices of an edge."""
-        return [u, v]
-
-    def edge_faces(self, u: int, v: int) -> Tuple[Optional[int], Optional[int]]:
-        """Get the faces on each side of an edge."""
-        f0 = self.halfedge.get(u, {}).get(v)
-        f1 = self.halfedge.get(v, {}).get(u)
-        return (f0, f1)
-
-    def edge_edges(self, u: int, v: int) -> List[Tuple[int, int]]:
-        """Get all edges sharing a vertex with (u,v), excluding (u,v) and (v,u)."""
-        edges = []
-        for w in self.halfedge.get(u, {}):
-            if w != v:
-                edges.append((u, w))
-        for w in self.halfedge.get(v, {}):
-            if w != u:
-                edges.append((v, w))
-        return edges
 
     ###########################################################################################
     # Geometric Properties
@@ -1610,9 +1642,9 @@ class Mesh:
         if vertices is None or len(vertices) < 3:
             return None
 
-        p0 = self.vertex_position(vertices[0])
-        p1 = self.vertex_position(vertices[1])
-        p2 = self.vertex_position(vertices[2])
+        p0 = self.vertex_point(vertices[0])
+        p1 = self.vertex_point(vertices[1])
+        p2 = self.vertex_point(vertices[2])
 
         if p0 is None or p1 is None or p2 is None:
             return None
@@ -1737,9 +1769,9 @@ class Mesh:
         prev_vertex = vertices[(vertex_index - 1) % n]
         next_vertex = vertices[(vertex_index + 1) % n]
 
-        center = self.vertex_position(vertex_key)
-        prev_pos = self.vertex_position(prev_vertex)
-        next_pos = self.vertex_position(next_vertex)
+        center = self.vertex_point(vertex_key)
+        prev_pos = self.vertex_point(prev_vertex)
+        next_pos = self.vertex_point(next_vertex)
 
         if center is None or prev_pos is None or next_pos is None:
             return None
@@ -1759,11 +1791,11 @@ class Mesh:
 
     def dihedral_angle(self, u: int, v: int) -> Optional[float]:
         """Calculate the dihedral angle between two faces sharing edge (u,v)."""
-        f0_opt, f1_opt = self.edge_faces(u, v)
-        if f0_opt is None or f1_opt is None:
+        ef = self.edge_faces(u, v)
+        if ef is None or len(ef) < 2:
             return None
-        n0 = self.face_normal(f0_opt)
-        n1 = self.face_normal(f1_opt)
+        n0 = self.face_normal(ef[0])
+        n1 = self.face_normal(ef[1])
         if n0 is None or n1 is None:
             return None
         dot = max(-1.0, min(1.0, n0[0]*n1[0] + n0[1]*n1[1] + n0[2]*n1[2]))

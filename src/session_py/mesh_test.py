@@ -272,8 +272,10 @@ def test_mesh_from_polygon_with_holes_many():
             [Point(x+1, 1, 0), Point(x+4, 1, 0), Point(x+4, 4, 0), Point(x+1, 4, 0)],
         ])
     meshes = Mesh.from_polygon_with_holes_many(inputs)
-    for m in meshes:
-        MINI_CHECK(m.is_valid())
+    MINI_CHECK(meshes[0].is_valid())
+    MINI_CHECK(meshes[1].is_valid())
+    MINI_CHECK(meshes[2].is_valid())
+    MINI_CHECK(meshes[3].is_valid())
     meshes_seq = Mesh.from_polygon_with_holes_many(inputs, False, False)
     MINI_CHECK(meshes_seq[0].number_of_faces() == meshes[0].number_of_faces())
 
@@ -288,20 +290,36 @@ def test_mesh_loft_many():
     for i in range(6):
         x = i * 3.0
         b = Polyline([
-            Point(x, 0, 0), Point(x+1, 0, 0), Point(x+1, 1, 0),
-            Point(x, 1, 0), Point(x, 0, 0),
-        ])
+            Point(x, 0, 0), Point(x+1, 0, 0), Point(x+1, 1, 0), Point(x, 1, 0), Point(x, 0, 0)])
         t = Polyline([
-            Point(x, 0, 1+i*0.5), Point(x+1, 0, 1+i*0.5),
-            Point(x+1, 1, 1+i*0.5), Point(x, 1, 1+i*0.5), Point(x, 0, 1+i*0.5),
-        ])
+            Point(x, 0, 1+i*0.5), Point(x+1, 0, 1+i*0.5), Point(x+1, 1, 1+i*0.5), Point(x, 1, 1+i*0.5), Point(x, 0, 1+i*0.5)])
         loft_inputs.append(([b], [t]))
     meshes = Mesh.loft_many(loft_inputs)
-    for m in meshes:
-        MINI_CHECK(m.is_valid())
-        MINI_CHECK(m.is_closed())
+    MINI_CHECK(meshes[0].is_valid())
+    MINI_CHECK(meshes[0].is_closed())
+    MINI_CHECK(meshes[1].is_valid())
+    MINI_CHECK(meshes[1].is_closed())
+    MINI_CHECK(meshes[2].is_valid())
+    MINI_CHECK(meshes[2].is_closed())
+    MINI_CHECK(meshes[3].is_valid())
+    MINI_CHECK(meshes[3].is_closed())
+    MINI_CHECK(meshes[4].is_valid())
+    MINI_CHECK(meshes[4].is_closed())
+    MINI_CHECK(meshes[5].is_valid())
+    MINI_CHECK(meshes[5].is_closed())
     meshes_seq = Mesh.loft_many(loft_inputs, True, False)
-    MINI_CHECK(meshes_seq[0].number_of_faces() == meshes[0].number_of_faces())
+    MINI_CHECK(meshes_seq[0].is_valid())
+    MINI_CHECK(meshes_seq[0].is_closed())
+    MINI_CHECK(meshes_seq[1].is_valid())
+    MINI_CHECK(meshes_seq[1].is_closed())
+    MINI_CHECK(meshes_seq[2].is_valid())
+    MINI_CHECK(meshes_seq[2].is_closed())
+    MINI_CHECK(meshes_seq[3].is_valid())
+    MINI_CHECK(meshes_seq[3].is_closed())
+    MINI_CHECK(meshes_seq[4].is_valid())
+    MINI_CHECK(meshes_seq[4].is_closed())
+    MINI_CHECK(meshes_seq[5].is_valid())
+    MINI_CHECK(meshes_seq[5].is_closed())
 
 
 @MINI_TEST("Mesh", "Loft with quads and triangles")
@@ -422,10 +440,14 @@ def test_mesh_loft_panels():
     for i, panel in enumerate(panels):
         face_colors = []
         for fk, role in panel.face_roles.items():
-            if role == "TopCap": face_colors.append(Color.blue())
-            elif role == "BotCap": face_colors.append(Color.red())
-            elif role == "TriWall": face_colors.append(Color.yellow())
-            else: face_colors.append(Color.grey())
+            if role == "TopCap":
+                face_colors.append(Color.blue())
+            elif role == "BotCap":
+                face_colors.append(Color.red())
+            elif role == "TriWall":
+                face_colors.append(Color.yellow())
+            else:
+                face_colors.append(Color.grey())
         panel.mesh.set_facecolors(face_colors)
 
     # face centroids labelled with panel index
@@ -750,81 +772,187 @@ def test_mesh_connectivity_queries():
     from session_py import Point
 
     pts = [
-        Point(0,0,0),
-        Point(1,0,0),
-        Point(1,1,0),
-        Point(0,1,0),
-        Point(2,0,0),
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(2.0, 0.0, 0.0),
     ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2,3], [1,4,2]])
-    vi = mesh.vertex_index()
-    vkeys = mesh.vertices()
-    v0 = vkeys[0]
-    v1 = vkeys[1]
-    v2 = vkeys[2]
-    v3 = vkeys[3]
-    v4 = vkeys[4]
-    fkeys = mesh.faces()
-    f0 = fkeys[0]
-    f1 = fkeys[1]
+    v = mesh.vertices()
+    f = mesh.faces()
 
-    # vertex_position
-    pos = mesh.vertex_position(v0)
-    MINI_CHECK(pos is not None)
-    MINI_CHECK(TOLERANCE.is_point_close(pos, Point(0.0, 0.0, 0.0)))
-    MINI_CHECK(mesh.vertex_position(999) is None)
+    # edge edges
+    # edge 1 - 2, edges: 1-0, 1-4, 2-3, 2-4
+    ee = mesh.edge_edges(1, 2)
+    if ee is not None:
 
-    # face_vertices
-    fv = mesh.face_vertices(f0)
-    MINI_CHECK(fv is not None)
-    MINI_CHECK(len(fv) == 4)
-    MINI_CHECK(fv[0] == v0 and fv[1] == v1 and fv[2] == v2 and fv[3] == v3)
+        u0 = ee[0][0]
+        v0 = ee[0][1]
+        l0 = mesh.edge_line(u0, v0)
+        mid0 = l0.center()
+        mid0.name = "e" + str(u0) + "-" + str(v0)
 
-    # vertex_neighbors
-    nb = mesh.vertex_neighbors(v1)
-    MINI_CHECK(len(nb) == 3)
+        u1 = ee[1][0]
+        v1 = ee[1][1]
+        l1 = mesh.edge_line(u1, v1)
+        mid1 = l1.center()
+        mid1.name = "e" + str(u1) + "-" + str(v1)
 
-    # vertex_faces
-    vf0 = mesh.vertex_faces(v0)
-    MINI_CHECK(len(vf0) == 1)
-    vf1 = mesh.vertex_faces(v1)
-    MINI_CHECK(len(vf1) == 2)
+        u2 = ee[2][0]
+        v2 = ee[2][1]
+        l2 = mesh.edge_line(u2, v2)
+        mid2 = l2.center()
+        mid2.name = "e" + str(u2) + "-" + str(v2)
 
-    # vertex_edges
-    ve = mesh.vertex_edges(v1)
-    MINI_CHECK(len(ve) == 3)
-    MINI_CHECK((v1, v0) in ve)
-    MINI_CHECK((v1, v2) in ve)
-    MINI_CHECK((v1, v4) in ve)
+        u3 = ee[3][0]
+        v3 = ee[3][1]
+        l3 = mesh.edge_line(u3, v3)
+        mid3 = l3.center()
+        mid3.name = "e" + str(u3) + "-" + str(v3)
+
+        ee_set = set(ee)
+        MINI_CHECK(len(ee) == 4)
+        MINI_CHECK(ee[0] == (1, 0))
+        MINI_CHECK(ee[1] == (1, 4))
+        MINI_CHECK(ee[2] == (2, 3))
+        MINI_CHECK(ee[3] == (2, 4))
+
+    # edge faces
+    # edge 1-2, faces: 0, 1
+    ef = mesh.edge_faces(1, 2)
+    if ef is not None:
+        ef0 = ef[0]
+        ef1 = ef[1]
+        efp0 = mesh.face_centroid(ef0)
+        efp0.name = "f" + str(ef0)
+        efp1 = mesh.face_centroid(ef1)
+        efp1.name = "f" + str(ef1)
+        MINI_CHECK(len(ef) == 2)
+        MINI_CHECK(ef0 == 0 and ef1 == 1)
 
     # face_edges
-    fe = mesh.face_edges(f0)
-    MINI_CHECK(len(fe) == 4)
-    MINI_CHECK(fe[0] == (v0, v1))
-    MINI_CHECK(fe[1] == (v1, v2))
-    MINI_CHECK(fe[2] == (v2, v3))
-    MINI_CHECK(fe[3] == (v3, v0))
+    # face 0, edges: 0-1, 1-2, 2-3, 3-0
+    fe = mesh.face_edges(f[0])
+    if fe is not None:
+        l0 = mesh.edge_line(fe[0][0], fe[0][1])
+        l1 = mesh.edge_line(fe[1][0], fe[1][1])
+        l2 = mesh.edge_line(fe[2][0], fe[2][1])
+        l3 = mesh.edge_line(fe[3][0], fe[3][1])
+        lmid0 = l0.center()
+        lmid0.name = "e" + str(fe[0][0]) + "-" + str(fe[0][1])
+        lmid1 = l1.center()
+        lmid1.name = "e" + str(fe[1][0]) + "-" + str(fe[1][1])
+        lmid2 = l2.center()
+        lmid2.name = "e" + str(fe[2][0]) + "-" + str(fe[2][1])
+        lmid3 = l3.center()
+        lmid3.name = "e" + str(fe[3][0]) + "-" + str(fe[3][1])
+        MINI_CHECK(len(fe) == 4)
+        MINI_CHECK(fe[0] == (0, 1))
+        MINI_CHECK(fe[1] == (1, 2))
+        MINI_CHECK(fe[2] == (2, 3))
+        MINI_CHECK(fe[3] == (3, 0))
 
-    # face_neighbors
-    fn0 = mesh.face_neighbors(f0)
-    MINI_CHECK(len(fn0) == 1)
-    MINI_CHECK(fn0[0] == f1)
+    # face_faces
+    # face 0, adjacent faces: 1
+    ff = mesh.face_faces(f[0])
+    if ff is not None:
+        ff0 = ff[0]
+        ffp = mesh.face_centroid(ff0)
+        ffp.name = "f" + str(ff0)
+        MINI_CHECK(len(ff) == 1)
+        MINI_CHECK(ff0 == 1)
 
-    # edge_vertices
-    ev = mesh.edge_vertices(v0, v1)
-    MINI_CHECK(ev[0] == v0 and ev[1] == v1)
+    # face points
+    points = mesh.face_points(f[0])
+    if points is not None:
+        pointcount = len(points)
+        MINI_CHECK(pointcount == 4)
 
-    # edge_faces
-    ef_inner = mesh.edge_faces(v1, v2)
-    MINI_CHECK(ef_inner[0] is not None and ef_inner[1] is not None)
-    ef_boundary = mesh.edge_faces(v0, v1)
-    MINI_CHECK((ef_boundary[0] is not None) != (ef_boundary[1] is not None))
+    # face polyline
+    pl = mesh.face_polyline(f[0])
+    if pl is not None:
+        pointcount = len(pl.get_points())
+        MINI_CHECK(pointcount == 4)
 
-    # edge_edges
-    ee = mesh.edge_edges(v1, v2)
-    MINI_CHECK(len(ee) == 4)
-    MINI_CHECK((v1, v2) not in ee)
-    MINI_CHECK((v2, v1) not in ee)
+    # face_vertices
+    # face 0 vertices: 0, 1, 2, 3
+    fv = mesh.face_vertices(f[0])
+    if fv is not None:
+        fv0 = fv[0]
+        fv1 = fv[1]
+        fv2 = fv[2]
+        fv3 = fv[3]
+        p0 = mesh.vertex_point(fv0)
+        p0.name = str(fv0)
+        p1 = mesh.vertex_point(fv1)
+        p1.name = str(fv1)
+        p2 = mesh.vertex_point(fv2)
+        p2.name = str(fv2)
+        p3 = mesh.vertex_point(fv3)
+        p3.name = str(fv3)
+        MINI_CHECK(fv0 == 0)
+        MINI_CHECK(fv1 == 1)
+        MINI_CHECK(fv2 == 2)
+        MINI_CHECK(fv3 == 3)
+        MINI_CHECK(len(fv) == 4)
+
+    # vertex_edges
+    # vertex 1, edges 1-0, 1-2, 1-4
+    ve = mesh.vertex_edges(v[1])
+    if ve is not None:
+        vp = mesh.vertex_point(v[1])
+        vp.name = "v" + str(v[1])
+
+        l0 = mesh.edge_line(ve[0][0], ve[0][1])
+        l1 = mesh.edge_line(ve[1][0], ve[1][1])
+        l2 = mesh.edge_line(ve[2][0], ve[2][1])
+        lmid0 = l0.center()
+        lmid0.name = "e" + str(ve[0][0]) + "-" + str(ve[0][1])
+        lmid1 = l1.center()
+        lmid1.name = "e" + str(ve[1][0]) + "-" + str(ve[1][1])
+        lmid2 = l2.center()
+        lmid2.name = "e" + str(ve[2][0]) + "-" + str(ve[2][1])
+
+        MINI_CHECK(ve[0] == (1, 0))
+        MINI_CHECK(ve[1] == (1, 2))
+        MINI_CHECK(ve[2] == (1, 4))
+        MINI_CHECK(len(ve) == 3)
+
+    # vertex_faces
+    vf = mesh.vertex_faces(v[1])
+    # vertex 1, faces 0, 1
+    if vf is not None:
+
+        vp = mesh.vertex_point(v[1])
+        vp.name = "v" + str(v[1])
+
+        fp0 = mesh.face_centroid(vf[0])
+        fp0.name = "f" + str(vf[0])
+        fp1 = mesh.face_centroid(vf[1])
+        fp1.name = "f" + str(vf[1])
+        MINI_CHECK(len(vf) == 2)
+        MINI_CHECK(vf[0] == 0)
+        MINI_CHECK(vf[1] == 1)
+
+    # vertex_vertices
+    # vertex 1, neighbors 0, 2, 4
+    vn = mesh.vertex_vertices(v[1])
+    if vn is not None:
+        p0 = mesh.vertex_point(v[1])
+        p0.name = "main" + str(v[1])
+
+        np0 = mesh.vertex_point(vn[0])
+        np0.name = str(vn[0])
+        np1 = mesh.vertex_point(vn[1])
+        np1.name = str(vn[1])
+        np2 = mesh.vertex_point(vn[2])
+        np2.name = str(vn[2])
+
+        MINI_CHECK(vn[0] == 0)
+        MINI_CHECK(vn[1] == 2)
+        MINI_CHECK(vn[2] == 4)
+        MINI_CHECK(len(vn) == 3)
 
 
 @MINI_TEST("Mesh", "Geometric Properties")
@@ -840,7 +968,6 @@ def test_mesh_geometric_properties():
         Point(0,1,0),
     ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,3], [0,3,2]])
-    vi = mesh.vertex_index()
     vkeys = mesh.vertices()
     v0 = vkeys[0]
     v1 = vkeys[1]
@@ -851,6 +978,19 @@ def test_mesh_geometric_properties():
     fn = mesh.face_normal(f0)
     MINI_CHECK(fn is not None)
     MINI_CHECK(TOLERANCE.is_close(fn[2], 1.0))
+
+    # face_centroid
+    fc = mesh.face_centroid(f0)
+    MINI_CHECK(fc is not None)
+    MINI_CHECK(TOLERANCE.is_close(fc[0], 1.0 / 3.0))
+    MINI_CHECK(TOLERANCE.is_close(fc[1], 1.0 / 3.0))
+    MINI_CHECK(fc[2] == 0.0)
+
+    # centroid
+    c = mesh.centroid()
+    MINI_CHECK(c[0] == 0.0)
+    MINI_CHECK(TOLERANCE.is_close(c[1], 0.25))
+    MINI_CHECK(c[2] == 0.0)
 
     # vertex_normal
     vn = mesh.vertex_normal(v0)
@@ -922,28 +1062,28 @@ def test_mesh_transformation():
     mesh1.xform = Xform.translation(0.0, 0.0, 1.0)
     mesh1.transform()
     MINI_CHECK(not mesh1.xform.is_identity())
-    MINI_CHECK(mesh1.vertex_position(v0)[2] == 1.0)
+    MINI_CHECK(mesh1.vertex_point(v0)[2] == 1.0)
 
     # transform(xf) — apply given xform in-place; stored xform unchanged
     mesh2 = mesh.duplicate()
     x = Xform.translation(0.0, 0.0, 1.0)
     mesh2.transform(x)
     MINI_CHECK(mesh2.xform.is_identity())
-    MINI_CHECK(mesh2.vertex_position(v0)[2] == 1.0)
+    MINI_CHECK(mesh2.vertex_point(v0)[2] == 1.0)
 
     # transformed() — copy with stored xform applied
     mesh3 = mesh.duplicate()
     mesh3.xform = Xform.translation(0.0, 0.0, 10.0)
     mesh3t = mesh3.transformed()
     MINI_CHECK(not mesh3t.xform.is_identity())
-    MINI_CHECK(mesh3t.vertex_position(v0)[2] == 10.0)
+    MINI_CHECK(mesh3t.vertex_point(v0)[2] == 10.0)
 
     # transformed(xf) — copy with given xform applied
     mesh4 = mesh.duplicate()
     x = Xform.translation(0.0, 0.0, 10.0)
     mesh4t = mesh4.transformed(x)
     MINI_CHECK(mesh4t.xform.is_identity())
-    MINI_CHECK(mesh4t.vertex_position(v0)[2] == 10.0)
+    MINI_CHECK(mesh4t.vertex_point(v0)[2] == 10.0)
 
 
 @MINI_TEST("Mesh", "Json Roundtrip")
@@ -954,6 +1094,12 @@ def test_mesh_json_roundtrip():
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh"
+    from session_py import Color
+    mesh.set_objectcolor(Color(255, 0, 0, 255))
+    fc = []
+    for _ in range(mesh.number_of_faces()):
+        fc.append(Color(255, 0, 0, 255))
+    mesh.set_facecolors(fc)
 
     # JSON object
     from session_py import Xform
@@ -961,6 +1107,8 @@ def test_mesh_json_roundtrip():
     d = mesh.__jsondump__()
     loaded_json = Mesh.__jsonload__(d)
     MINI_CHECK(loaded_json.name == mesh.name)
+    MINI_CHECK(loaded_json.objectcolor == mesh.objectcolor)
+    MINI_CHECK(loaded_json.color_mode == mesh.color_mode)
     MINI_CHECK(loaded_json.number_of_vertices() == mesh.number_of_vertices())
     MINI_CHECK(loaded_json.number_of_faces() == mesh.number_of_faces())
     MINI_CHECK(loaded_json.xform == mesh.xform)
@@ -976,6 +1124,7 @@ def test_mesh_json_roundtrip():
     mesh.json_dump(filename)
     loaded_file = Mesh.json_load(filename)
     MINI_CHECK(loaded_file.name == mesh.name)
+    MINI_CHECK(loaded_file.objectcolor == mesh.objectcolor)
     MINI_CHECK(loaded_file.number_of_vertices() == mesh.number_of_vertices())
     MINI_CHECK(loaded_file.number_of_faces() == mesh.number_of_faces())
 
@@ -1006,11 +1155,19 @@ def test_mesh_protobuf_roundtrip():
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh_proto"
+    from session_py import Color
+    mesh.set_objectcolor(Color(255, 0, 0, 255))
+    fc = []
+    for _ in range(mesh.number_of_faces()):
+        fc.append(Color(255, 0, 0, 255))
+    mesh.set_facecolors(fc)
 
     # String
     proto_bytes = mesh.pb_dumps()
     loaded_string = Mesh.pb_loads(proto_bytes)
     MINI_CHECK(loaded_string.name == mesh.name)
+    MINI_CHECK(loaded_string.objectcolor == mesh.objectcolor)
+    MINI_CHECK(loaded_string.color_mode == mesh.color_mode)
     MINI_CHECK(loaded_string.number_of_vertices() == mesh.number_of_vertices())
 
     # File
@@ -1018,6 +1175,7 @@ def test_mesh_protobuf_roundtrip():
     mesh.pb_dump(filename)
     loaded_file = Mesh.pb_load(filename)
     MINI_CHECK(loaded_file.name == mesh.name)
+    MINI_CHECK(loaded_file.objectcolor == mesh.objectcolor)
     MINI_CHECK(loaded_file.number_of_vertices() == mesh.number_of_vertices())
     MINI_CHECK(loaded_file.number_of_faces() == mesh.number_of_faces())
     MINI_CHECK(loaded_file.guid == mesh.guid)

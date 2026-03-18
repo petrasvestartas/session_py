@@ -191,6 +191,24 @@ def _extract_timed_code(source_lines: list[str]) -> str:
 
         body_lines.append(line)
 
+    # Remove empty if-blocks (entire body was MINI_CHECK calls)
+    filtered: list[str] = []
+    idx = 0
+    while idx < len(body_lines):
+        line = body_lines[idx]
+        stripped = line.lstrip()
+        if stripped.startswith("if ") and stripped.rstrip("\n").endswith(":"):
+            indent = len(line) - len(stripped)
+            j = idx + 1
+            while j < len(body_lines) and body_lines[j].strip() == "":
+                j += 1
+            if j >= len(body_lines) or (len(body_lines[j]) - len(body_lines[j].lstrip())) <= indent:
+                idx += 1
+                continue
+        filtered.append(line)
+        idx += 1
+    body_lines = filtered
+
     # Strip trailing newlines but keep original indentation
     return "".join(body_lines).rstrip("\n")
 
