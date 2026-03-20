@@ -653,6 +653,16 @@ def test_mesh_edges():
     MINI_CHECK(edges[0] == (v0, v1))
 
 
+@MINI_TEST("Mesh", "Create Dodecahedron")
+def test_mesh_create_dodecahedron():
+    from session_py import Mesh
+
+    m = Mesh.create_dodecahedron(2.0)
+    MINI_CHECK(m.is_valid())
+    MINI_CHECK(m.number_of_vertices() == 20)
+    MINI_CHECK(m.number_of_faces() == 12)
+
+
 @MINI_TEST("Mesh", "Vertex and Face Operations")
 def test_mesh_vertex_and_face_operations():
     from session_py import Mesh

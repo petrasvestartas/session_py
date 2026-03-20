@@ -1711,30 +1711,6 @@ class Primitives:
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def dodecahedron(edge=2.0):
-        phi = (1.0 + math.sqrt(5.0)) / 2.0
-        ip = 1.0 / phi
-        s = edge / (2.0 * ip)
-        verts = [
-            Point( s,  s,  s), Point( s,  s, -s), Point( s, -s,  s), Point( s, -s, -s),
-            Point(-s,  s,  s), Point(-s,  s, -s), Point(-s, -s,  s), Point(-s, -s, -s),
-            Point(0,  s*ip,  s*phi), Point(0,  s*ip, -s*phi),
-            Point(0, -s*ip,  s*phi), Point(0, -s*ip, -s*phi),
-            Point( s*ip,  s*phi, 0), Point( s*ip, -s*phi, 0),
-            Point(-s*ip,  s*phi, 0), Point(-s*ip, -s*phi, 0),
-            Point( s*phi, 0,  s*ip), Point( s*phi, 0, -s*ip),
-            Point(-s*phi, 0,  s*ip), Point(-s*phi, 0, -s*ip),
-        ]
-        idx = [
-            [0, 8,10, 2,16], [0,16,17, 1,12], [0,12,14, 4, 8],
-            [1,17, 3,11, 9], [1, 9, 5,14,12], [2,10, 6,15,13],
-            [2,13, 3,17,16], [3,13,15, 7,11], [4,14, 5,19,18],
-            [4,18, 6,10, 8], [5, 9,11, 7,19], [6,18,19, 7,15],
-        ]
-        faces = [[verts[f[0]], verts[f[1]], verts[f[2]], verts[f[3]], verts[f[4]]] for f in idx]
-        return Mesh.from_polylines(faces, 1e-10)
-
-    @staticmethod
     def wave_surface(size, amplitude):
         n = 13
         PI2 = 2.0 * math.pi

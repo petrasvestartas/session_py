@@ -1046,16 +1046,6 @@ def test_mesh_icosahedron():
     MINI_CHECK(m.number_of_faces() == 20)
 
 
-@MINI_TEST("Primitives", "Mesh Dodecahedron")
-def test_mesh_dodecahedron():
-    from session_py import Primitives
-
-    m = Primitives.dodecahedron(2.0)
-    MINI_CHECK(m.is_valid())
-    MINI_CHECK(m.number_of_vertices() == 20)
-    MINI_CHECK(m.number_of_faces() == 12)
-
-
 @MINI_TEST("Primitives", "Nurbssurface Wave")
 def test_nurbssurface_wave():
     from session_py import Primitives
