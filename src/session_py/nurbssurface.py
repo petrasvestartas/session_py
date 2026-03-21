@@ -8,7 +8,7 @@ from .vector import Vector
 from .plane import Plane
 from .tolerance import Tolerance
 from .tolerance import PI
-from .boundingbox import BoundingBox
+from .obb import Obb
 from .xform import Xform
 from .color import Color
 from .nurbscurve import NurbsCurve
@@ -1799,16 +1799,16 @@ class NurbsSurface:
     # GEOMETRIC OPERATIONS
     ###########################################################################
     
-    def get_bounding_box(self) -> BoundingBox:
+    def get_bounding_box(self) -> Obb:
         """Get bounding box of surface.
 
         Returns
         -------
-        BoundingBox
+        Obb
             Bounding box containing all control points.
         """
         if not self.is_valid() or self.m_cv_count[0] == 0 or self.m_cv_count[1] == 0:
-            return BoundingBox()
+            return Obb()
 
         min_pt = self.get_cv(0, 0)
         max_pt = Point(min_pt.x, min_pt.y, min_pt.z)
@@ -1830,7 +1830,7 @@ class NurbsSurface:
                           (max_pt.y - min_pt.y) / 2.0,
                           (max_pt.z - min_pt.z) / 2.0)
 
-        return BoundingBox(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
+        return Obb(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
     
     def divide_by_count(self, nu: int, nv: int):
         u0, u1 = self.domain(0)

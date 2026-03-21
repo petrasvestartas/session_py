@@ -93,14 +93,6 @@ class Xform:
         return xform
 
     @staticmethod
-    def scaling(x, y, z):
-        xform = Xform()
-        xform.m[0] = x
-        xform.m[5] = y
-        xform.m[10] = z
-        return xform
-
-    @staticmethod
     def rotation_x(angle_radians):
         xform = Xform()
         cos_angle = math.cos(angle_radians)
@@ -380,7 +372,7 @@ class Xform:
     @staticmethod
     def scale_uniform(origin, scale_value):
         t0 = Xform.translation(-origin[0], -origin[1], -origin[2])
-        t1 = Xform.scaling(scale_value, scale_value, scale_value)
+        t1 = Xform.scale_xyz(scale_value, scale_value, scale_value)
         t2 = Xform.translation(origin[0], origin[1], origin[2])
         return t2 * (t1 * t0)
 

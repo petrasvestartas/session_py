@@ -18,7 +18,7 @@ from .edge import Edge
 from .objects import Objects
 from .session import Session
 from .mesh import Mesh, NormalWeighting
-from .boundingbox import BoundingBox
+from .obb import Obb
 from .pointcloud import PointCloud
 from .bvh import BVH, BVHNode
 from .rtree import RTree
@@ -54,7 +54,7 @@ __all__ = [
     "Session",
     "Mesh",
     "NormalWeighting",
-    "BoundingBox",
+    "Obb",
     "PointCloud",
     "BVH",
     "BVHNode",

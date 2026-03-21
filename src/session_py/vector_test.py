@@ -376,6 +376,71 @@ def test_vector_is_zero():
     MINI_CHECK(tiny.is_zero())
 
 
+@MINI_TEST("Vector", "Scale")
+def test_vector_scale():
+    from session_py import Vector
+
+    v = Vector(2.0, 4.0, 6.0)
+    v.scale(0.5)
+    v_up = Vector(1.0, 2.0, 3.0)
+    v_up.scale_up()
+    v_rt = Vector(1.0, 2.0, 3.0)
+    v_rt.scale_up()
+    v_rt.scale_down()
+
+    MINI_CHECK(v[0] == 1.0 and v[1] == 2.0 and v[2] == 3.0)
+    MINI_CHECK(v_up[0] > 1.0)
+    MINI_CHECK(TOLERANCE.is_close(v_rt[0], 1.0) and TOLERANCE.is_close(v_rt[1], 2.0) and TOLERANCE.is_close(v_rt[2], 3.0))
+
+
+@MINI_TEST("Vector", "Reflect")
+def test_vector_reflect():
+    from session_py import Vector
+
+    v = Vector(1.0, 2.0, 3.0)
+    n = Vector.x_axis()
+    r = v.reflect(n)
+
+    MINI_CHECK(TOLERANCE.is_close(r[0], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(r[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(r[2], 3.0))
+
+
+@MINI_TEST("Vector", "Average Normal")
+def test_vector_average_normal():
+    from session_py import Point
+    from session_py.vector import average_normal
+
+    sq = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+    ]
+    n = average_normal(sq)
+
+    MINI_CHECK(TOLERANCE.is_close(abs(n[2]), 1.0))
+    MINI_CHECK(TOLERANCE.is_close(n[0], 0.0) and TOLERANCE.is_close(n[1], 0.0))
+
+
+@MINI_TEST("Vector", "Interpolate Points")
+def test_vector_interpolate_points():
+    from session_py import Point
+    from session_py.vector import interpolate_points
+
+    from_pt = Point(0.0, 0.0, 0.0)
+    to_pt = Point(1.0, 0.0, 0.0)
+    pts0 = interpolate_points(from_pt, to_pt, 2, 0)
+    pts1 = interpolate_points(from_pt, to_pt, 1, 1)
+
+    MINI_CHECK(len(pts0) == 2)
+    MINI_CHECK(TOLERANCE.is_close(pts0[0][0], 1.0 / 3.0))
+    MINI_CHECK(TOLERANCE.is_close(pts0[1][0], 2.0 / 3.0))
+    MINI_CHECK(len(pts1) == 3)
+    MINI_CHECK(TOLERANCE.is_close(pts1[0][0], 0.0) and TOLERANCE.is_close(pts1[2][0], 1.0))
+
+
 @MINI_TEST("Vector", "Json Roundtrip")
 def test_vector_json_roundtrip():
     from session_py import Vector

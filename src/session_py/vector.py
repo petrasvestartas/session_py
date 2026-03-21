@@ -1000,6 +1000,27 @@ class Vector:
         self._x, self._y, self._z = coords
         self._has_magnitude = False
 
+    def reflect(self, plane_normal):
+        """Reflect this vector across a plane defined by its normal.
+
+        Parameters
+        ----------
+        plane_normal : :class:`Vector`
+            The normal of the plane to reflect across.
+
+        Returns
+        -------
+        :class:`Vector`
+            The reflected vector.
+
+        """
+        d = self.dot(plane_normal)
+        return Vector(
+            self[0] - 2.0 * d * plane_normal[0],
+            self[1] - 2.0 * d * plane_normal[1],
+            self[2] - 2.0 * d * plane_normal[2]
+        )
+
     ###########################################################################################
     # Polymorphic JSON Serialization (COMPAS-style)
     ###########################################################################################
@@ -1147,3 +1168,77 @@ class Vector:
         with open(filepath, 'rb') as f:
             data = f.read()
         return cls.pb_loads(data)
+
+
+def average_normal(pts):
+    """Compute the average normal of a polygon defined by a list of points.
+
+    Parameters
+    ----------
+    pts : list of :class:`Point`
+        The polygon vertices. May be closed (first == last).
+
+    Returns
+    -------
+    :class:`Vector`
+        The unit average normal.
+
+    """
+    DISTANCE_SQUARED = 1e-10
+    dx = pts[-1][0] - pts[0][0]
+    dy = pts[-1][1] - pts[0][1]
+    dz = pts[-1][2] - pts[0][2]
+    n = len(pts) - 1 if (dx * dx + dy * dy + dz * dz) < DISTANCE_SQUARED else len(pts)
+    avg = Vector(0.0, 0.0, 0.0)
+    for i in range(n):
+        prev = (i - 1 + n) % n
+        nxt = (i + 1) % n
+        ax = pts[i][0] - pts[prev][0]
+        ay = pts[i][1] - pts[prev][1]
+        az = pts[i][2] - pts[prev][2]
+        bx = pts[nxt][0] - pts[i][0]
+        by = pts[nxt][1] - pts[i][1]
+        bz = pts[nxt][2] - pts[i][2]
+        avg[0] += ay * bz - az * by
+        avg[1] += az * bx - ax * bz
+        avg[2] += ax * by - ay * bx
+    avg.normalize_self()
+    return avg
+
+
+def interpolate_points(from_pt, to_pt, steps, type=0):
+    """Interpolate points between two endpoints.
+
+    Parameters
+    ----------
+    from_pt : :class:`Point`
+        Start point.
+    to_pt : :class:`Point`
+        End point.
+    steps : int
+        Number of interior steps.
+    type : int, optional
+        0 = interior only, 1 = both endpoints included, 2 = start + interior.
+
+    Returns
+    -------
+    list of :class:`Point`
+        Interpolated points.
+
+    """
+    from .point import Point
+    pts = []
+    if type == 1:
+        pts.append(Point(from_pt[0], from_pt[1], from_pt[2]))
+    elif type == 2:
+        pts.append(Point(from_pt[0], from_pt[1], from_pt[2]))
+    for i in range(1, steps + 1):
+        t = i / (1 + steps)
+        pts.append(Point(
+            from_pt[0] + t * (to_pt[0] - from_pt[0]),
+            from_pt[1] + t * (to_pt[1] - from_pt[1]),
+            from_pt[2] + t * (to_pt[2] - from_pt[2])
+        ))
+    if type == 1:
+        pts.append(Point(to_pt[0], to_pt[1], to_pt[2]))
+    return pts

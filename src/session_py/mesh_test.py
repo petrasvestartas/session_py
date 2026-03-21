@@ -969,88 +969,136 @@ def test_mesh_connectivity_queries():
 def test_mesh_geometric_properties():
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
     from session_py import NormalWeighting
 
-    pts = [
-        Point(0,0,0),
-        Point(1,0,0),
-        Point(-1,0,0),
-        Point(0,1,0),
-    ]
-    mesh = Mesh.from_vertices_and_faces(pts, [[0,1,3], [0,3,2]])
-    vkeys = mesh.vertices()
-    v0 = vkeys[0]
-    v1 = vkeys[1]
-    v3 = vkeys[3]
-    f0 = mesh.faces()[0]
-
-    # face_normal
-    fn = mesh.face_normal(f0)
-    MINI_CHECK(fn is not None)
-    MINI_CHECK(TOLERANCE.is_close(fn[2], 1.0))
-
-    # face_centroid
-    fc = mesh.face_centroid(f0)
-    MINI_CHECK(fc is not None)
-    MINI_CHECK(TOLERANCE.is_close(fc[0], 1.0 / 3.0))
-    MINI_CHECK(TOLERANCE.is_close(fc[1], 1.0 / 3.0))
-    MINI_CHECK(fc[2] == 0.0)
-
-    # centroid
-    c = mesh.centroid()
-    MINI_CHECK(c[0] == 0.0)
-    MINI_CHECK(TOLERANCE.is_close(c[1], 0.25))
-    MINI_CHECK(c[2] == 0.0)
-
-    # vertex_normal
-    vn = mesh.vertex_normal(v0)
-    MINI_CHECK(vn is not None)
-    MINI_CHECK(abs(vn[2]) == 1.0)
-
-    # vertex_normal_weighted
-    vnw = mesh.vertex_normal_weighted(v0, NormalWeighting.ANGLE)
-    MINI_CHECK(vnw is not None)
-    MINI_CHECK(TOLERANCE.is_close(vnw[2], 1.0))
-
-    # face_area
-    area = mesh.face_area(f0)
-    MINI_CHECK(area is not None)
-    MINI_CHECK(TOLERANCE.is_close(area, 0.5))
-
-    # vertex_angle_in_face
-    angle = mesh.vertex_angle_in_face(v0, f0)
-    MINI_CHECK(angle is not None)
-    MINI_CHECK(TOLERANCE.is_close(angle, TOLERANCE.PI / 2.0))
-    MINI_CHECK(mesh.vertex_angle_in_face(999, f0) is None)
-
-    # dihedral_angle — interior edge v0-v3 shared by f0 and f1 (coplanar = PI)
-    da = mesh.dihedral_angle(v3, v0)
-    MINI_CHECK(da is not None)
-    MINI_CHECK(TOLERANCE.is_close(da, TOLERANCE.PI))
-    # boundary edge — only one face
-    MINI_CHECK(mesh.dihedral_angle(v0, v1) is None)
-
-    # face_normals
-    fns = mesh.face_normals()
-    MINI_CHECK(len(fns) == 2)
-    MINI_CHECK(TOLERANCE.is_close(fns[f0][2], 1.0))
-
-    # vertex_normals
-    vns = mesh.vertex_normals()
-    MINI_CHECK(len(vns) == mesh.number_of_vertices())
-    MINI_CHECK(TOLERANCE.is_close(vns[v0][2], 1.0))
-
-    # vertex_normals_weighted
-    vnsw = mesh.vertex_normals_weighted(NormalWeighting.ANGLE)
-    MINI_CHECK(len(vnsw) == mesh.number_of_vertices())
-    MINI_CHECK(TOLERANCE.is_close(vnsw[v0][2], 1.0))
+    mesh = Mesh.create_dodecahedron(1.5)
 
     # area
-    box = Mesh.create_box(2.0, 2.0, 2.0)
-    MINI_CHECK(TOLERANCE.is_close(box.area(), 24.0))
+    area = mesh.area()
+    MINI_CHECK(TOLERANCE.is_close(area, 46.4528898159021))
+
+    # centroid
+    centroid = mesh.centroid()
+    MINI_CHECK(TOLERANCE.is_point_close(centroid, Point(0.0, 0.0, 0.0)))
+
+    # dihedral angle
+    angles, arcs, points = mesh.dihedral_angles(0.3)
+
+    for edge, angle in angles.items():
+        u, v = edge
+        angle_in_degrees = angle
+        MINI_CHECK(TOLERANCE.is_close(angle_in_degrees, 116.565051177078))
+
+    # face area
+    for f in mesh.faces():
+        face_area = mesh.face_area(f)
+        MINI_CHECK(TOLERANCE.is_close(face_area, 3.87107415132518))
+
+    # face centroid
+    centroids = []
+    for f in mesh.faces():
+        centroids.append(mesh.face_centroid(f))
+
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[0],  Point( 0.878115294937453,  0.0,               1.420820393249937)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[1],  Point( 1.420820393249937,  0.878115294937453, 0.0              )))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[2],  Point( 0.0,                1.420820393249937,  0.878115294937453)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[3],  Point( 0.878115294937453,  0.0,              -1.420820393249937)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[4],  Point( 0.0,                1.420820393249937, -0.878115294937453)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[5],  Point( 0.0,               -1.420820393249937,  0.878115294937453)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[6],  Point( 1.420820393249937, -0.878115294937453, 0.0              )))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[7],  Point( 0.0,               -1.420820393249937, -0.878115294937453)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[8],  Point(-1.420820393249937,  0.878115294937453, 0.0              )))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[9],  Point(-0.878115294937453,  0.0,               1.420820393249937)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[10], Point(-0.878115294937453,  0.0,              -1.420820393249937)))
+    MINI_CHECK(TOLERANCE.is_point_close(centroids[11], Point(-1.420820393249937, -0.878115294937453, 0.0              )))
+
+    # face normal / s
+    face_normals = mesh.face_normals()
+    for f in mesh.faces():
+        normal0 = mesh.face_normal(f)
+        normal1 = face_normals[f]
+        MINI_CHECK(TOLERANCE.is_vector_close(face_normals[f], mesh.face_normal(f)))
+
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[0],  Vector( 0.5257311121191336,  0.0,                 0.8506508083520400)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[1],  Vector( 0.8506508083520400,  0.5257311121191336,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[2],  Vector( 0.0,                 0.8506508083520400,  0.5257311121191336)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[3],  Vector( 0.5257311121191336,  0.0,                -0.8506508083520400)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[4],  Vector( 0.0,                 0.8506508083520400, -0.5257311121191336)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[5],  Vector( 0.0,                -0.8506508083520400,  0.5257311121191336)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[6],  Vector( 0.8506508083520400, -0.5257311121191336,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[7],  Vector( 0.0,                -0.8506508083520400, -0.5257311121191336)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[8],  Vector(-0.8506508083520400,  0.5257311121191336,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[9],  Vector(-0.5257311121191336,  0.0,                 0.8506508083520400)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[10], Vector(-0.5257311121191336,  0.0,                -0.8506508083520400)))
+    MINI_CHECK(TOLERANCE.is_vector_close(face_normals[11], Vector(-0.8506508083520400, -0.5257311121191336,  0.0               )))
+
+    # vertex angle in face
+    for f in mesh.faces():
+        for v in mesh.face_vertices(f):
+            angle = mesh.vertex_angle_in_face(v, f)
+            MINI_CHECK(TOLERANCE.is_close(mesh.vertex_angle_in_face(v, f), 1.8849555921538759))
+
+    # vertex normal / s
+    vertex_normals = mesh.vertex_normals()
+    for v in mesh.vertices():
+        normal0 = mesh.vertex_normal(v)
+        normal1 = vertex_normals[v]
+        MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[v], mesh.vertex_normal(v)))
+
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[0],  Vector( 0.5773502691896258,  0.5773502691896258,  0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[1],  Vector( 0.0,                 0.3568220897730899,  0.9341723589627158)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[2],  Vector( 0.0,                -0.3568220897730899,  0.9341723589627158)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[3],  Vector( 0.5773502691896257, -0.5773502691896258,  0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[4],  Vector( 0.9341723589627158,  0.0,                 0.3568220897730899)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[5],  Vector( 0.9341723589627158,  0.0,                -0.3568220897730899)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[6],  Vector( 0.5773502691896258,  0.5773502691896257, -0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[7],  Vector( 0.3568220897730899,  0.9341723589627158,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[8],  Vector(-0.3568220897730899,  0.9341723589627157,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[9],  Vector(-0.5773502691896258,  0.5773502691896258,  0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[10], Vector( 0.5773502691896258, -0.5773502691896258, -0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[11], Vector( 0.0,                -0.3568220897730899, -0.9341723589627157)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[12], Vector( 0.0,                 0.3568220897730899, -0.9341723589627158)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[13], Vector(-0.5773502691896257,  0.5773502691896258, -0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[14], Vector(-0.5773502691896258, -0.5773502691896257,  0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[15], Vector(-0.3568220897730899, -0.9341723589627157,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[16], Vector( 0.3568220897730899, -0.9341723589627158,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[17], Vector(-0.5773502691896258, -0.5773502691896258, -0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[18], Vector(-0.9341723589627157,  0.0,                -0.3568220897730899)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[19], Vector(-0.9341723589627158,  0.0,                 0.3568220897730899)))
+
+    # vertex normal weighted / s
+    vertex_normals_weighted = mesh.vertex_normals_weighted(NormalWeighting.ANGLE)
+    for v in mesh.vertices():
+        normal0 = mesh.vertex_normal_weighted(v, NormalWeighting.ANGLE)
+        normal1 = vertex_normals_weighted[v]
+        MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[v], mesh.vertex_normal_weighted(v, NormalWeighting.ANGLE)))
+
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[0],  Vector( 0.5773502691896257,  0.5773502691896257,  0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[1],  Vector( 0.0,                 0.3568220897730899,  0.9341723589627158)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[2],  Vector( 0.0,                -0.3568220897730899,  0.9341723589627158)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[3],  Vector( 0.5773502691896257, -0.5773502691896257,  0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[4],  Vector( 0.9341723589627158,  0.0,                 0.3568220897730899)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[5],  Vector( 0.9341723589627158,  0.0,                -0.3568220897730899)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[6],  Vector( 0.5773502691896258,  0.5773502691896257, -0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[7],  Vector( 0.3568220897730899,  0.9341723589627158,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[8],  Vector(-0.3568220897730899,  0.9341723589627158,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[9],  Vector(-0.5773502691896257,  0.5773502691896258,  0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[10], Vector( 0.5773502691896257, -0.5773502691896258, -0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[11], Vector( 0.0,                -0.3568220897730899, -0.9341723589627158)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[12], Vector( 0.0,                 0.3568220897730899, -0.9341723589627158)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[13], Vector(-0.5773502691896257,  0.5773502691896257, -0.5773502691896258)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[14], Vector(-0.5773502691896258, -0.5773502691896257,  0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[15], Vector(-0.3568220897730900, -0.9341723589627158,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[16], Vector( 0.3568220897730899, -0.9341723589627158,  0.0               )))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[17], Vector(-0.5773502691896257, -0.5773502691896257, -0.5773502691896257)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[18], Vector(-0.9341723589627158,  0.0,                -0.3568220897730899)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[19], Vector(-0.9341723589627158,  0.0,                 0.3568220897730899)))
+
 
     # volume
-    MINI_CHECK(TOLERANCE.is_close(box.volume(), 8.0))
+    volume = mesh.volume()
+    MINI_CHECK(TOLERANCE.is_close(volume, 25.8630264921081))
 
 
 @MINI_TEST("Mesh", "Transformation")
@@ -1100,47 +1148,38 @@ def test_mesh_transformation():
 def test_mesh_json_roundtrip():
     from session_py import Mesh
     from session_py import Point
+    from session_py import Xform
     from pathlib import Path
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh"
-    from session_py import Color
-    mesh.set_objectcolor(Color(255, 0, 0, 255))
-    fc = []
-    for _ in range(mesh.number_of_faces()):
-        fc.append(Color(255, 0, 0, 255))
-    mesh.set_facecolors(fc)
+    mesh.xform = Xform.translation(1.0, 2.0, 3.0)
 
     # JSON object
-    from session_py import Xform
-    mesh.xform = Xform.translation(1.0, 2.0, 3.0)
     d = mesh.__jsondump__()
     loaded_json = Mesh.__jsonload__(d)
-    MINI_CHECK(loaded_json.name == mesh.name)
-    MINI_CHECK(loaded_json.objectcolor == mesh.objectcolor)
-    MINI_CHECK(loaded_json.color_mode == mesh.color_mode)
-    MINI_CHECK(loaded_json.number_of_vertices() == mesh.number_of_vertices())
-    MINI_CHECK(loaded_json.number_of_faces() == mesh.number_of_faces())
-    MINI_CHECK(loaded_json.xform == mesh.xform)
 
     # String
     json_string = mesh.json_dumps()
     loaded_string = Mesh.json_loads(json_string)
-    MINI_CHECK(loaded_string.name == mesh.name)
-    MINI_CHECK(loaded_string.number_of_vertices() == mesh.number_of_vertices())
 
     # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.json"
     mesh.json_dump(filename)
     loaded_file = Mesh.json_load(filename)
-    MINI_CHECK(loaded_file.name == mesh.name)
-    MINI_CHECK(loaded_file.objectcolor == mesh.objectcolor)
-    MINI_CHECK(loaded_file.number_of_vertices() == mesh.number_of_vertices())
-    MINI_CHECK(loaded_file.number_of_faces() == mesh.number_of_faces())
+
+    MINI_CHECK(loaded_json == mesh)
+    MINI_CHECK(loaded_string == mesh)
+    MINI_CHECK(loaded_file == mesh)
 
     # Triangulation roundtrip
-    pmesh = Mesh.from_polylines([[Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)]])
-    MINI_CHECK(len(pmesh.triangulation) > 0)
+    polys = [[
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]]
+    pmesh = Mesh.from_polylines(polys)
     loaded_tri = Mesh.__jsonload__(pmesh.__jsondump__())
     fk = sorted(pmesh.triangulation.keys())[0]
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
@@ -1150,7 +1189,6 @@ def test_mesh_json_roundtrip():
     hmesh = Mesh.from_polygon_with_holes([
         [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
         [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)]], True)
-    MINI_CHECK(len(hmesh.face_holes) > 0)
     loaded_holes = Mesh.__jsonload__(hmesh.__jsondump__())
     hfk = sorted(hmesh.face_holes.keys())[0]
     MINI_CHECK(len(loaded_holes.face_holes) > 0)
@@ -1161,38 +1199,33 @@ def test_mesh_json_roundtrip():
 def test_mesh_protobuf_roundtrip():
     from session_py import Mesh
     from session_py import Point
+    from session_py import Xform
     from pathlib import Path
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh_proto"
-    from session_py import Color
-    mesh.set_objectcolor(Color(255, 0, 0, 255))
-    fc = []
-    for _ in range(mesh.number_of_faces()):
-        fc.append(Color(255, 0, 0, 255))
-    mesh.set_facecolors(fc)
+    mesh.xform = Xform.translation(1.0, 2.0, 3.0)
 
     # String
     proto_bytes = mesh.pb_dumps()
     loaded_string = Mesh.pb_loads(proto_bytes)
-    MINI_CHECK(loaded_string.name == mesh.name)
-    MINI_CHECK(loaded_string.objectcolor == mesh.objectcolor)
-    MINI_CHECK(loaded_string.color_mode == mesh.color_mode)
-    MINI_CHECK(loaded_string.number_of_vertices() == mesh.number_of_vertices())
 
     # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.bin"
     mesh.pb_dump(filename)
     loaded_file = Mesh.pb_load(filename)
-    MINI_CHECK(loaded_file.name == mesh.name)
-    MINI_CHECK(loaded_file.objectcolor == mesh.objectcolor)
-    MINI_CHECK(loaded_file.number_of_vertices() == mesh.number_of_vertices())
-    MINI_CHECK(loaded_file.number_of_faces() == mesh.number_of_faces())
-    MINI_CHECK(loaded_file.guid == mesh.guid)
+
+    MINI_CHECK(loaded_string == mesh)
+    MINI_CHECK(loaded_file == mesh)
 
     # Triangulation roundtrip
-    pmesh = Mesh.from_polylines([[Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)]])
-    MINI_CHECK(len(pmesh.triangulation) > 0)
+    polys = [[
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]]
+    pmesh = Mesh.from_polylines(polys)
     loaded_tri = Mesh.pb_loads(pmesh.pb_dumps())
     fk = sorted(pmesh.triangulation.keys())[0]
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
@@ -1202,7 +1235,6 @@ def test_mesh_protobuf_roundtrip():
     hmesh = Mesh.from_polygon_with_holes([
         [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
         [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)]], True)
-    MINI_CHECK(len(hmesh.face_holes) > 0)
     loaded_holes = Mesh.pb_loads(hmesh.pb_dumps())
     hfk = sorted(hmesh.face_holes.keys())[0]
     MINI_CHECK(len(loaded_holes.face_holes) > 0)

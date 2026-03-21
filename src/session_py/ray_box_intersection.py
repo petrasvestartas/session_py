@@ -1,11 +1,11 @@
 from typing import Optional, List
 from .line import Line
 from .point import Point
-from .boundingbox import BoundingBox
+from .obb import Obb
 
 
 def ray_box(
-    line: Line, box: BoundingBox, t0: float, t1: float
+    line: Line, box: Obb, t0: float, t1: float
 ) -> Optional[List[Point]]:
     """
     Find intersection points between a ray (represented as a line) and an axis-aligned bounding box.

@@ -11,7 +11,7 @@ import numpy as np
 from typing import List, Tuple, Optional, NamedTuple
 from .point import Point
 from .vector import Vector
-from .boundingbox import BoundingBox
+from .obb import Obb
 
 # Try to import numba for JIT compilation
 try:
@@ -348,7 +348,7 @@ class BVH:
         self._guid = value
 
     @staticmethod
-    def compute_world_size(bounding_boxes: List[BoundingBox]) -> float:
+    def compute_world_size(bounding_boxes: List[Obb]) -> float:
         """Compute world size from bounding boxes."""
         if not bounding_boxes:
             return 1000.0
@@ -372,13 +372,13 @@ class BVH:
         return max(max_extent * 2.2, 10.0)
 
     @classmethod
-    def from_boxes(cls, bounding_boxes: List[BoundingBox], world_size: float) -> "BVH":
+    def from_boxes(cls, bounding_boxes: List[Obb], world_size: float) -> "BVH":
         """Create a BVH from a list of bounding boxes."""
         bvh = cls(world_size)
         bvh.build(bounding_boxes)
         return bvh
 
-    def build_with_guids(self, boxes_with_guids: List[Tuple[BoundingBox, str]]):
+    def build_with_guids(self, boxes_with_guids: List[Tuple[Obb, str]]):
         """Build BVH from bounding boxes with GUIDs."""
         if not boxes_with_guids:
             self.root = None
@@ -390,7 +390,7 @@ class BVH:
         self.world_size = self.compute_world_size(bounding_boxes)
         self.build(bounding_boxes)
 
-    def build(self, bounding_boxes: List[BoundingBox]) -> None:
+    def build(self, bounding_boxes: List[Obb]) -> None:
         """Build the BVH tree from bounding boxes using LBVH algorithm."""
         if not bounding_boxes:
             self.root = None
@@ -601,7 +601,7 @@ class BVH:
         # Don't build Box tree - arena is sufficient
         self.root = None
 
-    def merge_aabb(self, aabb1: BoundingBox, aabb2: BoundingBox) -> BoundingBox:
+    def merge_aabb(self, aabb1: Obb, aabb2: Obb) -> Obb:
         """Merge two AABBs into a single encompassing AABB."""
         min_x = min(
             aabb1.center[0] - aabb1.half_size[0], aabb2.center[0] - aabb2.half_size[0]
@@ -628,11 +628,11 @@ class BVH:
             (max_x - min_x) / 2, (max_y - min_y) / 2, (max_z - min_z) / 2
         )
 
-        return BoundingBox(
+        return Obb(
             center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), half_size
         )
 
-    def aabb_intersect(self, aabb1: BoundingBox, aabb2: BoundingBox) -> bool:
+    def aabb_intersect(self, aabb1: Obb, aabb2: Obb) -> bool:
         """Check if two AABBs intersect."""
         min1_x = aabb1.center[0] - aabb1.half_size[0]
         max1_x = aabb1.center[0] + aabb1.half_size[0]
@@ -711,7 +711,7 @@ class BVH:
         )
 
     def check_all_collisions(
-        self, bounding_boxes: List[BoundingBox]
+        self, bounding_boxes: List[Obb]
     ) -> Tuple[List[Tuple[int, int]], List[int], int]:
         """Check for all pairwise collisions in the scene using fast NumPy arena."""
         if self.arena_root < 0 or self.arena_aabb is None:
@@ -815,7 +815,7 @@ class BVH:
         return all_collisions, colliding_indices, total_checks
 
     def check_all_collisions_guids(
-        self, bounding_boxes: List[BoundingBox]
+        self, bounding_boxes: List[Obb]
     ) -> List[Tuple[str, str]]:
         """Check for all collisions and return GUID pairs."""
         collisions, _, _ = self.check_all_collisions(bounding_boxes)

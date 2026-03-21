@@ -1,7 +1,7 @@
 from .point import Point
 from .line import Line
 from .plane import Plane
-from .boundingbox import BoundingBox
+from .obb import Obb
 from .polyline import Polyline
 from .pointcloud import PointCloud
 from .mesh import Mesh
@@ -26,7 +26,7 @@ class Objects:
         The list of lines.
     planes : list[Plane]
         The list of planes.
-    bboxes : list[BoundingBox]
+    bboxes : list[Obb]
         The list of bounding boxes.
     polylines : list[Polyline]
         The list of polylines.
@@ -42,7 +42,7 @@ class Objects:
         self.points: list[Point] = []
         self.lines: list[Line] = []
         self.planes: list[Plane] = []
-        self.bboxes: list[BoundingBox] = []
+        self.bboxes: list[Obb] = []
         self.polylines: list[Polyline] = []
         self.pointclouds: list[PointCloud] = []
         self.meshes: list[Mesh] = []
@@ -193,7 +193,7 @@ class Objects:
         for pl in proto.planes:
             objects.planes.append(Plane.pb_loads(pl.SerializeToString()))
         for b in proto.bboxes:
-            objects.bboxes.append(BoundingBox.pb_loads(b.SerializeToString()))
+            objects.bboxes.append(Obb.pb_loads(b.SerializeToString()))
         for pl in proto.polylines:
             objects.polylines.append(Polyline.pb_loads(pl.SerializeToString()))
         for pc in proto.pointclouds:

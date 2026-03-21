@@ -207,11 +207,11 @@ def test_intersection_plane_plane_plane_parallel():
 @MINI_TEST("Intersection", "Ray Box")
 def test_intersection_ray_box():
     from session_py import intersection
-    from session_py import BoundingBox
+    from session_py import Obb
     from session_py import Line
     from session_py import Point
 
-    box = BoundingBox.from_points([Point(-1.0, -1.0, -1.0), Point(1.0, 1.0, 1.0)])
+    box = Obb.from_points([Point(-1.0, -1.0, -1.0), Point(1.0, 1.0, 1.0)])
     line = Line(-5.0, 0.0, 0.0, -4.0, 0.0, 0.0)
     points = intersection.ray_box(line, box, 0.0, 100.0)
     MINI_CHECK(points is not None)
@@ -222,11 +222,11 @@ def test_intersection_ray_box():
 @MINI_TEST("Intersection", "Ray Box Miss")
 def test_intersection_ray_box_miss():
     from session_py import intersection
-    from session_py import BoundingBox
+    from session_py import Obb
     from session_py import Line
     from session_py import Point
 
-    box = BoundingBox.from_points([Point(-1.0, -1.0, -1.0), Point(1.0, 1.0, 1.0)])
+    box = Obb.from_points([Point(-1.0, -1.0, -1.0), Point(1.0, 1.0, 1.0)])
     line = Line(-5.0, 5.0, 0.0, -4.0, 5.0, 0.0)
     points = intersection.ray_box(line, box, 0.0, 100.0)
     MINI_CHECK(points is None)
@@ -458,12 +458,12 @@ def test_intersection_ray_mesh_bvh_vs_naive():
 @MINI_TEST("Intersection", "Ray Box Real World")
 def test_intersection_ray_box_real_world():
     from session_py import intersection
-    from session_py import BoundingBox
+    from session_py import Obb
     from session_py import Line
     from session_py import Point
 
     l0 = Line(500.0, -573.576, -819.152, 500.0, 573.576, 819.152)
-    box = BoundingBox.from_points([Point(214.0, 192.0, 484.0), Point(694.0, 567.0, 796.0)])
+    box = Obb.from_points([Point(214.0, 192.0, 484.0), Point(694.0, 567.0, 796.0)])
     points = intersection.ray_box(l0, box, 0.0, 1000.0)
     MINI_CHECK(points is not None)
     MINI_CHECK(len(points) == 2)
@@ -680,6 +680,27 @@ def test_intersection_plane_4planes_open():
     result = intersection.plane_4planes_open(main, planes)
     MINI_CHECK(result is not None)
     MINI_CHECK(result.point_count() == 4)
+
+
+@MINI_TEST("Intersection", "Plane 4 Lines")
+def test_intersection_plane_4lines():
+    from session_py import intersection
+    from session_py import Line
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    l0 = Line(-1.0, -1.0, -1.0, -1.0,  1.0, 1.0)
+    l1 = Line( 1.0, -1.0, -1.0,  1.0,  1.0, 1.0)
+    l2 = Line(-1.0, -1.0, -1.0,  1.0, -1.0, 1.0)
+    l3 = Line(-1.0,  1.0, -1.0,  1.0,  1.0, 1.0)
+    result = intersection.plane_4lines(plane, l0, l1, l2, l3)
+    MINI_CHECK(result is not None)
+    MINI_CHECK(result.point_count() == 5)
+    for i in range(result.point_count()):
+        p = result.get_point(i)
+        MINI_CHECK(abs(p[2]) < 1e-6)
 
 
 @MINI_TEST("Intersection", "Scale Vector To Distance Of 2 Planes")

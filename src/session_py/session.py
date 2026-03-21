@@ -6,7 +6,7 @@ from .tree import Tree
 from .treenode import TreeNode
 from .graph import Graph
 from .bvh import BVH
-from .boundingbox import BoundingBox
+from .obb import Obb
 from .tolerance import Tolerance
 
 
@@ -418,7 +418,7 @@ class Session:
     ###########################################################################################
 
     @staticmethod
-    def _compute_bounding_box(geometry) -> BoundingBox:
+    def _compute_bounding_box(geometry) -> Obb:
         """Compute bounding box for a geometry object, inflated by tolerance.
 
         Parameters
@@ -428,7 +428,7 @@ class Session:
 
         Returns
         -------
-        BoundingBox
+        Obb
             Inflated bounding box for collision detection.
         """
         inflate = Tolerance.APPROXIMATION
@@ -441,25 +441,25 @@ class Session:
         from .plane import Plane
 
         if isinstance(geometry, Point):
-            return BoundingBox.from_point(geometry, inflate)
+            return Obb.from_point(geometry, inflate)
         elif isinstance(geometry, Line):
             points = [geometry.start(), geometry.end()]
-            return BoundingBox.from_points(points, inflate)
+            return Obb.from_points(points, inflate)
         elif isinstance(geometry, Polyline):
-            return BoundingBox.from_points(geometry.points, inflate)
+            return Obb.from_points(geometry.points, inflate)
         elif isinstance(geometry, PointCloud):
-            return BoundingBox.from_points(geometry.points, inflate)
+            return Obb.from_points(geometry.points, inflate)
         elif isinstance(geometry, Mesh):
             # Extract vertices from mesh
             points = [v.position() for v in geometry.vertex.values()]
             if not points:
-                return BoundingBox.from_point(Point(0, 0, 0), inflate)
-            return BoundingBox.from_points(points, inflate)
-        elif isinstance(geometry, BoundingBox):
+                return Obb.from_point(Point(0, 0, 0), inflate)
+            return Obb.from_points(points, inflate)
+        elif isinstance(geometry, Obb):
             # Inflate existing bounding box
             from .vector import Vector
 
-            inflated = BoundingBox(
+            inflated = Obb(
                 center=geometry.center,
                 x_axis=geometry.x_axis,
                 y_axis=geometry.y_axis,
@@ -473,10 +473,10 @@ class Session:
             return inflated
         elif isinstance(geometry, Plane):
             # Create bounded box around plane origin
-            return BoundingBox.from_point(geometry.origin, inflate * 10.0)
+            return Obb.from_point(geometry.origin, inflate * 10.0)
         else:
             # Fallback
-            return BoundingBox.from_point(Point(0, 0, 0), inflate)
+            return Obb.from_point(Point(0, 0, 0), inflate)
 
     def get_collisions(self) -> List[Tuple[str, str]]:
         """Get all collision pairs using BVH and add them as graph edges.
@@ -524,7 +524,7 @@ class Session:
         from .vector import Vector
         from .polyline import Polyline
         from .plane import Plane
-        from .boundingbox import BoundingBox
+        from .obb import Obb
         from .mesh import Mesh
         from .intersection import line_line, line_plane, ray_box, ray_mesh_bvh
 
@@ -543,7 +543,7 @@ class Session:
             origin[2] + dir_unit[2] * FAR,
         )
 
-        boxes_with_guids: List[Tuple[BoundingBox, str]] = []
+        boxes_with_guids: List[Tuple[Obb, str]] = []
         for guid, geometry in self.lookup.items():
             bbox = self._compute_bounding_box(geometry)
             boxes_with_guids.append((bbox, guid))
@@ -587,7 +587,7 @@ class Session:
 
             hit_point: Optional[Point] = None
 
-            if isinstance(geom, BoundingBox):
+            if isinstance(geom, Obb):
                 pts = ray_box(ray_line, geom, 0.0, FAR)
                 if pts:
                     hit_point = pts[0]

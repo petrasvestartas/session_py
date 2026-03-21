@@ -5,7 +5,7 @@ from .vector import Vector
 from .plane import Plane
 
 
-class BoundingBox:
+class Obb:
     def __init__(
         self,
         center: Point = None,
@@ -20,7 +20,7 @@ class BoundingBox:
         self.z_axis = z_axis if z_axis is not None else Vector(0.0, 0.0, 1.0)
         self.half_size = half_size if half_size is not None else Vector(0.5, 0.5, 0.5)
         self._guid = None
-        self.name = "my_boundingbox"
+        self.name = "my_obb"
 
     @property
     def guid(self) -> str:
@@ -103,7 +103,7 @@ class BoundingBox:
 
         Returns
         -------
-        BoundingBox
+        Obb
             Axis-aligned or oriented bounding box containing the polyline.
         """
         if plane is not None:
@@ -125,7 +125,7 @@ class BoundingBox:
 
         Returns
         -------
-        BoundingBox
+        Obb
             Axis-aligned or oriented bounding box containing the mesh.
         """
         vertices, faces = mesh.to_vertices_and_faces()
@@ -288,7 +288,7 @@ class BoundingBox:
         hx = abs(self.x_axis[0]) * ex + abs(self.y_axis[0]) * ey + abs(self.z_axis[0]) * ez
         hy = abs(self.x_axis[1]) * ex + abs(self.y_axis[1]) * ey + abs(self.z_axis[1]) * ez
         hz = abs(self.x_axis[2]) * ex + abs(self.y_axis[2]) * ey + abs(self.z_axis[2]) * ez
-        return BoundingBox(self.center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz))
+        return Obb(self.center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz))
 
     def point_at(self, x: float, y: float, z: float) -> Point:
         return Point(
@@ -369,8 +369,8 @@ class BoundingBox:
     def _separating_plane_exists(
         relative_position: Vector,
         axis: Vector,
-        box1: "BoundingBox",
-        box2: "BoundingBox",
+        box1: "Obb",
+        box2: "Obb",
     ) -> bool:
         dot_rp = abs(relative_position.dot(axis))
 
@@ -386,7 +386,7 @@ class BoundingBox:
 
         return dot_rp > (proj1 + proj2)
 
-    def collides_with(self, other: "BoundingBox") -> bool:
+    def collides_with(self, other: "Obb") -> bool:
         center_vec = Vector(self.center[0], self.center[1], self.center[2])
         other_center_vec = Vector(other.center[0], other.center[1], other.center[2])
         relative_position = Vector.from_points(center_vec, other_center_vec)

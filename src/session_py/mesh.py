@@ -7,7 +7,7 @@ from .vector import Vector
 from .tolerance import Tolerance
 from .color import Color
 from .xform import Xform
-from .boundingbox import BoundingBox
+from .obb import Obb
 from .bvh import BVH
 from .triangulation_2d import triangulate as _tri2d_triangulate
 from .trimesh_cdt import cdt_triangulate as _cdt_triangulate
@@ -1328,7 +1328,7 @@ class Mesh:
             return x
 
         if tolerance > 0.0:
-            boxes = [BoundingBox.from_point(p, tolerance) for p in positions]
+            boxes = [Obb.from_point(p, tolerance) for p in positions]
             ws = BVH.compute_world_size(boxes)
             bvh = BVH.from_boxes(boxes, ws)
             pairs, _, _ = bvh.check_all_collisions(boxes)
@@ -1633,6 +1633,150 @@ class Mesh:
             return None
         return list(self.halfedge[vertex_key].keys())
 
+    ###########################################################################################
+    # Geometric Properties
+    ###########################################################################################
+
+    def area(self) -> float:
+        total = 0.0
+        for vkeys in self.face.values():
+            if len(vkeys) < 3:
+                continue
+            vd0 = self.vertex.get(vkeys[0])
+            if vd0 is None:
+                continue
+            x0, y0, z0 = vd0.x, vd0.y, vd0.z
+            for i in range(1, len(vkeys) - 1):
+                vd1 = self.vertex.get(vkeys[i])
+                vd2 = self.vertex.get(vkeys[i + 1])
+                if vd1 is None or vd2 is None:
+                    continue
+                ux = vd1.x - x0; uy = vd1.y - y0; uz = vd1.z - z0
+                vx = vd2.x - x0; vy = vd2.y - y0; vz = vd2.z - z0
+                cx = uy * vz - uz * vy; cy = uz * vx - ux * vz; cz = ux * vy - uy * vx
+                total += math.sqrt(cx*cx + cy*cy + cz*cz) * 0.5
+        return total
+
+    def centroid(self) -> Point:
+        """Get the centroid of all vertices."""
+        x, y, z = 0.0, 0.0, 0.0
+        for vk in self.vertex:
+            p = self.vertex_point(vk)
+            x += p[0]; y += p[1]; z += p[2]
+        n = max(len(self.vertex), 1)
+        return Point(x / n, y / n, z / n)
+
+    def dihedral_angle(self, u: int, v: int) -> Optional[float]:
+        """Calculate the dihedral angle between two faces sharing edge (u,v)."""
+        ef = self.edge_faces(u, v)
+        if ef is None or len(ef) < 2:
+            return None
+        n0 = self.face_normal(ef[0])
+        n1 = self.face_normal(ef[1])
+        if n0 is None or n1 is None:
+            return None
+        dot = max(-1.0, min(1.0, n0[0]*n1[0] + n0[1]*n1[1] + n0[2]*n1[2]))
+        return (math.pi - math.acos(dot)) * 180.0 / math.pi
+
+    def dihedral_angles(self, scale: float = 0.3, with_arcs: bool = True, with_points: bool = True):
+        """Calculate dihedral angles for all interior edges.
+        Returns (angles, arcs, points): angles dict (u,v)->radians; arcs slerp polylines if scale>0;
+        points at arc midpoint (scale>0) or edge midpoint (scale==0). arcs/points empty if flags false."""
+        from .polyline import Polyline
+        angles = {}
+        arcs = []
+        points = []
+        arc_n = 12
+        for u, v in self.edges():
+            da = self.dihedral_angle(u, v)
+            if da is None:
+                continue
+            angles[(u, v)] = da
+            deg = da
+            ep0 = self.vertex_point(u)
+            ep1 = self.vertex_point(v)
+            if ep0 is None or ep1 is None:
+                continue
+            mx = (ep0[0]+ep1[0])*0.5
+            my = (ep0[1]+ep1[1])*0.5
+            mz = (ep0[2]+ep1[2])*0.5
+            if scale == 0.0:
+                if with_points:
+                    pt = Point(mx, my, mz, str(deg))
+                    pt.pointcolor = Color(240, 220, 0, 255)
+                    points.append(pt)
+                continue
+            ef = self.edge_faces(u, v)
+            if ef is None or len(ef) < 2:
+                continue
+            ex = ep1[0]-ep0[0]; ey = ep1[1]-ep0[1]; ez = ep1[2]-ep0[2]
+            elen = math.sqrt(ex*ex+ey*ey+ez*ez)
+            if elen < 1e-10:
+                continue
+            ex /= elen; ey /= elen; ez /= elen
+            fc0 = self.face_centroid(ef[0])
+            fc1 = self.face_centroid(ef[1])
+            if fc0 is None or fc1 is None:
+                continue
+            d0x = fc0[0]-mx; d0y = fc0[1]-my; d0z = fc0[2]-mz
+            dot0 = d0x*ex+d0y*ey+d0z*ez
+            d0x -= dot0*ex; d0y -= dot0*ey; d0z -= dot0*ez
+            d0len = math.sqrt(d0x*d0x+d0y*d0y+d0z*d0z)
+            if d0len < 1e-10:
+                continue
+            d0x /= d0len; d0y /= d0len; d0z /= d0len
+            d1x = fc1[0]-mx; d1y = fc1[1]-my; d1z = fc1[2]-mz
+            dot1 = d1x*ex+d1y*ey+d1z*ez
+            d1x -= dot1*ex; d1y -= dot1*ey; d1z -= dot1*ez
+            d1len = math.sqrt(d1x*d1x+d1y*d1y+d1z*d1z)
+            if d1len < 1e-10:
+                continue
+            d1x /= d1len; d1y /= d1len; d1z /= d1len
+            theta = math.acos(max(-1.0, min(1.0, d0x*d1x+d0y*d1y+d0z*d1z)))
+            if abs(math.sin(theta)) < 1e-10:
+                continue
+            arc_pts = []
+            for j in range(arc_n+1):
+                t = j / arc_n
+                w1 = math.sin((1.0-t)*theta) / math.sin(theta)
+                w2 = math.sin(t*theta) / math.sin(theta)
+                arc_pts.append(Point(
+                    mx+(w1*d0x+w2*d1x)*scale,
+                    my+(w1*d0y+w2*d1y)*scale,
+                    mz+(w1*d0z+w2*d1z)*scale))
+            if with_arcs:
+                arc = Polyline(arc_pts)
+                arc.name = "dihedral_e"+str(u)+"_"+str(v)+"="+str(deg)
+                arc.linecolor = Color(240, 220, 0, 255)
+                arcs.append(arc)
+            if with_points:
+                mid = arc_pts[arc_n//2]
+                pt = Point(mid[0], mid[1], mid[2], str(deg))
+                pt.pointcolor = Color(240, 220, 0, 255)
+                points.append(pt)
+        return angles, arcs, points
+
+    def face_area(self, face_key: int) -> Optional[float]:
+        """Calculate the area of a face."""
+        vkeys = self.face.get(face_key)
+        if vkeys is None or len(vkeys) < 3:
+            return 0.0
+        vd0 = self.vertex.get(vkeys[0])
+        if vd0 is None:
+            return None
+        x0, y0, z0 = vd0.x, vd0.y, vd0.z
+        area = 0.0
+        for i in range(1, len(vkeys) - 1):
+            vd1 = self.vertex.get(vkeys[i])
+            vd2 = self.vertex.get(vkeys[i + 1])
+            if vd1 is None or vd2 is None:
+                return None
+            ux = vd1.x - x0; uy = vd1.y - y0; uz = vd1.z - z0
+            vx = vd2.x - x0; vy = vd2.y - y0; vz = vd2.z - z0
+            cx = uy * vz - uz * vy; cy = uz * vx - ux * vz; cz = ux * vy - uy * vx
+            area += math.sqrt(cx*cx + cy*cy + cz*cz) * 0.5
+        return area
+
     def face_centroid(self, face_key: int) -> Optional[Point]:
         """Get the centroid of a face."""
         verts = self.face.get(face_key)
@@ -1646,19 +1790,6 @@ class Mesh:
             x += p[0]; y += p[1]; z += p[2]
         n = len(verts)
         return Point(x / n, y / n, z / n)
-
-    def centroid(self) -> Point:
-        """Get the centroid of all vertices."""
-        x, y, z = 0.0, 0.0, 0.0
-        for vk in self.vertex:
-            p = self.vertex_point(vk)
-            x += p[0]; y += p[1]; z += p[2]
-        n = max(len(self.vertex), 1)
-        return Point(x / n, y / n, z / n)
-
-    ###########################################################################################
-    # Geometric Properties
-    ###########################################################################################
 
     def face_normal(self, face_key: int) -> Optional[Vector]:
         """Calculate the normal of a face."""
@@ -1683,6 +1814,46 @@ class Mesh:
             return Vector(normal[0] / length, normal[1] / length, normal[2] / length)
 
         return None
+
+    def face_normals(self) -> Dict[int, Vector]:
+        """Calculate normals for all faces."""
+        normals = {}
+        for face_key in self.face:
+            normal = self.face_normal(face_key)
+            if normal is not None:
+                normals[face_key] = normal
+        return normals
+
+    def vertex_angle_in_face(self, vertex_key: int, face_key: int) -> Optional[float]:
+        """Calculate the angle at a vertex in a face."""
+        vertices = self.face_vertices(face_key)
+        if vertices is None or vertex_key not in vertices:
+            return None
+
+        vertex_index = vertices.index(vertex_key)
+        n = len(vertices)
+        prev_vertex = vertices[(vertex_index - 1) % n]
+        next_vertex = vertices[(vertex_index + 1) % n]
+
+        center = self.vertex_point(vertex_key)
+        prev_pos = self.vertex_point(prev_vertex)
+        next_pos = self.vertex_point(next_vertex)
+
+        if center is None or prev_pos is None or next_pos is None:
+            return None
+
+        u = Vector(prev_pos[0] - center[0], prev_pos[1] - center[1], prev_pos[2] - center[2])
+        v = Vector(next_pos[0] - center[0], next_pos[1] - center[1], next_pos[2] - center[2])
+
+        u_len = u.magnitude()
+        v_len = v.magnitude()
+
+        if u_len < Tolerance.ZERO_TOLERANCE or v_len < Tolerance.ZERO_TOLERANCE:
+            return 0.0
+
+        cos_angle = u.dot(v) / (u_len * v_len)
+        cos_angle = max(-1.0, min(1.0, cos_angle))
+        return math.acos(cos_angle)
 
     def vertex_normal(self, vertex_key: int) -> Optional[Vector]:
         """Calculate the normal of a vertex (area-weighted)."""
@@ -1721,118 +1892,6 @@ class Mesh:
             )
 
         return None
-
-    def face_area(self, face_key: int) -> Optional[float]:
-        """Calculate the area of a face."""
-        vkeys = self.face.get(face_key)
-        if vkeys is None or len(vkeys) < 3:
-            return 0.0
-        vd0 = self.vertex.get(vkeys[0])
-        if vd0 is None:
-            return None
-        x0, y0, z0 = vd0.x, vd0.y, vd0.z
-        area = 0.0
-        for i in range(1, len(vkeys) - 1):
-            vd1 = self.vertex.get(vkeys[i])
-            vd2 = self.vertex.get(vkeys[i + 1])
-            if vd1 is None or vd2 is None:
-                return None
-            ux = vd1.x - x0; uy = vd1.y - y0; uz = vd1.z - z0
-            vx = vd2.x - x0; vy = vd2.y - y0; vz = vd2.z - z0
-            cx = uy * vz - uz * vy; cy = uz * vx - ux * vz; cz = ux * vy - uy * vx
-            area += math.sqrt(cx*cx + cy*cy + cz*cz) * 0.5
-        return area
-
-    def area(self) -> float:
-        total = 0.0
-        for vkeys in self.face.values():
-            if len(vkeys) < 3:
-                continue
-            vd0 = self.vertex.get(vkeys[0])
-            if vd0 is None:
-                continue
-            x0, y0, z0 = vd0.x, vd0.y, vd0.z
-            for i in range(1, len(vkeys) - 1):
-                vd1 = self.vertex.get(vkeys[i])
-                vd2 = self.vertex.get(vkeys[i + 1])
-                if vd1 is None or vd2 is None:
-                    continue
-                ux = vd1.x - x0; uy = vd1.y - y0; uz = vd1.z - z0
-                vx = vd2.x - x0; vy = vd2.y - y0; vz = vd2.z - z0
-                cx = uy * vz - uz * vy; cy = uz * vx - ux * vz; cz = ux * vy - uy * vx
-                total += math.sqrt(cx*cx + cy*cy + cz*cz) * 0.5
-        return total
-
-    def volume(self) -> float:
-        total = 0.0
-        for vkeys in self.face.values():
-            if len(vkeys) < 3:
-                continue
-            vd0 = self.vertex.get(vkeys[0])
-            if vd0 is None:
-                continue
-            x0, y0, z0 = vd0.x, vd0.y, vd0.z
-            for i in range(1, len(vkeys) - 1):
-                vd1 = self.vertex.get(vkeys[i])
-                vd2 = self.vertex.get(vkeys[i + 1])
-                if vd1 is None or vd2 is None:
-                    continue
-                total += (x0 * (vd1.y * vd2.z - vd1.z * vd2.y)
-                        + y0 * (vd1.z * vd2.x - vd1.x * vd2.z)
-                        + z0 * (vd1.x * vd2.y - vd1.y * vd2.x))
-        return abs(total) / 6.0
-
-    def vertex_angle_in_face(self, vertex_key: int, face_key: int) -> Optional[float]:
-        """Calculate the angle at a vertex in a face."""
-        vertices = self.face_vertices(face_key)
-        if vertices is None or vertex_key not in vertices:
-            return None
-
-        vertex_index = vertices.index(vertex_key)
-        n = len(vertices)
-        prev_vertex = vertices[(vertex_index - 1) % n]
-        next_vertex = vertices[(vertex_index + 1) % n]
-
-        center = self.vertex_point(vertex_key)
-        prev_pos = self.vertex_point(prev_vertex)
-        next_pos = self.vertex_point(next_vertex)
-
-        if center is None or prev_pos is None or next_pos is None:
-            return None
-
-        u = Vector(prev_pos[0] - center[0], prev_pos[1] - center[1], prev_pos[2] - center[2])
-        v = Vector(next_pos[0] - center[0], next_pos[1] - center[1], next_pos[2] - center[2])
-
-        u_len = u.magnitude()
-        v_len = v.magnitude()
-
-        if u_len < Tolerance.ZERO_TOLERANCE or v_len < Tolerance.ZERO_TOLERANCE:
-            return 0.0
-
-        cos_angle = u.dot(v) / (u_len * v_len)
-        cos_angle = max(-1.0, min(1.0, cos_angle))
-        return math.acos(cos_angle)
-
-    def dihedral_angle(self, u: int, v: int) -> Optional[float]:
-        """Calculate the dihedral angle between two faces sharing edge (u,v)."""
-        ef = self.edge_faces(u, v)
-        if ef is None or len(ef) < 2:
-            return None
-        n0 = self.face_normal(ef[0])
-        n1 = self.face_normal(ef[1])
-        if n0 is None or n1 is None:
-            return None
-        dot = max(-1.0, min(1.0, n0[0]*n1[0] + n0[1]*n1[1] + n0[2]*n1[2]))
-        return math.pi - math.acos(dot)
-
-    def face_normals(self) -> Dict[int, Vector]:
-        """Calculate normals for all faces."""
-        normals = {}
-        for face_key in self.face:
-            normal = self.face_normal(face_key)
-            if normal is not None:
-                normals[face_key] = normal
-        return normals
 
     def vertex_normals(self) -> Dict[int, Vector]:
         """Calculate normals for all vertices (area-weighted)."""
@@ -1896,6 +1955,25 @@ class Mesh:
             if length > Tolerance.ZERO_TOLERANCE:
                 normals[vk] = Vector(v[0]/length, v[1]/length, v[2]/length)
         return normals
+
+    def volume(self) -> float:
+        total = 0.0
+        for vkeys in self.face.values():
+            if len(vkeys) < 3:
+                continue
+            vd0 = self.vertex.get(vkeys[0])
+            if vd0 is None:
+                continue
+            x0, y0, z0 = vd0.x, vd0.y, vd0.z
+            for i in range(1, len(vkeys) - 1):
+                vd1 = self.vertex.get(vkeys[i])
+                vd2 = self.vertex.get(vkeys[i + 1])
+                if vd1 is None or vd2 is None:
+                    continue
+                total += (x0 * (vd1.y * vd2.z - vd1.z * vd2.y)
+                        + y0 * (vd1.z * vd2.x - vd1.x * vd2.z)
+                        + z0 * (vd1.x * vd2.y - vd1.y * vd2.x))
+        return abs(total) / 6.0
 
     ###########################################################################################
     # Export

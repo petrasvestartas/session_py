@@ -44,7 +44,7 @@ def test_xform_constructor():
 
     # Matrix multiplication (*)
     t = Xform.translation(10.0, 0.0, 0.0)
-    s = Xform.scaling(2.0, 1.0, 1.0)
+    s = Xform.scale_xyz(2.0, 1.0, 1.0)
     combined = t * s
     p = Point(1.0, 0.0, 0.0)
     result = combined.transformed_point(p)
@@ -94,7 +94,7 @@ def test_xform_scaling():
     from session_py import Point
 
     # Scaling matrix
-    s = Xform.scaling(2.0, 3.0, 4.0)
+    s = Xform.scale_xyz(2.0, 3.0, 4.0)
 
     # Apply to point
     p = Point(1.0, 1.0, 1.0)
@@ -157,7 +157,7 @@ def test_xform_inverse():
 
     # Create composite transformation
     t = Xform.translation(1.0, 2.0, 3.0)
-    s = Xform.scaling(2.0, 2.0, 2.0)
+    s = Xform.scale_xyz(2.0, 2.0, 2.0)
     composite = t * s
 
     # Compute inverse
