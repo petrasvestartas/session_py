@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from .mesh import Mesh
 
 
-class TrimeshAdaptive:
+class RemeshNurbssurfaceAdaptive:
     def __init__(self, surface: "NurbsSurface"):
         self._surface = surface
         self._max_angle = 20.0
@@ -15,19 +15,31 @@ class TrimeshAdaptive:
         self._min_edge_length = 0.0
         self._max_chord_height = 0.0
 
-    def set_max_angle(self, degrees: float) -> "TrimeshAdaptive":
+    def get_max_angle(self) -> float:
+        return self._max_angle
+
+    def get_max_edge_length(self) -> float:
+        return self._max_edge_length
+
+    def get_min_edge_length(self) -> float:
+        return self._min_edge_length
+
+    def get_max_chord_height(self) -> float:
+        return self._max_chord_height
+
+    def set_max_angle(self, degrees: float) -> "RemeshNurbssurfaceAdaptive":
         self._max_angle = degrees
         return self
 
-    def set_max_edge_length(self, length: float) -> "TrimeshAdaptive":
+    def set_max_edge_length(self, length: float) -> "RemeshNurbssurfaceAdaptive":
         self._max_edge_length = length
         return self
 
-    def set_min_edge_length(self, length: float) -> "TrimeshAdaptive":
+    def set_min_edge_length(self, length: float) -> "RemeshNurbssurfaceAdaptive":
         self._min_edge_length = length
         return self
 
-    def set_max_chord_height(self, height: float) -> "TrimeshAdaptive":
+    def set_max_chord_height(self, height: float) -> "RemeshNurbssurfaceAdaptive":
         self._max_chord_height = height
         return self
 
@@ -166,6 +178,34 @@ class TrimeshAdaptive:
                     me2 = self._max_edge_length**2
                     if pdist2(c[0], c[1]) > me2 or pdist2(c[2], c[3]) > me2: split_u = True
                     if pdist2(c[1], c[2]) > me2 or pdist2(c[3], c[0]) > me2: split_v = True
+
+                if not split_u or not split_v:
+                    derivs2 = s.evaluate(um, vm, 2)
+                    if len(derivs2) >= 6:
+                        dux, duy, duz = derivs2[2][0], derivs2[2][1], derivs2[2][2]
+                        dvx, dvy, dvz = derivs2[1][0], derivs2[1][1], derivs2[1][2]
+                        d2ux, d2uy, d2uz = derivs2[5][0], derivs2[5][1], derivs2[5][2]
+                        d2vx, d2vy, d2vz = derivs2[3][0], derivs2[3][1], derivs2[3][2]
+                        nx = duy*dvz - duz*dvy
+                        ny = duz*dvx - dux*dvz
+                        nz = dux*dvy - duy*dvx
+                        nlen = _math.sqrt(nx*nx + ny*ny + nz*nz)
+                        E = dux*dux + duy*duy + duz*duz
+                        G = dvx*dvx + dvy*dvy + dvz*dvz
+                        if nlen > 1e-10 and E > 1e-20 and G > 1e-20:
+                            nnx, nny, nnz = nx/nlen, ny/nlen, nz/nlen
+                            e_coeff = d2ux*nnx + d2uy*nny + d2uz*nnz
+                            g_coeff = d2vx*nnx + d2vy*nny + d2vz*nnz
+                            kappa_u = abs(e_coeff) / E
+                            kappa_v = abs(g_coeff) / G
+                            span_u = _math.sqrt(E) * (u1 - u0)
+                            span_v = _math.sqrt(G) * (v1 - v0)
+                            if not split_u and kappa_u > 1e-20:
+                                needed_u = span_u * _math.sqrt(kappa_u / (8.0 * chord_tol))
+                                if needed_u > 1.0: split_u = True
+                            if not split_v and kappa_v > 1e-20:
+                                needed_v = span_v * _math.sqrt(kappa_v / (8.0 * chord_tol))
+                                if needed_v > 1.0: split_v = True
 
                 if not split_u and not split_v:
                     continue

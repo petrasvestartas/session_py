@@ -2209,8 +2209,8 @@ class NurbsSurface:
         if not self.is_valid():
             from .mesh import Mesh
             return Mesh()
-        from .trimesh_adaptive import TrimeshAdaptive
-        mesher = TrimeshAdaptive(self)
+        from .remesh_nurbssurface_adaptive import RemeshNurbssurfaceAdaptive
+        mesher = RemeshNurbssurfaceAdaptive(self)
         mesher.set_max_angle(max_angle)
         mesher.set_max_edge_length(max_edge_length)
         mesher.set_min_edge_length(min_edge_length)

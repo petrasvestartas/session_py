@@ -35,6 +35,8 @@ from .brep import BRep
 from .ray_box_intersection import ray_box
 from .closest import Closest
 from .mesh_iso import MeshIso, TpmsType, TpmsMode
+from .remesh_nurbssurface_grid import remesh_nurbssurface_grid, RemeshNurbsSurfaceGrid
+from .remesh_nurbssurface_adaptive import RemeshNurbssurfaceAdaptive
 
 __all__ = [
     "Color",
@@ -76,4 +78,7 @@ __all__ = [
     "MeshIso",
     "TpmsType",
     "TpmsMode",
+    "remesh_nurbssurface_grid",
+    "RemeshNurbsSurfaceGrid",
+    "RemeshNurbssurfaceAdaptive",
 ]
