@@ -9,8 +9,7 @@ from .color import Color
 from .xform import Xform
 from .obb import Obb
 from .bvh import BVH
-from .triangulation_2d import triangulate as _tri2d_triangulate
-from .trimesh_cdt import cdt_triangulate as _cdt_triangulate
+from .remesh_cdt import cdt_triangulate as _cdt_triangulate
 
 
 class ColorMode(Enum):
@@ -584,9 +583,14 @@ class Mesh:
         for cycle in face_cycles:
             fvkeys = [vkeys[i] for i in cycle]
             fkey = mesh.add_face(fvkeys)
-            pts = [verts[i] for i in cycle]
-            tris = _tri2d_triangulate(pts)
-            mesh.triangulation[fkey] = [[vkeys[cycle[t[0]]], vkeys[cycle[t[1]]], vkeys[cycle[t[2]]]] for t in tris]
+            bpts = [(verts[i][0], verts[i][1]) for i in cycle]
+            area = sum(bpts[j][0]*bpts[(j+1)%len(bpts)][1] - bpts[(j+1)%len(bpts)][0]*bpts[j][1]
+                       for j in range(len(bpts))) * 0.5
+            ordered = list(cycle)
+            if area < 0:
+                bpts.reverse(); ordered.reverse()
+            tris = _cdt_triangulate(bpts, None)
+            mesh.triangulation[fkey] = [[vkeys[ordered[t[0]]], vkeys[ordered[t[1]]], vkeys[ordered[t[2]]]] for t in tris]
         return mesh
 
     @staticmethod

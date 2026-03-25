@@ -185,7 +185,7 @@ class TrimmedSurface:
 
         # Planar: boundary-conforming ear-clip triangulation
         if self.m_surface.is_planar():
-            from . import triangulation_2d
+            from .remesh_cdt import cdt_triangulate as _cdt_triangulate
             def disc(crv):
                 n = max(crv.cv_count() * 4, 16) if crv.degree() > 1 else max(crv.cv_count() - 1, 4)
                 pts, _ = crv.divide_by_count(n)
@@ -203,7 +203,20 @@ class TrimmedSurface:
             add_pts(outer_pts)
             for hp in hole_pts:
                 add_pts(hp)
-            tris = triangulation_2d.triangulate(outer_pts, hole_pts if hole_pts else None)
+            def to_pairs(uvs):
+                n = len(uvs)
+                if n > 1 and abs(uvs[0][0]-uvs[n-1][0]) < 1e-12 and abs(uvs[0][1]-uvs[n-1][1]) < 1e-12:
+                    uvs = uvs[:-1]
+                return [(float(p[0]), float(p[1])) for p in uvs]
+            border = to_pairs(outer_pts)
+            holes = [to_pairs(h) for h in hole_pts] if hole_pts else []
+            area = sum(border[j][0]*border[(j+1)%len(border)][1] - border[(j+1)%len(border)][0]*border[j][1]
+                       for j in range(len(border))) * 0.5
+            if area < 0: border.reverse()
+            for h in holes:
+                ha = sum(h[j][0]*h[(j+1)%len(h)][1] - h[(j+1)%len(h)][0]*h[j][1] for j in range(len(h))) * 0.5
+                if ha > 0: h.reverse()
+            tris = _cdt_triangulate(border, holes if holes else None)
             np_ = len(pts3d)
             polygons = []
             for v0, v1, v2 in tris:

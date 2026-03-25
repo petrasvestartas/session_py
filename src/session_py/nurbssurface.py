@@ -1372,19 +1372,12 @@ class NurbsSurface:
         Nu = self._basis_functions(0, span_u, u)
         Nv = self._basis_functions(1, span_v, v)
         
-        # Evaluate surface point - OpenNURBS lines 1107-1117
-        # CV index starts at span (since span is in range [0, cv_count-order])
+        # Evaluate surface point using vectorized einsum
         cv_size_val = self.cv_size()
-        point = np.zeros(cv_size_val)
-        
-        for j0 in range(self.m_order[0]):
-            cv_i = span_u + j0
-            for j1 in range(self.m_order[1]):
-                cv_j = span_v + j1
-                c = Nu[j0] * Nv[j1]
-                cv_data = self.cv(cv_i, cv_j)
-                if cv_data is not None:
-                    point += c * cv_data
+        cv_3d = self.m_cv.reshape(self.m_cv_count[0], self.m_cv_count[1], cv_size_val)
+        cv_block = cv_3d[span_u:span_u + self.m_order[0], span_v:span_v + self.m_order[1]]
+        weights = Nu[:, np.newaxis] * Nv[np.newaxis, :]
+        point = np.einsum('ij,ijk->k', weights, cv_block)
         
         # Handle rational case
         if self.m_is_rat and abs(point[self.m_dim]) > 1e-14:
@@ -1456,20 +1449,17 @@ class NurbsSurface:
 
         cv_size_val = (self.m_dim + 1) if self.m_is_rat else self.m_dim
 
-        # Compute all homogeneous derivatives
+        # Vectorized: extract CV block and compute all derivative combos with einsum
+        cv_3d = self.m_cv.reshape(self.m_cv_count[0], self.m_cv_count[1], cv_size_val)
+        cv_block = cv_3d[span_u:span_u + self.m_order[0], span_v:span_v + self.m_order[1]]
+        ders_u_np = np.array(ders_u)
+        ders_v_np = np.array(ders_v)
+
         skl_all = []
         for k in range(max_derivs + 1):
             for l in range(max_derivs - k + 1):
-                skl = [0.0] * cv_size_val
-                for i in range(self.m_order[0]):
-                    cv_i = span_u + i
-                    for j in range(self.m_order[1]):
-                        cv_j = span_v + j
-                        coeff = ders_u[k][i] * ders_v[l][j]
-                        cv_data = self.cv(cv_i, cv_j)
-                        if cv_data is not None:
-                            for d in range(cv_size_val):
-                                skl[d] += coeff * cv_data[d]
+                weights_kl = ders_u_np[k, :, np.newaxis] * ders_v_np[l, np.newaxis, :]
+                skl = np.einsum('ij,ijk->k', weights_kl, cv_block)
                 skl_all.append((k, l, skl))
 
         if not self.m_is_rat:
@@ -2209,8 +2199,8 @@ class NurbsSurface:
         if not self.is_valid():
             from .mesh import Mesh
             return Mesh()
-        from .remesh_nurbssurface_adaptive import RemeshNurbssurfaceAdaptive
-        mesher = RemeshNurbssurfaceAdaptive(self)
+        from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
+        mesher = RemeshNurbsSurfaceAdaptive(self)
         mesher.set_max_angle(max_angle)
         mesher.set_max_edge_length(max_edge_length)
         mesher.set_min_edge_length(min_edge_length)

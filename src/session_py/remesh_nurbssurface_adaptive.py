@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from .mesh import Mesh
 
 
-class RemeshNurbssurfaceAdaptive:
+class RemeshNurbsSurfaceAdaptive:
     def __init__(self, surface: "NurbsSurface"):
         self._surface = surface
         self._max_angle = 20.0
@@ -27,19 +27,19 @@ class RemeshNurbssurfaceAdaptive:
     def get_max_chord_height(self) -> float:
         return self._max_chord_height
 
-    def set_max_angle(self, degrees: float) -> "RemeshNurbssurfaceAdaptive":
+    def set_max_angle(self, degrees: float) -> "RemeshNurbsSurfaceAdaptive":
         self._max_angle = degrees
         return self
 
-    def set_max_edge_length(self, length: float) -> "RemeshNurbssurfaceAdaptive":
+    def set_max_edge_length(self, length: float) -> "RemeshNurbsSurfaceAdaptive":
         self._max_edge_length = length
         return self
 
-    def set_min_edge_length(self, length: float) -> "RemeshNurbssurfaceAdaptive":
+    def set_min_edge_length(self, length: float) -> "RemeshNurbsSurfaceAdaptive":
         self._min_edge_length = length
         return self
 
-    def set_max_chord_height(self, height: float) -> "RemeshNurbssurfaceAdaptive":
+    def set_max_chord_height(self, height: float) -> "RemeshNurbsSurfaceAdaptive":
         self._max_chord_height = height
         return self
 
@@ -167,12 +167,17 @@ class RemeshNurbssurfaceAdaptive:
                     if nvalid(e_mid) and nvalid(c[1]) and ndiff(e_mid, c[1]) > norm_tol: split_v = True
 
                 if not split_u and not split_v:
-                    twist_tol2 = 4.0 * chord_tol * chord_tol
-                    for d in range(2):
-                        mid = pmid(c[d], c[d+2])
-                        if pdist2(c[4], mid) > twist_tol2:
-                            split_u = True
-                            split_v = True
+                    degenerate = any(
+                        pdist2(c[ci], c[(ci + 1) % 4]) < chord_tol * chord_tol
+                        for ci in range(4)
+                    )
+                    if not degenerate:
+                        twist_tol2 = 4.0 * chord_tol * chord_tol
+                        for d in range(2):
+                            mid = pmid(c[d], c[d+2])
+                            if pdist2(c[4], mid) > twist_tol2:
+                                split_u = True
+                                split_v = True
 
                 if self._max_edge_length > 0:
                     me2 = self._max_edge_length**2

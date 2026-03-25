@@ -32,6 +32,7 @@ class MiniTestResult:
         Failure records for unexpected exceptions or assertion errors.
     """
 
+    group: str
     test_name: str
     passed: bool
     time_ms: float
@@ -374,6 +375,7 @@ def run_all(language: str = "python") -> None:
                 test_file = Path(source_file)
 
             result = MiniTestResult(
+                group=class_name,
                 test_name=test_name,
                 passed=passed,
                 time_ms=round(effective_elapsed * 1e3, 3),
