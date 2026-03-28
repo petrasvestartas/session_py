@@ -3,6 +3,13 @@ from typing import Any
 import importlib
 
 
+_CLASS_MODULE_MAP = {
+    "ColumnElement": "element_column",
+    "BeamElement": "element_beam",
+    "PlateElement": "element_plate",
+}
+
+
 def _get_class_from_name(class_name: str):
     """Dynamically import a class by name from the session_py package.
 
@@ -20,7 +27,8 @@ def _get_class_from_name(class_name: str):
         The class object if found, None otherwise
     """
     try:
-        module_name = f"session_py.{class_name.lower()}"
+        mod = _CLASS_MODULE_MAP.get(class_name, class_name.lower())
+        module_name = f"session_py.{mod}"
         module = importlib.import_module(module_name)
         return getattr(module, class_name, None)
     except (ImportError, AttributeError):

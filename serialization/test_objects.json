@@ -1,16 +1,16 @@
 {
     "type": "Objects",
-    "guid": "33421b78-060f-415b-8ab3-685cf7bbf408",
+    "guid": "2dcf317d-dc90-45f4-bc5b-1cf2c410011d",
     "name": "my_objects",
     "points": [
         {
-            "guid": "afc67dd0-ef6f-4336-91f1-7f0f432dc242",
+            "guid": "cd63018d-5d70-4931-879a-14a2fde42b9c",
             "name": "my_point",
             "pointcolor": {
                 "a": 255,
                 "b": 255,
                 "g": 0,
-                "guid": "2652bb21-9fc9-410a-875d-4d1401ec9c0e",
+                "guid": "bea7d145-4e34-4e7a-b7c6-9745abb920e2",
                 "name": "blue",
                 "r": 0,
                 "type": "Color"
@@ -19,7 +19,7 @@
             "width": 1.0,
             "x": 1.0,
             "xform": {
-                "guid": "a44999b3-a66f-4f75-92bd-30be89e0623b",
+                "guid": "555e2da5-59e5-40da-a373-d3365fa2b4a1",
                 "m": [
                     1.0,
                     0.0,
@@ -45,13 +45,13 @@
             "z": 3.0
         },
         {
-            "guid": "73d2be96-4ad4-4275-b6c1-19424cc924d0",
+            "guid": "1af7636d-1491-4ad3-8a10-146adb767781",
             "name": "my_point",
             "pointcolor": {
                 "a": 255,
                 "b": 255,
                 "g": 0,
-                "guid": "2652bb21-9fc9-410a-875d-4d1401ec9c0e",
+                "guid": "bea7d145-4e34-4e7a-b7c6-9745abb920e2",
                 "name": "blue",
                 "r": 0,
                 "type": "Color"
@@ -60,7 +60,7 @@
             "width": 1.0,
             "x": 4.0,
             "xform": {
-                "guid": "a44999b3-a66f-4f75-92bd-30be89e0623b",
+                "guid": "555e2da5-59e5-40da-a373-d3365fa2b4a1",
                 "m": [
                     1.0,
                     0.0,
@@ -94,5 +94,6 @@
     "meshes": [],
     "nurbscurves": [],
     "nurbssurfaces": [],
-    "breps": []
+    "breps": [],
+    "elements": []
 }

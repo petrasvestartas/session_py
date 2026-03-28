@@ -130,6 +130,8 @@ class Session:
             session.lookup[nurbssurface.guid] = nurbssurface
         for brep in session.objects.breps:
             session.lookup[brep.guid] = brep
+        for element in session.objects.elements:
+            session.lookup[element.guid] = element
 
         return session
 
@@ -193,6 +195,8 @@ class Session:
             session.lookup[nurbssurface.guid] = nurbssurface
         for brep in session.objects.breps:
             session.lookup[brep.guid] = brep
+        for element in session.objects.elements:
+            session.lookup[element.guid] = element
         return session
 
     def pb_dump(self, filepath):
@@ -330,6 +334,12 @@ class Session:
         self.lookup[brep.guid] = brep
         self.graph.add_node(brep.guid, f"brep_{brep.name}")
         return TreeNode(name=brep.guid)
+
+    def add_element(self, element) -> TreeNode:
+        self.objects.elements.append(element)
+        self.lookup[element.guid] = element
+        self.graph.add_node(element.guid, f"element_{element.name}")
+        return TreeNode(name=element.guid)
 
     def add_group(self, name: str) -> TreeNode:
         node = TreeNode(name=name)
@@ -475,6 +485,9 @@ class Session:
             # Create bounded box around plane origin
             return Obb.from_point(geometry.origin, inflate * 10.0)
         else:
+            from .element import Element
+            if isinstance(geometry, Element):
+                return geometry.aabb
             # Fallback
             return Obb.from_point(Point(0, 0, 0), inflate)
 
@@ -749,6 +762,7 @@ class Session:
             transformed_objects.polylines,
             transformed_objects.pointclouds,
             transformed_objects.meshes,
+            transformed_objects.elements,
         ]:
             for geom in collection:
                 transformed_lookup[geom.guid] = geom
