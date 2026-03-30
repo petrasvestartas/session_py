@@ -57,7 +57,11 @@ def test_nurbscurve_polyline():
     from session_py import Point
 
     c = NurbsCurve.create(False, 1, [
-        Point(0, 0, 0), Point(1, 2, 0), Point(2, 0, 0), Point(3, 2, 0), Point(4, 0, 0),
+        Point(0, 0, 0),
+        Point(1, 2, 0),
+        Point(2, 0, 0),
+        Point(3, 2, 0),
+        Point(4, 0, 0),
     ])
 
     MINI_CHECK(c.cv_count() == 5)
@@ -416,15 +420,21 @@ def test_nurbssurface_planar():
     c4 = math.cos(1.13); s4 = math.sin(1.13)
 
     ca = NurbsCurve.create(False, 1, [
-        Point(0.0, 0.0, 0.0), Point(4.0, 0.0, 0.0),
-        Point(4.0, 3.0*c1, 3.0*s1), Point(0.0, 3.0*c1, 3.0*s1),
-        Point(0.0, 0.0, 0.0)])
+        Point(0.0, 0.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+        Point(4.0, 3.0*c1, 3.0*s1),
+        Point(0.0, 3.0*c1, 3.0*s1),
+        Point(0.0, 0.0, 0.0),
+    ])
     s_quad = Primitives.create_planar(ca)
     m_quad = s_quad.mesh()
 
     cb1 = NurbsCurve.create(False, 1, [
-        Point(8.0, 0.0, 0.0), Point(8.0+5.0*c2, 0.0, 5.0*s2),
-        Point(8.0+2.0*c2, 3.0, 2.0*s2), Point(8.0, 0.0, 0.0)])
+        Point(8.0, 0.0, 0.0),
+        Point(8.0+5.0*c2, 0.0, 5.0*s2),
+        Point(8.0+2.0*c2, 3.0, 2.0*s2),
+        Point(8.0, 0.0, 0.0),
+    ])
     s_triangle = Primitives.create_planar(cb1)
     m_triangle = s_triangle.mesh()
 
@@ -504,7 +514,10 @@ def test_nurbssurface_extrusion():
 
     direction = Vector(0.0, 1.0, 5.0)
 
-    c1 = NurbsCurve.create(False, 1, [Point(13.0, 0.0, 0.0), Point(18.0, 0.0, 0.0)])
+    c1 = NurbsCurve.create(False, 1, [
+        Point(13.0, 0.0, 0.0),
+        Point(18.0, 0.0, 0.0),
+    ])
     s_line = Primitives.create_extrusion(c1, direction)
     m_line = s_line.mesh()
 
@@ -513,13 +526,18 @@ def test_nurbssurface_extrusion():
     m_circle = s_circle.mesh()
 
     c3 = NurbsCurve.create(False, 2, [
-        Point(30.0, 0.0, 0.0), Point(33.0, 5.0, 0.0), Point(37.0, 0.0, 0.0),
+        Point(30.0, 0.0, 0.0),
+        Point(33.0, 5.0, 0.0),
+        Point(37.0, 0.0, 0.0),
     ])
     s_arc = Primitives.create_extrusion(c3, direction)
     m_arc = s_arc.mesh()
 
     c4 = NurbsCurve.create(False, 1, [
-        Point(40.0, 3.0, 0.0), Point(45.0, 0.0, 0.0), Point(50.0, 3.0, 0.0), Point(55.0, 0.0, 0.0),
+        Point(40.0, 3.0, 0.0),
+        Point(45.0, 0.0, 0.0),
+        Point(50.0, 3.0, 0.0),
+        Point(55.0, 0.0, 0.0),
     ])
     s_wavy = Primitives.create_extrusion(c4, direction)
     m_wavy = s_wavy.mesh()
@@ -539,8 +557,8 @@ def test_nurbssurface_extrusion():
     MINI_CHECK(s_circle.is_rational())
     MINI_CHECK(s_circle.is_closed(0) == True and s_circle.is_closed(1) == False)
     MINI_CHECK(s_circle.cv_count_dir(0) == 9 and s_circle.cv_count_dir(1) == 2)
-    MINI_CHECK(m_circle.number_of_vertices() == 40)
-    MINI_CHECK(m_circle.number_of_faces() == 40)
+    MINI_CHECK(m_circle.number_of_vertices() == 42)
+    MINI_CHECK(m_circle.number_of_faces() == 42)
     MINI_CHECK(TOLERANCE.is_point_close(s_circle.get_cv(0, 0), Point(27.0, 0.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_circle.get_cv(0, 1), Point(27.0, 1.0, 5.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_circle.get_cv(4, 0), Point(21.0, 0.0, 0.0)))
@@ -628,16 +646,22 @@ def test_nurbssurface_loft():
 
     open_pts = [
         [
-            Point(10.0, -12.0, 0.0), Point(10.0, -10.0, 3.0),
-            Point(10.0, -7.0, 3.0), Point(10.0, -5.0, 0.0),
+            Point(10.0, -12.0, 0.0),
+            Point(10.0, -10.0, 3.0),
+            Point(10.0, -7.0, 3.0),
+            Point(10.0, -5.0, 0.0),
         ],
         [
-            Point(5.5, -12.0, 3.5), Point(5.5, -10.0, 1.5),
-            Point(5.5, -7.0, 1.5), Point(5.5, -5.0, 3.5),
+            Point(5.5, -12.0, 3.5),
+            Point(5.5, -10.0, 1.5),
+            Point(5.5, -7.0, 1.5),
+            Point(5.5, -5.0, 3.5),
         ],
         [
-            Point(1.0, -12.0, 0.0), Point(1.0, -10.0, 3.0),
-            Point(1.0, -7.0, 3.0), Point(1.0, -5.0, 0.0),
+            Point(1.0, -12.0, 0.0),
+            Point(1.0, -10.0, 3.0),
+            Point(1.0, -7.0, 3.0),
+            Point(1.0, -5.0, 0.0),
         ],
     ]
     open_curves = [
@@ -722,8 +746,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_vase.is_closed(1) == False)
     MINI_CHECK(s_vase.cv_count_dir(0) == 9)
     MINI_CHECK(s_vase.cv_count_dir(1) == 7)
-    MINI_CHECK(m_vase.number_of_vertices() == 660)
-    MINI_CHECK(m_vase.number_of_faces() == 1280)
+    MINI_CHECK(m_vase.number_of_vertices() == 609)
+    MINI_CHECK(m_vase.number_of_faces() == 1176)
     MINI_CHECK(TOLERANCE.is_point_close(s_vase.get_cv(0, 0), Point(1.5, 0.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_vase.get_cv(0, 6), Point(1.8, 0.0, 5.0)))
 
@@ -732,8 +756,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_torus.is_closed(1) == True)
     MINI_CHECK(s_torus.cv_count_dir(0) == 9)
     MINI_CHECK(s_torus.cv_count_dir(1) == 9)
-    MINI_CHECK(m_torus.number_of_vertices() == 640)
-    MINI_CHECK(m_torus.number_of_faces() == 1280)
+    MINI_CHECK(m_torus.number_of_vertices() == 693)
+    MINI_CHECK(m_torus.number_of_faces() == 1386)
     MINI_CHECK(TOLERANCE.is_point_close(s_torus.get_cv(0, 0), Point(20.5, 0.0, 0.0)))
 
     MINI_CHECK(s_elbow.is_valid())
@@ -755,8 +779,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_sphere.is_singular(2) == True)
     MINI_CHECK(s_sphere.cv_count_dir(0) == 9)
     MINI_CHECK(s_sphere.cv_count_dir(1) == 5)
-    MINI_CHECK(m_sphere.number_of_vertices() > 0)
-    MINI_CHECK(m_sphere.number_of_faces() > 0)
+    MINI_CHECK(m_sphere.number_of_vertices() == 191)
+    MINI_CHECK(m_sphere.number_of_faces() == 378)
     MINI_CHECK(TOLERANCE.is_point_close(s_sphere.get_cv(0, 0), Point(36.0, 0.0, -2.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sphere.get_cv(0, 4), Point(36.0, 0.0, 2.0)))
 
@@ -767,8 +791,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_cone.is_singular(2) == False)
     MINI_CHECK(s_cone.cv_count_dir(0) == 9)
     MINI_CHECK(s_cone.cv_count_dir(1) == 2)
-    MINI_CHECK(m_cone.number_of_vertices() > 0)
-    MINI_CHECK(m_cone.number_of_faces() > 0)
+    MINI_CHECK(m_cone.number_of_vertices() == 22)
+    MINI_CHECK(m_cone.number_of_faces() == 21)
     MINI_CHECK(TOLERANCE.is_point_close(s_cone.get_cv(0, 0), Point(44.0, 0.0, 3.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_cone.get_cv(0, 1), Point(46.0, 0.0, 0.0)))
 
@@ -780,23 +804,33 @@ def test_nurbssurface_sweep():
     from session_py import Point
 
     rail = NurbsCurve.create(False, 2, [
-        Point(0.0, 0.0, 0.0), Point(0.0, 5.0, 0.0), Point(2.0, 9.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+        Point(0.0, 5.0, 0.0),
+        Point(2.0, 9.0, 0.0),
     ])
     profile = Primitives.circle(0.0, 0.0, 0.0, 1.0)
     s_sweep1 = Primitives.create_sweep1(rail, profile)
     m_sweep1 = s_sweep1.mesh()
 
     rail1 = NurbsCurve.create(False, 2, [
-        Point(6.0, -1.0, 0.0), Point(7.0, 3.0, 0.0), Point(8.0, 4.0, 0.0),
+        Point(6.0, -1.0, 0.0),
+        Point(7.0, 3.0, 0.0),
+        Point(8.0, 4.0, 0.0),
     ])
     rail2 = NurbsCurve.create(False, 2, [
-        Point(10.0, -1.0, 0.0), Point(10.0, 3.0, 0.0), Point(9.0, 4.0, 0.0),
+        Point(10.0, -1.0, 0.0),
+        Point(10.0, 3.0, 0.0),
+        Point(9.0, 4.0, 0.0),
     ])
     shape1 = NurbsCurve.create(False, 2, [
-        Point(6.0, -1.0, 0.0), Point(8.0, -1.0, 2.0), Point(10.0, -1.0, 0.0),
+        Point(6.0, -1.0, 0.0),
+        Point(8.0, -1.0, 2.0),
+        Point(10.0, -1.0, 0.0),
     ])
     shape2 = NurbsCurve.create(False, 2, [
-        Point(8.0, 4.0, 0.0), Point(8.5, 4.0, 1.5), Point(9.0, 4.0, 0.0),
+        Point(8.0, 4.0, 0.0),
+        Point(8.5, 4.0, 1.5),
+        Point(9.0, 4.0, 0.0),
     ])
     s_sweep2 = Primitives.create_sweep2(rail1, rail2, [shape1, shape2])
     m_sweep2 = s_sweep2.mesh()
@@ -836,18 +870,26 @@ def test_nurbssurface_edge():
     from session_py import Point
 
     pts_south = [
-        Point(1.0, 20.569076, 0.0), Point(1.0, 22.569076, 3.0),
-        Point(1.0, 25.569076, 3.0), Point(1.0, 27.569076, 0.0),
+        Point(1.0, 20.569076, 0.0),
+        Point(1.0, 22.569076, 3.0),
+        Point(1.0, 25.569076, 3.0),
+        Point(1.0, 27.569076, 0.0),
     ]
     pts_west  = [
-        Point(10.0, 20.569076, 0.0), Point(5.5, 20.569076, 3.5), Point(1.0, 20.569076, 0.0),
+        Point(10.0, 20.569076, 0.0),
+        Point(5.5, 20.569076, 3.5),
+        Point(1.0, 20.569076, 0.0),
     ]
     pts_north = [
-        Point(10.0, 20.569076, 0.0), Point(10.0, 22.569076, 3.0),
-        Point(10.0, 25.569076, 3.0), Point(10.0, 27.569076, 0.0),
+        Point(10.0, 20.569076, 0.0),
+        Point(10.0, 22.569076, 3.0),
+        Point(10.0, 25.569076, 3.0),
+        Point(10.0, 27.569076, 0.0),
     ]
     pts_east  = [
-        Point(10.0, 27.569076, 0.0), Point(5.5, 27.569076, 3.5), Point(1.0, 27.569076, 0.0),
+        Point(10.0, 27.569076, 0.0),
+        Point(5.5, 27.569076, 3.5),
+        Point(1.0, 27.569076, 0.0),
     ]
 
     south = NurbsCurve.create(False, 3, pts_south)
@@ -965,9 +1007,13 @@ def test_nurbscurve_interpolated():
     from session_py import knot
 
     points = [
-        Point(14, 9, 0), Point(15.342777, 13.734889, 0), Point(21.897914, 32.239195, 0),
-        Point(24.678472, 0.354555, 0), Point(33.813678, 24.76858, 0),
-        Point(39.626394, 15.47249, 0), Point(41, 13, 0)
+        Point(14, 9, 0),
+        Point(15.342777, 13.734889, 0),
+        Point(21.897914, 32.239195, 0),
+        Point(24.678472, 0.354555, 0),
+        Point(33.813678, 24.76858, 0),
+        Point(39.626394, 15.47249, 0),
+        Point(41, 13, 0),
     ]
 
     c = Primitives.create_interpolated(points, knot.CurveKnotStyle.Chord)

@@ -245,6 +245,7 @@ def test_control_vertices_access():
 
     # Raw CV access - cv() returns view of internal storage
     cv_arr = s.cv(0, 0)
+
     MINI_CHECK(cv_arr[2] == 0)
     cv_arr[2] = 10.0
     MINI_CHECK(cv_arr[2] == 10)
@@ -361,6 +362,7 @@ def test_domain():
     # Get domain 0 - 1
     domain_u = s.domain(0)
     domain_v = s.domain(1)
+
     MINI_CHECK(TOLERANCE.is_close(domain_u[0], 0))
     MINI_CHECK(TOLERANCE.is_close(domain_u[1], 1))
 
@@ -551,6 +553,7 @@ def test_evaluation():
 
     # point_at(u, v) - returns Point
     p1 = s.point_at(u, v)
+
     MINI_CHECK(TOLERANCE.is_point_close(p1, Point(2.5, 2.5, 3.0)))
 
     # normal_at(u, v) - returns Vector
@@ -610,6 +613,7 @@ def test_modification():
     # Reverse one direction
     s_rev = copy.deepcopy(s)
     s_rev.reverse(0)
+
     MINI_CHECK(s_rev.point_at_corner(0, 0) == s.point_at_corner(1, 0))
     MINI_CHECK(s_rev.normal_at(0.5, 0.5) == s.normal_at(0.5, 0.5) * -1)
 
@@ -688,6 +692,7 @@ def test_transformations():
     surface1 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     surface1.xform = Xform.translation(0.0, 0.0, 1.0)
     surface1.transform()
+
     MINI_CHECK(surface1.xform.is_identity() == False)
     MINI_CHECK(surface1.cv(0, 0)[2] == 1.0)
 
@@ -726,6 +731,7 @@ def test_meshing():
     sphere = Primitives.sphere_surface(0, 0, 0, 3.0)
     mesh_sphere = sphere.mesh()
     mesh_sphere_adaptive = sphere.mesh_adaptive(45.0)
+
     MINI_CHECK(mesh_sphere.is_valid())
     MINI_CHECK(mesh_sphere_adaptive.is_valid())
 
@@ -763,8 +769,14 @@ def test_meshing():
     MINI_CHECK(mesh_cylinder_adaptive.is_valid())
 
     # 6. Ruled — bilinear (degree 1x1), tests twist subdivision
-    ra = NurbsCurve.create(False, 1, [Point(0, 64, 0), Point(5, 64, 5)])
-    rb = NurbsCurve.create(False, 1, [Point(0, 69, 5), Point(5, 69, 0)])
+    ra = NurbsCurve.create(False, 1, [
+        Point(0, 64, 0),
+        Point(5, 64, 5),
+    ])
+    rb = NurbsCurve.create(False, 1, [
+        Point(0, 69, 5),
+        Point(5, 69, 0),
+    ])
     hypar = Primitives.create_ruled(ra, rb)
     mesh_hypar = hypar.mesh()
     mesh_hypar_adaptive = hypar.mesh_adaptive(45.0)
@@ -773,7 +785,11 @@ def test_meshing():
 
     # 7. Sweep1 — circle along curved rail
     profile = Primitives.circle(0, 0, 0, 1.0)
-    rail = NurbsCurve.create(False, 2, [Point(0, 76, 0), Point(0, 81, 0), Point(2, 85, 0)])
+    rail = NurbsCurve.create(False, 2, [
+        Point(0, 76, 0),
+        Point(0, 81, 0),
+        Point(2, 85, 0),
+    ])
     sweep1 = Primitives.create_sweep1(rail, profile)
     mesh_sweep1 = sweep1.mesh()
     mesh_sweep1_adaptive = sweep1.mesh_adaptive(45.0)
@@ -781,10 +797,26 @@ def test_meshing():
     MINI_CHECK(mesh_sweep1_adaptive.is_valid())
 
     # 8. Sweep2 — two rails + cross sections
-    r1 = NurbsCurve.create(False, 2, [Point(0, 89, 0), Point(1, 93, 0), Point(2, 94, 0)])
-    r2 = NurbsCurve.create(False, 2, [Point(4, 89, 0), Point(4, 93, 0), Point(3, 94, 0)])
-    sh1 = NurbsCurve.create(False, 2, [Point(0, 89, 0), Point(2, 89, 2), Point(4, 89, 0)])
-    sh2 = NurbsCurve.create(False, 2, [Point(2, 94, 0), Point(2.5, 94, 1.5), Point(3, 94, 0)])
+    r1 = NurbsCurve.create(False, 2, [
+        Point(0, 89, 0),
+        Point(1, 93, 0),
+        Point(2, 94, 0),
+    ])
+    r2 = NurbsCurve.create(False, 2, [
+        Point(4, 89, 0),
+        Point(4, 93, 0),
+        Point(3, 94, 0),
+    ])
+    sh1 = NurbsCurve.create(False, 2, [
+        Point(0, 89, 0),
+        Point(2, 89, 2),
+        Point(4, 89, 0),
+    ])
+    sh2 = NurbsCurve.create(False, 2, [
+        Point(2, 94, 0),
+        Point(2.5, 94, 1.5),
+        Point(3, 94, 0),
+    ])
     sweep2 = Primitives.create_sweep2(r1, r2, [sh1, sh2])
     mesh_sweep2 = sweep2.mesh()
     mesh_sweep2_adaptive = sweep2.mesh_adaptive(45.0)
@@ -793,13 +825,27 @@ def test_meshing():
 
     # 9. Edge surface (Coons patch) — 4 boundary curves
     south = NurbsCurve.create(False, 3, [
-        Point(1, 104, 0), Point(1, 106, 3), Point(1, 109, 3), Point(1, 111, 0),
+        Point(1, 104, 0),
+        Point(1, 106, 3),
+        Point(1, 109, 3),
+        Point(1, 111, 0),
     ])
-    west  = NurbsCurve.create(False, 2, [Point(10, 104, 0), Point(5.5, 104, 3.5), Point(1, 104, 0)])
+    west  = NurbsCurve.create(False, 2, [
+        Point(10, 104, 0),
+        Point(5.5, 104, 3.5),
+        Point(1, 104, 0),
+    ])
     north = NurbsCurve.create(False, 3, [
-        Point(10, 104, 0), Point(10, 106, 3), Point(10, 109, 3), Point(10, 111, 0),
+        Point(10, 104, 0),
+        Point(10, 106, 3),
+        Point(10, 109, 3),
+        Point(10, 111, 0),
     ])
-    east  = NurbsCurve.create(False, 2, [Point(10, 111, 0), Point(5.5, 111, 3.5), Point(1, 111, 0)])
+    east  = NurbsCurve.create(False, 2, [
+        Point(10, 111, 0),
+        Point(5.5, 111, 3.5),
+        Point(1, 111, 0),
+    ])
     arched = Primitives.create_edge(south, west, north, east)
     mesh_arched = arched.mesh()
     mesh_arched_adaptive = arched.mesh_adaptive(45.0)
@@ -815,7 +861,11 @@ def test_meshing():
 
     # 11. Planar — mesh() early exit: 2 triangles
     planar = NurbsCurve.create(False, 1, [
-        Point(0, 132, 0), Point(6, 132, 0), Point(6, 136, 0), Point(0, 136, 0), Point(0, 132, 0),
+        Point(0, 132, 0),
+        Point(6, 132, 0),
+        Point(6, 136, 0),
+        Point(0, 136, 0),
+        Point(0, 132, 0),
     ])
     pln = Primitives.create_planar(planar)
     mesh_planar = pln.mesh()

@@ -13,6 +13,7 @@ def test_read_bunny():
     from session_py import Mesh
     from session_py.obj import read_obj
     mesh = read_obj(str(bunny_path))
+
     MINI_CHECK(mesh.number_of_vertices() == 2503)
     MINI_CHECK(mesh.number_of_faces() == 4968)
     vertices, faces = mesh.to_vertices_and_faces()
@@ -34,6 +35,7 @@ def test_write_read_roundtrip():
     v3 = original_mesh.add_vertex(Point(0, 0, 1))
     original_mesh.add_face([v0, v1, v2])
     original_mesh.add_face([v0, v1, v3])
+
     MINI_CHECK(original_mesh.number_of_vertices() == 4)
     MINI_CHECK(original_mesh.number_of_faces() == 2)
     temp_file = str(Path(__file__).resolve().parents[2] / "serialization" / "test_temp_roundtrip.obj")

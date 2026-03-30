@@ -172,12 +172,12 @@ def test_plane_is_right_hand():
     default_pl.rotate(PI / 4.0)
     rotated_rh = default_pl.is_right_hand()
 
-    MINI_CHECK(xy_rh == True)
-    MINI_CHECK(yz_rh == True)
-    MINI_CHECK(xz_rh == True)
-    MINI_CHECK(default_rh == True)
-    MINI_CHECK(reversed_rh == True)
-    MINI_CHECK(rotated_rh == True)
+    MINI_CHECK(xy_rh)
+    MINI_CHECK(yz_rh)
+    MINI_CHECK(xz_rh)
+    MINI_CHECK(default_rh)
+    MINI_CHECK(reversed_rh)
+    MINI_CHECK(rotated_rh)
 
 
 @MINI_TEST("Plane", "Is Coplanar")
@@ -211,14 +211,14 @@ def test_plane_is_coplanar():
     p6 += Vector(0.0, 0.0, 1.0)
     not_coplanar = Plane.is_coplanar(p5, p6, True)
 
-    MINI_CHECK(same_dir == True)
-    MINI_CHECK(same_dir_flipped == True)
-    MINI_CHECK(same_dir_strict == False)
-    MINI_CHECK(same_pos == True)
-    MINI_CHECK(diff_pos == False)
-    MINI_CHECK(coplanar == True)
-    MINI_CHECK(coplanar_reversed == True)
-    MINI_CHECK(not_coplanar == False)
+    MINI_CHECK(same_dir)
+    MINI_CHECK(same_dir_flipped)
+    MINI_CHECK(not same_dir_strict)
+    MINI_CHECK(same_pos)
+    MINI_CHECK(not diff_pos)
+    MINI_CHECK(coplanar)
+    MINI_CHECK(coplanar_reversed)
+    MINI_CHECK(not not_coplanar)
 
 
 @MINI_TEST("Plane", "Transform")

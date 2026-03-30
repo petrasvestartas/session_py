@@ -1,3 +1,9 @@
+# BVH — binary tree with OBB leaves, Morton-code (LBVH) construction.
+# Use for: collision detection and closest-point between many dynamic objects.
+#   Handles oriented boxes; supports OBB-OBB overlap as the inner test.
+# Prefer over AABBTree when objects rotate or you need OBB tightness.
+# Prefer over RTree  when all queries are nearest-object, not region overlap.
+# Prefer over KDTree when objects are volumetric (not point clouds).
 """Boundary Volume Hierarchy (BVH) for spatial acceleration.
 
 This module implements a BVH tree using Morton codes for efficient spatial
@@ -8,10 +14,11 @@ algorithm from Karras 2012.
 import uuid
 import heapq
 import numpy as np
-from typing import List, Tuple, Optional, NamedTuple
+from typing import List, Tuple, Optional
 from .point import Point
 from .vector import Vector
-from .obb import Obb
+from .obb import OBB
+from .aabb import AABB
 
 # Try to import numba for JIT compilation
 try:
@@ -31,17 +38,6 @@ except ImportError:
         return decorator
 
 
-class BvhAABB(NamedTuple):
-    """Lightweight axis-aligned bounding box used internally by BVH."""
-
-    cx: float
-    cy: float
-    cz: float
-    hx: float
-    hy: float
-    hz: float
-
-
 class BVHNode:
     """A node in the BVH tree."""
 
@@ -51,7 +47,7 @@ class BVHNode:
         self.left: Optional["BVHNode"] = None
         self.right: Optional["BVHNode"] = None
         self.object_id: int = -1
-        self.aabb: Optional[BvhAABB] = None
+        self.aabb: Optional[AABB] = None
 
     def is_leaf(self) -> bool:
         return self.object_id != -1
@@ -284,7 +280,7 @@ def _check_collisions_jit(
 
 
 def _ray_aabb_intersect(
-    origin: Point, direction: Vector, box: BvhAABB
+    origin: Point, direction: Vector, box: AABB
 ) -> Tuple[bool, float, float]:
     """Check if a ray intersects an AABB."""
     min_x = box.cx - box.hx
@@ -348,7 +344,7 @@ class BVH:
         self._guid = value
 
     @staticmethod
-    def compute_world_size(bounding_boxes: List[Obb]) -> float:
+    def compute_world_size(bounding_boxes: List[OBB]) -> float:
         """Compute world size from bounding boxes."""
         if not bounding_boxes:
             return 1000.0
@@ -372,13 +368,13 @@ class BVH:
         return max(max_extent * 2.2, 10.0)
 
     @classmethod
-    def from_boxes(cls, bounding_boxes: List[Obb], world_size: float) -> "BVH":
+    def from_boxes(cls, bounding_boxes: List[OBB], world_size: float) -> "BVH":
         """Create a BVH from a list of bounding boxes."""
         bvh = cls(world_size)
         bvh.build(bounding_boxes)
         return bvh
 
-    def build_with_guids(self, boxes_with_guids: List[Tuple[Obb, str]]):
+    def build_with_guids(self, boxes_with_guids: List[Tuple[OBB, str]]):
         """Build BVH from bounding boxes with GUIDs."""
         if not boxes_with_guids:
             self.root = None
@@ -390,7 +386,7 @@ class BVH:
         self.world_size = self.compute_world_size(bounding_boxes)
         self.build(bounding_boxes)
 
-    def build(self, bounding_boxes: List[Obb]) -> None:
+    def build(self, bounding_boxes: List[OBB]) -> None:
         """Build the BVH tree from bounding boxes using LBVH algorithm."""
         if not bounding_boxes:
             self.root = None
@@ -409,7 +405,7 @@ class BVH:
             morton_code = calculate_morton_code(
                 bbox.center[0], bbox.center[1], bbox.center[2], self.world_size
             )
-            aabb = BvhAABB(
+            aabb = AABB(
                 bbox.center[0],
                 bbox.center[1],
                 bbox.center[2],
@@ -544,7 +540,7 @@ class BVH:
             max_y = max(a.cy + a.hy, b.cy + b.hy)
             max_z = max(a.cz + a.hz, b.cz + b.hz)
 
-            node.aabb = BvhAABB(
+            node.aabb = AABB(
                 (min_x + max_x) * 0.5,
                 (min_y + max_y) * 0.5,
                 (min_z + max_z) * 0.5,
@@ -601,7 +597,7 @@ class BVH:
         # Don't build Box tree - arena is sufficient
         self.root = None
 
-    def merge_aabb(self, aabb1: Obb, aabb2: Obb) -> Obb:
+    def merge_aabb(self, aabb1: OBB, aabb2: OBB) -> OBB:
         """Merge two AABBs into a single encompassing AABB."""
         min_x = min(
             aabb1.center[0] - aabb1.half_size[0], aabb2.center[0] - aabb2.half_size[0]
@@ -628,11 +624,11 @@ class BVH:
             (max_x - min_x) / 2, (max_y - min_y) / 2, (max_z - min_z) / 2
         )
 
-        return Obb(
+        return OBB(
             center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), half_size
         )
 
-    def aabb_intersect(self, aabb1: Obb, aabb2: Obb) -> bool:
+    def aabb_intersect(self, aabb1: OBB, aabb2: OBB) -> bool:
         """Check if two AABBs intersect."""
         min1_x = aabb1.center[0] - aabb1.half_size[0]
         max1_x = aabb1.center[0] + aabb1.half_size[0]
@@ -657,7 +653,7 @@ class BVH:
             and max1_z >= min2_z
         )
 
-    def _aabb_intersect_internal(self, aabb1: BvhAABB, aabb2: BvhAABB) -> bool:
+    def _aabb_intersect_internal(self, aabb1: AABB, aabb2: AABB) -> bool:
         """Check if two internal AABBs intersect."""
         min1_x = aabb1.cx - aabb1.hx
         max1_x = aabb1.cx + aabb1.hx
@@ -711,7 +707,7 @@ class BVH:
         )
 
     def check_all_collisions(
-        self, bounding_boxes: List[Obb]
+        self, bounding_boxes: List[OBB]
     ) -> Tuple[List[Tuple[int, int]], List[int], int]:
         """Check for all pairwise collisions in the scene using fast NumPy arena."""
         if self.arena_root < 0 or self.arena_aabb is None:
@@ -815,7 +811,7 @@ class BVH:
         return all_collisions, colliding_indices, total_checks
 
     def check_all_collisions_guids(
-        self, bounding_boxes: List[Obb]
+        self, bounding_boxes: List[OBB]
     ) -> List[Tuple[str, str]]:
         """Check for all collisions and return GUID pairs."""
         collisions, _, _ = self.check_all_collisions(bounding_boxes)
@@ -842,7 +838,7 @@ class BVH:
 
         # Test root node
         root_aabb_data = self.arena_aabb[self.arena_root]
-        root_aabb = BvhAABB(*root_aabb_data)
+        root_aabb = AABB(*root_aabb_data)
         intersects, rtmin, rtmax = _ray_aabb_intersect(origin, direction, root_aabb)
         if not intersects or rtmax < 0.0:
             return False
@@ -870,7 +866,7 @@ class BVH:
             left_idx = self.arena_left[idx]
             if left_idx >= 0:
                 left_aabb_data = self.arena_aabb[left_idx]
-                left_aabb = BvhAABB(*left_aabb_data)
+                left_aabb = AABB(*left_aabb_data)
                 intersects, cmin, cmax = _ray_aabb_intersect(
                     origin, direction, left_aabb
                 )
@@ -880,7 +876,7 @@ class BVH:
             right_idx = self.arena_right[idx]
             if right_idx >= 0:
                 right_aabb_data = self.arena_aabb[right_idx]
-                right_aabb = BvhAABB(*right_aabb_data)
+                right_aabb = AABB(*right_aabb_data)
                 intersects, cmin, cmax = _ray_aabb_intersect(
                     origin, direction, right_aabb
                 )

@@ -7,9 +7,9 @@ from .vector import Vector
 from .tolerance import Tolerance
 from .color import Color
 from .xform import Xform
-from .obb import Obb
+from .obb import OBB
 from .bvh import BVH
-from .remesh_cdt import cdt_triangulate as _cdt_triangulate
+from .remesh_cdt import _cdt_triangulate as _cdt_triangulate
 
 
 class ColorMode(Enum):
@@ -412,7 +412,7 @@ class Mesh:
                     vx = ny*uz - nz*uy; vy = nz*ux - nx*uz; vz = nx*uy - ny*ux
                     pts2d = [Point(poly[i][0]*ux + poly[i][1]*uy + poly[i][2]*uz,
                                    poly[i][0]*vx + poly[i][1]*vy + poly[i][2]*vz, 0.0) for i in range(np_)]
-                    tris = _cdt_triangulate(pts2d, None)
+                    tris = _cdt_triangulate(pts2d, [])
                     mesh.triangulation[fkey] = [[vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]] for t in tris]
 
         return mesh
@@ -589,7 +589,7 @@ class Mesh:
             ordered = list(cycle)
             if area < 0:
                 bpts.reverse(); ordered.reverse()
-            tris = _cdt_triangulate(bpts, None)
+            tris = _cdt_triangulate(bpts, [])
             mesh.triangulation[fkey] = [[vkeys[ordered[t[0]]], vkeys[ordered[t[1]]], vkeys[ordered[t[2]]]] for t in tris]
         return mesh
 
@@ -597,104 +597,12 @@ class Mesh:
     def from_polygon_with_holes(
         polylines: List[List[Point]], sort_by_bbox: bool = False
     ) -> "Mesh":
+        from .remesh_cdt import RemeshCDT
+        from .polyline import Polyline
         if not polylines:
             return Mesh()
-        border_idx = 0
-        if sort_by_bbox and len(polylines) > 1:
-            max_diag = 0.0
-            for i, poly in enumerate(polylines):
-                if len(poly) < 3:
-                    continue
-                xs = [p[0] for p in poly]
-                ys = [p[1] for p in poly]
-                zs = [p[2] for p in poly]
-                dx = max(xs) - min(xs)
-                dy = max(ys) - min(ys)
-                dz = max(zs) - min(zs)
-                diag = math.sqrt(dx*dx + dy*dy + dz*dz)
-                if diag > max_diag:
-                    max_diag = diag
-                    border_idx = i
-        def strip_close(pts):
-            if len(pts) > 1:
-                f, b = pts[0], pts[-1]
-                if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
-                    return pts[:-1]
-            return pts
-        border = strip_close(polylines[border_idx])
-        if len(border) < 3:
-            return Mesh()
-        from .polyline import Polyline as _Polyline
-        origin, xaxis, yaxis, zaxis = _Polyline(border).get_average_plane()
-        def project_2d(p):
-            dx = p[0] - origin[0]
-            dy = p[1] - origin[1]
-            dz = p[2] - origin[2]
-            u = dx * xaxis[0] + dy * xaxis[1] + dz * xaxis[2]
-            v = dx * yaxis[0] + dy * yaxis[1] + dz * yaxis[2]
-            return Point(u, v, 0.0)
-        boundary_2d = [project_2d(p) for p in border]
-        def signed_area(pts):
-            a = 0.0
-            n = len(pts)
-            for i in range(n):
-                j = (i + 1) % n
-                a += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1]
-            return a * 0.5
-        if signed_area(boundary_2d) < 0.0:
-            border.reverse()
-            boundary_2d.reverse()
-        holes_2d = []
-        hole_pts_3d = []
-        for i, poly in enumerate(polylines):
-            if i == border_idx:
-                continue
-            hole = strip_close(poly)
-            if len(hole) < 3:
-                continue
-            hole_2d = [project_2d(p) for p in hole]
-            if signed_area(hole_2d) > 0.0:
-                hole.reverse()
-                hole_2d.reverse()
-            holes_2d.append(hole_2d)
-            hole_pts_3d.append(hole)
-        tris = _cdt_triangulate(boundary_2d, holes_2d if holes_2d else None)
-        all_pts = list(border)
-        for h in hole_pts_3d:
-            all_pts.extend(h)
-        mesh = Mesh()
-        vkeys = []
-        for p in all_pts:
-            vkeys.append(mesh.add_vertex(p))
-        if not holes_2d:
-            fkey = mesh.add_face(list(vkeys))
-            tri_list = []
-            for t in tris:
-                if vkeys[t[0]] == vkeys[t[1]] or vkeys[t[1]] == vkeys[t[2]] or vkeys[t[2]] == vkeys[t[0]]:
-                    continue
-                tri_list.append([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
-            n_vk = len(vkeys)
-            covered = set(k for t in tri_list for k in t)
-            for m in range(n_vk):
-                if vkeys[m] not in covered:
-                    tri_list.append([vkeys[(m - 1) % n_vk], vkeys[m], vkeys[(m + 1) % n_vk]])
-            mesh.triangulation[fkey] = tri_list
-        else:
-            fkey = mesh.add_face(list(vkeys[:len(border)]))
-            if fkey is not None:
-                hole_rings = []
-                off = len(border)
-                for h in hole_pts_3d:
-                    hole_rings.append(list(vkeys[off:off+len(h)]))
-                    off += len(h)
-                mesh.face_holes[fkey] = hole_rings
-                tri_list = []
-                for t in tris:
-                    if vkeys[t[0]] == vkeys[t[1]] or vkeys[t[1]] == vkeys[t[2]] or vkeys[t[2]] == vkeys[t[0]]:
-                        continue
-                    tri_list.append([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
-                mesh.triangulation[fkey] = tri_list
-        return mesh
+        pls = [Polyline(v) for v in polylines]
+        return RemeshCDT.from_polylines(pls, False, not sort_by_bbox)
 
     @staticmethod
     def loft(polylines0: List, polylines1: List, cap: bool = True) -> "Mesh":
@@ -749,7 +657,7 @@ class Mesh:
             _, bot_n0, _, top_n0 = poly_infos[0]
             bpts = [Point(*proj(all_bot[i]), 0.0) for i in range(bot_n0)]
             b_hpts = [[Point(*proj(all_bot[i]), 0.0) for i in range(off, off+cnt)] for off, cnt, _, _ in poly_infos[1:]]
-            bot_tris = _cdt_triangulate(bpts, b_hpts if b_hpts else None)
+            bot_tris = _cdt_triangulate(bpts, b_hpts if b_hpts else [])
             fk_bot = mesh.add_face([bvk[bot_n0 - 1 - i] for i in range(bot_n0)])
             if fk_bot is not None:
                 if b_hpts:
@@ -757,7 +665,7 @@ class Mesh:
                 mesh.triangulation[fk_bot] = [[bvk[t[0]], bvk[t[2]], bvk[t[1]]] for t in bot_tris]
             tpts = [Point(*proj(all_top[i]), 0.0) for i in range(top_n0)]
             t_hpts = [[Point(*proj(all_top[i]), 0.0) for i in range(off, off+cnt)] for _, _, off, cnt in poly_infos[1:]]
-            top_tris = _cdt_triangulate(tpts, t_hpts if t_hpts else None)
+            top_tris = _cdt_triangulate(tpts, t_hpts if t_hpts else [])
             fk_top = mesh.add_face([tvk[i] for i in range(top_n0)])
             if fk_top is not None:
                 if t_hpts:
@@ -905,7 +813,7 @@ class Mesh:
                         um = math.sqrt(ux*ux+uy*uy+uz*uz); ux /= um; uy /= um; uz /= um
                         vx = ny*uz-nz*uy; vy = nz*ux-nx*uz; vz = nx*uy-ny*ux
                         bpts = [Point(p[0]*ux+p[1]*uy+p[2]*uz, p[0]*vx+p[1]*vy+p[2]*vz, 0.0) for p in top_pts]
-                        tris = _cdt_triangulate(bpts, None)
+                        tris = _cdt_triangulate(bpts, [])
                         if tris:
                             panel.mesh.triangulation[fk] = [[top_cap[t[0]], top_cap[t[1]], top_cap[t[2]]] for t in tris]
             top_arr = np.array([[p[0], p[1], p[2]] for p in top_pts])
@@ -978,7 +886,7 @@ class Mesh:
                         bcux /= bcum; bcuy /= bcum; bcuz /= bcum
                         bcvx = bcny*bcuz-bcnz*bcuy; bcvy = bcnz*bcux-bcnx*bcuz; bcvz = bcnx*bcuy-bcny*bcux
                         bpts2 = [Point(p[0]*bcux+p[1]*bcuy+p[2]*bcuz, p[0]*bcvx+p[1]*bcvy+p[2]*bcvz, 0.0) for p in bot_pts]
-                        btris = _cdt_triangulate(bpts2, None)
+                        btris = _cdt_triangulate(bpts2, [])
                         if btris:
                             panel.mesh.triangulation[bot_cap_fk] = [[bot_cap[t[0]], bot_cap[t[1]], bot_cap[t[2]]] for t in btris]
             panels.append(panel)
@@ -1332,7 +1240,7 @@ class Mesh:
             return x
 
         if tolerance > 0.0:
-            boxes = [Obb.from_point(p, tolerance) for p in positions]
+            boxes = [OBB.from_point(p, tolerance) for p in positions]
             ws = BVH.compute_world_size(boxes)
             bvh = BVH.from_boxes(boxes, ws)
             pairs, _, _ = bvh.check_all_collisions(boxes)

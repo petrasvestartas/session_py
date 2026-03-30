@@ -8,7 +8,7 @@ including lines, planes, rays, boxes, spheres, triangles, and meshes.
 from typing import Optional, Tuple, List
 from .line import Line
 from .point import Point
-from .obb import Obb
+from .obb import OBB
 from .mesh import Mesh
 from .bvh import BVH
 from .closest import Closest
@@ -238,7 +238,7 @@ def plane_plane_plane(plane0, plane1, plane2) -> Optional[Point]:
 
 
 def ray_box(
-    line: Line, box: Obb, t0: float, t1: float
+    line: Line, box: OBB, t0: float, t1: float
 ) -> Optional[List[Point]]:
     """
     Find intersection points between a line and an axis-aligned bounding box.
@@ -511,9 +511,9 @@ def ray_mesh_bvh(
         return None
 
     # Build AABBs for triangles
-    tri_boxes: List[Obb] = []
+    tri_boxes: List[OBB] = []
     for v0, v1, v2 in tris:
-        tri_boxes.append(Obb.from_points([v0, v1, v2]))
+        tri_boxes.append(OBB.from_points([v0, v1, v2]))
 
     world_size = BVH.compute_world_size(tri_boxes)
     bvh = BVH.from_boxes(tri_boxes, world_size)

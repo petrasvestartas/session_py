@@ -11,42 +11,49 @@ from session_py.tolerance import (
 @MINI_TEST("Tolerance", "Is Zero")
 def test_tolerance_is_zero():
     result = TOLERANCE.is_zero(1e-10)
-    MINI_CHECK(result == True)
+
+    MINI_CHECK(result)
 
 
 @MINI_TEST("Tolerance", "Is Close")
 def test_tolerance_is_close():
     result = TOLERANCE.is_close(1.0, 1.0 + 1e-7)
-    MINI_CHECK(result == True)
+
+    MINI_CHECK(result)
 
 
 @MINI_TEST("Tolerance", "Is Positive")
 def test_tolerance_is_positive():
     result = TOLERANCE.is_positive(1.0)
-    MINI_CHECK(result == True)
+
+    MINI_CHECK(result)
 
 
 @MINI_TEST("Tolerance", "Is Negative")
 def test_tolerance_is_negative():
     result = TOLERANCE.is_negative(-1.0)
-    MINI_CHECK(result == True)
+
+    MINI_CHECK(result)
 
 
 @MINI_TEST("Tolerance", "Is Between")
 def test_tolerance_is_between():
     result = TOLERANCE.is_between(0.5, 0.0, 1.0)
-    MINI_CHECK(result == True)
+
+    MINI_CHECK(result)
 
 
 @MINI_TEST("Tolerance", "Format Number")
 def test_tolerance_format_number():
     result = TOLERANCE.format_number(3.14159, precision=2)
+
     MINI_CHECK(result == "3.14")
 
 
 @MINI_TEST("Tolerance", "Key")
 def test_tolerance_key():
     result = TOLERANCE.key([1.0, 2.0, 3.0])
+
     MINI_CHECK(result == "1.000,2.000,3.000")
 
 
@@ -55,6 +62,7 @@ def test_tolerance_runtime_modification():
     # Get current default values
     original_absolute = TOLERANCE.absolute
     original_relative = TOLERANCE.relative
+
     MINI_CHECK(original_absolute == 1e-9)
     MINI_CHECK(original_relative == 1e-6)
 
@@ -66,7 +74,7 @@ def test_tolerance_runtime_modification():
 
     # Test with new tolerance - 1e-11 difference now fails is_close
     close_with_tight = TOLERANCE.is_close(1.0, 1.0 + 1e-11)
-    MINI_CHECK(close_with_tight == False)
+    MINI_CHECK(not close_with_tight)
 
     # Reset to defaults
     TOLERANCE.reset()
@@ -75,13 +83,14 @@ def test_tolerance_runtime_modification():
 
     # Same test now passes with default tolerance
     close_with_default = TOLERANCE.is_close(1.0, 1.0 + 1e-11)
-    MINI_CHECK(close_with_default == True)
+    MINI_CHECK(close_with_default)
 
 
 @MINI_TEST("Tolerance", "Unique From Two Int")
 def test_tolerance_unique_from_two_int():
     r0 = unique_from_two_int(3, 7)
     r1 = unique_from_two_int(7, 3)
+
     MINI_CHECK(r0 == r1)
     MINI_CHECK(r0 == (7 << 32) | 3)
 

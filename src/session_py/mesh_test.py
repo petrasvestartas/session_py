@@ -102,6 +102,7 @@ def test_mesh_from_polylines():
             Point(1.853404, 0.866025, 1.578581),
         ],
     ], 0.001)
+
     MINI_CHECK(mesh.is_valid())
 
 
@@ -134,6 +135,7 @@ def test_mesh_from_lines():
                          Point(3.866593, 0.371225, 1.376346)),
     ]
     mesh = Mesh.from_lines(lines, True)
+
     MINI_CHECK(mesh.is_valid())
 
 
@@ -171,12 +173,24 @@ def test_mesh_from_polygon_with_holes():
             Point(7.950364, 0.924872, 0.345738),
         ],
     ], True)
+
     MINI_CHECK(mesh.is_valid())
 
     mesh_sorted = Mesh.from_polygon_with_holes([
-        [Point(1, 1, 0), Point(3, 1, 0), Point(3, 3, 0), Point(1, 3, 0)],
-        [Point(0, 0, 0), Point(4, 0, 0), Point(4, 4, 0), Point(0, 4, 0)],
+        [
+            Point(1, 1, 0),
+            Point(3, 1, 0),
+            Point(3, 3, 0),
+            Point(1, 3, 0),
+        ],
+        [
+            Point(0, 0, 0),
+            Point(4, 0, 0),
+            Point(4, 4, 0),
+            Point(0, 4, 0),
+        ],
     ], True)
+
     MINI_CHECK(mesh_sorted.is_valid())
 
 
@@ -251,10 +265,12 @@ def test_mesh_loft():
         ]),
     ]
     mesh = Mesh.loft(bottom, top, True)
+
     MINI_CHECK(mesh.is_valid())
     MINI_CHECK(mesh.is_closed())
 
     mesh_no_cap = Mesh.loft(bottom, top, False)
+
     MINI_CHECK(mesh_no_cap.is_valid())
     MINI_CHECK(not mesh_no_cap.is_closed())
 
@@ -268,15 +284,27 @@ def test_mesh_from_polygon_with_holes_many():
     for i in range(4):
         x = i * 7.0
         inputs.append([
-            [Point(x, 0, 0), Point(x+5, 0, 0), Point(x+5, 5, 0), Point(x, 5, 0)],
-            [Point(x+1, 1, 0), Point(x+4, 1, 0), Point(x+4, 4, 0), Point(x+1, 4, 0)],
+            [
+                Point(x, 0, 0),
+                Point(x+5, 0, 0),
+                Point(x+5, 5, 0),
+                Point(x, 5, 0),
+            ],
+            [
+                Point(x+1, 1, 0),
+                Point(x+4, 1, 0),
+                Point(x+4, 4, 0),
+                Point(x+1, 4, 0),
+            ],
         ])
     meshes = Mesh.from_polygon_with_holes_many(inputs)
+
     MINI_CHECK(meshes[0].is_valid())
     MINI_CHECK(meshes[1].is_valid())
     MINI_CHECK(meshes[2].is_valid())
     MINI_CHECK(meshes[3].is_valid())
     meshes_seq = Mesh.from_polygon_with_holes_many(inputs, False, False)
+
     MINI_CHECK(meshes_seq[0].number_of_faces() == meshes[0].number_of_faces())
 
 
@@ -290,11 +318,22 @@ def test_mesh_loft_many():
     for i in range(6):
         x = i * 3.0
         b = Polyline([
-            Point(x, 0, 0), Point(x+1, 0, 0), Point(x+1, 1, 0), Point(x, 1, 0), Point(x, 0, 0)])
+            Point(x, 0, 0),
+            Point(x+1, 0, 0),
+            Point(x+1, 1, 0),
+            Point(x, 1, 0),
+            Point(x, 0, 0),
+        ])
         t = Polyline([
-            Point(x, 0, 1+i*0.5), Point(x+1, 0, 1+i*0.5), Point(x+1, 1, 1+i*0.5), Point(x, 1, 1+i*0.5), Point(x, 0, 1+i*0.5)])
+            Point(x, 0, 1+i*0.5),
+            Point(x+1, 0, 1+i*0.5),
+            Point(x+1, 1, 1+i*0.5),
+            Point(x, 1, 1+i*0.5),
+            Point(x, 0, 1+i*0.5),
+        ])
         loft_inputs.append(([b], [t]))
     meshes = Mesh.loft_many(loft_inputs)
+
     MINI_CHECK(meshes[0].is_valid())
     MINI_CHECK(meshes[0].is_closed())
     MINI_CHECK(meshes[1].is_valid())
@@ -308,6 +347,7 @@ def test_mesh_loft_many():
     MINI_CHECK(meshes[5].is_valid())
     MINI_CHECK(meshes[5].is_closed())
     meshes_seq = Mesh.loft_many(loft_inputs, True, False)
+
     MINI_CHECK(meshes_seq[0].is_valid())
     MINI_CHECK(meshes_seq[0].is_closed())
     MINI_CHECK(meshes_seq[1].is_valid())
@@ -330,108 +370,108 @@ def test_mesh_loft_panels():
 
     top7 = [
         [
-            Point(250,-250,500),
-            Point(250,250,500),
-            Point(-250,250,500),
-            Point(-250,-250,500),
-            Point(250,-250,500),
+            Point(250, -250, 500),
+            Point(250, 250, 500),
+            Point(-250, 250, 500),
+            Point(-250, -250, 500),
+            Point(250, -250, 500),
         ],
         [
-            Point(-250,500,250),
-            Point(-250,250,500),
-            Point(250,250,500),
-            Point(250,500,250),
-            Point(-250,500,250),
+            Point(-250, 500, 250),
+            Point(-250, 250, 500),
+            Point(250, 250, 500),
+            Point(250, 500, 250),
+            Point(-250, 500, 250),
         ],
         [
-            Point(250,-250,500),
-            Point(500,-250,250),
-            Point(500,250,250),
-            Point(250,250,500),
-            Point(250,-250,500),
+            Point(250, -250, 500),
+            Point(500, -250, 250),
+            Point(500, 250, 250),
+            Point(250, 250, 500),
+            Point(250, -250, 500),
         ],
         [
-            Point(250,500,250),
-            Point(250,250,500),
-            Point(500,250,250),
-            Point(250,500,250),
+            Point(250, 500, 250),
+            Point(250, 250, 500),
+            Point(500, 250, 250),
+            Point(250, 500, 250),
         ],
         [
-            Point(-250,500,250),
-            Point(250,500,250),
-            Point(250,500,-250),
-            Point(-250,500,-250),
-            Point(-250,500,250),
+            Point(-250, 500, 250),
+            Point(250, 500, 250),
+            Point(250, 500, -250),
+            Point(-250, 500, -250),
+            Point(-250, 500, 250),
         ],
         [
-            Point(250,500,250),
-            Point(500,250,250),
-            Point(500,250,-250),
-            Point(250,500,-250),
-            Point(250,500,250),
+            Point(250, 500, 250),
+            Point(500, 250, 250),
+            Point(500, 250, -250),
+            Point(250, 500, -250),
+            Point(250, 500, 250),
         ],
         [
-            Point(500,-250,250),
-            Point(500,-250,-250),
-            Point(500,250,-250),
-            Point(500,250,250),
-            Point(500,-250,250),
+            Point(500, -250, 250),
+            Point(500, -250, -250),
+            Point(500, 250, -250),
+            Point(500, 250, 250),
+            Point(500, -250, 250),
         ],
     ]
     bot7 = [
         [
-            Point(270.710678,-250,550),
-            Point(270.710678,265.891862,550),
-            Point(265.891862,270.710678,550),
-            Point(-250,270.710678,550),
-            Point(-250,-250,550),
-            Point(270.710678,-250,550),
+            Point(270.710678, -250, 550),
+            Point(270.710678, 265.891862, 550),
+            Point(265.891862, 270.710678, 550),
+            Point(-250, 270.710678, 550),
+            Point(-250, -250, 550),
+            Point(270.710678, -250, 550),
         ],
         [
-            Point(270.710678,-250,550),
-            Point(550,-250,270.710678),
-            Point(550,265.891862,270.710678),
-            Point(270.710678,265.891862,550),
-            Point(270.710678,-250,550),
+            Point(270.710678, -250, 550),
+            Point(550, -250, 270.710678),
+            Point(550, 265.891862, 270.710678),
+            Point(270.710678, 265.891862, 550),
+            Point(270.710678, -250, 550),
         ],
         [
-            Point(-250,550,270.710678),
-            Point(-250,270.710678,550),
-            Point(265.891862,270.710678,550),
-            Point(265.891862,550,270.710678),
-            Point(-250,550,270.710678),
+            Point(-250, 550, 270.710678),
+            Point(-250, 270.710678, 550),
+            Point(265.891862, 270.710678, 550),
+            Point(265.891862, 550, 270.710678),
+            Point(-250, 550, 270.710678),
         ],
         [
-            Point(265.891862,550,270.710678),
-            Point(265.891862,270.710678,550),
-            Point(270.710678,265.891862,550),
-            Point(550,265.891862,270.710678),
-            Point(550,270.710678,265.891862),
-            Point(270.710678,550,265.891862),
-            Point(265.891862,550,270.710678),
+            Point(265.891862, 550, 270.710678),
+            Point(265.891862, 270.710678, 550),
+            Point(270.710678, 265.891862, 550),
+            Point(550, 265.891862, 270.710678),
+            Point(550, 270.710678, 265.891862),
+            Point(270.710678, 550, 265.891862),
+            Point(265.891862, 550, 270.710678),
         ],
         [
-            Point(-250,550,270.710678),
-            Point(265.891862,550,270.710678),
-            Point(270.710678,550,265.891862),
-            Point(270.710678,550,-250),
-            Point(-250,550,-250),
-            Point(-250,550,270.710678),
+            Point(-250, 550, 270.710678),
+            Point(265.891862, 550, 270.710678),
+            Point(270.710678, 550, 265.891862),
+            Point(270.710678, 550, -250),
+            Point(-250, 550, -250),
+            Point(-250, 550, 270.710678),
         ],
         [
-            Point(270.710678,550,265.891862),
-            Point(550,270.710678,265.891862),
-            Point(550,270.710678,-250),
-            Point(270.710678,550,-250),
-            Point(270.710678,550,265.891862),
+            Point(270.710678, 550, 265.891862),
+            Point(550, 270.710678, 265.891862),
+            Point(550, 270.710678, -250),
+            Point(270.710678, 550, -250),
+            Point(270.710678, 550, 265.891862),
         ],
         [
-            Point(550,-250,270.710678),
-            Point(550,-250,-250),
-            Point(550,270.710678,-250),
-            Point(550,270.710678,265.891862),
-            Point(550,265.891862,270.710678),
-            Point(550,-250,270.710678),
+            Point(550, -250, 270.710678),
+            Point(550, -250, -250),
+            Point(550, 270.710678, -250),
+            Point(550, 270.710678, 265.891862),
+            Point(550, 265.891862, 270.710678),
+            Point(550, -250, 270.710678),
         ],
     ]
     panels, adj, top_mesh, bot_mesh = Mesh.loft_panels(top7, bot7, 0.001)
@@ -460,6 +500,7 @@ def test_mesh_loft_panels():
         w = panels[pair.pi].wall_faces[pair.wi]
         pt = panels[pair.pi].mesh.face_centroid(w.face_key)
         pt.name = f"p{pair.pi} f{w.face_index} - p{pair.pj} f{panels[pair.pj].wall_faces[pair.wj].face_index}"
+
     MINI_CHECK(len(panels) == 7)
     MINI_CHECK(panels[0].mesh.is_valid())
     MINI_CHECK(panels[1].mesh.is_valid())
@@ -670,8 +711,14 @@ def test_mesh_vertex_and_face_operations():
 
     hx, hy, hz = 0.5, 0.5, 0.5
     verts = [
-        Point(-hx, -hy, -hz), Point( hx, -hy, -hz), Point( hx,  hy, -hz), Point(-hx,  hy, -hz),
-        Point(-hx, -hy,  hz), Point( hx, -hy,  hz), Point( hx,  hy,  hz), Point(-hx,  hy,  hz),
+        Point(-hx, -hy, -hz),
+        Point( hx, -hy, -hz),
+        Point( hx,  hy, -hz),
+        Point(-hx,  hy, -hz),
+        Point(-hx, -hy,  hz),
+        Point( hx, -hy,  hz),
+        Point( hx,  hy,  hz),
+        Point(-hx,  hy,  hz),
     ]
     faces = [
         [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [0, 4, 7, 3], [1, 2, 6, 5],
@@ -1108,9 +1155,9 @@ def test_mesh_transformation():
     from session_py import Xform
 
     pts = [
-        Point(0,0,0),
-        Point(1,0,0),
-        Point(0,1,0),
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(0, 1, 0),
     ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2]])
     v0 = mesh.vertices()[0]
@@ -1119,6 +1166,7 @@ def test_mesh_transformation():
     mesh1 = mesh.duplicate()
     mesh1.xform = Xform.translation(0.0, 0.0, 1.0)
     mesh1.transform()
+
     MINI_CHECK(not mesh1.xform.is_identity())
     MINI_CHECK(mesh1.vertex_point(v0)[2] == 1.0)
 
@@ -1182,15 +1230,27 @@ def test_mesh_json_roundtrip():
     pmesh = Mesh.from_polylines(polys)
     loaded_tri = Mesh.__jsonload__(pmesh.__jsondump__())
     fk = sorted(pmesh.triangulation.keys())[0]
+
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
     MINI_CHECK(fk in loaded_tri.triangulation)
 
     # Face holes roundtrip
     hmesh = Mesh.from_polygon_with_holes([
-        [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
-        [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)]], True)
+        [
+            Point(0, 0, 0),
+            Point(4, 0, 0),
+            Point(4, 4, 0),
+            Point(0, 4, 0),
+        ],
+        [
+            Point(1, 1, 0),
+            Point(3, 1, 0),
+            Point(3, 3, 0),
+            Point(1, 3, 0),
+        ]], True)
     loaded_holes = Mesh.__jsonload__(hmesh.__jsondump__())
     hfk = sorted(hmesh.face_holes.keys())[0]
+
     MINI_CHECK(len(loaded_holes.face_holes) > 0)
     MINI_CHECK(loaded_holes.face_holes[hfk] == hmesh.face_holes[hfk])
 
@@ -1228,15 +1288,27 @@ def test_mesh_protobuf_roundtrip():
     pmesh = Mesh.from_polylines(polys)
     loaded_tri = Mesh.pb_loads(pmesh.pb_dumps())
     fk = sorted(pmesh.triangulation.keys())[0]
+
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
     MINI_CHECK(fk in loaded_tri.triangulation)
 
     # Face holes roundtrip
     hmesh = Mesh.from_polygon_with_holes([
-        [Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)],
-        [Point(1,1,0), Point(3,1,0), Point(3,3,0), Point(1,3,0)]], True)
+        [
+            Point(0, 0, 0),
+            Point(4, 0, 0),
+            Point(4, 4, 0),
+            Point(0, 4, 0),
+        ],
+        [
+            Point(1, 1, 0),
+            Point(3, 1, 0),
+            Point(3, 3, 0),
+            Point(1, 3, 0),
+        ]], True)
     loaded_holes = Mesh.pb_loads(hmesh.pb_dumps())
     hfk = sorted(hmesh.face_holes.keys())[0]
+
     MINI_CHECK(len(loaded_holes.face_holes) > 0)
     MINI_CHECK(loaded_holes.face_holes[hfk] == hmesh.face_holes[hfk])
 

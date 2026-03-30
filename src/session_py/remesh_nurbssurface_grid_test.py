@@ -90,8 +90,10 @@ def test_remesh_nurbs_surface_grid_flat_quad():
     from session_py import Point
 
     s = NurbsSurface.create(False, False, 1, 1, 2, 2, [
-        Point(0, 0, 0), Point(0, 4, 0),
-        Point(4, 0, 0), Point(4, 4, 0),
+        Point(0, 0, 0),
+        Point(0, 4, 0),
+        Point(4, 0, 0),
+        Point(4, 4, 0),
     ])
     m = RemeshNurbsSurfaceGrid.from_u_v(s, 0, 0)
 
@@ -107,8 +109,10 @@ def test_remesh_nurbs_surface_grid_flat_triangle():
     from session_py import Point
 
     s = NurbsSurface.create(False, False, 1, 1, 2, 2, [
-        Point(0, 0, 0), Point(2, 4, 0),
-        Point(4, 0, 0), Point(2, 4, 0),
+        Point(0, 0, 0),
+        Point(2, 4, 0),
+        Point(4, 0, 0),
+        Point(2, 4, 0),
     ])
     m = RemeshNurbsSurfaceGrid.from_u_v(s, 0, 0)
 

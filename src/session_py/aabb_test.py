@@ -12,6 +12,7 @@ def test_aabbtree_build_empty():
 
     m = Mesh()
     cp, fk, d = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 0.0))
+
     MINI_CHECK(d == float('inf'))
 
 
@@ -27,6 +28,7 @@ def test_aabbtree_build_single():
     vk2 = m.add_vertex(Point(0.0, 1.0, 0.0))
     m.add_face([vk0, vk1, vk2])
     cp, fk, d = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 1.0))
+
     MINI_CHECK(d > 0.0)
     MINI_CHECK(TOLERANCE.is_close(d, 1.0))
 
@@ -51,6 +53,7 @@ def test_aabbtree_build_multiple():
     m.add_face([vk3, vk4, vk5])
     m.add_face([vk6, vk7, vk8])
     cp, fk, d = Closest.mesh_point_aabb(m, Point(0.5, 0.0, 0.0))
+
     MINI_CHECK(d < 0.5)
 
 
@@ -69,6 +72,7 @@ def test_aabbtree_node_count():
     for i in range(100):
         m.add_face([vkeys[i*3], vkeys[i*3+1], vkeys[i*3+2]])
     cp, fk, d = Closest.mesh_point_aabb(m, Point(50.0, 0.0, 0.0))
+
     MINI_CHECK(d < 0.5)
 
 
@@ -80,6 +84,7 @@ def test_aabbtree_mesh_point_aabb():
 
     m = Primitives.cube(2.0)
     cp1, fk1, d1 = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 2.0))
+
     MINI_CHECK(TOLERANCE.is_close(cp1[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
     cp2, fk2, d2 = Closest.mesh_point_aabb(m, Point(1.0, 1.0, 1.0))
@@ -96,10 +101,41 @@ def test_aabbtree_mesh_point_aabb_matches_bvh():
     tp = Point(0.3, 0.7, 1.5)
     cp_bvh, fk_bvh, d_bvh = Closest.mesh_point(m, tp)
     cp_aabb, fk_aabb, d_aabb = Closest.mesh_point_aabb(m, tp)
+
     MINI_CHECK(TOLERANCE.is_close(d_bvh, d_aabb))
     MINI_CHECK(TOLERANCE.is_close(cp_bvh[0], cp_aabb[0]))
     MINI_CHECK(TOLERANCE.is_close(cp_bvh[1], cp_aabb[1]))
     MINI_CHECK(TOLERANCE.is_close(cp_bvh[2], cp_aabb[2]))
+
+
+@MINI_TEST("Aabb", "Constructor")
+def test_aabb_constructor():
+    import math
+    from session_py import AABB
+    from session_py import Point
+
+    # AABB(0,0,0, 1,2,3) — dims 2×4×6
+    a = AABB(0.0, 0.0, 0.0, 1.0, 2.0, 3.0)
+
+    MINI_CHECK(TOLERANCE.is_close(a.area(), 88.0))
+    MINI_CHECK(a.center() == Point(0.0, 0.0, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(a.diagonal(), 2.0 * math.sqrt(14.0)))
+    MINI_CHECK(a.is_valid())
+    MINI_CHECK(TOLERANCE.is_close(a.volume(), 48.0))
+    MINI_CHECK(a.closest_point(Point(0.0, 0.0, 0.0)) == Point(0.0, 0.0, 0.0))
+    MINI_CHECK(a.closest_point(Point(10.0, 0.0, 0.0)) == Point(1.0, 0.0, 0.0))
+    MINI_CHECK(a.contains(Point(0.0, 0.0, 0.0)))
+    MINI_CHECK(not a.contains(Point(10.0, 0.0, 0.0)))
+    MINI_CHECK(a.corner(False, False, False) == Point(-1.0, -2.0, -3.0))
+    MINI_CHECK(a.corner(True, True, True) == Point(1.0, 2.0, 3.0))
+    MINI_CHECK(len(a.get_corners()) == 8)
+    MINI_CHECK(len(a.get_edges()) == 12)
+    MINI_CHECK(a.point_at(1.0, 0.0, 0.0) == Point(1.0, 0.0, 0.0))
+    MINI_CHECK(a.point_at(0.0, 0.0, 0.0) == Point(0.0, 0.0, 0.0))
+    b = AABB(5.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+    a = a.union(b)
+    MINI_CHECK(a.min_point() == Point(-1.0, -2.0, -3.0))
+    MINI_CHECK(a.max_point() == Point(6.0, 2.0, 3.0))
 
 
 if __name__ == "__main__":

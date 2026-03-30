@@ -7,6 +7,8 @@ _CLASS_MODULE_MAP = {
     "ColumnElement": "element_column",
     "BeamElement": "element_beam",
     "PlateElement": "element_plate",
+    "Vertex": "graph",
+    "Edge": "graph",
 }
 
 

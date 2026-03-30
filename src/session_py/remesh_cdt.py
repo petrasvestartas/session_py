@@ -693,12 +693,128 @@ class _Delaunay:
         return res
 
 
-def cdt_triangulate(border_2d, holes_2d=None):
+def _from_polygon_with_holes(polylines, is_2d=False, is_first_boundary=True):
+    from .mesh import Mesh
+    from .point import Point
+    from .session_config import SESSION_CONFIG
+    if not polylines:
+        return Mesh()
+    border_idx = 0
+    if not is_first_boundary and len(polylines) > 1:
+        max_diag = 0.0
+        for i, pl in enumerate(polylines):
+            pts = pl if not hasattr(pl, 'get_points') else pl.get_points()
+            if len(pts) < 3:
+                continue
+            xs = [p[0] for p in pts]; ys = [p[1] for p in pts]; zs = [p[2] for p in pts]
+            dx = max(xs) - min(xs); dy = max(ys) - min(ys); dz = max(zs) - min(zs)
+            diag = math.sqrt(dx*dx + dy*dy + dz*dz)
+            if diag > max_diag:
+                max_diag = diag; border_idx = i
+    def strip_close(pts):
+        if len(pts) > 1:
+            f, b = pts[0], pts[-1]
+            if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
+                return pts[:-1]
+        return pts
+    raw_border = polylines[border_idx]
+    border = strip_close(raw_border if not hasattr(raw_border, 'get_points') else raw_border.get_points())
+    if len(border) < 3:
+        return Mesh()
+    hole_pts_3d = []
+    for i, pl in enumerate(polylines):
+        if i == border_idx:
+            continue
+        raw = pl if not hasattr(pl, 'get_points') else pl.get_points()
+        h = strip_close(raw)
+        if len(h) >= 3:
+            hole_pts_3d.append(h)
+    def signed_area(pts):
+        a = 0.0; n = len(pts)
+        for i in range(n):
+            j = (i + 1) % n
+            a += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1]
+        return a * 0.5
+    if is_2d:
+        boundary_2d = [(p[0], p[1]) for p in border]
+        holes_2d = [[(p[0], p[1]) for p in h] for h in hole_pts_3d]
+    else:
+        all_pts_for_plane = list(border)
+        for h in hole_pts_3d:
+            all_pts_for_plane.extend(h)
+        from .polyline import Polyline as _Polyline
+        origin, xaxis, yaxis, _ = _Polyline(all_pts_for_plane).get_average_plane()
+        def project_2d(p):
+            dx = p[0] - origin[0]; dy = p[1] - origin[1]; dz = p[2] - origin[2]
+            return (dx*xaxis[0]+dy*xaxis[1]+dz*xaxis[2], dx*yaxis[0]+dy*yaxis[1]+dz*yaxis[2])
+        boundary_2d = [project_2d(p) for p in border]
+        holes_2d = [[project_2d(p) for p in h] for h in hole_pts_3d]
+    if signed_area(boundary_2d) < 0.0:
+        border = list(reversed(border)); boundary_2d = list(reversed(boundary_2d))
+    for idx in range(len(hole_pts_3d)):
+        if signed_area(holes_2d[idx]) > 0.0:
+            hole_pts_3d[idx] = list(reversed(hole_pts_3d[idx]))
+            holes_2d[idx] = list(reversed(holes_2d[idx]))
+    tris = _cdt_triangulate(boundary_2d, holes_2d)
+    all_pts = list(border)
+    for h in hole_pts_3d:
+        all_pts.extend(h)
+    m = Mesh()
+    vkeys = []
+    for p in all_pts:
+        vkeys.append(m.add_vertex(Point(p[0], p[1], p[2])))
+    if SESSION_CONFIG.explode_mesh_faces:
+        for t in tris:
+            m.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+        return m
+    if not hole_pts_3d:
+        fkey = m.add_face(list(vkeys[:len(border)]))
+        if fkey is not None:
+            tri_list = []
+            for t in tris:
+                if vkeys[t[0]] == vkeys[t[1]] or vkeys[t[1]] == vkeys[t[2]] or vkeys[t[2]] == vkeys[t[0]]:
+                    continue
+                tri_list.append([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+            n_vk = len(border)
+            covered = set(k for tri in tri_list for k in tri)
+            for i in range(n_vk):
+                if vkeys[i] not in covered:
+                    tri_list.append([vkeys[(i - 1) % n_vk], vkeys[i], vkeys[(i + 1) % n_vk]])
+            m.triangulation[fkey] = tri_list
+    else:
+        fkey = m.add_face(list(vkeys[:len(border)]))
+        if fkey is not None:
+            hole_rings = []
+            off = len(border)
+            for h in hole_pts_3d:
+                hole_rings.append(list(vkeys[off:off+len(h)]))
+                off += len(h)
+            m.face_holes[fkey] = hole_rings
+            tri_list = []
+            for t in tris:
+                a, b, c = vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]
+                if a != b and b != c and c != a:
+                    tri_list.append([a, b, c])
+            m.triangulation[fkey] = tri_list
+    return m
+
+
+def _cdt_triangulate(border_2d, holes_2d=None):
     """Constrained Delaunay triangulation of a polygon with optional holes.
     border_2d: list of Point (uses [0],[1] as x,y)
     holes_2d: optional list of lists of Point
     Returns: list of (i,j,k) index tuples into flat array [border..., hole0..., hole1...]"""
-    scale = 1e6
+    max_coord = 1.0
+    for p in border_2d:
+        max_coord = max(max_coord, abs(p[0]), abs(p[1]))
+    if holes_2d:
+        for h in holes_2d:
+            for p in h:
+                max_coord = max(max_coord, abs(p[0]), abs(p[1]))
+    precision = 6
+    while precision > 0 and max_coord * (10 ** precision) > 9e17:
+        precision -= 1
+    scale = 10 ** precision
     flat = list(border_2d)
     if holes_2d:
         for h in holes_2d:
@@ -736,3 +852,37 @@ def cdt_triangulate(border_2d, holes_2d=None):
         if ok:
             out.append((f[0], f[1], f[2]))
     return out
+
+
+class RemeshCDT:
+    @staticmethod
+    def triangulate(polylines):
+        """CDT (sweep-line + Delaunay legalization). polylines[0]=border, rest=holes (x,y used; z ignored).
+        Closing duplicate vertex (first==last) is stripped.
+        Returns list of (i,j,k) index triples into flat array [border..., hole0..., hole1...].
+        To build a Mesh from the result:
+            border = Polyline([Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)])
+            hole   = Polyline([Point(1,1,0), Point(1,3,0), Point(3,3,0), Point(3,1,0)])
+            tris = RemeshCDT.triangulate([border, hole])
+            flat = border.get_points() + hole.get_points()
+            m = Mesh()
+            vkeys = [m.add_vertex(Point(p[0], p[1], p[2])) for p in flat]
+            for a, b, c in tris:
+                m.add_face([vkeys[a], vkeys[b], vkeys[c]])"""
+        def _strip(pts):
+            if len(pts) > 1:
+                f, b = pts[0], pts[-1]
+                if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
+                    return pts[:-1]
+            return pts
+        bpts = _strip(polylines[0].get_points())
+        hpts_list = [_strip(h.get_points()) for h in polylines[1:]]
+        return _cdt_triangulate(bpts, hpts_list)
+
+    @staticmethod
+    def from_polylines(polylines, is_2d=False, is_first_boundary=True):
+        """Polylines → Mesh. polylines[0]=border (or auto-detected), rest=holes.
+        is_2d=True skips plane projection. is_first_boundary=False detects border by largest bbox diagonal."""
+        return _from_polygon_with_holes(polylines, is_2d=is_2d, is_first_boundary=is_first_boundary)
+
+

@@ -101,7 +101,7 @@ def test_aabb():
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[2], 0.0))
 
 
-@MINI_TEST("Element", "Obb")
+@MINI_TEST("Element", "OBB")
 def test_obb():
     from session_py import Mesh
     from session_py import Element

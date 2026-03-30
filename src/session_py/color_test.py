@@ -32,13 +32,13 @@ def test_color_constructor():
     ccopy = red.duplicate()
     cother = Color(255, 0, 0, 255, "red")
 
-    MINI_CHECK(red.name == "red" and
-               red.guid != "" and
-               red[0 ] == 255 and
-               red[1] == 0 and
-               red[2] == 0 and
-               red[3] == 255 and
-               red.guid)
+    MINI_CHECK(red.name == "red")
+    MINI_CHECK(red.guid != "")
+    MINI_CHECK(red[0] == 255)
+    MINI_CHECK(red[1] == 0)
+    MINI_CHECK(red[2] == 0)
+    MINI_CHECK(red[3] == 255)
+    MINI_CHECK(red.guid)
 
     MINI_CHECK(r == 255 and g == 0 and b == 0 and a == 255)
     MINI_CHECK(cstr == "255, 0, 0, 255")
@@ -136,6 +136,7 @@ def test_color_presets():
     navy = Color.navy()
     purple = Color.purple()
     silver = Color.silver()
+
     MINI_CHECK(white == Color(255, 255, 255, 255, "white"))
     MINI_CHECK(black == Color(0, 0, 0, 255, "black"))
     MINI_CHECK(grey == Color(128, 128, 128, 255, "grey"))

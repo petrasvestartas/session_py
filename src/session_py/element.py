@@ -146,19 +146,19 @@ class Element:
     ###########################################################################################
 
     def compute_aabb(self):
-        from .obb import Obb
+        from .obb import OBB
         from .point import Point
         geo = self.session_geometry
         if geo is None:
-            return Obb.from_point(Point(0, 0, 0), 0.0)
+            return OBB.from_point(Point(0, 0, 0), 0.0)
         return self._obb_from_geometry(geo, aabb=True)
 
     def compute_obb(self):
-        from .obb import Obb
+        from .obb import OBB
         from .point import Point
         geo = self.session_geometry
         if geo is None:
-            return Obb.from_point(Point(0, 0, 0), 0.0)
+            return OBB.from_point(Point(0, 0, 0), 0.0)
         return self._obb_from_geometry(geo, aabb=False)
 
     def compute_collision_mesh(self):
@@ -204,7 +204,7 @@ class Element:
 
     @staticmethod
     def _obb_from_geometry(geo, aabb=True):
-        from .obb import Obb
+        from .obb import OBB
         from .point import Point
         from .mesh import Mesh
         from .brep import BRep
@@ -212,13 +212,13 @@ class Element:
         if isinstance(geo, Mesh):
             points = [v.position() for v in geo.vertex.values()]
             if not points:
-                return Obb.from_point(Point(0, 0, 0), inflate)
-            return Obb.from_points(points, inflate)
+                return OBB.from_point(Point(0, 0, 0), inflate)
+            return OBB.from_points(points, inflate)
         if isinstance(geo, BRep):
             if not geo.m_vertices:
-                return Obb.from_point(Point(0, 0, 0), inflate)
-            return Obb.from_points(geo.m_vertices, inflate)
-        return Obb.from_point(Point(0, 0, 0), inflate)
+                return OBB.from_point(Point(0, 0, 0), inflate)
+            return OBB.from_points(geo.m_vertices, inflate)
+        return OBB.from_point(Point(0, 0, 0), inflate)
 
     ###########################################################################################
     # Serialization - JSON
@@ -317,7 +317,7 @@ class Element:
         from .plane import Plane
         from .polyline import Polyline
         from .mesh import Mesh
-        from .obb import Obb
+        from .obb import OBB
         from .pointcloud import PointCloud
         from .nurbscurve import NurbsCurve
         from .nurbssurface import NurbsSurface
@@ -328,7 +328,7 @@ class Element:
             "Plane": Plane,
             "Polyline": Polyline,
             "Mesh": Mesh,
-            "Obb": Obb,
+            "OBB": OBB,
             "PointCloud": PointCloud,
             "NurbsCurve": NurbsCurve,
             "NurbsSurface": NurbsSurface,

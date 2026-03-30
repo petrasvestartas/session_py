@@ -13,6 +13,7 @@ def test_closest_line_point():
     l = Line(0.0, 0.0, 0.0, 10.0, 0.0, 0.0)
 
     cp1, t1, d1 = Closest.line_point(l, Point(5.0, 5.0, 0.0))
+
     MINI_CHECK(TOLERANCE.is_close(cp1[0], 5.0))
     MINI_CHECK(TOLERANCE.is_close(cp1[1], 0.0))
     MINI_CHECK(TOLERANCE.is_close(t1, 0.5))
@@ -35,9 +36,14 @@ def test_closest_polyline_point():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0)])
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
+    ])
 
     cp1, t1, d1 = Closest.polyline_point(pl, Point(5.0, 5.0, 0.0))
+
     MINI_CHECK(TOLERANCE.is_close(d1, 5.0))
 
     cp2, t2, d2 = Closest.polyline_point(pl, Point(10.0, 5.0, 0.0))
@@ -53,12 +59,15 @@ def test_closest_curve_point():
     from session_py import Point
 
     pts = [
-        Point(0.0, 0.0, 0.0), Point(1.0, 2.0, 0.0),
-        Point(3.0, 2.0, 0.0), Point(4.0, 0.0, 0.0)
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 2.0, 0.0),
+        Point(3.0, 2.0, 0.0),
+        Point(4.0, 0.0, 0.0),
     ]
     crv = NurbsCurve.create(False, 3, pts)
 
     t, dist = Closest.curve_point(crv, Point(2.0, 3.0, 0.0))
+
     MINI_CHECK(dist < 1.6)
     cp = crv.point_at(t)
     MINI_CHECK(TOLERANCE.is_close(cp.distance(Point(2.0, 3.0, 0.0)), dist))
@@ -94,6 +103,7 @@ def test_closest_surface_point():
     srf = NurbsSurface.create(False, False, 3, 3, 4, 4, pts)
 
     u, v, dist = Closest.surface_point(srf, Point(1.5, 1.5, 2.0))
+
     MINI_CHECK(dist < 1.5)
     cp = srf.point_at(u, v)
     MINI_CHECK(TOLERANCE.is_close(cp.distance(Point(1.5, 1.5, 2.0)), dist))
@@ -111,6 +121,7 @@ def test_closest_mesh_point():
     m = Primitives.cube(2.0)
 
     cp1, fk1, d1 = Closest.mesh_point(m, Point(0.0, 0.0, 2.0))
+
     MINI_CHECK(TOLERANCE.is_close(cp1[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
 
@@ -127,6 +138,7 @@ def test_closest_mesh_point_aabb():
     m = Primitives.cube(2.0)
 
     cp1, fk1, d1 = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 2.0))
+
     MINI_CHECK(TOLERANCE.is_close(cp1[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
 
@@ -141,11 +153,14 @@ def test_closest_pointcloud_point():
     from session_py import Point
 
     pc = PointCloud([
-        Point(0.0, 0.0, 0.0), Point(5.0, 0.0, 0.0),
-        Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+        Point(5.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
     ])
 
     cp1, i1, d1 = Closest.pointcloud_point(pc, Point(4.0, 0.0, 0.0))
+
     MINI_CHECK(TOLERANCE.is_close(cp1[0], 5.0))
     MINI_CHECK(i1 == 1)
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))

@@ -12,13 +12,12 @@ from .xform import Xform
 from .quaternion import Quaternion
 from .tree import Tree
 from .treenode import TreeNode
-from .graph import Graph
-from .vertex import Vertex
-from .edge import Edge
+from .graph import Graph, Vertex, Edge
 from .objects import Objects
 from .session import Session
 from .mesh import Mesh, NormalWeighting
-from .obb import Obb
+from .aabb import AABB
+from .obb import OBB
 from .pointcloud import PointCloud
 from .bvh import BVH, BVHNode
 from .rtree import RTree
@@ -36,11 +35,15 @@ from .element import Element
 from .element_column import ColumnElement
 from .element_beam import BeamElement
 from .element_plate import PlateElement
-from .ray_box_intersection import ray_box
 from .closest import Closest
 from .mesh_iso import MeshIso, TpmsType, TpmsMode
+from .remesh_cdt import RemeshCDT
 from .remesh_nurbssurface_grid import remesh_nurbssurface_grid, RemeshNurbsSurfaceGrid
 from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
+from .matrix import Matrix
+from .convex_hull import ConvexHull
+from .kdtree import KDTree
+from .marching_squares import MarchingSquares
 
 __all__ = [
     "Color",
@@ -60,7 +63,7 @@ __all__ = [
     "Session",
     "Mesh",
     "NormalWeighting",
-    "Obb",
+    "OBB",
     "PointCloud",
     "BVH",
     "BVHNode",
@@ -81,12 +84,16 @@ __all__ = [
     "ColumnElement",
     "BeamElement",
     "PlateElement",
-    "ray_box",
     "Closest",
     "MeshIso",
     "TpmsType",
     "TpmsMode",
     "remesh_nurbssurface_grid",
+    "RemeshCDT",
     "RemeshNurbsSurfaceGrid",
     "RemeshNurbsSurfaceAdaptive",
+    "Matrix",
+    "ConvexHull",
+    "KDTree",
+    "MarchingSquares",
 ]

@@ -55,14 +55,13 @@ def test_point_constructor():
     psum = Point.sum(p1, p2)
     pdif = Point.sub(p2, p1)
 
-    MINI_CHECK(
-        p.name == "my_point" and
-        p[0] == 10.0 and 
-        p[1] == 20.0 and 
-        p[2] == 30.0 and
-        p.width == 1.0 and
-        p.pointcolor == Color.blue() and
-        p.guid)
+    MINI_CHECK(p.name == "my_point")
+    MINI_CHECK(p[0] == 10.0)
+    MINI_CHECK(p[1] == 20.0)
+    MINI_CHECK(p[2] == 30.0)
+    MINI_CHECK(p.width == 1.0)
+    MINI_CHECK(p.pointcolor == Color.blue())
+    MINI_CHECK(p.guid)
     MINI_CHECK(x == 10.0 and y == 20.0 and z == 30.0)
     MINI_CHECK(pstr == "10.0, 20.0, 30.0")
     MINI_CHECK(prepr == "Point(my_point, 10.0, 20.0, 30.0, Color(blue, 0, 0, 255, 255), 1.0)")

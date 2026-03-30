@@ -48,7 +48,11 @@ def test_encode_collection_values():
     from session_py.encoders import json_dumps
     import json
 
-    json_str = json_dumps([Point(1, 2, 3), Point(4, 5, 6), Point(7, 8, 9)])
+    json_str = json_dumps([
+        Point(1, 2, 3),
+        Point(4, 5, 6),
+        Point(7, 8, 9),
+    ])
     d = json.loads(json_str)
 
     MINI_CHECK(isinstance(d, list))
@@ -64,7 +68,10 @@ def test_encode_collection_shared_ptr():
     from session_py.encoders import json_dumps
     import json
 
-    d = json.loads(json_dumps([Line(0, 0, 0, 1, 0, 0), Line(0, 0, 0, 0, 1, 0)]))
+    d = json.loads(json_dumps([
+        Line(0, 0, 0, 1, 0, 0),
+        Line(0, 0, 0, 0, 1, 0),
+    ]))
 
     MINI_CHECK(isinstance(d, list))
     MINI_CHECK(len(d) == 2)
@@ -77,7 +84,10 @@ def test_decode_collection():
     from session_py import Point
     from session_py.encoders import json_dumps, json_loads
 
-    decoded = json_loads(json_dumps([Point(1, 2, 3), Point(4, 5, 6)]))
+    decoded = json_loads(json_dumps([
+        Point(1, 2, 3),
+        Point(4, 5, 6),
+    ]))
 
     MINI_CHECK(len(decoded) == 2)
     MINI_CHECK(TOLERANCE.is_close(decoded[0][0], 1.0))
@@ -89,7 +99,10 @@ def test_decode_collection_ptr():
     from session_py import Vector
     from session_py.encoders import json_dumps, json_loads
 
-    decoded = json_loads(json_dumps([Vector(1, 0, 0), Vector(0, 1, 0)]))
+    decoded = json_loads(json_dumps([
+        Vector(1, 0, 0),
+        Vector(0, 1, 0),
+    ]))
 
     MINI_CHECK(len(decoded) == 2)
     MINI_CHECK(TOLERANCE.is_close(decoded[0][0], 1.0))
@@ -101,7 +114,10 @@ def test_nested_collections():
     from session_py import Line
     from session_py.encoders import json_dumps, json_loads
 
-    loaded = json_loads(json_dumps([Line(0, 0, 0, 1, 0, 0), Line(0, 0, 0, 0, 1, 0)]))
+    loaded = json_loads(json_dumps([
+        Line(0, 0, 0, 1, 0, 0),
+        Line(0, 0, 0, 0, 1, 0),
+    ]))
 
     MINI_CHECK(len(loaded) == 2)
     MINI_CHECK(TOLERANCE.is_close(loaded[0].end()[0], 1.0))
@@ -170,7 +186,10 @@ def test_decode_list():
     MINI_CHECK(loaded_vec[0] == 1)
     MINI_CHECK(loaded_vec[2] == 3)
 
-    decoded = json_loads(json_dumps([Point(1, 2, 3), Point(4, 5, 6)]))
+    decoded = json_loads(json_dumps([
+        Point(1, 2, 3),
+        Point(4, 5, 6),
+    ]))
 
     MINI_CHECK(len(decoded) == 2)
 
@@ -211,7 +230,10 @@ def test_dict_of_lists():
     data = {
         "numbers": [1, 2, 3],
         "letters": ["a", "b", "c"],
-        "points": [Point(1, 0, 0), Point(0, 1, 0)],
+        "points": [
+            Point(1, 0, 0),
+            Point(0, 1, 0),
+        ],
     }
     loaded = json_loads(json_dumps(data))
 

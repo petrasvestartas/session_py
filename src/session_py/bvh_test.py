@@ -21,6 +21,7 @@ def test_bvh_morton_code_origin():
     from session_py.bvh import calculate_morton_code
 
     code = calculate_morton_code(0.0, 0.0, 0.0, 100.0)
+
     MINI_CHECK(code < (1 << 30))
 
 
@@ -29,6 +30,7 @@ def test_bvh_morton_code_corners():
     from session_py.bvh import calculate_morton_code
 
     code_min = calculate_morton_code(-50.0, -50.0, -50.0, 100.0)
+
     MINI_CHECK(code_min == 0)
     code_max = calculate_morton_code(50.0, 50.0, 50.0, 100.0)
     MINI_CHECK(code_max == 0x3FFFFFFF)
@@ -43,6 +45,7 @@ def test_bvh_morton_code_spatial_locality():
     code3 = calculate_morton_code(-40.0, -40.0, -40.0)
     diff_nearby = abs(code1 - code2)
     diff_far = abs(code1 - code3)
+
     MINI_CHECK(diff_nearby < diff_far)
 
 
@@ -51,6 +54,7 @@ def test_bvh_node_creation():
     from session_py.bvh import BVHNode
 
     node = BVHNode()
+
     MINI_CHECK(node.left is None)
     MINI_CHECK(node.right is None)
     MINI_CHECK(node.object_id == -1)
@@ -62,6 +66,7 @@ def test_bvh_node_leaf():
     from session_py.bvh import BVHNode
 
     node = BVHNode()
+
     MINI_CHECK(not node.is_leaf())
     node.object_id = 5
     MINI_CHECK(node.is_leaf())
@@ -72,6 +77,7 @@ def test_bvh_creation():
     from session_py.bvh import BVH
 
     bvh = BVH(100.0)
+
     MINI_CHECK(bool(bvh.guid))
     MINI_CHECK(bvh.name == "my_bvh")
     MINI_CHECK(bvh.root is None)
@@ -84,19 +90,21 @@ def test_bvh_build_empty():
 
     boxes = []
     bvh = BVH.from_boxes(boxes, 100.0)
+
     MINI_CHECK(bvh.arena_root == -1)
 
 
 @MINI_TEST("BVH", "Build Single")
 def test_bvh_build_single():
     from session_py.bvh import BVH
-    from session_py import Obb
+    from session_py import OBB
     from session_py import Point
     from session_py import Vector
 
-    bbox = Obb(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox = OBB(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
     boxes = [bbox]
     bvh = BVH.from_boxes(boxes, 100.0)
+
     MINI_CHECK(bvh.arena_root >= 0)
     MINI_CHECK(bvh.arena_object_id[bvh.arena_root] == 0)
 
@@ -104,16 +112,17 @@ def test_bvh_build_single():
 @MINI_TEST("BVH", "Build Multiple")
 def test_bvh_build_multiple():
     from session_py.bvh import BVH
-    from session_py import Obb
+    from session_py import OBB
     from session_py import Point
     from session_py import Vector
 
     bboxes = [
-        Obb(Point(-10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
-        Obb(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
-        Obb(Point(0, 10, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(-10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(0, 10, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
     ]
     bvh = BVH.from_boxes(bboxes, 100.0)
+
     MINI_CHECK(bvh.arena_root >= 0)
     MINI_CHECK(bvh.arena_object_id[bvh.arena_root] == -1)
     MINI_CHECK(bvh.arena_left[bvh.arena_root] >= 0)
@@ -123,32 +132,34 @@ def test_bvh_build_multiple():
 @MINI_TEST("BVH", "Aabb Intersect")
 def test_bvh_aabb_intersect():
     from session_py.bvh import BVH
-    from session_py import Obb
+    from session_py import OBB
     from session_py import Point
     from session_py import Vector
 
     bvh = BVH(100.0)
-    bbox1 = Obb(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
-    bbox2 = Obb(Point(0.5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox1 = OBB(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox2 = OBB(Point(0.5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+
     MINI_CHECK(bvh.aabb_intersect(bbox1, bbox2))
-    bbox3 = Obb(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox3 = OBB(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
     MINI_CHECK(not bvh.aabb_intersect(bbox1, bbox3))
 
 
 @MINI_TEST("BVH", "Check All Collisions")
 def test_bvh_check_all_collisions():
     from session_py.bvh import BVH
-    from session_py import Obb
+    from session_py import OBB
     from session_py import Point
     from session_py import Vector
 
     bboxes = [
-        Obb(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
-        Obb(Point(0.5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
-        Obb(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(0.5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
     ]
     bvh = BVH.from_boxes(bboxes, 100.0)
     collisions, colliding_indices, checks = bvh.check_all_collisions(bboxes)
+
     MINI_CHECK(len(collisions) == 1)
     MINI_CHECK(collisions[0][0] == 0)
     MINI_CHECK(collisions[0][1] == 1)
@@ -159,14 +170,15 @@ def test_bvh_check_all_collisions():
 @MINI_TEST("BVH", "Merge Aabb")
 def test_bvh_merge_aabb():
     from session_py.bvh import BVH
-    from session_py import Obb
+    from session_py import OBB
     from session_py import Point
     from session_py import Vector
 
     bvh = BVH(100.0)
-    bbox1 = Obb(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
-    bbox2 = Obb(Point(5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox1 = OBB(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
+    bbox2 = OBB(Point(5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1))
     merged = bvh.merge_aabb(bbox1, bbox2)
+
     MINI_CHECK(TOLERANCE.is_close(merged.center[0], 2.5))
     MINI_CHECK(TOLERANCE.is_close(merged.half_size[0], 3.5))
 
@@ -174,7 +186,7 @@ def test_bvh_merge_aabb():
 @MINI_TEST("BVH", "Fixed 100 Boxes")
 def test_bvh_fixed_100_boxes():
     from session_py.bvh import BVH
-    from session_py import Obb
+    from session_py import OBB
     from session_py import Point
     from session_py import Vector
 
@@ -187,7 +199,7 @@ def test_bvh_fixed_100_boxes():
         hx = (max_x - min_x) * 0.5
         hy = (max_y - min_y) * 0.5
         hz = (max_z - min_z) * 0.5
-        boxes.append(Obb(Point(cx, cy, cz), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz)))
+        boxes.append(OBB(Point(cx, cy, cz), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz)))
 
     add(-53.1254, -0.98185, 20.5516, -46.8089, 5.89927, 26.5331)
     add(44.4446, -1.5359, -1.49382, 50.7301, 3.99953, 7.58362)

@@ -8,7 +8,7 @@ from .vector import Vector
 from .plane import Plane
 from .tolerance import Tolerance
 from .tolerance import PI
-from .obb import Obb
+from .obb import OBB
 from .xform import Xform
 from .color import Color
 from .nurbscurve import NurbsCurve
@@ -1789,16 +1789,16 @@ class NurbsSurface:
     # GEOMETRIC OPERATIONS
     ###########################################################################
     
-    def get_bounding_box(self) -> Obb:
+    def get_bounding_box(self) -> OBB:
         """Get bounding box of surface.
 
         Returns
         -------
-        Obb
+        OBB
             Bounding box containing all control points.
         """
         if not self.is_valid() or self.m_cv_count[0] == 0 or self.m_cv_count[1] == 0:
-            return Obb()
+            return OBB()
 
         min_pt = self.get_cv(0, 0)
         max_pt = Point(min_pt.x, min_pt.y, min_pt.z)
@@ -1820,7 +1820,7 @@ class NurbsSurface:
                           (max_pt.y - min_pt.y) / 2.0,
                           (max_pt.z - min_pt.z) / 2.0)
 
-        return Obb(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
+        return OBB(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
     
     def divide_by_count(self, nu: int, nv: int):
         u0, u1 = self.domain(0)
@@ -1984,6 +1984,16 @@ class NurbsSurface:
                 subs[i] = max(subs[i], 2)
         return subs
 
+    def mesh_grid(self):
+        if self.m_mesh is not None:
+            return self.m_mesh
+        if not self.is_valid():
+            from .mesh import Mesh
+            return Mesh()
+        from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
+        self.m_mesh = RemeshNurbsSurfaceGrid.from_u_v(self, 0, 0)
+        return self.m_mesh
+
     def mesh(self):
         if self.m_mesh is not None:
             return self.m_mesh
@@ -2024,173 +2034,7 @@ class NurbsSurface:
                 result.vertex[vkey].set_normal(n[0], n[1], n[2])
             self.m_mesh = result
             return result
-        ns_u = len(usp) - 1
-        ns_v = len(vsp) - 1
-        max_angle_deg = 20.0
-        bbox_diag = self._compute_bbox_diagonal()
-        deg_u = self.degree(0)
-        deg_v = self.degree(1)
-        u_subs = self._span_subs(0, usp, vsp, max_angle_deg, bbox_diag)
-        v_subs = self._span_subs(1, vsp, usp, max_angle_deg, bbox_diag)
-        total_u = sum(u_subs) + 1
-        total_v = sum(v_subs) + 1
-        v_mid = (vsp[0] + vsp[-1]) * 0.5
-        u_mid = (usp[0] + usp[-1]) * 0.5
-        u_len = 0.0
-        p0 = self.point_at(usp[0], v_mid)
-        n_sample = max(total_u, 10)
-        for i in range(1, n_sample + 1):
-            u = usp[0] + i * (usp[-1] - usp[0]) / n_sample
-            p1 = self.point_at(u, v_mid)
-            u_len += math.sqrt((p1[0]-p0[0])**2 + (p1[1]-p0[1])**2 + (p1[2]-p0[2])**2)
-            p0 = p1
-        v_len = 0.0
-        p0 = self.point_at(u_mid, vsp[0])
-        n_sample = max(total_v, 10)
-        for i in range(1, n_sample + 1):
-            v = vsp[0] + i * (vsp[-1] - vsp[0]) / n_sample
-            p1 = self.point_at(u_mid, v)
-            v_len += math.sqrt((p1[0]-p0[0])**2 + (p1[1]-p0[1])**2 + (p1[2]-p0[2])**2)
-            p0 = p1
-        if u_len > 1e-14 and v_len > 1e-14 and total_u > 0 and total_v > 0:
-            spacing_u = u_len / total_u
-            spacing_v = v_len / total_v
-            ratio = spacing_u / spacing_v
-            if ratio > 2.0 and deg_u > 1:
-                scale = math.sqrt(ratio)
-                u_subs = [min(int(math.ceil(s * scale)), 24) for s in u_subs]
-            elif ratio < 0.5 and deg_v > 1:
-                scale = math.sqrt(1.0 / ratio)
-                v_subs = [min(int(math.ceil(s * scale)), 24) for s in v_subs]
-        if deg_u == 1 and deg_v == 1:
-            max_twist = 0.0
-            chord_tol = bbox_diag * 0.005 if bbox_diag > 0 else 1e-6
-            for i in range(ns_u):
-                for j in range(ns_v):
-                    u0, u1 = usp[i], usp[i + 1]
-                    v0, v1 = vsp[j], vsp[j + 1]
-                    pm = self.point_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
-                    p00 = self.point_at(u0, v0)
-                    p11 = self.point_at(u1, v1)
-                    mx = (p00[0] + p11[0]) * 0.5
-                    my = (p00[1] + p11[1]) * 0.5
-                    mz = (p00[2] + p11[2]) * 0.5
-                    dx, dy, dz = pm[0] - mx, pm[1] - my, pm[2] - mz
-                    twist = math.sqrt(dx * dx + dy * dy + dz * dz)
-                    if twist > max_twist:
-                        max_twist = twist
-            if max_twist > chord_tol:
-                twist_subs = max(4, min(int(math.ceil(2.0 * math.sqrt(max_twist / chord_tol))), 24))
-                for i in range(len(u_subs)):
-                    u_subs[i] = max(u_subs[i], twist_subs)
-                for i in range(len(v_subs)):
-                    v_subs[i] = max(v_subs[i], twist_subs)
-        us = []
-        for i in range(len(usp) - 1):
-            for s in range(u_subs[i]):
-                us.append(usp[i] + s * (usp[i + 1] - usp[i]) / u_subs[i])
-        us.append(usp[-1])
-        vs = []
-        for i in range(len(vsp) - 1):
-            for s in range(v_subs[i]):
-                vs.append(vsp[i] + s * (vsp[i + 1] - vsp[i]) / v_subs[i])
-        vs.append(vsp[-1])
-        closed_u = self.is_closed(0)
-        closed_v = self.is_closed(1)
-        def fix_closed_gap(params, spans, closed):
-            if not closed or len(params) < 3:
-                return
-            params.pop()
-            domain_end = spans[-1]
-            wrap_gap = domain_end - params[-1]
-            max_gap = max((params[i] - params[i-1] for i in range(1, len(params))), default=0)
-            if max_gap > 0 and wrap_gap > max_gap * 1.5:
-                extra = int(math.ceil(wrap_gap / max_gap)) - 1
-                step = wrap_gap / (extra + 1)
-                for e in range(1, extra + 1):
-                    params.append(params[-1] + step)
-        fix_closed_gap(us, usp, closed_u)
-        fix_closed_gap(vs, vsp, closed_v)
-        nu, nv = len(us), len(vs)
-        sing_v0 = self.is_singular(0)
-        sing_v1 = self.is_singular(2)
-        j_start = 1 if sing_v0 else 0
-        j_end = nv - 1 if sing_v1 else nv
-        nv_grid = j_end - j_start
-        result = Mesh()
-        south_pole = 0
-        north_pole = 0
-        if sing_v0:
-            south_pole = result.add_vertex(self.point_at(us[0], vs[0]))
-            result.vertex[south_pole].attributes["u"] = us[0]
-            result.vertex[south_pole].attributes["v"] = vs[0]
-        if sing_v1:
-            north_pole = result.add_vertex(self.point_at(us[0], vs[nv - 1]))
-            result.vertex[north_pole].attributes["u"] = us[0]
-            result.vertex[north_pole].attributes["v"] = vs[nv - 1]
-        vkeys = []
-        for i in range(nu):
-            for j in range(j_start, j_end):
-                vk = result.add_vertex(self.point_at(us[i], vs[j]))
-                result.vertex[vk].attributes["u"] = us[i]
-                result.vertex[vk].attributes["v"] = vs[j]
-                vkeys.append(vk)
-        def grid_idx(i, j):
-            return vkeys[i * nv_grid + (j - j_start)]
-        nu_faces = nu if closed_u else nu - 1
-        if sing_v0:
-            for i in range(nu_faces):
-                i1 = (i + 1) % nu
-                result.add_face([south_pole, grid_idx(i1, j_start), grid_idx(i, j_start)])
-        nv_interior = nv_grid - 1
-        if closed_v and not sing_v0 and not sing_v1:
-            nv_interior = nv_grid
-        for i in range(nu_faces):
-            for jj in range(nv_interior):
-                j = jj + j_start
-                i1 = (i + 1) % nu
-                j1 = ((jj + 1) % nv_grid + j_start) if (closed_v and not sing_v0 and not sing_v1) else (j + 1)
-                v00, v10 = grid_idx(i, j), grid_idx(i1, j)
-                v01, v11 = grid_idx(i, j1), grid_idx(i1, j1)
-                if (i + jj) % 2 == 0:
-                    result.add_face([v00, v10, v11])
-                    result.add_face([v00, v11, v01])
-                else:
-                    result.add_face([v00, v10, v01])
-                    result.add_face([v10, v11, v01])
-        if sing_v1:
-            j_last = j_end - 1
-            for i in range(nu_faces):
-                i1 = (i + 1) % nu
-                result.add_face([grid_idx(i, j_last), grid_idx(i1, j_last), north_pole])
-        max_vkey = max(result.vertex.keys()) if result.vertex else 0
-        vnx = [0.0] * (max_vkey + 1)
-        vny = [0.0] * (max_vkey + 1)
-        vnz = [0.0] * (max_vkey + 1)
-        for fi, vids in result.face.items():
-            if len(vids) < 3:
-                continue
-            p0 = result.vertex[vids[0]]
-            p1 = result.vertex[vids[1]]
-            p2 = result.vertex[vids[2]]
-            e1x, e1y, e1z = p1.x-p0.x, p1.y-p0.y, p1.z-p0.z
-            e2x, e2y, e2z = p2.x-p0.x, p2.y-p0.y, p2.z-p0.z
-            fnx = e1y*e2z - e1z*e2y
-            fny = e1z*e2x - e1x*e2z
-            fnz = e1x*e2y - e1y*e2x
-            for vi in vids:
-                vnx[vi] += fnx
-                vny[vi] += fny
-                vnz[vi] += fnz
-        for vk in result.vertex:
-            ln = math.sqrt(vnx[vk]**2 + vny[vk]**2 + vnz[vk]**2)
-            if ln > 1e-15:
-                vnx[vk] /= ln
-                vny[vk] /= ln
-                vnz[vk] /= ln
-            result.vertex[vk].set_normal(vnx[vk], vny[vk], vnz[vk])
-        self.m_mesh = result
-        return self.m_mesh
+        return self.mesh_grid()
 
     def mesh_adaptive(self, max_angle: float = 20.0, max_edge_length: float = 0.0,
                       min_edge_length: float = 0.0, max_chord_height: float = 0.0):

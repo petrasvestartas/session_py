@@ -1,6 +1,97 @@
 import uuid
-from .vertex import Vertex
-from .edge import Edge
+
+
+class Vertex:
+    """A graph vertex with a unique identifier and attribute string."""
+
+    def __init__(self, name="my_vertex", attribute=""):
+        self._guid = None
+        self.name = str(name)
+        self.attribute = str(attribute)
+        self.index = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    def __jsondump__(self):
+        return {
+            "type": f"{self.__class__.__name__}",
+            "guid": self.guid,
+            "name": self.name,
+            "attribute": self.attribute,
+            "index": self.index,
+        }
+
+    @classmethod
+    def __jsonload__(cls, data, guid=None, name=None):
+        vertex = cls(data["name"], data.get("attribute", ""))
+        vertex.index = data.get("index")
+        vertex.guid = guid if guid is not None else data.get("guid", vertex.guid)
+        return vertex
+
+
+class Edge:
+    """A graph edge connecting two vertices with an attribute string."""
+
+    def __init__(self, v0, v1, attribute=""):
+        self._guid = None
+        self.name = "my_edge"
+        self.v0 = str(v0)
+        self.v1 = str(v1)
+        self.attribute = str(attribute)
+        self.index = None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, '_guid', None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str):
+        self._guid = value
+
+    def __jsondump__(self):
+        return {
+            "type": f"{self.__class__.__name__}",
+            "guid": self.guid,
+            "name": self.name,
+            "v0": self.v0,
+            "v1": self.v1,
+            "attribute": self.attribute,
+            "index": self.index,
+        }
+
+    @classmethod
+    def __jsonload__(cls, data, guid=None, name=None):
+        edge = cls(data["v0"], data["v1"], data.get("attribute", ""))
+        edge.index = data.get("index")
+        edge.guid = guid if guid is not None else data.get("guid", edge.guid)
+        edge.name = name if name is not None else data.get("name", edge.name)
+        return edge
+
+    @property
+    def vertices(self):
+        return (self.v0, self.v1)
+
+    def connects(self, vertex_id):
+        return str(vertex_id) in self.vertices
+
+    def other_vertex(self, vertex_id):
+        vertex_id = str(vertex_id)
+        if vertex_id == self.v0:
+            return self.v1
+        elif vertex_id == self.v1:
+            return self.v0
+        else:
+            raise ValueError(f"Vertex {vertex_id} is not connected by this edge")
 
 
 class Graph:
@@ -666,3 +757,140 @@ class Graph:
             return str(value)
         else:
             return edge_obj.attribute
+
+    ###########################################################################################
+    # Algorithms
+    ###########################################################################################
+
+    def bfs(self, start):
+        if not self.has_node(start):
+            return []
+        visited = set()
+        queue = [start]
+        visited.add(start)
+        result = []
+        while queue:
+            node = queue.pop(0)
+            result.append(node)
+            for neighbor in sorted(self.edges.get(node, {}).keys()):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        return result
+
+    def dfs(self, start):
+        if not self.has_node(start):
+            return []
+        visited = set()
+        result = []
+        stack = [start]
+        while stack:
+            node = stack.pop()
+            if node in visited:
+                continue
+            visited.add(node)
+            result.append(node)
+            for neighbor in reversed(sorted(self.edges.get(node, {}).keys())):
+                if neighbor not in visited:
+                    stack.append(neighbor)
+        return result
+
+    def connected_components(self):
+        visited = set()
+        components = []
+        for start in sorted(self.vertices.keys()):
+            if start in visited:
+                continue
+            comp = self.bfs(start)
+            visited.update(comp)
+            components.append(sorted(comp))
+        return components
+
+    def is_connected(self):
+        return len(self.connected_components()) <= 1
+
+    def number_connected_components(self):
+        return len(self.connected_components())
+
+    def shortest_path(self, u, v):
+        if not self.has_node(u) or not self.has_node(v):
+            return []
+        if u == v:
+            return [u]
+        parent = {u: None}
+        queue = [u]
+        while queue:
+            node = queue.pop(0)
+            for neighbor in sorted(self.edges.get(node, {}).keys()):
+                if neighbor not in parent:
+                    parent[neighbor] = node
+                    if neighbor == v:
+                        path = []
+                        cur = v
+                        while cur is not None:
+                            path.append(cur)
+                            cur = parent[cur]
+                        return list(reversed(path))
+                    queue.append(neighbor)
+        return []
+
+    def shortest_path_length(self, u, v):
+        path = self.shortest_path(u, v)
+        if not path:
+            return -1
+        return len(path) - 1
+
+    def has_cycle(self):
+        visited = set()
+        for start in sorted(self.vertices.keys()):
+            if start in visited:
+                continue
+            parent = {start: None}
+            queue = [start]
+            visited.add(start)
+            while queue:
+                node = queue.pop(0)
+                for neighbor in self.edges.get(node, {}).keys():
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        parent[neighbor] = node
+                        queue.append(neighbor)
+                    elif parent[node] != neighbor:
+                        return True
+        return False
+
+    def cycle_basis(self):
+        result = []
+        disc = {}
+        par = {}
+        timer = [0]
+        for start in sorted(self.vertices.keys()):
+            if start in disc:
+                continue
+            par[start] = None
+            disc[start] = timer[0]
+            timer[0] += 1
+            nbrs = sorted(self.edges.get(start, {}).keys())
+            stk = [(start, None, nbrs, 0)]
+            while stk:
+                u, p, nbrs_u, idx = stk[-1]
+                if idx < len(nbrs_u):
+                    v = nbrs_u[idx]
+                    stk[-1] = (u, p, nbrs_u, idx + 1)
+                    if v not in disc:
+                        par[v] = u
+                        disc[v] = timer[0]
+                        timer[0] += 1
+                        v_nbrs = sorted(self.edges.get(v, {}).keys())
+                        stk.append((v, u, v_nbrs, 0))
+                    elif v != p and disc[v] < disc[u]:
+                        cycle = []
+                        node = u
+                        while node != v:
+                            cycle.append(node)
+                            node = par[node]
+                        cycle.append(v)
+                        result.append(cycle)
+                else:
+                    stk.pop()
+        return result

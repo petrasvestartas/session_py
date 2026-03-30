@@ -37,10 +37,10 @@ class Color:
     def __init__(self, r: int, g: int, b: int, a: int, name: str = "my_color"):
         self._guid = None
         self.name = name
-        self._r = int(r)
-        self._g = int(g)
-        self._b = int(b)
-        self._a = int(a)
+        self._r = max(0, min(255, int(r)))
+        self._g = max(0, min(255, int(g)))
+        self._b = max(0, min(255, int(b)))
+        self._a = max(0, min(255, int(a)))
 
     @property
     def guid(self) -> str:
@@ -58,7 +58,7 @@ class Color:
 
     @r.setter
     def r(self, value):
-        self._r = int(value)
+        self._r = max(0, min(255, int(value)))
 
     @property
     def g(self):
@@ -66,7 +66,7 @@ class Color:
 
     @g.setter
     def g(self, value):
-        self._g = int(value)
+        self._g = max(0, min(255, int(value)))
 
     @property
     def b(self):
@@ -74,7 +74,7 @@ class Color:
 
     @b.setter
     def b(self, value):
-        self._b = int(value)
+        self._b = max(0, min(255, int(value)))
 
     @property
     def a(self):
@@ -82,7 +82,7 @@ class Color:
 
     @a.setter
     def a(self, value):
-        self._a = int(value)
+        self._a = max(0, min(255, int(value)))
 
     ###########################################################################################
     # Operators

@@ -309,6 +309,10 @@ def run_all(language: str = "python") -> None:
     for class_name, test_name, func in _REGISTERED_TESTS:
         tests_by_class.setdefault(class_name, []).append((test_name, func))
 
+    total_passed = 0
+    total_tests = 0
+    failed_tests: list[tuple[str, str, list[dict[str, Any]]]] = []
+
     for class_name, tests in tests_by_class.items():
         results: list[dict[str, Any]] = []
         test_file: Path | None = None
@@ -374,6 +378,12 @@ def run_all(language: str = "python") -> None:
             if test_file is None:
                 test_file = Path(source_file)
 
+            total_tests += 1
+            if passed:
+                total_passed += 1
+            else:
+                failed_tests.append((class_name, test_name, failures, source_file, start_line))
+
             result = MiniTestResult(
                 group=class_name,
                 test_name=test_name,
@@ -393,6 +403,23 @@ def run_all(language: str = "python") -> None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
+
+    if failed_tests:
+        print(f"\n[py-minitest] FAILURES:", file=sys.stderr)
+        for group, name, fails, src_file, src_line in failed_tests:
+            loc = ""
+            if fails and "file" in fails[0] and "line" in fails[0]:
+                loc = f"  {fails[0]['file']}:{fails[0]['line']}"
+            elif src_file and src_line and src_line > 0:
+                loc = f"  {src_file}:{src_line}"
+            print(f"  FAIL {group}::{name}{loc}", file=sys.stderr)
+            for fl in fails:
+                err = fl.get("error") or fl.get("code_line") or "assertion failed"
+                print(f"       {err}", file=sys.stderr)
+        print(f"\n[py-minitest] {total_passed}/{total_tests} passed, {len(failed_tests)} failed", file=sys.stderr)
+        sys.exit(1)
+    else:
+        print(f"[py-minitest] {total_passed}/{total_tests} passed")
 
 
 def MINI_TEST(class_name: str, test_name: str) -> Callable[[Callable[[], None]], Callable[[], None]]:

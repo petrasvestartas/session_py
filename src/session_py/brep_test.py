@@ -79,7 +79,10 @@ def test_brep_add_face():
     fi = b.add_face(si, False)
     li = b.add_loop(fi, 0)
 
-    trim = NurbsCurve.create(False, 1, [Point(0, 0, 0), Point(1, 0, 0)])
+    trim = NurbsCurve.create(False, 1, [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+    ])
     ci = b.add_curve_2d(trim)
     b.add_trim(ci, -1, li, False, 0)
 
@@ -227,18 +230,58 @@ def test_brep_from_polylines():
 
     hx, hy, hz = 1.0, 1.5, 2.0
     c = [
-        Point(-hx, -hy, -hz), Point(hx, -hy, -hz),
-        Point(hx, hy, -hz), Point(-hx, hy, -hz),
-        Point(-hx, -hy, hz), Point(hx, -hy, hz),
-        Point(hx, hy, hz), Point(-hx, hy, hz),
+        Point(-hx, -hy, -hz),
+        Point(hx, -hy, -hz),
+        Point(hx, hy, -hz),
+        Point(-hx, hy, -hz),
+        Point(-hx, -hy, hz),
+        Point(hx, -hy, hz),
+        Point(hx, hy, hz),
+        Point(-hx, hy, hz),
     ]
 
-    bottom = Polyline([c[0], c[3], c[2], c[1], c[0]])
-    top = Polyline([c[4], c[5], c[6], c[7], c[4]])
-    front = Polyline([c[0], c[1], c[5], c[4], c[0]])
-    right = Polyline([c[1], c[2], c[6], c[5], c[1]])
-    back = Polyline([c[2], c[3], c[7], c[6], c[2]])
-    left = Polyline([c[3], c[0], c[4], c[7], c[3]])
+    bottom = Polyline([
+        c[0],
+        c[3],
+        c[2],
+        c[1],
+        c[0],
+    ])
+    top = Polyline([
+        c[4],
+        c[5],
+        c[6],
+        c[7],
+        c[4],
+    ])
+    front = Polyline([
+        c[0],
+        c[1],
+        c[5],
+        c[4],
+        c[0],
+    ])
+    right = Polyline([
+        c[1],
+        c[2],
+        c[6],
+        c[5],
+        c[1],
+    ])
+    back = Polyline([
+        c[2],
+        c[3],
+        c[7],
+        c[6],
+        c[2],
+    ])
+    left = Polyline([
+        c[3],
+        c[0],
+        c[4],
+        c[7],
+        c[3],
+    ])
 
     b = BRep.from_polylines([bottom, top, front, right, back, left])
     m = b.mesh()
@@ -261,18 +304,34 @@ def test_brep_from_nurbscurves():
 
     hx, hy, hz = 1.0, 1.5, 2.0
     c = [
-        Point(-hx, -hy, -hz), Point(hx, -hy, -hz),
-        Point(hx, hy, -hz), Point(-hx, hy, -hz),
-        Point(-hx, -hy, hz), Point(hx, -hy, hz),
-        Point(hx, hy, hz), Point(-hx, hy, hz),
+        Point(-hx, -hy, -hz),
+        Point(hx, -hy, -hz),
+        Point(hx, hy, -hz),
+        Point(-hx, hy, -hz),
+        Point(-hx, -hy, hz),
+        Point(hx, -hy, hz),
+        Point(hx, hy, hz),
+        Point(-hx, hy, hz),
     ]
 
-    bottom = NurbsCurve.create(False, 1, [c[0], c[3], c[2], c[1], c[0]])
-    top = NurbsCurve.create(False, 1, [c[4], c[5], c[6], c[7], c[4]])
-    front = NurbsCurve.create(False, 1, [c[0], c[1], c[5], c[4], c[0]])
-    right = NurbsCurve.create(False, 1, [c[1], c[2], c[6], c[5], c[1]])
-    back = NurbsCurve.create(False, 1, [c[2], c[3], c[7], c[6], c[2]])
-    left = NurbsCurve.create(False, 1, [c[3], c[0], c[4], c[7], c[3]])
+    bottom = NurbsCurve.create(False, 1, [
+        c[0], c[3], c[2], c[1], c[0],
+    ])
+    top = NurbsCurve.create(False, 1, [
+        c[4], c[5], c[6], c[7], c[4],
+    ])
+    front = NurbsCurve.create(False, 1, [
+        c[0], c[1], c[5], c[4], c[0],
+    ])
+    right = NurbsCurve.create(False, 1, [
+        c[1], c[2], c[6], c[5], c[1],
+    ])
+    back = NurbsCurve.create(False, 1, [
+        c[2], c[3], c[7], c[6], c[2],
+    ])
+    left = NurbsCurve.create(False, 1, [
+        c[3], c[0], c[4], c[7], c[3],
+    ])
 
     b = BRep.from_nurbscurves([bottom, top, front, right, back, left])
     m = b.mesh()
@@ -292,7 +351,11 @@ def test_brep_from_nurbscurves_holes():
     from session_py import Primitives
 
     outer = NurbsCurve.create(False, 1, [
-        Point(-5, -5, 0), Point(5, -5, 0), Point(5, 5, 0), Point(-5, 5, 0), Point(-5, -5, 0),
+        Point(-5, -5, 0),
+        Point(5, -5, 0),
+        Point(5, 5, 0),
+        Point(-5, 5, 0),
+        Point(-5, -5, 0),
     ])
     hole = Primitives.circle(0.0, 0.0, 0.0, 2.0)
 

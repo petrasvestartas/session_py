@@ -53,8 +53,11 @@ def test_nurbscurve_create_interpolated():
     from session_py.knot import CurveKnotStyle
 
     points = [
-        Point(14, 9, 0), Point(21, 22, 0), Point(26, 10, 0),
-        Point(35, 19, 0), Point(41, 13, 0)
+        Point(14, 9, 0),
+        Point(21, 22, 0),
+        Point(26, 10, 0),
+        Point(35, 19, 0),
+        Point(41, 13, 0),
     ]
 
     c = NurbsCurve.create_interpolated(points, CurveKnotStyle.Chord)

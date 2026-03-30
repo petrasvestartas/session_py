@@ -10,23 +10,6 @@ from .xform import Xform
 from .color import Color
 
 
-def _point_in_polygon_2d(px, py, coords):
-    winding = 0
-    n = len(coords) // 2
-    for i in range(n):
-        j = (i + 1) % n
-        y0, y1 = coords[i*2+1], coords[j*2+1]
-        if y0 <= py:
-            if y1 > py:
-                x0, x1 = coords[i*2], coords[j*2]
-                if (x1-x0)*(py-y0) - (px-x0)*(y1-y0) > 0:
-                    winding += 1
-        else:
-            if y1 <= py:
-                x0, x1 = coords[i*2], coords[j*2]
-                if (x1-x0)*(py-y0) - (px-x0)*(y1-y0) < 0:
-                    winding -= 1
-    return winding != 0
 
 
 class TrimmedSurface:
@@ -185,7 +168,7 @@ class TrimmedSurface:
 
         # Planar: boundary-conforming ear-clip triangulation
         if self.m_surface.is_planar():
-            from .remesh_cdt import cdt_triangulate as _cdt_triangulate
+            from .remesh_cdt import _cdt_triangulate as _RemeshCDT_cdt
             def disc(crv):
                 n = max(crv.cv_count() * 4, 16) if crv.degree() > 1 else max(crv.cv_count() - 1, 4)
                 pts, _ = crv.divide_by_count(n)
@@ -216,7 +199,7 @@ class TrimmedSurface:
             for h in holes:
                 ha = sum(h[j][0]*h[(j+1)%len(h)][1] - h[(j+1)%len(h)][0]*h[j][1] for j in range(len(h))) * 0.5
                 if ha > 0: h.reverse()
-            tris = _cdt_triangulate(border, holes if holes else None)
+            tris = _RemeshCDT_cdt(border, holes if holes else None)
             np_ = len(pts3d)
             polygons = []
             for v0, v1, v2 in tris:
@@ -266,25 +249,24 @@ class TrimmedSurface:
                 else:
                     full.add_face([v00, v10, v01])
                     full.add_face([v10, v11, v01])
+        from .point import Point
+        from .polyline import Polyline
         def discretize(crv):
             n = max(crv.cv_count() * 4, 16)
             pts, _ = crv.divide_by_count(n)
-            coords = []
-            for p in pts:
-                coords.append(p[0])
-                coords.append(p[1])
-            return coords
-        outer_coords = discretize(self.m_outer_loop)
-        inner_coords = [discretize(inner) for inner in self.m_inner_loops]
+            return Polyline([Point(p[0], p[1], 0.0) for p in pts])
+        outer_polygon = discretize(self.m_outer_loop)
+        inner_polygons = [discretize(inner) for inner in self.m_inner_loops]
         keep_verts = set()
         for vk, vd in full.vertex.items():
             u_raw = vd.attributes.get("u", 0.0)
             v_raw = vd.attributes.get("v", 0.0)
-            if not _point_in_polygon_2d(u_raw, v_raw, outer_coords):
+            pt = Point(u_raw, v_raw, 0.0)
+            if not outer_polygon.point_in_polygon_2d(pt):
                 continue
             in_hole = False
-            for ic in inner_coords:
-                if _point_in_polygon_2d(u_raw, v_raw, ic):
+            for ip in inner_polygons:
+                if ip.point_in_polygon_2d(pt):
                     in_hole = True
                     break
             if not in_hole:

@@ -7,6 +7,7 @@ from .mini_test import run_all
 def test_rtree_creation():
     from session_py.rtree import RTree
     t = RTree()
+
     MINI_CHECK(t.count() == 0)
 
 
@@ -15,6 +16,7 @@ def test_rtree_insert():
     from session_py.rtree import RTree
     t = RTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 42)
+
     MINI_CHECK(t.count() == 1)
 
 
@@ -25,6 +27,7 @@ def test_rtree_insert_multiple():
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
     t.insert([2.0, 2.0, 2.0], [3.0, 3.0, 3.0], 1)
     t.insert([4.0, 4.0, 4.0], [5.0, 5.0, 5.0], 2)
+
     MINI_CHECK(t.count() == 3)
 
 
@@ -38,6 +41,7 @@ def test_rtree_search_hit():
         found[0] = data
         return True
     hits = t.search([1.0, 1.0, 1.0], [3.0, 3.0, 3.0], cb)
+
     MINI_CHECK(hits == 1)
     MINI_CHECK(found[0] == 0)
 
@@ -48,6 +52,7 @@ def test_rtree_search_miss():
     t = RTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 7)
     hits = t.search([2.0, 2.0, 2.0], [3.0, 3.0, 3.0], lambda data: True)
+
     MINI_CHECK(hits == 0)
 
 
@@ -57,6 +62,7 @@ def test_rtree_remove():
     t = RTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 5)
     t.remove([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 5)
+
     MINI_CHECK(t.count() == 0)
 
 
@@ -68,6 +74,7 @@ def test_rtree_remove_all():
     t.insert([2.0, 2.0, 2.0], [3.0, 3.0, 3.0], 1)
     t.insert([4.0, 4.0, 4.0], [5.0, 5.0, 5.0], 2)
     t.remove_all()
+
     MINI_CHECK(t.count() == 0)
 
 
@@ -81,6 +88,7 @@ def test_rtree_search_count():
     t.insert([10.0, 0.0, 0.0], [11.0, 1.0, 1.0], 3)
     t.insert([0.0, 10.0, 0.0], [1.0, 11.0, 1.0], 4)
     hits = t.search([0.0, 0.0, 0.0], [4.0, 4.0, 4.0], lambda data: True)
+
     MINI_CHECK(hits == 3)
 
 
@@ -92,6 +100,7 @@ def test_rtree_search_stop():
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1)
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 2)
     hits = t.search([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], lambda data: False)
+
     MINI_CHECK(hits == 1)
 
 
@@ -208,6 +217,7 @@ def test_rtree_search_100_boxes():
         found.append(data)
         return True
     hits = t.search([-60.0, -60.0, -60.0], [60.0, 60.0, 60.0], cb)
+
     MINI_CHECK(hits > 0)
     MINI_CHECK(hits <= 100)
     for d in found:

@@ -8,6 +8,7 @@ from .tolerance import TOLERANCE
 def test_session_constructor():
     from session_py import Session
     session = Session()
+
     MINI_CHECK(session.name == "my_session")
     MINI_CHECK(bool(session.guid))
 
@@ -26,6 +27,7 @@ def test_session_jsondump():
     session.add_point(point2)
     session.add_edge(point1.guid, point2.guid, "connection")
     data = session.__jsondump__()
+
     MINI_CHECK(data["name"] == "my_session")
     MINI_CHECK("guid" in data)
     MINI_CHECK(len(data["objects"]["points"]) == 2)
@@ -48,6 +50,7 @@ def test_session_jsonload():
     session.add_edge(point1.guid, point2.guid, "connection")
     data = session.__jsondump__()
     session2 = Session.__jsonload__(data)
+
     MINI_CHECK(session2.name == "my_session")
     MINI_CHECK(len(session2.lookup) == 2)
     MINI_CHECK(session2.graph.number_of_vertices() == 2)
@@ -71,6 +74,7 @@ def test_session_file_io():
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_roundtrip.json"
     json_dump(session, fname)
     loaded_session = json_load(fname)
+
     MINI_CHECK(loaded_session.name == session.name)
     MINI_CHECK(len(loaded_session.lookup) == len(session.lookup))
     MINI_CHECK(loaded_session.graph.number_of_vertices() == session.graph.number_of_vertices())
@@ -85,6 +89,7 @@ def test_session_add_point():
     session = Session()
     point = Point(1.0, 2.0, 3.0)
     session.add_point(point)
+
     MINI_CHECK(len(session.objects.points) == 1)
     MINI_CHECK(point.guid in session.lookup)
     MINI_CHECK(session.graph.has_node(point.guid))
@@ -101,6 +106,7 @@ def test_session_add_edge():
     session.add_point(point1)
     session.add_point(point2)
     session.add_edge(point1.guid, point2.guid, "connection")
+
     MINI_CHECK(session.graph.has_edge((point1.guid, point2.guid)))
 
 
@@ -113,6 +119,7 @@ def test_session_get_object():
     point = Point(1.0, 2.0, 3.0)
     session.add_point(point)
     retrieved = session.get_object(point.guid)
+
     MINI_CHECK(retrieved is not None)
     MINI_CHECK(retrieved.guid == point.guid)
 
@@ -135,6 +142,7 @@ def test_session_file_io_comprehensive():
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_comprehensive.json"
     json_dump(session, fname)
     loaded_session = json_load(fname)
+
     MINI_CHECK(loaded_session.name == session.name)
     MINI_CHECK(len(loaded_session.objects.points) == len(session.objects.points))
     MINI_CHECK(loaded_session.graph.number_of_vertices() == session.graph.number_of_vertices())
@@ -204,6 +212,7 @@ def test_session_tree_transformation_hierarchy():
     box3.xform = Xform.translation(2.0, 0, 0)
 
     transformed = scene.get_geometry()
+
     MINI_CHECK(len(transformed.meshes) == 3)
 
     expected_box1 = [

@@ -6,16 +6,16 @@ from session_py.session_config import SESSION_CONFIG, SessionConfig
 
 @MINI_TEST("SessionConfig", "Default Values")
 def test_session_config_default_values():
-    MINI_CHECK(SESSION_CONFIG.explode_mesh_faces == False)
+    MINI_CHECK(not SESSION_CONFIG.explode_mesh_faces)
 
 
 @MINI_TEST("SessionConfig", "Runtime Modification")
 def test_session_config_runtime_modification():
-    MINI_CHECK(SESSION_CONFIG.explode_mesh_faces == False)
+    MINI_CHECK(not SESSION_CONFIG.explode_mesh_faces)
     SESSION_CONFIG.explode_mesh_faces = True
-    MINI_CHECK(SESSION_CONFIG.explode_mesh_faces == True)
+    MINI_CHECK(SESSION_CONFIG.explode_mesh_faces)
     SESSION_CONFIG.reset()
-    MINI_CHECK(SESSION_CONFIG.explode_mesh_faces == False)
+    MINI_CHECK(not SESSION_CONFIG.explode_mesh_faces)
 
 
 if __name__ == "__main__":

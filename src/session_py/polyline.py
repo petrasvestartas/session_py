@@ -589,6 +589,27 @@ class Polyline:
 
         return Point(sum_x / n, sum_y / n, sum_z / n)
 
+    def point_in_polygon_2d(self, p) -> bool:
+        """Winding-number point-in-polygon test. p.x/y tested; polygon vertex z ignored."""
+        px, py = p[0], p[1]
+        coords = self.points
+        winding = 0
+        n = len(coords)
+        for i in range(n):
+            j = (i + 1) % n
+            y0, y1 = coords[i][1], coords[j][1]
+            if y0 <= py:
+                if y1 > py:
+                    x0, x1 = coords[i][0], coords[j][0]
+                    if (x1 - x0) * (py - y0) - (px - x0) * (y1 - y0) > 0:
+                        winding += 1
+            else:
+                if y1 <= py:
+                    x0, x1 = coords[i][0], coords[j][0]
+                    if (x1 - x0) * (py - y0) - (px - x0) * (y1 - y0) < 0:
+                        winding -= 1
+        return winding != 0
+
     def get_average_plane(self) -> Tuple[Point, Vector, Vector, Vector]:
         """Get average plane from polyline points."""
         origin = self.center()
@@ -1227,3 +1248,56 @@ class Polyline:
 
     def __ne__(self, other) -> bool:
         return not self == other
+
+    @staticmethod
+    def _simplify_perp_dist(pt, line_start, line_end):
+        import math
+        dx = line_end[0] - line_start[0]
+        dy = line_end[1] - line_start[1]
+        dz = line_end[2] - line_start[2]
+        len_sq = dx * dx + dy * dy + dz * dz
+        if len_sq == 0.0:
+            ex = pt[0] - line_start[0]
+            ey = pt[1] - line_start[1]
+            ez = pt[2] - line_start[2]
+            return math.sqrt(ex * ex + ey * ey + ez * ez)
+        t = ((pt[0] - line_start[0]) * dx + (pt[1] - line_start[1]) * dy + (pt[2] - line_start[2]) * dz) / len_sq
+        t = max(0.0, min(1.0, t))
+        cx = line_start[0] + t * dx
+        cy = line_start[1] + t * dy
+        cz = line_start[2] + t * dz
+        ex = pt[0] - cx
+        ey = pt[1] - cy
+        ez = pt[2] - cz
+        return math.sqrt(ex * ex + ey * ey + ez * ez)
+
+    @staticmethod
+    def _simplify_rdp(points, start, end, tolerance, keep):
+        if end <= start + 1:
+            return
+        max_dist = 0.0
+        max_idx = start
+        for i in range(start + 1, end):
+            d = Polyline._simplify_perp_dist(points[i], points[start], points[end])
+            if d > max_dist:
+                max_dist = d
+                max_idx = i
+        if max_dist > tolerance:
+            keep[max_idx] = True
+            Polyline._simplify_rdp(points, start, max_idx, tolerance, keep)
+            Polyline._simplify_rdp(points, max_idx, end, tolerance, keep)
+
+    @staticmethod
+    def simplify_points(points, tolerance):
+        n = len(points)
+        if n < 3:
+            return list(points)
+        keep = [False] * n
+        keep[0] = True
+        keep[n - 1] = True
+        Polyline._simplify_rdp(points, 0, n - 1, tolerance, keep)
+        return [points[i] for i in range(n) if keep[i]]
+
+    def simplify(self, tolerance):
+        pts = Polyline.simplify_points(self.points, tolerance)
+        return Polyline(pts)

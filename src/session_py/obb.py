@@ -5,7 +5,7 @@ from .vector import Vector
 from .plane import Plane
 
 
-class Obb:
+class OBB:
     def __init__(
         self,
         center: Point = None,
@@ -103,7 +103,7 @@ class Obb:
 
         Returns
         -------
-        Obb
+        OBB
             Axis-aligned or oriented bounding box containing the polyline.
         """
         if plane is not None:
@@ -125,7 +125,7 @@ class Obb:
 
         Returns
         -------
-        Obb
+        OBB
             Axis-aligned or oriented bounding box containing the mesh.
         """
         vertices, faces = mesh.to_vertices_and_faces()
@@ -288,7 +288,7 @@ class Obb:
         hx = abs(self.x_axis[0]) * ex + abs(self.y_axis[0]) * ey + abs(self.z_axis[0]) * ez
         hy = abs(self.x_axis[1]) * ex + abs(self.y_axis[1]) * ey + abs(self.z_axis[1]) * ez
         hz = abs(self.x_axis[2]) * ex + abs(self.y_axis[2]) * ey + abs(self.z_axis[2]) * ez
-        return Obb(self.center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz))
+        return OBB(self.center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz))
 
     def point_at(self, x: float, y: float, z: float) -> Point:
         return Point(
@@ -365,12 +365,107 @@ class Obb:
             self.half_size[2] + amount,
         )
 
+    def area(self) -> float:
+        hx, hy, hz = self.half_size[0], self.half_size[1], self.half_size[2]
+        return 8.0 * (hx * hy + hy * hz + hz * hx)
+
+    def diagonal(self) -> float:
+        import math
+        hx, hy, hz = self.half_size[0], self.half_size[1], self.half_size[2]
+        return 2.0 * math.sqrt(hx * hx + hy * hy + hz * hz)
+
+    def is_valid(self) -> bool:
+        return self.half_size[0] >= 0.0 and self.half_size[1] >= 0.0 and self.half_size[2] >= 0.0
+
+    def volume(self) -> float:
+        return 8.0 * self.half_size[0] * self.half_size[1] * self.half_size[2]
+
+    def closest_point(self, pt) -> Point:
+        dx = pt[0] - self.center[0]
+        dy = pt[1] - self.center[1]
+        dz = pt[2] - self.center[2]
+        lx = dx * self.x_axis[0] + dy * self.x_axis[1] + dz * self.x_axis[2]
+        ly = dx * self.y_axis[0] + dy * self.y_axis[1] + dz * self.y_axis[2]
+        lz = dx * self.z_axis[0] + dy * self.z_axis[1] + dz * self.z_axis[2]
+        hx, hy, hz = self.half_size[0], self.half_size[1], self.half_size[2]
+        lx = max(-hx, min(hx, lx))
+        ly = max(-hy, min(hy, ly))
+        lz = max(-hz, min(hz, lz))
+        return Point(
+            self.center[0] + lx * self.x_axis[0] + ly * self.y_axis[0] + lz * self.z_axis[0],
+            self.center[1] + lx * self.x_axis[1] + ly * self.y_axis[1] + lz * self.z_axis[1],
+            self.center[2] + lx * self.x_axis[2] + ly * self.y_axis[2] + lz * self.z_axis[2],
+        )
+
+    def contains(self, pt) -> bool:
+        dx = pt[0] - self.center[0]
+        dy = pt[1] - self.center[1]
+        dz = pt[2] - self.center[2]
+        lx = abs(dx * self.x_axis[0] + dy * self.x_axis[1] + dz * self.x_axis[2])
+        ly = abs(dx * self.y_axis[0] + dy * self.y_axis[1] + dz * self.y_axis[2])
+        lz = abs(dx * self.z_axis[0] + dy * self.z_axis[1] + dz * self.z_axis[2])
+        return lx <= self.half_size[0] and ly <= self.half_size[1] and lz <= self.half_size[2]
+
+    def corner(self, x_max: bool, y_max: bool, z_max: bool) -> Point:
+        ox = self.half_size[0] if x_max else -self.half_size[0]
+        oy = self.half_size[1] if y_max else -self.half_size[1]
+        oz = self.half_size[2] if z_max else -self.half_size[2]
+        return self.point_at(ox, oy, oz)
+
+    def get_corners(self) -> List[Point]:
+        return self.corners()
+
+    def get_edges(self):
+        from .line import Line
+        c = self.corners()
+        return [
+            Line.from_points(c[0], c[1]),
+            Line.from_points(c[1], c[2]),
+            Line.from_points(c[2], c[3]),
+            Line.from_points(c[3], c[0]),
+            Line.from_points(c[4], c[5]),
+            Line.from_points(c[5], c[6]),
+            Line.from_points(c[6], c[7]),
+            Line.from_points(c[7], c[4]),
+            Line.from_points(c[0], c[4]),
+            Line.from_points(c[1], c[5]),
+            Line.from_points(c[2], c[6]),
+            Line.from_points(c[3], c[7]),
+        ]
+
+    def union(self, other: "OBB"):
+        min_x, max_x = -self.half_size[0], self.half_size[0]
+        min_y, max_y = -self.half_size[1], self.half_size[1]
+        min_z, max_z = -self.half_size[2], self.half_size[2]
+        for c in other.corners():
+            dx = c[0] - self.center[0]
+            dy = c[1] - self.center[1]
+            dz = c[2] - self.center[2]
+            lx = dx * self.x_axis[0] + dy * self.x_axis[1] + dz * self.x_axis[2]
+            ly = dx * self.y_axis[0] + dy * self.y_axis[1] + dz * self.y_axis[2]
+            lz = dx * self.z_axis[0] + dy * self.z_axis[1] + dz * self.z_axis[2]
+            min_x = min(min_x, lx)
+            max_x = max(max_x, lx)
+            min_y = min(min_y, ly)
+            max_y = max(max_y, ly)
+            min_z = min(min_z, lz)
+            max_z = max(max_z, lz)
+        ox = (min_x + max_x) * 0.5
+        oy = (min_y + max_y) * 0.5
+        oz = (min_z + max_z) * 0.5
+        self.center = Point(
+            self.center[0] + ox * self.x_axis[0] + oy * self.y_axis[0] + oz * self.z_axis[0],
+            self.center[1] + ox * self.x_axis[1] + oy * self.y_axis[1] + oz * self.z_axis[1],
+            self.center[2] + ox * self.x_axis[2] + oy * self.y_axis[2] + oz * self.z_axis[2],
+        )
+        self.half_size = Vector((max_x - min_x) * 0.5, (max_y - min_y) * 0.5, (max_z - min_z) * 0.5)
+
     @staticmethod
     def _separating_plane_exists(
         relative_position: Vector,
         axis: Vector,
-        box1: "Obb",
-        box2: "Obb",
+        box1: "OBB",
+        box2: "OBB",
     ) -> bool:
         dot_rp = abs(relative_position.dot(axis))
 
@@ -386,7 +481,19 @@ class Obb:
 
         return dot_rp > (proj1 + proj2)
 
-    def collides_with(self, other: "Obb") -> bool:
+    def collides_with_broad(self, other: "OBB") -> bool:
+        from .aabb import AABB
+        def _world_aabb(o):
+            ex, ey, ez = o.half_size[0], o.half_size[1], o.half_size[2]
+            hx = abs(o.x_axis[0])*ex + abs(o.y_axis[0])*ey + abs(o.z_axis[0])*ez
+            hy = abs(o.x_axis[1])*ex + abs(o.y_axis[1])*ey + abs(o.z_axis[1])*ez
+            hz = abs(o.x_axis[2])*ex + abs(o.y_axis[2])*ey + abs(o.z_axis[2])*ez
+            return AABB(o.center[0], o.center[1], o.center[2], hx, hy, hz)
+        if not _world_aabb(self).intersects(_world_aabb(other)):
+            return False
+        return self.collides_with(other)
+
+    def collides_with(self, other: "OBB") -> bool:
         center_vec = Vector(self.center[0], self.center[1], self.center[2])
         other_center_vec = Vector(other.center[0], other.center[1], other.center[2])
         relative_position = Vector.from_points(center_vec, other_center_vec)

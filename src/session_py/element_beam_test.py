@@ -110,6 +110,7 @@ def test_beam_session_geometry():
     MINI_CHECK(isinstance(sg, Mesh))
     verts = list(sg.vertex.values())
     xs = [v.x for v in verts]
+
     MINI_CHECK(min(xs) > 9.0)
 
 

@@ -69,7 +69,7 @@ def test_pointcloud_constructor():
     pc4 = PointCloud.from_coords(coords, colors_arr, normals_arr)
 
     MINI_CHECK(pc.name == "my_pointcloud" and pc.guid != "" and point_count == 3)
-    MINI_CHECK(color_count == 3 and normal_count == 3 and is_empty == False)
+    MINI_CHECK(color_count == 3 and normal_count == 3 and not is_empty)
     MINI_CHECK("3 points" in pcstr)
     MINI_CHECK("PointCloud(my_pointcloud" in pcrepr)
     MINI_CHECK(pccopy == pc and pccopy.guid != pc.guid)
@@ -159,9 +159,18 @@ def test_pointcloud_json_roundtrip():
     from pathlib import Path
 
     pc = PointCloud(
-        [Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)],
-        [Vector(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0)],
-        [Color(255, 0, 0, 255), Color(0, 255, 0, 255)]
+        [
+            Point(1.0, 2.0, 3.0),
+            Point(4.0, 5.0, 6.0),
+        ],
+        [
+            Vector(0.0, 0.0, 1.0),
+            Vector(0.0, 0.0, 1.0),
+        ],
+        [
+            Color(255, 0, 0, 255),
+            Color(0, 255, 0, 255),
+        ]
     )
     pc.name = "test_pointcloud"
 
@@ -196,9 +205,18 @@ def test_pointcloud_protobuf_roundtrip():
     from pathlib import Path
 
     pc = PointCloud(
-        [Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)],
-        [Vector(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0)],
-        [Color(255, 0, 0, 255), Color(0, 255, 0, 255)]
+        [
+            Point(1.0, 2.0, 3.0),
+            Point(4.0, 5.0, 6.0),
+        ],
+        [
+            Vector(0.0, 0.0, 1.0),
+            Vector(0.0, 0.0, 1.0),
+        ],
+        [
+            Color(255, 0, 0, 255),
+            Color(0, 255, 0, 255),
+        ]
     )
     pc.name = "test_pointcloud"
 

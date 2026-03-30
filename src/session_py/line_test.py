@@ -144,6 +144,7 @@ def test_line_json_roundtrip():
     # JSON object
     d = l.__jsondump__()
     loaded_j = Line.__jsonload__(d)
+
     MINI_CHECK(loaded_j.name == "test_line")
 
     # String
@@ -182,6 +183,7 @@ def test_line_protobuf_roundtrip():
     # Bytes
     b = l.pb_dumps()
     loaded_s = Line.pb_loads(b)
+
     MINI_CHECK(loaded_s.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
     MINI_CHECK(loaded_s.guid == l.guid)
@@ -288,8 +290,10 @@ def test_line_fit_points():
     from session_py import Point
 
     fit_pts = [
-        Point(0.0, 0.0, 0.0), Point(1.0, 1.0, 0.5),
-        Point(2.0, 2.0, 1.0), Point(3.0, 3.0, 1.5),
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.5),
+        Point(2.0, 2.0, 1.0),
+        Point(3.0, 3.0, 1.5),
     ]
     l_fit = Line.fit_points(fit_pts)
 
