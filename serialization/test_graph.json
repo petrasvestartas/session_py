@@ -1,18 +1,18 @@
 {
     "type": "Graph",
-    "guid": "9ce5d653-522b-45d5-94b9-fba25137599d",
+    "guid": "93736d91-6203-4930-872a-c60146dcfe37",
     "name": "./serialization/test_graph",
     "vertices": [
         {
             "type": "Vertex",
-            "guid": "ea923885-ef13-4b1c-a190-6450d35ad329",
+            "guid": "2f85c3d8-25bc-452e-b6a8-827c9f246052",
             "name": "node1",
             "attribute": "Node 1",
             "index": 0
         },
         {
             "type": "Vertex",
-            "guid": "e8d83895-224c-4722-a65a-8b26bbb9e5cc",
+            "guid": "e894ad7d-f08e-4d25-8c3e-2e6c7c3009c3",
             "name": "node2",
             "attribute": "Node 2",
             "index": 1
@@ -21,7 +21,7 @@
     "edges": [
         {
             "type": "Edge",
-            "guid": "d3f27240-c722-4983-b510-f6337a296c6c",
+            "guid": "5ec49fa5-7870-439f-b5c2-6868477900bf",
             "name": "my_edge",
             "v0": "node1",
             "v1": "node2",
