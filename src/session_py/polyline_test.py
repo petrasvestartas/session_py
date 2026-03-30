@@ -353,6 +353,28 @@ def test_polyline_get_points():
     MINI_CHECK(TOLERANCE.is_close(points[3][0], 0.0) and TOLERANCE.is_close(points[3][1], 1.0))
 
 
+@MINI_TEST("Polyline", "Get Lines")
+def test_polyline_get_lines():
+    from session_py import Polyline
+    from session_py import Point
+    from session_py import Line
+
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+    ])
+    lines = pl.get_lines()
+    lines_prop = pl.lines
+
+    MINI_CHECK(len(lines) == 3)
+    MINI_CHECK(len(lines_prop) == 3)
+    MINI_CHECK(TOLERANCE.is_close(lines[0][0], 0.0) and TOLERANCE.is_close(lines[0][3], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(lines[1][0], 1.0) and TOLERANCE.is_close(lines[1][4], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(lines[2][0], 1.0) and TOLERANCE.is_close(lines[2][3], 0.0))
+
+
 @MINI_TEST("Polyline", "Shift")
 def test_polyline_shift():
     from session_py import Polyline

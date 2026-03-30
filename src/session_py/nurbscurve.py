@@ -1540,9 +1540,21 @@ class NurbsCurve:
         if abs(old_t1 - old_t0) < Tolerance.ZERO_TOLERANCE:
             return False
 
+        clamped_start = (self.m_order >= 2 and
+            abs(self.m_knot[0] - self.m_knot[self.m_order - 2]) < Tolerance.ZERO_TOLERANCE)
+        clamped_end = (self.m_cv_count < len(self.m_knot) and
+            abs(self.m_knot[-1] - self.m_knot[self.m_cv_count - 1]) < Tolerance.ZERO_TOLERANCE)
+
         scale = (t1 - t0) / (old_t1 - old_t0)
         for i in range(len(self.m_knot)):
             self.m_knot[i] = t0 + (self.m_knot[i] - old_t0) * scale
+
+        if clamped_start:
+            for i in range(self.m_order - 1):
+                self.m_knot[i] = t0
+        if clamped_end:
+            for i in range(self.m_cv_count - 1, len(self.m_knot)):
+                self.m_knot[i] = t1
 
         self._invalidate_rmf_cache()
         return True

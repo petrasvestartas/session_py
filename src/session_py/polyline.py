@@ -155,6 +155,24 @@ class Polyline:
         n = self.point_count()
         return n - 1 if n > 1 else 0
 
+    def get_lines(self) -> List:
+        """Returns all segments as Line objects."""
+        from .line import Line
+        result = []
+        for i in range(self.segment_count()):
+            idx0 = i * 3
+            idx1 = (i + 1) * 3
+            result.append(Line(
+                self._coords[idx0], self._coords[idx0 + 1], self._coords[idx0 + 2],
+                self._coords[idx1], self._coords[idx1 + 1], self._coords[idx1 + 2],
+            ))
+        return result
+
+    @property
+    def lines(self) -> List:
+        """Property returning all segments as Line objects."""
+        return self.get_lines()
+
     def length(self) -> float:
         """Calculates the total length of the polyline."""
         total_length = 0.0
