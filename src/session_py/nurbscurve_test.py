@@ -357,14 +357,14 @@ def test_nurbscurve_attributes():
 
     # Span of distict knot intervals
     intervals = curve.get_span_vector()
-    MINI_CHECK(intervals[0] == 0.0 and intervals[1] == 0.5 and intervals[2] == 1.0)
+    MINI_CHECK(TOLERANCE.is_close(intervals[0], 0.0) and TOLERANCE.is_close(intervals[1], 0.5) and TOLERANCE.is_close(intervals[2], 1.0))
 
     #####################################################
     # Geometric checks
     #####################################################
 
     found, t_out = curve.get_next_discontinuity(2, curve.domain_start(), curve.domain_end())
-    MINI_CHECK(found == True and t_out == 0.5)
+    MINI_CHECK(found == True and TOLERANCE.is_close(t_out, 0.5))
 
 
 @MINI_TEST("NurbsCurve", "Conversions")
