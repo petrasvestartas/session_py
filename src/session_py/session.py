@@ -261,7 +261,7 @@ class Session:
         tree_node = TreeNode(name=plane.guid)
         return tree_node
 
-    def add_bbox(self, bbox) -> TreeNode:
+    def add_obb(self, bbox) -> TreeNode:
         """Add a bounding box to the Session.
 
         Returns

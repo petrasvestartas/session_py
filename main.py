@@ -386,7 +386,7 @@ def main():
         )
         bbox.name = "bbox_40"
         bbox_guid = bbox.guid
-        scene.add_bbox(bbox)
+        scene.add_obb(bbox)
         
         cyl_line = Line.from_points(Point(-1, 50, 0), Point(1, 50, 0))
         cyl = Cylinder(cyl_line, 1.0)
