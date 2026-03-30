@@ -1,16 +1,16 @@
 {
     "type": "Objects",
-    "guid": "f2ea8e10-d13a-4355-99fd-7e3f3292ba15",
+    "guid": "cbafabbd-1eb8-4580-9938-999e147a3fd1",
     "name": "my_objects",
     "points": [
         {
-            "guid": "ec5cda48-8f4a-4c89-a1d7-39628ac38dd8",
+            "guid": "07beb985-4047-4b60-9a3b-afabfa2f21e0",
             "name": "my_point",
             "pointcolor": {
                 "a": 255,
                 "b": 255,
                 "g": 0,
-                "guid": "7e5ab079-7cea-4db8-bfd6-42efc8066408",
+                "guid": "9bce8e63-b4f8-4006-bdd8-5590020b3d76",
                 "name": "blue",
                 "r": 0,
                 "type": "Color"
@@ -19,7 +19,7 @@
             "width": 1.0,
             "x": 1.0,
             "xform": {
-                "guid": "0a972a48-9de9-486a-b3a1-688954b24293",
+                "guid": "8919e4eb-07fd-4137-84ef-f4770f59a479",
                 "m": [
                     1.0,
                     0.0,
@@ -45,13 +45,13 @@
             "z": 3.0
         },
         {
-            "guid": "96e80546-f37c-4ee8-8c6f-c15077451661",
+            "guid": "55a66bde-5ae7-4264-ae79-9d729e0ca3b1",
             "name": "my_point",
             "pointcolor": {
                 "a": 255,
                 "b": 255,
                 "g": 0,
-                "guid": "7e5ab079-7cea-4db8-bfd6-42efc8066408",
+                "guid": "9bce8e63-b4f8-4006-bdd8-5590020b3d76",
                 "name": "blue",
                 "r": 0,
                 "type": "Color"
@@ -60,7 +60,7 @@
             "width": 1.0,
             "x": 4.0,
             "xform": {
-                "guid": "0a972a48-9de9-486a-b3a1-688954b24293",
+                "guid": "8919e4eb-07fd-4137-84ef-f4770f59a479",
                 "m": [
                     1.0,
                     0.0,
