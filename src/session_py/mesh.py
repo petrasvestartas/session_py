@@ -474,7 +474,7 @@ class Mesh:
             [4,18, 6,10, 8], [5, 9,11, 7,19], [6,18,19, 7,15],
         ]
         faces = [[verts[f[0]], verts[f[1]], verts[f[2]], verts[f[3]], verts[f[4]]] for f in idx]
-        return Mesh.from_polylines(faces, 1e-10)
+        return Mesh.from_polylines(faces, 1e-6)
 
     @staticmethod
     def from_lines(

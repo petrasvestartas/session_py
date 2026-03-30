@@ -1334,3 +1334,8 @@ class Polyline:
     def simplify(self, tolerance):
         pts = Polyline.simplify_points(self.points, tolerance)
         return Polyline(pts)
+
+    @staticmethod
+    def boolean_op(a, b, clip_type):
+        from .boolean_polyline import BooleanPolyline
+        return BooleanPolyline.compute(a, b, clip_type)
