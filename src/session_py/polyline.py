@@ -131,6 +131,21 @@ class Polyline:
         """Returns the number of points in the polyline."""
         return self.point_count()
 
+    def __getitem__(self, index: int) -> Point:
+        if 0 <= index < self.point_count():
+            idx = index * 3
+            return Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+        raise IndexError("Index out of range")
+
+    def __setitem__(self, index: int, point: Point) -> None:
+        if 0 <= index < self.point_count():
+            idx = index * 3
+            self._coords[idx] = point[0]
+            self._coords[idx + 1] = point[1]
+            self._coords[idx + 2] = point[2]
+        else:
+            raise IndexError("Index out of range")
+
     def is_empty(self) -> bool:
         """Returns true if the polyline has no points."""
         return self.point_count() == 0

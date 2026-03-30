@@ -26,6 +26,11 @@ def test_polyline_constructor():
     # Get point
     pt = pl.get_point(1)
 
+    # Index operator
+    pt_idx = pl[1]
+    pl_copy = pl.duplicate()
+    pl_copy[0] = Point(5.0, 6.0, 7.0)
+
     # Minimal and Full String Representation
     plstr = str(pl)
     plrepr = repr(pl)
@@ -77,6 +82,7 @@ def test_polyline_constructor():
     MINI_CHECK(pl.name == "my_polyline" and pl.guid != "" and point_count == 4)
     MINI_CHECK(segment_count == 3 and not is_empty)
     MINI_CHECK(pt[0] == 1.0 and pt[1] == 0.0 and pt[2] == 0.0)
+    MINI_CHECK(pt_idx[0] == 1.0 and pl_copy[0][0] == 5.0 and pl_copy[0][1] == 6.0)
     MINI_CHECK("(0.0, 0.0, 0.0)" in plstr)
     MINI_CHECK("Polyline(my_polyline" in plrepr and "4 points" in plrepr)
     MINI_CHECK(plcopy == plother)
