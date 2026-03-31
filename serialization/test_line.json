@@ -1,10 +1,10 @@
 {
-  "guid": "16ae1ef0-f7d0-4fd1-9cb7-507a7bf8f705",
+  "guid": "5414f87a-6ff2-4e28-a3cf-d871656baac0",
   "linecolor": {
     "a": 255,
     "b": 0,
     "g": 0,
-    "guid": "423c9059-cd77-4d93-ba2a-ff7ac20ec722",
+    "guid": "15a649a1-e214-4c65-a0aa-96e73bb00e28",
     "name": "black",
     "r": 0,
     "type": "Color"
@@ -15,7 +15,7 @@
   "x0": 42.1,
   "x1": 168.4,
   "xform": {
-    "guid": "770c2c97-0d4d-43b0-a786-58206c3b9f94",
+    "guid": "e83cf893-3bca-4b26-b7ca-787959492171",
     "m": [
       1.0,
       0.0,

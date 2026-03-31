@@ -249,6 +249,23 @@ def test_polyline_is_closed():
     MINI_CHECK(is_closed)
 
 
+@MINI_TEST("Polyline", "Closed")
+def test_polyline_closed():
+    from session_py import Polyline
+    from session_py import Point
+
+    open_pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)])
+    closed_from_open = open_pl.closed()
+
+    closed_pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0), Point(0.0, 0.0, 0.0)])
+    closed_from_closed = closed_pl.closed()
+
+    MINI_CHECK(closed_from_open.point_count() == 5)
+    MINI_CHECK(closed_from_open.is_closed())
+    MINI_CHECK(closed_from_closed.point_count() == 5)
+    MINI_CHECK(closed_from_closed.is_closed())
+
+
 @MINI_TEST("Polyline", "Reverse")
 def test_polyline_reverse():
     from session_py import Polyline

@@ -569,6 +569,13 @@ class Polyline:
             return False
         return self.points[0].distance(self.points[-1]) < Tolerance.ZERO_TOLERANCE
 
+    def closed(self) -> "Polyline":
+        if self.is_closed():
+            return Polyline.from_coords(self._coords[:])
+        new_coords = self._coords[:]
+        new_coords.extend([self._coords[0], self._coords[1], self._coords[2]])
+        return Polyline.from_coords(new_coords)
+
     def merge_collinear(self, tol: float = Tolerance.APPROXIMATION) -> None:
         """Merge consecutive collinear segments in-place; closed polyline wraps around."""
         closed = self.is_closed()
