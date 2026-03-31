@@ -21,7 +21,7 @@ from .obb import OBB
 from .pointcloud import PointCloud
 from .bvh import BVH, BVHNode
 from .rtree import RTree
-from .tolerance import Tolerance
+from .tolerance import Tolerance, TOLERANCE
 from .session_config import SessionConfig, SESSION_CONFIG
 from . import encoders
 from .obj import load_obj, save_obj
@@ -69,6 +69,7 @@ __all__ = [
     "BVHNode",
     "RTree",
     "Tolerance",
+    "TOLERANCE",
     "SessionConfig",
     "SESSION_CONFIG",
     "encoders",
