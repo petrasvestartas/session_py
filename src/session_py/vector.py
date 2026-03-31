@@ -213,6 +213,9 @@ class Vector:
     def __sub__(self, other):
         return Vector(self._x - other._x, self._y - other._y, self._z - other._z)
 
+    def __neg__(self):
+        return Vector(-self._x, -self._y, -self._z)
+
     ###########################################################################################
     # Static Methods
     ###########################################################################################
