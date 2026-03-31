@@ -407,28 +407,31 @@ class Line:
             (self._z0 + self._z1) * 0.5,
         )
 
-    def closest_point(self, point):
+    def closest_point(self, point, limited=True):
         """Find the closest point on the line to a given point.
 
         Parameters
         ----------
         point : Point
             The point to find the closest point to.
+        limited : bool, optional
+            If True (default), clamp to segment [0,1]. If False, treat as infinite line.
 
         Returns
         -------
-        Point
-            The closest point on the line segment.
+        tuple
+            (float, Point) — parameter t and closest point.
         """
         dx = self._x1 - self._x0
         dy = self._y1 - self._y0
         dz = self._z1 - self._z0
         len_sq = dx * dx + dy * dy + dz * dz
         if len_sq < 1e-20:
-            return self.start()
+            return (0.0, self.start())
         t = ((point[0] - self._x0) * dx + (point[1] - self._y0) * dy + (point[2] - self._z0) * dz) / len_sq
-        t = max(0.0, min(1.0, t))
-        return self.point_at(t)
+        if limited:
+            t = max(0.0, min(1.0, t))
+        return (t, self.point_at(t))
 
     @staticmethod
     def get_middle_line(line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point):

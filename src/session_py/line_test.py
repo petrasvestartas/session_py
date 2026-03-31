@@ -261,13 +261,16 @@ def test_line_closest_point():
     p1 = Point(5.0, 5.0, 0.0)
     p2 = Point(-5.0, 0.0, 0.0)
     p3 = Point(15.0, 0.0, 0.0)
-    cp1 = l.closest_point(p1)
-    cp2 = l.closest_point(p2)
-    cp3 = l.closest_point(p3)
+    t1, cp1 = l.closest_point(p1)
+    t2, cp2 = l.closest_point(p2)
+    t3, cp3 = l.closest_point(p3)
 
     MINI_CHECK(cp1[0] == 5.0 and cp1[1] == 0.0 and cp1[2] == 0.0)
     MINI_CHECK(cp2[0] == 0.0 and cp2[1] == 0.0 and cp2[2] == 0.0)
     MINI_CHECK(cp3[0] == 10.0 and cp3[1] == 0.0 and cp3[2] == 0.0)
+    MINI_CHECK(TOLERANCE.is_close(t1, 0.5))
+    MINI_CHECK(TOLERANCE.is_close(t2, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(t3, 1.0))
 
 
 @MINI_TEST("Line", "Start End Center")
