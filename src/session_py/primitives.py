@@ -278,12 +278,12 @@ class Primitives:
         line_vec = line.to_vector()
         length = line.length()
 
-        z_axis = line_vec.normalize()
+        z_axis = line_vec.normalized()
         if abs(z_axis[2]) < 0.9:
-            x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalize()
+            x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalized()
         else:
-            x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalize()
-        y_axis = z_axis.cross(x_axis).normalize()
+            x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalized()
+        y_axis = z_axis.cross(x_axis).normalized()
 
         scale = Xform.scale_xyz(radius * 2.0, radius * 2.0, length)
         rotation = Xform()
@@ -342,12 +342,12 @@ class Primitives:
         line_vec = line.to_vector()
         length = line.length()
 
-        z_axis = line_vec.normalize()
+        z_axis = line_vec.normalized()
         if abs(z_axis[2]) < 0.9:
-            x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalize()
+            x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalized()
         else:
-            x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalize()
-        y_axis = z_axis.cross(x_axis).normalize()
+            x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalized()
+        y_axis = z_axis.cross(x_axis).normalized()
 
         cone_length = length * 0.2
         body_length = length * 0.8

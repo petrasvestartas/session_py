@@ -96,7 +96,7 @@ def test_vector_normalize():
     v0.normalize_self()
 
     v1 = Vector(3.0, 4.0, 0.0)
-    v2 = v1.normalize()
+    v2 = v1.normalized()
 
     MINI_CHECK(TOLERANCE.is_close(v0.magnitude(), 1.0))
     MINI_CHECK(TOLERANCE.is_close(v2.magnitude(), 1.0))

@@ -424,7 +424,7 @@ class Vector:
             return True
         return False
 
-    def normalize(self):
+    def normalized(self):
         """Return a normalized copy of the vector.
 
         Returns
@@ -435,16 +435,6 @@ class Vector:
         normalized_vector = Vector(self._x, self._y, self._z)
         normalized_vector.normalize_self()
         return normalized_vector
-
-    def normalized(self):
-        """Alias for normalize() - Return a normalized copy of the vector.
-
-        Returns
-        -------
-        Vector
-            A new vector that is the unit vector of this vector.
-        """
-        return self.normalize()
 
     def dot(self, other):
         """Calculate dot product with another vector.

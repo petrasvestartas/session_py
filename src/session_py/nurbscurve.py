@@ -826,7 +826,7 @@ class NurbsCurve:
         if normal.magnitude() < Tolerance.ZERO_TOLERANCE:
             return True
 
-        normal = normal.normalize()
+        normal = normal.normalized()
         n = np.array([normal[0], normal[1], normal[2]])
         origin = np.array([p0.x, p0.y, p0.z])
 
@@ -886,13 +886,13 @@ class NurbsCurve:
         normal = d1.cross(d2)
         if normal.magnitude() < Tolerance.ZERO_TOLERANCE:
             return False
-        normal = normal.normalize()
+        normal = normal.normalized()
 
         from session_py.point import Point as Pt
         m1 = Pt((p0[0]+p1[0])*0.5, (p0[1]+p1[1])*0.5, (p0[2]+p1[2])*0.5)
         m2 = Pt((p1[0]+p2[0])*0.5, (p1[1]+p2[1])*0.5, (p1[2]+p2[2])*0.5)
-        perp1 = d1.cross(normal).normalize()
-        perp2 = d2.cross(normal).normalize()
+        perp1 = d1.cross(normal).normalized()
+        perp2 = d2.cross(normal).normalized()
 
         denom = perp1[0] * perp2[1] - perp1[1] * perp2[0]
         if abs(denom) < Tolerance.ZERO_TOLERANCE:

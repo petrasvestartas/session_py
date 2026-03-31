@@ -479,7 +479,7 @@ def ray_mesh(
 
     hits: List[Tuple[float, Point]] = []
     origin = line.start()
-    direction = line.to_vector().normalize()
+    direction = line.to_vector().normalized()
 
     for v0, v1, v2 in tris:
         p = ray_triangle(line, v0, v1, v2, epsilon)
@@ -519,7 +519,7 @@ def ray_mesh_bvh(
     bvh = BVH.from_boxes(tri_boxes, world_size)
 
     origin = line.start()
-    direction = line.to_vector().normalize()
+    direction = line.to_vector().normalized()
     candidate_ids: List[int] = []
     found = bvh.ray_cast(origin, direction, candidate_ids, True)
     if not found:

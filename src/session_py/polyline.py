@@ -655,12 +655,12 @@ class Polyline:
         origin = self.center()
 
         if len(self.points) >= 2:
-            x_axis = (self.points[1] - self.points[0]).normalize()
+            x_axis = (self.points[1] - self.points[0]).normalized()
         else:
             x_axis = Vector(1.0, 0.0, 0.0)
 
         z_axis = self._average_normal()
-        y_axis = z_axis.cross(x_axis).normalize()
+        y_axis = z_axis.cross(x_axis).normalized()
 
         return origin, x_axis, y_axis, z_axis
 
@@ -691,7 +691,7 @@ class Polyline:
             p0 -= v * proportion0
             p1 += v * proportion1
         else:
-            v_norm = v.normalize()
+            v_norm = v.normalized()
             p0 -= v_norm * dist0
             p1 += v_norm * dist1
 
@@ -718,7 +718,7 @@ class Polyline:
             segment_start -= v * proportion
             segment_end += v * proportion
         else:
-            v_norm = v.normalize()
+            v_norm = v.normalized()
             segment_start -= v_norm * dist
             segment_end += v_norm * dist
 
@@ -745,7 +745,7 @@ class Polyline:
     def extend_line_static(start: Point, end: Point, d0: float, d1: float) -> None:
         """Extend a line segment independently at each end by a real (normalized) distance."""
         v = end - start
-        v_norm = v.normalize()
+        v_norm = v.normalized()
         start -= v_norm * d0
         end += v_norm * d1
 
@@ -785,10 +785,10 @@ class Polyline:
             prev = n - 1 if current == 0 else current - 1
             next_pt = 0 if current == n - 1 else current + 1
 
-            dir0 = (self.points[current] - self.points[prev]).normalize()
-            dir1 = (self.points[next_pt] - self.points[current]).normalize()
+            dir0 = (self.points[current] - self.points[prev]).normalized()
+            dir1 = (self.points[next_pt] - self.points[current]).normalized()
 
-            cross = dir0.cross(dir1).normalize()
+            cross = dir0.cross(dir1).normalized()
             dot = cross.dot(normal)
             is_convex = not (dot < 0.0)
             convex_corners.append(is_convex)
@@ -1021,7 +1021,7 @@ class Polyline:
             cross = v1.cross(v2)
             average_normal += cross
 
-        return average_normal.normalize()
+        return average_normal.normalized()
 
     ###########################################################################################
     # Polymorphic JSON Serialization

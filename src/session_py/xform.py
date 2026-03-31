@@ -128,7 +128,7 @@ class Xform:
     @staticmethod
     def rotation(axis, angle_radians):
         xform = Xform()
-        axis = axis.normalize()
+        axis = axis.normalized()
         cos_angle = math.cos(angle_radians)
         sin_angle = math.sin(angle_radians)
         one_minus_cos = 1.0 - cos_angle
@@ -267,12 +267,12 @@ class Xform:
         :class:`Xform`
             Transformation matrix.
         """
-        x0 = plane_from.x_axis.normalize()
-        y0 = plane_from.y_axis.normalize()
-        z0 = plane_from.z_axis.normalize()
-        x1 = plane_to.x_axis.normalize()
-        y1 = plane_to.y_axis.normalize()
-        z1 = plane_to.z_axis.normalize()
+        x0 = plane_from.x_axis.normalized()
+        y0 = plane_from.y_axis.normalized()
+        z0 = plane_from.z_axis.normalized()
+        x1 = plane_to.x_axis.normalized()
+        y1 = plane_to.y_axis.normalized()
+        z1 = plane_to.z_axis.normalized()
         origin_0 = plane_from.origin
         origin_1 = plane_to.origin
         t0 = Xform.translation(-origin_0[0], -origin_0[1], -origin_0[2])
@@ -302,9 +302,9 @@ class Xform:
 
     @staticmethod
     def plane_to_xy(origin, x_axis, y_axis, z_axis):
-        x = x_axis.normalize()
-        y = y_axis.normalize()
-        z = z_axis.normalize()
+        x = x_axis.normalized()
+        y = y_axis.normalized()
+        z = z_axis.normalized()
         t = Xform.translation(-origin[0], -origin[1], -origin[2])
         f = Xform()
         f.m[0] = x[0]
@@ -320,9 +320,9 @@ class Xform:
 
     @staticmethod
     def xy_to_plane(origin, x_axis, y_axis, z_axis):
-        x = x_axis.normalize()
-        y = y_axis.normalize()
-        z = z_axis.normalize()
+        x = x_axis.normalized()
+        y = y_axis.normalized()
+        z = z_axis.normalized()
         f = Xform()
         f.m[0] = x[0]
         f.m[4] = y[0]
@@ -350,9 +350,9 @@ class Xform:
         :class:`Xform`
             Transformation matrix.
         """
-        x = frame.x_axis.normalize()
-        y = frame.y_axis.normalize()
-        z = frame.z_axis.normalize()
+        x = frame.x_axis.normalized()
+        y = frame.y_axis.normalized()
+        z = frame.z_axis.normalized()
         o = frame.origin
         xf = Xform()
         xf.m[0] = x[0]; xf.m[4] = y[0]; xf.m[8]  = z[0]; xf.m[12] = o[0]
@@ -407,8 +407,8 @@ class Xform:
     def look_at_rh(eye, target, up):
         from .vector import Vector
 
-        f = (target - eye).normalize()
-        s = f.cross(up.normalize()).normalize()
+        f = (target - eye).normalized()
+        s = f.cross(up.normalized()).normalized()
         u = s.cross(f)
         xform = Xform()
         xform.m[0] = s[0]

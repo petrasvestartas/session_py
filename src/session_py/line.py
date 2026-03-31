@@ -237,7 +237,7 @@ class Line:
         Line
             New line from point in direction with given length.
         """
-        d = direction.normalize()
+        d = direction.normalized()
         return cls(
             point[0], point[1], point[2],
             point[0] + d[0] * length, point[1] + d[1] * length, point[2] + d[2] * length
@@ -309,7 +309,7 @@ class Line:
         Vector
             Normalized direction vector from start to end.
         """
-        return self.to_vector().normalize()
+        return self.to_vector().normalized()
 
     def point_at(self, t):
         """Get point at parameter t along the line.

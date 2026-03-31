@@ -544,7 +544,7 @@ class Session:
         dir_vec = Vector(direction[0], direction[1], direction[2])
         if dir_vec.magnitude() <= 0.0:
             return []
-        dir_unit = dir_vec.normalize()
+        dir_unit = dir_vec.normalized()
 
         FAR = 1e6
         ray_line = Line(

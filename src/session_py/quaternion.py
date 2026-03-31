@@ -31,14 +31,14 @@ class Quaternion:
 
     @staticmethod
     def from_axis_angle(axis, angle):
-        ax = axis.normalize()
+        ax = axis.normalized()
         half = angle * 0.5
         return Quaternion(math.cos(half), ax * math.sin(half))
 
     @staticmethod
     def from_arc(src, dst):
-        s = src.normalize()
-        d = dst.normalize()
+        s = src.normalized()
+        d = dst.normalized()
         cross = s.cross(d)
         dot_val = s.dot(d)
         if cross.magnitude() < 1e-10:
@@ -46,9 +46,9 @@ class Quaternion:
                 perp = s.cross(Vector(0.0, 0.0, 1.0))
                 if perp.magnitude() < 1e-10:
                     perp = s.cross(Vector(0.0, 1.0, 0.0))
-                return Quaternion.from_axis_angle(perp.normalize(), math.pi)
+                return Quaternion.from_axis_angle(perp.normalized(), math.pi)
             return Quaternion.identity()
-        return Quaternion(1.0 + dot_val, cross).normalize()
+        return Quaternion(1.0 + dot_val, cross).normalized()
 
     @staticmethod
     def from_euler(x, y, z):
@@ -73,7 +73,7 @@ class Quaternion:
     def magnitude2(self):
         return self.s * self.s + self.v[0] * self.v[0] + self.v[1] * self.v[1] + self.v[2] * self.v[2]
 
-    def normalize(self):
+    def normalized(self):
         mag = self.magnitude()
         if mag > 1e-10:
             q = Quaternion(self.s / mag, self.v / mag)
@@ -106,7 +106,7 @@ class Quaternion:
     def slerp(self, other, amount):
         dot_val = self.dot(other)
         if dot_val > 0.9995:
-            return (self + (other - self) * amount).normalize()
+            return (self + (other - self) * amount).normalized()
         robust_dot = max(-1.0, min(1.0, dot_val))
         theta = math.acos(robust_dot)
         scale1 = math.sin(theta * (1.0 - amount))
@@ -115,7 +115,7 @@ class Quaternion:
         return (self * scale1 + other * scale2) * (1.0 / sin_theta)
 
     def nlerp(self, other, amount):
-        return (self * (1.0 - amount) + other * amount).normalize()
+        return (self * (1.0 - amount) + other * amount).normalized()
 
     def __mul__(self, other):
         if isinstance(other, Quaternion):
