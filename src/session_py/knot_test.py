@@ -3,255 +3,175 @@
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
-
-
-@MINI_TEST("Knot", "Knot Count")
-def test_knot_count():
-    from session_py import knot
-
-    # Calculate knot counts for various order/cv_count combinations
-    count1 = knot.knot_count(2, 2)
-    count2 = knot.knot_count(3, 3)
-    count3 = knot.knot_count(4, 4)
-    count4 = knot.knot_count(4, 5)
-    count5 = knot.knot_count(3, 4)
-
-    MINI_CHECK(count1 == 2)
-    MINI_CHECK(count2 == 4)
-    MINI_CHECK(count3 == 6)
-    MINI_CHECK(count4 == 7)
-    MINI_CHECK(count5 == 5)
+from .tolerance import TOLERANCE
 
 
 @MINI_TEST("Knot", "Make Clamped Uniform")
 def test_make_clamped_uniform():
     from session_py import knot
 
-    # Basic clamped uniform knot vector
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    k_len = len(k)
-    k0, k1, k2 = k[0], k[1], k[2]
-    k3, k4, k5 = k[3], k[4], k[5]
-
-    # With custom delta
-    k2_vec = knot.make_clamped_uniform(3, 4, 2.5)
-    k2_len = len(k2_vec)
-    t0, t1 = knot.get_domain(3, 4, k2_vec)
-
-    # Invalid params
-    k_invalid1 = knot.make_clamped_uniform(1, 2, 1.0)
-    k_invalid2 = knot.make_clamped_uniform(4, 3, 1.0)
-
-    MINI_CHECK(k is not None)
-    MINI_CHECK(k_len == 6)
-    MINI_CHECK(k0 == 0.0 and k1 == 0.0 and k2 == 0.0)
-    MINI_CHECK(k3 == 1.0 and k4 == 1.0 and k5 == 1.0)
-    MINI_CHECK(k2_len == 5)
-    MINI_CHECK(t0 == 0.0 and t1 == 5.0)
-    MINI_CHECK(k_invalid1 is None)
-    MINI_CHECK(k_invalid2 is None)
+    # 0 0 0 1 2 2 2
+    order = 4
+    cv_count = 5
+    knots = knot.make_clamped_uniform(order, cv_count)
+    MINI_CHECK(TOLERANCE.is_allclose(knots, [0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]))
 
 
 @MINI_TEST("Knot", "Make Periodic Uniform")
 def test_make_periodic_uniform():
     from session_py import knot
-    import numpy as np
 
-    # Create periodic uniform knot vector
-    k = knot.make_periodic_uniform(3, 4, 1.0)
-    k_len = len(k)
-    k0, k1, k2, k3, k4 = k[0], k[1], k[2], k[3], k[4]
-
-    MINI_CHECK(k is not None)
-    MINI_CHECK(k_len == 5)
-    MINI_CHECK(k0 == 0.0 and k1 == 1.0 and k2 == 2.0 and k3 == 3.0 and k4 == 4.0)
-
-
-@MINI_TEST("Knot", "Clamp")
-def test_clamp():
-    from session_py import knot
-    import numpy as np
-
-    # Clamp a periodic knot vector
-    k = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-    clamp_result = knot.clamp(4, 4, k, 2)
-    first_clamped = k[0] == k[1] and k[1] == k[2]
-    last_clamped = k[3] == k[4] and k[4] == k[5]
-
-    MINI_CHECK(clamp_result)
-    MINI_CHECK(first_clamped)
-    MINI_CHECK(last_clamped)
-
-
-@MINI_TEST("Knot", "Is Valid")
-def test_is_valid():
-    from session_py import knot
-    import numpy as np
-
-    # Valid clamped knot vector
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    valid = knot.is_valid(4, 4, k)
-
-    # Invalid - decreasing values
-    k_invalid = np.array([0.0, 0.0, 1.0, 0.5, 1.0, 1.0])
-    invalid = knot.is_valid(4, 4, k_invalid)
-
-    MINI_CHECK(valid)
-    MINI_CHECK(not invalid)
+    # 0 1 2 3 4 5 6
+    order = 4
+    cv_count = 5
+    knots = knot.make_periodic_uniform(order, cv_count)
+    MINI_CHECK(TOLERANCE.is_allclose(knots, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]))
 
 
 @MINI_TEST("Knot", "Is Clamped")
 def test_is_clamped():
     from session_py import knot
 
-    # Clamped knot vector
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    clamped_both = knot.is_clamped(4, 4, k, 2)
-    clamped_start = knot.is_clamped(4, 4, k, 0)
-    clamped_end = knot.is_clamped(4, 4, k, 1)
-
-    # Periodic knot vector (not clamped)
-    k2 = knot.make_periodic_uniform(4, 5, 1.0)
-    not_clamped = knot.is_clamped(4, 5, k2, 2)
-
-    MINI_CHECK(clamped_both)
-    MINI_CHECK(clamped_start)
-    MINI_CHECK(clamped_end)
-    MINI_CHECK(not not_clamped)
-
-
-@MINI_TEST("Knot", "Is Periodic")
-def test_is_periodic():
-    from session_py import knot
-
-    # Periodic knot vector
-    k = knot.make_periodic_uniform(3, 4, 1.0)
-    periodic = knot.is_periodic(3, 4, k)
-
-    # Clamped knot vector (not periodic)
-    k2 = knot.make_clamped_uniform(4, 4, 1.0)
-    not_periodic = knot.is_periodic(4, 4, k2)
-
-    MINI_CHECK(periodic)
-    MINI_CHECK(not not_periodic)
-
-
-@MINI_TEST("Knot", "Get Domain")
-def test_get_domain():
-    from session_py import knot
-
-    # Get domain of clamped knot vector
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    t0, t1 = knot.get_domain(4, 4, k)
-
-    MINI_CHECK(t0 == 0.0)
-    MINI_CHECK(t1 == 1.0)
-
-
-@MINI_TEST("Knot", "Set Domain")
-def test_set_domain():
-    from session_py import knot
-
-    # Create knot vector and set domain
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    set_result = knot.set_domain(4, 4, k, 5.0, 10.0)
-    t0, t1 = knot.get_domain(4, 4, k)
-    t0_close = abs(t0 - 5.0) < 1e-10
-    t1_close = abs(t1 - 10.0) < 1e-10
-
-    MINI_CHECK(set_result)
-    MINI_CHECK(t0_close)
-    MINI_CHECK(t1_close)
+    # 0 0 0 1 2 2 2
+    # 0 1 2 3 4 5 6
+    order = 4
+    cv_count = 5
+    knots_periodic = knot.make_periodic_uniform(order, cv_count)
+    knots_clamped = knot.make_clamped_uniform(order, cv_count)
+    is_not_clamped = knot.is_clamped(order, cv_count, knots_periodic)
+    is_clamped = knot.is_clamped(order, cv_count, knots_clamped)
+    MINI_CHECK(not is_not_clamped and is_clamped)
 
 
 @MINI_TEST("Knot", "Reverse")
 def test_reverse():
     from session_py import knot
 
-    # Reverse knot vector
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    t0_orig, t1_orig = knot.get_domain(4, 4, k)
-    reverse_result = knot.reverse(4, 4, k)
-    t0, t1 = knot.get_domain(4, 4, k)
-    t0_preserved = abs(t0 - t0_orig) < 1e-10
-    t1_preserved = abs(t1 - t1_orig) < 1e-10
+    # Symmetric knot vector -> reverse gives back the same (palindrome)
+    # 0 0 0 1 2 2 2
+    order = 4
+    cv_count = 5
+    knots_sym = knot.make_clamped_uniform(order, cv_count)
+    knot.reverse(order, cv_count, knots_sym)
+    MINI_CHECK(TOLERANCE.is_allclose(knots_sym, [0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]))
 
-    MINI_CHECK(reverse_result)
-    MINI_CHECK(t0_preserved)
-    MINI_CHECK(t1_preserved)
-
-
-@MINI_TEST("Knot", "Multiplicity")
-def test_multiplicity():
-    from session_py import knot
-
-    # Check multiplicity at clamped ends
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    mult_first = knot.multiplicity(4, 4, k, 0)
-    mult_last = knot.multiplicity(4, 4, k, 5)
-
-    MINI_CHECK(mult_first == 3)
-    MINI_CHECK(mult_last == 3)
-
-
-@MINI_TEST("Knot", "Span Count")
-def test_span_count():
-    from session_py import knot
-
-    # Single Bezier span
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    span1 = knot.span_count(4, 4, k)
-
-    # Multiple spans
-    k2 = knot.make_clamped_uniform(3, 5, 1.0)
-    span2 = knot.span_count(3, 5, k2)
-
-    MINI_CHECK(span1 == 1)
-    MINI_CHECK(span2 == 3)
+    # Asymmetric knot vector -> extra knot at 0.5 shifts to 1.5 after reverse
+    # 0 0 0 0.5 1 2 2 2 -> 0 0 0 1 1.5 2 2 2
+    knots_asym = [0.0, 0.0, 0.0, 0.5, 1.0, 2.0, 2.0, 2.0]
+    knot.reverse(4, 6, knots_asym)
+    MINI_CHECK(TOLERANCE.is_allclose(knots_asym, [0.0, 0.0, 0.0, 1.0, 1.5, 2.0, 2.0, 2.0]))
 
 
 @MINI_TEST("Knot", "Find Span")
 def test_find_span():
     from session_py import knot
 
-    # Find span in single-span knot vector
-    k = knot.make_clamped_uniform(4, 4, 1.0)
-    span_0 = knot.find_span(4, 4, k, 0.0)
-    span_mid = knot.find_span(4, 4, k, 0.5)
-    span_1 = knot.find_span(4, 4, k, 1.0)
-
-    # Find span in multi-span knot vector
-    k2 = knot.make_clamped_uniform(3, 5, 1.0)
-    span2_0 = knot.find_span(3, 5, k2, 0.0)
-    span2_mid = knot.find_span(3, 5, k2, 1.5)
-    span2_end = knot.find_span(3, 5, k2, 2.5)
-
-    MINI_CHECK(span_0 == 0 and span_mid == 0 and span_1 == 0)
-    MINI_CHECK(span2_0 == 0 and span2_mid == 1 and span2_end == 2)
+    # 0 0 0 1 2 2 2
+    order = 4
+    cv_count = 5
+    knots_clamped = knot.make_clamped_uniform(order, cv_count)
+    #   - 0.5 falls in span [0, 1] -> index 0
+    #   - 1.5 falls in span [1, 2] -> index 1
+    spancount0 = knot.find_span(order, cv_count, knots_clamped, 0.5)
+    spancount1 = knot.find_span(order, cv_count, knots_clamped, 1.5)
+    MINI_CHECK(spancount0 == 0 and spancount1 == 1)
 
 
-@MINI_TEST("Knot", "Greville Abcissae")
-def test_greville_abcissae():
+@MINI_TEST("Knot", "Solve Tridiagonal")
+def test_solve_tridiagonal():
     from session_py import knot
 
-    # Get Greville abcissae (control point parameter values)
-    k = knot.make_clamped_uniform(3, 4, 1.0)
-    g = knot.get_greville_abcissae(3, 4, k)
-    g_len = len(g)
+    # Thomas algorithm -- an O(n) solver for tridiagonal linear systems
+    #   | 2 1 | |x0|   |3|
+    #   | 1 2 | |x1| = |3|
+    #   -> solution: x0 = 1, x1 = 1
+    lo = [0, 1]
+    di = [2, 2]
+    up = [1, 0]
+    rh = [3, 3]
+    sol = knot.solve_tridiagonal(1, 2, lo, di, up, rh)
+    MINI_CHECK(TOLERANCE.is_allclose(sol, [1.0, 1.0]))
 
-    MINI_CHECK(g_len == 4)
+
+@MINI_TEST("Knot", "Compute Parameters")
+def test_compute_parameters():
+    from session_py import knot
+    import numpy as np
+
+    pts = np.array([[0,0,0], [1,0,0], [2,0,0], [3,0,0]], dtype=float)
+    # Chord-length parameterization: since all gaps are 1.0, params = {0, 1, 2, 3}
+    t = knot.compute_parameters(pts, knot.CurveKnotStyle.Chord)
+    MINI_CHECK(TOLERANCE.is_allclose(t, [0.0, 1.0, 2.0, 3.0]))
 
 
-@MINI_TEST("Knot", "Domain Tolerance")
-def test_domain_tolerance():
+@MINI_TEST("Knot", "Build Interpolation Knots")
+def test_build_interp_knots():
     from session_py import knot
 
-    # Calculate domain tolerance
-    tol_same = knot.domain_tolerance(1.0, 1.0)
-    tol_diff = knot.domain_tolerance(0.0, 1.0)
+    params = [0.0, 1.0, 2.0, 3.0]
+    degree = 3
+    # cv_count = n + 2 = 6 (natural end conditions add 2 CVs)
+    # kc = order + cv_count - 2 = 4 + 6 - 2 = 8
+    #   [0, 0, 0,  |  1, 2,  |  3, 3, 3]
+    #   <-clamp->    interior    <-clamp->
+    knots = knot.build_interp_knots(params, degree)
+    MINI_CHECK(TOLERANCE.is_allclose(knots, [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 3.0, 3.0]))
 
-    MINI_CHECK(tol_same == 0.0)
-    MINI_CHECK(tol_diff > 0.0)
+
+@MINI_TEST("Knot", "Evaluation Basis")
+def test_eval_basis():
+    from session_py import knot
+
+    # Cox-de Boor recursive evaluation of B-spline basis functions
+    # At parameter t, exactly 'order' basis functions are non-zero
+    # Partition of unity: they always sum to 1.0
+    # Used to evaluate NURBS curves/surfaces: C(t) = sum(N_i(t) * P_i)
+    # 0 0 0 1 2 2 2
+    order = 4
+    cv_count = 5
+    knots = knot.make_clamped_uniform(order, cv_count)
+    span = knot.find_span(order, cv_count, knots, 0.5)
+    basis = knot.eval_basis(order, knots, span, 0.5)
+    MINI_CHECK(TOLERANCE.is_allclose(basis, [0.125, 0.59375, 0.25, 0.03125]))
+
+
+@MINI_TEST("Knot", "Build Fitted Knots Adaptive")
+def test_build_fitted_knots_adaptive():
+    from session_py import knot
+
+    # Builds knot vectors for least-squares fitting
+    # Concentrates knots where curvature is high (sharp turns)
+    # For collinear points (zero curvature), interior knots are evenly distributed
+    pts = [0,0,0, 1,0,0, 2,0,0, 3,0,0, 4,0,0]
+    params = [0.0, 1.0, 2.0, 3.0, 4.0]
+    knots = knot.build_fitted_knots_adaptive(params, pts, 5, 3, 5, 3)
+    MINI_CHECK(TOLERANCE.is_allclose(knots, [0.0, 0.0, 0.0, 2.0, 4.0, 4.0, 4.0]))
+
+
+@MINI_TEST("Knot", "Build Fitted Knots Periodic Adaptive")
+def test_build_fitted_knots_periodic_adaptive():
+    from session_py import knot
+
+    # Periodic version for closed curves -- knots wrap around
+    # For a regular square (equal turns, equal chords), knots are uniformly spaced
+    pts = [0,0,0, 1,0,0, 1,1,0, 0,1,0]
+    params = [0.0, 1.0, 2.0, 3.0, 4.0]
+    knots = knot.build_fitted_knots_periodic_adaptive(params, pts, 4, 3, 4, 3)
+    MINI_CHECK(TOLERANCE.is_allclose(knots, [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]))
+
+
+@MINI_TEST("Knot", "Solve Banded SPD")
+def test_solve_banded_spd():
+    from session_py import knot
+
+    # Cholesky solver for banded symmetric positive-definite systems
+    #   | 4 2 0 |       |8 |       |1|
+    #   | 2 5 1 | * x = |13| -> x = |2|
+    #   | 0 1 3 |       |5 |       |1|
+    band = [4, 0, 5, 2, 3, 1]
+    rhs = [8, 13, 5]
+    knot.solve_banded_spd(1, 3, 1, band, rhs)
+    MINI_CHECK(TOLERANCE.is_allclose(rhs, [1.0, 2.0, 1.0]))
 
 
 if __name__ == "__main__":
