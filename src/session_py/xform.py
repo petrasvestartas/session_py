@@ -11,6 +11,10 @@ from .vector import Vector
 class Xform:
     _identity_cache = None
 
+    ###########################################################################################
+    # Constructors
+    ###########################################################################################
+
     def __init__(self, m=None):
         self._guid = None
         self.name = "my_xform"
@@ -64,9 +68,8 @@ class Xform:
         return '\n'.join(rows)
 
     def __repr__(self):
-        """Full representation with all 16 matrix values."""
-        vals = [f"{v:.3f}" for v in self.m]
-        return f"Xform(name='{self.name}', matrix=[{', '.join(vals)}])"
+        """Full representation (name, guid prefix)."""
+        return f"Xform({self.name}, {self.guid[:8]})"
 
     def duplicate(self):
         """Create a copy with a new GUID."""
@@ -84,6 +87,10 @@ class Xform:
     def from_matrix(m):
         return Xform(m)
 
+    ###########################################################################################
+    # Transformations
+    ###########################################################################################
+
     @staticmethod
     def translation(x, y, z):
         xform = Xform()
@@ -93,10 +100,12 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation_x(angle_radians):
+    def rotation_x(angle, degrees=False):
+        if degrees:
+            angle = angle * (math.pi / 180.0)
         xform = Xform()
-        cos_angle = math.cos(angle_radians)
-        sin_angle = math.sin(angle_radians)
+        cos_angle = math.cos(angle)
+        sin_angle = math.sin(angle)
         xform.m[5] = cos_angle
         xform.m[6] = sin_angle
         xform.m[9] = -sin_angle
@@ -104,10 +113,12 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation_y(angle_radians):
+    def rotation_y(angle, degrees=False):
+        if degrees:
+            angle = angle * (math.pi / 180.0)
         xform = Xform()
-        cos_angle = math.cos(angle_radians)
-        sin_angle = math.sin(angle_radians)
+        cos_angle = math.cos(angle)
+        sin_angle = math.sin(angle)
         xform.m[0] = cos_angle
         xform.m[2] = -sin_angle
         xform.m[8] = sin_angle
@@ -115,10 +126,12 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation_z(angle_radians):
+    def rotation_z(angle, degrees=False):
+        if degrees:
+            angle = angle * (math.pi / 180.0)
         xform = Xform()
-        cos_angle = math.cos(angle_radians)
-        sin_angle = math.sin(angle_radians)
+        cos_angle = math.cos(angle)
+        sin_angle = math.sin(angle)
         xform.m[0] = cos_angle
         xform.m[1] = sin_angle
         xform.m[4] = -sin_angle
@@ -126,11 +139,13 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation(axis, angle_radians):
+    def rotation(axis, angle, degrees=False):
+        if degrees:
+            angle = angle * (math.pi / 180.0)
         xform = Xform()
         axis = axis.normalized()
-        cos_angle = math.cos(angle_radians)
-        sin_angle = math.sin(angle_radians)
+        cos_angle = math.cos(angle)
+        sin_angle = math.sin(angle)
         one_minus_cos = 1.0 - cos_angle
         xx = axis[0] * axis[0]
         xy = axis[0] * axis[1]
@@ -148,6 +163,15 @@ class Xform:
         xform.m[9] = yz * one_minus_cos - axis[0] * sin_angle
         xform.m[10] = cos_angle + zz * one_minus_cos
         return xform
+
+    @staticmethod
+    def rotation_around_line(line, angle, degrees=False):
+        p = line.start()
+        d = line.to_direction()
+        t0 = Xform.translation(-p[0], -p[1], -p[2])
+        r = Xform.rotation(d, angle, degrees)
+        t1 = Xform.translation(p[0], p[1], p[2])
+        return t1 * (r * t0)
 
     @staticmethod
     def change_basis(
@@ -384,7 +408,9 @@ class Xform:
         return t2 * (t1 * t0)
 
     @staticmethod
-    def axis_rotation(angle, axis):
+    def axis_rotation(angle, axis, degrees=False):
+        if degrees:
+            angle = angle * (math.pi / 180.0)
         c = math.cos(angle)
         s = math.sin(angle)
         ux = axis[0]
@@ -404,7 +430,7 @@ class Xform:
         return xform
 
     @staticmethod
-    def look_at_rh(eye, target, up):
+    def look_at_right_handed(eye, target, up):
         from .vector import Vector
 
         f = (target - eye).normalized()
@@ -425,6 +451,89 @@ class Xform:
         xform.m[13] = -u.dot(eye_vec)
         xform.m[14] = f.dot(eye_vec)
         return xform
+
+    @staticmethod
+    def look_to_right_handed(eye, direction, up):
+        from .vector import Vector
+
+        f = direction.normalized()
+        s = f.cross(up.normalized()).normalized()
+        u = s.cross(f)
+        xform = Xform()
+        xform.m[0] = s[0]
+        xform.m[4] = s[1]
+        xform.m[8] = s[2]
+        xform.m[1] = u[0]
+        xform.m[5] = u[1]
+        xform.m[9] = u[2]
+        xform.m[2] = -f[0]
+        xform.m[6] = -f[1]
+        xform.m[10] = -f[2]
+        eye_vec = Vector(eye[0], eye[1], eye[2])
+        xform.m[12] = -s.dot(eye_vec)
+        xform.m[13] = -u.dot(eye_vec)
+        xform.m[14] = f.dot(eye_vec)
+        return xform
+
+    @staticmethod
+    def perspective(fov_y, aspect, near, far):
+        f = 1.0 / math.tan(fov_y / 2.0)
+        nf = near - far
+        xform = Xform([0.0] * 16)
+        xform.m[0] = f / aspect
+        xform.m[5] = f
+        xform.m[10] = far / nf
+        xform.m[11] = -1.0
+        xform.m[14] = (near * far) / nf
+        return xform
+
+    @staticmethod
+    def orthographic(left, right, bottom, top, near, far):
+        rl = right - left
+        tb = top - bottom
+        nf = near - far
+        xform = Xform([0.0] * 16)
+        xform.m[0] = 2.0 / rl
+        xform.m[5] = 2.0 / tb
+        xform.m[10] = 1.0 / nf
+        xform.m[12] = (left + right) / (left - right)
+        xform.m[13] = (bottom + top) / (bottom - top)
+        xform.m[14] = near / nf
+        xform.m[15] = 1.0
+        return xform
+
+    @staticmethod
+    def project_to_plane(plane):
+        n = plane.z_axis
+        o = plane.origin
+        nx, ny, nz = n[0], n[1], n[2]
+        d = o[0] * nx + o[1] * ny + o[2] * nz
+        xform = Xform()
+        xform.m[0]  = 1.0 - nx * nx;  xform.m[4]  = -nx * ny;        xform.m[8]  = -nx * nz;        xform.m[12] = nx * d
+        xform.m[1]  = -ny * nx;       xform.m[5]  = 1.0 - ny * ny;   xform.m[9]  = -ny * nz;        xform.m[13] = ny * d
+        xform.m[2]  = -nz * nx;       xform.m[6]  = -nz * ny;        xform.m[10] = 1.0 - nz * nz;   xform.m[14] = nz * d
+        xform.m[3]  = 0.0;            xform.m[7]  = 0.0;             xform.m[11] = 0.0;              xform.m[15] = 1.0
+        return xform
+
+    @staticmethod
+    def project_to_plane_by_axis(plane, direction):
+        n = plane.z_axis
+        o = plane.origin
+        nx, ny, nz = n[0], n[1], n[2]
+        dx, dy, dz = direction[0], direction[1], direction[2]
+        dot_nd = nx * dx + ny * dy + nz * dz
+        s = 1.0 / dot_nd
+        d = o[0] * nx + o[1] * ny + o[2] * nz
+        xform = Xform()
+        xform.m[0]  = 1.0 - dx*s*nx;  xform.m[4]  = -dx*s*ny;        xform.m[8]  = -dx*s*nz;        xform.m[12] = dx*s*d
+        xform.m[1]  = -dy*s*nx;       xform.m[5]  = 1.0 - dy*s*ny;   xform.m[9]  = -dy*s*nz;        xform.m[13] = dy*s*d
+        xform.m[2]  = -dz*s*nx;       xform.m[6]  = -dz*s*ny;        xform.m[10] = 1.0 - dz*s*nz;   xform.m[14] = dz*s*d
+        xform.m[3]  = 0.0;            xform.m[7]  = 0.0;             xform.m[11] = 0.0;              xform.m[15] = 1.0
+        return xform
+
+    ###########################################################################################
+    # Details
+    ###########################################################################################
 
     def inverse(self) -> Optional["Xform"]:
         a00 = self.m[0]
@@ -483,47 +592,9 @@ class Xform:
                 return False
         return True
 
-    def transformed_point(self, point):
-        from .point import Point
-
-        x = point[0]
-        y = point[1]
-        z = point[2]
-        w = self.m[3] * x + self.m[7] * y + self.m[11] * z + self.m[15]
-        w_inv = 1.0 / w if abs(w) > 1e-10 else 1.0
-        return Point(
-            (self.m[0] * x + self.m[4] * y + self.m[8] * z + self.m[12]) * w_inv,
-            (self.m[1] * x + self.m[5] * y + self.m[9] * z + self.m[13]) * w_inv,
-            (self.m[2] * x + self.m[6] * y + self.m[10] * z + self.m[14]) * w_inv,
-        )
-
-    def transformed_vector(self, vector):
-        x = vector[0]
-        y = vector[1]
-        z = vector[2]
-        return Vector(
-            self.m[0] * x + self.m[4] * y + self.m[8] * z,
-            self.m[1] * x + self.m[5] * y + self.m[9] * z,
-            self.m[2] * x + self.m[6] * y + self.m[10] * z,
-        )
-
-    def transform_point(self, point):
-        x = point[0]
-        y = point[1]
-        z = point[2]
-        w = self.m[3] * x + self.m[7] * y + self.m[11] * z + self.m[15]
-        w_inv = 1.0 / w if abs(w) > 1e-10 else 1.0
-        point[0] = (self.m[0] * x + self.m[4] * y + self.m[8] * z + self.m[12]) * w_inv
-        point[1] = (self.m[1] * x + self.m[5] * y + self.m[9] * z + self.m[13]) * w_inv
-        point[2] = (self.m[2] * x + self.m[6] * y + self.m[10] * z + self.m[14]) * w_inv
-
-    def transform_vector(self, vector):
-        x = vector[0]
-        y = vector[1]
-        z = vector[2]
-        vector[0] = self.m[0] * x + self.m[4] * y + self.m[8] * z
-        vector[1] = self.m[1] * x + self.m[5] * y + self.m[9] * z
-        vector[2] = self.m[2] * x + self.m[6] * y + self.m[10] * z
+    ###########################################################################################
+    # Operators
+    ###########################################################################################
 
     def __mul__(self, other):
         result = Xform()
@@ -559,7 +630,7 @@ class Xform:
             raise TypeError("Index must be a tuple of (row, col)")
 
     ###########################################################################################
-    # Polymorphic JSON Serialization
+    # JSON
     ###########################################################################################
 
     def __jsondump__(self):
@@ -648,7 +719,7 @@ class Xform:
         return cls.__jsonload__(json.loads(json_string))
 
     ###########################################################################################
-    # Protobuf Serialization
+    # Protobuf
     ###########################################################################################
 
     def pb_dumps(self):

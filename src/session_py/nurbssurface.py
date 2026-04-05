@@ -1537,8 +1537,8 @@ class NurbsSurface:
             for j in range(self.m_cv_count[1]):
                 pt = self.get_cv(i, j)
                 if pt is not None:
-                    # transform_point modifies in-place
-                    xform.transform_point(pt)
+                    pt.xform = xform
+                    pt.transform()
                     self.set_cv(i, j, pt)
         
         return True

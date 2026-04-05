@@ -77,6 +77,49 @@ class ColumnElement(Element):
         self._geometry = self.compute_element_geometry()
         self.reset()
 
+    def compute_polylines(self):
+        from .polyline import Polyline
+        from .point import Point
+        hx = self._width * 0.5
+        hy = self._depth * 0.5
+        b = [Point(-hx, -hy, 0), Point(hx, -hy, 0), Point(hx, hy, 0), Point(-hx, hy, 0)]
+        t = [Point(-hx, -hy, self._height), Point(hx, -hy, self._height), Point(hx, hy, self._height), Point(-hx, hy, self._height)]
+        bottom_pl = Polyline([b[0], b[3], b[2], b[1], Point(b[0][0], b[0][1], b[0][2])])
+        top_pl = Polyline([t[0], t[1], t[2], t[3], Point(t[0][0], t[0][1], t[0][2])])
+        side0 = Polyline([b[0], b[1], t[1], t[0], Point(b[0][0], b[0][1], b[0][2])])
+        side1 = Polyline([b[2], b[3], t[3], t[2], Point(b[2][0], b[2][1], b[2][2])])
+        side2 = Polyline([b[0], t[0], t[3], b[3], Point(b[0][0], b[0][1], b[0][2])])
+        side3 = Polyline([b[1], b[2], t[2], t[1], Point(b[1][0], b[1][1], b[1][2])])
+        return [bottom_pl, top_pl, side0, side1, side2, side3]
+
+    def compute_planes(self):
+        from .plane import Plane
+        from .point import Point
+        from .vector import Vector
+        hx = self._width * 0.5
+        hy = self._depth * 0.5
+        hz = self._height * 0.5
+        return [
+            Plane.from_point_normal(Point(0, 0, 0), Vector(0, 0, -1)),
+            Plane.from_point_normal(Point(0, 0, self._height), Vector(0, 0, 1)),
+            Plane.from_point_normal(Point(0, -hy, hz), Vector(0, -1, 0)),
+            Plane.from_point_normal(Point(0, hy, hz), Vector(0, 1, 0)),
+            Plane.from_point_normal(Point(-hx, 0, hz), Vector(-1, 0, 0)),
+            Plane.from_point_normal(Point(hx, 0, hz), Vector(1, 0, 0)),
+        ]
+
+    def compute_edge_vectors(self):
+        from .vector import Vector
+        return [
+            Vector(1, 0, 0), Vector(0, 1, 0), Vector(-1, 0, 0), Vector(0, -1, 0),
+            Vector(1, 0, 0), Vector(0, 1, 0), Vector(-1, 0, 0), Vector(0, -1, 0),
+            Vector(0, 0, 1), Vector(0, 0, 1), Vector(0, 0, 1), Vector(0, 0, 1),
+        ]
+
+    def compute_axis(self):
+        from .line import Line
+        return Line(0, 0, 0, 0, 0, self._height)
+
     ###########################################################################################
     # Operators
     ###########################################################################################
@@ -98,6 +141,10 @@ class ColumnElement(Element):
         result._obb = None
         result._collision_mesh = None
         result._point = None
+        result._polylines = None
+        result._planes = None
+        result._edge_vectors = None
+        result._axis = None
         return result
 
     def __eq__(self, other):

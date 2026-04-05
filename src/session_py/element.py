@@ -15,6 +15,10 @@ class Element:
         self._obb = None
         self._collision_mesh = None
         self._point = None
+        self._polylines = None
+        self._planes = None
+        self._edge_vectors = None
+        self._axis = None
 
     @property
     def guid(self) -> str:
@@ -78,6 +82,30 @@ class Element:
         return self._point
 
     @property
+    def polylines(self):
+        if self._is_dirty or self._polylines is None:
+            self._polylines = self.compute_polylines()
+        return self._polylines
+
+    @property
+    def planes(self):
+        if self._is_dirty or self._planes is None:
+            self._planes = self.compute_planes()
+        return self._planes
+
+    @property
+    def edge_vectors(self):
+        if self._is_dirty or self._edge_vectors is None:
+            self._edge_vectors = self.compute_edge_vectors()
+        return self._edge_vectors
+
+    @property
+    def axis(self):
+        if self._is_dirty or self._axis is None:
+            self._axis = self.compute_axis()
+        return self._axis
+
+    @property
     def is_dirty(self):
         return self._is_dirty
 
@@ -99,6 +127,10 @@ class Element:
         result._obb = None
         result._collision_mesh = None
         result._point = None
+        result._polylines = None
+        result._planes = None
+        result._edge_vectors = None
+        result._axis = None
         return result
 
     def duplicate(self):
@@ -140,6 +172,10 @@ class Element:
         self._obb = None
         self._collision_mesh = None
         self._point = None
+        self._polylines = None
+        self._planes = None
+        self._edge_vectors = None
+        self._axis = None
 
     ###########################################################################################
     # Computation
@@ -196,6 +232,18 @@ class Element:
             n = len(pts)
             return Point(sx / n, sy / n, sz / n)
         return Point(0, 0, 0)
+
+    def compute_polylines(self):
+        return []
+
+    def compute_planes(self):
+        return []
+
+    def compute_edge_vectors(self):
+        return []
+
+    def compute_axis(self):
+        return None
 
     def apply_features(self, geometry):
         for feature in self._features:

@@ -242,5 +242,22 @@ def test_protobuf_roundtrip():
     MINI_CHECK(loaded.geometry.vertex_count() == 8)
 
 
+@MINI_TEST("Element", "Polylines")
+def test_polylines():
+    from session_py import Mesh
+    from session_py import Element
+
+    m = Mesh.from_vertices_and_faces(
+        [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
+        [[0, 1, 2, 3]],
+    )
+    e = Element(geometry=m)
+
+    MINI_CHECK(len(e.polylines) == 0)
+    MINI_CHECK(len(e.planes) == 0)
+    MINI_CHECK(len(e.edge_vectors) == 0)
+    MINI_CHECK(e.axis is None)
+
+
 if __name__ == "__main__":
     run_all(language="python")

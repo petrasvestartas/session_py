@@ -153,5 +153,58 @@ def test_column_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.height, 4.0))
 
 
+@MINI_TEST("ColumnElement", "Polylines")
+def test_column_polylines():
+    from session_py import ColumnElement
+    from session_py import Polyline
+
+    c = ColumnElement(width=0.4, depth=0.4, height=3.0)
+    pls = c.polylines
+
+    MINI_CHECK(len(pls) == 6)
+    MINI_CHECK(isinstance(pls[0], Polyline))
+    for pl in pls:
+        MINI_CHECK(pl.point_count() == 5)
+
+
+@MINI_TEST("ColumnElement", "Planes")
+def test_column_planes():
+    from session_py import ColumnElement
+    from session_py import Plane
+
+    c = ColumnElement(width=0.4, depth=0.4, height=3.0)
+    pls = c.planes
+
+    MINI_CHECK(len(pls) == 6)
+    MINI_CHECK(isinstance(pls[0], Plane))
+    MINI_CHECK(TOLERANCE.is_close(pls[0].z_axis[2], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(pls[1].z_axis[2], 1.0))
+
+
+@MINI_TEST("ColumnElement", "Edge Vectors")
+def test_column_edge_vectors():
+    from session_py import ColumnElement
+    from session_py import Vector
+
+    c = ColumnElement(width=0.4, depth=0.4, height=3.0)
+    evs = c.edge_vectors
+
+    MINI_CHECK(len(evs) == 12)
+    MINI_CHECK(isinstance(evs[0], Vector))
+
+
+@MINI_TEST("ColumnElement", "Axis")
+def test_column_axis():
+    from session_py import ColumnElement
+    from session_py import Line
+
+    c = ColumnElement(height=5.0)
+    ax = c.axis
+
+    MINI_CHECK(isinstance(ax, Line))
+    MINI_CHECK(TOLERANCE.is_close(ax.start()[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(ax.end()[2], 5.0))
+
+
 if __name__ == "__main__":
     run_all(language="python")

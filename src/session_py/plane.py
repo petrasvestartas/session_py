@@ -1,5 +1,6 @@
 import uuid
 import math
+from .color import Color
 from .point import Point
 from .vector import Vector
 from .tolerance import Tolerance
@@ -48,6 +49,7 @@ class Plane:
         self._guid = None
         self.name = name
         self.width = width
+        self._linecolor = None
         self._xform = None
 
         if origin is None:
@@ -91,6 +93,16 @@ class Plane:
     @xform.setter
     def xform(self, value):
         self._xform = value
+
+    @property
+    def linecolor(self):
+        if self._linecolor is None:
+            self._linecolor = Color.blue()
+        return self._linecolor
+
+    @linecolor.setter
+    def linecolor(self, value):
+        self._linecolor = value
 
     def _update_equation(self):
         """Update plane equation coefficients from z_axis and origin."""
@@ -144,7 +156,7 @@ class Plane:
         return self._d
 
     @staticmethod
-    def from_point_normal(point, normal):
+    def from_point_normal(point, normal, normalize=True):
         """Create a plane from a point and normal vector.
 
         Parameters
@@ -153,6 +165,8 @@ class Plane:
             Point on the plane.
         normal : Vector
             Normal vector of the plane.
+        normalize : bool, optional
+            Normalize axes. Set False when normal is already unit-length. Defaults to True.
 
         Returns
         -------
@@ -163,15 +177,19 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
         plane.width = 1.0
+        plane._linecolor = None
         plane.xform = Xform.identity()
         plane._origin = point
         plane._z_axis = Vector(normal[0], normal[1], normal[2])
-        plane._z_axis.normalize_self()
+        if normalize:
+            plane._z_axis.normalize_self()
         plane._x_axis = Vector()
         plane._x_axis.perpendicular_to(plane._z_axis)
-        plane._x_axis.normalize_self()
+        if normalize:
+            plane._x_axis.normalize_self()
         plane._y_axis = plane._z_axis.cross(plane._x_axis)
-        plane._y_axis.normalize_self()
+        if normalize:
+            plane._y_axis.normalize_self()
         plane._update_equation()
         return plane
 
@@ -196,6 +214,7 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
         plane.width = 1.0
+        plane._linecolor = None
         plane.xform = Xform.identity()
         plane._origin = points[0]
 
@@ -261,6 +280,7 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
         plane.width = 1.0
+        plane._linecolor = None
         plane.xform = Xform.identity()
         plane._origin = Point(cx, cy, cz)
         plane._x_axis = x_axis
@@ -289,6 +309,7 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "my_plane"
         plane.width = 1.0
+        plane._linecolor = None
         plane.xform = Xform.identity()
         plane._origin = point1
 
@@ -318,6 +339,7 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "xy_plane"
         plane.width = 1.0
+        plane._linecolor = None
         plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.x_axis()
@@ -342,6 +364,7 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "yz_plane"
         plane.width = 1.0
+        plane._linecolor = None
         plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.y_axis()
@@ -366,6 +389,7 @@ class Plane:
         plane.guid = str(uuid.uuid4())
         plane.name = "xz_plane"
         plane.width = 1.0
+        plane._linecolor = None
         plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.x_axis()
@@ -383,6 +407,7 @@ class Plane:
         p.guid = str(uuid.uuid4())
         p.name = "my_plane"
         p.width = 1.0
+        p._linecolor = None
         p.xform = Xform.identity()
         p._origin = Point(0, 0, 0)
         p._x_axis = Vector(0, 0, 0)
@@ -403,6 +428,7 @@ class Plane:
         p.guid = str(uuid.uuid4())
         p.name = "my_plane"
         p.width = 1.0
+        p._linecolor = None
         p.xform = Xform.identity()
         p._origin = origin
         p._x_axis = x_axis
@@ -423,10 +449,14 @@ class Plane:
 
         Transforms the plane in-place and resets xform to identity.
         """
-        self.xform.transform_point(self._origin)
-        self.xform.transform_vector(self._x_axis)
-        self.xform.transform_vector(self._y_axis)
-        self.xform.transform_vector(self._z_axis)
+        self._origin.xform = self.xform
+        self._origin.transform()
+        self._x_axis.xform = self.xform
+        self._x_axis.transform()
+        self._y_axis.xform = self.xform
+        self._y_axis.transform()
+        self._z_axis.xform = self.xform
+        self._z_axis.transform()
         self.xform = Xform.identity()
 
     def transformed(self):
@@ -464,7 +494,7 @@ class Plane:
 
     def repr(self):
         """Return full string representation."""
-        return f"Plane({self.name}, {self._origin[0]}, {self._origin[1]}, {self._origin[2]}, {self._z_axis[0]}, {self._z_axis[1]}, {self._z_axis[2]})"
+        return f"Plane({self.name}, {self._origin[0]}, {self._origin[1]}, {self._origin[2]}, {self._z_axis[0]}, {self._z_axis[1]}, {self._z_axis[2]}, {repr(self.linecolor)})"
 
     def __str__(self):
         return self.str
@@ -478,7 +508,8 @@ class Plane:
                     self._origin == other._origin and
                     self._x_axis == other._x_axis and
                     self._y_axis == other._y_axis and
-                    self._z_axis == other._z_axis)
+                    self._z_axis == other._z_axis and
+                    self.linecolor == other.linecolor)
         return False
 
     def __ne__(self, other):
@@ -523,6 +554,7 @@ class Plane:
             result.guid = self.guid
             result.name = self.name
             result.width = self.width
+            result._linecolor = None
             result.xform = Xform.identity()
             result._origin = self._origin + other
             result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
@@ -616,7 +648,7 @@ class Plane:
         if can_be_flipped:
             return parallel != 0
         else:
-            return parallel == 1
+            return parallel == -1
 
     @staticmethod
     def is_same_position(plane0, plane1):
@@ -648,7 +680,7 @@ class Plane:
             + plane1._d
         )
 
-        tolerance = Tolerance.ZERO_TOLERANCE
+        tolerance = Tolerance.APPROXIMATION
         return dist0 < tolerance and dist1 < tolerance
 
     @staticmethod
@@ -672,6 +704,29 @@ class Plane:
         return Plane.is_same_direction(
             plane0, plane1, can_be_flipped
         ) and Plane.is_same_position(plane0, plane1)
+
+    @staticmethod
+    def is_coplanar_from_normals(origin0, normal0, origin1, normal1, can_be_flipped=True):
+        """Check coplanarity from origin+normal without constructing Plane objects."""
+        from .vector import Vector
+        n0 = Vector(normal0[0], normal0[1], normal0[2])
+        n1 = Vector(normal1[0], normal1[1], normal1[2])
+        parallel = n0.is_parallel_to(n1)
+        if can_be_flipped:
+            if parallel == 0:
+                return False
+        else:
+            if parallel != -1:
+                return False
+        a0, b0, c0 = n0[0], n0[1], n0[2]
+        d0 = -(a0 * origin0[0] + b0 * origin0[1] + c0 * origin0[2])
+        a1, b1, c1 = n1[0], n1[1], n1[2]
+        d1 = -(a1 * origin1[0] + b1 * origin1[1] + c1 * origin1[2])
+        from .tolerance import TOLERANCE
+        tol = TOLERANCE.approximation
+        dist0 = abs(a0 * origin1[0] + b0 * origin1[1] + c0 * origin1[2] + d0)
+        dist1 = abs(a1 * origin0[0] + b1 * origin0[1] + c1 * origin0[2] + d1)
+        return dist0 < tol and dist1 < tol
 
     def translate_by_normal(self, distance):
         """Translate (move) a plane along its normal direction by a specified distance.
@@ -711,6 +766,7 @@ class Plane:
         """
         # Alphabetical order to match Rust's serde_json
         return {
+            "linecolor": self.linecolor.__jsondump__(),
             "frame": [
                 self._origin[0], self._origin[1], self._origin[2],
                 self._x_axis[0], self._x_axis[1], self._x_axis[2],
@@ -758,6 +814,10 @@ class Plane:
         plane = cls(origin, x_axis, y_axis, width=width)
         plane.guid = guid if guid is not None else data.get("guid", plane.guid)
         plane.name = name if name is not None else data.get("name", plane.name)
+
+        # Load linecolor
+        if "linecolor" in data:
+            plane.linecolor = decode_node(data["linecolor"])
 
         # Load xform if present
         if "xform" in data:
@@ -838,6 +898,13 @@ class Plane:
             self._z_axis[0], self._z_axis[1], self._z_axis[2],
         ])
 
+        # Set linecolor
+        proto.linecolor.name = self.linecolor.name
+        proto.linecolor.r = self.linecolor[0]
+        proto.linecolor.g = self.linecolor[1]
+        proto.linecolor.b = self.linecolor[2]
+        proto.linecolor.a = self.linecolor[3]
+
         # Set xform
         proto.xform.name = self.xform.name
         proto.xform.matrix.extend(self.xform.m)
@@ -873,6 +940,15 @@ class Plane:
         plane = cls(origin, x_axis, y_axis, width=proto.width if proto.width > 0 else 1.0)
         plane.guid = proto.guid
         plane.name = proto.name
+
+        # Load linecolor
+        plane.linecolor = Color(
+            proto.linecolor.r,
+            proto.linecolor.g,
+            proto.linecolor.b,
+            proto.linecolor.a
+        )
+        plane.linecolor.name = proto.linecolor.name
 
         # Load xform if present
         if proto.HasField('xform'):

@@ -4,23 +4,47 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("Quaternion", "Json Roundtrip")
-def test_quaternion_json_roundtrip():
+@MINI_TEST("Quaternion", "Constructor")
+def test_quaternion_constructor():
     from session_py import Quaternion
     from session_py import Vector
-    from session_py.encoders import json_dump
-    from session_py.encoders import json_load
-    from pathlib import Path
     import math
 
-    axis = Vector(0.0, 0.0, 1.0)
-    original = Quaternion.from_axis_angle(axis, 1.5708)
+    # Default constructor (identity)
+    q0 = Quaternion()
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_quaternion.json"
-    json_dump(original, fname)
-    loaded = json_load(fname)
+    # Constructor with args
+    q1 = Quaternion.from_sv(2.0, Vector(1.0, 0.0, 0.0))
 
-    MINI_CHECK(TOLERANCE.is_close(loaded.s, original.s))
+    # Quaternion multiplication
+    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 2.0)
+    r = q * q
+    v = r.rotate_vector(Vector(1.0, 0.0, 0.0))
+
+    # Scalar multiplication
+    scaled = Quaternion.identity() * 2.0
+
+    # Addition
+    a = Quaternion.from_sv(1.0, Vector(0.0, 0.0, 0.0))
+    b = Quaternion.from_sv(0.0, Vector(0.0, 0.0, 1.0))
+    s = a + b
+
+    # Subtraction
+    diff = q - q
+
+    # Negation
+    neg = -Quaternion.identity()
+
+    MINI_CHECK(q0.name == "my_quaternion")
+    MINI_CHECK(q0.guid)
+    MINI_CHECK(TOLERANCE.is_close(q0.s, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(q0.v[0], 0.0) and TOLERANCE.is_close(q0.v[1], 0.0) and TOLERANCE.is_close(q0.v[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(q1.s, 2.0) and TOLERANCE.is_close(q1.v[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(v[0], -1.0) and TOLERANCE.is_close(v[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(scaled.s, 2.0))
+    MINI_CHECK(TOLERANCE.is_close(s.s, 1.0) and TOLERANCE.is_close(s.v[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(diff.s, 0.0) and TOLERANCE.is_close(diff.v[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(neg.s, -1.0))
 
 
 @MINI_TEST("Quaternion", "From Arc")
@@ -57,7 +81,56 @@ def test_quaternion_from_euler():
     MINI_CHECK(TOLERANCE.is_close(q_euler.v[2], q_axis.v[2]))
 
 
-@MINI_TEST("Quaternion", "slerp")
+@MINI_TEST("Quaternion", "Magnitude Squared")
+def test_quaternion_magnitude_squared():
+    from session_py import Quaternion
+    from session_py import Vector
+    import math
+
+    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 4.0)
+
+    MINI_CHECK(TOLERANCE.is_close(q.magnitude_squared(), q.magnitude() * q.magnitude()))
+
+
+@MINI_TEST("Quaternion", "Conjugate")
+def test_quaternion_conjugate():
+    from session_py import Quaternion
+    from session_py import Vector
+    import math
+
+    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 4.0)
+    r = q.conjugate()
+
+    MINI_CHECK(TOLERANCE.is_close(r.s, q.s))
+    MINI_CHECK(TOLERANCE.is_close(r.v[0], -q.v[0]))
+    MINI_CHECK(TOLERANCE.is_close(r.v[2], -q.v[2]))
+
+
+@MINI_TEST("Quaternion", "Invert")
+def test_quaternion_invert():
+    from session_py import Quaternion
+    from session_py import Vector
+    import math
+
+    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 3.0)
+    result = q * q.invert()
+
+    MINI_CHECK(TOLERANCE.is_close(result.s, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(result.v[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(result.v[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(result.v[2], 0.0))
+
+
+@MINI_TEST("Quaternion", "Dot")
+def test_quaternion_dot():
+    from session_py import Quaternion
+
+    q = Quaternion.identity()
+
+    MINI_CHECK(TOLERANCE.is_close(q.dot(q), 1.0))
+
+
+@MINI_TEST("Quaternion", "Slerp")
 def test_quaternion_slerp():
     from session_py import Quaternion
     from session_py import Vector
@@ -76,7 +149,7 @@ def test_quaternion_slerp():
     MINI_CHECK(TOLERANCE.is_close(mid2.s, half.s))
 
 
-@MINI_TEST("Quaternion", "nlerp")
+@MINI_TEST("Quaternion", "Nlerp")
 def test_quaternion_nlerp():
     from session_py import Quaternion
     from session_py import Vector
@@ -91,113 +164,23 @@ def test_quaternion_nlerp():
     MINI_CHECK(TOLERANCE.is_close(r1.s, q2.s))
 
 
-@MINI_TEST("Quaternion", "invert")
-def test_quaternion_invert():
+@MINI_TEST("Quaternion", "Json Roundtrip")
+def test_quaternion_json_roundtrip():
     from session_py import Quaternion
     from session_py import Vector
+    from session_py.encoders import json_dump
+    from session_py.encoders import json_load
+    from pathlib import Path
     import math
 
-    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 3.0)
-    result = q * q.invert()
+    axis = Vector(0.0, 0.0, 1.0)
+    original = Quaternion.from_axis_angle(axis, 1.5708)
 
-    MINI_CHECK(TOLERANCE.is_close(result.s, 1.0))
-    MINI_CHECK(TOLERANCE.is_close(result.v[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(result.v[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(result.v[2], 0.0))
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_quaternion.json"
+    json_dump(original, fname)
+    loaded = json_load(fname)
 
-
-@MINI_TEST("Quaternion", "dot")
-def test_quaternion_dot():
-    from session_py import Quaternion
-
-    q = Quaternion.identity()
-
-    MINI_CHECK(TOLERANCE.is_close(q.dot(q), 1.0))
-
-
-@MINI_TEST("Quaternion", "add")
-def test_quaternion_add():
-    from session_py import Quaternion
-    from session_py import Vector
-
-    a = Quaternion.from_sv(1.0, Vector(0.0, 0.0, 0.0))
-    b = Quaternion.from_sv(0.0, Vector(0.0, 0.0, 1.0))
-    r = a + b
-
-    MINI_CHECK(TOLERANCE.is_close(r.s, 1.0))
-    MINI_CHECK(TOLERANCE.is_close(r.v[2], 1.0))
-
-
-@MINI_TEST("Quaternion", "sub")
-def test_quaternion_sub():
-    from session_py import Quaternion
-    from session_py import Vector
-    import math
-
-    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 4.0)
-    r = q - q
-
-    MINI_CHECK(TOLERANCE.is_close(r.s, 0.0))
-    MINI_CHECK(TOLERANCE.is_close(r.v[2], 0.0))
-
-
-@MINI_TEST("Quaternion", "neg")
-def test_quaternion_neg():
-    from session_py import Quaternion
-
-    q = Quaternion.identity()
-    r = -q
-
-    MINI_CHECK(TOLERANCE.is_close(r.s, -1.0))
-
-
-@MINI_TEST("Quaternion", "Mul Scalar")
-def test_quaternion_mul_scalar():
-    from session_py import Quaternion
-
-    q = Quaternion.identity()
-    r = q * 2.0
-
-    MINI_CHECK(TOLERANCE.is_close(r.s, 2.0))
-
-
-@MINI_TEST("Quaternion", "magnitude2")
-def test_quaternion_magnitude2():
-    from session_py import Quaternion
-    from session_py import Vector
-    import math
-
-    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 4.0)
-
-    MINI_CHECK(TOLERANCE.is_close(q.magnitude2(), q.magnitude() * q.magnitude()))
-
-
-@MINI_TEST("Quaternion", "conjugate")
-def test_quaternion_conjugate():
-    from session_py import Quaternion
-    from session_py import Vector
-    import math
-
-    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 4.0)
-    r = q.conjugate()
-
-    MINI_CHECK(TOLERANCE.is_close(r.s, q.s))
-    MINI_CHECK(TOLERANCE.is_close(r.v[0], -q.v[0]))
-    MINI_CHECK(TOLERANCE.is_close(r.v[2], -q.v[2]))
-
-
-@MINI_TEST("Quaternion", "mul")
-def test_quaternion_mul():
-    from session_py import Quaternion
-    from session_py import Vector
-    import math
-
-    q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), math.pi / 2.0)
-    r = q * q
-    v = r.rotate_vector(Vector(1.0, 0.0, 0.0))
-
-    MINI_CHECK(TOLERANCE.is_close(v[0], -1.0))
-    MINI_CHECK(TOLERANCE.is_close(v[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.s, original.s))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 {
+  "color_mode": "objectcolor",
   "default_edge_attributes": {},
   "default_face_attributes": {},
   "default_vertex_attributes": {
@@ -73,7 +74,7 @@
     255
   ],
   "facedata": {},
-  "guid": "9548212c-7399-4726-876e-211bcc7fa310",
+  "guid": "823842f0-b583-4744-ad94-1fe4cf670451",
   "halfedge": {
     "0": {
       "3": 0,
@@ -173,12 +174,11 @@
     "a": 255,
     "b": 255,
     "g": 255,
-    "guid": "11fe0899-b858-4df3-884e-82e174352873",
+    "guid": "1b30a09d-e01d-4461-8695-cd40146e5e58",
     "name": "white",
     "r": 255,
     "type": "Color"
   },
-  "color_mode": "objectcolor",
   "pointcolors": [
     255,
     255,
@@ -280,7 +280,7 @@
     1.0
   ],
   "xform": {
-    "guid": "afefb4b7-b2d6-4920-a9af-1a5cce041d87",
+    "guid": "68b0f0fd-ebaa-4da5-a681-a025aef65e72",
     "m": [
       1.0,
       0.0,

@@ -1938,7 +1938,8 @@ class Mesh:
         xform = xf if xf is not None else self.xform
         for vdata in self.vertex.values():
             pos = vdata.position()
-            xform.transform_point(pos)
+            pos.xform = xform
+            pos.transform()
             vdata[0] = pos[0]
             vdata[1] = pos[1]
             vdata[2] = pos[2]
@@ -2009,6 +2010,7 @@ class Mesh:
 
         # Return fields in alphabetical order to match Rust's serde_json
         return {
+            "color_mode": self.color_mode.value,
             "default_edge_attributes": self.default_edge_attributes,
             "default_face_attributes": self.default_face_attributes,
             "default_vertex_attributes": self.default_vertex_attributes,
@@ -2024,7 +2026,6 @@ class Mesh:
             "max_vertex": self._max_vertex,
             "name": self.name,
             "objectcolor": self.objectcolor.__jsondump__(),
-            "color_mode": self.color_mode.value,
             "pointcolors": pointcolors_flat,
             "triangulation": {
                 str(fk): [[t[0], t[1], t[2]] for t in tris]

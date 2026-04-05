@@ -578,8 +578,10 @@ class Line:
         start = Point(self._x0, self._y0, self._z0)
         end = Point(self._x1, self._y1, self._z1)
 
-        self.xform.transform_point(start)
-        self.xform.transform_point(end)
+        start.xform = self.xform
+        start.transform()
+        end.xform = self.xform
+        end.transform()
 
         self._x0 = start[0]
         self._y0 = start[1]

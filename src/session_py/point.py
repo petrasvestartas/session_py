@@ -259,7 +259,13 @@ class Point:
 
         Transforms the point in-place and resets xform to identity.
         """
-        self.xform.transform_point(self)
+        x, y, z = self[0], self[1], self[2]
+        m = self.xform.m
+        w = m[3]*x + m[7]*y + m[11]*z + m[15]
+        w_inv = 1.0 / w if abs(w) > 1e-10 else 1.0
+        self[0] = (m[0]*x + m[4]*y + m[8]*z + m[12]) * w_inv
+        self[1] = (m[1]*x + m[5]*y + m[9]*z + m[13]) * w_inv
+        self[2] = (m[2]*x + m[6]*y + m[10]*z + m[14]) * w_inv
         self.xform = Xform.identity()
 
     def transformed(self):

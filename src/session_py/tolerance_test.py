@@ -117,6 +117,20 @@ def test_tolerance_rad_deg():
     MINI_CHECK(abs(deg_to_rad(rad_to_deg(1.234)) - 1.234) < 1e-9)
 
 
+@MINI_TEST("Tolerance", "To Radians")
+def test_tolerance_to_radians():
+    MINI_CHECK(abs(Tolerance.to_radians(180.0) - PI) < 1e-9)
+    MINI_CHECK(abs(Tolerance.to_radians(90.0) - PI / 2.0) < 1e-9)
+    MINI_CHECK(abs(Tolerance.to_radians(0.0)) < 1e-9)
+
+
+@MINI_TEST("Tolerance", "To Degrees")
+def test_tolerance_to_degrees():
+    MINI_CHECK(abs(Tolerance.to_degrees(PI) - 180.0) < 1e-9)
+    MINI_CHECK(abs(Tolerance.to_degrees(PI / 2.0) - 90.0) < 1e-9)
+    MINI_CHECK(abs(Tolerance.to_degrees(0.0)) < 1e-9)
+
+
 @MINI_TEST("Tolerance", "Count Digits")
 def test_tolerance_count_digits():
     MINI_CHECK(count_digits(0.0)   == 0)

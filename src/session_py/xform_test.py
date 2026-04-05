@@ -38,135 +38,447 @@ def test_xform_constructor():
     xcopy = x.duplicate()
     xother = Xform()
 
-    # Equality operators
-    x_eq = (x == xother)
-    x_ne = (x != xfrom)
-
     # Matrix multiplication (*)
     t = Xform.translation(10.0, 0.0, 0.0)
     s = Xform.scale_xyz(2.0, 1.0, 1.0)
     combined = t * s
     p = Point(1.0, 0.0, 0.0)
-    result = combined.transformed_point(p)
+    p.xform = combined
+    result = p.transformed()
 
     # In-place multiplication (*=)
     t2 = Xform.translation(10.0, 0.0, 0.0)
     t2 *= s
-    result2 = t2.transformed_point(p)
+    p = Point(1.0, 0.0, 0.0)
+    p.xform = t2
+    result2 = p.transformed()
 
-    MINI_CHECK(x.name == "my_xform" and x.guid != "")
+    MINI_CHECK(x.name == "my_xform")
+    MINI_CHECK(x.guid != "")
     MINI_CHECK(m00 == 1.0 and m11 == 1.0 and m22 == 1.0 and m33 == 1.0)
     MINI_CHECK(is_id == True)
     MINI_CHECK(xfrom.m[12] == 5.0 and xfrom.m[13] == 10.0 and xfrom.m[14] == 15.0)
-    MINI_CHECK("1.000000" in xstr)
-    MINI_CHECK("Xform(" in xrepr and "my_xform" in xrepr)
+    MINI_CHECK(xstr == "[1.000000, 0.000000, 0.000000, 0.000000]\n[0.000000, 1.000000, 0.000000, 0.000000]\n[0.000000, 0.000000, 1.000000, 0.000000]\n[0.000000, 0.000000, 0.000000, 1.000000]")
+    MINI_CHECK(xrepr == f"Xform(my_xform, {x.guid[:8]})")
     MINI_CHECK(xcopy == x and xcopy.guid != x.guid)
-    MINI_CHECK(x_eq == True and x_ne == True)
-    # (1,0,0) * scale(2,1,1) = (2,0,0), then translate(10,0,0) = (12,0,0)
-    MINI_CHECK(TOLERANCE.is_close(result[0], 12.0))
-    MINI_CHECK(TOLERANCE.is_close(result[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(result[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(result2[0], 12.0))
-    MINI_CHECK(TOLERANCE.is_close(result2[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(result2[2], 0.0))
+    MINI_CHECK(xother == x)
+    MINI_CHECK(xfrom != x)
+    MINI_CHECK(result[0] == 12.0 and result[1] == 0.0 and result[2] == 0.0)
+    MINI_CHECK(result2[0] == 12.0 and result2[1] == 0.0 and result2[2] == 0.0)
 
 
 @MINI_TEST("Xform", "Translation")
 def test_xform_translation():
     from session_py import Xform
+    from session_py import Mesh
     from session_py import Point
 
-    # Translation matrix
-    t = Xform.translation(1.0, 2.0, 3.0)
+    xf = Xform.translation(1.5, 1.0, 0.5)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(0.5, 0, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(2.5, 0, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(2.5, 2, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(0.5, 2, -0.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(0.5, 0, 1.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(2.5, 0, 1.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(2.5, 2, 1.5)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(0.5, 2, 1.5)))
 
-    # Apply to point
-    p = Point(4.0, 5.0, 6.0)
-    tp = t.transformed_point(p)
 
-    MINI_CHECK(TOLERANCE.is_close(tp[0], 5.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[1], 7.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[2], 9.0))
-
-
-@MINI_TEST("Xform", "Scaling")
-def test_xform_scaling():
+@MINI_TEST("Xform", "Rotation X")
+def test_xform_rotation_x():
+    import math
     from session_py import Xform
+    from session_py import Mesh
     from session_py import Point
 
-    # Scaling matrix
-    s = Xform.scale_xyz(2.0, 3.0, 4.0)
+    s = math.sqrt(2.0)
+    xf = Xform.rotation_x(PI / 4.0)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-1, 0, -s)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(1, 0, -s)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(1, s, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-1, s, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-1, -s, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(1, -s, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(1, 0, s)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-1, 0, s)))
 
-    # Apply to point
-    p = Point(1.0, 1.0, 1.0)
-    sp = s.transformed_point(p)
 
-    MINI_CHECK(TOLERANCE.is_close(sp[0], 2.0))
-    MINI_CHECK(TOLERANCE.is_close(sp[1], 3.0))
-    MINI_CHECK(TOLERANCE.is_close(sp[2], 4.0))
-
-
-@MINI_TEST("Xform", "Rotation")
-def test_xform_rotation():
+@MINI_TEST("Xform", "Rotation Y")
+def test_xform_rotation_y():
+    import math
     from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+
+    s = math.sqrt(2.0)
+    xf = Xform.rotation_y(PI / 4.0)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-s, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(0, -1, -s)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(0, 1, -s)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-s, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(0, -1, s)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(s, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(s, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(0, 1, s)))
+
+
+@MINI_TEST("Xform", "Rotation Z")
+def test_xform_rotation_z():
+    import math
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+
+    s = math.sqrt(2.0)
+    xf = Xform.rotation_z(PI / 4.0)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(0, -s, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(s, 0, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(0, s, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-s, 0, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(0, -s, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(s, 0, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(0, s, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-s, 0, 1)))
+
+
+@MINI_TEST("Xform", "Rotation Axis")
+def test_xform_rotation_axis():
+    import math
+    from session_py import Xform
+    from session_py import Mesh
     from session_py import Point
     from session_py import Vector
 
-    # Rotation around X axis by 90 degrees
-    rx = Xform.rotation_x(PI / 2.0)
-    # Apply to point (0,1,0) -> (0,0,1)
-    px = Point(0.0, 1.0, 0.0)
-    rpx = rx.transformed_point(px)
-
-    # Rotation around Y axis by 90 degrees
-    ry = Xform.rotation_y(PI / 2.0)
-    # Apply to point (0,0,1) -> (1,0,0)
-    py = Point(0.0, 0.0, 1.0)
-    rpy = ry.transformed_point(py)
-
-    # Rotation around Z axis by 90 degrees
-    rz = Xform.rotation_z(PI / 2.0)
-    # Apply to point (1,0,0) -> (0,1,0)
-    pz = Point(1.0, 0.0, 0.0)
-    rpz = rz.transformed_point(pz)
-
-    # Rotation around arbitrary axis (1,1,1) by 120 degrees
-    # This cycles x->y->z->x
     axis = Vector(1.0, 1.0, 1.0)
-    r = Xform.rotation(axis, 2.0 * PI / 3.0)
-    # Apply to point (1,0,0) -> (0,1,0)
-    p = Point(1.0, 0.0, 0.0)
-    rp = r.transformed_point(p)
+    xf = Xform.rotation(axis, 2.0 * PI / 4.0)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    t = 1.0 / 3.0
+    k = 2.0 / math.sqrt(3.0)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-1, -1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(-t, -t+k, -t-k)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(t-k, t+k, t)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-t-k, -t, -t+k)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-t+k, -t-k, -t)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(t+k, t, t-k)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(1, 1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(t, t-k, t+k)))
 
-    MINI_CHECK(TOLERANCE.is_close(rpx[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rpx[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rpx[2], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(rpy[0], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(rpy[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rpy[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rpz[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rpz[1], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(rpz[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rp[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(rp[1], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(rp[2], 0.0))
+
+@MINI_TEST("Xform", "Rotation Around Line")
+def test_xform_rotation_around_line():
+    import math
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Line
+
+    s = math.sqrt(2.0)
+    line = Line(-1.0, -1.0, -1.0, -1.0, -1.0, 1.0)
+    xf = Xform.rotation_around_line(line, PI / 4.0)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-1, -1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(s-1, s-1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(-1, 2*s-1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-s-1, s-1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-1, -1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(s-1, s-1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(-1, 2*s-1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-s-1, s-1, 1)))
+
+
+@MINI_TEST("Xform", "Change Basis")
+def test_xform_change_basis():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+
+    o0 = Point(0, 0, 0)
+    x0 = Vector(1, 0, 0)
+    y0 = Vector(0, 1, 0)
+    z0 = Vector(0, 0, 1)
+    o1 = Point(0.5, -1.0, 0.5)
+    x1 = Vector(1.2, 0.0, 0.0)
+    y1 = Vector(0.3, -1.0, -0.15)
+    z1 = Vector(0.0, 0.0, 1.1)
+    xf = Xform.change_basis(o0, x0, y0, z0, o1, x1, y1, z1)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-1, 0, -0.45)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(1.4, 0, -0.45)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(2, -2, -0.75)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-0.4, -2, -0.75)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-1, 0, 1.75)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(1.4, 0, 1.75)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(2, -2, 1.45)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-0.4, -2, 1.45)))
+
+
+@MINI_TEST("Xform", "Plane To Plane")
+def test_xform_plane_to_plane():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Plane
+
+    pf = Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
+    pt = Plane(Point(2, 0, 0), Vector(0, 1, 0), Vector(-1, 0, 0))
+    xf = Xform.plane_to_plane(pf, pt)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(1, 1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(1, -1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(3, -1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(3, 1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(1, 1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(1, -1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(3, -1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(3, 1, 1)))
+
+
+@MINI_TEST("Xform", "Scale XYZ")
+def test_xform_scale_xyz():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+
+    xf = Xform.scale_xyz(1.5, 1.2, 1.8)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-1.5, -1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(1.5, -1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(1.5, 1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-1.5, 1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-1.5, -1.2, 1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(1.5, -1.2, 1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(1.5, 1.2, 1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-1.5, 1.2, 1.8)))
+
+
+@MINI_TEST("Xform", "Scale Uniform")
+def test_xform_scale_uniform():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+
+    c = Point(0, 0, 0)
+    xf = Xform.scale_uniform(c, 2.0)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-2, -2, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(2, -2, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(2, 2, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-2, 2, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-2, -2, 2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(2, -2, 2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(2, 2, 2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-2, 2, 2)))
+
+
+@MINI_TEST("Xform", "Scale Non Uniform")
+def test_xform_scale_non_uniform():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+
+    c = Point(0, 0, 0)
+    xf = Xform.scale_non_uniform(c, 1.5, 1.2, 1.8)
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-1.5, -1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(1.5, -1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(1.5, 1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-1.5, 1.2, -1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-1.5, -1.2, 1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(1.5, -1.2, 1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(1.5, 1.2, 1.8)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-1.5, 1.2, 1.8)))
+
+
+@MINI_TEST("Xform", "Look At Right Handed")
+def test_xform_look_at_right_handed():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+
+    eye = Point(0, 3, 0)
+    target = Point(0, 0, 0)
+    xf = Xform.look_at_right_handed(eye, target, Vector(0, 0, 1))
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(1, -1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(-1, -1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(-1, -1, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(1, -1, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(1, 1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(-1, 1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(-1, 1, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(1, 1, -2)))
+
+
+@MINI_TEST("Xform", "Look To Right Handed")
+def test_xform_look_to_right_handed():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+
+    eye = Point(0, 3, 0)
+    direction = Vector(0, -1, 0)
+    xf = Xform.look_to_right_handed(eye, direction, Vector(0, 0, 1))
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(1, -1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(-1, -1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(-1, -1, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(1, -1, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(1, 1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(-1, 1, -4)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(-1, 1, -2)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(1, 1, -2)))
+
+
+@MINI_TEST("Xform", "Perspective")
+def test_xform_perspective():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+
+    view = Xform.translation(0, 0, -2)
+    proj = Xform.perspective(PI / 2.0, 1.0, 1.0, 3.0)
+    xf = proj * view
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    t = 1.0 / 3.0
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-t, -t, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(t, -t, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(t, t, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-t, t, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-1, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(1, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(1, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-1, 1, 0)))
+
+
+@MINI_TEST("Xform", "Orthographic")
+def test_xform_orthographic():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+
+    view = Xform.translation(0, 0, -2)
+    proj = Xform.orthographic(-1.0, 1.0, -1.0, 1.0, 1.0, 3.0)
+    xf = proj * view
+    mesh = Mesh.create_box(2, 2, 2)
+    result = mesh.transformed(xf)
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(0), Point(-1, -1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(1), Point(1, -1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(2), Point(1, 1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(3), Point(-1, 1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(4), Point(-1, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(1, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(1, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(-1, 1, 0)))
+
+
+@MINI_TEST("Xform", "Project To Plane")
+def test_xform_project_to_plane():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Plane
+    from session_py import Polyline
+
+    plane = Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
+    move = Xform.translation(0, 0, 1)
+    proj = Xform.project_to_plane(plane)
+    xf = proj * move
+    def tp(x, y, z):
+        p = Point(x, y, z)
+        p.xform = xf
+        return p.transformed()
+    outline = Polyline([
+        tp(-1, -1, -1),
+        tp(1, -1, -1),
+        tp(1, 1, -1),
+        tp(-1, 1, -1),
+        tp(-1, -1, -1)
+    ])
+    pts = outline.get_points()
+    MINI_CHECK(TOLERANCE.is_point_close(pts[0], Point(-1, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[1], Point(1, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[2], Point(1, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[3], Point(-1, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[4], Point(-1, -1, 0)))
+
+
+@MINI_TEST("Xform", "Project To Plane By Axis")
+def test_xform_project_to_plane_by_axis():
+    from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Plane
+    from session_py import Polyline
+
+    plane = Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
+    direction = Vector(1, 0, 1)
+    move = Xform.translation(0, 0, 1)
+    proj = Xform.project_to_plane_by_axis(plane, direction)
+    xf = proj * move
+    def tp(x, y, z):
+        p = Point(x, y, z)
+        p.xform = xf
+        return p.transformed()
+    outline = Polyline([
+        tp(-1, -1, 1),
+        tp(1, -1, -1),
+        tp(1, 1, -1),
+        tp(-1, 1, 1),
+        tp(-1, -1, 1)
+    ])
+    pts = outline.get_points()
+    MINI_CHECK(TOLERANCE.is_point_close(pts[0], Point(-3, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[1], Point(1, -1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[2], Point(1, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[3], Point(-3, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[4], Point(-3, -1, 0)))
 
 
 @MINI_TEST("Xform", "Inverse")
 def test_xform_inverse():
     from session_py import Xform
+    from session_py import Mesh
+    from session_py import Point
 
-    # Create composite transformation
-    t = Xform.translation(1.0, 2.0, 3.0)
-    s = Xform.scale_xyz(2.0, 2.0, 2.0)
+    t = Xform.translation(1.0, 0.5, 0.5)
+    s = Xform.scale_xyz(1.5, 1.2, 1.3)
     composite = t * s
-
-    # Compute inverse
     inv = composite.inverse()
-
-    # Multiply should give identity
-    result = composite * inv
-
-    MINI_CHECK(result.is_identity())
+    mesh = Mesh.create_box(2, 2, 2)
+    forward = mesh.transformed(composite)
+    roundtrip = forward.transformed(inv)
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(0), Point(-1, -1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(1), Point(1, -1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(2), Point(1, 1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(3), Point(-1, 1, -1)))
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(4), Point(-1, -1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(5), Point(1, -1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(6), Point(1, 1, 1)))
+    MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(7), Point(-1, 1, 1)))
 
 
 @MINI_TEST("Xform", "Transform Geometry")
@@ -183,130 +495,38 @@ def test_xform_transform_geometry():
 
     # Transform Point: (1,2,3) -> (11,22,33)
     pt = Point(1.0, 2.0, 3.0)
-    pt.xform = t.duplicate()
+    pt.xform = t
     pt_transformed = pt.transformed()
 
     # Transform Vector: translation should NOT affect vectors
     v = Vector(1.0, 0.0, 0.0)
-    v_transformed = t.transformed_vector(v)
+    v.xform = t
+    v_transformed = v.transformed()
 
     # Transform Line: (0,0,0)-(1,0,0) -> (10,20,30)-(11,20,30)
     ln = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-    ln.xform = t.duplicate()
+    ln.xform = t
     ln_transformed = ln.transformed()
 
     # Transform Plane: origin (0,0,0) -> (10,20,30)
     pl = Plane(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0))
-    pl.xform = t.duplicate()
+    pl.xform = t
     pl_transformed = pl.transformed()
 
     # Transform Polyline: 3 points translated
     poly = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)])
-    poly.xform = t.duplicate()
+    poly.xform = t
     poly_transformed = poly.transformed()
     pts = poly_transformed.get_points()
 
-    MINI_CHECK(TOLERANCE.is_close(pt_transformed[0], 11.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_transformed[1], 22.0))
-    MINI_CHECK(TOLERANCE.is_close(pt_transformed[2], 33.0))
-    MINI_CHECK(TOLERANCE.is_close(v_transformed[0], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(v_transformed[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(v_transformed[2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[0], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[1], 20.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[3], 11.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[4], 20.0))
-    MINI_CHECK(TOLERANCE.is_close(ln_transformed[5], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_transformed.origin[0], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_transformed.origin[1], 20.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_transformed.origin[2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[0][0], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[0][1], 20.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[0][2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[1][0], 11.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[1][1], 20.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[1][2], 30.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[2][0], 11.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[2][1], 21.0))
-    MINI_CHECK(TOLERANCE.is_close(pts[2][2], 30.0))
-
-
-@MINI_TEST("Xform", "Change Basis")
-def test_xform_change_basis():
-    from session_py import Xform
-    from session_py import Point
-    from session_py import Vector
-
-    # System 0: standard XY plane at origin
-    origin_0 = Point(0.0, 0.0, 0.0)
-    x_axis_0 = Vector(1.0, 0.0, 0.0)
-    y_axis_0 = Vector(0.0, 1.0, 0.0)
-    z_axis_0 = Vector(0.0, 0.0, 1.0)
-
-    # System 1: translated and rotated 90 degrees around Z
-    origin_1 = Point(10.0, 20.0, 0.0)
-    x_axis_1 = Vector(0.0, 1.0, 0.0)
-    y_axis_1 = Vector(-1.0, 0.0, 0.0)
-    z_axis_1 = Vector(0.0, 0.0, 1.0)
-
-    # Transform maps points FROM system 1 TO system 0
-    xform = Xform.change_basis(
-        origin_1, x_axis_1, y_axis_1, z_axis_1,
-        origin_0, x_axis_0, y_axis_0, z_axis_0)
-
-    # Point at origin_1 should map to origin_0
-    p = Point(10.0, 20.0, 0.0)
-    tp = xform.transformed_point(p)
-
-    MINI_CHECK(TOLERANCE.is_close(tp[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[2], 0.0))
-
-
-@MINI_TEST("Xform", "Plane To Plane")
-def test_xform_plane_to_plane():
-    from session_py import Xform
-    from session_py import Point
-    from session_py import Vector
-    from session_py import Plane
-
-    # Source plane at origin, XY plane
-    plane_from = Plane(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0))
-
-    # Target plane translated and rotated
-    plane_to = Plane(Point(10.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), Vector(-1.0, 0.0, 0.0))
-
-    xform = Xform.plane_to_plane(plane_from, plane_to)
-
-    # Origin of source should map to origin of target
-    p = Point(0.0, 0.0, 0.0)
-    tp = xform.transformed_point(p)
-
-    MINI_CHECK(TOLERANCE.is_close(tp[0], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[2], 0.0))
-
-
-@MINI_TEST("Xform", "Look At Rh")
-def test_xform_look_at_rh():
-    from session_py import Xform
-    from session_py import Point
-    from session_py import Vector
-
-    # Camera at (0,0,10) looking at origin
-    eye = Point(0.0, 0.0, 10.0)
-    target = Point(0.0, 0.0, 0.0)
-    up = Vector(0.0, 1.0, 0.0)
-
-    xform = Xform.look_at_rh(eye, target, up)
-
-    # The target point should be on the negative Z axis in view space
-    tp = xform.transformed_point(target)
-
-    MINI_CHECK(TOLERANCE.is_close(tp[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(tp[2], -10.0))
+    MINI_CHECK(TOLERANCE.is_point_close(pt_transformed, Point(11.0, 22.0, 33.0)))
+    MINI_CHECK(v_transformed[0] == 1.0 and v_transformed[1] == 0.0 and v_transformed[2] == 0.0)
+    MINI_CHECK(ln_transformed[0] == 10.0 and ln_transformed[1] == 20.0 and ln_transformed[2] == 30.0)
+    MINI_CHECK(ln_transformed[3] == 11.0 and ln_transformed[4] == 20.0 and ln_transformed[5] == 30.0)
+    MINI_CHECK(TOLERANCE.is_point_close(pl_transformed.origin, Point(10.0, 20.0, 30.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[0], Point(10.0, 20.0, 30.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[1], Point(11.0, 20.0, 30.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[2], Point(11.0, 21.0, 30.0)))
 
 
 @MINI_TEST("Xform", "Json Roundtrip")
@@ -314,26 +534,23 @@ def test_xform_json_roundtrip():
     from session_py import Xform
     from pathlib import Path
 
-    # Create a non-identity xform
     xform = Xform.translation(1.0, 2.0, 3.0)
     xform.name = "test_xform"
 
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
-
-    # json_dump(fname) / json_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.json"
     xform.json_dump(fname)
     loaded = Xform.json_load(fname)
 
     MINI_CHECK(loaded.name == "test_xform")
-    MINI_CHECK(TOLERANCE.is_close(loaded.m[12], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(loaded.m[13], 2.0))
-    MINI_CHECK(TOLERANCE.is_close(loaded.m[14], 3.0))
+    MINI_CHECK(loaded.guid == xform.guid)
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[0], 1.0) and TOLERANCE.is_close(loaded.m[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[2], 0.0) and TOLERANCE.is_close(loaded.m[3], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[4], 0.0) and TOLERANCE.is_close(loaded.m[5], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[6], 0.0) and TOLERANCE.is_close(loaded.m[7], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[8], 0.0) and TOLERANCE.is_close(loaded.m[9], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[10], 1.0) and TOLERANCE.is_close(loaded.m[11], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[12], 1.0) and TOLERANCE.is_close(loaded.m[13], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[14], 3.0) and TOLERANCE.is_close(loaded.m[15], 1.0))
 
 
 @MINI_TEST("Xform", "Protobuf Roundtrip")
@@ -341,24 +558,23 @@ def test_xform_protobuf_roundtrip():
     from session_py import Xform
     from pathlib import Path
 
-    # Create a non-identity xform
     xform = Xform.translation(1.0, 2.0, 3.0)
     xform.name = "test_xform_proto"
 
-    #   pb_dumps()      │ bytes        │ to protobuf bytes
-    #   pb_loads(b)     │ bytes        │ from protobuf bytes
-    #   pb_dump(path)   │ file         │ write to file
-    #   pb_load(path)   │ file         │ read from file
-
-    # pb_dump(fname) / pb_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.bin"
     xform.pb_dump(fname)
     loaded = Xform.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_xform_proto")
-    MINI_CHECK(TOLERANCE.is_close(loaded.m[12], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(loaded.m[13], 2.0))
-    MINI_CHECK(TOLERANCE.is_close(loaded.m[14], 3.0))
+    MINI_CHECK(loaded.guid == xform.guid)
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[0], 1.0) and TOLERANCE.is_close(loaded.m[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[2], 0.0) and TOLERANCE.is_close(loaded.m[3], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[4], 0.0) and TOLERANCE.is_close(loaded.m[5], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[6], 0.0) and TOLERANCE.is_close(loaded.m[7], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[8], 0.0) and TOLERANCE.is_close(loaded.m[9], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[10], 1.0) and TOLERANCE.is_close(loaded.m[11], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[12], 1.0) and TOLERANCE.is_close(loaded.m[13], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.m[14], 3.0) and TOLERANCE.is_close(loaded.m[15], 1.0))
 
 
 if __name__ == "__main__":

@@ -356,7 +356,8 @@ class Polyline:
         for i in range(self.point_count()):
             idx = i * 3
             pt = Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
-            self.xform.transform_point(pt)
+            pt.xform = self.xform
+            pt.transform()
             self._coords[idx] = pt[0]
             self._coords[idx + 1] = pt[1]
             self._coords[idx + 2] = pt[2]

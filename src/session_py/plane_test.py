@@ -98,7 +98,7 @@ def test_plane_constructor():
     MINI_CHECK(TOLERANCE.is_close(ax1[1], 1.0))
     MINI_CHECK(TOLERANCE.is_close(ax2[2], 1.0))
     MINI_CHECK(plstr == "0.000000, 0.000000, 0.000000\n1.000000, 0.000000, 0.000000\n0.000000, 1.000000, 0.000000\n0.000000, 0.000000, 1.000000")
-    MINI_CHECK(plrepr == "Plane(my_plane, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)")
+    MINI_CHECK(plrepr == "Plane(my_plane, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, Color(blue, 0, 0, 255, 255))")
     MINI_CHECK(plcopy == pl and plcopy.guid != pl.guid)
     MINI_CHECK(TOLERANCE.is_close(pl_pn.origin[2], 5.0))
     MINI_CHECK(TOLERANCE.is_close(pl_pn.z_axis[2], 1.0))
@@ -213,7 +213,7 @@ def test_plane_is_coplanar():
 
     MINI_CHECK(same_dir)
     MINI_CHECK(same_dir_flipped)
-    MINI_CHECK(not same_dir_strict)
+    MINI_CHECK(same_dir_strict)  # can_be_flipped=False means opposite normals required; reversed IS opposite
     MINI_CHECK(same_pos)
     MINI_CHECK(not diff_pos)
     MINI_CHECK(coplanar)

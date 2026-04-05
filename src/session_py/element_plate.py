@@ -17,6 +17,10 @@ class PlateElement(Element):
             ]
         self._polygon = [Point(p[0], p[1], p[2]) for p in polygon]
         self._thickness = thickness
+        self._joint_types = []
+        self._j_mf = []
+        self._key = ""
+        self._component_plane = None
         self._geometry = self.compute_element_geometry()
 
     @property
@@ -39,6 +43,38 @@ class PlateElement(Element):
         self._thickness = value
         self._geometry = self.compute_element_geometry()
         self.reset()
+
+    @property
+    def joint_types(self):
+        return self._joint_types
+
+    @joint_types.setter
+    def joint_types(self, value):
+        self._joint_types = list(value)
+
+    @property
+    def j_mf(self):
+        return self._j_mf
+
+    @j_mf.setter
+    def j_mf(self, value):
+        self._j_mf = [list(face) for face in value]
+
+    @property
+    def key(self):
+        return self._key
+
+    @key.setter
+    def key(self, value):
+        self._key = value
+
+    @property
+    def component_plane(self):
+        return self._component_plane
+
+    @component_plane.setter
+    def component_plane(self, value):
+        self._component_plane = value
 
     @staticmethod
     def _polygon_normal(pts):
@@ -82,6 +118,97 @@ class PlateElement(Element):
             faces.append([a, b, c, d])
         return Mesh.from_vertices_and_faces(vertices, faces)
 
+    def compute_polylines(self):
+        from .polyline import Polyline
+        from .point import Point
+        normal = self._polygon_normal(self._polygon)
+        n = len(self._polygon)
+        bottom = [Point(p[0], p[1], p[2]) for p in self._polygon]
+        top = [Point(
+            p[0] - normal[0] * self._thickness,
+            p[1] - normal[1] * self._thickness,
+            p[2] - normal[2] * self._thickness,
+        ) for p in self._polygon]
+        rev = list(reversed(bottom))
+        bottom_pl = Polyline(rev + [Point(rev[0][0], rev[0][1], rev[0][2])])
+        top_pl = Polyline(top + [Point(top[0][0], top[0][1], top[0][2])])
+        result = [bottom_pl, top_pl]
+        for i in range(n):
+            j = (i + 1) % n
+            side = Polyline([bottom[i], bottom[j], top[j], top[i], Point(bottom[i][0], bottom[i][1], bottom[i][2])])
+            result.append(side)
+        return result
+
+    def compute_planes(self):
+        from .plane import Plane
+        from .point import Point
+        from .vector import Vector
+        normal = self._polygon_normal(self._polygon)
+        n = len(self._polygon)
+        bottom = [Point(p[0], p[1], p[2]) for p in self._polygon]
+        top = [Point(
+            p[0] - normal[0] * self._thickness,
+            p[1] - normal[1] * self._thickness,
+            p[2] - normal[2] * self._thickness,
+        ) for p in self._polygon]
+        bcx = sum(p[0] for p in bottom) / n
+        bcy = sum(p[1] for p in bottom) / n
+        bcz = sum(p[2] for p in bottom) / n
+        tcx = sum(p[0] for p in top) / n
+        tcy = sum(p[1] for p in top) / n
+        tcz = sum(p[2] for p in top) / n
+        bottom_plane = Plane.from_point_normal(Point(bcx, bcy, bcz), normal)
+        neg_normal = Vector(-normal[0], -normal[1], -normal[2])
+        top_plane = Plane.from_point_normal(Point(tcx, tcy, tcz), neg_normal)
+        result = [bottom_plane, top_plane]
+        for i in range(n):
+            j = (i + 1) % n
+            edge = Vector(bottom[j][0] - bottom[i][0], bottom[j][1] - bottom[i][1], bottom[j][2] - bottom[i][2])
+            side_normal = Vector(
+                edge[1] * normal[2] - edge[2] * normal[1],
+                edge[2] * normal[0] - edge[0] * normal[2],
+                edge[0] * normal[1] - edge[1] * normal[0],
+            )
+            mag = (side_normal[0]**2 + side_normal[1]**2 + side_normal[2]**2) ** 0.5
+            if mag > 1e-12:
+                side_normal = Vector(side_normal[0] / mag, side_normal[1] / mag, side_normal[2] / mag)
+            cx = (bottom[i][0] + bottom[j][0] + top[i][0] + top[j][0]) * 0.25
+            cy = (bottom[i][1] + bottom[j][1] + top[i][1] + top[j][1]) * 0.25
+            cz = (bottom[i][2] + bottom[j][2] + top[i][2] + top[j][2]) * 0.25
+            result.append(Plane.from_point_normal(Point(cx, cy, cz), side_normal))
+        return result
+
+    def compute_edge_vectors(self):
+        from .vector import Vector
+        n = len(self._polygon)
+        result = []
+        for i in range(n):
+            j = (i + 1) % n
+            dx = self._polygon[j][0] - self._polygon[i][0]
+            dy = self._polygon[j][1] - self._polygon[i][1]
+            dz = self._polygon[j][2] - self._polygon[i][2]
+            mag = (dx * dx + dy * dy + dz * dz) ** 0.5
+            if mag > 1e-12:
+                result.append(Vector(dx / mag, dy / mag, dz / mag))
+            else:
+                result.append(Vector(0, 0, 0))
+        return result
+
+    def compute_axis(self):
+        from .line import Line
+        from .point import Point
+        normal = self._polygon_normal(self._polygon)
+        n = len(self._polygon)
+        cx = sum(p[0] for p in self._polygon) / n
+        cy = sum(p[1] for p in self._polygon) / n
+        cz = sum(p[2] for p in self._polygon) / n
+        return Line(
+            cx, cy, cz,
+            cx - normal[0] * self._thickness,
+            cy - normal[1] * self._thickness,
+            cz - normal[2] * self._thickness,
+        )
+
     ###########################################################################################
     # Operators
     ###########################################################################################
@@ -94,6 +221,10 @@ class PlateElement(Element):
         result.name = copy.deepcopy(self.name, memo)
         result._polygon = copy.deepcopy(self._polygon, memo)
         result._thickness = self._thickness
+        result._joint_types = list(self._joint_types)
+        result._j_mf = copy.deepcopy(self._j_mf, memo)
+        result._key = self._key
+        result._component_plane = copy.deepcopy(self._component_plane, memo)
         result._geometry = copy.deepcopy(self._geometry, memo)
         result._session_transformation = copy.deepcopy(self._session_transformation, memo)
         result._features = list(self._features)
@@ -102,6 +233,10 @@ class PlateElement(Element):
         result._obb = None
         result._collision_mesh = None
         result._point = None
+        result._polylines = None
+        result._planes = None
+        result._edge_vectors = None
+        result._axis = None
         return result
 
     def __eq__(self, other):
@@ -133,9 +268,13 @@ class PlateElement(Element):
 
     def __jsondump__(self):
         return {
+            "component_plane": self._component_plane.__jsondump__() if self._component_plane else None,
             "geometry_data": self._geometry.__jsondump__() if self._geometry else None,
             "geometry_type": type(self._geometry).__name__ if self._geometry else "None",
             "guid": self.guid,
+            "j_mf": self._j_mf,
+            "joint_types": self._joint_types,
+            "key": self._key,
             "name": self.name,
             "polygon": [[p[0], p[1], p[2]] for p in self._polygon],
             "session_transformation": self.session_transformation.__jsondump__(),
@@ -156,6 +295,12 @@ class PlateElement(Element):
         elem.name = name if name is not None else data.get("name", elem.name)
         if "session_transformation" in data:
             elem.session_transformation = decode_node(data["session_transformation"])
+        elem._joint_types = data.get("joint_types", [])
+        elem._j_mf = data.get("j_mf", [])
+        elem._key = data.get("key", "")
+        cp = data.get("component_plane")
+        if cp is not None:
+            elem._component_plane = decode_node(cp)
         return elem
 
     ###########################################################################################
@@ -175,6 +320,26 @@ class PlateElement(Element):
         }).encode()
         proto.session_transformation.name = self.session_transformation.name
         proto.session_transformation.matrix.extend(self.session_transformation.m)
+        proto.joint_types.extend(self._joint_types)
+        for face_joints in self._j_mf:
+            fj = element_pb2.FaceJoints()
+            for jid, is_male, param in face_joints:
+                jc = element_pb2.JointConnection()
+                jc.joint_id = jid
+                jc.is_male = is_male
+                jc.parameter = param
+                fj.connections.append(jc)
+            proto.j_mf.append(fj)
+        proto.key = self._key
+        if self._component_plane is not None:
+            cp = self._component_plane
+            proto.component_plane.name = cp.name
+            proto.component_plane.frame.extend([
+                cp.origin[0], cp.origin[1], cp.origin[2],
+                cp.x_axis[0], cp.x_axis[1], cp.x_axis[2],
+                cp.y_axis[0], cp.y_axis[1], cp.y_axis[2],
+                cp.z_axis[0], cp.z_axis[1], cp.z_axis[2],
+            ])
         return proto.SerializeToString()
 
     @classmethod
@@ -196,4 +361,20 @@ class PlateElement(Element):
         xf.name = proto.session_transformation.name
         xf.m = list(proto.session_transformation.matrix)
         elem.session_transformation = xf
+        elem._joint_types = list(proto.joint_types)
+        elem._j_mf = []
+        for fj in proto.j_mf:
+            face = [(jc.joint_id, jc.is_male, jc.parameter) for jc in fj.connections]
+            elem._j_mf.append(face)
+        elem._key = proto.key
+        if proto.HasField("component_plane") and len(proto.component_plane.frame) == 12:
+            from .plane import Plane
+            from .vector import Vector
+            f = list(proto.component_plane.frame)
+            elem._component_plane = Plane(
+                origin=Point(f[0], f[1], f[2]),
+                x_axis=Vector(f[3], f[4], f[5]),
+                y_axis=Vector(f[6], f[7], f[8]),
+                name=proto.component_plane.name,
+            )
         return elem

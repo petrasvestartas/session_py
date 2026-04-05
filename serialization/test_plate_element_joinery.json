@@ -1,5 +1,56 @@
 {
-  "component_plane": null,
+  "component_plane": {
+    "linecolor": {
+      "a": 255,
+      "b": 255,
+      "g": 0,
+      "guid": "b13e2f69-76c6-41d7-a9ce-e64e50fa6b95",
+      "name": "blue",
+      "r": 0,
+      "type": "Color"
+    },
+    "frame": [
+      1,
+      2,
+      3,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "guid": "33fca0a7-596a-4fb5-bb2f-165058c1064c",
+    "name": "my_plane",
+    "type": "Plane",
+    "width": 1.0,
+    "xform": {
+      "guid": "2c563f9e-ea3e-4955-9511-c4ab4842e838",
+      "m": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "name": "my_xform",
+      "type": "Xform"
+    }
+  },
   "geometry_data": {
     "color_mode": "objectcolor",
     "default_edge_attributes": {},
@@ -76,7 +127,7 @@
       255
     ],
     "facedata": {},
-    "guid": "2c66419e-fe3d-4628-a0dc-fbc895e121ba",
+    "guid": "49fb97a2-369e-4ae4-bf10-fb60b9212f37",
     "halfedge": {
       "0": {
         "1": 2,
@@ -306,11 +357,32 @@
     }
   },
   "geometry_type": "Mesh",
-  "guid": "f2359878-0e85-465c-ad80-14d6e7d42bb5",
-  "j_mf": [],
-  "joint_types": [],
-  "key": "",
-  "name": "json_plate",
+  "guid": "e9c9e79e-7176-444b-914c-a37ff5282003",
+  "j_mf": [
+    [
+      [
+        0,
+        true,
+        0.5
+      ]
+    ],
+    [],
+    [
+      [
+        1,
+        false,
+        0.3
+      ]
+    ]
+  ],
+  "joint_types": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "key": "plate_A",
+  "name": "joinery_plate",
   "polygon": [
     [
       0,
@@ -334,7 +406,7 @@
     ]
   ],
   "session_transformation": {
-    "guid": "a193c816-6d6c-44c6-a16c-e9bfd1ca76e9",
+    "guid": "2c563f9e-ea3e-4955-9511-c4ab4842e838",
     "m": [
       1.0,
       0.0,
@@ -348,9 +420,9 @@
       0.0,
       1.0,
       0.0,
-      1.0,
-      2.0,
-      3.0,
+      0.0,
+      0.0,
+      0.0,
       1.0
     ],
     "name": "my_xform",

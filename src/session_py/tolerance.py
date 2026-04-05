@@ -364,6 +364,14 @@ class Tolerance:
                 setattr(self, k, v)
 
     @staticmethod
+    def to_radians(degrees):
+        return degrees * (math.pi / 180.0)
+
+    @staticmethod
+    def to_degrees(radians):
+        return radians * (180.0 / math.pi)
+
+    @staticmethod
     def round_to(value, ndigits):
         factor = 10 ** ndigits
         return round(value * factor) / factor

@@ -76,6 +76,26 @@ def test_vector_constructor():
     MINI_CHECK(vzero[0] == 0.0 and vzero[1] == 0.0 and vzero[2] == 0.0)
 
 
+@MINI_TEST("Vector", "Transformation")
+def test_vector_transformation():
+    from session_py import Vector, Xform
+    from session_py.tolerance import PI
+
+    v = Vector(1.0, 2.0, 3.0)
+    v.xform = Xform.translation(10.0, 20.0, 30.0)
+    v_transformed = v.transformed()
+    v.transform()
+
+    MINI_CHECK(v_transformed[0] == 1.0 and v_transformed[1] == 2.0 and v_transformed[2] == 3.0)
+    MINI_CHECK(v[0] == 1.0 and v[1] == 2.0 and v[2] == 3.0)
+    MINI_CHECK(v.xform == Xform.identity())
+
+    v2 = Vector(1.0, 0.0, 0.0)
+    v2.xform = Xform.rotation_z(PI / 2.0)
+    v2.transform()
+    MINI_CHECK(TOLERANCE.is_close(v2[0], 0.0) and TOLERANCE.is_close(v2[1], 1.0) and TOLERANCE.is_close(v2[2], 0.0))
+
+
 @MINI_TEST("Vector", "Magnitude")
 def test_vector_magnitude():
     from session_py import Vector

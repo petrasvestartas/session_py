@@ -154,5 +154,58 @@ def test_beam_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.length, 5.0))
 
 
+@MINI_TEST("BeamElement", "Polylines")
+def test_beam_polylines():
+    from session_py import BeamElement
+    from session_py import Polyline
+
+    b = BeamElement(width=0.1, depth=0.2, length=3.0)
+    pls = b.polylines
+
+    MINI_CHECK(len(pls) == 6)
+    MINI_CHECK(isinstance(pls[0], Polyline))
+    for pl in pls:
+        MINI_CHECK(pl.point_count() == 5)
+
+
+@MINI_TEST("BeamElement", "Planes")
+def test_beam_planes():
+    from session_py import BeamElement
+    from session_py import Plane
+
+    b = BeamElement(width=0.1, depth=0.2, length=3.0)
+    pls = b.planes
+
+    MINI_CHECK(len(pls) == 6)
+    MINI_CHECK(isinstance(pls[0], Plane))
+    MINI_CHECK(TOLERANCE.is_close(pls[0].z_axis[2], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(pls[1].z_axis[2], 1.0))
+
+
+@MINI_TEST("BeamElement", "Edge Vectors")
+def test_beam_edge_vectors():
+    from session_py import BeamElement
+    from session_py import Vector
+
+    b = BeamElement(width=0.1, depth=0.2, length=3.0)
+    evs = b.edge_vectors
+
+    MINI_CHECK(len(evs) == 12)
+    MINI_CHECK(isinstance(evs[0], Vector))
+
+
+@MINI_TEST("BeamElement", "Axis")
+def test_beam_axis():
+    from session_py import BeamElement
+    from session_py import Line
+
+    b = BeamElement(length=5.0)
+    ax = b.axis
+
+    MINI_CHECK(isinstance(ax, Line))
+    MINI_CHECK(TOLERANCE.is_close(ax.start()[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(ax.end()[2], 5.0))
+
+
 if __name__ == "__main__":
     run_all(language="python")

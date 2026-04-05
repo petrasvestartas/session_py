@@ -1,3 +1,4 @@
+import copy
 import uuid
 import math
 from .tolerance import Tolerance, TO_DEGREES, TO_RADIANS
@@ -38,6 +39,18 @@ class Vector:
         self._z = z
         self._magnitude = 0.0
         self._has_magnitude = False
+        self._xform = None
+
+    @property
+    def xform(self):
+        if getattr(self, '_xform', None) is None:
+            from .xform import Xform
+            self._xform = Xform.identity()
+        return self._xform
+
+    @xform.setter
+    def xform(self, value):
+        self._xform = value
 
     @property
     def guid(self) -> str:
@@ -97,6 +110,7 @@ class Vector:
         result._z = self._z
         result._magnitude = self._magnitude
         result._has_magnitude = self._has_magnitude
+        result.xform = copy.deepcopy(self.xform, memo)
         return result
 
     def duplicate(self):
@@ -286,6 +300,38 @@ class Vector:
 
         """
         return Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+
+    ###########################################################################################
+    # Transform
+    ###########################################################################################
+
+    def transform(self):
+        """Apply the stored xform transformation to the vector coordinates.
+
+        Transforms the vector in-place and resets xform to identity.
+        """
+        from .xform import Xform
+        x, y, z = self[0], self[1], self[2]
+        m = self.xform.m
+        self[0] = m[0]*x + m[4]*y + m[8]*z
+        self[1] = m[1]*x + m[5]*y + m[9]*z
+        self[2] = m[2]*x + m[6]*y + m[10]*z
+        self.xform = Xform.identity()
+
+    def transformed(self):
+        """Return a transformed copy of the vector.
+
+        Returns a new vector with the transformation applied.
+        The original vector and its xform remain unchanged.
+
+        Returns
+        -------
+        Vector
+            A new transformed vector.
+        """
+        result = copy.deepcopy(self)
+        result.transform()
+        return result
 
     ###########################################################################################
     # Details
@@ -1026,6 +1072,7 @@ class Vector:
             "name": self.name,
             "type": f"{self.__class__.__name__}",
             "x": self[0],
+            "xform": self.xform.__jsondump__(),
             "y": self[1],
             "z": self[2],
         }
@@ -1033,9 +1080,12 @@ class Vector:
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from polymorphic JSON format."""
+        from .encoders import decode_node
         vec = cls(data["x"], data["y"], data["z"])
         vec.guid = guid if guid is not None else data.get("guid", vec.guid)
         vec.name = name if name is not None else data.get("name", vec.name)
+        if "xform" in data:
+            vec.xform = decode_node(data["xform"])
         return vec
 
     def json_dump(self, filepath):
@@ -1102,7 +1152,9 @@ class Vector:
         proto.y = self._y
         proto.z = self._z
         proto.name = self.name
-        
+        proto.xform.name = self.xform.name
+        proto.xform.matrix.extend(self.xform.m)
+
         return proto.SerializeToString()
 
     @classmethod
@@ -1125,9 +1177,14 @@ class Vector:
         proto = vector_pb2.Vector()
         proto.ParseFromString(data)
         
+        from .xform import Xform
+
         v = cls(proto.x, proto.y, proto.z)
         v.name = proto.name
-        
+        v.xform = Xform()
+        v.xform.name = proto.xform.name
+        v.xform.m = list(proto.xform.matrix)
+
         return v
 
     def pb_dump(self, filepath):

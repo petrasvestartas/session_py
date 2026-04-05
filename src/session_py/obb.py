@@ -263,7 +263,7 @@ class OBB:
         max_x = max_y = max_z = float('-inf')
 
         for pt in points:
-            local_pt = plane_to_xy.transformed_point(pt)
+            local_pt = Point(pt[0], pt[1], pt[2]); local_pt.xform = plane_to_xy; local_pt = local_pt.transformed()
             min_x = min(min_x, local_pt[0])
             min_y = min(min_y, local_pt[1])
             min_z = min(min_z, local_pt[2])
@@ -279,7 +279,7 @@ class OBB:
         )
 
         xy_to_plane = Xform.xy_to_plane(origin, x_axis, y_axis, z_axis)
-        world_center = xy_to_plane.transformed_point(local_center)
+        local_center.xform = xy_to_plane; world_center = local_center.transformed()
 
         return cls(world_center, x_axis, y_axis, z_axis, half_size)
 
@@ -555,10 +555,14 @@ class OBB:
         """
         from .xform import Xform
 
-        self.xform.transform_point(self.center)
-        self.xform.transform_vector(self.x_axis)
-        self.xform.transform_vector(self.y_axis)
-        self.xform.transform_vector(self.z_axis)
+        self.center.xform = self.xform
+        self.center.transform()
+        self.x_axis.xform = self.xform
+        self.x_axis.transform()
+        self.y_axis.xform = self.xform
+        self.y_axis.transform()
+        self.z_axis.xform = self.xform
+        self.z_axis.transform()
         self.xform = Xform.identity()
 
     def transformed(self):

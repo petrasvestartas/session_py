@@ -23,15 +23,20 @@ _sym_db = _symbol_database.Default()
 
 
 from . import xform_pb2 as xform__pb2
+from . import plane_pb2 as plane__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\relement.proto\x12\rsession_proto\x1a\x0bxform.proto\"\x89\x01\n\x07\x45lement\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x15\n\rgeometry_type\x18\x03 \x01(\t\x12\x15\n\rgeometry_data\x18\x04 \x01(\x0c\x12\x34\n\x16session_transformation\x18\x05 \x01(\x0b\x32\x14.session_proto.Xformb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\relement.proto\x12\rsession_proto\x1a\x0bxform.proto\x1a\x0bplane.proto\"G\n\x0fJointConnection\x12\x10\n\x08joint_id\x18\x01 \x01(\x05\x12\x0f\n\x07is_male\x18\x02 \x01(\x08\x12\x11\n\tparameter\x18\x03 \x01(\x01\"A\n\nFaceJoints\x12\x33\n\x0b\x63onnections\x18\x01 \x03(\x0b\x32\x1e.session_proto.JointConnection\"\x83\x02\n\x07\x45lement\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x15\n\rgeometry_type\x18\x03 \x01(\t\x12\x15\n\rgeometry_data\x18\x04 \x01(\x0c\x12\x34\n\x16session_transformation\x18\x05 \x01(\x0b\x32\x14.session_proto.Xform\x12\x13\n\x0bjoint_types\x18\x06 \x03(\x05\x12\'\n\x04j_mf\x18\x07 \x03(\x0b\x32\x19.session_proto.FaceJoints\x12\x0b\n\x03key\x18\x08 \x01(\t\x12-\n\x0f\x63omponent_plane\x18\t \x01(\x0b\x32\x14.session_proto.Planeb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'element_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_ELEMENT']._serialized_start=46
-  _globals['_ELEMENT']._serialized_end=183
+  _globals['_JOINTCONNECTION']._serialized_start=58
+  _globals['_JOINTCONNECTION']._serialized_end=129
+  _globals['_FACEJOINTS']._serialized_start=131
+  _globals['_FACEJOINTS']._serialized_end=196
+  _globals['_ELEMENT']._serialized_start=199
+  _globals['_ELEMENT']._serialized_end=458
 # @@protoc_insertion_point(module_scope)

@@ -52,6 +52,8 @@ class Session:
         self.lookup: Dict[str, Any] = {}
         self.tree = Tree(name=f"{name}_tree")
         self.graph = Graph(name=f"{name}_graph")
+        self.layers: Dict[str, str] = {}  # guid -> layer name
+        self._current_layer: Optional[str] = None
 
         # BVH for collision detection (auto-computed world size)
         self.bvh = BVH()
@@ -209,6 +211,25 @@ class Session:
             return cls.pb_loads(f.read())
 
     ###########################################################################################
+    # Details - Layers
+    ###########################################################################################
+
+    def set_layer(self, name: Optional[str]) -> None:
+        """Set the current layer. All subsequent add_* calls will be tagged with this layer.
+
+        Parameters
+        ----------
+        name : str or None
+            Layer name, or None to clear the current layer.
+        """
+        self._current_layer = name
+
+    def _tag_layer(self, guid: str) -> None:
+        """Tag an object with the current layer (if set)."""
+        if self._current_layer is not None:
+            self.layers[guid] = self._current_layer
+
+    ###########################################################################################
     # Details - Add objects
     ###########################################################################################
 
@@ -229,6 +250,7 @@ class Session:
         """
         self.objects.points.append(point)
         self.lookup[point.guid] = point
+        self._tag_layer(point.guid)
         self.graph.add_node(point.guid, f"point_{point.name}")
         tree_node = TreeNode(name=point.guid)
         return tree_node
@@ -243,6 +265,7 @@ class Session:
         """
         self.objects.lines.append(line)
         self.lookup[line.guid] = line
+        self._tag_layer(line.guid)
         self.graph.add_node(line.guid, f"line_{line.name}")
         tree_node = TreeNode(name=line.guid)
         return tree_node
@@ -257,6 +280,7 @@ class Session:
         """
         self.objects.planes.append(plane)
         self.lookup[plane.guid] = plane
+        self._tag_layer(plane.guid)
         self.graph.add_node(plane.guid, f"plane_{plane.name}")
         tree_node = TreeNode(name=plane.guid)
         return tree_node
@@ -271,6 +295,7 @@ class Session:
         """
         self.objects.bboxes.append(bbox)
         self.lookup[bbox.guid] = bbox
+        self._tag_layer(bbox.guid)
         self.graph.add_node(bbox.guid, f"bbox_{bbox.name}")
         tree_node = TreeNode(name=bbox.guid)
         return tree_node
@@ -285,6 +310,7 @@ class Session:
         """
         self.objects.polylines.append(polyline)
         self.lookup[polyline.guid] = polyline
+        self._tag_layer(polyline.guid)
         self.graph.add_node(polyline.guid, f"polyline_{polyline.name}")
         tree_node = TreeNode(name=polyline.guid)
         return tree_node
@@ -299,6 +325,7 @@ class Session:
         """
         self.objects.pointclouds.append(pointcloud)
         self.lookup[pointcloud.guid] = pointcloud
+        self._tag_layer(pointcloud.guid)
         self.graph.add_node(pointcloud.guid, f"pointcloud_{pointcloud.name}")
         tree_node = TreeNode(name=pointcloud.guid)
         return tree_node
@@ -313,6 +340,7 @@ class Session:
         """
         self.objects.meshes.append(mesh)
         self.lookup[mesh.guid] = mesh
+        self._tag_layer(mesh.guid)
         self.graph.add_node(mesh.guid, f"mesh_{mesh.name}")
         tree_node = TreeNode(name=mesh.guid)
         return tree_node
@@ -320,24 +348,28 @@ class Session:
     def add_nurbscurve(self, nurbscurve) -> TreeNode:
         self.objects.nurbscurves.append(nurbscurve)
         self.lookup[nurbscurve.guid] = nurbscurve
+        self._tag_layer(nurbscurve.guid)
         self.graph.add_node(nurbscurve.guid, f"nurbscurve_{nurbscurve.name}")
         return TreeNode(name=nurbscurve.guid)
 
     def add_nurbssurface(self, nurbssurface) -> TreeNode:
         self.objects.nurbssurfaces.append(nurbssurface)
         self.lookup[nurbssurface.guid] = nurbssurface
+        self._tag_layer(nurbssurface.guid)
         self.graph.add_node(nurbssurface.guid, f"nurbssurface_{nurbssurface.name}")
         return TreeNode(name=nurbssurface.guid)
 
     def add_brep(self, brep) -> TreeNode:
         self.objects.breps.append(brep)
         self.lookup[brep.guid] = brep
+        self._tag_layer(brep.guid)
         self.graph.add_node(brep.guid, f"brep_{brep.name}")
         return TreeNode(name=brep.guid)
 
     def add_element(self, element) -> TreeNode:
         self.objects.elements.append(element)
         self.lookup[element.guid] = element
+        self._tag_layer(element.guid)
         self.graph.add_node(element.guid, f"element_{element.name}")
         return TreeNode(name=element.guid)
 
