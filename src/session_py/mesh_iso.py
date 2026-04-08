@@ -1,6 +1,8 @@
 import math
 from enum import IntEnum
 
+from .tolerance import PI
+
 
 _EDGE_VERTICES = [
     (0, 1), (1, 2), (2, 3), (3, 0),
@@ -464,7 +466,7 @@ class MeshIso:
         if mode is None:
             mode = TpmsMode.SOLID
         def fn(x, y, z):
-            return MeshIso.eval(tpms_type, x, y, z, period / (2.0 * math.pi))
+            return MeshIso.eval(tpms_type, x, y, z, period / (2.0 * PI))
         if mode == TpmsMode.SOLID:
             return _marching_cubes(fn, box, nx, ny, nz, isovalue)
         m1 = _marching_cubes(fn, box, nx, ny, nz, isovalue - thickness)

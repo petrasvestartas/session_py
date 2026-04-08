@@ -682,5 +682,30 @@ def test_polyline_simplify_two_points():
     MINI_CHECK(len(result) == 2)
 
 
+@MINI_TEST("Polyline", "Boolean Op Plane")
+def test_polyline_boolean_op_plane():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    # Two overlapping squares lifted to z=5 and clipped against the z=5 plane
+    plane = Plane.from_point_normal(Point(0,0,5), Vector(0,0,1))
+    sq_a = Polyline([Point(-1,-1,5), Point(1,-1,5), Point(1,1,5), Point(-1,1,5), Point(-1,-1,5)])
+    sq_b = Polyline([Point(0,0,5),  Point(2,0,5), Point(2,2,5), Point(0,2,5), Point(0,0,5)])
+    isect = Polyline.boolean_op(sq_a, sq_b, 0, plane=plane)
+    uni   = Polyline.boolean_op(sq_a, sq_b, 1, plane=plane)
+    diff  = Polyline.boolean_op(sq_a, sq_b, 2, plane=plane)
+    MINI_CHECK(len(isect) == 1)
+    MINI_CHECK(len(uni) == 1)
+    MINI_CHECK(len(diff) == 1)
+    for i in range(isect[0].point_count()):
+        MINI_CHECK(TOLERANCE.is_close(isect[0][i][2], 5.0))
+    for i in range(uni[0].point_count()):
+        MINI_CHECK(TOLERANCE.is_close(uni[0][i][2], 5.0))
+    for i in range(diff[0].point_count()):
+        MINI_CHECK(TOLERANCE.is_close(diff[0][i][2], 5.0))
+
+
 if __name__ == "__main__":
     run_all("python")

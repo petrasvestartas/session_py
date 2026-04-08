@@ -166,6 +166,12 @@ class Element:
         self._geometry = geometry
         self._is_dirty = True
 
+    def set_polylines(self, polylines):
+        self._polylines = polylines
+
+    def set_planes(self, planes):
+        self._planes = planes
+
     def reset(self):
         self._is_dirty = True
         self._aabb = None

@@ -1,8 +1,6 @@
 import heapq
+import math
 from .polyline import Polyline
-
-BOOL_SCALE = 1e9
-BOOL_INV_SCALE = 1e-9
 
 VF_None = 0
 VF_LocalMax = 4
@@ -324,11 +322,11 @@ def pip_vertex(pt, head):
 
 # -- Vertex building + local minima detection --
 
-def v_add_path_from_doubles(coords, n, polytype, sc):
+def v_add_path_from_doubles(coords, n, polytype, sc, bool_scale):
     if n < 3:
         return None, 0, 0, 0, 0
     vertices = []
-    pt0 = BIVec2(round(coords[0] * BOOL_SCALE), round(coords[1] * BOOL_SCALE))
+    pt0 = BIVec2(round(coords[0] * bool_scale), round(coords[1] * bool_scale))
     v0 = VVertex()
     v0.pt = pt0
     vertices.append(v0)
@@ -336,8 +334,8 @@ def v_add_path_from_doubles(coords, n, polytype, sc):
     minY = maxY = pt0.y
     prev_v = v0
     for i in range(1, n):
-        px = round(coords[i * 3] * BOOL_SCALE)
-        py = round(coords[i * 3 + 1] * BOOL_SCALE)
+        px = round(coords[i * 3] * bool_scale)
+        py = round(coords[i * 3 + 1] * bool_scale)
         pt = BIVec2(px, py)
         if pt == prev_v.pt:
             continue
@@ -1477,6 +1475,18 @@ class BooleanPolyline:
         if na < 3 or nb < 3:
             return []
 
+        # Compute safe scale from actual coordinate range to prevent int64 overflow
+        # in cross products: (max_coord * scale)^2 must fit in int64
+        max_coord = 0.0
+        for i in range(na):
+            max_coord = max(max_coord, abs(ca[i * 3]), abs(ca[i * 3 + 1]))
+        for i in range(nb):
+            max_coord = max(max_coord, abs(cb[i * 3]), abs(cb[i * 3 + 1]))
+        if max_coord < 1e-12:
+            max_coord = 1.0
+        bool_scale = math.floor(math.sqrt(float(2**63 - 1)) / max_coord * 0.99)
+        bool_inv_scale = 1.0 / bool_scale
+
         sc = VattiScratch()
 
         # Small polygons: use intermediate arrays for containment check
@@ -1484,7 +1494,7 @@ class BooleanPolyline:
             va = []
             vb = []
             for i in range(na):
-                va.append(BIVec2(round(ca[i * 3] * BOOL_SCALE), round(ca[i * 3 + 1] * BOOL_SCALE)))
+                va.append(BIVec2(round(ca[i * 3] * bool_scale), round(ca[i * 3 + 1] * bool_scale)))
             aMinX = aMaxX = va[0].x
             aMinY = aMaxY = va[0].y
             for i in range(1, na):
@@ -1499,7 +1509,7 @@ class BooleanPolyline:
                     aMaxY = y
 
             for i in range(nb):
-                vb.append(BIVec2(round(cb[i * 3] * BOOL_SCALE), round(cb[i * 3 + 1] * BOOL_SCALE)))
+                vb.append(BIVec2(round(cb[i * 3] * bool_scale), round(cb[i * 3 + 1] * bool_scale)))
             bMinX = bMaxX = vb[0].x
             bMinY = bMaxY = vb[0].y
             for i in range(1, nb):
@@ -1578,8 +1588,8 @@ class BooleanPolyline:
             v_add_path(vb, nb, 1, sc)
         else:
             # Large polygons: single pass double->VVertex
-            va_head, aMinX, aMaxX, aMinY, aMaxY = v_add_path_from_doubles(ca, na, 0, sc)
-            vb_head, bMinX, bMaxX, bMinY, bMaxY = v_add_path_from_doubles(cb, nb, 1, sc)
+            va_head, aMinX, aMaxX, aMinY, aMaxY = v_add_path_from_doubles(ca, na, 0, sc, bool_scale)
+            vb_head, bMinX, bMaxX, bMinY, bMaxY = v_add_path_from_doubles(cb, nb, 1, sc, bool_scale)
             if va_head is None or vb_head is None:
                 return []
             # AABB disjoint
@@ -1621,12 +1631,12 @@ class BooleanPolyline:
             coords = []
             o = op.next
             last = o.pt
-            coords.extend([last.x * BOOL_INV_SCALE, last.y * BOOL_INV_SCALE, 0.0])
+            coords.extend([last.x * bool_inv_scale, last.y * bool_inv_scale, 0.0])
             o = o.next
             while o is not op.next:
                 if o.pt != last:
                     last = o.pt
-                    coords.extend([last.x * BOOL_INV_SCALE, last.y * BOOL_INV_SCALE, 0.0])
+                    coords.extend([last.x * bool_inv_scale, last.y * bool_inv_scale, 0.0])
                 o = o.next
             cnt = len(coords) // 3
             if cnt < 3:

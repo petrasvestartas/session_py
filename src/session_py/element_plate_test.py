@@ -199,6 +199,25 @@ def test_plate_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.polygon[1][0], 2.0))
 
 
+@MINI_TEST("PlateElement", "From Top Bottom")
+def test_plate_from_top_bottom():
+    from session_py import PlateElement
+    from session_py import Point
+
+    bottom = [Point(0,0,0), Point(2,0,0), Point(2,2,0), Point(0,2,0), Point(0,0,0)]
+    top    = [Point(0,0,1), Point(2,0,1), Point(2,2,1), Point(0,2,1), Point(0,0,1)]
+    p = PlateElement(polygon=bottom, polygon_top=top, name="tb_plate")
+    MINI_CHECK(len(p.polygon) == 4)
+    MINI_CHECK(len(p.polygon_top) == 4)
+    MINI_CHECK(TOLERANCE.is_close(p.thickness, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(p.polygon[0][2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(p.polygon_top[0][2], 1.0))
+    # Reversed argument order should auto-swap
+    pr = PlateElement(polygon=top, polygon_top=bottom, name="tb_plate_r")
+    MINI_CHECK(TOLERANCE.is_close(pr.polygon[0][2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pr.polygon_top[0][2], 1.0))
+
+
 @MINI_TEST("PlateElement", "Polylines")
 def test_plate_polylines():
     from session_py import PlateElement

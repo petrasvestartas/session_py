@@ -5,7 +5,17 @@ from .xform import Xform
 
 
 class PlateElement(Element):
-    def __init__(self, polygon=None, thickness=0.1, name="my_plate"):
+    @staticmethod
+    def _strip_closing(pts):
+        from .point import Point
+        result = [Point(p[0], p[1], p[2]) for p in pts]
+        if len(result) > 3:
+            f, l = result[0], result[-1]
+            if abs(f[0]-l[0]) < 1e-6 and abs(f[1]-l[1]) < 1e-6 and abs(f[2]-l[2]) < 1e-6:
+                result.pop()
+        return result
+
+    def __init__(self, polygon=None, thickness=0.1, name="my_plate", polygon_top=None):
         super().__init__(geometry=None, name=name)
         from .point import Point
         if polygon is None:
@@ -15,8 +25,27 @@ class PlateElement(Element):
                 Point( 0.5,  0.5, 0),
                 Point(-0.5,  0.5, 0),
             ]
-        self._polygon = [Point(p[0], p[1], p[2]) for p in polygon]
-        self._thickness = thickness
+        self._polygon = self._strip_closing(polygon)
+        if polygon_top is not None:
+            self._polygon_top = self._strip_closing(polygon_top)
+            # Ensure bottom normal points toward top
+            normal = self._polygon_normal(self._polygon)
+            d = sum((self._polygon_top[k][i]-self._polygon[k][i])*normal[i]
+                    for k in range(min(len(self._polygon), len(self._polygon_top))) for i in range(3))
+            if d < 0:
+                self._polygon, self._polygon_top = self._polygon_top, self._polygon
+            n = min(len(self._polygon), len(self._polygon_top))
+            self._thickness = sum(
+                ((self._polygon_top[k][0]-self._polygon[k][0])**2 +
+                 (self._polygon_top[k][1]-self._polygon[k][1])**2 +
+                 (self._polygon_top[k][2]-self._polygon[k][2])**2)**0.5
+                for k in range(n)) / n
+        else:
+            self._thickness = thickness
+            normal = self._polygon_normal(self._polygon)
+            self._polygon_top = [Point(
+                p[0]-normal[0]*thickness, p[1]-normal[1]*thickness, p[2]-normal[2]*thickness
+            ) for p in self._polygon]
         self._joint_types = []
         self._j_mf = []
         self._key = ""
@@ -92,20 +121,16 @@ class PlateElement(Element):
             return Vector(0, 0, 1)
         return Vector(nx / mag, ny / mag, nz / mag)
 
+    @property
+    def polygon_top(self):
+        return self._polygon_top
+
     def compute_element_geometry(self):
         from .mesh import Mesh
         from .point import Point
-        normal = self._polygon_normal(self._polygon)
-        n = len(self._polygon)
-        bottom = []
-        top = []
-        for p in self._polygon:
-            bottom.append(Point(p[0], p[1], p[2]))
-            top.append(Point(
-                p[0] - normal[0] * self._thickness,
-                p[1] - normal[1] * self._thickness,
-                p[2] - normal[2] * self._thickness,
-            ))
+        n = min(len(self._polygon), len(self._polygon_top))
+        bottom = [Point(p[0], p[1], p[2]) for p in self._polygon[:n]]
+        top = [Point(p[0], p[1], p[2]) for p in self._polygon_top[:n]]
         vertices = bottom + top
         bottom_face = list(range(n - 1, -1, -1))
         top_face = list(range(n, 2 * n))
@@ -121,21 +146,16 @@ class PlateElement(Element):
     def compute_polylines(self):
         from .polyline import Polyline
         from .point import Point
-        normal = self._polygon_normal(self._polygon)
-        n = len(self._polygon)
-        bottom = [Point(p[0], p[1], p[2]) for p in self._polygon]
-        top = [Point(
-            p[0] - normal[0] * self._thickness,
-            p[1] - normal[1] * self._thickness,
-            p[2] - normal[2] * self._thickness,
-        ) for p in self._polygon]
-        rev = list(reversed(bottom))
-        bottom_pl = Polyline(rev + [Point(rev[0][0], rev[0][1], rev[0][2])])
+        n = min(len(self._polygon), len(self._polygon_top))
+        bottom = [Point(p[0], p[1], p[2]) for p in self._polygon[:n]]
+        top = [Point(p[0], p[1], p[2]) for p in self._polygon_top[:n]]
+        # [0]=top, [1]=bottom, [2+]=sides (matching wood)
         top_pl = Polyline(top + [Point(top[0][0], top[0][1], top[0][2])])
-        result = [bottom_pl, top_pl]
+        bot_pl = Polyline(bottom + [Point(bottom[0][0], bottom[0][1], bottom[0][2])])
+        result = [top_pl, bot_pl]
         for i in range(n):
             j = (i + 1) % n
-            side = Polyline([bottom[i], bottom[j], top[j], top[i], Point(bottom[i][0], bottom[i][1], bottom[i][2])])
+            side = Polyline([top[i], top[j], bottom[j], bottom[i], Point(top[i][0], top[i][1], top[i][2])])
             result.append(side)
         return result
 
@@ -144,38 +164,31 @@ class PlateElement(Element):
         from .point import Point
         from .vector import Vector
         normal = self._polygon_normal(self._polygon)
-        n = len(self._polygon)
-        bottom = [Point(p[0], p[1], p[2]) for p in self._polygon]
-        top = [Point(
-            p[0] - normal[0] * self._thickness,
-            p[1] - normal[1] * self._thickness,
-            p[2] - normal[2] * self._thickness,
-        ) for p in self._polygon]
-        bcx = sum(p[0] for p in bottom) / n
-        bcy = sum(p[1] for p in bottom) / n
-        bcz = sum(p[2] for p in bottom) / n
+        n = min(len(self._polygon), len(self._polygon_top))
+        bottom = [Point(p[0], p[1], p[2]) for p in self._polygon[:n]]
+        top = [Point(p[0], p[1], p[2]) for p in self._polygon_top[:n]]
         tcx = sum(p[0] for p in top) / n
         tcy = sum(p[1] for p in top) / n
         tcz = sum(p[2] for p in top) / n
-        bottom_plane = Plane.from_point_normal(Point(bcx, bcy, bcz), normal)
+        bcx = sum(p[0] for p in bottom) / n
+        bcy = sum(p[1] for p in bottom) / n
+        bcz = sum(p[2] for p in bottom) / n
+        # [0]=top plane, [1]=bottom plane (matching wood)
+        top_plane = Plane.from_point_normal(Point(tcx, tcy, tcz), normal)
         neg_normal = Vector(-normal[0], -normal[1], -normal[2])
-        top_plane = Plane.from_point_normal(Point(tcx, tcy, tcz), neg_normal)
-        result = [bottom_plane, top_plane]
+        bottom_plane = Plane.from_point_normal(Point(bcx, bcy, bcz), neg_normal)
+        result = [top_plane, bottom_plane]
         for i in range(n):
             j = (i + 1) % n
-            edge = Vector(bottom[j][0] - bottom[i][0], bottom[j][1] - bottom[i][1], bottom[j][2] - bottom[i][2])
-            side_normal = Vector(
-                edge[1] * normal[2] - edge[2] * normal[1],
-                edge[2] * normal[0] - edge[0] * normal[2],
-                edge[0] * normal[1] - edge[1] * normal[0],
-            )
-            mag = (side_normal[0]**2 + side_normal[1]**2 + side_normal[2]**2) ** 0.5
-            if mag > 1e-12:
-                side_normal = Vector(side_normal[0] / mag, side_normal[1] / mag, side_normal[2] / mag)
-            cx = (bottom[i][0] + bottom[j][0] + top[i][0] + top[j][0]) * 0.25
-            cy = (bottom[i][1] + bottom[j][1] + top[i][1] + top[j][1]) * 0.25
-            cz = (bottom[i][2] + bottom[j][2] + top[i][2] + top[j][2]) * 0.25
-            result.append(Plane.from_point_normal(Point(cx, cy, cz), side_normal))
+            ax = top[i][0]-top[j][0]; ay = top[i][1]-top[j][1]; az = top[i][2]-top[j][2]
+            bx = bottom[j][0]-top[j][0]; by = bottom[j][1]-top[j][1]; bz = bottom[j][2]-top[j][2]
+            snx = ay*bz-az*by; sny = az*bx-ax*bz; snz = ax*by-ay*bx
+            mag = (snx*snx+sny*sny+snz*snz)**0.5
+            if mag > 1e-12: snx/=mag; sny/=mag; snz/=mag
+            cx = (top[i][0]+top[j][0]+bottom[j][0]+bottom[i][0])*0.25
+            cy = (top[i][1]+top[j][1]+bottom[j][1]+bottom[i][1])*0.25
+            cz = (top[i][2]+top[j][2]+bottom[j][2]+bottom[i][2])*0.25
+            result.append(Plane.from_point_normal(Point(cx, cy, cz), Vector(snx, sny, snz)))
         return result
 
     def compute_edge_vectors(self):
@@ -277,6 +290,7 @@ class PlateElement(Element):
             "key": self._key,
             "name": self.name,
             "polygon": [[p[0], p[1], p[2]] for p in self._polygon],
+            "polygon_top": [[p[0], p[1], p[2]] for p in self._polygon_top],
             "session_transformation": self.session_transformation.__jsondump__(),
             "thickness": self._thickness,
             "type": "PlateElement",
@@ -287,9 +301,12 @@ class PlateElement(Element):
         from .encoders import decode_node
         from .point import Point
         polygon = [Point(p[0], p[1], p[2]) for p in data.get("polygon", [])]
+        polygon_top_raw = data.get("polygon_top", [])
+        polygon_top = [Point(p[0], p[1], p[2]) for p in polygon_top_raw] if polygon_top_raw else None
         elem = cls(
             polygon=polygon if polygon else None,
             thickness=data.get("thickness", 0.1),
+            polygon_top=polygon_top,
         )
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
@@ -316,6 +333,7 @@ class PlateElement(Element):
         import json
         proto.geometry_data = json.dumps({
             "polygon": [[p[0], p[1], p[2]] for p in self._polygon],
+            "polygon_top": [[p[0], p[1], p[2]] for p in self._polygon_top],
             "thickness": self._thickness,
         }).encode()
         proto.session_transformation.name = self.session_transformation.name
@@ -351,9 +369,12 @@ class PlateElement(Element):
         proto.ParseFromString(data)
         params = json.loads(proto.geometry_data.decode())
         polygon = [Point(p[0], p[1], p[2]) for p in params["polygon"]]
+        polygon_top_raw = params.get("polygon_top", [])
+        polygon_top = [Point(p[0], p[1], p[2]) for p in polygon_top_raw] if polygon_top_raw else None
         elem = cls(
             polygon=polygon,
             thickness=params["thickness"],
+            polygon_top=polygon_top,
         )
         elem.guid = proto.guid
         elem.name = proto.name

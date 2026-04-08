@@ -3,6 +3,7 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
+from .tolerance import PI
 
 
 @MINI_TEST("ConvexHull", "Hull2d")
@@ -42,7 +43,7 @@ def test_convex_hull_hull_2d_circle():
     pts = []
     n = 12
     for i in range(n):
-        angle = 2.0 * math.pi * i / n
+        angle = 2.0 * PI * i / n
         pts.append(Point(math.cos(angle), math.sin(angle), 0.0))
     pts.append(Point(0.0, 0.0, 0.0))
     hull = ConvexHull.hull_2d(pts)

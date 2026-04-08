@@ -233,150 +233,83 @@ class Session:
     # Details - Add objects
     ###########################################################################################
 
-    def add_point(self, point: Point) -> TreeNode:
-        """Add a point to the Session.
+    def _add_object(self, collection, obj, type_prefix, parent=None):
+        collection.append(obj)
+        self.lookup[obj.guid] = obj
+        self._tag_layer(obj.guid)
+        self.graph.add_node(obj.guid, f"{type_prefix}_{obj.name}")
+        node = TreeNode(name=obj.guid)
+        if parent is not None:
+            self.add(node, parent)
+        return node
 
-        Automatically creates corresponding nodes in both graph and tree structures.
+    def add_point(self, point, parent=None) -> TreeNode:
+        return self._add_object(self.objects.points, point, "point", parent)
 
-        Parameters
-        ----------
-        point : :class:`Point`
-            The point to add to the session.
+    def add_line(self, line, parent=None) -> TreeNode:
+        return self._add_object(self.objects.lines, line, "line", parent)
 
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this point.
-        """
-        self.objects.points.append(point)
-        self.lookup[point.guid] = point
-        self._tag_layer(point.guid)
-        self.graph.add_node(point.guid, f"point_{point.name}")
-        tree_node = TreeNode(name=point.guid)
-        return tree_node
+    def add_plane(self, plane, parent=None) -> TreeNode:
+        return self._add_object(self.objects.planes, plane, "plane", parent)
 
-    def add_line(self, line) -> TreeNode:
-        """Add a line to the Session.
+    def add_obb(self, bbox, parent=None) -> TreeNode:
+        return self._add_object(self.objects.bboxes, bbox, "bbox", parent)
 
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this line.
-        """
-        self.objects.lines.append(line)
-        self.lookup[line.guid] = line
-        self._tag_layer(line.guid)
-        self.graph.add_node(line.guid, f"line_{line.name}")
-        tree_node = TreeNode(name=line.guid)
-        return tree_node
+    def add_polyline(self, polyline, parent=None) -> TreeNode:
+        return self._add_object(self.objects.polylines, polyline, "polyline", parent)
 
-    def add_plane(self, plane) -> TreeNode:
-        """Add a plane to the Session.
+    def add_pointcloud(self, pointcloud, parent=None) -> TreeNode:
+        return self._add_object(self.objects.pointclouds, pointcloud, "pointcloud", parent)
 
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this plane.
-        """
-        self.objects.planes.append(plane)
-        self.lookup[plane.guid] = plane
-        self._tag_layer(plane.guid)
-        self.graph.add_node(plane.guid, f"plane_{plane.name}")
-        tree_node = TreeNode(name=plane.guid)
-        return tree_node
+    def add_mesh(self, mesh, parent=None) -> TreeNode:
+        return self._add_object(self.objects.meshes, mesh, "mesh", parent)
 
-    def add_obb(self, bbox) -> TreeNode:
-        """Add a bounding box to the Session.
+    def add_nurbscurve(self, nurbscurve, parent=None) -> TreeNode:
+        return self._add_object(self.objects.nurbscurves, nurbscurve, "nurbscurve", parent)
 
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this bounding box.
-        """
-        self.objects.bboxes.append(bbox)
-        self.lookup[bbox.guid] = bbox
-        self._tag_layer(bbox.guid)
-        self.graph.add_node(bbox.guid, f"bbox_{bbox.name}")
-        tree_node = TreeNode(name=bbox.guid)
-        return tree_node
+    def add_nurbssurface(self, nurbssurface, parent=None) -> TreeNode:
+        return self._add_object(self.objects.nurbssurfaces, nurbssurface, "nurbssurface", parent)
 
-    def add_polyline(self, polyline) -> TreeNode:
-        """Add a polyline to the Session.
+    def add_brep(self, brep, parent=None) -> TreeNode:
+        return self._add_object(self.objects.breps, brep, "brep", parent)
 
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this polyline.
-        """
-        self.objects.polylines.append(polyline)
-        self.lookup[polyline.guid] = polyline
-        self._tag_layer(polyline.guid)
-        self.graph.add_node(polyline.guid, f"polyline_{polyline.name}")
-        tree_node = TreeNode(name=polyline.guid)
-        return tree_node
-
-    def add_pointcloud(self, pointcloud) -> TreeNode:
-        """Add a point cloud to the Session.
-
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this point cloud.
-        """
-        self.objects.pointclouds.append(pointcloud)
-        self.lookup[pointcloud.guid] = pointcloud
-        self._tag_layer(pointcloud.guid)
-        self.graph.add_node(pointcloud.guid, f"pointcloud_{pointcloud.name}")
-        tree_node = TreeNode(name=pointcloud.guid)
-        return tree_node
-
-    def add_mesh(self, mesh) -> TreeNode:
-        """Add a mesh to the Session.
-
-        Returns
-        -------
-        TreeNode
-            The TreeNode created for this mesh.
-        """
-        self.objects.meshes.append(mesh)
-        self.lookup[mesh.guid] = mesh
-        self._tag_layer(mesh.guid)
-        self.graph.add_node(mesh.guid, f"mesh_{mesh.name}")
-        tree_node = TreeNode(name=mesh.guid)
-        return tree_node
-
-    def add_nurbscurve(self, nurbscurve) -> TreeNode:
-        self.objects.nurbscurves.append(nurbscurve)
-        self.lookup[nurbscurve.guid] = nurbscurve
-        self._tag_layer(nurbscurve.guid)
-        self.graph.add_node(nurbscurve.guid, f"nurbscurve_{nurbscurve.name}")
-        return TreeNode(name=nurbscurve.guid)
-
-    def add_nurbssurface(self, nurbssurface) -> TreeNode:
-        self.objects.nurbssurfaces.append(nurbssurface)
-        self.lookup[nurbssurface.guid] = nurbssurface
-        self._tag_layer(nurbssurface.guid)
-        self.graph.add_node(nurbssurface.guid, f"nurbssurface_{nurbssurface.name}")
-        return TreeNode(name=nurbssurface.guid)
-
-    def add_brep(self, brep) -> TreeNode:
-        self.objects.breps.append(brep)
-        self.lookup[brep.guid] = brep
-        self._tag_layer(brep.guid)
-        self.graph.add_node(brep.guid, f"brep_{brep.name}")
-        return TreeNode(name=brep.guid)
-
-    def add_element(self, element) -> TreeNode:
-        self.objects.elements.append(element)
-        self.lookup[element.guid] = element
-        self._tag_layer(element.guid)
-        self.graph.add_node(element.guid, f"element_{element.name}")
-        return TreeNode(name=element.guid)
+    def add_element(self, element, parent=None) -> TreeNode:
+        return self._add_object(self.objects.elements, element, "element", parent)
 
     def add_group(self, name: str) -> TreeNode:
         node = TreeNode(name=name)
         self.add(node)
         return node
+
+    def compute_face_to_face(self, inflate=5.0, coplanar_tolerance=50.0):
+        from .intersection import adjacency_search, face_to_face
+        from .polyline import Polyline
+        elems = self.objects.elements
+        N = len(elems)
+        if N == 0:
+            return
+        all_polys = [e.compute_polylines() for e in elems]
+        all_planes = [e.compute_planes() for e in elems]
+        from .aabb import AABB
+        aabbs = []
+        for polys in all_polys:
+            pts = []
+            for pl in polys:
+                pts.extend(pl.get_points())
+            aabbs.append(AABB.from_points(pts, inflate) if pts else AABB.from_point(Point(0,0,0), inflate))
+        adjacency = []
+        for i in range(N):
+            for j in range(i+1, N):
+                if aabbs[i].intersects(aabbs[j]):
+                    adjacency.extend([i, j, -1, -1])
+        joints = face_to_face(adjacency, all_polys, all_planes, coplanar_tolerance)
+        g = self.add_group("Joints")
+        for k, (a, b, fi, fj, type_val, poly) in enumerate(joints):
+            jpl = Polyline(poly.get_points()) if not isinstance(poly, Polyline) else poly
+            jpl.name = f"joint_{k}"
+            self.add_polyline(jpl, g)
+            self.add_edge(elems[a].guid, elems[b].guid,
+                f"{fi},{fj},{type_val},{jpl.guid}")
 
     def add(self, node: TreeNode, parent: TreeNode = None) -> None:
         """Add a TreeNode to the tree hierarchy.
@@ -446,8 +379,10 @@ class Session:
         # Remove from lookup table
         del self.lookup[guid]
 
-        # Remove from tree - tree should handle GUID lookup
-        self.tree.remove_node_by_guid(guid)
+        # Remove from tree - find node by guid first
+        node = self.tree.find_node_by_guid(guid)
+        if node is not None:
+            self.tree.remove(node)
 
         # Remove from graph using string GUID
         if self.graph.has_node(str(guid)):
@@ -725,7 +660,7 @@ class Session:
         list[UUID]
             List of children GUIDs.
         """
-        return self.tree.get_children(guid)
+        return self.tree.get_children_guids(guid)
 
     ###########################################################################################
     # Details - Graph

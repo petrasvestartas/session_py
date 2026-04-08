@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Tuple
 from .point import Point
 from .vector import Vector
 from .tolerance import Tolerance
+from .tolerance import PI
 from .color import Color
 from .xform import Xform
 from .obb import OBB
@@ -1588,7 +1589,7 @@ class Mesh:
         if n0 is None or n1 is None:
             return None
         dot = max(-1.0, min(1.0, n0[0]*n1[0] + n0[1]*n1[1] + n0[2]*n1[2]))
-        return (math.pi - math.acos(dot)) * 180.0 / math.pi
+        return (PI - math.acos(dot)) * 180.0 / PI
 
     def dihedral_angles(self, scale: float = 0.3, with_arcs: bool = True, with_points: bool = True):
         """Calculate dihedral angles for all interior edges.

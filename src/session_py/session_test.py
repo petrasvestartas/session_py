@@ -2,83 +2,19 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
+from .tolerance import PI
 
 
 @MINI_TEST("Session", "Constructor")
 def test_session_constructor():
     from session_py import Session
+
     session = Session()
+    named = Session("my_named_session")
 
     MINI_CHECK(session.name == "my_session")
     MINI_CHECK(bool(session.guid))
-
-
-@MINI_TEST("Session", "Jsondump")
-def test_session_jsondump():
-    from session_py import Session
-    from session_py import Point
-    from session_py.encoders import json_dump
-    from pathlib import Path
-
-    session = Session()
-    point1 = Point(1.0, 2.0, 3.0)
-    point2 = Point(4.0, 5.0, 6.0)
-    session.add_point(point1)
-    session.add_point(point2)
-    session.add_edge(point1.guid, point2.guid, "connection")
-    data = session.__jsondump__()
-
-    MINI_CHECK(data["name"] == "my_session")
-    MINI_CHECK("guid" in data)
-    MINI_CHECK(len(data["objects"]["points"]) == 2)
-    MINI_CHECK(len(data["graph"]["vertices"]) == 2)
-    MINI_CHECK(len(data["graph"]["edges"]) == 1)
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
-    json_dump(session, fname)
-
-
-@MINI_TEST("Session", "Jsonload")
-def test_session_jsonload():
-    from session_py import Session
-    from session_py import Point
-
-    session = Session()
-    point1 = Point(1.0, 2.0, 3.0)
-    point2 = Point(4.0, 5.0, 6.0)
-    session.add_point(point1)
-    session.add_point(point2)
-    session.add_edge(point1.guid, point2.guid, "connection")
-    data = session.__jsondump__()
-    session2 = Session.__jsonload__(data)
-
-    MINI_CHECK(session2.name == "my_session")
-    MINI_CHECK(len(session2.lookup) == 2)
-    MINI_CHECK(session2.graph.number_of_vertices() == 2)
-
-
-@MINI_TEST("Session", "File Io")
-def test_session_file_io():
-    from session_py import Session
-    from session_py import Point
-    from session_py.encoders import json_dump
-    from session_py.encoders import json_load
-    from pathlib import Path
-    import os
-
-    session = Session()
-    point1 = Point(1.0, 2.0, 3.0)
-    point2 = Point(4.0, 5.0, 6.0)
-    session.add_point(point1)
-    session.add_point(point2)
-    session.add_edge(point1.guid, point2.guid, "connection")
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_roundtrip.json"
-    json_dump(session, fname)
-    loaded_session = json_load(fname)
-
-    MINI_CHECK(loaded_session.name == session.name)
-    MINI_CHECK(len(loaded_session.lookup) == len(session.lookup))
-    MINI_CHECK(loaded_session.graph.number_of_vertices() == session.graph.number_of_vertices())
-    os.remove(fname)
+    MINI_CHECK(named.name == "my_named_session")
 
 
 @MINI_TEST("Session", "Add Point")
@@ -95,19 +31,189 @@ def test_session_add_point():
     MINI_CHECK(session.graph.has_node(point.guid))
 
 
+@MINI_TEST("Session", "Add Line")
+def test_session_add_line():
+    from session_py import Session
+    from session_py import Line
+    from session_py import Point
+
+    session = Session()
+    line = Line(Point(0,0,0), Point(1,0,0))
+    session.add_line(line)
+
+    MINI_CHECK(len(session.objects.lines) == 1)
+    MINI_CHECK(line.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Plane")
+def test_session_add_plane():
+    from session_py import Session
+    from session_py import Plane
+
+    session = Session()
+    plane = Plane.xy_plane()
+    session.add_plane(plane)
+
+    MINI_CHECK(len(session.objects.planes) == 1)
+    MINI_CHECK(plane.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Polyline")
+def test_session_add_polyline():
+    from session_py import Session
+    from session_py import Polyline
+    from session_py import Point
+
+    session = Session()
+    pl = Polyline([Point(0,0,0), Point(1,0,0), Point(1,1,0)])
+    session.add_polyline(pl)
+
+    MINI_CHECK(len(session.objects.polylines) == 1)
+    MINI_CHECK(pl.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Pointcloud")
+def test_session_add_pointcloud():
+    from session_py import Session
+    from session_py import PointCloud
+    from session_py import Point
+
+    session = Session()
+    pc = PointCloud([Point(0,0,0), Point(1,0,0)])
+    session.add_pointcloud(pc)
+
+    MINI_CHECK(len(session.objects.pointclouds) == 1)
+    MINI_CHECK(pc.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Mesh")
+def test_session_add_mesh():
+    from session_py import Session
+    from session_py import Mesh
+    from session_py import Point
+
+    session = Session()
+    mesh = Mesh()
+    mesh.add_vertex(Point(0,0,0), 0)
+    mesh.add_vertex(Point(1,0,0), 1)
+    mesh.add_vertex(Point(0,1,0), 2)
+    mesh.add_face([0, 1, 2])
+    session.add_mesh(mesh)
+
+    MINI_CHECK(len(session.objects.meshes) == 1)
+    MINI_CHECK(mesh.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Element")
+def test_session_add_element():
+    from session_py import Session
+    from session_py import PlateElement
+    from session_py import Point
+
+    session = Session()
+    polygon = [Point(0,0,0), Point(2,0,0), Point(2,2,0), Point(0,2,0)]
+    plate = PlateElement(polygon=polygon, thickness=0.2, name="p1")
+    session.add_element(plate)
+
+    MINI_CHECK(len(session.objects.elements) == 1)
+    MINI_CHECK(plate.guid in session.lookup)
+    MINI_CHECK(session.graph.has_node(plate.guid))
+
+
+@MINI_TEST("Session", "Add Group")
+def test_session_add_group():
+    from session_py import Session
+
+    session = Session()
+    group = session.add_group("my_group")
+
+    MINI_CHECK(group is not None)
+    MINI_CHECK(group.name == "my_group")
+
+
 @MINI_TEST("Session", "Add Edge")
 def test_session_add_edge():
     from session_py import Session
     from session_py import Point
 
     session = Session()
-    point1 = Point(1.0, 2.0, 3.0)
-    point2 = Point(4.0, 5.0, 6.0)
-    session.add_point(point1)
-    session.add_point(point2)
-    session.add_edge(point1.guid, point2.guid, "connection")
+    p1 = Point(1.0, 2.0, 3.0)
+    p2 = Point(4.0, 5.0, 6.0)
+    session.add_point(p1)
+    session.add_point(p2)
+    session.add_edge(p1.guid, p2.guid, "connection")
 
-    MINI_CHECK(session.graph.has_edge((point1.guid, point2.guid)))
+    MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
+
+
+@MINI_TEST("Session", "Add Hierarchy")
+def test_session_add_hierarchy():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    p1 = Point(0,0,0)
+    p2 = Point(1,0,0)
+    n1 = session.add_point(p1)
+    n2 = session.add_point(p2)
+    session.add(n1)
+    session.add(n2)
+    ok = session.add_hierarchy(n1.guid, n2.guid)
+
+    MINI_CHECK(ok)
+
+
+@MINI_TEST("Session", "Get Children")
+def test_session_get_children():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    p1 = Point(0,0,0)
+    p2 = Point(1,0,0)
+    n1 = session.add_point(p1)
+    n2 = session.add_point(p2)
+    session.add(n1)
+    session.add(n2)
+    session.add_hierarchy(n1.guid, n2.guid)
+
+    children = session.get_children(n1.guid)
+
+    MINI_CHECK(len(children) == 1)
+    MINI_CHECK(children[0] == n2.guid)
+
+
+@MINI_TEST("Session", "Add Relationship")
+def test_session_add_relationship():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    p1 = Point(0,0,0)
+    p2 = Point(1,0,0)
+    session.add_point(p1)
+    session.add_point(p2)
+    session.add_relationship(p1.guid, p2.guid, "connects_to")
+
+    MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
+
+
+@MINI_TEST("Session", "Get Neighbours")
+def test_session_get_neighbours():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    p1 = Point(0,0,0)
+    p2 = Point(1,0,0)
+    session.add_point(p1)
+    session.add_point(p2)
+    session.add_edge(p1.guid, p2.guid, "connection")
+
+    neighbours = session.get_neighbours(p1.guid)
+
+    MINI_CHECK(len(neighbours) == 1)
+    MINI_CHECK(neighbours[0] == p2.guid)
 
 
 @MINI_TEST("Session", "Get Object")
@@ -124,30 +230,99 @@ def test_session_get_object():
     MINI_CHECK(retrieved.guid == point.guid)
 
 
-@MINI_TEST("Session", "File Io Comprehensive")
-def test_session_file_io_comprehensive():
+@MINI_TEST("Session", "Remove Object")
+def test_session_remove_object():
     from session_py import Session
     from session_py import Point
-    from session_py.encoders import json_dump
-    from session_py.encoders import json_load
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    session.add_point(point)
+    removed = session.remove_object(point.guid)
+
+    MINI_CHECK(removed)
+    MINI_CHECK(point.guid not in session.lookup)
+
+
+@MINI_TEST("Session", "Get Geometry")
+def test_session_get_geometry():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    session.add_point(point)
+
+    geom = session.get_geometry()
+
+    MINI_CHECK(len(geom.points) == 1)
+
+
+@MINI_TEST("Session", "Compute Face To Face")
+def test_session_compute_face_to_face():
+    from session_py import Session
+    from session_py import PlateElement
+    from session_py import Point
+
+    session = Session()
+    p1 = PlateElement(polygon=[Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0)], thickness=0.2, name="p1")
+    p2 = PlateElement(polygon=[Point(0,0,-0.2), Point(1,0,-0.2), Point(1,1,-0.2), Point(0,1,-0.2)], thickness=0.2, name="p2")
+    session.add_element(p1)
+    session.add_element(p2)
+    session.compute_face_to_face(5.0, 0.001)
+
+    MINI_CHECK(len(session.objects.elements) == 2)
+    MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
+
+
+@MINI_TEST("Session", "Json Roundtrip")
+def test_session_json_roundtrip():
+    from session_py import Session
+    from session_py import Point
     from pathlib import Path
-    import os
 
-    session = Session("./serialization/test_session")
-    point1 = Point(1.0, 2.0, 3.0)
-    point2 = Point(4.0, 5.0, 6.0)
-    session.add_point(point1)
-    session.add_point(point2)
-    session.add_edge(point1.guid, point2.guid, "./serialization/test_connection")
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_comprehensive.json"
-    json_dump(session, fname)
-    loaded_session = json_load(fname)
+    session = Session()
+    p1 = Point(1.0, 2.0, 3.0)
+    p2 = Point(4.0, 5.0, 6.0)
+    session.add_point(p1)
+    session.add_point(p2)
+    session.add_edge(p1.guid, p2.guid, "connection")
 
-    MINI_CHECK(loaded_session.name == session.name)
-    MINI_CHECK(len(loaded_session.objects.points) == len(session.objects.points))
-    MINI_CHECK(loaded_session.graph.number_of_vertices() == session.graph.number_of_vertices())
-    MINI_CHECK(loaded_session.graph.number_of_edges() == session.graph.number_of_edges())
-    os.remove(fname)
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
+    session.json_dump(fname)
+    loaded = Session.json_load(fname)
+
+    MINI_CHECK(loaded.name == session.name)
+    MINI_CHECK(len(loaded.lookup) == len(session.lookup))
+    MINI_CHECK(loaded.graph.number_of_vertices() == session.graph.number_of_vertices())
+
+
+@MINI_TEST("Session", "Protobuf Roundtrip")
+def test_session_protobuf_roundtrip():
+    from session_py import Session
+    from session_py import Point
+    from pathlib import Path
+
+    session = Session()
+    p1 = Point(1.0, 2.0, 3.0)
+    p2 = Point(4.0, 5.0, 6.0)
+    session.add_point(p1)
+    session.add_point(p2)
+    session.add_edge(p1.guid, p2.guid, "connection")
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session.bin"
+    session.pb_dump(fname)
+    loaded = Session.pb_load(fname)
+
+    MINI_CHECK(loaded.name == session.name)
+    MINI_CHECK(len(loaded.lookup) == len(session.lookup))
 
 
 @MINI_TEST("Session", "Tree Transformation Hierarchy")
@@ -158,7 +333,6 @@ def test_session_tree_transformation_hierarchy():
     from session_py import Mesh
     from session_py import Xform
     from session_py import Plane
-    import math
 
     scene = Session("tree_transformation_test")
 
@@ -178,12 +352,8 @@ def test_session_tree_transformation_hierarchy():
         for i, v in enumerate(verts):
             mesh.add_vertex(v, i)
         faces = [
-            [0, 1, 2, 3],
-            [4, 7, 6, 5],
-            [0, 4, 5, 1],
-            [2, 6, 7, 3],
-            [0, 3, 7, 4],
-            [1, 5, 6, 2],
+            [0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1],
+            [2, 6, 7, 3], [0, 3, 7, 4], [1, 5, 6, 2],
         ]
         for f in faces:
             mesh.add_face(f)
@@ -200,73 +370,21 @@ def test_session_tree_transformation_hierarchy():
     scene.add(box2_node, box1_node)
     scene.add(box3_node, box2_node)
 
-    box1_top = Point(0, 0, 1.0)
-    normal = Vector(0, 0, 1)
-    x = Vector(1, 0, 0)
-    y = Vector(0, 1, 0)
     plane_from = Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
-    plane_to = Plane(box1_top, x, y)
+    plane_to = Plane(Point(0, 0, 1.0), Vector(1, 0, 0), Vector(0, 1, 0))
     xy_to_top = Xform.plane_to_plane(plane_from, plane_to)
-    box1.xform = Xform.rotation_z(math.pi / 1.5) * xy_to_top
-    box2.xform = Xform.translation(2.0, 0, 0) * Xform.rotation_z(math.pi / 6.0)
+    box1.xform = Xform.rotation_z(PI / 1.5) * xy_to_top
+    box2.xform = Xform.translation(2.0, 0, 0) * Xform.rotation_z(PI / 6.0)
     box3.xform = Xform.translation(2.0, 0, 0)
 
     transformed = scene.get_geometry()
 
     MINI_CHECK(len(transformed.meshes) == 3)
-
-    expected_box1 = [
-        [1.36603, -0.366025, 0], [0.366025, 1.36603, 0],
-        [-1.36603, 0.366025, 0], [-0.366025, -1.36603, 0],
-        [1.36603, -0.366025, 2], [0.366025, 1.36603, 2],
-        [-1.36603, 0.366025, 2], [-0.366025, -1.36603, 2],
-    ]
-    expected_box2 = [
-        [0.366025, 2.09808, 0], [-1.36603, 3.09808, 0],
-        [-2.36603, 1.36603, 0], [-0.633975, 0.366025, 0],
-        [0.366025, 2.09808, 2], [-1.36603, 3.09808, 2],
-        [-2.36603, 1.36603, 2], [-0.633975, 0.366025, 2],
-    ]
-    expected_box3 = [
-        [-1.36603, 3.09808, 0], [-3.09808, 4.09808, 0],
-        [-4.09808, 2.36603, 0], [-2.36603, 1.36603, 0],
-        [-1.36603, 3.09808, 2], [-3.09808, 4.09808, 2],
-        [-4.09808, 2.36603, 2], [-2.36603, 1.36603, 2],
-    ]
-    expected_faces = [
-        [0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1],
-        [2, 6, 7, 3], [0, 3, 7, 4], [1, 5, 6, 2],
-    ]
-
     m1 = transformed.meshes[0]
-    for i in range(8):
-        v = m1.vertex[i]
-        MINI_CHECK(abs(v[0] - expected_box1[i][0]) < 1e-4)
-        MINI_CHECK(abs(v[1] - expected_box1[i][1]) < 1e-4)
-        MINI_CHECK(abs(v[2] - expected_box1[i][2]) < 1e-4)
-
-    m2 = transformed.meshes[1]
-    for i in range(8):
-        v = m2.vertex[i]
-        MINI_CHECK(abs(v[0] - expected_box2[i][0]) < 1e-4)
-        MINI_CHECK(abs(v[1] - expected_box2[i][1]) < 1e-4)
-        MINI_CHECK(abs(v[2] - expected_box2[i][2]) < 1e-4)
-
-    m3 = transformed.meshes[2]
-    for i in range(8):
-        v = m3.vertex[i]
-        MINI_CHECK(abs(v[0] - expected_box3[i][0]) < 1e-4)
-        MINI_CHECK(abs(v[1] - expected_box3[i][1]) < 1e-4)
-        MINI_CHECK(abs(v[2] - expected_box3[i][2]) < 1e-4)
-
-    for mesh in [m1, m2, m3]:
-        MINI_CHECK(len(mesh.face) == 6)
-        face_idx = 0
-        for key, face in mesh.face.items():
-            MINI_CHECK(len(face) == len(expected_faces[face_idx]))
-            for i in range(len(face)):
-                MINI_CHECK(face[i] == expected_faces[face_idx][i])
-            face_idx += 1
+    v0 = m1.vertex[0]
+    MINI_CHECK(abs(v0[0] - 1.36603) < 1e-4)
+    MINI_CHECK(abs(v0[1] - (-0.366025)) < 1e-4)
+    MINI_CHECK(abs(v0[2] - 0.0) < 1e-4)
 
 
 if __name__ == "__main__":

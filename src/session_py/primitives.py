@@ -13,6 +13,7 @@ from .polyline import Polyline
 from .xform import Xform
 from .mesh import Mesh
 from .tolerance import Tolerance
+from .tolerance import PI
 from . import knot
 from . import intersection
 
@@ -163,7 +164,7 @@ class Primitives:
         curve = NurbsCurve(dimension=3, is_rational=False, order=4, cv_count=cv_count)
         curve.m_cv = np.zeros(cv_count * 3, dtype=np.float64)
 
-        total_angle = turns * 2 * math.pi
+        total_angle = turns * 2 * PI
 
         for i in range(cv_count):
             t = i / total_segments
@@ -203,7 +204,7 @@ class Primitives:
     @staticmethod
     def _capsule_geometry(start_pt, end_pt, radius):
         n = 10
-        lat = math.pi / 4
+        lat = PI / 4
         r_hemi = radius * math.sin(lat)
         off = radius * math.cos(lat)
         ax = end_pt[0] - start_pt[0]
@@ -226,7 +227,7 @@ class Primitives:
         def ring(cx, cy, cz, axis_off, ring_r):
             pts = []
             for i in range(n):
-                a = 2 * math.pi * i / n
+                a = 2 * PI * i / n
                 ca, sa = math.cos(a), math.sin(a)
                 pts.append(Point(
                     cx + axis_off*ax + ring_r*(ca*xx + sa*yx),
@@ -1713,7 +1714,7 @@ class Primitives:
     @staticmethod
     def wave_surface(size, amplitude):
         n = 13
-        PI2 = 2.0 * math.pi
+        PI2 = 2.0 * PI
         pts = []
         for i in range(n):
             u = i / (n - 1)

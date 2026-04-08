@@ -35,11 +35,8 @@ class Polyline:
             for p in points:
                 self._coords.extend([p[0], p[1], p[2]])
 
-        # Delegate plane computation to Plane.from_points
-        if self.point_count() >= 3:
-            self.plane = Plane.from_points(self.get_points())
-        else:
-            self.plane = Plane()
+        # Plane computed lazily on first access
+        self._plane = None
 
     @property
     def guid(self) -> str:
@@ -50,6 +47,42 @@ class Polyline:
     @guid.setter
     def guid(self, value: str):
         self._guid = value
+
+    @property
+    def plane(self):
+        if self._plane is None:
+            n = self.point_count()
+            if n >= 3:
+                pts = self.get_points()
+                p0 = pts[0]
+                found = False
+                for i in range(1, n):
+                    v1 = Vector(pts[i][0]-p0[0], pts[i][1]-p0[1], pts[i][2]-p0[2])
+                    if v1[0]*v1[0]+v1[1]*v1[1]+v1[2]*v1[2] < 1e-20:
+                        continue
+                    for j in range(i + 1, n):
+                        v2 = Vector(pts[j][0]-p0[0], pts[j][1]-p0[1], pts[j][2]-p0[2])
+                        normal = v1.cross(v2)
+                        if normal[0]*normal[0]+normal[1]*normal[1]+normal[2]*normal[2] < 1e-20:
+                            continue
+                        normal.normalize_self()
+                        v1.normalize_self()
+                        yax = normal.cross(v1)
+                        yax.normalize_self()
+                        self._plane = Plane(p0, v1, yax)
+                        found = True
+                        break
+                    if found:
+                        break
+                if not found:
+                    self._plane = Plane()
+            else:
+                self._plane = Plane()
+        return self._plane
+
+    @plane.setter
+    def plane(self, value):
+        self._plane = value
 
     @property
     def linecolor(self):
@@ -248,9 +281,8 @@ class Polyline:
         return result
 
     def _recompute_plane(self) -> None:
-        """Helper to recompute plane when points change."""
-        if self.point_count() >= 3:
-            self.plane = Plane.from_points(self.get_points())
+        """Mark plane as dirty — recomputed lazily on next access."""
+        self._plane = None
 
     ###########################################################################################
     # Core Methods
@@ -1344,6 +1376,55 @@ class Polyline:
         return Polyline(pts)
 
     @staticmethod
-    def boolean_op(a, b, clip_type):
+    def boolean_op(a, b, clip_type, plane=None):
         from .boolean_polyline import BooleanPolyline
-        return BooleanPolyline.compute(a, b, clip_type)
+        if plane is None:
+            return BooleanPolyline.compute(a, b, clip_type)
+        ox, oy, oz = plane.origin[0], plane.origin[1], plane.origin[2]
+        xx, xy, xz = plane.x_axis[0], plane.x_axis[1], plane.x_axis[2]
+        yx, yy, yz = plane.y_axis[0], plane.y_axis[1], plane.y_axis[2]
+        def project(pl):
+            coords = []
+            for i in range(pl.point_count()):
+                dx = pl._coords[i*3]-ox; dy = pl._coords[i*3+1]-oy; dz = pl._coords[i*3+2]-oz
+                coords.extend([dx*xx+dy*xy+dz*xz, dx*yx+dy*yy+dz*yz, 0.0])
+            n = len(coords) // 3
+            if n >= 4:
+                dx = coords[(n-1)*3] - coords[0]; dy = coords[(n-1)*3+1] - coords[1]
+                if dx*dx+dy*dy < 1.0:
+                    coords[(n-1)*3] = coords[0]; coords[(n-1)*3+1] = coords[1]
+            p2d = Polyline.__new__(Polyline)
+            p2d._guid = None; p2d.name = ""; p2d.width = 1.0; p2d._linecolor = None; p2d._xform = None; p2d._plane = None
+            p2d._coords = coords
+            return p2d
+        def ensure_ccw(p2d):
+            n = p2d.point_count()
+            m = n
+            if m >= 4:
+                dx = p2d._coords[(m-1)*3] - p2d._coords[0]
+                dy = p2d._coords[(m-1)*3+1] - p2d._coords[1]
+                if dx*dx + dy*dy < 1e-10:
+                    m -= 1
+            if m < 3:
+                return
+            area = 0.0
+            for i in range(m):
+                j = (i + 1) % m
+                area += p2d._coords[i*3] * p2d._coords[j*3+1] - p2d._coords[j*3] * p2d._coords[i*3+1]
+            if area < 0:
+                for i in range(n // 2):
+                    j = n - 1 - i
+                    p2d._coords[i*3], p2d._coords[j*3] = p2d._coords[j*3], p2d._coords[i*3]
+                    p2d._coords[i*3+1], p2d._coords[j*3+1] = p2d._coords[j*3+1], p2d._coords[i*3+1]
+                    p2d._coords[i*3+2], p2d._coords[j*3+2] = p2d._coords[j*3+2], p2d._coords[i*3+2]
+        pa2d = project(a); pb2d = project(b)
+        ensure_ccw(pa2d); ensure_ccw(pb2d)
+        results = BooleanPolyline.compute(pa2d, pb2d, clip_type)
+        for r in results:
+            n = r.point_count()
+            for i in range(n):
+                u, v = r._coords[i*3], r._coords[i*3+1]
+                r._coords[i*3] = ox + u*xx + v*yx
+                r._coords[i*3+1] = oy + u*xy + v*yy
+                r._coords[i*3+2] = oz + u*xz + v*yz
+        return results

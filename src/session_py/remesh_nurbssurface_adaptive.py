@@ -2,6 +2,8 @@ import math
 from bisect import bisect_left, bisect_right
 from typing import TYPE_CHECKING
 
+from .tolerance import PI
+
 if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .mesh import Mesh
@@ -71,7 +73,7 @@ class RemeshNurbsSurfaceAdaptive:
         ns_v = len(vsp) - 1
         bbox_diag = self._bbox_diagonal()
 
-        norm_tol = 2.0 - 2.0 * _math.cos(self._max_angle * _math.pi / 180.0)
+        norm_tol = 2.0 - 2.0 * _math.cos(self._max_angle * PI / 180.0)
         chord_tol = self._max_chord_height if self._max_chord_height > 0 else bbox_diag * 0.005
         closed_u = s.is_closed(0)
         closed_v = s.is_closed(1)

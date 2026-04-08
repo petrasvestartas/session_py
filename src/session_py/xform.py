@@ -5,6 +5,7 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from .point import Point
 
+from .tolerance import PI
 from .vector import Vector
 
 
@@ -102,7 +103,7 @@ class Xform:
     @staticmethod
     def rotation_x(angle, degrees=False):
         if degrees:
-            angle = angle * (math.pi / 180.0)
+            angle = angle * (PI / 180.0)
         xform = Xform()
         cos_angle = math.cos(angle)
         sin_angle = math.sin(angle)
@@ -115,7 +116,7 @@ class Xform:
     @staticmethod
     def rotation_y(angle, degrees=False):
         if degrees:
-            angle = angle * (math.pi / 180.0)
+            angle = angle * (PI / 180.0)
         xform = Xform()
         cos_angle = math.cos(angle)
         sin_angle = math.sin(angle)
@@ -128,7 +129,7 @@ class Xform:
     @staticmethod
     def rotation_z(angle, degrees=False):
         if degrees:
-            angle = angle * (math.pi / 180.0)
+            angle = angle * (PI / 180.0)
         xform = Xform()
         cos_angle = math.cos(angle)
         sin_angle = math.sin(angle)
@@ -141,7 +142,7 @@ class Xform:
     @staticmethod
     def rotation(axis, angle, degrees=False):
         if degrees:
-            angle = angle * (math.pi / 180.0)
+            angle = angle * (PI / 180.0)
         xform = Xform()
         axis = axis.normalized()
         cos_angle = math.cos(angle)
@@ -410,7 +411,7 @@ class Xform:
     @staticmethod
     def axis_rotation(angle, axis, degrees=False):
         if degrees:
-            angle = angle * (math.pi / 180.0)
+            angle = angle * (PI / 180.0)
         c = math.cos(angle)
         s = math.sin(angle)
         ux = axis[0]

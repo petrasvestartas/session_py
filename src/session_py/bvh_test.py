@@ -167,6 +167,31 @@ def test_bvh_check_all_collisions():
     MINI_CHECK(checks > 0)
 
 
+@MINI_TEST("BVH", "Nearest Neighbors")
+def test_bvh_nearest_neighbors():
+    from session_py.bvh import BVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    bboxes = [
+        OBB(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(0.5, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(10, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+    ]
+    bvh = BVH.from_boxes(bboxes, 100.0)
+
+    n0 = bvh.nearest_neighbors(0, bboxes, 1.2)
+    MINI_CHECK(len(n0) == 1)
+    MINI_CHECK(n0[0] == 1)
+
+    n2 = bvh.nearest_neighbors(2, bboxes, 1.2)
+    MINI_CHECK(len(n2) == 0)
+
+    n2_wide = bvh.nearest_neighbors(2, bboxes, 10.0)
+    MINI_CHECK(len(n2_wide) == 2)
+
+
 @MINI_TEST("BVH", "Merge Aabb")
 def test_bvh_merge_aabb():
     from session_py.bvh import BVH

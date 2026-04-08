@@ -706,7 +706,7 @@ class Plane:
         ) and Plane.is_same_position(plane0, plane1)
 
     @staticmethod
-    def is_coplanar_from_normals(origin0, normal0, origin1, normal1, can_be_flipped=True):
+    def is_coplanar_from_normals(origin0, normal0, origin1, normal1, can_be_flipped=True, tolerance=-1.0):
         """Check coplanarity from origin+normal without constructing Plane objects."""
         from .vector import Vector
         n0 = Vector(normal0[0], normal0[1], normal0[2])
@@ -723,7 +723,7 @@ class Plane:
         a1, b1, c1 = n1[0], n1[1], n1[2]
         d1 = -(a1 * origin1[0] + b1 * origin1[1] + c1 * origin1[2])
         from .tolerance import TOLERANCE
-        tol = TOLERANCE.approximation
+        tol = TOLERANCE.approximation if tolerance < 0 else tolerance
         dist0 = abs(a0 * origin1[0] + b0 * origin1[1] + c0 * origin1[2] + d0)
         dist1 = abs(a1 * origin0[0] + b1 * origin0[1] + c1 * origin0[2] + d1)
         return dist0 < tol and dist1 < tol

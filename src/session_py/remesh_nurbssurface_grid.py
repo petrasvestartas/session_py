@@ -1,6 +1,8 @@
 import math
 from typing import TYPE_CHECKING
 
+from .tolerance import PI
+
 if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .mesh import Mesh
@@ -71,7 +73,7 @@ class RemeshNurbsSurfaceGrid:
                         total_angle = 0.0
                         if has_first:
                             dot = fn3[0]*ln3[0] + fn3[1]*ln3[1] + fn3[2]*ln3[2]
-                            total_angle = math.acos(max(-1.0, min(1.0, dot))) * 180.0 / math.pi
+                            total_angle = math.acos(max(-1.0, min(1.0, dot))) * 180.0 / PI
                         if total_angle > max_angle:
                             max_angle = total_angle
                     subs[i] = max(1, min(int(math.ceil(max_angle / MAX_ANGLE)), 24))

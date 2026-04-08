@@ -9,24 +9,12 @@ from .xform import Xform
 
 
 class PointCloud:
-    """A point cloud with coordinates, normals, and colors stored as flat arrays.
-
-    Internally stores data as flat arrays for efficient serialization:
-    - coords: [x0, y0, z0, x1, y1, z1, ...]
-    - colors: [r0, g0, b0, a0, r1, g1, b1, a1, ...]
-    - normals: [nx0, ny0, nz0, nx1, ny1, nz1, ...]
-    """
+    """A point cloud with coordinates, normals, and colors stored as flat arrays."""
 
     def __init__(self, points: Optional[List[Point]] = None,
                  normals: Optional[List[Vector]] = None,
                  colors: Optional[List[Color]] = None):
-        """Creates a new PointCloud with default guid and name.
-
-        Args:
-            points: Collection of points (converted to flat coords internally).
-            normals: Collection of normals (converted to flat array internally).
-            colors: Collection of colors (converted to flat array internally).
-        """
+        """Default constructor (empty cloud) or with points, normals, and colors."""
         self._guid = None
         self.name = "my_pointcloud"
         self.point_size = 1.0
@@ -51,6 +39,7 @@ class PointCloud:
 
     @property
     def guid(self) -> str:
+        """Lazy GUID accessor."""
         if getattr(self, '_guid', None) is None:
             self._guid = str(uuid.uuid4())
         return self._guid
@@ -61,6 +50,7 @@ class PointCloud:
 
     @property
     def xform(self):
+        """Transformation matrix applied by transform()/transformed()."""
         if getattr(self, '_xform', None) is None:
             self._xform = Xform.identity()
         return self._xform
@@ -73,16 +63,7 @@ class PointCloud:
     def from_coords(cls, coords: List[float],
                     colors: Optional[List[int]] = None,
                     normals: Optional[List[float]] = None) -> "PointCloud":
-        """Create a PointCloud from flat arrays.
-
-        Args:
-            coords: Flat array [x0, y0, z0, x1, y1, z1, ...]
-            colors: Flat array [r0, g0, b0, a0, r1, g1, b1, a1, ...]
-            normals: Flat array [nx0, ny0, nz0, nx1, ny1, nz1, ...]
-
-        Returns:
-            New PointCloud instance.
-        """
+        """Create from flat arrays of coords, colors, and normals."""
         pc = cls()
         pc._coords = list(coords)
         if colors is not None:

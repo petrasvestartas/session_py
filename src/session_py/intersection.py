@@ -1754,3 +1754,121 @@ def line_line_3d(cutter, seg) -> Optional[Point]:
     return Point(s[0] + t0*(e[0]-s[0]),
                  s[1] + t0*(e[1]-s[1]),
                  s[2] + t0*(e[2]-s[2]))
+
+
+def face_to_face(adjacency, polylines_list, planes_list, coplanar_tolerance=5.0):
+    """Face-to-face joint detection between elements.
+    Returns list of (a, b, face_a, face_b, type, joint_polyline).
+
+    Optimization: pre-pack all face origins/normals into numpy arrays once and
+    do a vectorized coplanar test per adjacency pair, replacing ~166k Python
+    calls to Plane.is_coplanar_from_normals (the dominant ~38% hot spot in
+    `compute_face_to_face` profiling).
+    """
+    import numpy as np
+    import math
+    from .polyline import Polyline
+    from .plane import Plane
+    from .vector import Vector
+    from .tolerance import Tolerance, TO_RADIANS
+
+    # Pre-pack all face planes into flat (M, 3) ndarrays. face_starts[i] gives
+    # the index into the flat arrays where element i's faces begin.
+    n_elems = len(planes_list)
+    face_starts = np.zeros(n_elems + 1, dtype=np.int64)
+    for i, planes in enumerate(planes_list):
+        face_starts[i + 1] = face_starts[i] + len(planes)
+    total_faces = int(face_starts[-1])
+    face_origins = np.empty((total_faces, 3), dtype=np.float64)
+    face_normals = np.empty((total_faces, 3), dtype=np.float64)
+    k = 0
+    for planes in planes_list:
+        for p in planes:
+            o = p.origin
+            n = p.z_axis
+            face_origins[k, 0] = o[0]; face_origins[k, 1] = o[1]; face_origins[k, 2] = o[2]
+            face_normals[k, 0] = n[0]; face_normals[k, 1] = n[1]; face_normals[k, 2] = n[2]
+            k += 1
+
+    # Vectorized coplanar test, matching Plane.is_coplanar_from_normals with
+    # can_be_flipped=False (only antiparallel normals accepted, i.e. faces
+    # touching back-to-back).
+    cos_tol = math.cos(Tolerance.ANGLE_TOLERANCE_DEGREES * TO_RADIANS)
+
+    results = []
+    for idx in range(0, len(adjacency), 4):
+        a, b = adjacency[idx], adjacency[idx + 1]
+
+        a0, a1 = int(face_starts[a]), int(face_starts[a + 1])
+        b0, b1 = int(face_starts[b]), int(face_starts[b + 1])
+        oa = face_origins[a0:a1]                # (na, 3)
+        na_ = face_normals[a0:a1]               # (na, 3)
+        ob = face_origins[b0:b1]                # (nb, 3)
+        nb_ = face_normals[b0:b1]               # (nb, 3)
+
+        # Antiparallel check: dot(na, nb) <= -cos_tol  → mask shape (na, nb)
+        dots = na_ @ nb_.T                                          # (na, nb)
+        antiparallel = dots <= -cos_tol
+
+        # Plane-distance check: |na · (ob - oa)| < tol  AND  |nb · (oa - ob)| < tol
+        # Using na_dot_oa[i] = na_[i] · oa[i], na_dot_ob[i,j] = na_[i] · ob[j].
+        na_dot_oa = np.einsum('ij,ij->i', na_, oa)                  # (na,)
+        nb_dot_ob = np.einsum('ij,ij->i', nb_, ob)                  # (nb,)
+        na_dot_ob = na_ @ ob.T                                      # (na, nb)
+        nb_dot_oa = nb_ @ oa.T                                      # (nb, na) → transpose
+        dist0 = np.abs(na_dot_ob - na_dot_oa[:, None])              # (na, nb)
+        dist1 = np.abs(nb_dot_oa - nb_dot_ob[:, None]).T            # (na, nb)
+        coplanar_mask = antiparallel & (dist0 < coplanar_tolerance) & (dist1 < coplanar_tolerance)
+
+        if not coplanar_mask.any():
+            continue
+
+        # Walk row-major to preserve the original loop order: first matching
+        # (i, j) for which the boolean op produces a valid polygon wins.
+        # np.nonzero on a 2D array returns indices in row-major (C) order.
+        ii_arr, jj_arr = np.nonzero(coplanar_mask)
+        for k in range(len(ii_arr)):
+            i = int(ii_arr[k])
+            j = int(jj_arr[k])
+            pts_i = polylines_list[a][i].get_points()
+            if len(pts_i) < 2:
+                continue
+            edge = Vector(pts_i[1][0] - pts_i[0][0], pts_i[1][1] - pts_i[0][1], pts_i[1][2] - pts_i[0][2])
+            edge.normalize_self()
+            zax = planes_list[a][i].z_axis
+            yax = zax.cross(edge)
+            yax.normalize_self()
+            pln = Plane(pts_i[0], edge, yax)
+            bools = Polyline.boolean_op(polylines_list[a][i], polylines_list[b][j], 0, plane=pln)
+            if not bools or bools[0].point_count() < 3:
+                continue
+            type_val = (0 if i > 1 else 1) + (0 if j > 1 else 1)
+            jpl = bools[0] if bools[0].is_closed() else bools[0].closed()
+            results.append((a, b, i, j, type_val, jpl))
+            break
+    return results
+
+
+def adjacency_search(elements, inflate=5.0):
+    """BVH/brute-force adjacency search. Returns flat list [a, b, -1, -1, ...]."""
+    from .aabb import AABB
+    N = len(elements)
+    aabbs = []
+    for elem in elements:
+        polys = elem.polylines if hasattr(elem, "polylines") and callable(getattr(elem, "polylines", None)) else []
+        if callable(getattr(elem, "compute_polylines", None)):
+            polys = elem.compute_polylines()
+        pts = []
+        for pl in polys:
+            pts.extend(pl.get_points())
+        if pts:
+            aabbs.append(AABB.from_points(pts, inflate))
+        else:
+            aabbs.append(AABB.from_point(Point(0,0,0), inflate))
+    adjacency = []
+    for i in range(N):
+        for j in range(i+1, N):
+            if aabbs[i].intersects(aabbs[j]):
+                adjacency.extend([i, j, -1, -1])
+    return adjacency
+

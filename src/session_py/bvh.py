@@ -884,3 +884,63 @@ class BVH:
                     heapq.heappush(heap, (cmin, right_idx))
 
         return any_found
+
+    def query_aabb(self, query: OBB) -> List[int]:
+        """Return object_ids of all leaves whose AABB overlaps the query box."""
+        hits: List[int] = []
+        if self.arena_root < 0 or self.arena_aabb is None:
+            return hits
+        qcx = query.center[0]
+        qcy = query.center[1]
+        qcz = query.center[2]
+        qhx = query.half_size[0]
+        qhy = query.half_size[1]
+        qhz = query.half_size[2]
+        stack: List[int] = [self.arena_root]
+        while stack:
+            idx = stack.pop()
+            a = self.arena_aabb[idx]
+            if (
+                a[0] - a[3] > qcx + qhx
+                or a[0] + a[3] < qcx - qhx
+                or a[1] - a[4] > qcy + qhy
+                or a[1] + a[4] < qcy - qhy
+                or a[2] - a[5] > qcz + qhz
+                or a[2] + a[5] < qcz - qhz
+            ):
+                continue
+            obj_id = int(self.arena_object_id[idx])
+            if obj_id >= 0:
+                hits.append(obj_id)
+            else:
+                left_idx = int(self.arena_left[idx])
+                right_idx = int(self.arena_right[idx])
+                if left_idx >= 0:
+                    stack.append(left_idx)
+                if right_idx >= 0:
+                    stack.append(right_idx)
+        return hits
+
+    def nearest_neighbors(
+        self, object_id: int, bounding_boxes: List[OBB], inflate: float = 1.2
+    ) -> List[int]:
+        """Find leaf object_ids near `object_id`, excluding self.
+
+        Inflates the half-extents of the object's AABB by `inflate` and queries.
+        """
+        if object_id < 0 or object_id >= len(bounding_boxes):
+            return []
+        bb = bounding_boxes[object_id]
+        inflated = OBB(
+            bb.center,
+            bb.x_axis,
+            bb.y_axis,
+            bb.z_axis,
+            Vector(
+                bb.half_size[0] * inflate,
+                bb.half_size[1] * inflate,
+                bb.half_size[2] * inflate,
+            ),
+        )
+        hits = self.query_aabb(inflated)
+        return [h for h in hits if h != object_id]
