@@ -748,6 +748,28 @@ class Plane:
 
         return Plane(new_origin, self._x_axis, self._y_axis)
 
+    def to_polylines(self, scale=1.0):
+        from .polyline import Polyline
+        s = scale * 0.5
+        o = self._origin
+        x = self._x_axis
+        y = self._y_axis
+        z = self._z_axis
+        c0 = Point(o[0] - x[0]*s - y[0]*s, o[1] - x[1]*s - y[1]*s, o[2] - x[2]*s - y[2]*s)
+        c1 = Point(o[0] + x[0]*s - y[0]*s, o[1] + x[1]*s - y[1]*s, o[2] + x[2]*s - y[2]*s)
+        c2 = Point(o[0] + x[0]*s + y[0]*s, o[1] + x[1]*s + y[1]*s, o[2] + x[2]*s + y[2]*s)
+        c3 = Point(o[0] - x[0]*s + y[0]*s, o[1] - x[1]*s + y[1]*s, o[2] - x[2]*s + y[2]*s)
+        rect = Polyline([c0, c1, c2, c3, c0])
+        rect.linecolor = Color(self.linecolor[0], self.linecolor[1], self.linecolor[2], self.linecolor[3])
+        origin_pt = Point(o[0], o[1], o[2])
+        x_line = Polyline([origin_pt, Point(o[0] + x[0]*s, o[1] + x[1]*s, o[2] + x[2]*s)])
+        x_line.linecolor = Color.red()
+        y_line = Polyline([origin_pt, Point(o[0] + y[0]*s, o[1] + y[1]*s, o[2] + y[2]*s)])
+        y_line.linecolor = Color.green()
+        z_line = Polyline([origin_pt, Point(o[0] + z[0]*s, o[1] + z[1]*s, o[2] + z[2]*s)])
+        z_line.linecolor = Color.blue()
+        return [rect, x_line, y_line, z_line]
+
     ###########################################################################################
     # Polymorphic JSON Serialization
     ###########################################################################################

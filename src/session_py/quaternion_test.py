@@ -14,7 +14,7 @@ def test_quaternion_constructor():
     q0 = Quaternion()
 
     # Constructor with arguments
-    q = Quaternion.from_scalar_and_vector(2.0, Vector(1.0, 0.0, 0.0))
+    q = Quaternion.from_components(2.0, Vector(1.0, 0.0, 0.0))
 
     # Setters
     q[0] = 5.0
@@ -34,14 +34,14 @@ def test_quaternion_constructor():
 
     # Copy (duplicates everything except guid)
     qcopy = q.duplicate()
-    qother = Quaternion.from_scalar_and_vector(2.0, Vector(1.0, 0.0, 0.0))
+    qother = Quaternion.from_components(2.0, Vector(1.0, 0.0, 0.0))
 
     # Copy operators
     qrot = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), PI / 2.0)
     qmul = qrot * qrot
     qscaled = Quaternion.identity() * 2.0
-    a = Quaternion.from_scalar_and_vector(1.0, Vector(0.0, 0.0, 0.0))
-    b = Quaternion.from_scalar_and_vector(0.0, Vector(0.0, 0.0, 1.0))
+    a = Quaternion.from_components(1.0, Vector(0.0, 0.0, 0.0))
+    b = Quaternion.from_components(0.0, Vector(0.0, 0.0, 1.0))
     qsum = a + b
     qdiff = qrot - qrot
     qneg = -Quaternion.identity()
@@ -75,17 +75,38 @@ def test_quaternion_identity():
     MINI_CHECK(TOLERANCE.is_close(q.vector[2], 0.0))
 
 
-@MINI_TEST("Quaternion", "From Scalar And Vector")
-def test_quaternion_from_scalar_and_vector():
+@MINI_TEST("Quaternion", "From Components")
+def test_quaternion_from_components():
+    import math
     from session_py import Quaternion
     from session_py import Vector
 
-    q = Quaternion.from_scalar_and_vector(2.0, Vector(1.0, 2.0, 3.0))
+    # q = s + xi + yj + zk: first arg is scalar, second arg is (i,j,k) coefficients (NOT a rotation axis).
+    q = Quaternion.from_components(2.0, Vector(1.0, 2.0, 3.0))
 
     MINI_CHECK(TOLERANCE.is_close(q.scalar, 2.0))
     MINI_CHECK(TOLERANCE.is_close(q.vector[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(q.vector[1], 2.0))
     MINI_CHECK(TOLERANCE.is_close(q.vector[2], 3.0))
+
+    # Geometric meaning of (s, v): a rotation by `angle` around `axis`.
+    # to_axis_angle() extracts these — for q=(2,(1,2,3)):
+    #   axis  = (1,2,3)/sqrt(14)
+    #   angle = 2*acos(2/sqrt(18)) ≈ 2.1617 rad ≈ 123.85°
+    axis, angle = q.to_axis_angle()
+    sqrt14 = math.sqrt(14.0)
+    MINI_CHECK(TOLERANCE.is_close(axis[0], 1.0 / sqrt14))
+    MINI_CHECK(TOLERANCE.is_close(axis[1], 2.0 / sqrt14))
+    MINI_CHECK(TOLERANCE.is_close(axis[2], 3.0 / sqrt14))
+    MINI_CHECK(TOLERANCE.is_close(angle, 2.0 * math.acos(2.0 / math.sqrt(18.0))))
+
+    # Round-trip: from_axis_angle(to_axis_angle(q)) == q.normalized()
+    q_round = Quaternion.from_axis_angle(axis, angle)
+    qn = q.normalized()
+    MINI_CHECK(TOLERANCE.is_close(q_round.scalar, qn.scalar))
+    MINI_CHECK(TOLERANCE.is_close(q_round.vector[0], qn.vector[0]))
+    MINI_CHECK(TOLERANCE.is_close(q_round.vector[1], qn.vector[1]))
+    MINI_CHECK(TOLERANCE.is_close(q_round.vector[2], qn.vector[2]))
 
 
 @MINI_TEST("Quaternion", "From Axis Angle")
@@ -202,7 +223,7 @@ def test_quaternion_normalized():
     from session_py import Quaternion
     from session_py import Vector
 
-    q = Quaternion.from_scalar_and_vector(2.0, Vector(0.0, 0.0, 2.0))
+    q = Quaternion.from_components(2.0, Vector(0.0, 0.0, 2.0))
     n = q.normalized()
 
     MINI_CHECK(TOLERANCE.is_close(n.magnitude(), 1.0))

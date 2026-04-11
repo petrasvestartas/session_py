@@ -34,8 +34,52 @@ class Quaternion:
         return Quaternion(1.0, Vector(0.0, 0.0, 0.0))
 
     @staticmethod
-    def from_scalar_and_vector(scalar, vector):
-        """Create from scalar and vector components."""
+    def from_components(scalar, vector):
+        """Create a quaternion from raw scalar (real) and vector (imaginary) components.
+
+        WARNING: The ``vector`` argument is NOT a rotation axis. It is the
+        ``(i, j, k)`` coefficients of the quaternion. Most users want
+        :meth:`from_axis_angle` instead.
+
+        A quaternion is canonically written as ``q = s + xi + yj + zk`` where
+        ``s`` is the scalar (real) part and ``(x, y, z)`` is the vector
+        (imaginary) part. Use this constructor only when you have raw
+        quaternion components.
+
+        Visually constructing a plane from ``(s, v)`` values
+        ----------------------------------------------------
+        1. If ``v`` should be the plane's NORMAL (the geometric meaning users
+           usually expect), bypass the quaternion entirely::
+
+               p = Plane.from_point_normal(Point(0, 0, 0), v)
+
+        2. If you want the plane produced by the quaternion's rotation
+           (i.e. the world XY plane rotated by ``q``), normalize first::
+
+               p = Quaternion.from_components(s, v).normalized().get_rotation()
+
+           The result's normal is the rotation of ``(0, 0, 1)`` by ``q``,
+           which equals ``v`` only in the trivial case where the rotation
+           axis is already Z.
+
+        3. If you want a quaternion whose rotation produces a plane with
+           normal ``v``, use :meth:`from_arc`::
+
+               q = Quaternion.from_arc(Vector(0, 0, 1), v.normalized())
+               p = q.get_rotation()   # p.z_axis == v.normalized()
+
+        Parameters
+        ----------
+        scalar : float
+            Real part of the quaternion (the ``s`` in ``q = s + xi + yj + zk``).
+        vector : Vector
+            Imaginary parts (i, j, k coefficients) — NOT a rotation axis.
+
+        Returns
+        -------
+        Quaternion
+            Quaternion with the given raw components (not normalized).
+        """
         return Quaternion(scalar, vector)
 
     @staticmethod
@@ -44,6 +88,41 @@ class Quaternion:
         ax = axis.normalized()
         half = angle * 0.5
         return Quaternion(math.cos(half), ax * math.sin(half))
+
+    def to_axis_angle(self):
+        """Extract ``(axis, angle)`` from this quaternion — the inverse of :meth:`from_axis_angle`.
+
+        Geometric meaning of a quaternion ``(s, v)``::
+
+            axis  = v / |v|
+            angle = 2 * acos(s / |q|)
+
+        Normalizes internally, so non-unit quaternions are handled correctly.
+
+        Edge case: for the identity quaternion (or any near-identity) the
+        axis is undefined; this function returns ``(Vector(0, 0, 1), 0.0)``.
+
+        Example
+        -------
+        >>> q = Quaternion.from_components(2.0, Vector(1.0, 2.0, 3.0))
+        >>> axis, angle = q.to_axis_angle()
+        >>> # axis = (1,2,3)/sqrt(14), angle ≈ 2.1617 rad ≈ 123.85°
+        >>> # Reconstruct via geometric form:
+        >>> q2 = Quaternion.from_axis_angle(axis, angle)  # == q.normalized()
+
+        Returns
+        -------
+        tuple of (Vector, float)
+            ``(unit axis, angle in radians)``.
+        """
+        qn = self.normalized()
+        s = max(-1.0, min(1.0, qn.scalar))
+        angle = 2.0 * math.acos(s)
+        sin_half = math.sqrt(1.0 - s * s)
+        if sin_half < 1e-12:
+            return (Vector(0.0, 0.0, 1.0), 0.0)
+        axis = Vector(qn.vector[0] / sin_half, qn.vector[1] / sin_half, qn.vector[2] / sin_half)
+        return (axis, angle)
 
     @staticmethod
     def from_arc(src, dst):
