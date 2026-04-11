@@ -429,7 +429,7 @@ def test_vector_reflect():
 @MINI_TEST("Vector", "Average Normal")
 def test_vector_average_normal():
     from session_py import Point
-    from session_py.vector import average_normal
+    from session_py import Vector
 
     sq = [
         Point(0.0, 0.0, 0.0),
@@ -438,7 +438,7 @@ def test_vector_average_normal():
         Point(0.0, 1.0, 0.0),
         Point(0.0, 0.0, 0.0),
     ]
-    n = average_normal(sq)
+    n = Vector.average_normal(sq)
 
     MINI_CHECK(TOLERANCE.is_close(abs(n[2]), 1.0))
     MINI_CHECK(TOLERANCE.is_close(n[0], 0.0) and TOLERANCE.is_close(n[1], 0.0))

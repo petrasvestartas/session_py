@@ -707,5 +707,45 @@ def test_polyline_boolean_op_plane():
         MINI_CHECK(TOLERANCE.is_close(diff[0][i][2], 5.0))
 
 
+@MINI_TEST("Polyline", "Transformed Xform")
+def test_polyline_transformed_xform():
+    from session_py import Point, Polyline, Xform
+    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
+    xf = Xform.translation(10.0, 0.0, 0.0)
+    pl_x = pl.transformed_xform(xf)
+    MINI_CHECK(TOLERANCE.is_close(pl_x.get_point(0)[0], 10.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_x.get_point(1)[0], 11.0))
+
+
+@MINI_TEST("Polyline", "Translate")
+def test_polyline_translate():
+    from session_py import Point, Polyline, Vector
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+    ])
+    pl.translate(Vector(5.0, 0.0, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.get_point(0)[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.get_point(2)[0], 6.0))
+
+
+@MINI_TEST("Polyline", "Extend Edge Equally")
+def test_polyline_extend_edge_equally():
+    from session_py import Point, Polyline
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
+        Point(0.0, 10.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+    ])
+    pl.extend_edge_equally(0, 1.0)
+    MINI_CHECK(TOLERANCE.is_close(pl.get_point(0)[0], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.get_point(1)[0], 11.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.get_point(4)[0], -1.0))
+
+
 if __name__ == "__main__":
     run_all("python")

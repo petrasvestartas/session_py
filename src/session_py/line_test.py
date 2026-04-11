@@ -325,5 +325,36 @@ def test_line_subdivide():
     MINI_CHECK(TOLERANCE.is_close(pts_dist[4][0], 10.0))
 
 
+@MINI_TEST("Line", "Overlap")
+def test_line_overlap():
+    from session_py import Line, Point
+    l0 = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
+    l1 = Line.from_points(Point(5.0, 0.0, 0.0), Point(15.0, 0.0, 0.0))
+    out = l0.overlap(l1)
+    MINI_CHECK(out is not None)
+    MINI_CHECK(TOLERANCE.is_close(out.start()[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(out.end()[0], 10.0))
+
+
+@MINI_TEST("Line", "Overlap Average")
+def test_line_overlap_average():
+    from session_py import Line, Point
+    l0 = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
+    l1 = Line.from_points(Point(5.0, 0.0, 0.0), Point(15.0, 0.0, 0.0))
+    out = l0.overlap_average(l1)
+    MINI_CHECK(out is not None)
+    MINI_CHECK(TOLERANCE.is_close(out.start()[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(out.end()[0], 10.0))
+
+
+@MINI_TEST("Line", "Extend")
+def test_line_extend():
+    from session_py import Line, Point
+    l = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
+    l.extend(1.0, 2.0)
+    MINI_CHECK(TOLERANCE.is_close(l.start()[0], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(l.end()[0], 12.0))
+
+
 if __name__ == "__main__":
     run_all("python")

@@ -401,6 +401,82 @@ class Polyline:
         result.transform()
         return result
 
+    def transformed_xform(self, xf):
+        """Return a copy of this polyline with ``xf`` applied to every point.
+
+        Mirrors C++ ``Polyline::transformed_xform``: applies a column-major
+        affine transformation matrix.
+
+        Parameters
+        ----------
+        xf : :class:`Xform`
+
+        Returns
+        -------
+        :class:`Polyline`
+        """
+        m = xf.m
+        new_pts = []
+        for i in range(self.point_count()):
+            p = self.get_point(i)
+            x = m[0]*p[0] + m[4]*p[1] + m[8]*p[2]  + m[12]
+            y = m[1]*p[0] + m[5]*p[1] + m[9]*p[2]  + m[13]
+            z = m[2]*p[0] + m[6]*p[1] + m[10]*p[2] + m[14]
+            new_pts.append(Point(x, y, z))
+        return Polyline(new_pts)
+
+    def translate(self, v):
+        """Translate every point of this polyline by ``v`` (in place).
+
+        Mirrors C++ ``Polyline::translate``.
+
+        Parameters
+        ----------
+        v : :class:`Vector`
+        """
+        for i in range(self.point_count()):
+            idx = i * 3
+            self._coords[idx]     += v[0]
+            self._coords[idx + 1] += v[1]
+            self._coords[idx + 2] += v[2]
+
+    def extend_edge_equally(self, edge_idx, distance):
+        """Slide both endpoints of edge ``edge_idx`` outward by ``distance``.
+
+        Negative ``distance`` slides them inward. For closed polylines the
+        closing-duplicate vertex is kept in sync.
+
+        Parameters
+        ----------
+        edge_idx : int
+        distance : float
+        """
+        n = self.point_count()
+        if n < 2 or edge_idx + 1 >= n:
+            return
+        i = edge_idx
+        j = edge_idx + 1
+        pi = self.get_point(i)
+        pj = self.get_point(j)
+        dx = pj[0] - pi[0]
+        dy = pj[1] - pi[1]
+        dz = pj[2] - pi[2]
+        length = (dx*dx + dy*dy + dz*dz) ** 0.5
+        if length < 1e-12:
+            return
+        inv = 1.0 / length
+        ux = dx * inv * distance
+        uy = dy * inv * distance
+        uz = dz * inv * distance
+        new_pi = Point(pi[0]-ux, pi[1]-uy, pi[2]-uz)
+        new_pj = Point(pj[0]+ux, pj[1]+uy, pj[2]+uz)
+        self.set_point(i, new_pi)
+        self.set_point(j, new_pj)
+        if i == 0:
+            self.set_point(n - 1, new_pi)
+        if j == n - 1:
+            self.set_point(0, new_pj)
+
     # ===========================================================================================
     # Geometric Utilities
     # ===========================================================================================

@@ -865,5 +865,82 @@ def test_intersection_line_line_3d():
     MINI_CHECK(intersection.line_line_3d(par0, par1) is None)
 
 
+@MINI_TEST("Intersection", "Polyline Plane To Line")
+def test_intersection_polyline_plane_to_line():
+    from session_py import Plane, Point, Polyline, Vector
+    from session_py.intersection import polyline_plane_to_line
+    poly = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+        Point(4.0, 4.0, 0.0),
+        Point(0.0, 4.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+    ])
+    pln = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
+    out = polyline_plane_to_line(poly, pln, Point(0.0, 0.0, 0.0))
+    MINI_CHECK(out is not None)
+    MINI_CHECK(TOLERANCE.is_close(out.start()[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(out.end()[0], 4.0))
+
+
+@MINI_TEST("Intersection", "Quad From Line Top Bottom Planes")
+def test_intersection_quad_from_line_top_bottom_planes():
+    from session_py import Line, Plane, Point, Vector
+    from session_py.intersection import quad_from_line_top_bottom_planes
+    face = Plane.xy_plane()
+    line = Line(0.0, 0.0, 0.0, 10.0, 0.0, 0.0)
+    plane0 = Plane.from_point_normal(Point(0.0, -2.0, 0.0), Vector(0.0, 1.0, 0.0))
+    plane1 = Plane.from_point_normal(Point(0.0,  2.0, 0.0), Vector(0.0, 1.0, 0.0))
+    out = quad_from_line_top_bottom_planes(face, line, plane0, plane1)
+    MINI_CHECK(out is not None)
+    MINI_CHECK(out.point_count() == 5)
+    MINI_CHECK(TOLERANCE.is_close(abs(out.get_point(0)[1]), 2.0))
+    MINI_CHECK(TOLERANCE.is_close(abs(out.get_point(2)[1]), 2.0))
+    MINI_CHECK(TOLERANCE.is_close(out.get_point(2)[0], 10.0))
+
+
+@MINI_TEST("Intersection", "Orthogonal Vector Between Two Plane Pairs")
+def test_intersection_orthogonal_vector_between_two_plane_pairs():
+    from session_py import Plane, Point, Vector
+    from session_py.intersection import orthogonal_vector_between_two_plane_pairs
+    pp00 = Plane.xy_plane()
+    pp10 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    pp11 = Plane.from_point_normal(Point(4.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    out = orthogonal_vector_between_two_plane_pairs(pp00, pp10, pp11)
+    MINI_CHECK(out is not None)
+    mag = (out[0]*out[0] + out[1]*out[1] + out[2]*out[2]) ** 0.5
+    MINI_CHECK(TOLERANCE.is_close(mag, 4.0))
+    MINI_CHECK(TOLERANCE.is_close(out[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(out[2], 0.0))
+
+
+@MINI_TEST("Intersection", "Closed And Open Paths 2D")
+def test_intersection_closed_and_open_paths_2d():
+    from session_py import Plane, Point, Polyline
+    from session_py.intersection import closed_and_open_paths_2d
+    plate = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
+        Point(0.0, 10.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+    ])
+    joint = Polyline([
+        Point(-2.0, 5.0, 0.0),
+        Point(12.0, 5.0, 0.0),
+    ])
+    pln = Plane.xy_plane()
+    result = closed_and_open_paths_2d(plate, joint, pln)
+    MINI_CHECK(result is not None)
+    out, (t0, t1) = result
+    MINI_CHECK(out.point_count() == 2)
+    MINI_CHECK(TOLERANCE.is_close(out.get_point(0)[1], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(out.get_point(1)[1], 5.0))
+    t_lo = min(t0, t1)
+    t_hi = max(t0, t1)
+    MINI_CHECK(TOLERANCE.is_close(t_lo, 1.5))
+    MINI_CHECK(TOLERANCE.is_close(t_hi, 3.5))
+
+
 if __name__ == "__main__":
     run_all("python")

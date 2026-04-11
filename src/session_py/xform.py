@@ -277,6 +277,94 @@ class Xform:
         return t2 * (m_xform * t0)
 
     @staticmethod
+    def from_change_of_basis(rect0, rect1):
+        """Build the change-of-basis xform from two 4-point joint volume rectangles.
+
+        Maps the unit cube ``[-0.5, +0.5]^3`` to the world frame defined by
+        the two rectangles. Verbatim port of the inline ``change_basis``
+        helper from main_5.cpp:782, which mirrored wood ``wood_joint.cpp:103``.
+
+        Parameters
+        ----------
+        rect0 : :class:`Polyline`
+            4-point quad whose first point is the origin and whose
+            ``[1] - [0]`` / ``[3] - [0]`` are the X / Y axes of the target
+            frame.
+        rect1 : :class:`Polyline`
+            Polyline whose first point is the Z anchor (``[0] - rect0[0]``
+            is the Z axis of the target frame).
+
+        Returns
+        -------
+        :class:`Xform`
+            Identity if the rectangle is degenerate.
+        """
+        if rect0.point_count() < 4 or rect1.point_count() < 1:
+            return Xform.identity()
+
+        O1x, O1y, O1z = -0.5, -0.5, -0.5
+        # X1=(1,0,0), Y1=(0,1,0), Z1=(0,0,1)
+
+        O0 = rect0.get_point(0)
+        r01 = rect0.get_point(1)
+        r03 = rect0.get_point(3)
+        r10 = rect1.get_point(0)
+        X0 = Vector(r01[0] - O0[0], r01[1] - O0[1], r01[2] - O0[2])
+        Y0 = Vector(r03[0] - O0[0], r03[1] - O0[1], r03[2] - O0[2])
+        Z0 = Vector(r10[0] - O0[0], r10[1] - O0[1], r10[2] - O0[2])
+
+        # Augmented matrix [Gram(X1,Y1,Z1) | dot(Xi,X0j)] (X1/Y1/Z1 are
+        # orthonormal so the Gram is the identity).
+        R = [
+            [1.0, 0.0, 0.0, X0[0], Y0[0], Z0[0]],
+            [0.0, 1.0, 0.0, X0[1], Y0[1], Z0[1]],
+            [0.0, 0.0, 1.0, X0[2], Y0[2], Z0[2]],
+        ]
+
+        i0 = 0 if R[0][0] >= R[1][1] else 1
+        if R[2][2] > R[i0][i0]:
+            i0 = 2
+        i1 = (i0 + 1) % 3
+        i2 = (i1 + 1) % 3
+        if R[i0][i0] == 0.0:
+            return Xform.identity()
+
+        def elim(pivot, target):
+            if R[target][pivot] == 0.0:
+                return
+            dd = -R[target][pivot]
+            for k in range(6):
+                R[target][k] += dd * R[pivot][k]
+            R[target][pivot] = 0.0
+
+        def norm_row(row):
+            dd = 1.0 / R[row][row]
+            for k in range(6):
+                R[row][k] *= dd
+            R[row][row] = 1.0
+
+        norm_row(i0); elim(i0, i1); elim(i0, i2)
+        if abs(R[i1][i1]) < abs(R[i2][i2]):
+            i1, i2 = i2, i1
+        if R[i1][i1] == 0.0:
+            return Xform.identity()
+        norm_row(i1); elim(i1, i0); elim(i1, i2)
+        if R[i2][i2] == 0.0:
+            return Xform.identity()
+        norm_row(i2); elim(i2, i0); elim(i2, i1)
+
+        tx = O0[0] - (R[0][3]*O1x + R[0][4]*O1y + R[0][5]*O1z)
+        ty = O0[1] - (R[1][3]*O1x + R[1][4]*O1y + R[1][5]*O1z)
+        tz = O0[2] - (R[2][3]*O1x + R[2][4]*O1y + R[2][5]*O1z)
+        mat = [
+            R[0][3], R[1][3], R[2][3], 0.0,
+            R[0][4], R[1][4], R[2][4], 0.0,
+            R[0][5], R[1][5], R[2][5], 0.0,
+            tx,      ty,      tz,      1.0,
+        ]
+        return Xform(mat)
+
+    @staticmethod
     def plane_to_plane(plane_from, plane_to):
         """Create transformation from one plane to another.
 

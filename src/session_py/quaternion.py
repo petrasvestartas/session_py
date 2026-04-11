@@ -84,7 +84,12 @@ class Quaternion:
 
     @staticmethod
     def from_axis_angle(axis, angle):
-        """Create from axis of rotation and angle."""
+        """Build a unit quaternion that rotates by ``angle`` radians around ``axis``.
+
+        THE everyday rotation builder. Use this whenever you can describe the
+        rotation as "spin by N radians around this direction" - turning a wheel,
+        opening a door, orbiting a camera. The result is always unit-length.
+        """
         ax = axis.normalized()
         half = angle * 0.5
         return Quaternion(math.cos(half), ax * math.sin(half))
@@ -126,7 +131,12 @@ class Quaternion:
 
     @staticmethod
     def from_arc(src, dst):
-        """Create rotation from source vector to destination vector."""
+        """Build the shortest rotation that maps direction ``src`` to direction ``dst``.
+
+        Use this for "look at" logic (point a camera at a target), aligning a
+        model's forward axis with a desired direction, or snapping one face
+        normal to another. Both arguments are normalized internally.
+        """
         s = src.normalized()
         d = dst.normalized()
         cross = s.cross(d)
@@ -142,7 +152,13 @@ class Quaternion:
 
     @staticmethod
     def from_euler(x, y, z):
-        """Create from Euler angles (XYZ convention)."""
+        """Build a quaternion from three Euler angles (XYZ convention).
+
+        Use only at I/O boundaries: importing rotations stored as pitch/yaw/roll
+        or accepting user input. AVOID for composition - Euler angles suffer
+        from gimbal lock. Store/compose as quaternions, convert to Euler only
+        to display or save.
+        """
         s1, c1 = math.sin(x * 0.5), math.cos(x * 0.5)
         s2, c2 = math.sin(y * 0.5), math.cos(y * 0.5)
         s3, c3 = math.sin(z * 0.5), math.cos(z * 0.5)
@@ -154,7 +170,13 @@ class Quaternion:
 
     @staticmethod
     def from_rotation(plane_a, plane_b):
-        """Create rotation that maps the basis of plane_a onto plane_b (Rhino: Quaternion.Rotation(plane, plane))."""
+        """Build the quaternion that maps the basis of ``plane_a`` onto the basis of ``plane_b``.
+
+        Use this to snap one local frame to another - aligning two CAD parts
+        by their reference planes, transferring a frame between objects, or
+        computing the relative rotation between two coordinate systems.
+        (Rhino: Quaternion.Rotation(plane, plane))
+        """
         xa, ya, za = plane_a.x_axis, plane_a.y_axis, plane_a.z_axis
         xb, yb, zb = plane_b.x_axis, plane_b.y_axis, plane_b.z_axis
         m = [[0.0]*3 for _ in range(3)]
@@ -197,7 +219,13 @@ class Quaternion:
         return Quaternion(s * (m[k][j] - m[j][k]), Vector(q[0], q[1], q[2]))
 
     def get_rotation(self):
-        """Apply this quaternion's rotation to the world XY plane and return the resulting plane (Rhino: Quaternion.GetRotation(out plane))."""
+        """Apply this rotation to the world XY plane and return the resulting Plane.
+
+        Use this to visualize a quaternion as a frame in 3D, or to convert a
+        stored quaternion into a Plane for frame-based APIs in the rest of the
+        kernel. Inverse: ``from_rotation(xy_plane(), result)``.
+        (Rhino: Quaternion.GetRotation(out plane))
+        """
         from .plane import Plane
         from .point import Point
         a, b, c, d = self.scalar, self.vector[0], self.vector[1], self.vector[2]
@@ -212,7 +240,12 @@ class Quaternion:
         return result
 
     def rotate_vector(self, v):
-        """Rotate a vector by this quaternion."""
+        """Apply this rotation to a 3D vector and return the rotated vector.
+
+        Use this when you have a quaternion orientation and need to know where
+        a specific direction points after the rotation - the camera's forward
+        axis, a bone's tip, the normal of a rotated face. Math: ``q*v_pure*q^-1``.
+        """
         qv = self.vector
         uv = qv.cross(v)
         uuv = qv.cross(uv)
@@ -227,7 +260,12 @@ class Quaternion:
         return self.scalar * self.scalar + self.vector[0] * self.vector[0] + self.vector[1] * self.vector[1] + self.vector[2] * self.vector[2]
 
     def normalized(self):
-        """Unit quaternion with same direction."""
+        """Return a unit-length copy of this quaternion (divides by magnitude).
+
+        Use periodically after composing many rotations - floating-point drift
+        slowly makes a quaternion non-unit, and a non-unit quaternion no longer
+        represents a valid rotation.
+        """
         mag = self.magnitude()
         if mag > 1e-10:
             q = Quaternion(self.scalar / mag, self.vector / mag)
@@ -238,7 +276,11 @@ class Quaternion:
         return Quaternion.identity()
 
     def conjugate(self):
-        """Conjugate (negates vector part)."""
+        """Flip the sign of the vector part: ``(s, v)`` -> ``(s, -v)``.
+
+        For UNIT quaternions this equals the inverse - the opposite rotation.
+        Use as the cheap inverse when you KNOW the quaternion is unit-length.
+        """
         q = Quaternion(self.scalar, self.vector * -1.0)
         q.typ = self.typ
         q.guid = self.guid
@@ -246,7 +288,12 @@ class Quaternion:
         return q
 
     def invert(self):
-        """Multiplicative inverse."""
+        """True multiplicative inverse: conjugate / magnitude_squared.
+
+        Works for non-unit quaternions too. Use as the safe inverse when the
+        quaternion may not be unit-length. ``q * q.invert()`` always equals
+        identity.
+        """
         mag2 = self.magnitude_squared()
         if mag2 < 1e-20:
             return Quaternion.identity()
@@ -257,11 +304,20 @@ class Quaternion:
         return q
 
     def dot(self, other):
-        """Dot product with another quaternion."""
+        """Algebraic 4D dot product (NOT a geometric operation).
+
+        Used inside slerp implementations and as a similarity measure between
+        two unit quaternions (1 = same, 0 = 90 deg apart).
+        """
         return self.scalar * other.scalar + self.vector.dot(other.vector)
 
     def slerp(self, other, amount):
-        """Spherical linear interpolation."""
+        """Spherical Linear intERPolation along the shortest great-circle path on S^3.
+
+        Constant angular velocity. Use for high-quality animation between two
+        orientations - camera transitions, character bones, anything where
+        smoothness matters more than raw speed.
+        """
         dot_val = self.dot(other)
         if dot_val > 0.9995:
             return (self + (other - self) * amount).normalized()
@@ -273,7 +329,12 @@ class Quaternion:
         return (self * scale1 + other * scale2) * (1.0 / sin_theta)
 
     def nlerp(self, other, amount):
-        """Normalized linear interpolation."""
+        """Normalized Linear intERPolation. Cheaper than slerp.
+
+        Angular velocity isn't perfectly uniform. Use in real-time loops where
+        every microsecond matters and the visual difference from slerp is
+        negligible.
+        """
         return (self * (1.0 - amount) + other * amount).normalized()
 
     def __getitem__(self, index):

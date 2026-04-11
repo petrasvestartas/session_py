@@ -257,5 +257,15 @@ def test_plane_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.c, 1.0))
 
 
+@MINI_TEST("Plane", "Has On Negative Side")
+def test_plane_has_on_negative_side():
+    from session_py import Plane, Point
+    pl = Plane.xy_plane()
+    above = Point(0.0, 0.0, 1.0)
+    below = Point(0.0, 0.0, -1.0)
+    MINI_CHECK(pl.has_on_negative_side(below))
+    MINI_CHECK(not pl.has_on_negative_side(above))
+
+
 if __name__ == "__main__":
     run_all("python")

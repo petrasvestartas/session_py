@@ -608,6 +608,56 @@ class Line:
         result.transform()
         return result
 
+    def overlap(self, other):
+        """Return the overlapping segment between this line and ``other``.
+
+        Returns
+        -------
+        Optional[Line]
+            ``None`` if the segments do not overlap (or overlap at a point).
+        """
+        from .polyline import Polyline
+        result = Polyline.line_line_overlap(self.start(), self.end(), other.start(), other.end())
+        if result is None:
+            return None
+        return Line.from_points(result[0], result[1])
+
+    def overlap_average(self, other):
+        """Return the average of the two reciprocal overlaps between this line and ``other``.
+
+        Returns
+        -------
+        Optional[Line]
+            ``None`` if the resulting overlap collapses to a point.
+        """
+        from .polyline import Polyline
+        result = Polyline.line_line_overlap_average(self.start(), self.end(), other.start(), other.end())
+        if result is None:
+            return None
+        out = Line.from_points(result[0], result[1])
+        if out.squared_length() <= 0.0:
+            return None
+        return out
+
+    def extend(self, ext_start, ext_end):
+        """Extend this line in place by ``ext_start`` at the start end and ``ext_end`` at the end.
+
+        Mutates the line in place. Mirrors C++ ``Line::extend``.
+        """
+        s = self.start()
+        e = self.end()
+        v = e - s
+        mag = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]) ** 0.5
+        if mag < 1e-20:
+            return
+        ux = v[0] / mag
+        uy = v[1] / mag
+        uz = v[2] / mag
+        new_s = Point(s[0] - ux * ext_start, s[1] - uy * ext_start, s[2] - uz * ext_start)
+        new_e = Point(e[0] + ux * ext_end,   e[1] + uy * ext_end,   e[2] + uz * ext_end)
+        self._x0 = new_s[0]; self._y0 = new_s[1]; self._z0 = new_s[2]
+        self._x1 = new_e[0]; self._y1 = new_e[1]; self._z1 = new_e[2]
+
     ###########################################################################################
     # Polymorphic JSON Serialization
     ###########################################################################################

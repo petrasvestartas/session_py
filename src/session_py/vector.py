@@ -1060,6 +1060,21 @@ class Vector:
             self[2] - 2.0 * d * plane_normal[2]
         )
 
+    @staticmethod
+    def average_normal(points):
+        """Average outward normal of a polygon defined by ``points`` (Newell's method).
+
+        Parameters
+        ----------
+        points : list of :class:`Point`
+
+        Returns
+        -------
+        :class:`Vector`
+            Unit average normal.
+        """
+        return average_normal(points)
+
     ###########################################################################################
     # Polymorphic JSON Serialization (COMPAS-style)
     ###########################################################################################

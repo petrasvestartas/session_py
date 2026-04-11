@@ -728,6 +728,23 @@ class Plane:
         dist1 = abs(a1 * origin0[0] + b1 * origin0[1] + c1 * origin0[2] + d1)
         return dist0 < tol and dist1 < tol
 
+    def has_on_negative_side(self, p):
+        """Sign test using the cached plane equation ``ax + by + cz + d``.
+
+        Returns ``True`` if ``p`` lies on the negative side
+        (``a*p[0] + b*p[1] + c*p[2] + d < 0``). Mirrors CGAL's
+        ``Plane_3::has_on_negative_side``.
+
+        Parameters
+        ----------
+        p : :class:`Point`
+
+        Returns
+        -------
+        bool
+        """
+        return (self.a * p[0] + self.b * p[1] + self.c * p[2] + self.d) < 0.0
+
     def translate_by_normal(self, distance):
         """Translate (move) a plane along its normal direction by a specified distance.
 

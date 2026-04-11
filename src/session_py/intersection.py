@@ -1741,6 +1741,297 @@ def polyline_plane_to_line(poly, plane, align_start) -> Optional[object]:
     return Line(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
 
 
+def quad_from_line_top_bottom_planes(face_plane, line, plane0, plane1):
+    """Build a closed quad polyline from a joint line plus two side planes.
+
+    End-cap planes are perpendicular to the joint line at each endpoint;
+    the four corners are 3-plane intersections.
+
+    Parameters
+    ----------
+    face_plane, plane0, plane1 : :class:`Plane`
+    line : :class:`Line`
+
+    Returns
+    -------
+    Optional[:class:`Polyline`]
+        ``None`` if any of the 3-plane intersections is degenerate.
+    """
+    from .plane import Plane
+    from .polyline import Polyline
+    direction = line.to_vector()
+    s = line.start()
+    lp0 = Plane.from_point_normal(s, direction)
+    e = line.end()
+    lp1 = Plane.from_point_normal(e, direction)
+    p0 = plane_plane_plane(lp0, plane0, face_plane)
+    if p0 is None:
+        return None
+    p1 = plane_plane_plane(lp0, plane1, face_plane)
+    if p1 is None:
+        return None
+    p2 = plane_plane_plane(lp1, plane1, face_plane)
+    if p2 is None:
+        return None
+    p3 = plane_plane_plane(lp1, plane0, face_plane)
+    if p3 is None:
+        return None
+    return Polyline([p0, p1, p2, p3, p0])
+
+
+def orthogonal_vector_between_two_plane_pairs(pp00, pp10, pp11):
+    """Vector orthogonal to the (pp00, pp10) intersection line, anchored on (pp00, pp11).
+
+    Verbatim port of wood ``cgal_intersection_util.cpp:619-628``::
+
+        plane_plane(pp00, pp10, l0);
+        plane_plane(pp00, pp11, l1);
+        output = l1.point() - l0.projection(l1.point());
+
+    Parameters
+    ----------
+    pp00, pp10, pp11 : :class:`Plane`
+
+    Returns
+    -------
+    Optional[:class:`Vector`]
+    """
+    l0 = plane_plane(pp00, pp10)
+    if l0 is None:
+        return None
+    l1 = plane_plane(pp00, pp11)
+    if l1 is None:
+        return None
+    p1 = l1.start()
+    ldir = l0.to_vector()
+    len_sq = ldir[0]*ldir[0] + ldir[1]*ldir[1] + ldir[2]*ldir[2]
+    if len_sq < 1e-20:
+        return None
+    l0s = l0.start()
+    vx = p1[0] - l0s[0]
+    vy = p1[1] - l0s[1]
+    vz = p1[2] - l0s[2]
+    t = (vx*ldir[0] + vy*ldir[1] + vz*ldir[2]) / len_sq
+    px = l0s[0] + ldir[0]*t
+    py = l0s[1] + ldir[1]*t
+    pz = l0s[2] + ldir[2]*t
+    return Vector(p1[0]-px, p1[1]-py, p1[2]-pz)
+
+
+def closed_and_open_paths_2d(plate, joint, plane):
+    """Clip an open joint outline against a closed plate polygon in 2D.
+
+    Native (no Clipper) port of the wood ``wood_element.cpp:438-651`` helper.
+    Returns the clipped 3D polyline plus parametric positions ``(t0, t1)``
+    on the plate edges, or ``None`` if the joint outline does not intersect
+    the plate polygon.
+
+    Parameters
+    ----------
+    plate : :class:`Polyline`
+    joint : :class:`Polyline`
+    plane : :class:`Plane`
+
+    Returns
+    -------
+    Optional[Tuple[:class:`Polyline`, Tuple[float, float]]]
+    """
+    from .polyline import Polyline
+    import math as _math
+
+    origin = plate.get_point(0)
+    xax = plane.x_axis
+    yax = plane.y_axis
+    xax = Vector(xax[0], xax[1], xax[2]); xax.normalize_self()
+    yax = Vector(yax[0], yax[1], yax[2]); yax.normalize_self()
+
+    def to_2d(pp):
+        dx = pp[0]-origin[0]
+        dy = pp[1]-origin[1]
+        dz = pp[2]-origin[2]
+        return (dx*xax[0]+dy*xax[1]+dz*xax[2],
+                dx*yax[0]+dy*yax[1]+dz*yax[2])
+
+    def to_3d(u, v):
+        return Point(origin[0] + u*xax[0] + v*yax[0],
+                     origin[1] + u*xax[1] + v*yax[1],
+                     origin[2] + u*xax[2] + v*yax[2])
+
+    # Plate outline (2D), strip closing duplicate.
+    plate_n = plate.point_count()
+    if plate_n > 1:
+        f = plate.get_point(0)
+        l = plate.get_point(plate_n-1)
+        if abs(f[0]-l[0]) < 1e-6 and abs(f[1]-l[1]) < 1e-6 and abs(f[2]-l[2]) < 1e-6:
+            plate_n -= 1
+    plate2d = [to_2d(plate.get_point(i)) for i in range(plate_n)]
+    if len(plate2d) < 3:
+        return None
+
+    joint2d = [to_2d(joint.get_point(i)) for i in range(joint.point_count())]
+    if len(joint2d) < 2:
+        return None
+
+    def pip(px, py):
+        wn = 0
+        n = len(plate2d)
+        for i in range(n):
+            ax, ay = plate2d[i]
+            bx, by = plate2d[(i+1) % n]
+            if ay <= py:
+                if by > py:
+                    e = (bx-ax)*(py-ay) - (px-ax)*(by-ay)
+                    if e > 0.0:
+                        wn += 1
+            else:
+                if by <= py:
+                    e = (bx-ax)*(py-ay) - (px-ax)*(by-ay)
+                    if e < 0.0:
+                        wn -= 1
+        return wn != 0
+
+    def seg_seg_2d(s0, s1, e0, e1):
+        sx = s1[0]-s0[0]; sy = s1[1]-s0[1]
+        ex = e1[0]-e0[0]; ey = e1[1]-e0[1]
+        denom = sx*ey - sy*ex
+        if abs(denom) < 1e-20:
+            return None
+        dx = e0[0]-s0[0]; dy = e0[1]-s0[1]
+        t_s = (dx*ey - dy*ex) / denom
+        t_e = (dx*sy - dy*sx) / denom
+        return t_s, t_e
+
+    EPS = 1e-9
+    pieces = []
+    for s in range(len(joint2d)-1):
+        p0 = joint2d[s]
+        p1 = joint2d[s+1]
+        ts = [0.0]
+        for i in range(len(plate2d)):
+            a = plate2d[i]
+            b = plate2d[(i+1) % len(plate2d)]
+            r = seg_seg_2d(p0, p1, a, b)
+            if r is None:
+                continue
+            t_s, t_e = r
+            if EPS < t_s < 1.0 - EPS and -EPS <= t_e <= 1.0 + EPS:
+                ts.append(t_s)
+        ts.append(1.0)
+        ts.sort()
+        # Deduplicate close-to-equal values.
+        deduped = [ts[0]]
+        for v in ts[1:]:
+            if abs(v - deduped[-1]) > EPS:
+                deduped.append(v)
+        ts = deduped
+
+        current = []
+        for i in range(len(ts) - 1):
+            t_mid = 0.5 * (ts[i] + ts[i+1])
+            mx = p0[0] + (p1[0]-p0[0]) * t_mid
+            my = p0[1] + (p1[1]-p0[1]) * t_mid
+            if pip(mx, my):
+                sub_a = (p0[0] + (p1[0]-p0[0])*ts[i],   p0[1] + (p1[1]-p0[1])*ts[i])
+                sub_b = (p0[0] + (p1[0]-p0[0])*ts[i+1], p0[1] + (p1[1]-p0[1])*ts[i+1])
+                if not current:
+                    current.append(sub_a)
+                    current.append(sub_b)
+                else:
+                    dx = current[-1][0] - sub_a[0]
+                    dy = current[-1][1] - sub_a[1]
+                    if dx*dx + dy*dy < 1e-18:
+                        current.append(sub_b)
+                    else:
+                        pieces.append(current)
+                        current = [sub_a, sub_b]
+            else:
+                if current:
+                    pieces.append(current)
+                    current = []
+        if current:
+            pieces.append(current)
+
+    def sq2(a, b):
+        dx = a[0]-b[0]; dy = a[1]-b[1]
+        return dx*dx + dy*dy
+
+    DISTANCE_SQ = 0.01
+    c2d = []
+    count = 0
+    for piece in pieces:
+        if len(piece) <= 1:
+            continue
+        if count == 0:
+            c2d = list(piece)
+        else:
+            pts = list(piece)
+            if sq2(c2d[-1], pts[0]) > DISTANCE_SQ and sq2(c2d[-1], pts[-1]) > DISTANCE_SQ:
+                c2d.reverse()
+            if sq2(c2d[-1], pts[0]) > sq2(c2d[-1], pts[-1]):
+                pts.reverse()
+            for j in range(1, len(pts)):
+                c2d.append(pts[j])
+        count += 1
+
+    if len(c2d) < 2:
+        return None
+
+    def closest_param(p, a, b):
+        abx = b[0]-a[0]; aby = b[1]-a[1]
+        l2 = abx*abx + aby*aby
+        if l2 < 1e-20:
+            return 0.0
+        apx = p[0]-a[0]; apy = p[1]-a[1]
+        t = (apx*abx + apy*aby) / l2
+        if t < 0.0: t = 0.0
+        if t > 1.0: t = 1.0
+        return t
+
+    def sq_dist_seg(p, a, b):
+        abx = b[0]-a[0]; aby = b[1]-a[1]
+        l2 = abx*abx + aby*aby
+        if l2 < 1e-20:
+            dx = p[0]-a[0]; dy = p[1]-a[1]
+            return dx*dx + dy*dy
+        apx = p[0]-a[0]; apy = p[1]-a[1]
+        t = (apx*abx + apy*aby) / l2
+        if t < 0.0: t = 0.0
+        if t > 1.0: t = 1.0
+        px = a[0] + t*abx
+        py = a[1] + t*aby
+        dx = p[0]-px
+        dy = p[1]-py
+        return dx*dx + dy*dy
+
+    t0 = -1.0
+    t1 = -1.0
+    for i in range(len(plate2d)):
+        a = plate2d[i]
+        b = plate2d[(i+1) % len(plate2d)]
+        for jj in range(2):
+            idx = 0 if jj == 0 else len(c2d) - 1
+            d = sq_dist_seg(c2d[idx], a, b)
+            if jj == 0 and d < 1.0:
+                t0 = float(i) + closest_param(c2d[0], a, b)
+            elif jj == 1 and d < 1.0:
+                t1 = float(i) + closest_param(c2d[-1], a, b)
+        if t0 >= 0.0 and t1 >= 0.0:
+            break
+
+    reverse_flag = (t0 > t1)
+    if int(_math.floor(t0)) == 0 and int(_math.floor(t1)) == len(c2d) - 1:
+        reverse_flag = not reverse_flag
+    if reverse_flag:
+        t0, t1 = t1, t0
+        c2d.reverse()
+
+    if t0 < 0.0 or t1 < 0.0:
+        return None
+
+    out_pts = [to_3d(p[0], p[1]) for p in c2d]
+    return Polyline(out_pts), (t0, t1)
+
+
 def line_line_3d(cutter, seg) -> Optional[Point]:
     """3D skew-line intersection via infinite line_line_parameters."""
     result = line_line_parameters(cutter, seg, 0.0,

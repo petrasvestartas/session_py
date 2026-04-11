@@ -238,5 +238,33 @@ def test_centroid_quad():
     MINI_CHECK(TOLERANCE.is_close(centroid[2], 1.0))
 
 
+@MINI_TEST("Point", "Centroid")
+def test_centroid():
+    from session_py import Point
+
+    p0 = Point(0.0, 0.0, 0.0)
+    p1 = Point(2.0, 0.0, 0.0)
+    p2 = Point(2.0, 2.0, 0.0)
+    p3 = Point(0.0, 2.0, 0.0)
+    centroid = Point.centroid([p0, p1, p2, p3])
+
+    MINI_CHECK(TOLERANCE.is_close(centroid[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(centroid[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(centroid[2], 0.0))
+
+
+@MINI_TEST("Point", "Dihedral Angle Deg")
+def test_dihedral_angle_deg():
+    from session_py import Point
+
+    p = Point(0.0, 0.0, 0.0)
+    q = Point(1.0, 0.0, 0.0)
+    r = Point(0.0, 1.0, 0.0)
+    s = Point(0.0, 0.0, 1.0)
+    angle = Point.dihedral_angle_deg(p, q, r, s)
+
+    MINI_CHECK(TOLERANCE.is_close(angle, 90.0))
+
+
 if __name__ == "__main__":
     run_all(language="python")

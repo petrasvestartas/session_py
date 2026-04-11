@@ -577,5 +577,21 @@ def test_xform_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.m[14], 3.0) and TOLERANCE.is_close(loaded.m[15], 1.0))
 
 
+@MINI_TEST("Xform", "From Change Of Basis")
+def test_xform_from_change_of_basis():
+    from session_py import Point, Polyline, Xform
+    rect0 = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(2.0, 3.0, 0.0),
+        Point(0.0, 3.0, 0.0),
+    ])
+    rect1 = Polyline([Point(0.0, 0.0, 4.0)])
+    xf = Xform.from_change_of_basis(rect0, rect1)
+    MINI_CHECK(TOLERANCE.is_close(xf.m[12], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(xf.m[13], 1.5))
+    MINI_CHECK(TOLERANCE.is_close(xf.m[14], 2.0))
+
+
 if __name__ == "__main__":
     run_all("python")

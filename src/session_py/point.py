@@ -473,6 +473,60 @@ class Point:
         result = centroid_sum / total_area
         return Point(result[0], result[1], result[2])
 
+    @staticmethod
+    def centroid(points):
+        """Average of an arbitrary list of points.
+
+        Parameters
+        ----------
+        points : list of :class:`Point`
+
+        Returns
+        -------
+        :class:`Point`
+        """
+        if not points:
+            return Point(0, 0, 0)
+        cx = 0.0
+        cy = 0.0
+        cz = 0.0
+        for p in points:
+            cx += p[0]
+            cy += p[1]
+            cz += p[2]
+        n = float(len(points))
+        return Point(cx / n, cy / n, cz / n)
+
+    @staticmethod
+    def dihedral_angle_deg(p, q, r, s):
+        """Approximate dihedral angle in degrees between half-planes (p,q,r) and (p,q,s).
+
+        Half-plane normals are built via the shared edge ``pq``.
+
+        Parameters
+        ----------
+        p, q, r, s : :class:`Point`
+
+        Returns
+        -------
+        float
+        """
+        pq = Vector(q[0] - p[0], q[1] - p[1], q[2] - p[2])
+        pr = Vector(r[0] - p[0], r[1] - p[1], r[2] - p[2])
+        ps = Vector(s[0] - p[0], s[1] - p[1], s[2] - p[2])
+        n1 = pq.cross(pr)
+        n2 = pq.cross(ps)
+        m1 = n1.magnitude()
+        m2 = n2.magnitude()
+        if m1 < Tolerance.ZERO_TOLERANCE or m2 < Tolerance.ZERO_TOLERANCE:
+            return 0.0
+        cos_t = n1.dot(n2) / (m1 * m2)
+        if cos_t > 1.0:
+            cos_t = 1.0
+        if cos_t < -1.0:
+            cos_t = -1.0
+        return math.acos(cos_t) * (180.0 / 3.141592653589793)
+
     ###########################################################################################
     # JSON Serialization
     ###########################################################################################
