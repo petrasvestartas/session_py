@@ -39,6 +39,9 @@ def test_json_dumps_loads():
 
     loaded = json_loads(json_str)
 
+    MINI_CHECK(TOLERANCE.is_close(loaded[0], original[0]))
+    MINI_CHECK(TOLERANCE.is_close(loaded[1], original[1]))
+    MINI_CHECK(TOLERANCE.is_close(loaded[2], original[2]))
     MINI_CHECK(loaded.name == original.name)
 
 
@@ -140,6 +143,9 @@ def test_roundtrip_file_io():
     loaded = json_load(filepath)
 
     MINI_CHECK(len(loaded) == 3)
+    MINI_CHECK(TOLERANCE.is_close(loaded[0][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded[1][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded[2][2], 1.0))
 
     filepath.unlink()
 
@@ -168,10 +174,21 @@ def test_pretty_vs_compact():
 def test_decode_primitives():
     import json
 
-    MINI_CHECK(json.loads(json.dumps(42)) == 42)
-    MINI_CHECK(json.loads(json.dumps(3.14)) == 3.14)
-    MINI_CHECK(json.loads(json.dumps("hello")) == "hello")
-    MINI_CHECK(json.loads(json.dumps(True)) is True)
+    json_str = json.dumps(42)
+    loaded = json.loads(json_str)
+    MINI_CHECK(loaded == 42)
+
+    json_str = json.dumps(3.14)
+    loaded = json.loads(json_str)
+    MINI_CHECK(TOLERANCE.is_close(loaded, 3.14))
+
+    json_str = json.dumps("hello")
+    loaded = json.loads(json_str)
+    MINI_CHECK(loaded == "hello")
+
+    json_str = json.dumps(True)
+    loaded = json.loads(json_str)
+    MINI_CHECK(loaded is True)
 
 
 @MINI_TEST("Encoders", "Decode List")
@@ -192,6 +209,8 @@ def test_decode_list():
     ]))
 
     MINI_CHECK(len(decoded) == 2)
+    MINI_CHECK(TOLERANCE.is_close(decoded[0][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(decoded[1][0], 4.0))
 
 
 @MINI_TEST("Encoders", "Decode Dict")

@@ -1,10 +1,10 @@
 {
-  "guid": "0e196483-0319-4253-b506-59e6132b2bae",
+  "guid": "e087634b-da7b-4143-a079-1ae416e3fba4",
   "name": "test_vector",
   "type": "Vector",
   "x": 42.1,
   "xform": {
-    "guid": "2d09331c-a134-49bb-9e31-57d6da58b983",
+    "guid": "9e6a5f97-5799-47ca-8864-e6115314b18a",
     "m": [
       1.0,
       0.0,

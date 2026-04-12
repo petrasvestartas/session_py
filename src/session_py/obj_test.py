@@ -7,6 +7,7 @@ from pathlib import Path
 
 @MINI_TEST("OBJ", "Read Bunny")
 def test_read_bunny():
+    # load Stanford Bunny (real-world OBJ: 2503 vertices, 4968 faces)
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.obj"
     if not bunny_path.exists():
         return
@@ -26,6 +27,7 @@ def test_read_bunny():
 
 @MINI_TEST("OBJ", "Write Read Roundtrip")
 def test_write_read_roundtrip():
+    # build a small mesh (4 verts, 2 faces), write to OBJ, read back, compare counts
     from session_py import Mesh, Point
     from session_py.obj import read_obj, write_obj
     original_mesh = Mesh()

@@ -74,38 +74,6 @@ def test_mesh_iso_from_tpms_neovius_shell():
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("MeshIso", "SDF Sphere")
-def test_mesh_iso_sdf_sphere():
-    from session_py import MeshIso
-
-    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0), 0.0))
-    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0), -1.0))
-    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 0.0), 1.0))
-
-
-@MINI_TEST("MeshIso", "Smooth Union")
-def test_mesh_iso_smooth_union():
-    from session_py import MeshIso
-
-    MINI_CHECK(MeshIso.smooth_union(-1.0, 1.0, 8.0) < 0.0)
-    MINI_CHECK(MeshIso.smooth_union(1.0, 1.0, 8.0) < 1.0)
-
-
-@MINI_TEST("MeshIso", "From Function")
-def test_mesh_iso_from_function():
-    from session_py import MeshIso
-    from session_py import OBB
-    from session_py import Point
-
-    box = OBB.from_points([Point(-2.0, -2.0, -2.0), Point(2.0, 2.0, 2.0)])
-    def fn(x, y, z):
-        return MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, x, y, z)
-    m = MeshIso.from_function(fn, box, 10, 10, 10, 0.0)
-
-    MINI_CHECK(m.is_valid())
-    MINI_CHECK(m.number_of_vertices() > 0)
-
-
 @MINI_TEST("MeshIso", "All Tpms Shells")
 def test_mesh_iso_all_tpms_shells():
     from session_py import MeshIso
@@ -126,6 +94,30 @@ def test_mesh_iso_all_tpms_shells():
         MINI_CHECK(m.number_of_vertices() > 0)
 
 
+@MINI_TEST("MeshIso", "From Function")
+def test_mesh_iso_from_function():
+    from session_py import MeshIso
+    from session_py import OBB
+    from session_py import Point
+
+    box = OBB.from_points([Point(-2.0, -2.0, -2.0), Point(2.0, 2.0, 2.0)])
+    def fn(x, y, z):
+        return MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, x, y, z)
+    m = MeshIso.from_function(fn, box, 10, 10, 10, 0.0)
+
+    MINI_CHECK(m.is_valid())
+    MINI_CHECK(m.number_of_vertices() > 0)
+
+
+@MINI_TEST("MeshIso", "SDF Sphere")
+def test_mesh_iso_sdf_sphere():
+    from session_py import MeshIso
+
+    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0), 0.0))
+    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0), -1.0))
+    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_sphere(0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 0.0), 1.0))
+
+
 @MINI_TEST("MeshIso", "SDF Box")
 def test_mesh_iso_sdf_box():
     from session_py import MeshIso
@@ -135,6 +127,21 @@ def test_mesh_iso_sdf_box():
     box = OBB.from_points([Point(-2.0, -2.0, -2.0), Point(2.0, 2.0, 2.0)])
     def fn(x, y, z):
         return MeshIso.sdf_box(0.0, 0.0, 0.0, 1.0, 0.7, 1.3, x, y, z)
+    m = MeshIso.from_function(fn, box, 10, 10, 10, 0.0)
+
+    MINI_CHECK(m.is_valid())
+    MINI_CHECK(m.number_of_vertices() > 0)
+
+
+@MINI_TEST("MeshIso", "SDF Capsule")
+def test_mesh_iso_sdf_capsule():
+    from session_py import MeshIso
+    from session_py import OBB
+    from session_py import Point
+
+    box = OBB.from_points([Point(-2.0, -2.0, -2.0), Point(2.0, 2.0, 2.0)])
+    def fn(x, y, z):
+        return MeshIso.sdf_capsule(Point(0.0, -1.0, 0.0), Point(0.0, 1.0, 0.0), 0.5, x, y, z)
     m = MeshIso.from_function(fn, box, 10, 10, 10, 0.0)
 
     MINI_CHECK(m.is_valid())
@@ -156,19 +163,21 @@ def test_mesh_iso_sdf_torus():
     MINI_CHECK(m.number_of_vertices() > 0)
 
 
-@MINI_TEST("MeshIso", "SDF Capsule")
-def test_mesh_iso_sdf_capsule():
+@MINI_TEST("MeshIso", "SDF Plane")
+def test_mesh_iso_sdf_plane():
     from session_py import MeshIso
-    from session_py import OBB
-    from session_py import Point
 
-    box = OBB.from_points([Point(-2.0, -2.0, -2.0), Point(2.0, 2.0, 2.0)])
-    def fn(x, y, z):
-        return MeshIso.sdf_capsule(Point(0.0, -1.0, 0.0), Point(0.0, 1.0, 0.0), 0.5, x, y, z)
-    m = MeshIso.from_function(fn, box, 10, 10, 10, 0.0)
+    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_plane(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0), 0.0))
+    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_plane(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0), 1.0))
+    MINI_CHECK(TOLERANCE.is_close(MeshIso.sdf_plane(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0), -1.0))
 
-    MINI_CHECK(m.is_valid())
-    MINI_CHECK(m.number_of_vertices() > 0)
+
+@MINI_TEST("MeshIso", "Smooth Union")
+def test_mesh_iso_smooth_union():
+    from session_py import MeshIso
+
+    MINI_CHECK(MeshIso.smooth_union(-1.0, 1.0, 8.0) < 0.0)
+    MINI_CHECK(MeshIso.smooth_union(1.0, 1.0, 8.0) < 1.0)
 
 
 @MINI_TEST("MeshIso", "Smooth Subtract")

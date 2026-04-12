@@ -4,6 +4,17 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
+@MINI_TEST("Objects", "Constructor")
+def test_objects_constructor():
+    from session_py import Objects
+
+    obj = Objects()
+
+    MINI_CHECK(obj.name == "my_objects")
+    MINI_CHECK(len(obj.guid) > 0)
+    MINI_CHECK(len(str(obj)) > 0)
+
+
 @MINI_TEST("Objects", "Json Roundtrip")
 def test_objects_json_roundtrip():
     from session_py import Objects
@@ -19,6 +30,23 @@ def test_objects_json_roundtrip():
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_objects.json"
     json_dump(original, fname)
     loaded = json_load(fname)
+
+    MINI_CHECK(len(loaded.points) == len(original.points))
+
+
+@MINI_TEST("Objects", "Protobuf Roundtrip")
+def test_objects_protobuf_roundtrip():
+    from session_py import Objects
+    from session_py import Point
+    from pathlib import Path
+
+    original = Objects()
+    original.points.append(Point(1.0, 2.0, 3.0))
+    original.points.append(Point(4.0, 5.0, 6.0))
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_objects.bin"
+    original.pb_dump(fname)
+    loaded = Objects.pb_load(fname)
 
     MINI_CHECK(len(loaded.points) == len(original.points))
 

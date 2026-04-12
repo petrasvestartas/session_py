@@ -433,7 +433,7 @@ class OBB:
             Line.from_points(c[3], c[7]),
         ]
 
-    def union(self, other: "OBB"):
+    def union_with(self, other: "OBB"):
         min_x, max_x = -self.half_size[0], self.half_size[0]
         min_y, max_y = -self.half_size[1], self.half_size[1]
         min_z, max_z = -self.half_size[2], self.half_size[2]
@@ -543,6 +543,62 @@ class OBB:
                 relative_position, self.z_axis.cross(other.z_axis), self, other
             )
         )
+
+    def collides_with_rtcd(self, other: "OBB") -> bool:
+        EPS = 1e-9
+        A0, A1, A2 = self.x_axis, self.y_axis, self.z_axis
+        B0, B1, B2 = other.x_axis, other.y_axis, other.z_axis
+        a0, a1, a2 = self.half_size[0], self.half_size[1], self.half_size[2]
+        b0, b1, b2 = other.half_size[0], other.half_size[1], other.half_size[2]
+        R00, R01, R02 = A0.dot(B0), A0.dot(B1), A0.dot(B2)
+        R10, R11, R12 = A1.dot(B0), A1.dot(B1), A1.dot(B2)
+        R20, R21, R22 = A2.dot(B0), A2.dot(B1), A2.dot(B2)
+        d = Vector(other.center[0] - self.center[0], other.center[1] - self.center[1], other.center[2] - self.center[2])
+        t0, t1, t2 = d.dot(A0), d.dot(A1), d.dot(A2)
+        AbsR00, AbsR01, AbsR02 = abs(R00) + EPS, abs(R01) + EPS, abs(R02) + EPS
+        AbsR10, AbsR11, AbsR12 = abs(R10) + EPS, abs(R11) + EPS, abs(R12) + EPS
+        AbsR20, AbsR21, AbsR22 = abs(R20) + EPS, abs(R21) + EPS, abs(R22) + EPS
+        if abs(t0) > a0 + b0 * AbsR00 + b1 * AbsR01 + b2 * AbsR02: return False
+        if abs(t1) > a1 + b0 * AbsR10 + b1 * AbsR11 + b2 * AbsR12: return False
+        if abs(t2) > a2 + b0 * AbsR20 + b1 * AbsR21 + b2 * AbsR22: return False
+        if abs(t0 * R00 + t1 * R10 + t2 * R20) > a0 * AbsR00 + a1 * AbsR10 + a2 * AbsR20 + b0: return False
+        if abs(t0 * R01 + t1 * R11 + t2 * R21) > a0 * AbsR01 + a1 * AbsR11 + a2 * AbsR21 + b1: return False
+        if abs(t0 * R02 + t1 * R12 + t2 * R22) > a0 * AbsR02 + a1 * AbsR12 + a2 * AbsR22 + b2: return False
+        if abs(t2 * R10 - t1 * R20) > a1 * AbsR20 + a2 * AbsR10 + b1 * AbsR02 + b2 * AbsR01: return False
+        if abs(t2 * R11 - t1 * R21) > a1 * AbsR21 + a2 * AbsR11 + b0 * AbsR02 + b2 * AbsR00: return False
+        if abs(t2 * R12 - t1 * R22) > a1 * AbsR22 + a2 * AbsR12 + b0 * AbsR01 + b1 * AbsR00: return False
+        if abs(t0 * R20 - t2 * R00) > a0 * AbsR20 + a2 * AbsR00 + b1 * AbsR12 + b2 * AbsR11: return False
+        if abs(t0 * R21 - t2 * R01) > a0 * AbsR21 + a2 * AbsR01 + b0 * AbsR12 + b2 * AbsR10: return False
+        if abs(t0 * R22 - t2 * R02) > a0 * AbsR22 + a2 * AbsR02 + b0 * AbsR11 + b1 * AbsR10: return False
+        if abs(t1 * R00 - t0 * R10) > a0 * AbsR10 + a1 * AbsR00 + b1 * AbsR22 + b2 * AbsR21: return False
+        if abs(t1 * R01 - t0 * R11) > a0 * AbsR11 + a1 * AbsR01 + b0 * AbsR22 + b2 * AbsR20: return False
+        if abs(t1 * R02 - t0 * R12) > a0 * AbsR12 + a1 * AbsR02 + b0 * AbsR21 + b1 * AbsR20: return False
+        return True
+
+    def collides_with_naive(self, other: "OBB") -> bool:
+        relative_position = Vector(
+            other.center[0] - self.center[0],
+            other.center[1] - self.center[1],
+            other.center[2] - self.center[2],
+        )
+        x1, y1, z1 = self.x_axis, self.y_axis, self.z_axis
+        x2, y2, z2 = other.x_axis, other.y_axis, other.z_axis
+        if self._separating_plane_exists(relative_position, x1, self, other): return False
+        if self._separating_plane_exists(relative_position, y1, self, other): return False
+        if self._separating_plane_exists(relative_position, z1, self, other): return False
+        if self._separating_plane_exists(relative_position, x2, self, other): return False
+        if self._separating_plane_exists(relative_position, y2, self, other): return False
+        if self._separating_plane_exists(relative_position, z2, self, other): return False
+        if self._separating_plane_exists(relative_position, x1.cross(x2), self, other): return False
+        if self._separating_plane_exists(relative_position, x1.cross(y2), self, other): return False
+        if self._separating_plane_exists(relative_position, x1.cross(z2), self, other): return False
+        if self._separating_plane_exists(relative_position, y1.cross(x2), self, other): return False
+        if self._separating_plane_exists(relative_position, y1.cross(y2), self, other): return False
+        if self._separating_plane_exists(relative_position, y1.cross(z2), self, other): return False
+        if self._separating_plane_exists(relative_position, z1.cross(x2), self, other): return False
+        if self._separating_plane_exists(relative_position, z1.cross(y2), self, other): return False
+        if self._separating_plane_exists(relative_position, z1.cross(z2), self, other): return False
+        return True
 
     ###########################################################################################
     # Transformation

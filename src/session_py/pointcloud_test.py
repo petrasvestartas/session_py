@@ -26,6 +26,10 @@ def test_pointcloud_constructor():
     c2 = Color(0, 0, 255, 255)
     pc = PointCloud([p0, p1, p2], [n0, n1, n2], [c0, c1, c2])
 
+    # Python-only: coords is a public flat List[float] [x0,y0,z0, x1,y1,z1, ...]
+    # C++/Rust store coords privately; use get_point()/get_points() for cross-language code
+    coords = pc.coords
+
     # Minimal and Full String Representation
     pcstr = str(pc)
     pcrepr = repr(pc)
@@ -51,6 +55,7 @@ def test_pointcloud_constructor():
     MINI_CHECK(pcstr == "3 points")
     MINI_CHECK(pcrepr == "PointCloud(my_pointcloud, 3 points, 3 colors, 3 normals)")
     MINI_CHECK(pccopy == pc and pccopy.guid != pc.guid)
+    MINI_CHECK(len(coords) == 9 and TOLERANCE.is_close(coords[3], 1.0))
     MINI_CHECK(pcother != pc)
     MINI_CHECK(TOLERANCE.is_close(pc_iadd.get_point(0)[0], 11.0) and TOLERANCE.is_close(pc_iadd.get_point(0)[1], 22.0) and TOLERANCE.is_close(pc_iadd.get_point(0)[2], 33.0))
     MINI_CHECK(TOLERANCE.is_close(pc_isub.get_point(0)[0], -9.0) and TOLERANCE.is_close(pc_isub.get_point(0)[1], -18.0) and TOLERANCE.is_close(pc_isub.get_point(0)[2], -27.0))
@@ -151,11 +156,17 @@ def test_pointcloud_get_points():
     from session_py import Point
 
     pc = PointCloud([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)])
+    # get_points() allocates N Point objects from flat coords — use pc.coords for fast iteration
     points = pc.get_points()
+
+    # Python-only: direct flat-array access avoids Point allocation overhead
+    c = pc.coords
+    x1 = c[3]
 
     MINI_CHECK(len(points) == 2)
     MINI_CHECK(TOLERANCE.is_close(points[0][0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(points[1][2], 6.0))
+    MINI_CHECK(TOLERANCE.is_close(x1, 4.0))
 
 
 @MINI_TEST("PointCloud", "Color Count")

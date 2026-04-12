@@ -1456,8 +1456,8 @@ def v_build_path(op):
 class BooleanPolyline:
     @staticmethod
     def compute(a, b, clip_type):
-        ca = a._coords
-        cb = b._coords
+        ca = a.coords
+        cb = b.coords
         na = len(ca) // 3
         nb = len(cb) // 3
 

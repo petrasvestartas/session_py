@@ -315,22 +315,46 @@ def test_brep_from_nurbscurves():
     ]
 
     bottom = NurbsCurve.create(False, 1, [
-        c[0], c[3], c[2], c[1], c[0],
+        c[0],
+        c[3],
+        c[2],
+        c[1],
+        c[0],
     ])
     top = NurbsCurve.create(False, 1, [
-        c[4], c[5], c[6], c[7], c[4],
+        c[4],
+        c[5],
+        c[6],
+        c[7],
+        c[4],
     ])
     front = NurbsCurve.create(False, 1, [
-        c[0], c[1], c[5], c[4], c[0],
+        c[0],
+        c[1],
+        c[5],
+        c[4],
+        c[0],
     ])
     right = NurbsCurve.create(False, 1, [
-        c[1], c[2], c[6], c[5], c[1],
+        c[1],
+        c[2],
+        c[6],
+        c[5],
+        c[1],
     ])
     back = NurbsCurve.create(False, 1, [
-        c[2], c[3], c[7], c[6], c[2],
+        c[2],
+        c[3],
+        c[7],
+        c[6],
+        c[2],
     ])
     left = NurbsCurve.create(False, 1, [
-        c[3], c[0], c[4], c[7], c[3],
+        c[3],
+        c[0],
+        c[4],
+        c[7],
+        c[3],
     ])
 
     b = BRep.from_nurbscurves([bottom, top, front, right, back, left])

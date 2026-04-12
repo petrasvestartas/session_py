@@ -59,16 +59,6 @@ class AABB(NamedTuple):
         return cls.from_points(pointcloud.get_points(), inflate)
 
     @classmethod
-    def from_nurbssurface(cls, surface, inflate: float = 0.0) -> "AABB":
-        if not surface.is_valid() or surface.cv_count(0) == 0 or surface.cv_count(1) == 0:
-            return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-        points = []
-        for i in range(surface.cv_count(0)):
-            for j in range(surface.cv_count(1)):
-                points.append(surface.get_cv(i, j))
-        return cls.from_points(points, inflate)
-
-    @classmethod
     def from_nurbscurve(cls, curve, inflate: float = 0.0, tight: bool = False) -> "AABB":
         from .vector import Vector
         if not curve.is_valid() or curve.cv_count() == 0:
@@ -127,6 +117,16 @@ class AABB(NamedTuple):
                                 d_start = f_check
                     extrema_points.append(curve.point_at(t_root))
         return cls.from_points(extrema_points, inflate)
+
+    @classmethod
+    def from_nurbssurface(cls, surface, inflate: float = 0.0) -> "AABB":
+        if not surface.is_valid() or surface.cv_count(0) == 0 or surface.cv_count(1) == 0:
+            return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        points = []
+        for i in range(surface.cv_count(0)):
+            for j in range(surface.cv_count(1)):
+                points.append(surface.get_cv(i, j))
+        return cls.from_points(points, inflate)
 
     def min_point(self):
         from .point import Point
@@ -242,7 +242,7 @@ class AABB(NamedTuple):
         from .point import Point
         return Point(self.cx + x, self.cy + y, self.cz + z)
 
-    def union(self, other: "AABB") -> "AABB":
+    def union_with(self, other: "AABB") -> "AABB":
         min_x = min(self.cx - self.hx, other.cx - other.hx)
         min_y = min(self.cy - self.hy, other.cy - other.hy)
         min_z = min(self.cz - self.hz, other.cz - other.hz)

@@ -58,6 +58,27 @@ def test_session_add_plane():
     MINI_CHECK(plane.guid in session.lookup)
 
 
+@MINI_TEST("Session", "Add OBB")
+def test_session_add_obb():
+    from session_py import Session
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    session = Session()
+    obb = OBB(
+        center=Point(0.0, 0.0, 0.0),
+        x_axis=Vector(1.0, 0.0, 0.0),
+        y_axis=Vector(0.0, 1.0, 0.0),
+        z_axis=Vector(0.0, 0.0, 1.0),
+        half_size=Vector(1.0, 1.0, 1.0)
+    )
+    session.add_obb(obb)
+
+    MINI_CHECK(len(session.objects.bboxes) == 1)
+    MINI_CHECK(obb.guid in session.lookup)
+
+
 @MINI_TEST("Session", "Add Polyline")
 def test_session_add_polyline():
     from session_py import Session
@@ -102,6 +123,54 @@ def test_session_add_mesh():
 
     MINI_CHECK(len(session.objects.meshes) == 1)
     MINI_CHECK(mesh.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Nurbscurve")
+def test_session_add_nurbscurve():
+    from session_py import Session
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    session = Session()
+    pts = [Point(0,0,0), Point(1,1,0), Point(2,0,0), Point(3,1,0)]
+    nc = NurbsCurve.create(False, 2, pts)
+    session.add_nurbscurve(nc)
+
+    MINI_CHECK(len(session.objects.nurbscurves) == 1)
+    MINI_CHECK(nc.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Nurbssurface")
+def test_session_add_nurbssurface():
+    from session_py import Session
+    from session_py import NurbsSurface
+    from session_py import Point
+
+    session = Session()
+    pts = [
+        Point(0,0,0), Point(0,1,0), Point(0,2,0), Point(0,3,0),
+        Point(1,0,0), Point(1,1,0), Point(1,2,0), Point(1,3,0),
+        Point(2,0,0), Point(2,1,0), Point(2,2,0), Point(2,3,0),
+        Point(3,0,0), Point(3,1,0), Point(3,2,0), Point(3,3,0),
+    ]
+    ns = NurbsSurface.create(False, False, 3, 3, 4, 4, pts)
+    session.add_nurbssurface(ns)
+
+    MINI_CHECK(len(session.objects.nurbssurfaces) == 1)
+    MINI_CHECK(ns.guid in session.lookup)
+
+
+@MINI_TEST("Session", "Add Brep")
+def test_session_add_brep():
+    from session_py import Session
+    from session_py import BRep
+
+    session = Session()
+    brep = BRep.create_box(1.0, 1.0, 1.0)
+    session.add_brep(brep)
+
+    MINI_CHECK(len(session.objects.breps) == 1)
+    MINI_CHECK(brep.guid in session.lookup)
 
 
 @MINI_TEST("Session", "Add Element")
@@ -214,6 +283,54 @@ def test_session_get_neighbours():
 
     MINI_CHECK(len(neighbours) == 1)
     MINI_CHECK(neighbours[0] == p2.guid)
+
+
+@MINI_TEST("Session", "Get Collisions")
+def test_session_get_collisions():
+    from session_py import Session
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    session = Session()
+    obb1 = OBB(
+        center=Point(0.0, 0.0, 0.0),
+        x_axis=Vector(1.0, 0.0, 0.0),
+        y_axis=Vector(0.0, 1.0, 0.0),
+        z_axis=Vector(0.0, 0.0, 1.0),
+        half_size=Vector(2.0, 2.0, 2.0)
+    )
+    obb2 = OBB(
+        center=Point(1.0, 0.0, 0.0),
+        x_axis=Vector(1.0, 0.0, 0.0),
+        y_axis=Vector(0.0, 1.0, 0.0),
+        z_axis=Vector(0.0, 0.0, 1.0),
+        half_size=Vector(2.0, 2.0, 2.0)
+    )
+    session.add_obb(obb1)
+    session.add_obb(obb2)
+    pairs = session.get_collisions()
+
+    MINI_CHECK(len(pairs) >= 1)
+
+
+@MINI_TEST("Session", "Ray Cast")
+def test_session_ray_cast():
+    from session_py import Session
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+
+    session = Session()
+    mesh = Mesh()
+    mesh.add_vertex(Point(-1.0, -1.0, 0.0), 0)
+    mesh.add_vertex(Point(1.0, -1.0, 0.0), 1)
+    mesh.add_vertex(Point(0.0, 1.0, 0.0), 2)
+    mesh.add_face([0, 1, 2])
+    session.add_mesh(mesh)
+    hits = session.ray_cast(Point(0.0, 0.0, 2.0), Vector(0.0, 0.0, -1.0))
+
+    MINI_CHECK(len(hits) >= 1)
 
 
 @MINI_TEST("Session", "Get Object")

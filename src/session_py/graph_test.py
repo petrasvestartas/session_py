@@ -132,8 +132,6 @@ def test_graph_constructor():
 @MINI_TEST("Graph", "Json Roundtrip")
 def test_graph_json_roundtrip():
     from session_py import Graph
-    from session_py.encoders import json_dump
-    from session_py.encoders import json_load
     from pathlib import Path
 
     original = Graph("test_graph")
@@ -141,9 +139,35 @@ def test_graph_json_roundtrip():
     original.add_node("node2", "Node 2")
     original.add_edge("node1", "node2", "edge1")
 
+    #   __jsondump__()  │ dict         │ to JSON object (internal use)
+    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
+    #   json_dumps()    │ str          │ to JSON string
+    #   json_loads(s)   │ str          │ from JSON string
+    #   json_dump(path) │ file         │ write to file
+    #   json_load(path) │ file         │ read from file
+
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_graph.json"
-    json_dump(original, fname)
-    loaded = json_load(fname)
+    original.json_dump(fname)
+    loaded = Graph.json_load(fname)
+
+    MINI_CHECK(loaded.number_of_vertices() == 2)
+    MINI_CHECK(loaded.number_of_edges() == 1)
+    MINI_CHECK(loaded.has_edge(("node1", "node2")))
+
+
+@MINI_TEST("Graph", "Protobuf Roundtrip")
+def test_graph_protobuf_roundtrip():
+    from session_py import Graph
+    from pathlib import Path
+
+    original = Graph("test_graph")
+    original.add_node("node1", "Node 1")
+    original.add_node("node2", "Node 2")
+    original.add_edge("node1", "node2", "edge1")
+
+    path = Path(__file__).resolve().parents[2] / "serialization" / "test_graph.bin"
+    original.pb_dump(path)
+    loaded = Graph.pb_load(path)
 
     MINI_CHECK(loaded.number_of_vertices() == 2)
     MINI_CHECK(loaded.number_of_edges() == 1)
@@ -256,6 +280,19 @@ def test_graph_neighbors():
     g.add_edge("a", "c")
 
     neigh = list(g.neighbors("a"))
+
+    MINI_CHECK(len(neigh) == 2)
+
+
+@MINI_TEST("Graph", "Get Neighbors")
+def test_graph_get_neighbors():
+    from session_py import Graph
+
+    g = Graph("g")
+    g.add_edge("a", "b")
+    g.add_edge("a", "c")
+
+    neigh = g.get_neighbors("a")
 
     MINI_CHECK(len(neigh) == 2)
 

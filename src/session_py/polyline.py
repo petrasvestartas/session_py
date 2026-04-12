@@ -29,11 +29,11 @@ class Polyline:
         self._linecolor = None
         self._xform = None
 
-        # Store coordinates as flat array [x0, y0, z0, x1, y1, z1, ...]
-        self._coords: List[float] = []
+        # Flat coordinate array [x0, y0, z0, x1, y1, z1, ...]
+        self.coords: List[float] = []
         if points is not None:
             for p in points:
-                self._coords.extend([p[0], p[1], p[2]])
+                self.coords.extend([p[0], p[1], p[2]])
 
         # Plane computed lazily on first access
         self._plane = None
@@ -115,7 +115,7 @@ class Polyline:
             New Polyline instance.
         """
         pl = cls()
-        pl._coords = list(coords)
+        pl.coords = list(coords)
         if pl.point_count() >= 3:
             pl.plane = Plane.from_points(pl.get_points())
         return pl
@@ -126,7 +126,7 @@ class Polyline:
 
     def point_count(self) -> int:
         """Returns the number of points."""
-        return len(self._coords) // 3
+        return len(self.coords) // 3
 
     @classmethod
     def from_sides(cls, sides: int, radius: float = 1.0, close: bool = False) -> "Polyline":
@@ -145,7 +145,7 @@ class Polyline:
         points = []
         for i in range(self.point_count()):
             idx = i * 3
-            points.append(Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2]))
+            points.append(Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2]))
         return points
 
     @property
@@ -156,9 +156,9 @@ class Polyline:
     @points.setter
     def points(self, value: List[Point]) -> None:
         """Set points from a list of Point objects."""
-        self._coords = []
+        self.coords = []
         for p in value:
-            self._coords.extend([p[0], p[1], p[2]])
+            self.coords.extend([p[0], p[1], p[2]])
 
     def __len__(self) -> int:
         """Returns the number of points in the polyline."""
@@ -167,15 +167,15 @@ class Polyline:
     def __getitem__(self, index: int) -> Point:
         if 0 <= index < self.point_count():
             idx = index * 3
-            return Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+            return Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
         raise IndexError("Index out of range")
 
     def __setitem__(self, index: int, point: Point) -> None:
         if 0 <= index < self.point_count():
             idx = index * 3
-            self._coords[idx] = point[0]
-            self._coords[idx + 1] = point[1]
-            self._coords[idx + 2] = point[2]
+            self.coords[idx] = point[0]
+            self.coords[idx + 1] = point[1]
+            self.coords[idx + 2] = point[2]
         else:
             raise IndexError("Index out of range")
 
@@ -196,8 +196,8 @@ class Polyline:
             idx0 = i * 3
             idx1 = (i + 1) * 3
             result.append(Line(
-                self._coords[idx0], self._coords[idx0 + 1], self._coords[idx0 + 2],
-                self._coords[idx1], self._coords[idx1 + 1], self._coords[idx1 + 2],
+                self.coords[idx0], self.coords[idx0 + 1], self.coords[idx0 + 2],
+                self.coords[idx1], self.coords[idx1 + 1], self.coords[idx1 + 2],
             ))
         return result
 
@@ -212,9 +212,9 @@ class Polyline:
         for i in range(self.segment_count()):
             idx0 = i * 3
             idx1 = (i + 1) * 3
-            dx = self._coords[idx1] - self._coords[idx0]
-            dy = self._coords[idx1 + 1] - self._coords[idx0 + 1]
-            dz = self._coords[idx1 + 2] - self._coords[idx0 + 2]
+            dx = self.coords[idx1] - self.coords[idx0]
+            dy = self.coords[idx1 + 1] - self.coords[idx0 + 1]
+            dz = self.coords[idx1 + 2] - self.coords[idx0 + 2]
             total_length += (dx * dx + dy * dy + dz * dz) ** 0.5
         return total_length
 
@@ -222,27 +222,27 @@ class Polyline:
         """Returns the point at the given index, or None if out of bounds."""
         if 0 <= index < self.point_count():
             idx = index * 3
-            return Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+            return Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
         return None
 
     def set_point(self, index: int, point: Point) -> None:
         """Sets the point at the given index."""
         if 0 <= index < self.point_count():
             idx = index * 3
-            self._coords[idx] = point[0]
-            self._coords[idx + 1] = point[1]
-            self._coords[idx + 2] = point[2]
+            self.coords[idx] = point[0]
+            self.coords[idx + 1] = point[1]
+            self.coords[idx + 2] = point[2]
 
     def add_point(self, point: Point) -> None:
         """Adds a point to the end of the polyline."""
-        self._coords.extend([point[0], point[1], point[2]])
+        self.coords.extend([point[0], point[1], point[2]])
         if self.point_count() == 3:
             self._recompute_plane()
 
     def insert_point(self, index: int, point: Point) -> None:
         """Inserts a point at the specified index."""
         idx = index * 3
-        self._coords[idx:idx] = [point[0], point[1], point[2]]
+        self.coords[idx:idx] = [point[0], point[1], point[2]]
         if self.point_count() == 3:
             self._recompute_plane()
 
@@ -250,8 +250,8 @@ class Polyline:
         """Removes and returns the point at the specified index."""
         if 0 <= index < self.point_count():
             idx = index * 3
-            point = Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
-            del self._coords[idx:idx + 3]
+            point = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
+            del self.coords[idx:idx + 3]
             if self.point_count() == 3:
                 self._recompute_plane()
             return point
@@ -264,13 +264,13 @@ class Polyline:
         new_coords = []
         for i in range(n - 1, -1, -1):
             idx = i * 3
-            new_coords.extend([self._coords[idx], self._coords[idx + 1], self._coords[idx + 2]])
-        self._coords = new_coords
+            new_coords.extend([self.coords[idx], self.coords[idx + 1], self.coords[idx + 2]])
+        self.coords = new_coords
         self.plane.reverse()
 
     def reversed(self) -> "Polyline":
         """Returns a new polyline with reversed point order."""
-        result = Polyline.from_coords(self._coords[:])
+        result = Polyline.from_coords(self.coords[:])
         result.guid = self.guid
         result.name = self.name
         result.width = self.width
@@ -298,9 +298,9 @@ class Polyline:
         """Translates all points in the polyline by a vector (+=)."""
         for i in range(self.point_count()):
             idx = i * 3
-            self._coords[idx] += vector[0]
-            self._coords[idx + 1] += vector[1]
-            self._coords[idx + 2] += vector[2]
+            self.coords[idx] += vector[0]
+            self.coords[idx + 1] += vector[1]
+            self.coords[idx + 2] += vector[2]
         # Update plane origin
         self.plane = Plane(
             self.plane.origin + vector, self.plane.x_axis, self.plane.y_axis
@@ -309,7 +309,7 @@ class Polyline:
 
     def __add__(self, vector: Vector) -> "Polyline":
         """Translates the polyline by a vector and returns a new polyline (+)."""
-        result = Polyline.from_coords(self._coords[:])
+        result = Polyline.from_coords(self.coords[:])
         result.guid = self.guid
         result.name = self.name
         result.width = self.width
@@ -323,9 +323,9 @@ class Polyline:
         """Translates all points by the negative of a vector (-=)."""
         for i in range(self.point_count()):
             idx = i * 3
-            self._coords[idx] -= vector[0]
-            self._coords[idx + 1] -= vector[1]
-            self._coords[idx + 2] -= vector[2]
+            self.coords[idx] -= vector[0]
+            self.coords[idx + 1] -= vector[1]
+            self.coords[idx + 2] -= vector[2]
         # Update plane origin
         self.plane = Plane(
             self.plane.origin - vector, self.plane.x_axis, self.plane.y_axis
@@ -334,7 +334,7 @@ class Polyline:
 
     def __sub__(self, vector: Vector) -> "Polyline":
         """Translates the polyline by the negative of a vector and returns a new polyline (-)."""
-        result = Polyline.from_coords(self._coords[:])
+        result = Polyline.from_coords(self.coords[:])
         result.guid = self.guid
         result.name = self.name
         result.width = self.width
@@ -346,13 +346,13 @@ class Polyline:
 
     def __imul__(self, factor: float) -> "Polyline":
         """Multiply all coordinates by scalar in place (*=)."""
-        for i in range(len(self._coords)):
-            self._coords[i] *= factor
+        for i in range(len(self.coords)):
+            self.coords[i] *= factor
         return self
 
     def __mul__(self, factor: float) -> "Polyline":
         """Multiply polyline by scalar and return new polyline (*)."""
-        result = Polyline.from_coords([c * factor for c in self._coords])
+        result = Polyline.from_coords([c * factor for c in self.coords])
         result.name = self.name
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor)
@@ -362,13 +362,13 @@ class Polyline:
 
     def __itruediv__(self, factor: float) -> "Polyline":
         """Divide all coordinates by scalar in place (/=)."""
-        for i in range(len(self._coords)):
-            self._coords[i] /= factor
+        for i in range(len(self.coords)):
+            self.coords[i] /= factor
         return self
 
     def __truediv__(self, factor: float) -> "Polyline":
         """Divide polyline by scalar and return new polyline (/)."""
-        result = Polyline.from_coords([c / factor for c in self._coords])
+        result = Polyline.from_coords([c / factor for c in self.coords])
         result.name = self.name
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor)
@@ -387,12 +387,12 @@ class Polyline:
         """
         for i in range(self.point_count()):
             idx = i * 3
-            pt = Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+            pt = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
             pt.xform = self.xform
             pt.transform()
-            self._coords[idx] = pt[0]
-            self._coords[idx + 1] = pt[1]
-            self._coords[idx + 2] = pt[2]
+            self.coords[idx] = pt[0]
+            self.coords[idx + 1] = pt[1]
+            self.coords[idx + 2] = pt[2]
         self.xform = Xform.identity()
 
     def transformed(self):
@@ -436,9 +436,9 @@ class Polyline:
         """
         for i in range(self.point_count()):
             idx = i * 3
-            self._coords[idx]     += v[0]
-            self._coords[idx + 1] += v[1]
-            self._coords[idx + 2] += v[2]
+            self.coords[idx]     += v[0]
+            self.coords[idx + 1] += v[1]
+            self.coords[idx + 2] += v[2]
 
     def extend_edge_equally(self, edge_idx, distance):
         """Slide both endpoints of edge ``edge_idx`` outward by ``distance``.
@@ -680,9 +680,9 @@ class Polyline:
 
     def closed(self) -> "Polyline":
         if self.is_closed():
-            return Polyline.from_coords(self._coords[:])
-        new_coords = self._coords[:]
-        new_coords.extend([self._coords[0], self._coords[1], self._coords[2]])
+            return Polyline.from_coords(self.coords[:])
+        new_coords = self.coords[:]
+        new_coords.extend([self.coords[0], self.coords[1], self.coords[2]])
         return Polyline.from_coords(new_coords)
 
     def merge_collinear(self, tol: float = Tolerance.APPROXIMATION) -> None:
@@ -713,11 +713,11 @@ class Polyline:
                 else:
                     out.append(pts[i])
             pts = out
-        self._coords = []
+        self.coords = []
         for p in pts:
-            self._coords.extend([p[0], p[1], p[2]])
+            self.coords.extend([p[0], p[1], p[2]])
         if closed and pts:
-            self._coords.extend([pts[0][0], pts[0][1], pts[0][2]])
+            self.coords.extend([pts[0][0], pts[0][1], pts[0][2]])
         if self.point_count() >= 3:
             self.plane = Plane.from_points(self.get_points())
 
@@ -851,7 +851,7 @@ class Polyline:
                 self.set_point(0, self.get_point(self.point_count() - 1))
 
     @staticmethod
-    def extend_line_static(start: Point, end: Point, d0: float, d1: float) -> None:
+    def extend_line_segment(start: Point, end: Point, d0: float, d1: float) -> None:
         """Extend a line segment independently at each end by a real (normalized) distance."""
         v = end - start
         v_norm = v.normalized()
@@ -859,7 +859,7 @@ class Polyline:
         end += v_norm * d1
 
     @staticmethod
-    def scale_line_static(start: Point, end: Point, dist: float) -> None:
+    def shrink_line_segment(start: Point, end: Point, dist: float) -> None:
         """Shrink a line segment equally from both ends by a fraction of its length (not normalized)."""
         v = end - start
         start += v * dist
@@ -1149,7 +1149,7 @@ class Polyline:
         """
         # Alphabetical order to match Rust's serde_json
         return {
-            "coords": self._coords,
+            "coords": self.coords,
             "guid": self.guid,
             "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
@@ -1263,7 +1263,7 @@ class Polyline:
         proto = polyline_pb2.Polyline()
         proto.guid = self.guid
         proto.name = self.name
-        proto.coords.extend(self._coords)
+        proto.coords.extend(self.coords)
         proto.width = self.width
 
         # Set linecolor
@@ -1283,7 +1283,7 @@ class Polyline:
         """Fill an existing Polyline proto message directly (avoids serialize/deserialize cycle)."""
         proto.guid = self.guid
         proto.name = self.name
-        proto.coords.extend(self._coords)
+        proto.coords.extend(self.coords)
         proto.width = self.width
         proto.linecolor.name = self.linecolor.name
         proto.linecolor.r = self.linecolor[0]
@@ -1371,7 +1371,7 @@ class Polyline:
         pts = []
         for i in range(self.point_count()):
             idx = i * 3
-            pts.append(f"({self._coords[idx]}, {self._coords[idx + 1]}, {self._coords[idx + 2]})")
+            pts.append(f"({self.coords[idx]}, {self.coords[idx + 1]}, {self.coords[idx + 2]})")
         return "[" + ", ".join(pts) + "]"
 
     def __repr__(self) -> str:
@@ -1386,8 +1386,8 @@ class Polyline:
             return False
         if self.point_count() != other.point_count():
             return False
-        for i in range(len(self._coords)):
-            if round(self._coords[i], Tolerance.ROUNDING) != round(other._coords[i], Tolerance.ROUNDING):
+        for i in range(len(self.coords)):
+            if round(self.coords[i], Tolerance.ROUNDING) != round(other.coords[i], Tolerance.ROUNDING):
                 return False
         if round(self.width, Tolerance.ROUNDING) != round(other.width, Tolerance.ROUNDING):
             return False
@@ -1462,7 +1462,7 @@ class Polyline:
         def project(pl):
             coords = []
             for i in range(pl.point_count()):
-                dx = pl._coords[i*3]-ox; dy = pl._coords[i*3+1]-oy; dz = pl._coords[i*3+2]-oz
+                dx = pl.coords[i*3]-ox; dy = pl.coords[i*3+1]-oy; dz = pl.coords[i*3+2]-oz
                 coords.extend([dx*xx+dy*xy+dz*xz, dx*yx+dy*yy+dz*yz, 0.0])
             n = len(coords) // 3
             if n >= 4:
@@ -1471,14 +1471,14 @@ class Polyline:
                     coords[(n-1)*3] = coords[0]; coords[(n-1)*3+1] = coords[1]
             p2d = Polyline.__new__(Polyline)
             p2d._guid = None; p2d.name = ""; p2d.width = 1.0; p2d._linecolor = None; p2d._xform = None; p2d._plane = None
-            p2d._coords = coords
+            p2d.coords = coords
             return p2d
         def ensure_ccw(p2d):
             n = p2d.point_count()
             m = n
             if m >= 4:
-                dx = p2d._coords[(m-1)*3] - p2d._coords[0]
-                dy = p2d._coords[(m-1)*3+1] - p2d._coords[1]
+                dx = p2d.coords[(m-1)*3] - p2d.coords[0]
+                dy = p2d.coords[(m-1)*3+1] - p2d.coords[1]
                 if dx*dx + dy*dy < 1e-10:
                     m -= 1
             if m < 3:
@@ -1486,21 +1486,21 @@ class Polyline:
             area = 0.0
             for i in range(m):
                 j = (i + 1) % m
-                area += p2d._coords[i*3] * p2d._coords[j*3+1] - p2d._coords[j*3] * p2d._coords[i*3+1]
+                area += p2d.coords[i*3] * p2d.coords[j*3+1] - p2d.coords[j*3] * p2d.coords[i*3+1]
             if area < 0:
                 for i in range(n // 2):
                     j = n - 1 - i
-                    p2d._coords[i*3], p2d._coords[j*3] = p2d._coords[j*3], p2d._coords[i*3]
-                    p2d._coords[i*3+1], p2d._coords[j*3+1] = p2d._coords[j*3+1], p2d._coords[i*3+1]
-                    p2d._coords[i*3+2], p2d._coords[j*3+2] = p2d._coords[j*3+2], p2d._coords[i*3+2]
+                    p2d.coords[i*3], p2d.coords[j*3] = p2d.coords[j*3], p2d.coords[i*3]
+                    p2d.coords[i*3+1], p2d.coords[j*3+1] = p2d.coords[j*3+1], p2d.coords[i*3+1]
+                    p2d.coords[i*3+2], p2d.coords[j*3+2] = p2d.coords[j*3+2], p2d.coords[i*3+2]
         pa2d = project(a); pb2d = project(b)
         ensure_ccw(pa2d); ensure_ccw(pb2d)
         results = BooleanPolyline.compute(pa2d, pb2d, clip_type)
         for r in results:
             n = r.point_count()
             for i in range(n):
-                u, v = r._coords[i*3], r._coords[i*3+1]
-                r._coords[i*3] = ox + u*xx + v*yx
-                r._coords[i*3+1] = oy + u*xy + v*yy
-                r._coords[i*3+2] = oz + u*xz + v*yz
+                u, v = r.coords[i*3], r.coords[i*3+1]
+                r.coords[i*3] = ox + u*xx + v*yx
+                r.coords[i*3+1] = oy + u*xy + v*yy
+                r.coords[i*3+2] = oz + u*xz + v*yz
         return results

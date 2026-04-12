@@ -87,8 +87,14 @@ def test_intersection_plane_plane():
     from session_py import Point
     from session_py import Vector
 
-    plane0 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
-    plane1 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0))
+    p0 = Point(0.0, 0.0, 0.0)
+    n0 = Vector(0.0, 0.0, 1.0)
+    plane0 = Plane.from_point_normal(p0, n0)
+
+    p1 = Point(0.0, 0.0, 0.0)
+    n1 = Vector(0.0, 1.0, 0.0)
+    plane1 = Plane.from_point_normal(p1, n1)
+
     output = intersection.plane_plane(plane0, plane1)
 
     MINI_CHECK(output is not None)
@@ -105,20 +111,27 @@ def test_intersection_plane_plane_complex():
     from session_py import Point
     from session_py import Vector
 
-    pl0 = Plane(
-        Point(213.787107, 513.797811, -24.743845),
-        Vector(0.907673, -0.258819, 0.330366), Vector(0.272094, 0.96225, 0.006285))
-    pl1 = Plane(
-        Point(247.17924, 499.115486, 59.619568),
-        Vector(0.552465, 0.816035, 0.16991), Vector(0.172987, 0.087156, -0.98106))
+    plane_origin_0 = Point(213.787107, 513.797811, -24.743845)
+    plane_xaxis_0 = Vector(0.907673, -0.258819, 0.330366)
+    plane_yaxis_0 = Vector(0.272094, 0.96225, 0.006285)
+    pl0 = Plane(plane_origin_0, plane_xaxis_0, plane_yaxis_0)
+
+    plane_origin_1 = Point(247.17924, 499.115486, 59.619568)
+    plane_xaxis_1 = Vector(0.552465, 0.816035, 0.16991)
+    plane_yaxis_1 = Vector(0.172987, 0.087156, -0.98106)
+    pl1 = Plane(plane_origin_1, plane_xaxis_1, plane_yaxis_1)
+
     intersection_line = intersection.plane_plane(pl0, pl1)
 
     MINI_CHECK(intersection_line is not None)
+
     start = intersection_line.start()
     end = intersection_line.end()
+
     MINI_CHECK(abs(start[0] - 252.4632) < 0.01)
     MINI_CHECK(abs(start[1] - 495.32248) < 0.01)
     MINI_CHECK(abs(start[2] - (-10.002656)) < 0.01)
+
     MINI_CHECK(abs(end[0] - 253.01033) < 0.01)
     MINI_CHECK(abs(end[1] - 496.1218) < 0.01)
     MINI_CHECK(abs(end[2] - (-9.888727)) < 0.01)
@@ -132,8 +145,12 @@ def test_intersection_line_plane():
     from session_py import Point
     from session_py import Vector
 
-    plane = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    p = Point(0.0, 0.0, 1.0)
+    n = Vector(0.0, 0.0, 1.0)
+    plane = Plane.from_point_normal(p, n)
+
     line = Line(0.0, 0.0, 0.0, 0.0, 0.0, 2.0)
+
     output = intersection.line_plane(line, plane, True)
 
     MINI_CHECK(output is not None)
@@ -150,8 +167,12 @@ def test_intersection_line_plane_parallel():
     from session_py import Point
     from session_py import Vector
 
-    plane = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    p = Point(0.0, 0.0, 1.0)
+    n = Vector(0.0, 0.0, 1.0)
+    plane = Plane.from_point_normal(p, n)
+
     line = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
     output = intersection.line_plane(line, plane, True)
 
     MINI_CHECK(output is None)
@@ -165,10 +186,13 @@ def test_intersection_line_plane_real_world():
     from session_py import Point
     from session_py import Vector
 
-    l0 = Line(500.0, -573.576, -819.152, 500.0, 573.576, 819.152)
-    pl0 = Plane(
-        Point(213.787107, 513.797811, -24.743845),
-        Vector(0.907673, -0.258819, 0.330366), Vector(0.272094, 0.96225, 0.006285))
+    l0 = Line(500.000, -573.576, -819.152, 500.000, 573.576, 819.152)
+
+    plane_origin_0 = Point(213.787107, 513.797811, -24.743845)
+    plane_xaxis_0 = Vector(0.907673, -0.258819, 0.330366)
+    plane_yaxis_0 = Vector(0.272094, 0.96225, 0.006285)
+    pl0 = Plane(plane_origin_0, plane_xaxis_0, plane_yaxis_0)
+
     lp = intersection.line_plane(l0, pl0)
 
     MINI_CHECK(lp is not None)
@@ -184,15 +208,21 @@ def test_intersection_plane_plane_plane():
     from session_py import Point
     from session_py import Vector
 
-    pl0 = Plane(
-        Point(213.787107, 513.797811, -24.743845),
-        Vector(0.907673, -0.258819, 0.330366), Vector(0.272094, 0.96225, 0.006285))
-    pl1 = Plane(
-        Point(247.17924, 499.115486, 59.619568),
-        Vector(0.552465, 0.816035, 0.16991), Vector(0.172987, 0.087156, -0.98106))
-    pl2 = Plane(
-        Point(221.399816, 605.893667, -54.000116),
-        Vector(0.903451, -0.360516, -0.231957), Vector(0.172742, -0.189057, 0.966653))
+    plane_origin_0 = Point(213.787107, 513.797811, -24.743845)
+    plane_xaxis_0 = Vector(0.907673, -0.258819, 0.330366)
+    plane_yaxis_0 = Vector(0.272094, 0.96225, 0.006285)
+    pl0 = Plane(plane_origin_0, plane_xaxis_0, plane_yaxis_0)
+
+    plane_origin_1 = Point(247.17924, 499.115486, 59.619568)
+    plane_xaxis_1 = Vector(0.552465, 0.816035, 0.16991)
+    plane_yaxis_1 = Vector(0.172987, 0.087156, -0.98106)
+    pl1 = Plane(plane_origin_1, plane_xaxis_1, plane_yaxis_1)
+
+    plane_origin_2 = Point(221.399816, 605.893667, -54.000116)
+    plane_xaxis_2 = Vector(0.903451, -0.360516, -0.231957)
+    plane_yaxis_2 = Vector(0.172742, -0.189057, 0.966653)
+    pl2 = Plane(plane_origin_2, plane_xaxis_2, plane_yaxis_2)
+
     output = intersection.plane_plane_plane(pl0, pl1, pl2)
 
     MINI_CHECK(output is not None)
@@ -208,9 +238,18 @@ def test_intersection_plane_plane_plane_parallel():
     from session_py import Point
     from session_py import Vector
 
-    plane0 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
-    plane1 = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
-    plane2 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    p0 = Point(0.0, 0.0, 0.0)
+    n0 = Vector(0.0, 0.0, 1.0)
+    plane0 = Plane.from_point_normal(p0, n0)
+
+    p1 = Point(0.0, 0.0, 1.0)
+    n1 = Vector(0.0, 0.0, 1.0)
+    plane1 = Plane.from_point_normal(p1, n1)
+
+    p2 = Point(0.0, 0.0, 0.0)
+    n2 = Vector(1.0, 0.0, 0.0)
+    plane2 = Plane.from_point_normal(p2, n2)
+
     output = intersection.plane_plane_plane(plane0, plane1, plane2)
 
     MINI_CHECK(output is None)
@@ -223,7 +262,10 @@ def test_intersection_ray_box():
     from session_py import Line
     from session_py import Point
 
-    box = OBB.from_points([Point(-1.0, -1.0, -1.0), Point(1.0, 1.0, 1.0)])
+    box = OBB.from_points([
+        Point(-1.0, -1.0, -1.0),
+        Point(1.0, 1.0, 1.0),
+    ])
     line = Line(-5.0, 0.0, 0.0, -4.0, 0.0, 0.0)
     points = intersection.ray_box(line, box, 0.0, 100.0)
 
@@ -239,7 +281,10 @@ def test_intersection_ray_box_miss():
     from session_py import Line
     from session_py import Point
 
-    box = OBB.from_points([Point(-1.0, -1.0, -1.0), Point(1.0, 1.0, 1.0)])
+    box = OBB.from_points([
+        Point(-1.0, -1.0, -1.0),
+        Point(1.0, 1.0, 1.0),
+    ])
     line = Line(-5.0, 5.0, 0.0, -4.0, 5.0, 0.0)
     points = intersection.ray_box(line, box, 0.0, 100.0)
 
@@ -543,7 +588,9 @@ def test_intersection_ray_box_real_world():
     from session_py import Point
 
     l0 = Line(500.0, -573.576, -819.152, 500.0, 573.576, 819.152)
-    box = OBB.from_points([Point(214.0, 192.0, 484.0), Point(694.0, 567.0, 796.0)])
+    min_pt = Point(214.0, 192.0, 484.0)
+    max_pt = Point(694.0, 567.0, 796.0)
+    box = OBB.from_points([min_pt, max_pt])
     points = intersection.ray_box(l0, box, 0.0, 1000.0)
 
     MINI_CHECK(points is not None)

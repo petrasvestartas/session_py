@@ -21,13 +21,13 @@ class PointCloud:
         self._xform = None
 
         # Store as flat arrays
-        self._coords: List[float] = []
+        self.coords: List[float] = []
         self._colors: List[int] = []
         self._normals: List[float] = []
 
         if points is not None:
             for p in points:
-                self._coords.extend([p[0], p[1], p[2]])
+                self.coords.extend([p[0], p[1], p[2]])
 
         if colors is not None:
             for c in colors:
@@ -65,7 +65,7 @@ class PointCloud:
                     normals: Optional[List[float]] = None) -> "PointCloud":
         """Create from flat arrays of coords, colors, and normals."""
         pc = cls()
-        pc._coords = list(coords)
+        pc.coords = list(coords)
         if colors is not None:
             pc._colors = list(colors)
         if normals is not None:
@@ -78,7 +78,7 @@ class PointCloud:
 
     def point_count(self) -> int:
         """Returns the number of points."""
-        return len(self._coords) // 3
+        return len(self.coords) // 3
 
     def __len__(self) -> int:
         """Returns the number of points."""
@@ -91,25 +91,25 @@ class PointCloud:
     def get_point(self, index: int) -> Point:
         """Get point at index as Point object."""
         idx = index * 3
-        return Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+        return Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
 
     def set_point(self, index: int, point: Point) -> None:
         """Set point at index from Point object."""
         idx = index * 3
-        self._coords[idx] = point[0]
-        self._coords[idx + 1] = point[1]
-        self._coords[idx + 2] = point[2]
+        self.coords[idx] = point[0]
+        self.coords[idx + 1] = point[1]
+        self.coords[idx + 2] = point[2]
 
     def add_point(self, point: Point) -> None:
         """Add a point to the cloud."""
-        self._coords.extend([point[0], point[1], point[2]])
+        self.coords.extend([point[0], point[1], point[2]])
 
     def get_points(self) -> List[Point]:
         """Returns all points as Point objects."""
         points = []
         for i in range(self.point_count()):
             idx = i * 3
-            points.append(Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2]))
+            points.append(Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2]))
         return points
 
     @property
@@ -120,9 +120,9 @@ class PointCloud:
     @points.setter
     def points(self, value: List[Point]) -> None:
         """Set points from a list of Point objects."""
-        self._coords = []
+        self.coords = []
         for p in value:
-            self._coords.extend([p[0], p[1], p[2]])
+            self.coords.extend([p[0], p[1], p[2]])
 
     ###########################################################################################
     # Color Access
@@ -250,7 +250,7 @@ class PointCloud:
         if not isinstance(other, PointCloud):
             return False
         return (self.name == other.name and
-                self._coords == other._coords and
+                self.coords == other.coords and
                 self._colors == other._colors and
                 self._normals == other._normals)
 
@@ -262,12 +262,12 @@ class PointCloud:
         """Apply the stored xform transformation to the point cloud in-place."""
         for i in range(self.point_count()):
             idx = i * 3
-            pt = Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
+            pt = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
             pt.xform = self.xform
             pt.transform()
-            self._coords[idx] = pt[0]
-            self._coords[idx + 1] = pt[1]
-            self._coords[idx + 2] = pt[2]
+            self.coords[idx] = pt[0]
+            self.coords[idx + 1] = pt[1]
+            self.coords[idx + 2] = pt[2]
 
         for i in range(self.normal_count()):
             idx = i * 3
@@ -294,18 +294,18 @@ class PointCloud:
         """Translate point cloud by vector (in-place)."""
         for i in range(self.point_count()):
             idx = i * 3
-            self._coords[idx] += other[0]
-            self._coords[idx + 1] += other[1]
-            self._coords[idx + 2] += other[2]
+            self.coords[idx] += other[0]
+            self.coords[idx + 1] += other[1]
+            self.coords[idx + 2] += other[2]
         return self
 
     def __isub__(self, other: Vector) -> "PointCloud":
         """Translate point cloud by negative vector (in-place)."""
         for i in range(self.point_count()):
             idx = i * 3
-            self._coords[idx] -= other[0]
-            self._coords[idx + 1] -= other[1]
-            self._coords[idx + 2] -= other[2]
+            self.coords[idx] -= other[0]
+            self.coords[idx + 1] -= other[1]
+            self.coords[idx + 2] -= other[2]
         return self
 
     ###########################################################################################
@@ -335,7 +335,7 @@ class PointCloud:
         # Alphabetical order to match Rust's serde_json
         return {
             "colors": self._colors,
-            "coords": self._coords,
+            "coords": self.coords,
             "guid": self.guid,
             "name": self.name,
             "normals": self._normals,
@@ -400,7 +400,7 @@ class PointCloud:
         proto = pointcloud_pb2.PointCloud()
         proto.guid = self.guid
         proto.name = self.name
-        proto.coords.extend(self._coords)
+        proto.coords.extend(self.coords)
         proto.colors.extend(self._colors)
         proto.normals.extend(self._normals)
         proto.point_size = self.point_size

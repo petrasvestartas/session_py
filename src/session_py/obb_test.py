@@ -90,6 +90,10 @@ def test_obb_collision():
     MINI_CHECK(not bb1.collides_with(bb3))
     MINI_CHECK(bb1.collides_with_broad(bb2))
     MINI_CHECK(not bb1.collides_with_broad(bb3))
+    MINI_CHECK(bb1.collides_with_rtcd(bb2))
+    MINI_CHECK(not bb1.collides_with_rtcd(bb3))
+    MINI_CHECK(bb1.collides_with_naive(bb2))
+    MINI_CHECK(not bb1.collides_with_naive(bb3))
 
 
 @MINI_TEST("OBB", "Transformation")
@@ -206,7 +210,7 @@ def test_obb_accessors():
     MINI_CHECK(len(b.get_corners()) == 8)
     MINI_CHECK(len(b.get_edges()) == 12)
     c = OBB.from_point(Point(5.0, 2.0, 3.0), 1.0)
-    b.union(c)
+    b.union_with(c)
 
     MINI_CHECK(TOLERANCE.is_close(b.half_size[0], 3.0))
 
