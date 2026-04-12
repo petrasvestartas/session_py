@@ -29,10 +29,10 @@ def test_write_read_roundtrip():
     from session_py import Mesh, Point
     from session_py.obj import read_obj, write_obj
     original_mesh = Mesh()
-    v0 = original_mesh.add_vertex(Point(0, 0, 0))
-    v1 = original_mesh.add_vertex(Point(1, 0, 0))
-    v2 = original_mesh.add_vertex(Point(0, 1, 0))
-    v3 = original_mesh.add_vertex(Point(0, 0, 1))
+    v0 = original_mesh.add_vertex(Point(0.0, 0.0, 0.0))
+    v1 = original_mesh.add_vertex(Point(1.0, 0.0, 0.0))
+    v2 = original_mesh.add_vertex(Point(0.0, 1.0, 0.0))
+    v3 = original_mesh.add_vertex(Point(0.0, 0.0, 1.0))
     original_mesh.add_face([v0, v1, v2])
     original_mesh.add_face([v0, v1, v3])
 

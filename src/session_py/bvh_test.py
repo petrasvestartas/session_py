@@ -339,5 +339,44 @@ def test_bvh_fixed_100_boxes():
         MINI_CHECK(i < j)
 
 
+@MINI_TEST("BVH", "Query Aabb")
+def test_bvh_query_aabb():
+    from session_py.bvh import BVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    bboxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(5.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(0.0, 5.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+    ]
+    bvh = BVH.from_boxes(bboxes, 100.0)
+    # Query near origin — should hit box 0 only
+    query = OBB(
+        Point(0.0, 0.0, 0.0),
+        Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+        Vector(0.0, 0.0, 1.0), Vector(0.5, 0.5, 0.5))
+    hits = bvh.query_aabb(query)
+
+    MINI_CHECK(len(hits) > 0)
+    MINI_CHECK(0 in hits)
+    MINI_CHECK(1 not in hits)
+    MINI_CHECK(2 not in hits)
+    # Query covering all three boxes
+    query_all = OBB(
+        Point(2.5, 2.5, 0.0),
+        Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+        Vector(0.0, 0.0, 1.0), Vector(5.0, 5.0, 2.0))
+    hits_all = bvh.query_aabb(query_all)
+    MINI_CHECK(len(hits_all) == 3)
+
+
 if __name__ == "__main__":
     run_all(language="python")

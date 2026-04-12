@@ -21,7 +21,7 @@ def test_marching_squares_extract():
     MINI_CHECK(result[0].is_closed())
 
 
-@MINI_TEST("MarchingSquares", "ExtractFromFunc")
+@MINI_TEST("MarchingSquares", "Extract From Func")
 def test_marching_squares_extract_from_func():
     from session_py import MarchingSquares
     # Circle: x^2 + y^2 = 1
@@ -32,7 +32,7 @@ def test_marching_squares_extract_from_func():
     MINI_CHECK(len(result) > 0)
 
 
-@MINI_TEST("MarchingSquares", "EmptyGrid")
+@MINI_TEST("MarchingSquares", "Empty Grid")
 def test_marching_squares_empty_grid():
     from session_py import MarchingSquares
     result = MarchingSquares.extract([], 0.5)
@@ -40,7 +40,7 @@ def test_marching_squares_empty_grid():
     MINI_CHECK(len(result) == 0)
 
 
-@MINI_TEST("MarchingSquares", "AllAbove")
+@MINI_TEST("MarchingSquares", "All Above")
 def test_marching_squares_all_above():
     from session_py import MarchingSquares
     grid = [
@@ -53,7 +53,7 @@ def test_marching_squares_all_above():
     MINI_CHECK(len(result) == 0)
 
 
-@MINI_TEST("MarchingSquares", "AllBelow")
+@MINI_TEST("MarchingSquares", "All Below")
 def test_marching_squares_all_below():
     from session_py import MarchingSquares
     grid = [

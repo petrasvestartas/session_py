@@ -141,5 +141,61 @@ def test_tolerance_count_digits():
     MINI_CHECK(count_digits(-42.0) == 2)
 
 
+@MINI_TEST("Tolerance", "Is Angle Zero")
+def test_tolerance_is_angle_zero():
+    # Angular tolerance default is 1e-6
+    MINI_CHECK(TOLERANCE.is_angle_zero(1e-8))
+    MINI_CHECK(not TOLERANCE.is_angle_zero(0.1))
+
+
+@MINI_TEST("Tolerance", "Is Angles Close")
+def test_tolerance_is_angles_close():
+    MINI_CHECK(TOLERANCE.is_angles_close(1.0, 1.0 + 1e-8))
+    MINI_CHECK(not TOLERANCE.is_angles_close(1.0, 2.0))
+
+
+@MINI_TEST("Tolerance", "Is Point Close")
+def test_tolerance_is_point_close():
+    from session_py import Point
+
+    a = Point(1.0, 2.0, 3.0)
+    b = Point(1.0, 2.0, 3.0 + 1e-12)
+    c = Point(1.0, 2.0, 4.0)
+
+    MINI_CHECK(TOLERANCE.is_point_close(a, b))
+    MINI_CHECK(not TOLERANCE.is_point_close(a, c))
+
+
+@MINI_TEST("Tolerance", "Is Allclose")
+def test_tolerance_is_allclose():
+    a = [1.0, 2.0, 3.0]
+    b = [1.0, 2.0, 3.0 + 1e-12]
+    c = [1.0, 2.0, 4.0]
+
+    MINI_CHECK(TOLERANCE.is_allclose(a, b))
+    MINI_CHECK(not TOLERANCE.is_allclose(a, c))
+
+
+@MINI_TEST("Tolerance", "Key Xy")
+def test_tolerance_key_xy():
+    result = TOLERANCE.key_xy([1.0, 2.0])
+
+    MINI_CHECK(result == "1.000,2.000")
+
+
+@MINI_TEST("Tolerance", "Round To")
+def test_tolerance_round_to():
+    MINI_CHECK(abs(Tolerance.round_to(3.14159, 2) - 3.14) < 1e-9)
+    MINI_CHECK(abs(Tolerance.round_to(2.5, 0) - 2.0) < 1e-9)
+
+
+@MINI_TEST("Tolerance", "Precision From Tolerance")
+def test_tolerance_precision_from_tolerance():
+    # Default absolute tolerance is 1e-9 -> precision should be 9
+    prec = TOLERANCE.precision_from_tolerance()
+
+    MINI_CHECK(prec == 9)
+
+
 if __name__ == "__main__":
     run_all("python")

@@ -8,24 +8,30 @@ from .tolerance import TOLERANCE
 @MINI_TEST("KDTree", "Nearest")
 def test_kdtree_nearest():
     from session_py import KDTree, Point
-    import random
-    rng = random.Random(42)
-    pts = []
-    for _ in range(100):
-        pts.append(Point(rng.uniform(-10.0, 10.0), rng.uniform(-10.0, 10.0), rng.uniform(-10.0, 10.0)))
+
+    # 5 known points on a line: 0, 1, 2, 3, 4
+    # Query at 1.1 — nearest should be index 1 (point at x=1), distance 0.1
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 0.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+    ]
     tree = KDTree(pts)
-    query = Point(0.0, 0.0, 0.0)
+    query = Point(1.1, 0.0, 0.0)
     idx, dist = tree.nearest(query)
-    brute_idx = min(range(len(pts)), key=lambda i: (pts[i][0]**2 + pts[i][1]**2 + pts[i][2]**2))
-    brute_dist = math.sqrt(pts[brute_idx][0]**2 + pts[brute_idx][1]**2 + pts[brute_idx][2]**2)
 
-    MINI_CHECK(idx == brute_idx)
-    MINI_CHECK(TOLERANCE.is_close(dist, brute_dist))
+    MINI_CHECK(idx == 1)
+    MINI_CHECK(TOLERANCE.is_close(dist, 0.1))
 
 
-@MINI_TEST("KDTree", "NearestK")
+@MINI_TEST("KDTree", "Nearest K")
 def test_kdtree_nearest_k():
     from session_py import KDTree, Point
+
+    # 5 points on X axis: 0, 1, 2, 3, 4
+    # Query at 1.5 — 3 nearest are: x=1 (d=0.5), x=2 (d=0.5), x=3 (d=1.5)
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -43,9 +49,12 @@ def test_kdtree_nearest_k():
     MINI_CHECK(TOLERANCE.is_close(result[2][1], 1.5))
 
 
-@MINI_TEST("KDTree", "RadiusSearch")
+@MINI_TEST("KDTree", "Radius Search")
 def test_kdtree_radius_search():
     from session_py import KDTree, Point
+
+    # 4 points: 0, 1, 2, 5 on X axis
+    # Query at 0.5, radius 1.1 — finds x=0 (d=0.5) and x=1 (d=0.5)
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -61,9 +70,12 @@ def test_kdtree_radius_search():
     MINI_CHECK(TOLERANCE.is_close(result[1][1], 0.5))
 
 
-@MINI_TEST("KDTree", "SinglePoint")
+@MINI_TEST("KDTree", "Single Point")
 def test_kdtree_single_point():
     from session_py import KDTree, Point
+
+    # Tree with one point at (3,4,0). Query from origin.
+    # Distance = sqrt(9+16) = 5 (3-4-5 right triangle)
     pts = [Point(3.0, 4.0, 0.0)]
     tree = KDTree(pts)
     query = Point(0.0, 0.0, 0.0)
@@ -73,21 +85,33 @@ def test_kdtree_single_point():
     MINI_CHECK(TOLERANCE.is_close(dist, 5.0))
 
 
-@MINI_TEST("KDTree", "NearestBruteForce")
+@MINI_TEST("KDTree", "Nearest Brute Force")
 def test_kdtree_nearest_brute_force():
     from session_py import KDTree, Point
-    import random
-    rng = random.Random(7)
-    pts = []
-    for _ in range(50):
-        pts.append(Point(rng.uniform(0.0, 100.0), rng.uniform(0.0, 100.0), rng.uniform(0.0, 100.0)))
+
+    # 8 points in 3D — verify KDTree matches brute-force for several queries
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 1.0),
+        Point(5.0, 5.0, 5.0),
+        Point(-3.0, 2.0, 1.0),
+        Point(2.0, -1.0, 3.0),
+        Point(-1.0, -1.0, -1.0),
+    ]
     tree = KDTree(pts)
-    queries = [Point(rng.uniform(0.0, 100.0), rng.uniform(0.0, 100.0), rng.uniform(0.0, 100.0)) for _ in range(10)]
+    queries = [
+        Point(0.5, 0.5, 0.5),
+        Point(4.0, 4.0, 4.0),
+        Point(-2.0, 1.0, 0.0),
+    ]
     all_match = True
     for q in queries:
         idx, dist = tree.nearest(q)
-        brute = min(range(len(pts)), key=lambda i: (pts[i][0]-q[0])**2+(pts[i][1]-q[1])**2+(pts[i][2]-q[2])**2)
-        brute_d = math.sqrt((pts[brute][0]-q[0])**2+(pts[brute][1]-q[1])**2+(pts[brute][2]-q[2])**2)
+        # Brute-force: find closest by scanning all points
+        brute = min(range(len(pts)), key=lambda i: pts[i].squared_distance(q))
+        brute_d = pts[brute].distance(q)
         if not TOLERANCE.is_close(dist, brute_d):
             all_match = False
 
