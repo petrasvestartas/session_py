@@ -1,6 +1,6 @@
 import os
 import time
-from session_py import Session, PlateElement
+from session_py import Session, ElementPlate
 from session_py.obj import read_obj_polylines, pair_polylines
 
 
@@ -18,7 +18,7 @@ def main():
     g = session.add_group("Elements")
     for a, b in pairs:
         session.add_element(
-            PlateElement(polygon=polylines[a].get_points(),
+            ElementPlate(polygon=polylines[a].get_points(),
                          polygon_top=polylines[b].get_points(),
                          name=f"plate_{a}"), g)
     t2 = time.perf_counter()

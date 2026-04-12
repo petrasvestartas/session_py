@@ -277,6 +277,24 @@ class Xform:
         return t2 * (m_xform * t0)
 
     @staticmethod
+    def from_axes(col_x, col_y, col_z):
+        """Build a pure rotation (no translation) from three column axis vectors.
+
+        Parameters
+        ----------
+        col_x, col_y, col_z : :class:`Vector`
+
+        Returns
+        -------
+        :class:`Xform`
+        """
+        xf = Xform()
+        xf.m[0]  = col_x[0]; xf.m[1]  = col_x[1]; xf.m[2]  = col_x[2]
+        xf.m[4]  = col_y[0]; xf.m[5]  = col_y[1]; xf.m[6]  = col_y[2]
+        xf.m[8]  = col_z[0]; xf.m[9]  = col_z[1]; xf.m[10] = col_z[2]
+        return xf
+
+    @staticmethod
     def from_change_of_basis(rect0, rect1):
         """Build the change-of-basis xform from two 4-point joint volume rectangles.
 

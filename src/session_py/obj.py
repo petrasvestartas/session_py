@@ -86,7 +86,7 @@ def read_obj_polylines(filepath: str) -> List[Polyline]:
 def pair_polylines(polylines: List[Polyline], search_radius: float = 500.0) -> List[Tuple[int, int]]:
     from .aabb import AABB
     from .rtree import RTree
-    from .element_plate import PlateElement
+    from .element_plate import ElementPlate
     NP = len(polylines)
     centroids: List[Point] = [Point(0, 0, 0)] * NP
     normals: List[List[float]] = [[0, 0, 0]] * NP
@@ -107,7 +107,7 @@ def pair_polylines(polylines: List[Polyline], search_radius: float = 500.0) -> L
         cy = sum(p[1] for p in pts) / len(pts)
         cz = sum(p[2] for p in pts) / len(pts)
         centroids[i] = Point(cx, cy, cz)
-        normals[i] = PlateElement._polygon_normal(pts)
+        normals[i] = ElementPlate._polygon_normal(pts)
         aabbs[i] = AABB.from_polyline(polylines[i], search_radius)
         a = aabbs[i]
         tree.insert([a.cx - a.hx, a.cy - a.hy, a.cz - a.hz],

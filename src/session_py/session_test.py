@@ -107,12 +107,12 @@ def test_session_add_mesh():
 @MINI_TEST("Session", "Add Element")
 def test_session_add_element():
     from session_py import Session
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
     session = Session()
     polygon = [Point(0,0,0), Point(2,0,0), Point(2,2,0), Point(0,2,0)]
-    plate = PlateElement(polygon=polygon, thickness=0.2, name="p1")
+    plate = ElementPlate(polygon=polygon, thickness=0.2, name="p1")
     session.add_element(plate)
 
     MINI_CHECK(len(session.objects.elements) == 1)
@@ -261,12 +261,12 @@ def test_session_get_geometry():
 @MINI_TEST("Session", "Compute Face To Face")
 def test_session_compute_face_to_face():
     from session_py import Session
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
     session = Session()
-    p1 = PlateElement(polygon=[Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0)], thickness=0.2, name="p1")
-    p2 = PlateElement(polygon=[Point(0,0,-0.2), Point(1,0,-0.2), Point(1,1,-0.2), Point(0,1,-0.2)], thickness=0.2, name="p2")
+    p1 = ElementPlate(polygon=[Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0)], thickness=0.2, name="p1")
+    p2 = ElementPlate(polygon=[Point(0,0,-0.2), Point(1,0,-0.2), Point(1,1,-0.2), Point(0,1,-0.2)], thickness=0.2, name="p2")
     session.add_element(p1)
     session.add_element(p2)
     session.compute_face_to_face(5.0, 0.001)

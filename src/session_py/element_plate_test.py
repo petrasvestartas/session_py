@@ -4,9 +4,9 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("PlateElement", "Constructor")
+@MINI_TEST("ElementPlate", "Constructor")
 def test_plate_constructor():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Mesh
 
@@ -16,7 +16,7 @@ def test_plate_constructor():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.2, name="plate1")
+    p = ElementPlate(polygon=polygon, thickness=0.2, name="plate1")
 
     geo = p.geometry
     name = p.name
@@ -25,39 +25,39 @@ def test_plate_constructor():
     prepr = repr(p)
 
     pcopy = p.duplicate()
-    p2 = PlateElement(polygon=polygon, thickness=0.2, name="plate1")
-    p3 = PlateElement(polygon=polygon, thickness=0.5, name="plate1")
+    p2 = ElementPlate(polygon=polygon, thickness=0.2, name="plate1")
+    p3 = ElementPlate(polygon=polygon, thickness=0.5, name="plate1")
 
     MINI_CHECK(name == "plate1")
     MINI_CHECK(guid is not None and len(guid) > 0)
     MINI_CHECK(isinstance(geo, Mesh))
     MINI_CHECK(len(p.polygon) == 4)
     MINI_CHECK(p.thickness == 0.2)
-    MINI_CHECK(pstr == "PlateElement(plate1, 4 pts, 0.2)")
-    MINI_CHECK(prepr == f"PlateElement({guid}, plate1, 4 pts, 0.2)")
+    MINI_CHECK(pstr == "ElementPlate(plate1, 4 pts, 0.2)")
+    MINI_CHECK(prepr == f"ElementPlate({guid}, plate1, 4 pts, 0.2)")
     MINI_CHECK(pcopy == p and pcopy.guid != p.guid)
     MINI_CHECK(p == p2)
     MINI_CHECK(p != p3)
 
 
-@MINI_TEST("PlateElement", "Default Polygon")
+@MINI_TEST("ElementPlate", "Default Polygon")
 def test_plate_default_polygon():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Mesh
 
-    p = PlateElement()
+    p = ElementPlate()
 
     MINI_CHECK(isinstance(p.geometry, Mesh))
     MINI_CHECK(len(p.polygon) == 4)
     MINI_CHECK(p.thickness == 0.1)
 
 
-@MINI_TEST("PlateElement", "Setters")
+@MINI_TEST("ElementPlate", "Setters")
 def test_plate_setters():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
-    p = PlateElement()
+    p = ElementPlate()
     p.thickness = 0.3
     p.polygon = [
         Point(0, 0, 0),
@@ -71,9 +71,9 @@ def test_plate_setters():
     MINI_CHECK(p.geometry is not None)
 
 
-@MINI_TEST("PlateElement", "Mesh Topology")
+@MINI_TEST("ElementPlate", "Mesh Topology")
 def test_plate_mesh_topology():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
     polygon = [
@@ -82,16 +82,16 @@ def test_plate_mesh_topology():
         Point(1, 1, 0),
         Point(0, 1, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.5)
+    p = ElementPlate(polygon=polygon, thickness=0.5)
     geo = p.geometry
 
     MINI_CHECK(len(geo.vertex) == 8)
     MINI_CHECK(len(geo.face) == 6)
 
 
-@MINI_TEST("PlateElement", "Aabb")
+@MINI_TEST("ElementPlate", "Aabb")
 def test_plate_aabb():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
     polygon = [
@@ -100,7 +100,7 @@ def test_plate_aabb():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.2)
+    p = ElementPlate(polygon=polygon, thickness=0.2)
     aabb = p.aabb
 
     MINI_CHECK(aabb is not None)
@@ -109,9 +109,9 @@ def test_plate_aabb():
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[2], 0.1))
 
 
-@MINI_TEST("PlateElement", "Compute Point")
+@MINI_TEST("ElementPlate", "Compute Point")
 def test_plate_compute_point():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
     polygon = [
@@ -120,7 +120,7 @@ def test_plate_compute_point():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.2)
+    p = ElementPlate(polygon=polygon, thickness=0.2)
     pt = p.point
 
     MINI_CHECK(TOLERANCE.is_close(pt[0], 1.0))
@@ -128,9 +128,9 @@ def test_plate_compute_point():
     MINI_CHECK(TOLERANCE.is_close(pt[2], -0.1))
 
 
-@MINI_TEST("PlateElement", "Triangle Polygon")
+@MINI_TEST("ElementPlate", "Triangle Polygon")
 def test_plate_triangle():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
     polygon = [
@@ -138,16 +138,16 @@ def test_plate_triangle():
         Point(1, 0, 0),
         Point(0.5, 1, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.1)
+    p = ElementPlate(polygon=polygon, thickness=0.1)
     geo = p.geometry
 
     MINI_CHECK(len(geo.vertex) == 6)
     MINI_CHECK(len(geo.face) == 5)
 
 
-@MINI_TEST("PlateElement", "Json Roundtrip")
+@MINI_TEST("ElementPlate", "Json Roundtrip")
 def test_plate_json_roundtrip():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Xform
     from pathlib import Path
@@ -158,23 +158,23 @@ def test_plate_json_roundtrip():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.3, name="json_plate")
+    p = ElementPlate(polygon=polygon, thickness=0.3, name="json_plate")
     p.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element.json"
     p.json_dump(fname)
-    loaded = PlateElement.json_load(fname)
+    loaded = ElementPlate.json_load(fname)
 
-    MINI_CHECK(isinstance(loaded, PlateElement))
+    MINI_CHECK(isinstance(loaded, ElementPlate))
     MINI_CHECK(loaded.name == "json_plate")
     MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 0.3))
     MINI_CHECK(len(loaded.polygon) == 4)
     MINI_CHECK(TOLERANCE.is_close(loaded.polygon[1][0], 2.0))
 
 
-@MINI_TEST("PlateElement", "Protobuf Roundtrip")
+@MINI_TEST("ElementPlate", "Protobuf Roundtrip")
 def test_plate_protobuf_roundtrip():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Xform
     from pathlib import Path
@@ -185,42 +185,42 @@ def test_plate_protobuf_roundtrip():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.3, name="proto_plate")
+    p = ElementPlate(polygon=polygon, thickness=0.3, name="proto_plate")
     p.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element.bin"
     p.pb_dump(path)
-    loaded = PlateElement.pb_load(path)
+    loaded = ElementPlate.pb_load(path)
 
-    MINI_CHECK(isinstance(loaded, PlateElement))
+    MINI_CHECK(isinstance(loaded, ElementPlate))
     MINI_CHECK(loaded.name == "proto_plate")
     MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 0.3))
     MINI_CHECK(len(loaded.polygon) == 4)
     MINI_CHECK(TOLERANCE.is_close(loaded.polygon[1][0], 2.0))
 
 
-@MINI_TEST("PlateElement", "From Top Bottom")
+@MINI_TEST("ElementPlate", "From Top Bottom")
 def test_plate_from_top_bottom():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
 
     bottom = [Point(0,0,0), Point(2,0,0), Point(2,2,0), Point(0,2,0), Point(0,0,0)]
     top    = [Point(0,0,1), Point(2,0,1), Point(2,2,1), Point(0,2,1), Point(0,0,1)]
-    p = PlateElement(polygon=bottom, polygon_top=top, name="tb_plate")
+    p = ElementPlate(polygon=bottom, polygon_top=top, name="tb_plate")
     MINI_CHECK(len(p.polygon) == 4)
     MINI_CHECK(len(p.polygon_top) == 4)
     MINI_CHECK(TOLERANCE.is_close(p.thickness, 1.0))
     MINI_CHECK(TOLERANCE.is_close(p.polygon[0][2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(p.polygon_top[0][2], 1.0))
     # Reversed argument order should auto-swap
-    pr = PlateElement(polygon=top, polygon_top=bottom, name="tb_plate_r")
+    pr = ElementPlate(polygon=top, polygon_top=bottom, name="tb_plate_r")
     MINI_CHECK(TOLERANCE.is_close(pr.polygon[0][2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(pr.polygon_top[0][2], 1.0))
 
 
-@MINI_TEST("PlateElement", "Polylines")
+@MINI_TEST("ElementPlate", "Polylines")
 def test_plate_polylines():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Polyline
 
@@ -230,7 +230,7 @@ def test_plate_polylines():
         Point(1, 1, 0),
         Point(0, 1, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.2)
+    p = ElementPlate(polygon=polygon, thickness=0.2)
     pls = p.polylines
 
     MINI_CHECK(len(pls) == 6)
@@ -241,9 +241,9 @@ def test_plate_polylines():
         MINI_CHECK(pls[i].point_count() == 5)
 
 
-@MINI_TEST("PlateElement", "Planes")
+@MINI_TEST("ElementPlate", "Planes")
 def test_plate_planes():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Plane
 
@@ -253,7 +253,7 @@ def test_plate_planes():
         Point(1, 1, 0),
         Point(0, 1, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.2)
+    p = ElementPlate(polygon=polygon, thickness=0.2)
     pls = p.planes
 
     MINI_CHECK(len(pls) == 6)
@@ -262,9 +262,9 @@ def test_plate_planes():
     MINI_CHECK(TOLERANCE.is_close(pls[1].z_axis[2], -1.0))
 
 
-@MINI_TEST("PlateElement", "Edge Vectors")
+@MINI_TEST("ElementPlate", "Edge Vectors")
 def test_plate_edge_vectors():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Vector
 
@@ -274,7 +274,7 @@ def test_plate_edge_vectors():
         Point(1, 1, 0),
         Point(0, 1, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.2)
+    p = ElementPlate(polygon=polygon, thickness=0.2)
     evs = p.edge_vectors
 
     MINI_CHECK(len(evs) == 4)
@@ -285,9 +285,9 @@ def test_plate_edge_vectors():
     MINI_CHECK(TOLERANCE.is_close(evs[1][1], 1.0))
 
 
-@MINI_TEST("PlateElement", "Axis")
+@MINI_TEST("ElementPlate", "Axis")
 def test_plate_axis():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Line
 
@@ -297,7 +297,7 @@ def test_plate_axis():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.4)
+    p = ElementPlate(polygon=polygon, thickness=0.4)
     ax = p.axis
 
     MINI_CHECK(isinstance(ax, Line))
@@ -307,11 +307,11 @@ def test_plate_axis():
     MINI_CHECK(TOLERANCE.is_close(ax.end()[2], -0.4))
 
 
-@MINI_TEST("PlateElement", "Joint Types")
+@MINI_TEST("ElementPlate", "Joint Types")
 def test_plate_joint_types():
-    from session_py import PlateElement
+    from session_py import ElementPlate
 
-    p = PlateElement()
+    p = ElementPlate()
 
     MINI_CHECK(len(p.joint_types) == 0)
     p.joint_types = [1, 2, 3, 4]
@@ -320,11 +320,11 @@ def test_plate_joint_types():
     MINI_CHECK(p.joint_types[3] == 4)
 
 
-@MINI_TEST("PlateElement", "J Mf")
+@MINI_TEST("ElementPlate", "J Mf")
 def test_plate_j_mf():
-    from session_py import PlateElement
+    from session_py import ElementPlate
 
-    p = PlateElement()
+    p = ElementPlate()
 
     MINI_CHECK(len(p.j_mf) == 0)
     p.j_mf = [
@@ -338,25 +338,25 @@ def test_plate_j_mf():
     MINI_CHECK(p.j_mf[2][0][0] == 2)
 
 
-@MINI_TEST("PlateElement", "Key")
+@MINI_TEST("ElementPlate", "Key")
 def test_plate_key():
-    from session_py import PlateElement
+    from session_py import ElementPlate
 
-    p = PlateElement()
+    p = ElementPlate()
 
     MINI_CHECK(p.key == "")
     p.key = "plate_A"
     MINI_CHECK(p.key == "plate_A")
 
 
-@MINI_TEST("PlateElement", "Component Plane")
+@MINI_TEST("ElementPlate", "Component Plane")
 def test_plate_component_plane():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Plane
     from session_py import Point
     from session_py import Vector
 
-    p = PlateElement()
+    p = ElementPlate()
 
     MINI_CHECK(p.component_plane is None)
     cp = Plane(origin=Point(1, 2, 3), x_axis=Vector(1, 0, 0), y_axis=Vector(0, 1, 0))
@@ -365,9 +365,9 @@ def test_plate_component_plane():
     MINI_CHECK(TOLERANCE.is_close(p.component_plane.origin[1], 2.0))
 
 
-@MINI_TEST("PlateElement", "Json Roundtrip Joinery")
+@MINI_TEST("ElementPlate", "Json Roundtrip Joinery")
 def test_plate_json_roundtrip_joinery():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Plane
     from session_py import Vector
@@ -379,7 +379,7 @@ def test_plate_json_roundtrip_joinery():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.3, name="joinery_plate")
+    p = ElementPlate(polygon=polygon, thickness=0.3, name="joinery_plate")
     p.joint_types = [1, 2, 3, 4]
     p.j_mf = [[(0, True, 0.5)], [], [(1, False, 0.3)]]
     p.key = "plate_A"
@@ -387,7 +387,7 @@ def test_plate_json_roundtrip_joinery():
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element_joinery.json"
     p.json_dump(fname)
-    loaded = PlateElement.json_load(fname)
+    loaded = ElementPlate.json_load(fname)
 
     MINI_CHECK(loaded.joint_types == [1, 2, 3, 4])
     MINI_CHECK(len(loaded.j_mf) == 3)
@@ -397,9 +397,9 @@ def test_plate_json_roundtrip_joinery():
     MINI_CHECK(TOLERANCE.is_close(loaded.component_plane.origin[0], 1.0))
 
 
-@MINI_TEST("PlateElement", "Protobuf Roundtrip Joinery")
+@MINI_TEST("ElementPlate", "Protobuf Roundtrip Joinery")
 def test_plate_protobuf_roundtrip_joinery():
-    from session_py import PlateElement
+    from session_py import ElementPlate
     from session_py import Point
     from session_py import Plane
     from session_py import Vector
@@ -411,7 +411,7 @@ def test_plate_protobuf_roundtrip_joinery():
         Point(2, 2, 0),
         Point(0, 2, 0),
     ]
-    p = PlateElement(polygon=polygon, thickness=0.3, name="joinery_plate")
+    p = ElementPlate(polygon=polygon, thickness=0.3, name="joinery_plate")
     p.joint_types = [1, 2, 3, 4]
     p.j_mf = [[(0, True, 0.5)], [], [(1, False, 0.3)]]
     p.key = "plate_A"
@@ -419,7 +419,7 @@ def test_plate_protobuf_roundtrip_joinery():
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element_joinery.bin"
     p.pb_dump(path)
-    loaded = PlateElement.pb_load(path)
+    loaded = ElementPlate.pb_load(path)
 
     MINI_CHECK(loaded.joint_types == [1, 2, 3, 4])
     MINI_CHECK(len(loaded.j_mf) == 3)

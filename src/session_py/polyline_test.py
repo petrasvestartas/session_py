@@ -599,6 +599,92 @@ def test_polyline_grid_of_points():
         MINI_CHECK(p[1] > 0.0 and p[1] < 4.0)
 
 
+@MINI_TEST("Polyline", "Boolean Op")
+def test_polyline_boolean_op():
+    from session_py import Point
+    from session_py import Polyline
+
+    sq_a = Polyline([
+        Point(-1.0, -1.0, 0.0),
+        Point( 1.0, -1.0, 0.0),
+        Point( 1.0,  1.0, 0.0),
+        Point(-1.0,  1.0, 0.0),
+    ])
+    sq_b = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(2.0, 2.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+    ])
+    sq_inside = Polyline([
+        Point(-0.5, -0.5, 0.0),
+        Point( 0.5, -0.5, 0.0),
+        Point( 0.5,  0.5, 0.0),
+        Point(-0.5,  0.5, 0.0),
+    ])
+    sq_disjoint = Polyline([
+        Point(5.0, 5.0, 0.0),
+        Point(6.0, 5.0, 0.0),
+        Point(6.0, 6.0, 0.0),
+        Point(5.0, 6.0, 0.0),
+    ])
+
+    isect = Polyline.boolean_op(sq_a, sq_b, 0)
+    uni   = Polyline.boolean_op(sq_a, sq_b, 1)
+    diff  = Polyline.boolean_op(sq_a, sq_b, 2)
+
+    MINI_CHECK(len(isect) == 1)
+    MINI_CHECK(isect[0].point_count() == 4)
+    MINI_CHECK(len(uni) == 1)
+    MINI_CHECK(uni[0].point_count() == 8)
+    MINI_CHECK(len(diff) == 1)
+    MINI_CHECK(diff[0].point_count() == 6)
+
+    isect_in = Polyline.boolean_op(sq_a, sq_inside, 0)
+    uni_in   = Polyline.boolean_op(sq_a, sq_inside, 1)
+    diff_in  = Polyline.boolean_op(sq_a, sq_inside, 2)
+
+    MINI_CHECK(len(isect_in) == 1)
+    MINI_CHECK(isect_in[0].point_count() == 4)
+    MINI_CHECK(len(uni_in) == 1)
+    MINI_CHECK(uni_in[0].point_count() == 4)
+    MINI_CHECK(len(diff_in) == 1)
+    MINI_CHECK(diff_in[0].point_count() == 4)
+
+    isect_dis = Polyline.boolean_op(sq_a, sq_disjoint, 0)
+    uni_dis   = Polyline.boolean_op(sq_a, sq_disjoint, 1)
+    diff_dis  = Polyline.boolean_op(sq_a, sq_disjoint, 2)
+
+    MINI_CHECK(len(isect_dis) == 0)
+    MINI_CHECK(len(uni_dis) == 2)
+    MINI_CHECK(len(diff_dis) == 1)
+
+
+@MINI_TEST("Polyline", "Boolean Op Plane")
+def test_polyline_boolean_op_plane():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    # Two overlapping squares lifted to z=5 and clipped against the z=5 plane
+    plane = Plane.from_point_normal(Point(0,0,5), Vector(0,0,1))
+    sq_a = Polyline([Point(-1,-1,5), Point(1,-1,5), Point(1,1,5), Point(-1,1,5), Point(-1,-1,5)])
+    sq_b = Polyline([Point(0,0,5),  Point(2,0,5), Point(2,2,5), Point(0,2,5), Point(0,0,5)])
+    isect = Polyline.boolean_op(sq_a, sq_b, 0, plane=plane)
+    uni   = Polyline.boolean_op(sq_a, sq_b, 1, plane=plane)
+    diff  = Polyline.boolean_op(sq_a, sq_b, 2, plane=plane)
+    MINI_CHECK(len(isect) == 1)
+    MINI_CHECK(len(uni) == 1)
+    MINI_CHECK(len(diff) == 1)
+    for i in range(isect[0].point_count()):
+        MINI_CHECK(TOLERANCE.is_close(isect[0][i][2], 5.0))
+    for i in range(uni[0].point_count()):
+        MINI_CHECK(TOLERANCE.is_close(uni[0][i][2], 5.0))
+    for i in range(diff[0].point_count()):
+        MINI_CHECK(TOLERANCE.is_close(diff[0][i][2], 5.0))
+
+
 @MINI_TEST("Polyline", "Simplify Points")
 def test_polyline_simplify_points():
     import math
@@ -680,31 +766,6 @@ def test_polyline_simplify_two_points():
     result = Polyline.simplify_points(pts, 0.001)
 
     MINI_CHECK(len(result) == 2)
-
-
-@MINI_TEST("Polyline", "Boolean Op Plane")
-def test_polyline_boolean_op_plane():
-    from session_py import Plane
-    from session_py import Point
-    from session_py import Polyline
-    from session_py import Vector
-
-    # Two overlapping squares lifted to z=5 and clipped against the z=5 plane
-    plane = Plane.from_point_normal(Point(0,0,5), Vector(0,0,1))
-    sq_a = Polyline([Point(-1,-1,5), Point(1,-1,5), Point(1,1,5), Point(-1,1,5), Point(-1,-1,5)])
-    sq_b = Polyline([Point(0,0,5),  Point(2,0,5), Point(2,2,5), Point(0,2,5), Point(0,0,5)])
-    isect = Polyline.boolean_op(sq_a, sq_b, 0, plane=plane)
-    uni   = Polyline.boolean_op(sq_a, sq_b, 1, plane=plane)
-    diff  = Polyline.boolean_op(sq_a, sq_b, 2, plane=plane)
-    MINI_CHECK(len(isect) == 1)
-    MINI_CHECK(len(uni) == 1)
-    MINI_CHECK(len(diff) == 1)
-    for i in range(isect[0].point_count()):
-        MINI_CHECK(TOLERANCE.is_close(isect[0][i][2], 5.0))
-    for i in range(uni[0].point_count()):
-        MINI_CHECK(TOLERANCE.is_close(uni[0][i][2], 5.0))
-    for i in range(diff[0].point_count()):
-        MINI_CHECK(TOLERANCE.is_close(diff[0][i][2], 5.0))
 
 
 @MINI_TEST("Polyline", "Transformed Xform")

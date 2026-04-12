@@ -388,7 +388,7 @@ class Element:
             "NurbsSurface": NurbsSurface,
             "BRep": BRep,
         }
-        if geo_type in ("ColumnElement", "BeamElement", "PlateElement"):
+        if geo_type in ("ElementColumn", "ElementBeam", "ElementPlate"):
             return None
         klass = type_map.get(geo_type)
         if klass is None:

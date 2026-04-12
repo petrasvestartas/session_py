@@ -4,7 +4,7 @@ from .element import Element
 from .xform import Xform
 
 
-class BeamElement(Element):
+class ElementBeam(Element):
     def __init__(self, width=0.1, depth=0.2, length=3.0, name="my_beam"):
         super().__init__(geometry=None, name=name)
         self._width = width
@@ -148,7 +148,7 @@ class BeamElement(Element):
         return result
 
     def __eq__(self, other):
-        if not isinstance(other, BeamElement):
+        if not isinstance(other, ElementBeam):
             return False
         return (self.name == other.name and
                 self._width == other._width and
@@ -159,10 +159,10 @@ class BeamElement(Element):
         return not self.__eq__(other)
 
     def __str__(self):
-        return f"BeamElement({self.name}, {self._width}, {self._depth}, {self._length})"
+        return f"ElementBeam({self.name}, {self._width}, {self._depth}, {self._length})"
 
     def __repr__(self):
-        return f"BeamElement({self.guid}, {self.name}, {self._width}, {self._depth}, {self._length})"
+        return f"ElementBeam({self.guid}, {self.name}, {self._width}, {self._depth}, {self._length})"
 
     ###########################################################################################
     # Serialization - JSON
@@ -177,7 +177,7 @@ class BeamElement(Element):
             "length": self._length,
             "name": self.name,
             "session_transformation": self.session_transformation.__jsondump__(),
-            "type": "BeamElement",
+            "type": "ElementBeam",
             "width": self._width,
         }
 
@@ -204,7 +204,7 @@ class BeamElement(Element):
         proto = element_pb2.Element()
         proto.guid = self.guid
         proto.name = self.name
-        proto.geometry_type = "BeamElement"
+        proto.geometry_type = "ElementBeam"
         import json
         proto.geometry_data = json.dumps({
             "width": self._width,

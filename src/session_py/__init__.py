@@ -32,9 +32,9 @@ from .primitives import Primitives
 from .trimmedsurface import TrimmedSurface
 from .brep import BRep
 from .element import Element
-from .element_column import ColumnElement
-from .element_beam import BeamElement
-from .element_plate import PlateElement
+from .element_column import ElementColumn
+from .element_beam import ElementBeam
+from .element_plate import ElementPlate
 from .closest import Closest
 from .mesh_iso import MeshIso, TpmsType, TpmsMode
 from .remesh_cdt import RemeshCDT
@@ -82,9 +82,9 @@ __all__ = [
     "TrimmedSurface",
     "BRep",
     "Element",
-    "ColumnElement",
-    "BeamElement",
-    "PlateElement",
+    "ElementColumn",
+    "ElementBeam",
+    "ElementPlate",
     "Closest",
     "MeshIso",
     "TpmsType",

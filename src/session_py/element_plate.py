@@ -4,7 +4,7 @@ from .element import Element
 from .xform import Xform
 
 
-class PlateElement(Element):
+class ElementPlate(Element):
     @staticmethod
     def _strip_closing(pts):
         from .point import Point
@@ -253,7 +253,7 @@ class PlateElement(Element):
         return result
 
     def __eq__(self, other):
-        if not isinstance(other, PlateElement):
+        if not isinstance(other, ElementPlate):
             return False
         if self.name != other.name:
             return False
@@ -270,10 +270,10 @@ class PlateElement(Element):
         return not self.__eq__(other)
 
     def __str__(self):
-        return f"PlateElement({self.name}, {len(self._polygon)} pts, {self._thickness})"
+        return f"ElementPlate({self.name}, {len(self._polygon)} pts, {self._thickness})"
 
     def __repr__(self):
-        return f"PlateElement({self.guid}, {self.name}, {len(self._polygon)} pts, {self._thickness})"
+        return f"ElementPlate({self.guid}, {self.name}, {len(self._polygon)} pts, {self._thickness})"
 
     ###########################################################################################
     # Serialization - JSON
@@ -293,7 +293,7 @@ class PlateElement(Element):
             "polygon_top": [[p[0], p[1], p[2]] for p in self._polygon_top],
             "session_transformation": self.session_transformation.__jsondump__(),
             "thickness": self._thickness,
-            "type": "PlateElement",
+            "type": "ElementPlate",
         }
 
     @classmethod
@@ -329,7 +329,7 @@ class PlateElement(Element):
         proto = element_pb2.Element()
         proto.guid = self.guid
         proto.name = self.name
-        proto.geometry_type = "PlateElement"
+        proto.geometry_type = "ElementPlate"
         import json
         proto.geometry_data = json.dumps({
             "polygon": [[p[0], p[1], p[2]] for p in self._polygon],

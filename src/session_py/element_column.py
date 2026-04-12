@@ -4,7 +4,7 @@ from .element import Element
 from .xform import Xform
 
 
-class ColumnElement(Element):
+class ElementColumn(Element):
     def __init__(self, width=0.4, depth=0.4, height=3.0, name="my_column"):
         super().__init__(geometry=None, name=name)
         self._width = width
@@ -148,7 +148,7 @@ class ColumnElement(Element):
         return result
 
     def __eq__(self, other):
-        if not isinstance(other, ColumnElement):
+        if not isinstance(other, ElementColumn):
             return False
         return (self.name == other.name and
                 self._width == other._width and
@@ -159,10 +159,10 @@ class ColumnElement(Element):
         return not self.__eq__(other)
 
     def __str__(self):
-        return f"ColumnElement({self.name}, {self._width}, {self._depth}, {self._height})"
+        return f"ElementColumn({self.name}, {self._width}, {self._depth}, {self._height})"
 
     def __repr__(self):
-        return f"ColumnElement({self.guid}, {self.name}, {self._width}, {self._depth}, {self._height})"
+        return f"ElementColumn({self.guid}, {self.name}, {self._width}, {self._depth}, {self._height})"
 
     ###########################################################################################
     # Serialization - JSON
@@ -177,7 +177,7 @@ class ColumnElement(Element):
             "height": self._height,
             "name": self.name,
             "session_transformation": self.session_transformation.__jsondump__(),
-            "type": "ColumnElement",
+            "type": "ElementColumn",
             "width": self._width,
         }
 
@@ -204,7 +204,7 @@ class ColumnElement(Element):
         proto = element_pb2.Element()
         proto.guid = self.guid
         proto.name = self.name
-        proto.geometry_type = "ColumnElement"
+        proto.geometry_type = "ElementColumn"
         import json
         proto.geometry_data = json.dumps({
             "width": self._width,
