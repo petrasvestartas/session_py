@@ -168,7 +168,7 @@ def test_matrix_solve():
     MINI_CHECK(TOLERANCE.is_close(residual_1, 10.0))
 
 
-@MINI_TEST("Matrix", "LuDecompose")
+@MINI_TEST("Matrix", "Lu Decompose")
 def test_matrix_lu_decompose():
     from session_py import Matrix
     a = Matrix.from_list(3, 3, [2.0, 1.0, 1.0, 4.0, 3.0, 3.0, 8.0, 7.0, 9.0])
@@ -186,7 +186,7 @@ def test_matrix_lu_decompose():
     MINI_CHECK(TOLERANCE.is_close(l[1, 2], 0.0))
 
 
-@MINI_TEST("Matrix", "QrDecompose")
+@MINI_TEST("Matrix", "Qr Decompose")
 def test_matrix_qr_decompose():
     from session_py import Matrix
     a = Matrix.from_list(3, 3, [12.0, -51.0, 4.0, 6.0, 167.0, -68.0, -4.0, 24.0, -41.0])

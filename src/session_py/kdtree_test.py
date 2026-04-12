@@ -7,7 +7,8 @@ from .tolerance import TOLERANCE
 
 @MINI_TEST("KDTree", "Nearest")
 def test_kdtree_nearest():
-    from session_py import KDTree, Point
+    from session_py import KDTree
+    from session_py import Point
 
     # 5 known points on a line: 0, 1, 2, 3, 4
     # Query at 1.1 — nearest should be index 1 (point at x=1), distance 0.1
@@ -28,7 +29,8 @@ def test_kdtree_nearest():
 
 @MINI_TEST("KDTree", "Nearest K")
 def test_kdtree_nearest_k():
-    from session_py import KDTree, Point
+    from session_py import KDTree
+    from session_py import Point
 
     # 5 points on X axis: 0, 1, 2, 3, 4
     # Query at 1.5 — 3 nearest are: x=1 (d=0.5), x=2 (d=0.5), x=3 (d=1.5)
@@ -51,7 +53,8 @@ def test_kdtree_nearest_k():
 
 @MINI_TEST("KDTree", "Radius Search")
 def test_kdtree_radius_search():
-    from session_py import KDTree, Point
+    from session_py import KDTree
+    from session_py import Point
 
     # 4 points: 0, 1, 2, 5 on X axis
     # Query at 0.5, radius 1.1 — finds x=0 (d=0.5) and x=1 (d=0.5)

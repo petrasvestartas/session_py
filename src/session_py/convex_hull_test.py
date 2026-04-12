@@ -6,9 +6,10 @@ from .tolerance import TOLERANCE
 from .tolerance import PI
 
 
-@MINI_TEST("ConvexHull", "Hull2d")
+@MINI_TEST("ConvexHull", "Hull 2d")
 def test_convex_hull_hull_2d():
-    from session_py import ConvexHull, Point
+    from session_py import ConvexHull
+    from session_py import Point
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -22,9 +23,10 @@ def test_convex_hull_hull_2d():
     MINI_CHECK(len(hull) == 4)
 
 
-@MINI_TEST("ConvexHull", "Hull2dCollinear")
+@MINI_TEST("ConvexHull", "Hull 2d Collinear")
 def test_convex_hull_hull_2d_collinear():
-    from session_py import ConvexHull, Point
+    from session_py import ConvexHull
+    from session_py import Point
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -37,9 +39,10 @@ def test_convex_hull_hull_2d_collinear():
     MINI_CHECK(len(hull) >= 3)
 
 
-@MINI_TEST("ConvexHull", "Hull2dCircle")
+@MINI_TEST("ConvexHull", "Hull 2d Circle")
 def test_convex_hull_hull_2d_circle():
-    from session_py import ConvexHull, Point
+    from session_py import ConvexHull
+    from session_py import Point
     pts = []
     n = 12
     for i in range(n):
@@ -51,9 +54,10 @@ def test_convex_hull_hull_2d_circle():
     MINI_CHECK(len(hull) == n)
 
 
-@MINI_TEST("ConvexHull", "Hull3d")
+@MINI_TEST("ConvexHull", "Hull 3d")
 def test_convex_hull_hull_3d():
-    from session_py import ConvexHull, Point
+    from session_py import ConvexHull
+    from session_py import Point
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -67,9 +71,10 @@ def test_convex_hull_hull_3d():
     MINI_CHECK(mesh.number_of_faces() == 4)
 
 
-@MINI_TEST("ConvexHull", "Hull3dCube")
+@MINI_TEST("ConvexHull", "Hull 3d Cube")
 def test_convex_hull_hull_3d_cube():
-    from session_py import ConvexHull, Point
+    from session_py import ConvexHull
+    from session_py import Point
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
