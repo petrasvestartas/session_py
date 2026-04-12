@@ -179,10 +179,10 @@ def test_json_roundtrip():
     loaded_json_string = BRep.json_loads(json_string)
 
     # File
-    filename = str(Path(__file__).parent.parent.parent.parent / "serialization" / "test_brep.json")
-    Path(filename).parent.mkdir(parents=True, exist_ok=True)
-    b.json_dump(filename)
-    loaded_from_file = BRep.json_load(filename)
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_brep.json"
+    fname.parent.mkdir(parents=True, exist_ok=True)
+    b.json_dump(str(fname))
+    loaded_from_file = BRep.json_load(str(fname))
 
     MINI_CHECK(loaded_json == b)
     MINI_CHECK(loaded_json_string == b)
@@ -403,10 +403,10 @@ def test_protobuf_roundtrip():
     loaded_proto = BRep.pb_loads(proto_data)
 
     # File
-    filename = str(Path(__file__).parent.parent.parent.parent / "serialization" / "test_brep.bin")
-    Path(filename).parent.mkdir(parents=True, exist_ok=True)
-    b.pb_dump(filename)
-    loaded = BRep.pb_load(filename)
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_brep.bin"
+    fname.parent.mkdir(parents=True, exist_ok=True)
+    b.pb_dump(str(fname))
+    loaded = BRep.pb_load(str(fname))
 
     MINI_CHECK(loaded_proto == b)
     MINI_CHECK(loaded == b)

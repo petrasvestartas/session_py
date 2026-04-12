@@ -3,7 +3,7 @@
     "a": 255,
     "b": 255,
     "g": 0,
-    "guid": "5d0f4563-80c0-494f-9f09-ebc608c8bd87",
+    "guid": "bd40a044-7a8e-49da-a64b-cb9853208a6f",
     "name": "blue",
     "r": 0,
     "type": "Color"
@@ -22,12 +22,12 @@
     0.0,
     1.0
   ],
-  "guid": "b6dd3917-6012-4536-9518-78b0fc7bd813",
+  "guid": "050115a3-47f8-466a-9322-5ff4a1351764",
   "name": "test_plane",
   "type": "Plane",
   "width": 1.0,
   "xform": {
-    "guid": "63bc3575-24fa-4810-9c07-fe0ba84fd2ff",
+    "guid": "e653cdf9-431d-4d04-966d-d244ae6c8fca",
     "m": [
       1.0,
       0.0,
