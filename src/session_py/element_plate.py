@@ -15,8 +15,8 @@ class ElementPlate(Element):
                 result.pop()
         return result
 
-    def __init__(self, polygon=None, thickness=0.1, name="my_plate", polygon_top=None):
-        super().__init__(geometry=None, name=name)
+    def __init__(self, polygon=None, thickness=0.1, transformation=None, name="my_plate", polygon_top=None):
+        super().__init__(geometry=None, transformation=transformation, name=name)
         from .point import Point
         if polygon is None:
             polygon = [

@@ -4,6 +4,26 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
+@MINI_TEST("BVH", "Constructor")
+def test_bvh_constructor():
+    from session_py.bvh import BVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    # BVH: Morton-ordered static hierarchy — O(log n) nearest-neighbour for OBBs
+    boxes = [
+        OBB(Point(0, 0, 0),  Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(2, 0, 0),  Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+        OBB(Point(20, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
+    ]
+    bvh = BVH.from_boxes(boxes, 100.0)
+    n = bvh.nearest_neighbors(0, boxes, 1.5)
+
+    MINI_CHECK(len(n) == 1)
+    MINI_CHECK(n[0] == 1)
+
+
 @MINI_TEST("BVH", "Expand Bits")
 def test_bvh_expand_bits():
     from session_py.bvh import expand_bits

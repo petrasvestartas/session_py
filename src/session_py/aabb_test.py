@@ -4,6 +4,26 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
+@MINI_TEST("AABBTree", "Constructor")
+def test_aabbtree_constructor():
+    from session_py import AABB
+    from session_py import Closest
+
+    # AABBTree: O(n log n) build, O(log n) cull — prune candidates before exact test
+    box0 = AABB(0.0, 0.0, 0.0, 0.5, 0.5, 0.5)
+    box1 = AABB(5.0, 0.0, 0.0, 0.5, 0.5, 0.5)
+    box2 = AABB(10.0, 0.0, 0.0, 0.5, 0.5, 0.5)
+    pairs = Closest.boxes_closest([box0, box1, box2], 0.0)
+
+    MINI_CHECK(len(pairs) == 0)
+
+    pairs_near = Closest.boxes_closest([box0, AABB(1.0, 0.0, 0.0, 0.5, 0.5, 0.5)], 0.0)
+
+    MINI_CHECK(len(pairs_near) == 1)
+    MINI_CHECK(pairs_near[0][0] == 0)
+    MINI_CHECK(pairs_near[0][1] == 1)
+
+
 @MINI_TEST("AABBTree", "Build Empty")
 def test_aabbtree_build_empty():
     from session_py import Closest
@@ -141,6 +161,122 @@ def test_aabb_constructor():
     c = AABB.merge(AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), AABB(4.0, 0.0, 0.0, 1.0, 1.0, 1.0))
     MINI_CHECK(c.min_point() == Point(-1.0, -1.0, -1.0))
     MINI_CHECK(c.max_point() == Point(5.0, 1.0, 1.0))
+
+
+@MINI_TEST("Aabb", "From Geometry")
+def test_aabb_from_geometry():
+    from session_py import AABB
+    from session_py import Color
+    from session_py import Line
+    from session_py import Mesh
+    from session_py import NurbsCurve
+    from session_py import NurbsSurface
+    from session_py import Point
+    from session_py import PointCloud
+    from session_py import Polyline
+    from session_py import Primitives
+    from session_py import Vector
+
+    a_pt = AABB.from_point(Point(1.0, 2.0, 3.0), 0.5)
+
+    MINI_CHECK(a_pt.center() == Point(1.0, 2.0, 3.0))
+    MINI_CHECK(TOLERANCE.is_close(a_pt.hx, 0.5))
+
+    a_pts = AABB.from_points([
+        Point(0.0, 0.0, 0.0),
+        Point(3.0, 4.0, 5.0),
+    ], 0.0)
+
+    MINI_CHECK(a_pts.min_point() == Point(0.0, 0.0, 0.0))
+    MINI_CHECK(a_pts.max_point() == Point(3.0, 4.0, 5.0))
+
+    ln = Line(0.0, 0.0, 0.0, 4.0, 0.0, 0.0)
+    a_line = AABB.from_line(ln, 1.0)
+
+    MINI_CHECK(a_line.min_point() == Point(-1.0, -1.0, -1.0))
+    MINI_CHECK(a_line.max_point() == Point(5.0, 1.0, 1.0))
+
+    pl = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(2.0, 2.0, 0.0),
+    ])
+    a_pl = AABB.from_polyline(pl, 0.0)
+
+    MINI_CHECK(a_pl.min_point() == Point(0.0, 0.0, 0.0))
+    MINI_CHECK(a_pl.max_point() == Point(2.0, 2.0, 0.0))
+
+    cube = Primitives.cube(2.0)
+    a_mesh = AABB.from_mesh(cube, 0.0)
+
+    MINI_CHECK(a_mesh.min_point() == Point(-1.0, -1.0, -1.0))
+    MINI_CHECK(a_mesh.max_point() == Point(1.0, 1.0, 1.0))
+
+    pc = PointCloud(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(4.0, 2.0, 6.0),
+        ],
+        [
+            Vector(0.0, 0.0, 1.0),
+            Vector(0.0, 0.0, 1.0),
+        ],
+        [
+            Color(255, 0, 0, 255),
+            Color(0, 255, 0, 255),
+        ]
+    )
+    a_pc = AABB.from_pointcloud(pc, 0.0)
+
+    MINI_CHECK(a_pc.min_point() == Point(0.0, 0.0, 0.0))
+    MINI_CHECK(a_pc.max_point() == Point(4.0, 2.0, 6.0))
+
+    curve = NurbsCurve.create(False, 2, [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 0.0, 0.0),
+    ])
+    a_nc = AABB.from_nurbscurve(curve, 0.5, False)
+
+    MINI_CHECK(a_nc.is_valid())
+    MINI_CHECK(a_nc.contains(Point(1.5, 0.0, 0.0)))
+
+    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, [
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(2.0, 2.0, 2.0),
+    ])
+    a_ns = AABB.from_nurbssurface(surf, 0.0)
+
+    MINI_CHECK(a_ns.is_valid())
+    MINI_CHECK(TOLERANCE.is_close(a_ns.volume(), 8.0))
+
+
+@MINI_TEST("AABBTree", "Query Aabb")
+def test_aabbtree_query_aabb():
+    from session_py import Closest
+    from session_py import Mesh
+    from session_py import Point
+
+    m = Mesh()
+    vk0 = m.add_vertex(Point(0.0, 0.0, 0.0))
+    vk1 = m.add_vertex(Point(1.0, 0.0, 0.0))
+    vk2 = m.add_vertex(Point(0.5, 1.0, 0.0))
+    vk3 = m.add_vertex(Point(20.0, 0.0, 0.0))
+    vk4 = m.add_vertex(Point(21.0, 0.0, 0.0))
+    vk5 = m.add_vertex(Point(20.5, 1.0, 0.0))
+    m.add_face([vk0, vk1, vk2])
+    m.add_face([vk3, vk4, vk5])
+    cp_near, fk_near, d_near = Closest.mesh_point_aabb(m, Point(0.5, 0.25, 0.0))
+    cp_far, fk_far, d_far = Closest.mesh_point_aabb(m, Point(20.5, 0.25, 0.0))
+
+    MINI_CHECK(TOLERANCE.is_close(d_near, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(d_far, 0.0))
+    MINI_CHECK(fk_near != fk_far)
+    MINI_CHECK(cp_near[0] < 2.0)
+    MINI_CHECK(cp_far[0] > 15.0)
 
 
 if __name__ == "__main__":

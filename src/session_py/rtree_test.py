@@ -3,6 +3,21 @@ from .mini_test import MINI_CHECK
 from .mini_test import run_all
 
 
+@MINI_TEST("RTree", "Constructor")
+def test_rtree_constructor():
+    from session_py.rtree import RTree
+
+    # RTree3: dynamic spatial index — insert/remove support, O(log n) overlap search
+    t = RTree()
+    t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
+    t.insert([5.0, 0.0, 0.0], [6.0, 1.0, 1.0], 1)
+    t.insert([10.0, 0.0, 0.0], [11.0, 1.0, 1.0], 2)
+    found = []
+    t.search([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], lambda id: found.append(id) or True)
+
+    MINI_CHECK(0 in found)
+
+
 @MINI_TEST("RTree", "Creation")
 def test_rtree_creation():
     from session_py.rtree import RTree

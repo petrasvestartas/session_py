@@ -5,8 +5,8 @@ from .xform import Xform
 
 
 class ElementColumn(Element):
-    def __init__(self, width=0.4, depth=0.4, height=3.0, name="my_column"):
-        super().__init__(geometry=None, name=name)
+    def __init__(self, width=0.4, depth=0.4, height=3.0, transformation=None, name="my_column"):
+        super().__init__(geometry=None, transformation=transformation, name=name)
         self._width = width
         self._depth = depth
         self._height = height

@@ -11,6 +11,24 @@ _CLASS_MODULE_MAP = {
     "Edge": "graph",
 }
 
+_EXTERNAL_CLASS_MAP: dict = {}
+
+
+def register_class(name: str, cls) -> None:
+    """Register an external class for polymorphic JSON deserialization.
+
+    Call this from external packages (e.g. session_tf) at import time so that
+    ``decode_node`` can reconstruct custom objects stored in ``objects.components``.
+
+    Parameters
+    ----------
+    name : str
+        The value of the ``"type"`` field in the object's ``__jsondump__`` output.
+    cls : type
+        The class to instantiate (must implement ``__jsonload__``).
+    """
+    _EXTERNAL_CLASS_MAP[name] = cls
+
 
 def _get_class_from_name(class_name: str):
     """Dynamically import a class by name from the session_py package.
@@ -28,6 +46,8 @@ def _get_class_from_name(class_name: str):
     type or None
         The class object if found, None otherwise
     """
+    if class_name in _EXTERNAL_CLASS_MAP:
+        return _EXTERNAL_CLASS_MAP[class_name]
     try:
         mod = _CLASS_MODULE_MAP.get(class_name, class_name.lower())
         module_name = f"session_py.{mod}"

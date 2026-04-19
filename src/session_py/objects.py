@@ -51,6 +51,7 @@ class Objects:
         self.nurbssurfaces: list[NurbsSurface] = []
         self.breps: list[BRep] = []
         self.elements: list[Element] = []
+        self.components: list = []
 
     @property
     def guid(self) -> str:
@@ -96,6 +97,7 @@ class Objects:
             "nurbssurfaces": [ns.__jsondump__() for ns in self.nurbssurfaces],
             "breps": [b.__jsondump__() for b in self.breps],
             "elements": [e.__jsondump__() for e in self.elements],
+            "components": [c.__jsondump__() for c in self.components],
         }
 
     @classmethod
@@ -134,6 +136,7 @@ class Objects:
         obj.nurbssurfaces = [decode_node(ns) for ns in data.get("nurbssurfaces", [])]
         obj.breps = [decode_node(b) for b in data.get("breps", [])]
         obj.elements = [decode_node(e) for e in data.get("elements", [])]
+        obj.components = [decode_node(c) for c in data.get("components", [])]
 
         return obj
 

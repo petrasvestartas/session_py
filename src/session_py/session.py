@@ -52,9 +52,6 @@ class Session:
         self.lookup: Dict[str, Any] = {}
         self.tree = Tree(name=f"{name}_tree")
         self.graph = Graph(name=f"{name}_graph")
-        self.layers: Dict[str, str] = {}  # guid -> layer name
-        self._current_layer: Optional[str] = None
-
         # BVH for collision detection (auto-computed world size)
         self.bvh = BVH()
 
@@ -134,6 +131,8 @@ class Session:
             session.lookup[brep.guid] = brep
         for element in session.objects.elements:
             session.lookup[element.guid] = element
+        for component in session.objects.components:
+            session.lookup[component.guid] = component
 
         return session
 
@@ -211,32 +210,12 @@ class Session:
             return cls.pb_loads(f.read())
 
     ###########################################################################################
-    # Details - Layers
-    ###########################################################################################
-
-    def set_layer(self, name: Optional[str]) -> None:
-        """Set the current layer. All subsequent add_* calls will be tagged with this layer.
-
-        Parameters
-        ----------
-        name : str or None
-            Layer name, or None to clear the current layer.
-        """
-        self._current_layer = name
-
-    def _tag_layer(self, guid: str) -> None:
-        """Tag an object with the current layer (if set)."""
-        if self._current_layer is not None:
-            self.layers[guid] = self._current_layer
-
-    ###########################################################################################
     # Details - Add objects
     ###########################################################################################
 
     def _add_object(self, collection, obj, type_prefix, parent=None):
         collection.append(obj)
         self.lookup[obj.guid] = obj
-        self._tag_layer(obj.guid)
         self.graph.add_node(obj.guid, f"{type_prefix}_{obj.name}")
         node = TreeNode(name=obj.guid)
         if parent is not None:
@@ -276,10 +255,26 @@ class Session:
     def add_element(self, element, parent=None) -> TreeNode:
         return self._add_object(self.objects.elements, element, "element", parent)
 
+    def add_component(self, component, parent=None) -> TreeNode:
+        """Add a custom component (any object with guid, name, __jsondump__, __jsonload__)."""
+        return self._add_object(self.objects.components, component, "component", parent)
+
     def add_group(self, name: str) -> TreeNode:
         node = TreeNode(name=name)
         self.add(node)
         return node
+
+    def find_group(self, name: str) -> TreeNode:
+        """Find an existing group by name.
+
+        Raises ValueError if the group does not exist.
+        """
+        root = self.tree.root
+        if root is not None:
+            for child in root.children:
+                if child.name == name:
+                    return child
+        raise ValueError(f"Group '{name}' not found")
 
     def compute_face_to_face(self, inflate=5.0, coplanar_tolerance=50.0):
         from .intersection import adjacency_search, face_to_face
@@ -718,6 +713,7 @@ class Session:
 
         # Deep copy all objects
         transformed_objects = copy.deepcopy(self.objects)
+
 
         # Rebuild lookup from copied objects
         transformed_lookup = {}

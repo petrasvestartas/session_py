@@ -4,11 +4,11 @@ from .xform import Xform
 
 
 class Element:
-    def __init__(self, geometry=None, name="my_element"):
+    def __init__(self, geometry=None, transformation=None, name="my_element"):
         self._guid = None
         self.name = name
         self._geometry = geometry
-        self._session_transformation = None
+        self._session_transformation = transformation
         self._features = []
         self._is_dirty = True
         self._aabb = None

@@ -5,8 +5,8 @@ from .xform import Xform
 
 
 class ElementBeam(Element):
-    def __init__(self, width=0.1, depth=0.2, length=3.0, name="my_beam"):
-        super().__init__(geometry=None, name=name)
+    def __init__(self, width=0.1, depth=0.2, length=3.0, transformation=None, name="my_beam"):
+        super().__init__(geometry=None, transformation=transformation, name=name)
         self._width = width
         self._depth = depth
         self._length = length

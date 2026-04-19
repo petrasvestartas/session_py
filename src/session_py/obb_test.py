@@ -215,5 +215,133 @@ def test_obb_accessors():
     MINI_CHECK(TOLERANCE.is_close(b.half_size[0], 3.0))
 
 
+@MINI_TEST("OBB", "From Geometry")
+def test_obb_from_geometry():
+    from session_py import Color
+    from session_py import Line
+    from session_py import NurbsCurve
+    from session_py import NurbsSurface
+    from session_py import OBB
+    from session_py import Point
+    from session_py import PointCloud
+    from session_py import Polyline
+    from session_py import Primitives
+    from session_py import Vector
+
+    bb_line = OBB.from_line(Line(0.0, 0.0, 0.0, 4.0, 0.0, 0.0), 0.1)
+
+    MINI_CHECK(bb_line.is_valid())
+    MINI_CHECK(TOLERANCE.is_close(bb_line.center[0], 2.0))
+
+    bb_pl = OBB.from_polyline(Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+        Point(4.0, 4.0, 4.0),
+    ]), 0.0)
+
+    MINI_CHECK(bb_pl.is_valid())
+    MINI_CHECK(bb_pl.volume() > 0.0)
+
+    bb_mesh = OBB.from_mesh(Primitives.cube(2.0), 0.0)
+
+    MINI_CHECK(bb_mesh.is_valid())
+    MINI_CHECK(TOLERANCE.is_close(bb_mesh.center[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(bb_mesh.volume(), 8.0))
+
+    bb_pc = OBB.from_pointcloud(PointCloud(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(0.0, 0.0, 2.0),
+        ],
+        [
+            Vector(0.0, 0.0, 1.0),
+            Vector(0.0, 0.0, 1.0),
+            Vector(0.0, 0.0, 1.0),
+            Vector(0.0, 0.0, 1.0),
+        ],
+        [
+            Color(255, 0, 0, 255),
+            Color(0, 255, 0, 255),
+            Color(0, 0, 255, 255),
+            Color(255, 255, 0, 255),
+        ]
+    ), 0.0)
+
+    MINI_CHECK(bb_pc.is_valid())
+    MINI_CHECK(bb_pc.volume() > 0.0)
+
+    bb_nc = OBB.from_nurbscurve(NurbsCurve.create(False, 2, [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 0.0, 0.0),
+    ]), 0.5, False)
+
+    MINI_CHECK(bb_nc.is_valid())
+
+    bb_ns = OBB.from_nurbssurface(NurbsSurface.create(False, False, 1, 1, 2, 2, [
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(2.0, 2.0, 2.0),
+    ]), 0.0)
+
+    MINI_CHECK(bb_ns.is_valid())
+
+
+@MINI_TEST("OBB", "From Plane")
+def test_obb_from_plane():
+    from session_py import OBB
+    from session_py import Plane
+    from session_py import Point
+
+    plane = Plane.xy_plane()
+    box = OBB.from_plane(plane, 2.0, 3.0, 4.0)
+
+    MINI_CHECK(TOLERANCE.is_close(box.half_size[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(box.half_size[1], 1.5))
+    MINI_CHECK(TOLERANCE.is_close(box.half_size[2], 2.0))
+    MINI_CHECK(box.center == Point(0.0, 0.0, 0.0))
+
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(2.0, 3.0, 0.0),
+        Point(0.0, 3.0, 0.0),
+    ]
+    bb = OBB.from_points_with_plane(pts, plane, 0.0)
+
+    MINI_CHECK(TOLERANCE.is_close(bb.half_size[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(bb.half_size[1], 1.5))
+    MINI_CHECK(TOLERANCE.is_close(bb.x_axis[0], 1.0))
+
+
+@MINI_TEST("OBB", "Two Rectangles")
+def test_obb_two_rectangles():
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    bb = OBB(
+        center=Point(1.0, 2.0, 3.0),
+        x_axis=Vector(1.0, 0.0, 0.0),
+        y_axis=Vector(0.0, 1.0, 0.0),
+        z_axis=Vector(0.0, 0.0, 1.0),
+        half_size=Vector(2.0, 3.0, 4.0)
+    )
+    rects = bb.two_rectangles()
+
+    # bottom rect (z=-4 offset): corners at z=-1; top rect (z=+4 offset): corners at z=7
+    MINI_CHECK(len(rects) == 10)
+    MINI_CHECK(rects[0] == Point(3.0, 5.0, -1.0))
+    MINI_CHECK(rects[2] == Point(-1.0, -1.0, -1.0))
+    MINI_CHECK(rects[4] == rects[0])
+    MINI_CHECK(rects[5] == Point(3.0, 5.0, 7.0))
+    MINI_CHECK(rects[7] == Point(-1.0, -1.0, 7.0))
+    MINI_CHECK(rects[9] == rects[5])
+
+
 if __name__ == "__main__":
     run_all(language="python")

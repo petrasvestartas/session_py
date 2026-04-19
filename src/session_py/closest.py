@@ -512,3 +512,162 @@ class Closest:
                 best_index = i
 
         return (best_point, best_index, best_dist)
+
+    @staticmethod
+    def pointcloud_point_kdtree(cloud, test_point):
+        if cloud.point_count() == 0:
+            return (Point(0, 0, 0), 0, float('inf'))
+        from session_py import KDTree
+        pts = [cloud.get_point(i) for i in range(cloud.point_count())]
+        tree = KDTree(pts)
+        idx, dist = tree.nearest(test_point)
+        return (cloud.get_point(idx), idx, dist)
+
+    @staticmethod
+    def _build_raw_boxes(aabbs):
+        return [(b.cx, b.cy, b.cz, b.hx, b.hy, b.hz) for b in aabbs]
+
+    @staticmethod
+    def _build_aabb_nodes(raw_boxes):
+        nodes = []
+
+        def build(ids):
+            ni = len(nodes)
+            nodes.append([None, -1, -1])
+            lx = ly = lz = 1e308
+            hx = hy = hz = -1e308
+            for i in ids:
+                b = raw_boxes[i]
+                lx = min(lx, b[0]-b[3]); hx = max(hx, b[0]+b[3])
+                ly = min(ly, b[1]-b[4]); hy = max(hy, b[1]+b[4])
+                lz = min(lz, b[2]-b[5]); hz = max(hz, b[2]+b[5])
+            nodes[ni][0] = ((lx+hx)*0.5, (ly+hy)*0.5, (lz+hz)*0.5,
+                            (hx-lx)*0.5, (hy-ly)*0.5, (hz-lz)*0.5)
+            if len(ids) == 1:
+                nodes[ni][2] = ids[0]
+                return
+            dx = hx-lx; dy = hy-ly; dz = hz-lz
+            axis = 0 if dx >= dy and dx >= dz else (1 if dy >= dz else 2)
+            ids.sort(key=lambda i: raw_boxes[i][axis])
+            mid = len(ids) // 2
+            build(ids[:mid])
+            nodes[ni][1] = len(nodes)
+            build(ids[mid:])
+
+        build(list(range(len(raw_boxes))))
+        return nodes
+
+    @staticmethod
+    def _query_aabb_nodes(nodes, query, result):
+        def overlaps(a, b):
+            return (abs(a[0]-b[0]) <= a[3]+b[3] and
+                    abs(a[1]-b[1]) <= a[4]+b[4] and
+                    abs(a[2]-b[2]) <= a[5]+b[5])
+
+        def dfs(ni):
+            aabb, right, obj = nodes[ni]
+            if not overlaps(aabb, query):
+                return
+            if obj >= 0:
+                result.append(obj)
+                return
+            dfs(ni + 1)
+            dfs(right)
+
+        dfs(0)
+
+    @staticmethod
+    def _aabb_to_aabb_min_dist(a, b):
+        dx = max(0.0, abs(a[0]-b[0]) - a[3] - b[3])
+        dy = max(0.0, abs(a[1]-b[1]) - a[4] - b[4])
+        dz = max(0.0, abs(a[2]-b[2]) - a[5] - b[5])
+        return (dx*dx + dy*dy + dz*dz) ** 0.5
+
+    @staticmethod
+    def lines_closest(lines, threshold=0.0):
+        if len(lines) < 2:
+            return []
+        from session_py import AABB
+        raw = Closest._build_raw_boxes([AABB.from_line(ln, threshold) for ln in lines])
+        nodes = Closest._build_aabb_nodes(raw)
+        pairs = []
+        for i in range(len(lines)):
+            candidates = []
+            Closest._query_aabb_nodes(nodes, raw[i], candidates)
+            for j in candidates:
+                if j <= i:
+                    continue
+                _, _, d_a = Closest.line_point(lines[j], lines[i].start())
+                _, _, d_b = Closest.line_point(lines[j], lines[i].end())
+                _, _, d_c = Closest.line_point(lines[i], lines[j].start())
+                _, _, d_d = Closest.line_point(lines[i], lines[j].end())
+                if min(d_a, d_b, d_c, d_d) <= threshold:
+                    pairs.append((i, j))
+        return pairs
+
+    @staticmethod
+    def polylines_closest(polylines, threshold=0.0):
+        if len(polylines) < 2:
+            return []
+        from session_py import AABB
+        raw = Closest._build_raw_boxes([AABB.from_polyline(pl, threshold) for pl in polylines])
+        nodes = Closest._build_aabb_nodes(raw)
+        pairs = []
+        for i in range(len(polylines)):
+            candidates = []
+            Closest._query_aabb_nodes(nodes, raw[i], candidates)
+            for j in candidates:
+                if j <= i:
+                    continue
+                pts_a = polylines[i].get_points()
+                dist = min(Closest.polyline_point(polylines[j], pt)[2] for pt in pts_a)
+                if dist <= threshold:
+                    pairs.append((i, j))
+        return pairs
+
+    @staticmethod
+    def nurbscurves_closest(curves, threshold=0.0):
+        if len(curves) < 2:
+            return []
+        from session_py import AABB
+        raw = Closest._build_raw_boxes([AABB.from_nurbscurve(crv, threshold, False) for crv in curves])
+        nodes = Closest._build_aabb_nodes(raw)
+        pairs = []
+        for i in range(len(curves)):
+            candidates = []
+            Closest._query_aabb_nodes(nodes, raw[i], candidates)
+            for j in candidates:
+                if j <= i:
+                    continue
+                t0, t1 = curves[i].domain()
+                p_start = curves[i].point_at(t0)
+                p_end = curves[i].point_at(t1)
+                _, d_a = Closest.curve_point(curves[j], p_start)
+                _, d_b = Closest.curve_point(curves[j], p_end)
+                if min(d_a, d_b) <= threshold:
+                    pairs.append((i, j))
+        return pairs
+
+    @staticmethod
+    def boxes_closest(boxes, threshold=0.0):
+        if len(boxes) < 2:
+            return []
+        inflated = []
+        for b in boxes:
+            from session_py import AABB
+            inf = AABB(b.cx, b.cy, b.cz, b.hx + threshold, b.hy + threshold, b.hz + threshold)
+            inflated.append(inf)
+        raw = Closest._build_raw_boxes(inflated)
+        nodes = Closest._build_aabb_nodes(raw)
+        raw_orig = Closest._build_raw_boxes(boxes)
+        pairs = []
+        for i in range(len(boxes)):
+            candidates = []
+            Closest._query_aabb_nodes(nodes, raw[i], candidates)
+            for j in candidates:
+                if j <= i:
+                    continue
+                dist = Closest._aabb_to_aabb_min_dist(raw_orig[i], raw_orig[j])
+                if dist <= threshold:
+                    pairs.append((i, j))
+        return pairs

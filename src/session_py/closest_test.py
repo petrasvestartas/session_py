@@ -170,5 +170,106 @@ def test_closest_pointcloud_point():
     MINI_CHECK(i2 == 3)
 
 
+@MINI_TEST("Closest", "Pointcloud Point KDTree")
+def test_closest_pointcloud_point_kdtree():
+    from session_py import Closest
+    from session_py import PointCloud
+    from session_py import Point
+
+    # KDTree variant: same result as linear scan, O(log n) query
+    pc = PointCloud([
+        Point(0.0, 0.0, 0.0),
+        Point(5.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
+    ])
+
+    cp1, i1, d1 = Closest.pointcloud_point_kdtree(pc, Point(4.0, 0.0, 0.0))
+
+    MINI_CHECK(TOLERANCE.is_close(cp1[0], 5.0))
+    MINI_CHECK(i1 == 1)
+    MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
+
+    cp2, i2, d2 = Closest.pointcloud_point_kdtree(pc, Point(10.0, 10.0, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
+    MINI_CHECK(i2 == 3)
+
+
+@MINI_TEST("Closest", "Lines Closest")
+def test_closest_lines_closest():
+    from session_py import Closest
+    from session_py import Line
+
+    # 3 lines: first two sharing an endpoint, third far away
+    lines = [
+        Line(0.0, 0.0, 0.0, 5.0, 0.0, 0.0),
+        Line(5.0, 0.0, 0.0, 10.0, 0.0, 0.0),
+        Line(100.0, 0.0, 0.0, 110.0, 0.0, 0.0),
+    ]
+
+    pairs = Closest.lines_closest(lines, 0.01)
+
+    MINI_CHECK(len(pairs) == 1)
+    MINI_CHECK(pairs[0][0] == 0)
+    MINI_CHECK(pairs[0][1] == 1)
+
+
+@MINI_TEST("Closest", "Polylines Closest")
+def test_closest_polylines_closest():
+    from session_py import Closest
+    from session_py import Polyline
+    from session_py import Point
+
+    pls = [
+        Polyline([Point(0.0, 0.0, 0.0), Point(5.0, 0.0, 0.0)]),
+        Polyline([Point(5.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)]),
+        Polyline([Point(100.0, 0.0, 0.0), Point(110.0, 0.0, 0.0)]),
+    ]
+
+    pairs = Closest.polylines_closest(pls, 0.01)
+
+    MINI_CHECK(len(pairs) == 1)
+    MINI_CHECK(pairs[0][0] == 0)
+    MINI_CHECK(pairs[0][1] == 1)
+
+
+@MINI_TEST("Closest", "Nurbscurves Closest")
+def test_closest_nurbscurves_closest():
+    from session_py import Closest
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    curves = [
+        NurbsCurve.create(False, 1, [Point(0.0, 0.0, 0.0), Point(5.0, 0.0, 0.0)]),
+        NurbsCurve.create(False, 1, [Point(5.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)]),
+        NurbsCurve.create(False, 1, [Point(100.0, 0.0, 0.0), Point(110.0, 0.0, 0.0)]),
+    ]
+
+    pairs = Closest.nurbscurves_closest(curves, 0.01)
+
+    MINI_CHECK(len(pairs) == 1)
+    MINI_CHECK(pairs[0][0] == 0)
+    MINI_CHECK(pairs[0][1] == 1)
+
+
+@MINI_TEST("Closest", "Boxes Closest")
+def test_closest_boxes_closest():
+    from session_py import AABB
+    from session_py import Closest
+
+    # 3 boxes: first two touching faces (shared at x=1), third far away
+    boxes = [
+        AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0),
+        AABB(2.0, 0.0, 0.0, 1.0, 1.0, 1.0),
+        AABB(20.0, 0.0, 0.0, 1.0, 1.0, 1.0),
+    ]
+
+    pairs = Closest.boxes_closest(boxes, 0.01)
+
+    MINI_CHECK(len(pairs) == 1)
+    MINI_CHECK(pairs[0][0] == 0)
+    MINI_CHECK(pairs[0][1] == 1)
+
+
 if __name__ == "__main__":
     run_all("python")

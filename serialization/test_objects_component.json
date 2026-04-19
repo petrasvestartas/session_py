@@ -1,0 +1,25 @@
+{
+  "type": "Objects",
+  "guid": "b3fcd511-7f4e-42de-aa96-e6159fcfa892",
+  "name": "my_objects",
+  "points": [],
+  "lines": [],
+  "planes": [],
+  "bboxes": [],
+  "polylines": [],
+  "pointclouds": [],
+  "meshes": [],
+  "nurbscurves": [],
+  "nurbssurfaces": [],
+  "breps": [],
+  "elements": [],
+  "components": [
+    {
+      "type": "Box",
+      "guid": "9499390a-e55a-451d-83f8-0a9ffd225aa9",
+      "name": "my_box",
+      "width": 3.0,
+      "height": 5.0
+    }
+  ]
+}

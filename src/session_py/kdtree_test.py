@@ -5,6 +5,24 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
+@MINI_TEST("KDTree", "Constructor")
+def test_kdtree_constructor():
+    from session_py import KDTree
+    from session_py import Point
+
+    # KDTree: O(n log n) build, O(log n) nearest — static point set closest search
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(3.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+    ]
+    tree = KDTree(pts)
+    idx, dist = tree.nearest(Point(2.0, 0.0, 0.0))
+
+    MINI_CHECK(idx == 1)
+    MINI_CHECK(TOLERANCE.is_close(dist, 1.0))
+
+
 @MINI_TEST("KDTree", "Nearest")
 def test_kdtree_nearest():
     from session_py import KDTree
