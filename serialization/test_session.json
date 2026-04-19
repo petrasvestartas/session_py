@@ -1,20 +1,20 @@
 {
   "type": "Session",
-  "guid": "7d74c730-87df-442f-a0cf-ab8ba528facc",
+  "guid": "4d975052-0673-456c-9dcf-1434d3e3040e",
   "name": "my_session",
   "objects": {
     "type": "Objects",
-    "guid": "3afae40d-1b91-46dd-b0ff-fcc8c9184ab3",
+    "guid": "5d0e7b44-8d5a-4364-9004-9375155f4530",
     "name": "my_objects",
     "points": [
       {
-        "guid": "b2ef157f-8f00-4723-b499-4905b9c57d30",
+        "guid": "1628d950-89c9-4ed1-9ab2-b131a5b99574",
         "name": "my_point",
         "pointcolor": {
           "a": 255,
           "b": 255,
           "g": 0,
-          "guid": "7744fe23-76a8-4c40-a25f-5e8bdfdae0fb",
+          "guid": "e22d310e-abf2-4830-be78-0c973f1c5cf5",
           "name": "blue",
           "r": 0,
           "type": "Color"
@@ -23,7 +23,7 @@
         "width": 1.0,
         "x": 1.0,
         "xform": {
-          "guid": "d5299dfd-f0f7-47b9-a438-ed9c6464dd37",
+          "guid": "9d34361e-e356-47f2-b217-60b4f788c652",
           "m": [
             1.0,
             0.0,
@@ -49,13 +49,13 @@
         "z": 3.0
       },
       {
-        "guid": "eff2d9c9-7122-46cc-ab69-71afde205aaa",
+        "guid": "fc76644b-c5ce-4394-8f24-b926ff8ddf40",
         "name": "my_point",
         "pointcolor": {
           "a": 255,
           "b": 255,
           "g": 0,
-          "guid": "7744fe23-76a8-4c40-a25f-5e8bdfdae0fb",
+          "guid": "e22d310e-abf2-4830-be78-0c973f1c5cf5",
           "name": "blue",
           "r": 0,
           "type": "Color"
@@ -64,7 +64,7 @@
         "width": 1.0,
         "x": 4.0,
         "xform": {
-          "guid": "d5299dfd-f0f7-47b9-a438-ed9c6464dd37",
+          "guid": "9d34361e-e356-47f2-b217-60b4f788c652",
           "m": [
             1.0,
             0.0,
@@ -104,31 +104,31 @@
   },
   "tree": {
     "type": "Tree",
-    "guid": "d294a670-5bbe-452c-8411-b6c61db373a3",
+    "guid": "4b351065-d5fa-4bdc-9074-6293105e10bf",
     "name": "my_session_tree",
     "root": {
       "type": "TreeNode",
-      "guid": "54394c5d-1714-4361-b00e-31f1b9e8f6eb",
+      "guid": "590068ed-5b49-4a55-8930-3c52dc5de514",
       "name": "my_session",
       "children": []
     }
   },
   "graph": {
     "type": "Graph",
-    "guid": "59d5f38c-7e56-41d5-873a-1eb1d2486836",
+    "guid": "75e51832-1ac7-4467-8153-2fe774a22bb4",
     "name": "my_session_graph",
     "vertices": [
       {
         "type": "Vertex",
-        "guid": "90443658-d55a-41df-9763-62d1e606d769",
-        "name": "b2ef157f-8f00-4723-b499-4905b9c57d30",
+        "guid": "c3e30f43-c651-46fd-b7dc-e801093f31dd",
+        "name": "1628d950-89c9-4ed1-9ab2-b131a5b99574",
         "attribute": "point_my_point",
         "index": 0
       },
       {
         "type": "Vertex",
-        "guid": "bb81f6e3-b644-4c0a-be0b-57d5144fb365",
-        "name": "eff2d9c9-7122-46cc-ab69-71afde205aaa",
+        "guid": "b4f0c4d7-6dc8-4229-a112-1c7dd253e065",
+        "name": "fc76644b-c5ce-4394-8f24-b926ff8ddf40",
         "attribute": "point_my_point",
         "index": 1
       }
@@ -136,10 +136,10 @@
     "edges": [
       {
         "type": "Edge",
-        "guid": "c776ea8a-2c97-48d9-bec1-922cddd01d88",
+        "guid": "8415d29e-1d50-4ea0-8da8-0d536f4d2cf3",
         "name": "my_edge",
-        "v0": "b2ef157f-8f00-4723-b499-4905b9c57d30",
-        "v1": "eff2d9c9-7122-46cc-ab69-71afde205aaa",
+        "v0": "1628d950-89c9-4ed1-9ab2-b131a5b99574",
+        "v1": "fc76644b-c5ce-4394-8f24-b926ff8ddf40",
         "attribute": "connection",
         "index": 0
       }
