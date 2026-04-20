@@ -36,14 +36,12 @@ from .element_column import ElementColumn
 from .element_beam import ElementBeam
 from .element_plate import ElementPlate
 from .closest import Closest
-from .mesh_iso import MeshIso, TpmsType, TpmsMode
 from .remesh_cdt import RemeshCDT
 from .remesh_nurbssurface_grid import remesh_nurbssurface_grid, RemeshNurbsSurfaceGrid
 from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
 from .matrix import Matrix
 from .convex_hull import ConvexHull
 from .kdtree import KDTree
-from .marching_squares import MarchingSquares
 
 __all__ = [
     "Color",
@@ -86,9 +84,6 @@ __all__ = [
     "ElementBeam",
     "ElementPlate",
     "Closest",
-    "MeshIso",
-    "TpmsType",
-    "TpmsMode",
     "remesh_nurbssurface_grid",
     "RemeshCDT",
     "RemeshNurbsSurfaceGrid",
@@ -96,5 +91,4 @@ __all__ = [
     "Matrix",
     "ConvexHull",
     "KDTree",
-    "MarchingSquares",
 ]

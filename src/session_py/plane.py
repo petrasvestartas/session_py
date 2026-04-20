@@ -765,6 +765,40 @@ class Plane:
 
         return Plane(new_origin, self._x_axis, self._y_axis)
 
+    def base1(self):
+        """Canonical in-plane x-axis from the normal (smallest-|coef| pivot rule).
+
+        Deterministic frame that depends only on the normal; used for 2D
+        projections that must be stable across different construction hints.
+        """
+        n = self._z_axis
+        nx = n[0]
+        ny = n[1]
+        nz = n[2]
+        ax = abs(nx)
+        ay = abs(ny)
+        az = abs(nz)
+        if ax <= ay and ax <= az:
+            b = Vector(0.0, -nz, ny)
+        elif ay <= ax and ay <= az:
+            b = Vector(-nz, 0.0, nx)
+        else:
+            b = Vector(-ny, nx, 0.0)
+        b.normalize_self()
+        return b
+
+    def base2(self):
+        """Canonical in-plane y-axis = normal × base1 (right-handed)."""
+        b1 = self.base1()
+        n = self._z_axis
+        b2 = Vector(
+            n[1]*b1[2] - n[2]*b1[1],
+            n[2]*b1[0] - n[0]*b1[2],
+            n[0]*b1[1] - n[1]*b1[0],
+        )
+        b2.normalize_self()
+        return b2
+
     def to_polylines(self, scale=1.0):
         from .polyline import Polyline
         s = scale * 0.5

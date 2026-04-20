@@ -1060,7 +1060,7 @@ class Polyline:
         div_dist: float,
         max_pts: int = 100,
     ) -> List[Point]:
-        """Grid of interior points; offset_dist is ignored (requires Clipper2)."""
+        """Grid of interior points; offset_dist insets (-) or outsets (+) polygon via miter offset."""
         pts = polygon.get_points()
         if len(pts) < 3:
             return []
@@ -1075,6 +1075,60 @@ class Polyline:
             return origin + x_axis * u + y_axis * v
 
         poly2d = [proj2d(p) for p in pts]
+
+        # Miter offset in 2D (negative = inward, positive = outward). Reuses
+        # the same algorithm as Intersection::offset_in_3d. Falls back to the
+        # un-offset polygon if the result degenerates.
+        if offset_dist != 0.0 and len(poly2d) >= 3:
+            n = len(poly2d)
+            signed_area = 0.0
+            for i in range(n):
+                a = poly2d[i]
+                b = poly2d[(i + 1) % n]
+                signed_area += a[0] * b[1] - b[0] * a[1]
+            delta = -offset_dist if signed_area < 0.0 else offset_dist
+
+            normals = []
+            for i in range(n):
+                a = poly2d[i]
+                b = poly2d[(i + 1) % n]
+                ex = b[0] - a[0]
+                ey = b[1] - a[1]
+                length = (ex * ex + ey * ey) ** 0.5
+                if length < 1e-12:
+                    normals.append((0.0, 0.0))
+                else:
+                    normals.append((ey / length, -ex / length))
+
+            out = []
+            for i in range(n):
+                np_ = normals[(i + n - 1) % n]
+                nn = normals[i]
+                cos_a = np_[0] * nn[0] + np_[1] * nn[1]
+                sin_a = np_[0] * nn[1] - np_[1] * nn[0]
+                denom = 1.0 + cos_a
+                concave = (cos_a > -0.999) and (sin_a * delta < 0.0) and (offset_dist > 0.0)
+                if concave:
+                    out.append((poly2d[i][0] + np_[0] * delta, poly2d[i][1] + np_[1] * delta))
+                    out.append((poly2d[i][0], poly2d[i][1]))
+                    out.append((poly2d[i][0] + nn[0] * delta, poly2d[i][1] + nn[1] * delta))
+                elif abs(denom) < 1e-9:
+                    mx = (np_[0] + nn[0]) * 0.5
+                    my = (np_[1] + nn[1]) * 0.5
+                    out.append((poly2d[i][0] + mx * delta, poly2d[i][1] + my * delta))
+                else:
+                    bx = (np_[0] + nn[0]) / denom
+                    by = (np_[1] + nn[1]) / denom
+                    out.append((poly2d[i][0] + bx * delta, poly2d[i][1] + by * delta))
+
+            out_area = 0.0
+            for i in range(len(out)):
+                a = out[i]
+                b = out[(i + 1) % len(out)]
+                out_area += a[0] * b[1] - b[0] * a[1]
+            if len(out) >= 3 and abs(out_area) > 1e-4:
+                poly2d = out
+
         nv = len(poly2d)
 
         def pt_in_poly(pu, pv):

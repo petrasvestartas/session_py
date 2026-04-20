@@ -1,6 +1,6 @@
 {
   "type": "Objects",
-  "guid": "ef6c808d-930e-4628-8d37-e8f5ff195258",
+  "guid": "c8d93cc9-de4c-47a1-98cd-dbdea9f128c0",
   "name": "my_objects",
   "points": [],
   "lines": [],
@@ -16,7 +16,7 @@
   "components": [
     {
       "type": "Box",
-      "guid": "147ebc65-e91a-420a-aa07-1a44953b5a8b",
+      "guid": "1a12ac15-d8f1-47da-924e-d61137a787e7",
       "name": "my_box",
       "width": 3.0,
       "height": 5.0
