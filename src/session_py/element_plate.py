@@ -298,7 +298,7 @@ class ElementPlate(Element):
 
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
-        from .encoders import decode_node
+        from .file_encoders import file_decode_node
         from .point import Point
         polygon = [Point(p[0], p[1], p[2]) for p in data.get("polygon", [])]
         polygon_top_raw = data.get("polygon_top", [])
@@ -311,13 +311,13 @@ class ElementPlate(Element):
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
         if "session_transformation" in data:
-            elem.session_transformation = decode_node(data["session_transformation"])
+            elem.session_transformation = file_decode_node(data["session_transformation"])
         elem._joint_types = data.get("joint_types", [])
         elem._j_mf = data.get("j_mf", [])
         elem._key = data.get("key", "")
         cp = data.get("component_plane")
         if cp is not None:
-            elem._component_plane = decode_node(cp)
+            elem._component_plane = file_decode_node(cp)
         return elem
 
     ###########################################################################################

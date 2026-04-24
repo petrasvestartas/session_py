@@ -83,7 +83,7 @@ def test_add_feature():
     MINI_CHECK(len(e._features) == 1)
 
 
-@MINI_TEST("Element", "Aabb")
+@MINI_TEST("Element", "AABB")
 def test_aabb():
     from session_py import Mesh
     from session_py import Element
@@ -211,8 +211,8 @@ def test_json_roundtrip():
     e.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_element.json"
-    e.json_dump(fname)
-    loaded = Element.json_load(fname)
+    e.file_json_dump(fname)
+    loaded = Element.file_json_load(fname)
 
     MINI_CHECK(isinstance(loaded, Element))
     MINI_CHECK(loaded.name == "json_test")

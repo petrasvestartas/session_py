@@ -9,16 +9,17 @@ _CLASS_MODULE_MAP = {
     "ElementPlate": "element_plate",
     "Vertex": "graph",
     "Edge": "graph",
+    "TreeNode": "tree",
 }
 
 _EXTERNAL_CLASS_MAP: dict = {}
 
 
-def register_class(name: str, cls) -> None:
+def file_register_class(name: str, cls) -> None:
     """Register an external class for polymorphic JSON deserialization.
 
     Call this from external packages (e.g. session_tf) at import time so that
-    ``decode_node`` can reconstruct custom objects stored in ``objects.components``.
+    ``file_decode_node`` can reconstruct custom objects stored in ``objects.components``.
 
     Parameters
     ----------
@@ -34,7 +35,7 @@ def _get_class_from_name(class_name: str):
     """Dynamically import a class by name from the session_py package.
 
     Convention: Class name maps to module name (lowercase).
-    Example: "Color" -> "session_py.color", "TreeNode" -> "session_py.treenode"
+    Example: "Color" -> "session_py.color", "TreeNode" -> "session_py.tree"
 
     Parameters
     ----------
@@ -57,7 +58,7 @@ def _get_class_from_name(class_name: str):
         return None
 
 
-class GeometryEncoder(json.JSONEncoder):
+class GeometryFileEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles geometry objects with __jsondump__ method.
 
     Automatically serializes:
@@ -80,7 +81,7 @@ class GeometryEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-class GeometryDecoder(json.JSONDecoder):
+class GeometryFileDecoder(json.JSONDecoder):
     """Custom JSON decoder that reconstructs geometry objects from the 'type' field.
 
     Automatically deserializes:
@@ -136,7 +137,7 @@ class GeometryDecoder(json.JSONDecoder):
         return obj
 
 
-def json_dump(data: Any, filepath: str, pretty: bool = True):
+def file_json_dump(data: Any, filepath: str, pretty: bool = True):
     """Write data to JSON file with geometry object support.
 
     Parameters
@@ -151,12 +152,12 @@ def json_dump(data: Any, filepath: str, pretty: bool = True):
     """
     with open(filepath, "w") as f:
         if pretty:
-            json.dump(data, f, cls=GeometryEncoder, indent=4)
+            json.dump(data, f, cls=GeometryFileEncoder, indent=4)
         else:
-            json.dump(data, f, cls=GeometryEncoder)
+            json.dump(data, f, cls=GeometryFileEncoder)
 
 
-def json_dumps(data: Any, pretty: bool = True) -> str:
+def file_json_dumps(data: Any, pretty: bool = True) -> str:
     """Serialize data to JSON string with geometry object support.
 
     Parameters
@@ -173,12 +174,12 @@ def json_dumps(data: Any, pretty: bool = True) -> str:
 
     """
     if pretty:
-        return json.dumps(data, cls=GeometryEncoder, indent=4)
+        return json.dumps(data, cls=GeometryFileEncoder, indent=4)
     else:
-        return json.dumps(data, cls=GeometryEncoder)
+        return json.dumps(data, cls=GeometryFileEncoder)
 
 
-def json_load(filepath: str) -> Any:
+def file_json_load(filepath: str) -> Any:
     """Load data from JSON file with geometry object reconstruction.
 
     Parameters
@@ -193,10 +194,10 @@ def json_load(filepath: str) -> Any:
 
     """
     with open(filepath, "r") as f:
-        return json.load(f, cls=GeometryDecoder)
+        return json.load(f, cls=GeometryFileDecoder)
 
 
-def json_loads(s: str) -> Any:
+def file_json_loads(s: str) -> Any:
     """Deserialize JSON string with geometry object reconstruction.
 
     Parameters
@@ -210,7 +211,7 @@ def json_loads(s: str) -> Any:
         Reconstructed data (geometry objects are restored).
 
     """
-    data = json.loads(s, cls=GeometryDecoder)
+    data = json.loads(s, cls=GeometryFileDecoder)
     # If root decoded as Session, return its JSON mapping form
     try:
         from .session import Session  # local import to avoid cycles
@@ -222,7 +223,7 @@ def json_loads(s: str) -> Any:
     return data
 
 
-def decode_node(node: Any) -> Any:
+def file_decode_node(node: Any) -> Any:
     """Recursively decode a node that may contain polymorphic objects.
 
     - If dict with 'type', dynamically import the class and call __jsonload__.
@@ -246,7 +247,7 @@ def decode_node(node: Any) -> Any:
         return node
     # Lists
     if isinstance(node, list):
-        return [decode_node(x) for x in node]
+        return [file_decode_node(x) for x in node]
     # Dicts
     if isinstance(node, dict):
         # Polymorphic geometry object
@@ -270,6 +271,6 @@ def decode_node(node: Any) -> Any:
             except Exception:
                 return node
         # Plain dict: decode values
-        return {k: decode_node(v) for k, v in node.items()}
+        return {k: file_decode_node(v) for k, v in node.items()}
     # Fallback
     return node

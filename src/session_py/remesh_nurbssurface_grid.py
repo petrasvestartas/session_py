@@ -155,24 +155,30 @@ class RemeshNurbsSurfaceGrid:
 
         # Bilinear twist check (skip for singular surfaces — fan triangulation handles those)
         if deg_u == 1 and deg_v == 1 and not s.is_singular(0) and not s.is_singular(2):
+            import numpy as _np
             chord_tol = bbox_diag * 0.005 if bbox_diag > 0 else 1e-6
-            max_twist = 0.0
-            for i in range(ns_u):
-                for j in range(ns_v):
-                    u0, u1 = usp[i], usp[i + 1]
-                    v0, v1 = vsp[j], vsp[j + 1]
-                    pm = s.point_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
-                    p00 = s.point_at(u0, v0)
-                    p11 = s.point_at(u1, v1)
-                    mx = (p00[0] + p11[0]) * 0.5
-                    my = (p00[1] + p11[1]) * 0.5
-                    mz = (p00[2] + p11[2]) * 0.5
-                    ddx = pm[0] - mx
-                    ddy = pm[1] - my
-                    ddz = pm[2] - mz
-                    twist = math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz)
-                    if twist > max_twist:
-                        max_twist = twist
+            u0_a = _np.array(usp[:-1], dtype=_np.float64)
+            u1_a = _np.array(usp[1:], dtype=_np.float64)
+            v0_a = _np.array(vsp[:-1], dtype=_np.float64)
+            v1_a = _np.array(vsp[1:], dtype=_np.float64)
+            um = ((u0_a + u1_a) * 0.5)
+            vm = ((v0_a + v1_a) * 0.5)
+            um_g = _np.repeat(um, ns_v)
+            vm_g = _np.tile(vm, ns_u)
+            u0_g = _np.repeat(u0_a, ns_v)
+            v0_g = _np.tile(v0_a, ns_u)
+            u1_g = _np.repeat(u1_a, ns_v)
+            v1_g = _np.tile(v1_a, ns_u)
+            all_u = _np.concatenate([um_g, u0_g, u1_g])
+            all_v = _np.concatenate([vm_g, v0_g, v1_g])
+            xyz_twist = s.batch_point_at(all_u, all_v)
+            k_tw = ns_u * ns_v
+            pm_arr = xyz_twist[:k_tw]
+            p00_arr = xyz_twist[k_tw:2 * k_tw]
+            p11_arr = xyz_twist[2 * k_tw:]
+            mid = (p00_arr + p11_arr) * 0.5
+            twist = _np.linalg.norm(pm_arr - mid, axis=1)
+            max_twist = float(twist.max()) if twist.size else 0.0
             if max_twist > chord_tol:
                 twist_subs = max(4, min(int(math.ceil(2.0 * math.sqrt(max_twist / chord_tol))), 24))
                 u_subs = [max(sub, twist_subs) for sub in u_subs]
@@ -284,12 +290,17 @@ class RemeshNurbsSurfaceGrid:
             result.vertex[north_pole].attributes["u"] = us[0]
             result.vertex[north_pole].attributes["v"] = vs[nv_count - 1]
         grid_base = len(result.vertex)
-        for i in range(nu):
-            for j in range(j_start, j_end):
-                p = s.point_at(us[i], vs[j])
-                vk = result.add_vertex(p)
-                result.vertex[vk].attributes["u"] = us[i]
-                result.vertex[vk].attributes["v"] = vs[j]
+        import numpy as _np
+        _us_a = _np.asarray(us, dtype=_np.float64)
+        _vs_a = _np.asarray(vs[j_start:j_end], dtype=_np.float64)
+        _grid_us = _np.repeat(_us_a, len(_vs_a))
+        _grid_vs = _np.tile(_vs_a, len(_us_a))
+        _pts_arr = s.batch_point_at(_grid_us, _grid_vs)
+        from .point import Point as _Pt
+        for idx in range(len(_grid_us)):
+            vk = result.add_vertex(_Pt(_pts_arr[idx, 0], _pts_arr[idx, 1], _pts_arr[idx, 2]))
+            result.vertex[vk].attributes["u"] = float(_grid_us[idx])
+            result.vertex[vk].attributes["v"] = float(_grid_vs[idx])
 
         def grid_idx(i, j):
             return grid_base + i * nv_grid + (j - j_start)

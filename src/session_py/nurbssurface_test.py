@@ -59,8 +59,8 @@ def test_nurbssurface_constructor():
     MINI_CHECK(s.order(1) == 4)
     MINI_CHECK(s.dimension() == 3)
     MINI_CHECK(not s.is_rational())
-    MINI_CHECK(s.knot_count(0) == 6)
-    MINI_CHECK(s.knot_count(1) == 6)
+    MINI_CHECK(s.nurbsknot_count(0) == 6)
+    MINI_CHECK(s.nurbsknot_count(1) == 6)
     MINI_CHECK(s.name == "my_nurbssurface")
     MINI_CHECK(s.guid)
     MINI_CHECK(sstr == "NurbsSurface(name=my_nurbssurface, degree=(3,3), cvs=(4,4))")
@@ -112,9 +112,9 @@ def test_booleans_queries():
 
     s = Primitives.sphere_surface(0, 0, 0, 5.0)
 
-    # Validity surface and knots
+    # Validity surface and nurbsknots
     is_valid = s.is_valid()
-    are_knots_valid = s.is_valid_knot_vector(0) and s.is_valid_knot_vector(1)
+    are_nurbsknots_valid = s.is_valid_nurbsknot_vector(0) and s.is_valid_nurbsknot_vector(1)
 
     # Are control points weights enabled?
     is_rational = s.is_rational()
@@ -136,7 +136,7 @@ def test_booleans_queries():
     is_clamped = s.is_clamped(0, 2) and s.is_clamped(1, 2)
 
     MINI_CHECK(is_valid)
-    MINI_CHECK(are_knots_valid)
+    MINI_CHECK(are_nurbsknots_valid)
     MINI_CHECK(is_rational)
     MINI_CHECK(is_closed)
     MINI_CHECK(not is_periodic)
@@ -191,9 +191,9 @@ def test_nurbssurface_attributes():
     cv_count = s.cv_count_dir(None)
     cv_size = s.cv_size()
 
-    # Number of knots
-    k_count_0 = s.knot_count(0)
-    k_count_1 = s.knot_count(1)
+    # Number of nurbsknots
+    k_count_0 = s.nurbsknot_count(0)
+    k_count_1 = s.nurbsknot_count(1)
 
     # Span count
     s_count_0 = s.span_count(0)
@@ -271,8 +271,8 @@ def test_control_vertices_access():
     MINI_CHECK(s.weight(0, 0) == 1)
 
 
-@MINI_TEST("NurbsSurface", "Knot Access")
-def test_knot_access():
+@MINI_TEST("NurbsSurface", "NurbsKnot Access")
+def test_nurbsknot_access():
     from session_py import NurbsSurface
     from session_py import Point
 
@@ -301,32 +301,32 @@ def test_knot_access():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Get knot vectors and individual knot
-    knots_u = s.get_knots(0)
-    for i in range(s.knot_count(0)):
-        knot = s.knot(0, i)
-        MINI_CHECK(knot == knots_u[i])
+    # Get nurbsknot vectors and individual nurbsknot
+    nurbsknots_u = s.get_nurbsknots(0)
+    for i in range(s.nurbsknot_count(0)):
+        nurbsknot = s.nurbsknot(0, i)
+        MINI_CHECK(nurbsknot == nurbsknots_u[i])
 
-    knots_v = s.get_knots(1)
-    for i in range(s.knot_count(1)):
-        knot = s.knot(1, i)
-        MINI_CHECK(knot == knots_v[i])
+    nurbsknots_v = s.get_nurbsknots(1)
+    for i in range(s.nurbsknot_count(1)):
+        nurbsknot = s.nurbsknot(1, i)
+        MINI_CHECK(nurbsknot == nurbsknots_v[i])
 
-    # Set knots
-    is_set = s.set_knot(0, 2, 0.5)
-    MINI_CHECK(s.knot(0, 2) == 0.5)
-    is_set = s.set_knot(0, 2, 0.0)
+    # Set nurbsknots
+    is_set = s.set_nurbsknot(0, 2, 0.5)
+    MINI_CHECK(s.nurbsknot(0, 2) == 0.5)
+    is_set = s.set_nurbsknot(0, 2, 0.0)
 
     # Verify start multiplicity
-    mult_u_start = s.knot_multiplicity(0, 0)
-    mult_v_start = s.knot_multiplicity(1, 0)
+    mult_u_start = s.nurbsknot_multiplicity(0, 0)
+    mult_v_start = s.nurbsknot_multiplicity(1, 0)
     MINI_CHECK(mult_u_start == 3)
     MINI_CHECK(mult_v_start == 3)
 
-    s.insert_knot(0, 0.1, 2)
-    MINI_CHECK(s.knot_count(0) == 8)
-    MINI_CHECK(s.knot(0, 3) == 0.1)
-    MINI_CHECK(s.knot_multiplicity(0, 3) == 2)
+    s.insert_nurbsknot(0, 0.1, 2)
+    MINI_CHECK(s.nurbsknot_count(0) == 8)
+    MINI_CHECK(s.nurbsknot(0, 3) == 0.1)
+    MINI_CHECK(s.nurbsknot_multiplicity(0, 3) == 2)
 
 
 @MINI_TEST("NurbsSurface", "Domain")
@@ -374,7 +374,7 @@ def test_domain():
     MINI_CHECK(is_set_v)
     MINI_CHECK(TOLERANCE.is_close(s.domain(1)[1], 1.3))
 
-    # Get sorted list of distinct knot values
+    # Get sorted list of distinct nurbsknot values
     span_vector = s.get_span_vector(0)
     first_item = span_vector[0]
     last_item = span_vector[-1]
@@ -905,13 +905,13 @@ def test_json_roundtrip():
     loaded_json = NurbsSurface.__jsonload__(json_obj)
 
     # String
-    json_string = surface.json_dumps()
-    loaded_json_string = NurbsSurface.json_loads(json_string)
+    json_string = surface.file_json_dumps()
+    loaded_json_string = NurbsSurface.file_json_loads(json_string)
 
     # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
-    surface.json_dump(filename)
-    loaded_from_file = NurbsSurface.json_load(filename)
+    surface.file_json_dump(filename)
+    loaded_from_file = NurbsSurface.file_json_load(filename)
 
     MINI_CHECK(loaded_json == surface)
     MINI_CHECK(loaded_json_string == surface)

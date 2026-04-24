@@ -99,13 +99,13 @@ def main():
     print("\n9. ray_mesh - Load bunny mesh")
     try:
         from src.session_py.mesh import Mesh
-        from src.session_py.obj import read_obj
+        from src.session_py.file_obj import read_file_obj
         
         bunny = None
         try_paths = ["../data/bunny.obj", "../../data/bunny.obj", "data/bunny.obj"]
         for path in try_paths:
             try:
-                bunny = read_obj(path)
+                bunny = read_file_obj(path)
                 break
             except Exception:
                 continue

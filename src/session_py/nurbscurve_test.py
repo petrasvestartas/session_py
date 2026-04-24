@@ -50,7 +50,7 @@ def test_nurbscurve_constructor():
 def test_nurbscurve_create_interpolated():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.knot import CurveKnotStyle
+    from session_py.nurbsknot import CurveNurbsKnotStyle
 
     points = [
         Point(14, 9, 0),
@@ -60,7 +60,7 @@ def test_nurbscurve_create_interpolated():
         Point(41, 13, 0),
     ]
 
-    c = NurbsCurve.create_interpolated(points, CurveKnotStyle.Chord)
+    c = NurbsCurve.create_interpolated(points, CurveNurbsKnotStyle.Chord)
 
     MINI_CHECK(c.is_valid())
     MINI_CHECK(c.degree() == 3)
@@ -88,7 +88,7 @@ def test_nurbscurve_create_interpolated():
         Point(0, 15, 0),
     ]
 
-    cp = NurbsCurve.create_interpolated(closed_pts, CurveKnotStyle.ChordPeriodic)
+    cp = NurbsCurve.create_interpolated(closed_pts, CurveNurbsKnotStyle.ChordPeriodic)
 
     MINI_CHECK(cp.is_valid())
     MINI_CHECK(cp.degree() == 3)
@@ -147,12 +147,12 @@ def test_nurbscurve_attributes():
     is_valid = curve.is_valid()
     MINI_CHECK(is_valid == True)
 
-    # Check whole knot vector for
+    # Check whole nurbsknot vector for
     # For correct size: order + cv_count - 2
     # Non-decreasing (can repeat, can't go down)
     # Valid domain exists
-    is_valid_knot_vector = curve.is_valid_knot_vector()
-    MINI_CHECK(is_valid_knot_vector == True)
+    is_valid_nurbsknot_vector = curve.is_valid_nurbsknot_vector()
+    MINI_CHECK(is_valid_nurbsknot_vector == True)
 
     # Check if the curve is clamped at start, end, or both
     is_clamped_start = curve.is_clamped(0)
@@ -195,15 +195,15 @@ def test_nurbscurve_attributes():
     MINI_CHECK(is_continuous == True)
 
     #############################################
-    # Knot Operations
+    # NurbsKnot Operations
     #############################################
 
-    # Insert knot into curve
+    # Insert nurbsknot into curve
     # Useful for splitting curves at a parameter
     # Increase local control without changing shape
     copy_curve = curve.duplicate()
     before_pt = copy_curve.point_at(1.5)
-    copy_curve.insert_knot(1.5, 1)
+    copy_curve.insert_nurbsknot(1.5, 1)
     MINI_CHECK(TOLERANCE.is_point_close(before_pt, copy_curve.point_at(1.5)))
 
     # Useful for controlling curve by cv on lying on it
@@ -230,7 +230,7 @@ def test_nurbscurve_attributes():
     # is_rational = false means control points [x, y, z]
     # is_rational = false means control points [xw, yw, zw]
     # Rational curves are used to represent:
-    # Order = degree + 1, control points + order = knots
+    # Order = degree + 1, control points + order = nurbsknots
     order = curve.order()
     MINI_CHECK(order == 3)
     # Number of control vertices
@@ -239,11 +239,11 @@ def test_nurbscurve_attributes():
     # Number of floats per 1 control vertex
     cv_size = curve.cv_size()
     MINI_CHECK(cv_size == 3)
-    # The knots are a list of (degree+control_points-1) numbers
-    knot_count = curve.knot_count()
-    MINI_CHECK(knot_count == 5)
-    # Span = a knot interval where a single polynomial segment is evaluated
-    # Knot vector: [0, 0, 0 ↑, 1 ↑, 2 ↑, 3, 3, 3]  (cubic, 5 CVs)
+    # The nurbsknots are a list of (degree+control_points-1) numbers
+    nurbsknot_count = curve.nurbsknot_count()
+    MINI_CHECK(nurbsknot_count == 5)
+    # Span = a nurbsknot interval where a single polynomial segment is evaluated
+    # NurbsKnot vector: [0, 0, 0 ↑, 1 ↑, 2 ↑, 3, 3, 3]  (cubic, 5 CVs)
     span_count = curve.span_count()
     MINI_CHECK(span_count == 2)
     #####################################################
@@ -287,46 +287,46 @@ def test_nurbscurve_attributes():
     MINI_CHECK(curve.weight(2) == 0.5)
 
     #####################################################
-    # Knot Access
+    # NurbsKnot Access
     #####################################################
 
-    # Get knot value at index
-    knot3 = curve.knot(3)
-    MINI_CHECK(TOLERANCE.is_close(knot3, 3.519488670956267))
+    # Get nurbsknot value at index
+    nurbsknot3 = curve.nurbsknot(3)
+    MINI_CHECK(TOLERANCE.is_close(nurbsknot3, 3.519488670956267))
 
-    # Set knot value at index
+    # Set nurbsknot value at index
     # ATTENTION you can brake increasing rule
-    end_knot = curve.knot(4)
-    curve.set_knot(4, end_knot)
-    MINI_CHECK(TOLERANCE.is_close(curve.knot(4), end_knot))
+    end_nurbsknot = curve.nurbsknot(4)
+    curve.set_nurbsknot(4, end_nurbsknot)
+    MINI_CHECK(TOLERANCE.is_close(curve.nurbsknot(4), end_nurbsknot))
 
-    # Count repeated knots at index [0, 0, 1, 1, 2]
-    m0 = curve.knot_multiplicity(0)  # 2 (two 0's)
-    m1 = curve.knot_multiplicity(1)  # 2 (still counting the 0's)
-    m2 = curve.knot_multiplicity(2)  # 1 (single 0.5)
-    m3 = curve.knot_multiplicity(3)  # 2 (single 1's)
-    m4 = curve.knot_multiplicity(4)  # 2 (single 2)
+    # Count repeated nurbsknots at index [0, 0, 1, 1, 2]
+    m0 = curve.nurbsknot_multiplicity(0)  # 2 (two 0's)
+    m1 = curve.nurbsknot_multiplicity(1)  # 2 (still counting the 0's)
+    m2 = curve.nurbsknot_multiplicity(2)  # 1 (single 0.5)
+    m3 = curve.nurbsknot_multiplicity(3)  # 2 (single 1's)
+    m4 = curve.nurbsknot_multiplicity(4)  # 2 (single 2)
     MINI_CHECK(m0 == 2)
     MINI_CHECK(m1 == 2)
     MINI_CHECK(m2 == 1)
     MINI_CHECK(m3 == 2)
     MINI_CHECK(m4 == 2)
 
-    # Superflous knots are used for extension of clamped curves
-    superfluous_knot = curve.superfluous_knot(1)
-    MINI_CHECK(TOLERANCE.is_close(superfluous_knot, 7.038977341912535))
+    # Superflous nurbsknots are used for extension of clamped curves
+    superfluous_nurbsknot = curve.superfluous_nurbsknot(1)
+    MINI_CHECK(TOLERANCE.is_close(superfluous_nurbsknot, 7.038977341912535))
 
-    # Direct memory access to knot values, fast, read-only
+    # Direct memory access to nurbsknot values, fast, read-only
     # Vector return is slower and makes a copy
-    knots = curve.knot_array()
-    k0 = knots[0]
-    knot_vector = curve.get_knots()
+    nurbsknots = curve.nurbsknot_array()
+    k0 = nurbsknots[0]
+    nurbsknot_vector = curve.get_nurbsknots()
     MINI_CHECK(k0 == 0.0)
-    MINI_CHECK(TOLERANCE.is_close(knot_vector[0], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(knot_vector[1], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(knot_vector[2], 1.759744335478134))
-    MINI_CHECK(TOLERANCE.is_close(knot_vector[3], 3.519488670956267))
-    MINI_CHECK(TOLERANCE.is_close(knot_vector[4], 3.519488670956267))
+    MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[2], 1.759744335478134))
+    MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[3], 3.519488670956267))
+    MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[4], 3.519488670956267))
 
     # Control vertex array access
     cvs = curve.cv_array()
@@ -355,7 +355,7 @@ def test_nurbscurve_attributes():
     MINI_CHECK(curve.domain_middle() == 0.5)
     MINI_CHECK(curve.domain_end() == 1.0)
 
-    # Span of distict knot intervals
+    # Span of distict nurbsknot intervals
     intervals = curve.get_span_vector()
     MINI_CHECK(TOLERANCE.is_close(intervals[0], 0.0) and TOLERANCE.is_close(intervals[1], 0.5) and TOLERANCE.is_close(intervals[2], 1.0))
 
@@ -600,14 +600,14 @@ def test_nurbscurve_modifications():
     for i in range(5):
         curve_open.set_cv(i, points_open[i])
 
-    for i in range(curve_open.knot_count()):
-        curve_open.set_knot(i, i * 1.0)
+    for i in range(curve_open.nurbsknot_count()):
+        curve_open.set_nurbsknot(i, i * 1.0)
 
-    # Now clamp, making 2 knots at the ends the same
+    # Now clamp, making 2 nurbsknots at the ends the same
     curve_open.clamp_end(2)
-    knots = curve_open.get_knots()
-    MINI_CHECK(TOLERANCE.is_close(knots[0], knots[1]))
-    MINI_CHECK(TOLERANCE.is_close(knots[-2], knots[-1]))
+    nurbsknots = curve_open.get_nurbsknots()
+    MINI_CHECK(TOLERANCE.is_close(nurbsknots[0], nurbsknots[1]))
+    MINI_CHECK(TOLERANCE.is_close(nurbsknots[-2], nurbsknots[-1]))
 
     # Increase degree without change the shape
     raised = curve.duplicate()
@@ -687,23 +687,23 @@ def test_nurbscurve_json_roundtrip():
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
+    #   file_json_dumps()    │ str          │ to JSON string
+    #   file_json_loads(s)   │ str          │ from JSON string
+    #   file_json_dump(path) │ file         │ write to file
+    #   file_json_load(path) │ file         │ read from file
 
     # JSON object
     json_obj = curve.__jsondump__()
     loaded_json = NurbsCurve.__jsonload__(json_obj)
 
     # String
-    json_string = curve.json_dumps()
-    loaded_json_string = NurbsCurve.json_loads(json_string)
+    json_string = curve.file_json_dumps()
+    loaded_json_string = NurbsCurve.file_json_loads(json_string)
 
     # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
-    curve.json_dump(filename)
-    loaded_from_file = NurbsCurve.json_load(filename)
+    curve.file_json_dump(filename)
+    loaded_from_file = NurbsCurve.file_json_load(filename)
 
     MINI_CHECK(loaded_json == curve)
     MINI_CHECK(loaded_json_string == curve)

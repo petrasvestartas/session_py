@@ -207,25 +207,25 @@ class Graph:
         return graph
 
     ###########################################################################################
-    # Serialization: json_dumps, json_loads, json_dump, json_load
+    # Serialization: file_json_dumps, file_json_loads, file_json_dump, file_json_load
     ###########################################################################################
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, s):
+    def file_json_loads(cls, s):
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))

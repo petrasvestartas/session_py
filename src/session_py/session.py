@@ -2,10 +2,9 @@ import uuid
 from typing import Any, Dict, List, Tuple, Optional, NamedTuple
 from .objects import Objects
 from .point import Point
-from .tree import Tree
-from .treenode import TreeNode
+from .tree import Tree, TreeNode
 from .graph import Graph
-from .bvh import BVH
+from .spatial_bvh import SpatialBVH
 from .obb import OBB
 from .tolerance import Tolerance
 
@@ -52,8 +51,8 @@ class Session:
         self.lookup: Dict[str, Any] = {}
         self.tree = Tree(name=f"{name}_tree")
         self.graph = Graph(name=f"{name}_graph")
-        # BVH for collision detection (auto-computed world size)
-        self.bvh = BVH()
+        # SpatialBVH for collision detection (auto-computed world size)
+        self.bvh = SpatialBVH()
 
         # Create empty root node with session name
         root_node = TreeNode(name=self.name)
@@ -95,18 +94,18 @@ class Session:
         cls, data: dict, guid: Optional[str] = None, name: Optional[str] = None
     ) -> "Session":
         """Deserialize from polymorphic JSON format."""
-        from .encoders import decode_node
+        from .file_encoders import file_decode_node
 
         session = cls(name=data.get("name", "my_session"))
         session.guid = guid if guid is not None else data.get("guid", session.guid)
 
-        # Load nested structures via decode_node
+        # Load nested structures via file_decode_node
         if data.get("objects"):
-            session.objects = decode_node(data["objects"])  # Objects
+            session.objects = file_decode_node(data["objects"])  # Objects
         if data.get("tree"):
-            session.tree = decode_node(data["tree"])  # Tree
+            session.tree = file_decode_node(data["tree"])  # Tree
         if data.get("graph"):
-            session.graph = decode_node(data["graph"])  # Graph
+            session.graph = file_decode_node(data["graph"])  # Graph
 
         # Rebuild lookup from all objects
         for point in session.objects.points:
@@ -136,22 +135,22 @@ class Session:
 
         return session
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, s):
+    def file_json_loads(cls, s):
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
@@ -386,7 +385,7 @@ class Session:
         return True
 
     ###########################################################################################
-    # BVH Collision Detection
+    # SpatialBVH Collision Detection
     ###########################################################################################
 
     @staticmethod
@@ -454,11 +453,11 @@ class Session:
             return OBB.from_point(Point(0, 0, 0), inflate)
 
     def get_collisions(self) -> List[Tuple[str, str]]:
-        """Get all collision pairs using BVH and add them as graph edges.
+        """Get all collision pairs using SpatialBVH and add them as graph edges.
 
         Automatically:
         - Computes bounding boxes for all objects with tolerance inflation
-        - Builds/rebuilds the BVH with auto-computed world size
+        - Builds/rebuilds the SpatialBVH with auto-computed world size
         - Detects all collision pairs
         - Adds collision edges to the graph
 
@@ -477,7 +476,7 @@ class Session:
         if not boxes_with_guids:
             return []
 
-        # Build BVH with GUIDs (auto-computes world size)
+        # Build SpatialBVH with GUIDs (auto-computes world size)
         self.bvh.build_with_guids(boxes_with_guids)
 
         # Extract just the boxes for collision checking

@@ -218,6 +218,18 @@ class Polyline:
             total_length += (dx * dx + dy * dy + dz * dz) ** 0.5
         return total_length
 
+    def length_squared(self) -> float:
+        """Sum of squared segment lengths — avoids sqrt when only relative lengths matter."""
+        total = 0.0
+        for i in range(self.segment_count()):
+            idx0 = i * 3
+            idx1 = (i + 1) * 3
+            dx = self.coords[idx1] - self.coords[idx0]
+            dy = self.coords[idx1 + 1] - self.coords[idx0 + 1]
+            dz = self.coords[idx1 + 2] - self.coords[idx0 + 2]
+            total += dx * dx + dy * dy + dz * dz
+        return total
+
     def get_point(self, index: int) -> Optional[Point]:
         """Returns the point at the given index, or None if out of bounds."""
         if 0 <= index < self.point_count():
@@ -1233,14 +1245,14 @@ class Polyline:
             Reconstructed polyline instance.
 
         """
-        from .encoders import decode_node
+        from .file_encoders import file_decode_node
 
         # Support both new coords format and legacy points format
         if "coords" in data:
             polyline = cls.from_coords(data["coords"])
         else:
             # Legacy format with full Point objects
-            points = [decode_node(p) for p in data["points"]]
+            points = [file_decode_node(p) for p in data["points"]]
             polyline = cls(points)
 
         polyline.guid = guid if guid is not None else data.get("guid", polyline.guid)
@@ -1249,13 +1261,13 @@ class Polyline:
         if "width" in data:
             polyline.width = data["width"]
         if "linecolor" in data:
-            polyline.linecolor = decode_node(data["linecolor"])
+            polyline.linecolor = file_decode_node(data["linecolor"])
         if "xform" in data:
-            polyline.xform = decode_node(data["xform"])
+            polyline.xform = file_decode_node(data["xform"])
 
         return polyline
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         """Write JSON to file.
 
         Parameters
@@ -1269,7 +1281,7 @@ class Polyline:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         """Read JSON from file.
 
         Parameters
@@ -1288,13 +1300,13 @@ class Polyline:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, json_string):
+    def file_json_loads(cls, json_string):
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -1558,3 +1570,237 @@ class Polyline:
                 r.coords[i*3+1] = oy + u*xy + v*yy
                 r.coords[i*3+2] = oz + u*xz + v*yz
         return results
+
+    @staticmethod
+    def polylabel(polylines, precision: float) -> Tuple[Point, "Plane", float]:
+        # Largest inscribed circle via mapbox polylabel.
+        # polylines[0] is the outer boundary; polylines[1..] are holes.
+        from .plane import Plane
+        if not polylines:
+            return Point(0.0, 0.0, 0.0), Plane.xy_plane(), 0.0
+        orig, xa, ya, _za = polylines[0].get_average_plane()
+
+        def to2d(p):
+            dx = p[0] - orig[0]; dy = p[1] - orig[1]; dz = p[2] - orig[2]
+            return (dx*xa[0]+dy*xa[1]+dz*xa[2], dx*ya[0]+dy*ya[1]+dz*ya[2])
+
+        rings2d = []
+        sizes = []
+        for pl in polylines:
+            pts = pl.get_points()
+            if len(pts) > 1:
+                a = pts[0]; b = pts[-1]
+                last = len(pts) - 1 if abs(a[0]-b[0])<1e-10 and abs(a[1]-b[1])<1e-10 and abs(a[2]-b[2])<1e-10 else len(pts)
+            else:
+                last = len(pts)
+            ring = []
+            mnx = mny = float("inf")
+            mxx = mxy = float("-inf")
+            for p in pts[:last]:
+                uv = to2d(p)
+                if uv[0] < mnx: mnx = uv[0]
+                if uv[0] > mxx: mxx = uv[0]
+                if uv[1] < mny: mny = uv[1]
+                if uv[1] > mxy: mxy = uv[1]
+                ring.append(uv)
+            dx = mxx - mnx; dy = mxy - mny
+            sizes.append(dx*dx + dy*dy)
+            rings2d.append(ring)
+        ids = sorted(range(len(rings2d)), key=lambda i: -sizes[i])
+        polygon = [rings2d[i] for i in ids]
+
+        cx2d, cy2d, r = _mapbox_polylabel(polygon, precision)
+        center = Point(
+            orig[0] + cx2d*xa[0] + cy2d*ya[0],
+            orig[1] + cx2d*xa[1] + cy2d*ya[1],
+            orig[2] + cx2d*xa[2] + cy2d*ya[2],
+        )
+        plane = Plane(orig, xa, ya)
+        return center, plane, r
+
+    @staticmethod
+    def polylabel_circle_division_points(
+        division_direction_in_3d: Vector,
+        polylines,
+        division: int,
+        scale: float,
+        precision: float,
+        orient_to_closest_edge: bool,
+    ) -> List[Point]:
+        import math
+        center, plane, r = Polyline.polylabel(polylines, precision)
+        radius = r * scale
+
+        is_direction_valid = (
+            division_direction_in_3d[0] != 0.0 or
+            division_direction_in_3d[1] != 0.0 or
+            division_direction_in_3d[2] != 0.0
+        )
+
+        edge_i = 0
+        edge_j = 0
+        best_sq = float("inf")
+        if orient_to_closest_edge:
+            for i, pl in enumerate(polylines):
+                pts = pl.get_points()
+                if len(pts) < 2:
+                    continue
+                for j in range(len(pts) - 1):
+                    a = pts[j]; b = pts[j + 1]
+                    ex = b[0]-a[0]; ey = b[1]-a[1]; ez = b[2]-a[2]
+                    len2 = ex*ex + ey*ey + ez*ez
+                    if len2 <= 0.0:
+                        continue
+                    px = center[0]-a[0]; py = center[1]-a[1]; pz = center[2]-a[2]
+                    t = (px*ex + py*ey + pz*ez) / len2
+                    if t < 0.0 or t > 1.0:
+                        continue
+                    cxp = a[0]+t*ex; cyp = a[1]+t*ey; czp = a[2]+t*ez
+                    dx = center[0]-cxp; dy = center[1]-cyp; dz = center[2]-czp
+                    d2 = dx*dx + dy*dy + dz*dz
+                    if d2 < best_sq:
+                        best_sq = d2; edge_i = i; edge_j = j
+
+        z_axis_ref = plane.z_axis
+        if is_direction_valid or orient_to_closest_edge:
+            if orient_to_closest_edge and math.isfinite(best_sq):
+                pts = polylines[edge_i].get_points()
+                dir_v = Vector(
+                    pts[edge_j+1][0]-pts[edge_j][0],
+                    pts[edge_j+1][1]-pts[edge_j][1],
+                    pts[edge_j+1][2]-pts[edge_j][2],
+                )
+            else:
+                dir_v = division_direction_in_3d
+            x_axis = Vector(dir_v[0], dir_v[1], dir_v[2])
+            y_axis = Vector(
+                dir_v[1]*z_axis_ref[2] - dir_v[2]*z_axis_ref[1],
+                dir_v[2]*z_axis_ref[0] - dir_v[0]*z_axis_ref[2],
+                dir_v[0]*z_axis_ref[1] - dir_v[1]*z_axis_ref[0],
+            )
+        else:
+            x_axis = Vector(plane.x_axis[0], plane.x_axis[1], plane.x_axis[2])
+            y_axis = Vector(plane.y_axis[0], plane.y_axis[1], plane.y_axis[2])
+        z_axis = Vector(z_axis_ref[0], z_axis_ref[1], z_axis_ref[2])
+        x_axis.normalize_self(); y_axis.normalize_self(); z_axis.normalize_self()
+
+        points = []
+        pi_rad = math.pi / 180.0
+        chunk = 360.0 / division
+        for i in range(division):
+            deg = i * chunk
+            rad = (45.0 + deg) * pi_rad
+            u = radius * math.cos(rad)
+            v = radius * math.sin(rad)
+            points.append(Point(
+                center[0] + u*x_axis[0] + v*y_axis[0],
+                center[1] + u*x_axis[1] + v*y_axis[1],
+                center[2] + u*x_axis[2] + v*y_axis[2],
+            ))
+        return points
+
+
+# ========== mapbox polylabel helpers (native) ==========
+def _pl_seg_dist_sq(px, py, ax, ay, bx, by):
+    x = ax; y = ay
+    dx = bx - x; dy = by - y
+    if dx != 0.0 or dy != 0.0:
+        t = ((px - x) * dx + (py - y) * dy) / (dx*dx + dy*dy)
+        if t > 1.0:
+            x = bx; y = by
+        elif t > 0.0:
+            x += dx * t; y += dy * t
+    dx = px - x; dy = py - y
+    return dx*dx + dy*dy
+
+
+def _pl_point_to_poly_dist(px, py, polygon):
+    inside = False
+    min_sq = float("inf")
+    for ring in polygon:
+        length = len(ring)
+        if length == 0:
+            continue
+        j = length - 1
+        for i in range(length):
+            ax, ay = ring[i]
+            bx, by = ring[j]
+            if (ay > py) != (by > py) and px < (bx-ax)*(py-ay)/(by-ay) + ax:
+                inside = not inside
+            d = _pl_seg_dist_sq(px, py, ax, ay, bx, by)
+            if d < min_sq:
+                min_sq = d
+            j = i
+    return (1.0 if inside else -1.0) * (min_sq ** 0.5)
+
+
+def _pl_centroid_cell(polygon):
+    import math
+    area = 0.0
+    cx = 0.0
+    cy = 0.0
+    ring = polygon[0]
+    length = len(ring)
+    j = length - 1
+    for i in range(length):
+        ax, ay = ring[i]
+        bx, by = ring[j]
+        f = ax*by - bx*ay
+        cx += (ax+bx)*f
+        cy += (ay+by)*f
+        area += f * 3.0
+        j = i
+    if area == 0.0:
+        d = _pl_point_to_poly_dist(ring[0][0], ring[0][1], polygon)
+        return (ring[0][0], ring[0][1], 0.0, d, d)
+    ccx = cx / area; ccy = cy / area
+    d = _pl_point_to_poly_dist(ccx, ccy, polygon)
+    return (ccx, ccy, 0.0, d, d)
+
+
+def _mapbox_polylabel(polygon, precision):
+    import heapq
+    import math
+    outer = polygon[0]
+    mnx = min(p[0] for p in outer); mxx = max(p[0] for p in outer)
+    mny = min(p[1] for p in outer); mxy = max(p[1] for p in outer)
+    sx = mxx - mnx; sy = mxy - mny
+    cell_size = min(sx, sy)
+    if cell_size == 0.0:
+        return (mnx, mny, 0.0)
+    h = cell_size / 2.0
+    sqrt2 = math.sqrt(2.0)
+
+    def make_cell(cx, cy, hh):
+        d = _pl_point_to_poly_dist(cx, cy, polygon)
+        return (-(d + hh * sqrt2), cx, cy, hh, d)
+
+    queue = []
+    x = mnx
+    while x < mxx:
+        y = mny
+        while y < mxy:
+            heapq.heappush(queue, make_cell(x + h, y + h, h))
+            y += cell_size
+        x += cell_size
+
+    best = _pl_centroid_cell(polygon)
+    bbox_c = (mnx + sx/2.0, mny + sy/2.0, 0.0, _pl_point_to_poly_dist(mnx + sx/2.0, mny + sy/2.0, polygon), 0.0)
+    bbox_d = bbox_c[3]
+    best_cx, best_cy, _h, best_d, _mx = best
+    if bbox_d > best_d:
+        best_cx, best_cy, best_d = bbox_c[0], bbox_c[1], bbox_d
+
+    while queue:
+        neg_mx, cx, cy, hh, d = heapq.heappop(queue)
+        mx = -neg_mx
+        if d > best_d:
+            best_cx, best_cy, best_d = cx, cy, d
+        if mx - best_d <= precision:
+            continue
+        nh = hh / 2.0
+        heapq.heappush(queue, make_cell(cx - nh, cy - nh, nh))
+        heapq.heappush(queue, make_cell(cx + nh, cy - nh, nh))
+        heapq.heappush(queue, make_cell(cx - nh, cy + nh, nh))
+        heapq.heappush(queue, make_cell(cx + nh, cy + nh, nh))
+    return (best_cx, best_cy, best_d)

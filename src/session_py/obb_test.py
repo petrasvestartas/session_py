@@ -136,16 +136,16 @@ def test_obb_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded_j.center[0], 1.0))
 
     # String
-    s = bb.json_dumps()
-    loaded_s = OBB.json_loads(s)
+    s = bb.file_json_dumps()
+    loaded_s = OBB.file_json_loads(s)
 
     MINI_CHECK(loaded_s.name == "test_bbox")
     MINI_CHECK(TOLERANCE.is_close(loaded_s.half_size[0], 5.0))
 
     # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_obb.json"
-    bb.json_dump(fname)
-    loaded = OBB.json_load(fname)
+    bb.file_json_dump(fname)
+    loaded = OBB.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_bbox")
     MINI_CHECK(TOLERANCE.is_close(loaded.center[0], 1.0))

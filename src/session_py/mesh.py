@@ -9,7 +9,7 @@ from .tolerance import PI
 from .color import Color
 from .xform import Xform
 from .obb import OBB
-from .bvh import BVH
+from .spatial_bvh import SpatialBVH
 from .remesh_cdt import _cdt_triangulate as _cdt_triangulate
 
 
@@ -645,10 +645,31 @@ class Mesh:
         order = [border_idx] + [i for i in range(len(polylines0)) if i != border_idx]
         poly_infos = []  # (bot_off, bot_n, top_off, top_n)
         all_bot = []; all_top = []
+        def strip_shared_collinear(bot, top):
+            cdt_scale = 1e6
+            def cross_q(a, b, c):
+                pa = proj(a); pb = proj(b); pc = proj(c)
+                iax = round(pa[0] * cdt_scale); iay = round(pa[1] * cdt_scale)
+                ibx = round(pb[0] * cdt_scale); iby = round(pb[1] * cdt_scale)
+                icx = round(pc[0] * cdt_scale); icy = round(pc[1] * cdt_scale)
+                return (ibx - iax) * (icy - iay) - (iby - iay) * (icx - iax)
+            changed = True
+            while changed and len(bot) > 3:
+                changed = False
+                n = len(bot)
+                for i in range(n):
+                    prev = (i + n - 1) % n
+                    nxt = (i + 1) % n
+                    if (cross_q(bot[prev], bot[i], bot[nxt]) == 0 and
+                            cross_q(top[prev], top[i], top[nxt]) == 0):
+                        bot.pop(i); top.pop(i)
+                        changed = True
+                        break
         for oi, idx in enumerate(order):
             bot = get_open(polylines0[idx]); top = get_open(polylines1[idx])
             if (oi == 0 and sarea(bot) < 0) or (oi != 0 and sarea(bot) > 0):
                 bot.reverse(); top.reverse()
+            if len(bot) == len(top): strip_shared_collinear(bot, top)
             poly_infos.append((len(all_bot), len(bot), len(all_top), len(top)))
             all_bot.extend(bot); all_top.extend(top)
         mesh = Mesh()
@@ -672,10 +693,6 @@ class Mesh:
                 if t_hpts:
                     mesh.face_holes[fk_top] = [[tvk[off + j] for j in range(cnt)] for _, _, off, cnt in poly_infos[1:]]
                 mesh.triangulation[fk_top] = [[tvk[t[0]], tvk[t[1]], tvk[t[2]]] for t in top_tris]
-            for off, cnt, _, _ in poly_infos[1:]:
-                mesh.add_face([bvk[off + cnt - 1 - j] for j in range(cnt)])
-            for _, _, off, cnt in poly_infos[1:]:
-                mesh.add_face([tvk[off + j] for j in range(cnt)])
         def side_faces(bot_off, bot_n, top_off, top_n, bpts, tpts):
             def edsq(pts, i):
                 j = (i + 1) % len(pts)
@@ -962,9 +979,17 @@ class Mesh:
         return True
 
     def is_closed(self) -> bool:
+        hole_edges = set()
+        for fk, rings in self.face_holes.items():
+            for ring in rings:
+                n = len(ring)
+                for i in range(n):
+                    a = ring[i]; b = ring[(i + 1) % n]
+                    hole_edges.add((a, b))
+                    hole_edges.add((b, a))
         for u, nbrs in self.halfedge.items():
             for v, fkey in nbrs.items():
-                if fkey is None:
+                if fkey is None and (u, v) not in hole_edges:
                     return False
         return bool(self.halfedge)
 
@@ -1242,8 +1267,8 @@ class Mesh:
 
         if tolerance > 0.0:
             boxes = [OBB.from_point(p, tolerance) for p in positions]
-            ws = BVH.compute_world_size(boxes)
-            bvh = BVH.from_boxes(boxes, ws)
+            ws = SpatialBVH.compute_world_size(boxes)
+            bvh = SpatialBVH.from_boxes(boxes, ws)
             pairs, _, _ = bvh.check_all_collisions(boxes)
             for i, j in pairs:
                 if positions[i].distance(positions[j]) <= tolerance:
@@ -2153,27 +2178,27 @@ class Mesh:
 
         return mesh
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         """Read JSON from file."""
         import json
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, json_string):
+    def file_json_loads(cls, json_string):
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))

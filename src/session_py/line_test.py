@@ -136,10 +136,10 @@ def test_line_json_roundtrip():
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
+    #   file_json_dumps()    │ str          │ to JSON string
+    #   file_json_loads(s)   │ str          │ from JSON string
+    #   file_json_dump(path) │ file         │ write to file
+    #   file_json_load(path) │ file         │ read from file
 
     # JSON object
     d = l.__jsondump__()
@@ -148,15 +148,15 @@ def test_line_json_roundtrip():
     MINI_CHECK(loaded_j.name == "test_line")
 
     # String
-    s = l.json_dumps()
-    loaded_s = Line.json_loads(s)
+    s = l.file_json_dumps()
+    loaded_s = Line.file_json_loads(s)
     MINI_CHECK(loaded_s.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
 
     # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.json"
-    l.json_dump(fname)
-    loaded = Line.json_load(fname)
+    l.file_json_dump(fname)
+    loaded = Line.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))

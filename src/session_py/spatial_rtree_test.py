@@ -3,12 +3,12 @@ from .mini_test import MINI_CHECK
 from .mini_test import run_all
 
 
-@MINI_TEST("RTree", "Constructor")
+@MINI_TEST("SpatialRTree", "Constructor")
 def test_rtree_constructor():
-    from session_py.rtree import RTree
+    from session_py.spatial_rtree import SpatialRTree
 
     # RTree3: dynamic spatial index — insert/remove support, O(log n) overlap search
-    t = RTree()
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
     t.insert([5.0, 0.0, 0.0], [6.0, 1.0, 1.0], 1)
     t.insert([10.0, 0.0, 0.0], [11.0, 1.0, 1.0], 2)
@@ -18,27 +18,27 @@ def test_rtree_constructor():
     MINI_CHECK(0 in found)
 
 
-@MINI_TEST("RTree", "Creation")
+@MINI_TEST("SpatialRTree", "Creation")
 def test_rtree_creation():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
 
     MINI_CHECK(t.count() == 0)
 
 
-@MINI_TEST("RTree", "Insert")
+@MINI_TEST("SpatialRTree", "Insert")
 def test_rtree_insert():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 42)
 
     MINI_CHECK(t.count() == 1)
 
 
-@MINI_TEST("RTree", "Insert Multiple")
+@MINI_TEST("SpatialRTree", "Insert Multiple")
 def test_rtree_insert_multiple():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
     t.insert([2.0, 2.0, 2.0], [3.0, 3.0, 3.0], 1)
     t.insert([4.0, 4.0, 4.0], [5.0, 5.0, 5.0], 2)
@@ -46,10 +46,10 @@ def test_rtree_insert_multiple():
     MINI_CHECK(t.count() == 3)
 
 
-@MINI_TEST("RTree", "Search Hit")
+@MINI_TEST("SpatialRTree", "Search Hit")
 def test_rtree_search_hit():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [2.0, 2.0, 2.0], 0)
     found = [-1]
     def cb(data):
@@ -61,30 +61,30 @@ def test_rtree_search_hit():
     MINI_CHECK(found[0] == 0)
 
 
-@MINI_TEST("RTree", "Search Miss")
+@MINI_TEST("SpatialRTree", "Search Miss")
 def test_rtree_search_miss():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 7)
     hits = t.search([2.0, 2.0, 2.0], [3.0, 3.0, 3.0], lambda data: True)
 
     MINI_CHECK(hits == 0)
 
 
-@MINI_TEST("RTree", "Remove")
+@MINI_TEST("SpatialRTree", "Remove")
 def test_rtree_remove():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 5)
     t.remove([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 5)
 
     MINI_CHECK(t.count() == 0)
 
 
-@MINI_TEST("RTree", "Remove All")
+@MINI_TEST("SpatialRTree", "Remove All")
 def test_rtree_remove_all():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
     t.insert([2.0, 2.0, 2.0], [3.0, 3.0, 3.0], 1)
     t.insert([4.0, 4.0, 4.0], [5.0, 5.0, 5.0], 2)
@@ -93,10 +93,10 @@ def test_rtree_remove_all():
     MINI_CHECK(t.count() == 0)
 
 
-@MINI_TEST("RTree", "Search Count")
+@MINI_TEST("SpatialRTree", "Search Count")
 def test_rtree_search_count():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
     t.insert([2.0, 2.0, 2.0], [3.0, 3.0, 3.0], 1)
     t.insert([3.0, 3.0, 3.0], [4.0, 4.0, 4.0], 2)
@@ -107,10 +107,10 @@ def test_rtree_search_count():
     MINI_CHECK(hits == 3)
 
 
-@MINI_TEST("RTree", "Search Stop")
+@MINI_TEST("SpatialRTree", "Search Stop")
 def test_rtree_search_stop():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 1)
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 2)
@@ -119,10 +119,10 @@ def test_rtree_search_stop():
     MINI_CHECK(hits == 1)
 
 
-@MINI_TEST("RTree", "Search 100 Boxes")
+@MINI_TEST("SpatialRTree", "Search 100 Boxes")
 def test_rtree_search_100_boxes():
-    from session_py.rtree import RTree
-    t = RTree()
+    from session_py.spatial_rtree import SpatialRTree
+    t = SpatialRTree()
     ids = [0]
     def add(x0, y0, z0, x1, y1, z1):
         t.insert([x0, y0, z0], [x1, y1, z1], ids[0])

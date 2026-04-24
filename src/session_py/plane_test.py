@@ -242,14 +242,14 @@ def test_plane_json_roundtrip():
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
+    #   file_json_dumps()    │ str          │ to JSON string
+    #   file_json_loads(s)   │ str          │ from JSON string
+    #   file_json_dump(path) │ file         │ write to file
+    #   file_json_load(path) │ file         │ read from file
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.json"
-    pl.json_dump(fname)
-    loaded = Plane.json_load(fname)
+    pl.file_json_dump(fname)
+    loaded = Plane.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_plane")
     MINI_CHECK(TOLERANCE.is_close(loaded.c, 1.0))

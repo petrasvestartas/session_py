@@ -1,7 +1,7 @@
 import os
 import time
 from session_py import Session, ElementPlate
-from session_py.obj import read_obj_polylines, pair_polylines
+from session_py.file_obj import read_file_obj_polylines, pair_polylines
 
 
 def main():
@@ -9,7 +9,7 @@ def main():
     t0 = time.perf_counter()
 
     # 1. Import + pair polylines
-    polylines = read_obj_polylines(os.path.join(base, "..", "session_data", "annen_polylines.obj"))
+    polylines = read_file_obj_polylines(os.path.join(base, "..", "session_data", "annen_polylines.obj"))
     pairs = pair_polylines(polylines)
     t1 = time.perf_counter()
 

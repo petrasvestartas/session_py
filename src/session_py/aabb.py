@@ -1,9 +1,5 @@
-# AABBTree — flat contiguous BVH over axis-aligned boxes (SAH median split).
-# Use for: closest-point on static mesh faces, ray-mesh intersection.
-#   Build once, query many times. Cache-friendly 56-byte nodes.
-# Prefer over BVH  when geometry is static and all volumes are world-aligned.
-# Prefer over RTree when no dynamic insert/delete is needed.
-# Prefer over KDTree when querying faces/volumes, not bare point clouds.
+# AABB — axis-aligned bounding box primitive (center + half-size).
+# Use for: containment tests, intersection tests, tight bounds of geometry.
 from typing import List
 from typing import NamedTuple
 
@@ -32,6 +28,36 @@ class AABB(NamedTuple):
         max_x = max(p[0] for p in points)
         max_y = max(p[1] for p in points)
         max_z = max(p[2] for p in points)
+        return cls(
+            (min_x + max_x) * 0.5,
+            (min_y + max_y) * 0.5,
+            (min_z + max_z) * 0.5,
+            (max_x - min_x) * 0.5 + inflate,
+            (max_y - min_y) * 0.5 + inflate,
+            (max_z - min_z) * 0.5 + inflate,
+        )
+
+    @classmethod
+    def from_coords_stride3(cls, coords, inflate: float = 0.0) -> "AABB":
+        # Build an AABB directly from a stride-3 coord buffer (e.g. Polyline.coords)
+        # without constructing an intermediate list of Points. Used on hot paths
+        # like Session.add_polyline where the caller already has raw coords.
+        if len(coords) < 3:
+            return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        n = len(coords) // 3
+        min_x = max_x = coords[0]
+        min_y = max_y = coords[1]
+        min_z = max_z = coords[2]
+        for i in range(1, n):
+            x = coords[i * 3]
+            y = coords[i * 3 + 1]
+            z = coords[i * 3 + 2]
+            if x < min_x: min_x = x
+            elif x > max_x: max_x = x
+            if y < min_y: min_y = y
+            elif y > max_y: max_y = y
+            if z < min_z: min_z = z
+            elif z > max_z: max_z = z
         return cls(
             (min_x + max_x) * 0.5,
             (min_y + max_y) * 0.5,

@@ -1,9 +1,9 @@
-# RTree — R-tree with dynamic insert/delete (Guttman split, fan-out 4–8).
+# SpatialRTree — R-tree with dynamic insert/delete (Guttman split, fan-out 4–8).
 # Use for: "find all objects overlapping this region" (spatial range queries).
 #   Supports live insertion and deletion; good for mutable object sets.
-# Prefer over AABBTree/BVH when data changes frequently.
-# Prefer over KDTree  when querying volumes/boxes, not bare point clouds.
-# Note: k-NN is possible but slower than KDTree for pure point queries.
+# Prefer over SpatialAABBTree/SpatialBVH when data changes frequently.
+# Prefer over SpatialKDTree  when querying volumes/boxes, not bare point clouds.
+# Note: k-NN is possible but slower than SpatialKDTree for pure point queries.
 MAXNODES = 8
 MINNODES = 4
 NOT_TAKEN = -1
@@ -63,7 +63,7 @@ class _PartitionVars:
         self.m_cover_split_area = 0.0
 
 
-class RTree:
+class SpatialRTree:
     def __init__(self):
         self._m_root = self._alloc_node()
         self._m_root.m_level = 0

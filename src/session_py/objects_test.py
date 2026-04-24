@@ -19,8 +19,8 @@ def test_objects_constructor():
 def test_objects_json_roundtrip():
     from session_py import Objects
     from session_py import Point
-    from session_py.encoders import json_dump
-    from session_py.encoders import json_load
+    from session_py.file_encoders import file_json_dump
+    from session_py.file_encoders import file_json_load
     from pathlib import Path
 
     original = Objects()
@@ -28,8 +28,8 @@ def test_objects_json_roundtrip():
     original.points.append(Point(4.0, 5.0, 6.0))
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_objects.json"
-    json_dump(original, fname)
-    loaded = json_load(fname)
+    file_json_dump(original, fname)
+    loaded = file_json_load(fname)
 
     MINI_CHECK(len(loaded.points) == len(original.points))
 
@@ -56,7 +56,7 @@ def test_objects_component_constructor():
     # A Component is any object with guid + name + __jsondump__/__jsonload__.
     # Here we use a minimal inline class to keep the test self-contained.
     import uuid
-    from session_py.encoders import register_class
+    from session_py.file_encoders import file_register_class
 
     class Box:
         def __init__(self, width=1.0, height=2.0):
@@ -76,7 +76,7 @@ def test_objects_component_constructor():
             obj.name  = name or data.get("name", obj.name)
             return obj
 
-    register_class("Box", Box)
+    file_register_class("Box", Box)
 
     box = Box(width=3.0, height=5.0)
     MINI_CHECK(len(box.guid) > 0)
@@ -88,7 +88,7 @@ def test_objects_component_constructor():
 def test_objects_component_json_roundtrip():
     import uuid
     from session_py import Objects
-    from session_py.encoders import register_class
+    from session_py.file_encoders import file_register_class
     from pathlib import Path
 
     class Box:
@@ -109,15 +109,15 @@ def test_objects_component_json_roundtrip():
             obj.name  = name or data.get("name", obj.name)
             return obj
 
-    register_class("Box", Box)
+    file_register_class("Box", Box)
 
     original = Objects()
     box = Box(width=3.0, height=5.0)
     original.components.append(box)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_objects_component.json"
-    original.json_dump(str(fname))
-    loaded = Objects.json_load(str(fname))
+    original.file_json_dump(str(fname))
+    loaded = Objects.file_json_load(str(fname))
 
     MINI_CHECK(len(loaded.components) == 1)
     MINI_CHECK(isinstance(loaded.components[0], Box))
@@ -130,7 +130,7 @@ def test_objects_component_json_roundtrip():
 def test_session_add_component():
     import uuid
     from session_py.session import Session
-    from session_py.encoders import register_class
+    from session_py.file_encoders import file_register_class
 
     class Box:
         def __init__(self, width=1.0, height=2.0):
@@ -150,7 +150,7 @@ def test_session_add_component():
             obj.name  = name or data.get("name", obj.name)
             return obj
 
-    register_class("Box", Box)
+    file_register_class("Box", Box)
 
     session = Session()
     box = Box(width=3.0, height=5.0)

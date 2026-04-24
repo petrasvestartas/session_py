@@ -538,8 +538,8 @@ def test_xform_json_roundtrip():
     xform.name = "test_xform"
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.json"
-    xform.json_dump(fname)
-    loaded = Xform.json_load(fname)
+    xform.file_json_dump(fname)
+    loaded = Xform.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_xform")
     MINI_CHECK(loaded.guid == xform.guid)

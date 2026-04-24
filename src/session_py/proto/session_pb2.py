@@ -26,20 +26,20 @@ from . import objects_pb2 as objects__pb2
 from . import tree_pb2 as tree__pb2
 from . import graph_pb2 as graph__pb2
 from . import boundingbox_pb2 as boundingbox__pb2
-from . import feature_pb2 as feature__pb2
+from . import elementfeature_pb2 as elementfeature__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rsession.proto\x12\rsession_proto\x1a\robjects.proto\x1a\ntree.proto\x1a\x0bgraph.proto\x1a\x11\x62oundingbox.proto\x1a\rfeature.proto\"\xd7\x02\n\x07Session\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\'\n\x07objects\x18\x03 \x01(\x0b\x32\x16.session_proto.Objects\x12!\n\x04tree\x18\x04 \x01(\x0b\x32\x13.session_proto.Tree\x12#\n\x05graph\x18\x05 \x01(\x0b\x32\x14.session_proto.Graph\x12-\n\tbvh_boxes\x18\x06 \x03(\x0b\x32\x1a.session_proto.BoundingBox\x12?\n\redge_features\x18\x07 \x03(\x0b\x32(.session_proto.Session.EdgeFeaturesEntry\x1aO\n\x11\x45\x64geFeaturesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x1a.session_proto.EdgeFeature:\x02\x38\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rsession.proto\x12\rsession_proto\x1a\robjects.proto\x1a\ntree.proto\x1a\x0bgraph.proto\x1a\x11\x62oundingbox.proto\x1a\x14\x65lementfeature.proto\"\xf3\x02\n\x07Session\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\'\n\x07objects\x18\x03 \x01(\x0b\x32\x16.session_proto.Objects\x12!\n\x04tree\x18\x04 \x01(\x0b\x32\x13.session_proto.Tree\x12#\n\x05graph\x18\x05 \x01(\x0b\x32\x14.session_proto.Graph\x12-\n\tbvh_boxes\x18\x06 \x03(\x0b\x32\x1a.session_proto.BoundingBox\x12M\n\x14\x65\x64ge_elementfeatures\x18\x07 \x03(\x0b\x32/.session_proto.Session.EdgeElementfeaturesEntry\x1a]\n\x18\x45\x64geElementfeaturesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x30\n\x05value\x18\x02 \x01(\x0b\x32!.session_proto.EdgeElementFeature:\x02\x38\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'session_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SESSION_EDGEFEATURESENTRY']._loaded_options = None
-  _globals['_SESSION_EDGEFEATURESENTRY']._serialized_options = b'8\001'
-  _globals['_SESSION']._serialized_start=107
-  _globals['_SESSION']._serialized_end=450
-  _globals['_SESSION_EDGEFEATURESENTRY']._serialized_start=371
-  _globals['_SESSION_EDGEFEATURESENTRY']._serialized_end=450
+  _globals['_SESSION_EDGEELEMENTFEATURESENTRY']._loaded_options = None
+  _globals['_SESSION_EDGEELEMENTFEATURESENTRY']._serialized_options = b'8\001'
+  _globals['_SESSION']._serialized_start=114
+  _globals['_SESSION']._serialized_end=485
+  _globals['_SESSION_EDGEELEMENTFEATURESENTRY']._serialized_start=392
+  _globals['_SESSION_EDGEELEMENTFEATURESENTRY']._serialized_end=485
 # @@protoc_insertion_point(module_scope)

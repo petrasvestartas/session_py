@@ -313,6 +313,8 @@ def run_all(language: str = "python") -> None:
     total_tests = 0
     failed_tests: list[tuple[str, str, list[dict[str, Any]]]] = []
 
+    results_by_file: dict[Path, list[dict[str, Any]]] = {}
+
     for class_name, tests in tests_by_class.items():
         results: list[dict[str, Any]] = []
         test_file: Path | None = None
@@ -399,10 +401,13 @@ def run_all(language: str = "python") -> None:
         if test_file is None:
             continue
 
+        results_by_file.setdefault(test_file, []).extend(results)
+
+    for test_file, all_results in results_by_file.items():
         out_path = _default_output_path(language, test_file)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with out_path.open("w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2)
+            json.dump(all_results, f, indent=2)
 
     if failed_tests:
         print(f"\n[py-minitest] FAILURES:", file=sys.stderr)

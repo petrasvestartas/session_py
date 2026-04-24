@@ -15,7 +15,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
     31,
     1,
     '',
-    'encoders.proto'
+    'file_encoders.proto'
 )
 # @@protoc_insertion_point(imports)
 

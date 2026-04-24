@@ -12,7 +12,7 @@ from .obb import OBB
 from .xform import Xform
 from .color import Color
 from .nurbscurve import NurbsCurve
-from . import knot
+from . import nurbsknot
 
 
 class NurbsSurface:
@@ -20,7 +20,7 @@ class NurbsSurface:
     
     A NURBS surface is defined by:
     - 2D array of control points (CVs)
-    - Two knot vectors (one for each parameter direction)
+    - Two nurbsknot vectors (one for each parameter direction)
     - Degrees in both directions (order = degree + 1)
     - Optional weights for rational surfaces
     
@@ -46,7 +46,7 @@ class NurbsSurface:
                  order0: int = 4, order1: int = 4,
                  cv_count0: int = 0, cv_count1: int = 0,
                  is_periodic_u: bool = False, is_periodic_v: bool = False,
-                 knot_delta_u: float = 1.0, knot_delta_v: float = 1.0):
+                 nurbsknot_delta_u: float = 1.0, nurbsknot_delta_v: float = 1.0):
         """Initialize a NURBS surface."""
         self._guid = None
         self.name = "my_nurbssurface"
@@ -64,7 +64,7 @@ class NurbsSurface:
         self.m_cv_stride = [0, 0]
 
         # Data arrays
-        self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
+        self.m_nurbsknot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
         self.m_mesh = None
 
@@ -72,16 +72,16 @@ class NurbsSurface:
         if cv_count0 > 0 and cv_count1 > 0:
             self._create_impl(dimension, is_rational, order0, order1, cv_count0, cv_count1)
 
-            # Initialize knot vectors
+            # Initialize nurbsknot vectors
             if is_periodic_u:
-                self.make_periodic_uniform_knot_vector(0, knot_delta_u)
+                self.make_periodic_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
             else:
-                self.make_clamped_uniform_knot_vector(0, knot_delta_u)
+                self.make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
 
             if is_periodic_v:
-                self.make_periodic_uniform_knot_vector(1, knot_delta_v)
+                self.make_periodic_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
             else:
-                self.make_clamped_uniform_knot_vector(1, knot_delta_v)
+                self.make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
     
     @property
     def guid(self) -> str:
@@ -123,7 +123,7 @@ class NurbsSurface:
         self.m_cv_count = [0, 0]
         self.m_cv_stride = [0, 0]
 
-        self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
+        self.m_nurbsknot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
     
     @staticmethod
@@ -131,7 +131,7 @@ class NurbsSurface:
                order0: int, order1: int,
                cv_count0: int, cv_count1: int,
                is_periodic_u: bool = False, is_periodic_v: bool = False,
-               knot_delta_u: float = 1.0, knot_delta_v: float = 1.0) -> 'NurbsSurface':
+               nurbsknot_delta_u: float = 1.0, nurbsknot_delta_v: float = 1.0) -> 'NurbsSurface':
         """Create NURBS surface with specified parameters (static factory method).
 
         Parameters
@@ -149,13 +149,13 @@ class NurbsSurface:
         cv_count1 : int
             Number of control vertices in v direction.
         is_periodic_u : bool, optional
-            If True, creates periodic uniform knot vector in u direction. Defaults to False.
+            If True, creates periodic uniform nurbsknot vector in u direction. Defaults to False.
         is_periodic_v : bool, optional
-            If True, creates periodic uniform knot vector in v direction. Defaults to False.
-        knot_delta_u : float, optional
-            Knot spacing in u direction. Defaults to 1.0.
-        knot_delta_v : float, optional
-            Knot spacing in v direction. Defaults to 1.0.
+            If True, creates periodic uniform nurbsknot vector in v direction. Defaults to False.
+        nurbsknot_delta_u : float, optional
+            NurbsKnot spacing in u direction. Defaults to 1.0.
+        nurbsknot_delta_v : float, optional
+            NurbsKnot spacing in v direction. Defaults to 1.0.
 
         Returns
         -------
@@ -164,16 +164,16 @@ class NurbsSurface:
         """
         surf = NurbsSurface()
         if surf._create_impl(dimension, is_rational, order0, order1, cv_count0, cv_count1):
-            # Initialize knot vectors
+            # Initialize nurbsknot vectors
             if is_periodic_u:
-                surf.make_periodic_uniform_knot_vector(0, knot_delta_u)
+                surf.make_periodic_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
             else:
-                surf.make_clamped_uniform_knot_vector(0, knot_delta_u)
+                surf.make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
 
             if is_periodic_v:
-                surf.make_periodic_uniform_knot_vector(1, knot_delta_v)
+                surf.make_periodic_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
             else:
-                surf.make_clamped_uniform_knot_vector(1, knot_delta_v)
+                surf.make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
 
             return surf
         return None
@@ -245,13 +245,13 @@ class NurbsSurface:
         self.m_cv_stride[1] = cv_size_val
         self.m_cv_stride[0] = cv_size_val * cv_count1
         
-        # Allocate knot vectors
-        # OpenNURBS formula: knot_count = order + cv_count - 2
-        knot_count0 = order0 + cv_count0 - 2
-        knot_count1 = order1 + cv_count1 - 2
+        # Allocate nurbsknot vectors
+        # OpenNURBS formula: nurbsknot_count = order + cv_count - 2
+        nurbsknot_count0 = order0 + cv_count0 - 2
+        nurbsknot_count1 = order1 + cv_count1 - 2
         
-        self.m_knot[0] = np.zeros(knot_count0, dtype=np.float64)
-        self.m_knot[1] = np.zeros(knot_count1, dtype=np.float64)
+        self.m_nurbsknot[0] = np.zeros(nurbsknot_count0, dtype=np.float64)
+        self.m_nurbsknot[1] = np.zeros(nurbsknot_count1, dtype=np.float64)
 
         # Allocate CV array
         total_cvs = cv_count0 * cv_count1
@@ -268,7 +268,7 @@ class NurbsSurface:
     
     def destroy(self):
         """Deallocate all memory and reset to empty state."""
-        self.m_knot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
+        self.m_nurbsknot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
         self.initialize()
     
@@ -294,12 +294,12 @@ class NurbsSurface:
             if self.m_cv_count[dir] < self.m_order[dir]:
                 return False
 
-            # OpenNURBS formula: knot_count = order + cv_count - 2
-            knot_count = self.m_order[dir] + self.m_cv_count[dir] - 2
-            if len(self.m_knot[dir]) != knot_count:
+            # OpenNURBS formula: nurbsknot_count = order + cv_count - 2
+            nurbsknot_count = self.m_order[dir] + self.m_cv_count[dir] - 2
+            if len(self.m_nurbsknot[dir]) != nurbsknot_count:
                 return False
 
-            if not self.is_valid_knot_vector(dir):
+            if not self.is_valid_nurbsknot_vector(dir):
                 return False
 
             # Check stride is valid (OpenNURBS check)
@@ -369,21 +369,21 @@ class NurbsSurface:
         if dir < 0 or dir >= 2 or not self.is_valid():
             return False
 
-        # Check knot vector periodicity
+        # Check nurbsknot vector periodicity
         degree = self.degree(dir)
-        kc = self.knot_count(dir)
+        kc = self.nurbsknot_count(dir)
 
         if kc != self.m_order[dir] + self.m_cv_count[dir] - 2:
             return False
 
         # Check uniform spacing
-        delta = self.m_knot[dir][self.m_cv_count[dir] - 1] - self.m_knot[dir][degree]
+        delta = self.m_nurbsknot[dir][self.m_cv_count[dir] - 1] - self.m_nurbsknot[dir][degree]
         if delta <= 0:
             return False
 
         for i in range(self.m_cv_count[dir] - 1):
-            expected = self.m_knot[dir][i + degree] + delta
-            if abs(self.m_knot[dir][i + self.m_order[dir] - 1] - expected) > 1e-10:
+            expected = self.m_nurbsknot[dir][i + degree] + delta
+            if abs(self.m_nurbsknot[dir][i + self.m_order[dir] - 1] - expected) > 1e-10:
                 return False
 
         # Check CV periodicity
@@ -533,11 +533,11 @@ class NurbsSurface:
         """
         if dir < 0 or dir >= 2:
             return False
-        if len(self.m_knot[dir]) == 0:
+        if len(self.m_nurbsknot[dir]) == 0:
             return False
 
-        # Use knot module function
-        return knot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], end)
+        # Use nurbsknot module function
+        return nurbsknot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], end)
 
     def is_duplicate(self, other, ignore_parameterization: bool = False, tolerance: float = None) -> bool:
         if tolerance is None:
@@ -563,13 +563,13 @@ class NurbsSurface:
                         return False
         if not ignore_parameterization:
             for dir in range(2):
-                for i in range(self.knot_count(dir)):
-                    if abs(self.knot(dir, i) - other.knot(dir, i)) > tolerance:
+                for i in range(self.nurbsknot_count(dir)):
+                    if abs(self.nurbsknot(dir, i) - other.nurbsknot(dir, i)) > tolerance:
                         return False
         return True
 
-    def is_valid_knot_vector(self, dir: int) -> bool:
-        """Check if knot vector is valid in specified direction.
+    def is_valid_nurbsknot_vector(self, dir: int) -> bool:
+        """Check if nurbsknot vector is valid in specified direction.
 
         Parameters
         ----------
@@ -579,16 +579,16 @@ class NurbsSurface:
         Returns
         -------
         bool
-            True if knot vector is valid (non-decreasing).
+            True if nurbsknot vector is valid (non-decreasing).
         """
         if dir < 0 or dir >= 2:
             return False
-        kc = self.knot_count(dir)
-        if len(self.m_knot[dir]) != kc:
+        kc = self.nurbsknot_count(dir)
+        if len(self.m_nurbsknot[dir]) != kc:
             return False
 
         for i in range(1, kc):
-            if self.m_knot[dir][i] < self.m_knot[dir][i-1]:
+            if self.m_nurbsknot[dir][i] < self.m_nurbsknot[dir][i-1]:
                 return False
         return True
 
@@ -623,9 +623,9 @@ class NurbsSurface:
         if self.m_cv_stride != other.m_cv_stride:
             return False
 
-        # Compare knot vectors
+        # Compare nurbsknot vectors
         for i in range(2):
-            if not np.array_equal(self.m_knot[i], other.m_knot[i]):
+            if not np.array_equal(self.m_nurbsknot[i], other.m_nurbsknot[i]):
                 return False
 
         # Compare control vertices
@@ -732,8 +732,8 @@ class NurbsSurface:
         """
         return (self.m_dim + 1) if self.m_is_rat else self.m_dim
     
-    def knot_count(self, dir: int) -> int:
-        """Get knot count in specified direction.
+    def nurbsknot_count(self, dir: int) -> int:
+        """Get nurbsknot count in specified direction.
         
         Parameters
         ----------
@@ -743,11 +743,11 @@ class NurbsSurface:
         Returns
         -------
         int
-            Number of knots in specified direction.
+            Number of nurbsknots in specified direction.
         """
         if dir < 0 or dir >= 2:
             return 0
-        # OpenNURBS formula: knot_count = order + cv_count - 2
+        # OpenNURBS formula: nurbsknot_count = order + cv_count - 2
         return self.m_order[dir] + self.m_cv_count[dir] - 2
     
     def span_count(self, dir: int) -> int:
@@ -981,73 +981,73 @@ class NurbsSurface:
         return True
     
     ###########################################################################
-    # KNOT ACCESS
+    # NURBSKNOT ACCESS
     ###########################################################################
     
-    def knot(self, dir: int, knot_index: int) -> float:
-        """Get knot value at index in specified direction.
+    def nurbsknot(self, dir: int, nurbsknot_index: int) -> float:
+        """Get nurbsknot value at index in specified direction.
         
         Parameters
         ----------
         dir : int
             Direction (0 for u, 1 for v).
-        knot_index : int
-            Index in knot vector.
+        nurbsknot_index : int
+            Index in nurbsknot vector.
         
         Returns
         -------
         float
-            Knot value, or 0.0 if invalid.
+            NurbsKnot value, or 0.0 if invalid.
         """
-        if dir < 0 or dir >= 2 or knot_index < 0 or knot_index >= len(self.m_knot[dir]):
+        if dir < 0 or dir >= 2 or nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot[dir]):
             return 0.0
-        return self.m_knot[dir][knot_index]
+        return self.m_nurbsknot[dir][nurbsknot_index]
     
-    def set_knot(self, dir: int, knot_index: int, knot_value: float) -> bool:
-        """Set knot value at index in specified direction.
+    def set_nurbsknot(self, dir: int, nurbsknot_index: int, nurbsknot_value: float) -> bool:
+        """Set nurbsknot value at index in specified direction.
         
         Parameters
         ----------
         dir : int
             Direction (0 for u, 1 for v).
-        knot_index : int
-            Index in knot vector.
-        knot_value : float
-            Knot value to set.
+        nurbsknot_index : int
+            Index in nurbsknot vector.
+        nurbsknot_value : float
+            NurbsKnot value to set.
         
         Returns
         -------
         bool
             True if successful, False otherwise.
         """
-        if dir < 0 or dir >= 2 or knot_index < 0 or knot_index >= len(self.m_knot[dir]):
+        if dir < 0 or dir >= 2 or nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot[dir]):
             return False
-        self.m_knot[dir][knot_index] = knot_value
+        self.m_nurbsknot[dir][nurbsknot_index] = nurbsknot_value
         return True
     
-    def knot_multiplicity(self, dir: int, knot_index: int) -> int:
-        """Get knot multiplicity at index in specified direction.
+    def nurbsknot_multiplicity(self, dir: int, nurbsknot_index: int) -> int:
+        """Get nurbsknot multiplicity at index in specified direction.
         
         Parameters
         ----------
         dir : int
             Direction (0 for u, 1 for v).
-        knot_index : int
-            Index in knot vector.
+        nurbsknot_index : int
+            Index in nurbsknot vector.
         
         Returns
         -------
         int
-            Multiplicity of the knot.
+            Multiplicity of the nurbsknot.
         """
         if dir < 0 or dir >= 2:
             return 0
         
-        # Use knot module function
-        return knot.multiplicity(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], knot_index)
+        # Use nurbsknot module function
+        return nurbsknot.multiplicity(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], nurbsknot_index)
     
-    def get_knots(self, dir: int) -> np.ndarray:
-        """Get all knot values for specified direction.
+    def get_nurbsknots(self, dir: int) -> np.ndarray:
+        """Get all nurbsknot values for specified direction.
         
         Parameters
         ----------
@@ -1057,11 +1057,11 @@ class NurbsSurface:
         Returns
         -------
         np.ndarray
-            Copy of knot vector.
+            Copy of nurbsknot vector.
         """
         if dir < 0 or dir >= 2:
             return np.array([])
-        return self.m_knot[dir].copy()
+        return self.m_nurbsknot[dir].copy()
 
     ###########################################################################
     # DOMAIN & PARAMETERIZATION
@@ -1082,8 +1082,8 @@ class NurbsSurface:
         """
         if not self.is_valid() or dir < 0 or dir >= 2:
             return (0.0, 0.0)
-        return (self.m_knot[dir][self.m_order[dir] - 2],
-                self.m_knot[dir][self.m_cv_count[dir] - 1])
+        return (self.m_nurbsknot[dir][self.m_order[dir] - 2],
+                self.m_nurbsknot[dir][self.m_cv_count[dir] - 1])
     
     def set_domain(self, dir: int, t0: float, t1: float) -> bool:
         """Set surface domain in specified direction.
@@ -1110,13 +1110,13 @@ class NurbsSurface:
             return False
         
         scale = (t1 - t0) / (old_t1 - old_t0)
-        for i in range(len(self.m_knot[dir])):
-            self.m_knot[dir][i] = t0 + (self.m_knot[dir][i] - old_t0) * scale
+        for i in range(len(self.m_nurbsknot[dir])):
+            self.m_nurbsknot[dir][i] = t0 + (self.m_nurbsknot[dir][i] - old_t0) * scale
         
         return True
     
     def get_span_vector(self, dir: int) -> np.ndarray:
-        """Get span (distinct knot intervals) values in specified direction.
+        """Get span (distinct nurbsknot intervals) values in specified direction.
         
         Parameters
         ----------
@@ -1132,28 +1132,28 @@ class NurbsSurface:
             return np.array([])
         
         spans = []
-        for i in range(len(self.m_knot[dir]) - 1):
-            if abs(self.m_knot[dir][i+1] - self.m_knot[dir][i]) > 1e-14:
-                spans.append(self.m_knot[dir][i])
+        for i in range(len(self.m_nurbsknot[dir]) - 1):
+            if abs(self.m_nurbsknot[dir][i+1] - self.m_nurbsknot[dir][i]) > 1e-14:
+                spans.append(self.m_nurbsknot[dir][i])
         
-        if len(self.m_knot[dir]) > 0:
-            spans.append(self.m_knot[dir][-1])
+        if len(self.m_nurbsknot[dir]) > 0:
+            spans.append(self.m_nurbsknot[dir][-1])
         
         return np.array(spans)
     
     ###########################################################################
-    # KNOT VECTOR OPERATIONS
+    # NURBSKNOT VECTOR OPERATIONS
     ###########################################################################
     
-    def make_clamped_uniform_knot_vector(self, dir: int, delta: float = 1.0) -> bool:
-        """Make knot vector a clamped uniform knot vector.
+    def make_clamped_uniform_nurbsknot_vector(self, dir: int, delta: float = 1.0) -> bool:
+        """Make nurbsknot vector a clamped uniform nurbsknot vector.
         
         Parameters
         ----------
         dir : int
             Direction (0 for u, 1 for v).
         delta : float, optional
-            Spacing between internal knots. Defaults to 1.0.
+            Spacing between internal nurbsknots. Defaults to 1.0.
         
         Returns
         -------
@@ -1165,22 +1165,22 @@ class NurbsSurface:
         if self.m_order[dir] < 2 or self.m_cv_count[dir] < self.m_order[dir]:
             return False
         
-        # Use knot module function
-        result = knot.make_clamped_uniform(self.m_order[dir], self.m_cv_count[dir], delta)
+        # Use nurbsknot module function
+        result = nurbsknot.make_clamped_uniform(self.m_order[dir], self.m_cv_count[dir], delta)
         if result is None:
             return False
-        self.m_knot[dir] = result
+        self.m_nurbsknot[dir] = result
         return True
     
-    def make_periodic_uniform_knot_vector(self, dir: int, delta: float = 1.0) -> bool:
-        """Make knot vector a periodic uniform knot vector.
+    def make_periodic_uniform_nurbsknot_vector(self, dir: int, delta: float = 1.0) -> bool:
+        """Make nurbsknot vector a periodic uniform nurbsknot vector.
         
         Parameters
         ----------
         dir : int
             Direction (0 for u, 1 for v).
         delta : float, optional
-            Spacing between knots. Defaults to 1.0.
+            Spacing between nurbsknots. Defaults to 1.0.
         
         Returns
         -------
@@ -1192,15 +1192,15 @@ class NurbsSurface:
         if self.m_order[dir] < 2 or self.m_cv_count[dir] < self.m_order[dir]:
             return False
         
-        # Use knot module function
-        result = knot.make_periodic_uniform(self.m_order[dir], self.m_cv_count[dir], delta)
+        # Use nurbsknot module function
+        result = nurbsknot.make_periodic_uniform(self.m_order[dir], self.m_cv_count[dir], delta)
         if result is None:
             return False
-        self.m_knot[dir] = result
+        self.m_nurbsknot[dir] = result
         return True
 
     def _find_span(self, dir: int, t: float) -> int:
-        """Find the knot span index containing parameter t.
+        """Find the nurbsknot span index containing parameter t.
         
         Implements ON_NurbsSpanIndex algorithm from OpenNURBS.
         
@@ -1216,8 +1216,8 @@ class NurbsSurface:
         int
             Span index in range [0, cv_count-order].
         """
-        # Use knot module function
-        return knot.find_span(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], t)
+        # Use nurbsknot module function
+        return nurbsknot.find_span(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], t)
     
     def _basis_functions(self, dir: int, span: int, t: float) -> np.ndarray:
         """Compute basis functions.
@@ -1230,7 +1230,7 @@ class NurbsSurface:
         dir : int
             Direction (0 for u, 1 for v).
         span : int
-            Span index (offset in knot array).
+            Span index (offset in nurbsknot array).
         t : float
             Parameter value.
         
@@ -1241,12 +1241,12 @@ class NurbsSurface:
         """
         order = self.m_order[dir]
         d = order - 1
-        knot_base = span + d
-        knot = self.m_knot[dir]
+        nurbsknot_base = span + d
+        nurbsknot = self.m_nurbsknot[dir]
 
-        if knot[knot_base - 1] == knot[knot_base]:
+        if nurbsknot[nurbsknot_base - 1] == nurbsknot[nurbsknot_base]:
             out = np.zeros(order)
-            if t <= knot[knot_base]:
+            if t <= nurbsknot[nurbsknot_base]:
                 out[0] = 1.0
             else:
                 out[order - 1] = 1.0
@@ -1257,14 +1257,14 @@ class NurbsSurface:
         left = np.zeros(d)
         right = np.zeros(d)
         N_idx = order * order - 1
-        k_right = knot_base
-        k_left = knot_base - 1
+        k_right = nurbsknot_base
+        k_left = nurbsknot_base - 1
 
         for j in range(d):
             N0_idx = N_idx
             N_idx -= (order + 1)
-            left[j] = t - knot[k_left]
-            right[j] = knot[k_right] - t
+            left[j] = t - nurbsknot[k_left]
+            right[j] = nurbsknot[k_right] - t
             k_left -= 1
             k_right += 1
 
@@ -1285,12 +1285,12 @@ class NurbsSurface:
             return []
         order = self.m_order[dir]
         degree = order - 1
-        kv = self.m_knot[dir]
-        knot_base = span + degree
+        kv = self.m_nurbsknot[dir]
+        nurbsknot_base = span + degree
 
         ders = [[0.0] * order for _ in range(deriv_order + 1)]
 
-        if kv[knot_base - 1] == kv[knot_base]:
+        if kv[nurbsknot_base - 1] == kv[nurbsknot_base]:
             return ders
 
         ndu = [[0.0] * order for _ in range(order)]
@@ -1299,8 +1299,8 @@ class NurbsSurface:
         right = [0.0] * (degree + 1)
 
         for j in range(1, degree + 1):
-            left[j] = t - kv[knot_base - j]
-            right[j] = kv[knot_base + j - 1] - t
+            left[j] = t - kv[nurbsknot_base - j]
+            right[j] = kv[nurbsknot_base + j - 1] - t
             saved = 0.0
             for r in range(j):
                 ndu[j][r] = right[r + 1] + left[j - r]
@@ -1390,6 +1390,82 @@ class NurbsSurface:
                     point[1] if self.m_dim > 1 else 0,
                     point[2] if self.m_dim > 2 else 0)
     
+    def batch_point_at(self, us: np.ndarray, vs: np.ndarray) -> np.ndarray:
+        """Evaluate surface at many (u, v) points. Returns (n, 3) array."""
+        us = np.asarray(us, dtype=np.float64)
+        vs = np.asarray(vs, dtype=np.float64)
+        n = len(us)
+        if n == 0:
+            return np.empty((0, 3))
+        if not self.is_valid():
+            return np.zeros((n, 3))
+
+        def _basis_batch(dir_idx, ts):
+            order = self.m_order[dir_idx]
+            cv_count = self.m_cv_count[dir_idx]
+            kn_arr = np.asarray(self.m_nurbsknot[dir_idx], dtype=np.float64)
+            pp1 = order
+            p = order - 1
+            m = len(ts)
+            if cv_count >= order and len(kn_arr) >= cv_count:
+                interior = kn_arr[order - 2:cv_count]
+                spans = np.clip(np.searchsorted(interior, ts, side='right') - 1, 0, cv_count - order)
+            else:
+                spans = np.zeros(m, dtype=np.int64)
+            offset = order - 2 + spans
+            N = np.zeros((m, pp1))
+            N[:, 0] = 1.0
+            left = np.zeros((m, pp1))
+            right = np.zeros((m, pp1))
+            for j in range(1, pp1):
+                left[:, j] = ts - kn_arr[offset + 1 - j]
+                right[:, j] = kn_arr[offset + j] - ts
+                saved = np.zeros(m)
+                for r in range(j):
+                    denom = right[:, r + 1] + left[:, j - r]
+                    nz = np.abs(denom) > 1e-14
+                    safe = np.where(nz, denom, 1.0)
+                    temp = np.where(nz, N[:, r] / safe, 0.0)
+                    N[:, r] = saved + right[:, r + 1] * temp
+                    saved = left[:, j - r] * temp
+                N[:, j] = saved
+            return N, spans
+
+        Nu, span_u = _basis_batch(0, us)
+        Nv, span_v = _basis_batch(1, vs)
+
+        order_u = self.m_order[0]
+        order_v = self.m_order[1]
+        cv_u = self.m_cv_count[0]
+        cv_v = self.m_cv_count[1]
+        stride = self.cv_size()
+        cv_3d = self.m_cv.reshape(cv_u, cv_v, stride)
+
+        iu = np.clip(span_u[:, None] + np.arange(order_u)[None, :], 0, cv_u - 1)
+        iv = np.clip(span_v[:, None] + np.arange(order_v)[None, :], 0, cv_v - 1)
+        cv_gathered = cv_3d[iu[:, :, None], iv[:, None, :]]
+
+        w = Nu[:, :, None] * Nv[:, None, :]
+        pt = np.einsum('nij,nijk->nk', w, cv_gathered)
+
+        result = np.zeros((n, 3))
+        if self.m_is_rat:
+            wcol = pt[:, self.m_dim]
+            mask = np.abs(wcol) > 1e-14
+            safe_w = np.where(mask, wcol, 1.0)
+            result[:, 0] = np.where(mask, pt[:, 0] / safe_w, pt[:, 0])
+            if self.m_dim > 1:
+                result[:, 1] = np.where(mask, pt[:, 1] / safe_w, pt[:, 1])
+            if self.m_dim > 2:
+                result[:, 2] = np.where(mask, pt[:, 2] / safe_w, pt[:, 2])
+        else:
+            result[:, 0] = pt[:, 0]
+            if self.m_dim > 1:
+                result[:, 1] = pt[:, 1]
+            if self.m_dim > 2:
+                result[:, 2] = pt[:, 2]
+        return result
+
     def point_at_corner(self, u_end: int, v_end: int) -> Point:
         """Get point at corner (u_end, v_end) where end is 0 or 1.
         
@@ -1562,7 +1638,7 @@ class NurbsSurface:
         copy.m_order = self.m_order.copy()
         copy.m_cv_count = self.m_cv_count.copy()
         copy.m_cv_stride = self.m_cv_stride.copy()
-        copy.m_knot = [self.m_knot[0].copy(), self.m_knot[1].copy()]
+        copy.m_nurbsknot = [self.m_nurbsknot[0].copy(), self.m_nurbsknot[1].copy()]
         copy.m_cv = self.m_cv.copy()
         copy.guid = self.guid
         copy.name = self.name
@@ -1597,8 +1673,8 @@ class NurbsSurface:
         if not self.is_valid():
             return False
         
-        # Reverse knot vector using knot module function
-        knot.reverse(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir])
+        # Reverse nurbsknot vector using nurbsknot module function
+        nurbsknot.reverse(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir])
         
         # Reverse control points in specified direction
         if dir == 0:
@@ -1651,8 +1727,8 @@ class NurbsSurface:
         self.m_order[0], self.m_order[1] = self.m_order[1], self.m_order[0]
         self.m_cv_count[0], self.m_cv_count[1] = self.m_cv_count[1], self.m_cv_count[0]
 
-        # Swap knot vectors
-        self.m_knot[0], self.m_knot[1] = self.m_knot[1], self.m_knot[0]
+        # Swap nurbsknot vectors
+        self.m_nurbsknot[0], self.m_nurbsknot[1] = self.m_nurbsknot[1], self.m_nurbsknot[0]
 
         # Rebuild CV array with transposed indices
         cv_size_val = self.cv_size()
@@ -2108,14 +2184,14 @@ class NurbsSurface:
         return Primitives.create_loft(input_curves, degree_v)
 
     @staticmethod
-    def _merge_knot_vectors(a, b, tol=1e-10):
+    def _merge_nurbsknot_vectors(a, b, tol=1e-10):
         from .primitives import Primitives
-        return Primitives._merge_knot_vectors(a, b, tol)
+        return Primitives._merge_nurbsknot_vectors(a, b, tol)
 
     @staticmethod
-    def _knot_vectors_equal(a, b, tol=1e-10):
+    def _nurbsknot_vectors_equal(a, b, tol=1e-10):
         from .primitives import Primitives
-        return Primitives._knot_vectors_equal(a, b, tol)
+        return Primitives._nurbsknot_vectors_equal(a, b, tol)
 
     @staticmethod
     def _make_curves_compatible(curves):
@@ -2139,7 +2215,7 @@ class NurbsSurface:
     
     def create_clamped_uniform(self, dimension: int, order0: int, order1: int,
                               cv_count0: int, cv_count1: int,
-                              knot_delta0: float = 1.0, knot_delta1: float = 1.0) -> bool:
+                              nurbsknot_delta0: float = 1.0, nurbsknot_delta1: float = 1.0) -> bool:
         """Create clamped uniform NURBS surface.
         
         Parameters
@@ -2150,8 +2226,8 @@ class NurbsSurface:
             Orders in u and v directions.
         cv_count0, cv_count1 : int
             Number of CVs in u and v directions.
-        knot_delta0, knot_delta1 : float, optional
-            Knot spacing.
+        nurbsknot_delta0, nurbsknot_delta1 : float, optional
+            NurbsKnot spacing.
         
         Returns
         -------
@@ -2161,8 +2237,8 @@ class NurbsSurface:
         if not self._create_impl(dimension, False, order0, order1, cv_count0, cv_count1):
             return False
         
-        self.make_clamped_uniform_knot_vector(0, knot_delta0)
-        self.make_clamped_uniform_knot_vector(1, knot_delta1)
+        self.make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta0)
+        self.make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta1)
         
         return True
     
@@ -2181,7 +2257,7 @@ class NurbsSurface:
         return self.m_cv_count[0] * self.m_cv_count[1]
     
     ###########################################################################
-    # KNOT VECTOR OPERATIONS (ADDITIONAL)
+    # NURBSKNOT VECTOR OPERATIONS (ADDITIONAL)
     ###########################################################################
     
     def _to_curve_internal(self, dir: int):
@@ -2195,8 +2271,8 @@ class NurbsSurface:
             n_other = self.cv_count(0)
         hdim = dim * n_other
         crv = NurbsCurve(hdim, False, self.order(dir), n_along)
-        for k in range(self.knot_count(dir)):
-            crv.set_knot(k, self.m_knot[dir][k])
+        for k in range(self.nurbsknot_count(dir)):
+            crv.set_nurbsknot(k, self.m_nurbsknot[dir][k])
         for i in range(n_along):
             cv_data = []
             for j in range(n_other):
@@ -2222,17 +2298,17 @@ class NurbsSurface:
         if dir == 0:
             new_srf = NurbsSurface.create_raw(dim, False, new_order, self.order(1),
                                                new_n_along, self.cv_count(1))
-            for k in range(crv.knot_count()):
-                new_srf.set_knot(0, k, crv.knot(k))
-            for k in range(self.knot_count(1)):
-                new_srf.set_knot(1, k, self.m_knot[1][k])
+            for k in range(crv.nurbsknot_count()):
+                new_srf.set_nurbsknot(0, k, crv.nurbsknot(k))
+            for k in range(self.nurbsknot_count(1)):
+                new_srf.set_nurbsknot(1, k, self.m_nurbsknot[1][k])
         else:
             new_srf = NurbsSurface.create_raw(dim, False, self.order(0), new_order,
                                                self.cv_count(0), new_n_along)
-            for k in range(self.knot_count(0)):
-                new_srf.set_knot(0, k, self.m_knot[0][k])
-            for k in range(crv.knot_count()):
-                new_srf.set_knot(1, k, crv.knot(k))
+            for k in range(self.nurbsknot_count(0)):
+                new_srf.set_nurbsknot(0, k, self.m_nurbsknot[0][k])
+            for k in range(crv.nurbsknot_count()):
+                new_srf.set_nurbsknot(1, k, crv.nurbsknot(k))
         for i in range(new_n_along):
             for j in range(n_other):
                 base = i * crv.m_cv_stride + j * dim
@@ -2245,19 +2321,19 @@ class NurbsSurface:
                     new_srf.set_cv(j, i, Point(x, y, z))
         self.m_order = new_srf.m_order
         self.m_cv_count = new_srf.m_cv_count
-        self.m_knot = new_srf.m_knot
+        self.m_nurbsknot = new_srf.m_nurbsknot
         self.m_cv = new_srf.m_cv
         self.m_cv_stride = new_srf.m_cv_stride
         return True
 
-    def insert_knot(self, dir: int, knot_value: float, knot_multiplicity: int = 1) -> bool:
+    def insert_nurbsknot(self, dir: int, nurbsknot_value: float, nurbsknot_multiplicity: int = 1) -> bool:
         if dir < 0 or dir > 1:
             return False
         crv = self._to_curve_internal(dir)
         if crv is None:
             return False
-        for _ in range(knot_multiplicity):
-            if not crv.insert_knot(knot_value, 1):
+        for _ in range(nurbsknot_multiplicity):
+            if not crv.insert_nurbsknot(nurbsknot_value, 1):
                 return False
         return self._from_curve_internal(crv, dir)
     
@@ -2317,9 +2393,9 @@ class NurbsSurface:
         return (lo, hi)
     
     def clamp_end(self, dir: int, end: int) -> bool:
-        """Clamp knot vector end(s) (OpenNURBS implementation).
+        """Clamp nurbsknot vector end(s) (OpenNURBS implementation).
         
-        Sets initial/final (order-2) knot values to match knot[order-2]/knot[cv_count-1].
+        Sets initial/final (order-2) nurbsknot values to match nurbsknot[order-2]/nurbsknot[cv_count-1].
         
         Parameters
         ----------
@@ -2338,8 +2414,8 @@ class NurbsSurface:
         if not self.is_valid():
             return False
         
-        # Use knot module function
-        return knot.clamp(self.m_order[dir], self.m_cv_count[dir], self.m_knot[dir], end)
+        # Use nurbsknot module function
+        return nurbsknot.clamp(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], end)
     
     def increase_degree(self, dir: int, desired_degree: int) -> bool:
         if dir < 0 or dir > 1:
@@ -2408,9 +2484,9 @@ class NurbsSurface:
         if not nurbs_crv.create_curve(self.m_dim, self.m_is_rat != 0, self.m_order[dir], self.m_cv_count[dir]):
             return None
         
-        # Copy knot vector for varying direction
-        for i in range(nurbs_crv.knot_count()):
-            nurbs_crv.set_knot(i, self.knot(dir, i))
+        # Copy nurbsknot vector for varying direction
+        for i in range(nurbs_crv.nurbsknot_count()):
+            nurbs_crv.set_nurbsknot(i, self.nurbsknot(dir, i))
         
         # Find span in constant direction
         span_index = self._find_span(1 - dir, c)
@@ -2487,8 +2563,8 @@ class NurbsSurface:
             'facecolors': [v for c in self.facecolors for v in (c.r, c.g, c.b, c.a)],
             'guid': self.guid,
             'is_rational': bool(self.m_is_rat),
-            'knots_u': self.m_knot[0].tolist(),
-            'knots_v': self.m_knot[1].tolist(),
+            'nurbsknots_u': self.m_nurbsknot[0].tolist(),
+            'nurbsknots_v': self.m_nurbsknot[1].tolist(),
             'linecolors': [v for c in self.linecolors for v in (c.r, c.g, c.b, c.a)],
             'name': self.name,
             'order_u': self.m_order[0],
@@ -2518,10 +2594,10 @@ class NurbsSurface:
         if cv_count_u > 0 and cv_count_v > 0:
             srf._create_impl(dimension, is_rational, order_u, order_v, cv_count_u, cv_count_v)
 
-            if 'knots_u' in data:
-                srf.m_knot[0] = np.array(data['knots_u'], dtype=np.float64)
-            if 'knots_v' in data:
-                srf.m_knot[1] = np.array(data['knots_v'], dtype=np.float64)
+            if 'nurbsknots_u' in data:
+                srf.m_nurbsknot[0] = np.array(data['nurbsknots_u'], dtype=np.float64)
+            if 'nurbsknots_v' in data:
+                srf.m_nurbsknot[1] = np.array(data['nurbsknots_v'], dtype=np.float64)
             if 'control_points' in data:
                 srf.m_cv = np.array(data['control_points'], dtype=np.float64)
 
@@ -2548,7 +2624,7 @@ class NurbsSurface:
 
         return srf
     
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         """Write JSON to file.
         
         Parameters
@@ -2561,7 +2637,7 @@ class NurbsSurface:
             json.dump(self.__jsondump__(), f, indent=2)
     
     @classmethod
-    def json_load(cls, filepath) -> 'NurbsSurface':
+    def file_json_load(cls, filepath) -> 'NurbsSurface':
         """Read JSON from file.
         
         Parameters
@@ -2579,13 +2655,13 @@ class NurbsSurface:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, json_string):
+    def file_json_loads(cls, json_string):
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -2616,9 +2692,9 @@ class NurbsSurface:
         proto.cv_stride_u = self.m_cv_stride[0]
         proto.cv_stride_v = self.m_cv_stride[1]
 
-        # Knot vectors
-        proto.knots_u.extend(self.m_knot[0].tolist())
-        proto.knots_v.extend(self.m_knot[1].tolist())
+        # NurbsKnot vectors
+        proto.nurbsknots_u.extend(self.m_nurbsknot[0].tolist())
+        proto.nurbsknots_v.extend(self.m_nurbsknot[1].tolist())
 
         # Control vertices (flat array)
         proto.cvs.extend(self.m_cv.tolist())
@@ -2659,8 +2735,8 @@ class NurbsSurface:
         proto.cv_count_v = self.m_cv_count[1]
         proto.cv_stride_u = self.m_cv_stride[0]
         proto.cv_stride_v = self.m_cv_stride[1]
-        proto.knots_u.extend(self.m_knot[0].tolist())
-        proto.knots_v.extend(self.m_knot[1].tolist())
+        proto.nurbsknots_u.extend(self.m_nurbsknot[0].tolist())
+        proto.nurbsknots_v.extend(self.m_nurbsknot[1].tolist())
         proto.cvs.extend(self.m_cv.tolist())
         proto.width = self.width
         for c in self.pointcolors:
@@ -2715,11 +2791,11 @@ class NurbsSurface:
         surface.name = proto.name
         surface.width = proto.width
 
-        # Load knot vectors
-        if len(proto.knots_u) == len(surface.m_knot[0]):
-            surface.m_knot[0] = np.array(list(proto.knots_u), dtype=np.float64)
-        if len(proto.knots_v) == len(surface.m_knot[1]):
-            surface.m_knot[1] = np.array(list(proto.knots_v), dtype=np.float64)
+        # Load nurbsknot vectors
+        if len(proto.nurbsknots_u) == len(surface.m_nurbsknot[0]):
+            surface.m_nurbsknot[0] = np.array(list(proto.nurbsknots_u), dtype=np.float64)
+        if len(proto.nurbsknots_v) == len(surface.m_nurbsknot[1]):
+            surface.m_nurbsknot[1] = np.array(list(proto.nurbsknots_v), dtype=np.float64)
 
         # Load control vertices
         if len(proto.cvs) == len(surface.m_cv):

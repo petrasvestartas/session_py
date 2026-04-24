@@ -1,8 +1,8 @@
-# KDTree — alternating-axis median split over bare 3D points.
+# SpatialKDTree — alternating-axis median split over bare 3D points.
 # Use for: k-nearest-neighbor queries on point clouds (fastest option).
 #   Points only — no volumes, no boxes, no rotation.
-# Prefer over AABBTree/BVH when data is a point cloud, not triangle faces.
-# Prefer over RTree   when queries are k-NN, not region overlap.
+# Prefer over SpatialAABBTree/SpatialBVH when data is a point cloud, not triangle faces.
+# Prefer over SpatialRTree   when queries are k-NN, not region overlap.
 # Note: static structure; rebuild required after point insertion.
 import math
 from typing import List, Optional, Tuple
@@ -10,17 +10,17 @@ from typing import List, Optional, Tuple
 from .point import Point
 
 
-class KDTree:
+class SpatialKDTree:
     """KD-tree for point-to-point nearest-neighbor queries.
 
     Build on construction using alternating-axis median split.
-    Complements RTree (box queries) and BVH (collision/ray).
+    Complements SpatialRTree (box queries) and SpatialBVH (collision/ray).
     """
 
     class _Node:
         __slots__ = ("idx", "axis", "left", "right")
 
-        def __init__(self, idx: int, axis: int, left: Optional["KDTree._Node"], right: Optional["KDTree._Node"]):
+        def __init__(self, idx: int, axis: int, left: Optional["SpatialKDTree._Node"], right: Optional["SpatialKDTree._Node"]):
             self.idx = idx
             self.axis = axis
             self.left = left
@@ -30,13 +30,13 @@ class KDTree:
         self._points = list(points)
         self._root = self._build(list(range(len(points))), 0) if points else None
 
-    def _build(self, indices: List[int], depth: int) -> Optional["KDTree._Node"]:
+    def _build(self, indices: List[int], depth: int) -> Optional["SpatialKDTree._Node"]:
         if not indices:
             return None
         axis = depth % 3
         indices.sort(key=lambda i: self._points[i][axis])
         mid = len(indices) // 2
-        return KDTree._Node(
+        return SpatialKDTree._Node(
             idx=indices[mid],
             axis=axis,
             left=self._build(indices[:mid], depth + 1),
@@ -50,7 +50,7 @@ class KDTree:
         dz = a[2] - b[2]
         return dx * dx + dy * dy + dz * dz
 
-    def _nearest_1(self, node: Optional["KDTree._Node"], query: Point, best: List) -> None:
+    def _nearest_1(self, node: Optional["SpatialKDTree._Node"], query: Point, best: List) -> None:
         if node is None:
             return
         d = self._dist_sq(query, self._points[node.idx])
@@ -68,7 +68,7 @@ class KDTree:
         self._nearest_1(self._root, query, best)
         return best[0], math.sqrt(best[1])
 
-    def _nearest_k(self, node: Optional["KDTree._Node"], query: Point, k: int, heap: List) -> None:
+    def _nearest_k(self, node: Optional["SpatialKDTree._Node"], query: Point, k: int, heap: List) -> None:
         if node is None:
             return
         d = self._dist_sq(query, self._points[node.idx])
@@ -89,7 +89,7 @@ class KDTree:
         self._nearest_k(self._root, query, k, heap)
         return sorted([(idx, math.sqrt(-neg_d)) for neg_d, idx in heap], key=lambda x: x[1])
 
-    def _radius(self, node: Optional["KDTree._Node"], query: Point, radius_sq: float, result: List) -> None:
+    def _radius(self, node: Optional["SpatialKDTree._Node"], query: Point, radius_sq: float, result: List) -> None:
         if node is None:
             return
         d = self._dist_sq(query, self._points[node.idx])

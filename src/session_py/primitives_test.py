@@ -716,7 +716,7 @@ def test_nurbssurface_revolve():
     rr = 5.0; r = 1.5; tcx = 14.0
     pb = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
     for i in range(10):
-        pb.set_knot(i, ck[i])
+        pb.set_nurbsknot(i, ck[i])
     for i in range(9):
         pb.set_cv_4d(i, (tcx + rr + r * ca[i]) * cw[i], 0.0, r * sa[i] * cw[i], cw[i])
     s_torus = Primitives.create_revolve(pb, Point(tcx, 0.0, 0.0), Vector(0.0, 0.0, 1.0), 2.0 * PI)
@@ -730,7 +730,7 @@ def test_nurbssurface_revolve():
     pd = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=5)
     sk = [0.0, 0.0, 1.0, 1.0, 2.0, 2.0]
     for i in range(6):
-        pd.set_knot(i, sk[i])
+        pd.set_nurbsknot(i, sk[i])
     spx = [0.0, sr, sr, sr, 0.0]; spz = [-sr, -sr, 0.0, sr, sr]; spw = [1.0, w, 1.0, w, 1.0]
     for i in range(5):
         pd.set_cv_4d(i, (scx + spx[i]) * spw[i], 0.0, spz[i] * spw[i], spw[i])
@@ -1006,7 +1006,7 @@ def test_nurbscurve_interpolated():
     from session_py import Primitives
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py import knot
+    from session_py import nurbsknot
 
     points = [
         Point(14, 9, 0),
@@ -1018,7 +1018,7 @@ def test_nurbscurve_interpolated():
         Point(41, 13, 0),
     ]
 
-    c = Primitives.create_interpolated(points, knot.CurveKnotStyle.Chord)
+    c = Primitives.create_interpolated(points, nurbsknot.CurveNurbsKnotStyle.Chord)
 
     MINI_CHECK(c.is_valid())
     MINI_CHECK(c.degree() == 3)
@@ -1027,13 +1027,13 @@ def test_nurbscurve_interpolated():
     MINI_CHECK(c.is_rational() == False)
 
     d0, d1 = c.domain()
-    knots = c.get_knots()
+    nurbsknots = c.get_nurbsknots()
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), points[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(knots[3]), points[1]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(knots[4]), points[2]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(knots[5]), points[3]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(knots[6]), points[4]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(knots[7]), points[5]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(nurbsknots[3]), points[1]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(nurbsknots[4]), points[2]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(nurbsknots[5]), points[3]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(nurbsknots[6]), points[4]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(nurbsknots[7]), points[5]))
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), points[6]))
 
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), points[0]))
@@ -1045,7 +1045,7 @@ def test_nurbscurve_interpolated():
         Point(3, 1, 0),
         Point(5, 3, 0),
     ]
-    c4 = Primitives.create_interpolated(pts4, knot.CurveKnotStyle.Chord)
+    c4 = Primitives.create_interpolated(pts4, nurbsknot.CurveNurbsKnotStyle.Chord)
     MINI_CHECK(c4.is_valid())
     MINI_CHECK(c4.degree() == 3)
     MINI_CHECK(c4.cv_count() == 6)

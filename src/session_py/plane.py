@@ -872,7 +872,7 @@ class Plane:
             Reconstructed plane instance.
 
         """
-        from .encoders import decode_node
+        from .file_encoders import file_decode_node
 
         # Load frame as flat array of 12 numbers:
         # [ox, oy, oz, xx, xy, xz, yx, yy, yz, zx, zy, zz]
@@ -890,15 +890,15 @@ class Plane:
 
         # Load linecolor
         if "linecolor" in data:
-            plane.linecolor = decode_node(data["linecolor"])
+            plane.linecolor = file_decode_node(data["linecolor"])
 
         # Load xform if present
         if "xform" in data:
-            plane.xform = decode_node(data["xform"])
+            plane.xform = file_decode_node(data["xform"])
 
         return plane
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         """Write JSON to file.
 
         Parameters
@@ -912,7 +912,7 @@ class Plane:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         """Read JSON from file.
 
         Parameters
@@ -931,13 +931,13 @@ class Plane:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, json_string):
+    def file_json_loads(cls, json_string):
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))

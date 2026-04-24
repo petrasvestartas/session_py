@@ -119,43 +119,43 @@ class Objects:
             Reconstructed objects instance.
 
         """
-        from .encoders import decode_node
+        from .file_encoders import file_decode_node
 
         obj = cls()
         obj.guid = guid if guid is not None else data.get("guid", obj.guid)
         obj.name = name if name is not None else data.get("name", obj.name)
 
-        obj.points = [decode_node(p) for p in data.get("points", [])]
-        obj.lines = [decode_node(l) for l in data.get("lines", [])]
-        obj.planes = [decode_node(pl) for pl in data.get("planes", [])]
-        obj.bboxes = [decode_node(b) for b in data.get("bboxes", [])]
-        obj.polylines = [decode_node(pl) for pl in data.get("polylines", [])]
-        obj.pointclouds = [decode_node(pc) for pc in data.get("pointclouds", [])]
-        obj.meshes = [decode_node(m) for m in data.get("meshes", [])]
-        obj.nurbscurves = [decode_node(nc) for nc in data.get("nurbscurves", [])]
-        obj.nurbssurfaces = [decode_node(ns) for ns in data.get("nurbssurfaces", [])]
-        obj.breps = [decode_node(b) for b in data.get("breps", [])]
-        obj.elements = [decode_node(e) for e in data.get("elements", [])]
-        obj.components = [decode_node(c) for c in data.get("components", [])]
+        obj.points = [file_decode_node(p) for p in data.get("points", [])]
+        obj.lines = [file_decode_node(l) for l in data.get("lines", [])]
+        obj.planes = [file_decode_node(pl) for pl in data.get("planes", [])]
+        obj.bboxes = [file_decode_node(b) for b in data.get("bboxes", [])]
+        obj.polylines = [file_decode_node(pl) for pl in data.get("polylines", [])]
+        obj.pointclouds = [file_decode_node(pc) for pc in data.get("pointclouds", [])]
+        obj.meshes = [file_decode_node(m) for m in data.get("meshes", [])]
+        obj.nurbscurves = [file_decode_node(nc) for nc in data.get("nurbscurves", [])]
+        obj.nurbssurfaces = [file_decode_node(ns) for ns in data.get("nurbssurfaces", [])]
+        obj.breps = [file_decode_node(b) for b in data.get("breps", [])]
+        obj.elements = [file_decode_node(e) for e in data.get("elements", [])]
+        obj.components = [file_decode_node(c) for c in data.get("components", [])]
 
         return obj
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, s):
+    def file_json_loads(cls, s):
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))

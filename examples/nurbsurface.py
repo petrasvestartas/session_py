@@ -6,9 +6,9 @@ from compas.geometry import Point as CompasPoint, Polyline
 # Create a NURBS surface (3D, order 4, 5x5 control points)
 srf = NurbsSurface(3, False, 4, 4, 5, 5)
 
-# Setup knot vectors
-srf.make_clamped_uniform_knot_vector(0, 1.0)
-srf.make_clamped_uniform_knot_vector(1, 1.0)
+# Setup nurbsknot vectors
+srf.make_clamped_uniform_nurbsknot_vector(0, 1.0)
+srf.make_clamped_uniform_nurbsknot_vector(1, 1.0)
 
 # Set control points (hardcoded 5x5 grid)
 srf.set_cv(0, 0, Point(0.0, 0.0, 2.5*-1))

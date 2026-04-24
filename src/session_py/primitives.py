@@ -14,7 +14,7 @@ from .xform import Xform
 from .mesh import Mesh
 from .tolerance import Tolerance
 from .tolerance import PI
-from . import knot
+from . import nurbsknot
 from . import intersection
 
 
@@ -31,7 +31,7 @@ class Primitives:
         weights = [1, w, 1, w, 1, w, 1, w, 1]
 
         curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-        curve.m_knot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
+        curve.m_nurbsknot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
         curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
 
         for i in range(9):
@@ -50,7 +50,7 @@ class Primitives:
         weights = [1, w, 1, w, 1, w, 1, w, 1]
 
         curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-        curve.m_knot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
+        curve.m_nurbsknot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
         curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
 
         for i in range(9):
@@ -101,7 +101,7 @@ class Primitives:
         w = max(0.1, min(1.0, w))
 
         curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=3)
-        curve.m_knot = np.array([0, 0, 1, 1], dtype=np.float64)
+        curve.m_nurbsknot = np.array([0, 0, 1, 1], dtype=np.float64)
         curve.m_cv = np.zeros(3 * 4, dtype=np.float64)
 
         shoulder = Point(
@@ -120,7 +120,7 @@ class Primitives:
     def parabola(p0: Point, p1: Point, p2: Point) -> NurbsCurve:
         """Create a parabola through 3 points as a non-rational quadratic NURBS."""
         curve = NurbsCurve(dimension=3, is_rational=False, order=3, cv_count=3)
-        curve.m_knot = np.array([0, 0, 1, 1], dtype=np.float64)
+        curve.m_nurbsknot = np.array([0, 0, 1, 1], dtype=np.float64)
         curve.m_cv = np.zeros(3 * 3, dtype=np.float64)
 
         cv1 = Point(
@@ -151,7 +151,7 @@ class Primitives:
             z = center[2]
             curve.set_cv(i, Point(x, y, z))
 
-        curve.m_knot = knot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
+        curve.m_nurbsknot = nurbsknot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
         return curve
 
     @staticmethod
@@ -175,7 +175,7 @@ class Primitives:
             z = t * turns * pitch
             curve.set_cv(i, Point(x, y, z))
 
-        curve.m_knot = knot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
+        curve.m_nurbsknot = nurbsknot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
         return curve
 
     @staticmethod
@@ -406,7 +406,7 @@ class Primitives:
     ###########################################################################
 
     @staticmethod
-    def _merge_knot_vectors(a, b, tol=1e-10):
+    def _merge_nurbsknot_vectors(a, b, tol=1e-10):
         merged = []
         i, j = 0, 0
         while i < len(a) and j < len(b):
@@ -429,7 +429,7 @@ class Primitives:
         return merged
 
     @staticmethod
-    def _knot_vectors_equal(a, b, tol=1e-10):
+    def _nurbsknot_vectors_equal(a, b, tol=1e-10):
         if len(a) != len(b):
             return False
         for i in range(len(a)):
@@ -454,25 +454,25 @@ class Primitives:
             if curves[i].cv_count() != curves[0].cv_count():
                 already_compatible = False
                 break
-            if not Primitives._knot_vectors_equal(list(curves[i].get_knots()), list(curves[0].get_knots())):
+            if not Primitives._nurbsknot_vectors_equal(list(curves[i].get_nurbsknots()), list(curves[0].get_nurbsknots())):
                 already_compatible = False
                 break
         if already_compatible:
             return
         for c in curves:
             c.set_domain(0.0, 1.0)
-        unified = list(curves[0].get_knots())
+        unified = list(curves[0].get_nurbsknots())
         for i in range(1, len(curves)):
-            unified = Primitives._merge_knot_vectors(unified, list(curves[i].get_knots()))
+            unified = Primitives._merge_nurbsknot_vectors(unified, list(curves[i].get_nurbsknots()))
         tol = 1e-10
         for c in curves:
-            cur_knots = list(c.get_knots())
+            cur_nurbsknots = list(c.get_nurbsknots())
             ci = 0
             for ui in range(len(unified)):
-                if ci < len(cur_knots) and abs(cur_knots[ci] - unified[ui]) < tol:
+                if ci < len(cur_nurbsknots) and abs(cur_nurbsknots[ci] - unified[ui]) < tol:
                     ci += 1
                 else:
-                    c.insert_knot(unified[ui], 1)
+                    c.insert_nurbsknot(unified[ui], 1)
 
     @staticmethod
     def cylinder_surface(cx, cy, cz, radius, height):
@@ -480,14 +480,14 @@ class Primitives:
         circle_weights = [1, w, 1, w, 1, w, 1, w, 1]
         circle_x = [1, 1, 0, -1, -1, -1, 0, 1, 1]
         circle_y = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-        v_knots = [0, 1]
+        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+        v_nurbsknots = [0, 1]
 
         srf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2)
         for i in range(10):
-            srf.set_knot(0, i, u_knots[i])
+            srf.set_nurbsknot(0, i, u_nurbsknots[i])
         for i in range(2):
-            srf.set_knot(1, i, v_knots[i])
+            srf.set_nurbsknot(1, i, v_nurbsknots[i])
 
         for i in range(9):
             wi = circle_weights[i]
@@ -504,14 +504,14 @@ class Primitives:
         circle_weights = [1, w, 1, w, 1, w, 1, w, 1]
         circle_x = [1, 1, 0, -1, -1, -1, 0, 1, 1]
         circle_y = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-        v_knots = [0, 1]
+        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+        v_nurbsknots = [0, 1]
 
         srf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2)
         for i in range(10):
-            srf.set_knot(0, i, u_knots[i])
+            srf.set_nurbsknot(0, i, u_nurbsknots[i])
         for i in range(2):
-            srf.set_knot(1, i, v_knots[i])
+            srf.set_nurbsknot(1, i, v_nurbsknots[i])
 
         apex_z = cz + height
         for i in range(9):
@@ -529,12 +529,12 @@ class Primitives:
         cw = [1, w, 1, w, 1, w, 1, w, 1]
         cos_a = [1, 1, 0, -1, -1, -1, 0, 1, 1]
         sin_a = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
 
         srf = NurbsSurface.create_raw(3, True, 3, 3, 9, 9)
         for d in range(2):
             for i in range(10):
-                srf.set_knot(d, i, u_knots[i])
+                srf.set_nurbsknot(d, i, u_nurbsknots[i])
 
         for i in range(9):
             ca = cos_a[i]
@@ -557,17 +557,17 @@ class Primitives:
         cw = [1, w, 1, w, 1, w, 1, w, 1]
         cos_a = [1, 1, 0, -1, -1, -1, 0, 1, 1]
         sin_a = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-        v_knots = [0, 0, 1, 1, 2, 2]
+        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+        v_nurbsknots = [0, 0, 1, 1, 2, 2]
         lat_r = [0, 1, 1, 1, 0]
         lat_z = [-1, -1, 0, 1, 1]
         lat_w = [1, w, 1, w, 1]
 
         srf = NurbsSurface.create_raw(3, True, 3, 3, 9, 5)
         for i in range(10):
-            srf.set_knot(0, i, u_knots[i])
+            srf.set_nurbsknot(0, i, u_nurbsknots[i])
         for i in range(6):
-            srf.set_knot(1, i, v_knots[i])
+            srf.set_nurbsknot(1, i, v_nurbsknots[i])
 
         for j in range(5):
             r = radius * lat_r[j]
@@ -640,20 +640,20 @@ class Primitives:
             cA.make_rational()
             cB.make_rational()
 
-        knots_a = list(cA.get_knots())
-        knots_b = list(cB.get_knots())
+        nurbsknots_a = list(cA.get_nurbsknots())
+        nurbsknots_b = list(cB.get_nurbsknots())
         tol = 1e-10
 
-        for k in knots_b:
-            found = any(abs(ka - k) < tol for ka in knots_a)
+        for k in nurbsknots_b:
+            found = any(abs(ka - k) < tol for ka in nurbsknots_a)
             if not found:
-                cA.insert_knot(k, 1)
+                cA.insert_nurbsknot(k, 1)
 
-        knots_a = list(cA.get_knots())
-        for k in knots_a:
-            found = any(abs(kb - k) < tol for kb in knots_b)
+        nurbsknots_a = list(cA.get_nurbsknots())
+        for k in nurbsknots_a:
+            found = any(abs(kb - k) < tol for kb in nurbsknots_b)
             if not found:
-                cB.insert_knot(k, 1)
+                cB.insert_nurbsknot(k, 1)
 
         order_u = cA.order()
         cv_count_u = cA.cv_count()
@@ -663,11 +663,11 @@ class Primitives:
         if surface is None:
             return NurbsSurface()
 
-        for i in range(cA.knot_count()):
-            surface.set_knot(0, i, cA.knot(i))
+        for i in range(cA.nurbsknot_count()):
+            surface.set_nurbsknot(0, i, cA.nurbsknot(i))
 
-        surface.set_knot(1, 0, 0.0)
-        surface.set_knot(1, 1, 1.0)
+        surface.set_nurbsknot(1, 0, 0.0)
+        surface.set_nurbsknot(1, 1, 1.0)
 
         if is_rat:
             for i in range(cv_count_u):
@@ -714,10 +714,10 @@ class Primitives:
 
         def make_bilinear(orig, xax, yax, min_u, max_u, min_v, max_v):
             srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2)
-            srf.set_knot(0, 0, 0.0)
-            srf.set_knot(0, 1, 1.0)
-            srf.set_knot(1, 0, 0.0)
-            srf.set_knot(1, 1, 1.0)
+            srf.set_nurbsknot(0, 0, 0.0)
+            srf.set_nurbsknot(0, 1, 1.0)
+            srf.set_nurbsknot(1, 0, 0.0)
+            srf.set_nurbsknot(1, 1, 1.0)
             def pt(u, v):
                 return Point(orig[0] + u*xax[0] + v*yax[0],
                              orig[1] + u*xax[1] + v*yax[1],
@@ -749,10 +749,10 @@ class Primitives:
 
         if len(unique_pts) == 3 and boundary.degree() <= 1:
             srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2)
-            srf.set_knot(0, 0, 0.0)
-            srf.set_knot(0, 1, 1.0)
-            srf.set_knot(1, 0, 0.0)
-            srf.set_knot(1, 1, 1.0)
+            srf.set_nurbsknot(0, 0, 0.0)
+            srf.set_nurbsknot(0, 1, 1.0)
+            srf.set_nurbsknot(1, 0, 0.0)
+            srf.set_nurbsknot(1, 1, 1.0)
             srf.set_cv(0, 0, unique_pts[0])
             srf.set_cv(1, 0, unique_pts[1])
             srf.set_cv(1, 1, unique_pts[2])
@@ -761,10 +761,10 @@ class Primitives:
 
         if len(unique_pts) == 4 and boundary.degree() <= 1:
             srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2)
-            srf.set_knot(0, 0, 0.0)
-            srf.set_knot(0, 1, 1.0)
-            srf.set_knot(1, 0, 0.0)
-            srf.set_knot(1, 1, 1.0)
+            srf.set_nurbsknot(0, 0, 0.0)
+            srf.set_nurbsknot(0, 1, 1.0)
+            srf.set_nurbsknot(1, 0, 0.0)
+            srf.set_nurbsknot(1, 1, 1.0)
             srf.set_cv(0, 0, unique_pts[0])
             srf.set_cv(1, 0, unique_pts[1])
             srf.set_cv(1, 1, unique_pts[2])
@@ -882,55 +882,55 @@ class Primitives:
                 v_params[k] = float(k) / (n_sections - 1)
 
         cv_count_v = n_sections
-        knot_count_v = order_v + cv_count_v - 2
-        knots_v = [0.0] * knot_count_v
+        nurbsknot_count_v = order_v + cv_count_v - 2
+        nurbsknots_v = [0.0] * nurbsknot_count_v
 
         if degree_v >= n_sections - 1:
             d = degree_v
             for i in range(d):
-                knots_v[i] = 0.0
-            for i in range(d, knot_count_v):
-                knots_v[i] = 1.0
+                nurbsknots_v[i] = 0.0
+            for i in range(d, nurbsknot_count_v):
+                nurbsknots_v[i] = 1.0
         else:
             for i in range(order_v - 1):
-                knots_v[i] = v_params[0]
+                nurbsknots_v[i] = v_params[0]
             for j in range(1, n_sections - order_v + 1):
                 s = 0.0
                 for i in range(j, j + degree_v):
                     s += v_params[i]
-                knots_v[order_v - 2 + j] = s / degree_v
-            for i in range(knot_count_v - order_v + 1, knot_count_v):
-                knots_v[i] = v_params[n_sections - 1]
+                nurbsknots_v[order_v - 2 + j] = s / degree_v
+            for i in range(nurbsknot_count_v - order_v + 1, nurbsknot_count_v):
+                nurbsknots_v[i] = v_params[n_sections - 1]
 
         surface = NurbsSurface.create_raw(3, is_rat, order_u, order_v, cv_count_u, cv_count_v)
         if surface is None:
             return NurbsSurface()
 
-        for i in range(surface.knot_count(0)):
-            surface.set_knot(0, i, curves[0].knot(i))
-        for i in range(len(knots_v)):
-            if i < surface.knot_count(1):
-                surface.set_knot(1, i, knots_v[i])
+        for i in range(surface.nurbsknot_count(0)):
+            surface.set_nurbsknot(0, i, curves[0].nurbsknot(i))
+        for i in range(len(nurbsknots_v)):
+            if i < surface.nurbsknot_count(1):
+                surface.set_nurbsknot(1, i, nurbsknots_v[i])
 
         n = n_sections
         N_matrix = [[0.0] * n for _ in range(n)]
-        knots_v_arr = np.array(knots_v)
+        nurbsknots_v_arr = np.array(nurbsknots_v)
 
         for k in range(n):
             t = v_params[k]
-            t0 = knots_v[order_v - 2]
-            t1 = knots_v[knot_count_v - order_v + 1]
+            t0 = nurbsknots_v[order_v - 2]
+            t1 = nurbsknots_v[nurbsknot_count_v - order_v + 1]
             if t < t0:
                 t = t0
             if t > t1:
                 t = t1
 
-            span = knot.find_span(order_v, cv_count_v, knots_v_arr, t)
+            span = nurbsknot.find_span(order_v, cv_count_v, nurbsknots_v_arr, t)
             d = order_v - 1
-            knot_base = span + d
+            nurbsknot_base = span + d
 
-            if knots_v[knot_base - 1] == knots_v[knot_base]:
-                if t <= knots_v[knot_base]:
+            if nurbsknots_v[nurbsknot_base - 1] == nurbsknots_v[nurbsknot_base]:
+                if t <= nurbsknots_v[nurbsknot_base]:
                     N_matrix[k][span] = 1.0
                 else:
                     N_matrix[k][span + order_v - 1] = 1.0
@@ -941,14 +941,14 @@ class Primitives:
             left = [0.0] * d
             right = [0.0] * d
             N_idx = order_v * order_v - 1
-            k_right = knot_base
-            k_left = knot_base - 1
+            k_right = nurbsknot_base
+            k_left = nurbsknot_base - 1
 
             for j in range(d):
                 N0_idx = N_idx
                 N_idx -= (order_v + 1)
-                left[j] = t - knots_v[k_left]
-                right[j] = knots_v[k_right] - t
+                left[j] = t - nurbsknots_v[k_left]
+                right[j] = nurbsknots_v[k_right] - t
                 k_left -= 1
                 k_right += 1
 
@@ -1045,16 +1045,16 @@ class Primitives:
         w_mid = math.cos(d_theta / 2.0)
         n_u = 2 * n_arcs + 1
 
-        knot_count_u = n_u + 1
-        knots_u = [0.0] * knot_count_u
-        knots_u[0] = 0.0
-        knots_u[1] = 0.0
+        nurbsknot_count_u = n_u + 1
+        nurbsknots_u = [0.0] * nurbsknot_count_u
+        nurbsknots_u[0] = 0.0
+        nurbsknots_u[1] = 0.0
         for i in range(1, n_arcs + 1):
             kv = i * d_theta
-            knots_u[2 * i] = kv
-            knots_u[2 * i + 1] = kv
-        knots_u[knot_count_u - 1] = angle
-        knots_u[knot_count_u - 2] = angle
+            nurbsknots_u[2 * i] = kv
+            nurbsknots_u[2 * i + 1] = kv
+        nurbsknots_u[nurbsknot_count_u - 1] = angle
+        nurbsknots_u[nurbsknot_count_u - 2] = angle
 
         cv_count_v = profile.cv_count()
         order_v = profile.order()
@@ -1064,10 +1064,10 @@ class Primitives:
         if surface is None:
             return NurbsSurface()
 
-        for i in range(min(knot_count_u, surface.knot_count(0))):
-            surface.set_knot(0, i, knots_u[i])
-        for i in range(min(profile.knot_count(), surface.knot_count(1))):
-            surface.set_knot(1, i, profile.knot(i))
+        for i in range(min(nurbsknot_count_u, surface.nurbsknot_count(0))):
+            surface.set_nurbsknot(0, i, nurbsknots_u[i])
+        for i in range(min(profile.nurbsknot_count(), surface.nurbsknot_count(1))):
+            surface.set_nurbsknot(1, i, profile.nurbsknot(i))
 
         u_angles = [0.0] * n_u
         u_weights = [0.0] * n_u
@@ -1455,10 +1455,10 @@ class Primitives:
         if surface is None:
             return NurbsSurface()
 
-        for i in range(surface.knot_count(0)):
-            surface.set_knot(0, i, west.knot(i))
-        for i in range(surface.knot_count(1)):
-            surface.set_knot(1, i, south.knot(i))
+        for i in range(surface.nurbsknot_count(0)):
+            surface.set_nurbsknot(0, i, west.nurbsknot(i))
+        for i in range(surface.nurbsknot_count(1)):
+            surface.set_nurbsknot(1, i, south.nurbsknot(i))
 
         u_grev = west.get_greville_abcissae()
         v_grev = south.get_greville_abcissae()
@@ -1497,7 +1497,7 @@ class Primitives:
         return surface
 
     @staticmethod
-    def create_interpolated(points, parameterization=knot.CurveKnotStyle.Chord):
+    def create_interpolated(points, parameterization=nurbsknot.CurveNurbsKnotStyle.Chord):
         return NurbsCurve.create_interpolated(points, parameterization)
 
     @staticmethod

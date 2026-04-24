@@ -89,7 +89,7 @@ def test_plate_mesh_topology():
     MINI_CHECK(len(geo.face) == 6)
 
 
-@MINI_TEST("ElementPlate", "Aabb")
+@MINI_TEST("ElementPlate", "AABB")
 def test_plate_aabb():
     from session_py import ElementPlate
     from session_py import Point
@@ -162,8 +162,8 @@ def test_plate_json_roundtrip():
     p.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element.json"
-    p.json_dump(fname)
-    loaded = ElementPlate.json_load(fname)
+    p.file_json_dump(fname)
+    loaded = ElementPlate.file_json_load(fname)
 
     MINI_CHECK(isinstance(loaded, ElementPlate))
     MINI_CHECK(loaded.name == "json_plate")
@@ -386,8 +386,8 @@ def test_plate_json_roundtrip_joinery():
     p.component_plane = Plane(origin=Point(1, 2, 3), x_axis=Vector(1, 0, 0), y_axis=Vector(0, 1, 0))
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element_joinery.json"
-    p.json_dump(fname)
-    loaded = ElementPlate.json_load(fname)
+    p.file_json_dump(fname)
+    loaded = ElementPlate.file_json_load(fname)
 
     MINI_CHECK(loaded.joint_types == [1, 2, 3, 4])
     MINI_CHECK(len(loaded.j_mf) == 3)

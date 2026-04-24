@@ -1,13 +1,13 @@
-# BVH — binary tree with OBB leaves, Morton-code (LBVH) construction.
+# SpatialBVH — binary tree with OBB leaves, Morton-code (LBVH) construction.
 # Use for: collision detection and closest-point between many dynamic objects.
 #   Handles oriented boxes; supports OBB-OBB overlap as the inner test.
-# Prefer over AABBTree when objects rotate or you need OBB tightness.
-# Prefer over RTree  when all queries are nearest-object, not region overlap.
-# Prefer over KDTree when objects are volumetric (not point clouds).
-"""Boundary Volume Hierarchy (BVH) for spatial acceleration.
+# Prefer over SpatialAABBTree when objects rotate or you need OBB tightness.
+# Prefer over SpatialRTree  when all queries are nearest-object, not region overlap.
+# Prefer over SpatialKDTree when objects are volumetric (not point clouds).
+"""Boundary Volume Hierarchy (SpatialBVH) for spatial acceleration.
 
-This module implements a BVH tree using Morton codes for efficient spatial
-partitioning and collision detection. Uses Linear BVH (LBVH) construction
+This module implements a SpatialBVH tree using Morton codes for efficient spatial
+partitioning and collision detection. Uses Linear SpatialBVH (LBVH) construction
 algorithm from Karras 2012.
 """
 
@@ -38,14 +38,14 @@ except ImportError:
         return decorator
 
 
-class BVHNode:
-    """A node in the BVH tree."""
+class SpatialBVHNode:
+    """A node in the SpatialBVH tree."""
 
     __slots__ = ("left", "right", "object_id", "aabb")
 
     def __init__(self):
-        self.left: Optional["BVHNode"] = None
-        self.right: Optional["BVHNode"] = None
+        self.left: Optional["SpatialBVHNode"] = None
+        self.right: Optional["SpatialBVHNode"] = None
         self.object_id: int = -1
         self.aabb: Optional[AABB] = None
 
@@ -315,13 +315,13 @@ def _ray_aabb_intersect(
     return tmax >= tmin, tmin, tmax
 
 
-class BVH:
+class SpatialBVH:
     """Boundary Volume Hierarchy for spatial acceleration."""
 
     def __init__(self, world_size: float = 1000.0):
         self._guid = None
         self.name = "my_bvh"
-        self.root: Optional[BVHNode] = None
+        self.root: Optional[SpatialBVHNode] = None
         self.world_size = world_size
         self.object_guids: List[str] = []
         # Flat arena for fast queries (NumPy arrays)
@@ -368,14 +368,14 @@ class BVH:
         return max(max_extent * 2.2, 10.0)
 
     @classmethod
-    def from_boxes(cls, bounding_boxes: List[OBB], world_size: float) -> "BVH":
-        """Create a BVH from a list of bounding boxes."""
+    def from_boxes(cls, bounding_boxes: List[OBB], world_size: float) -> "SpatialBVH":
+        """Create a SpatialBVH from a list of bounding boxes."""
         bvh = cls(world_size)
         bvh.build(bounding_boxes)
         return bvh
 
     def build_with_guids(self, boxes_with_guids: List[Tuple[OBB, str]]):
-        """Build BVH from bounding boxes with GUIDs."""
+        """Build SpatialBVH from bounding boxes with GUIDs."""
         if not boxes_with_guids:
             self.root = None
             self.object_guids = []
@@ -387,7 +387,7 @@ class BVH:
         self.build(bounding_boxes)
 
     def build(self, bounding_boxes: List[OBB]) -> None:
-        """Build the BVH tree from bounding boxes using LBVH algorithm."""
+        """Build the SpatialBVH tree from bounding boxes using LBVH algorithm."""
         if not bounding_boxes:
             self.root = None
             self.arena_root = -1
@@ -485,7 +485,7 @@ class BVH:
         # Allocate leaves
         leaves = []
         for i in range(N):
-            leaf = BVHNode()
+            leaf = SpatialBVHNode()
             leaf.object_id = objects[i]["id"]
             leaf.aabb = objects[i]["aabb"]
             leaves.append(leaf)
@@ -493,7 +493,7 @@ class BVH:
         # Allocate internal nodes
         internals = []
         for i in range(N - 1):
-            node = BVHNode()
+            node = SpatialBVHNode()
             internals.append(node)
 
         # Build topology
@@ -523,7 +523,7 @@ class BVH:
         self.root = internals[root_idx]
 
         # Post-order compute internal AABBs
-        def compute_aabb(node: BVHNode) -> None:
+        def compute_aabb(node: SpatialBVHNode) -> None:
             if not node or node.is_leaf():
                 return
 
@@ -560,7 +560,7 @@ class BVH:
 
         arena_idx = [0]  # Use list to allow mutation in nested function
 
-        def build_arena(node: Optional[BVHNode]) -> int:
+        def build_arena(node: Optional[SpatialBVHNode]) -> int:
             """Build flat arena from tree, return index."""
             if not node:
                 return -1
@@ -828,7 +828,7 @@ class BVH:
         candidate_leaf_ids: List[int],
         find_all: bool = False,
     ) -> bool:
-        """Cast a ray through the BVH and return candidate leaf IDs ordered by distance."""
+        """Cast a ray through the SpatialBVH and return candidate leaf IDs ordered by distance."""
         candidate_leaf_ids.clear()
 
         if self.arena_root < 0 or self.arena_aabb is None:

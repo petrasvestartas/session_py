@@ -468,6 +468,39 @@ class Xform:
         return t * f
 
     @staticmethod
+    def world_to_frame(origin, x_axis, y_axis, z_axis):
+        # Correct world→local rotation + translation. Stores basis as matrix
+        # ROWS — for world point p the result is f*(p - origin) where f is the
+        # rotation whose rows are the unit basis vectors. Unlike plane_to_xy
+        # (which stores basis as columns and is actually local-to-world),
+        # world_to_frame is a faithful 3D projection — needed when the input
+        # geometry's normal aligns with one of the basis axes. See
+        # wood_main.cpp type-13 branch.
+        x = x_axis.normalized()
+        y = y_axis.normalized()
+        z = z_axis.normalized()
+        f = Xform()
+        f.m[0] = x[0]; f.m[4] = x[1]; f.m[8]  = x[2]
+        f.m[1] = y[0]; f.m[5] = y[1]; f.m[9]  = y[2]
+        f.m[2] = z[0]; f.m[6] = z[1]; f.m[10] = z[2]
+        t = Xform.translation(-origin[0], -origin[1], -origin[2])
+        return f * t
+
+    @staticmethod
+    def frame_to_world(origin, x_axis, y_axis, z_axis):
+        # Inverse of world_to_frame: local (u, v, w) -> world point at
+        # origin + u*x_hat + v*y_hat + w*z_hat. Stores basis as matrix COLUMNS.
+        x = x_axis.normalized()
+        y = y_axis.normalized()
+        z = z_axis.normalized()
+        f = Xform()
+        f.m[0] = x[0]; f.m[1] = x[1]; f.m[2]  = x[2]
+        f.m[4] = y[0]; f.m[5] = y[1]; f.m[6]  = y[2]
+        f.m[8] = z[0]; f.m[9] = z[1]; f.m[10] = z[2]
+        t = Xform.translation(origin[0], origin[1], origin[2])
+        return t * f
+
+    @staticmethod
     def to_frame(frame):
         """Transform from world XY to target frame/plane (same as COMPAS from_frame).
 
@@ -781,7 +814,7 @@ class Xform:
         xform.name = name
         return xform
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         """Write JSON to file.
 
         Parameters
@@ -795,7 +828,7 @@ class Xform:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         """Read JSON from file.
 
         Parameters
@@ -814,13 +847,13 @@ class Xform:
             data = json.load(f)
         return cls.__jsonload__(data, data.get("guid"), data.get("name"))
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, json_string):
+    def file_json_loads(cls, json_string):
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))

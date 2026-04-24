@@ -517,9 +517,9 @@ class Closest:
     def pointcloud_point_kdtree(cloud, test_point):
         if cloud.point_count() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
-        from session_py import KDTree
+        from session_py import SpatialKDTree
         pts = [cloud.get_point(i) for i in range(cloud.point_count())]
-        tree = KDTree(pts)
+        tree = SpatialKDTree(pts)
         idx, dist = tree.nearest(test_point)
         return (cloud.get_point(idx), idx, dist)
 

@@ -175,14 +175,14 @@ def test_json_roundtrip():
     loaded_json = BRep.__jsonload__(json_obj)
 
     # String
-    json_string = b.json_dumps()
-    loaded_json_string = BRep.json_loads(json_string)
+    json_string = b.file_json_dumps()
+    loaded_json_string = BRep.file_json_loads(json_string)
 
     # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_brep.json"
     fname.parent.mkdir(parents=True, exist_ok=True)
-    b.json_dump(str(fname))
-    loaded_from_file = BRep.json_load(str(fname))
+    b.file_json_dump(str(fname))
+    loaded_from_file = BRep.file_json_load(str(fname))
 
     MINI_CHECK(loaded_json == b)
     MINI_CHECK(loaded_json_string == b)

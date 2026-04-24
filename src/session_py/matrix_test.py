@@ -279,8 +279,8 @@ def test_matrix_json_roundtrip():
     a = Matrix.from_list(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     a.name = "test_matrix"
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_matrix.json"
-    a.json_dump(fname)
-    loaded = Matrix.json_load(fname)
+    a.file_json_dump(fname)
+    loaded = Matrix.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_matrix")
     MINI_CHECK(loaded.rows == 2 and loaded.cols == 3)

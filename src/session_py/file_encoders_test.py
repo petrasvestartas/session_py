@@ -4,18 +4,18 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("Encoders", "Json Dump Load")
-def test_json_dump_load():
+@MINI_TEST("FileEncoders", "Json Dump Load")
+def test_file_json_dump_load():
     from session_py import Point
-    from session_py.encoders import json_dump, json_load
+    from session_py.file_encoders import file_json_dump, file_json_load
     from pathlib import Path
     import json
 
     original = Point(1.5, 2.5, 3.5)
     original.name = "test_point"
     filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_encoders_point.json"
-    json_dump(original, filepath)
-    loaded = json_load(filepath)
+    file_json_dump(original, filepath)
+    loaded = file_json_load(filepath)
 
     MINI_CHECK(TOLERANCE.is_close(loaded[0], original[0]))
     MINI_CHECK(TOLERANCE.is_close(loaded[1], original[1]))
@@ -25,19 +25,19 @@ def test_json_dump_load():
     filepath.unlink()
 
 
-@MINI_TEST("Encoders", "Json Dumps Loads")
-def test_json_dumps_loads():
+@MINI_TEST("FileEncoders", "Json Dumps Loads")
+def test_file_json_dumps_loads():
     from session_py import Vector
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
     original = Vector(42.1, 84.2, 126.3)
     original.name = "test_vector"
-    json_str = json_dumps(original)
+    json_str = file_json_dumps(original)
 
     MINI_CHECK(isinstance(json_str, str))
     MINI_CHECK("Vector" in json_str)
 
-    loaded = json_loads(json_str)
+    loaded = file_json_loads(json_str)
 
     MINI_CHECK(TOLERANCE.is_close(loaded[0], original[0]))
     MINI_CHECK(TOLERANCE.is_close(loaded[1], original[1]))
@@ -45,13 +45,13 @@ def test_json_dumps_loads():
     MINI_CHECK(loaded.name == original.name)
 
 
-@MINI_TEST("Encoders", "Encode Collection Values")
-def test_encode_collection_values():
+@MINI_TEST("FileEncoders", "Encode Collection Values")
+def test_file_encode_collection_values():
     from session_py import Point
-    from session_py.encoders import json_dumps
+    from session_py.file_encoders import file_json_dumps
     import json
 
-    json_str = json_dumps([
+    json_str = file_json_dumps([
         Point(1, 2, 3),
         Point(4, 5, 6),
         Point(7, 8, 9),
@@ -65,13 +65,13 @@ def test_encode_collection_values():
     MINI_CHECK(d[2]["z"] == 9.0)
 
 
-@MINI_TEST("Encoders", "Encode Collection Shared Ptr")
-def test_encode_collection_shared_ptr():
+@MINI_TEST("FileEncoders", "Encode Collection Shared Ptr")
+def test_file_encode_collection_shared_ptr():
     from session_py import Line
-    from session_py.encoders import json_dumps
+    from session_py.file_encoders import file_json_dumps
     import json
 
-    d = json.loads(json_dumps([
+    d = json.loads(file_json_dumps([
         Line(0, 0, 0, 1, 0, 0),
         Line(0, 0, 0, 0, 1, 0),
     ]))
@@ -82,12 +82,12 @@ def test_encode_collection_shared_ptr():
     MINI_CHECK(d[1]["type"] == "Line")
 
 
-@MINI_TEST("Encoders", "Decode Collection")
-def test_decode_collection():
+@MINI_TEST("FileEncoders", "Decode Collection")
+def test_file_decode_collection():
     from session_py import Point
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
-    decoded = json_loads(json_dumps([
+    decoded = file_json_loads(file_json_dumps([
         Point(1, 2, 3),
         Point(4, 5, 6),
     ]))
@@ -97,12 +97,12 @@ def test_decode_collection():
     MINI_CHECK(TOLERANCE.is_close(decoded[1][1], 5.0))
 
 
-@MINI_TEST("Encoders", "Decode Collection Ptr")
-def test_decode_collection_ptr():
+@MINI_TEST("FileEncoders", "Decode Collection Ptr")
+def test_file_decode_collection_ptr():
     from session_py import Vector
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
-    decoded = json_loads(json_dumps([
+    decoded = file_json_loads(file_json_dumps([
         Vector(1, 0, 0),
         Vector(0, 1, 0),
     ]))
@@ -112,12 +112,12 @@ def test_decode_collection_ptr():
     MINI_CHECK(TOLERANCE.is_close(decoded[1][1], 1.0))
 
 
-@MINI_TEST("Encoders", "Nested Collections")
+@MINI_TEST("FileEncoders", "Nested Collections")
 def test_nested_collections():
     from session_py import Line
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
-    loaded = json_loads(json_dumps([
+    loaded = file_json_loads(file_json_dumps([
         Line(0, 0, 0, 1, 0, 0),
         Line(0, 0, 0, 0, 1, 0),
     ]))
@@ -127,10 +127,10 @@ def test_nested_collections():
     MINI_CHECK(TOLERANCE.is_close(loaded[1].end()[1], 1.0))
 
 
-@MINI_TEST("Encoders", "Roundtrip File Io")
+@MINI_TEST("FileEncoders", "Roundtrip File Io")
 def test_roundtrip_file_io():
     from session_py import Vector
-    from session_py.encoders import json_dump, json_load
+    from session_py.file_encoders import file_json_dump, file_json_load
     from pathlib import Path
 
     vectors = [
@@ -139,8 +139,8 @@ def test_roundtrip_file_io():
         Vector(0, 0, 1),
     ]
     filepath = Path(__file__).resolve().parents[2] / "serialization" / "test_encoders_collection.json"
-    json_dump(vectors, filepath)
-    loaded = json_load(filepath)
+    file_json_dump(vectors, filepath)
+    loaded = file_json_load(filepath)
 
     MINI_CHECK(len(loaded) == 3)
     MINI_CHECK(TOLERANCE.is_close(loaded[0][0], 1.0))
@@ -150,27 +150,27 @@ def test_roundtrip_file_io():
     filepath.unlink()
 
 
-@MINI_TEST("Encoders", "Pretty Vs Compact")
+@MINI_TEST("FileEncoders", "Pretty Vs Compact")
 def test_pretty_vs_compact():
     from session_py import Point
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
     point = Point(1, 2, 3)
-    pretty = json_dumps(point, pretty=True)
-    compact = json_dumps(point, pretty=False)
+    pretty = file_json_dumps(point, pretty=True)
+    compact = file_json_dumps(point, pretty=False)
 
     MINI_CHECK(len(pretty) > len(compact))
     MINI_CHECK("\n" in pretty)
     MINI_CHECK("\n" not in compact)
 
-    loaded_pretty = json_loads(pretty)
-    loaded_compact = json_loads(compact)
+    loaded_pretty = file_json_loads(pretty)
+    loaded_compact = file_json_loads(compact)
 
     MINI_CHECK(TOLERANCE.is_close(loaded_pretty[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(loaded_compact[0], 1.0))
 
 
-@MINI_TEST("Encoders", "Decode Primitives")
+@MINI_TEST("FileEncoders", "Decode Primitives")
 def test_decode_primitives():
     import json
 
@@ -191,11 +191,11 @@ def test_decode_primitives():
     MINI_CHECK(loaded is True)
 
 
-@MINI_TEST("Encoders", "Decode List")
+@MINI_TEST("FileEncoders", "Decode List")
 def test_decode_list():
     import json
     from session_py import Point
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
     loaded_vec = json.loads(json.dumps([1, 2, 3]))
 
@@ -203,7 +203,7 @@ def test_decode_list():
     MINI_CHECK(loaded_vec[0] == 1)
     MINI_CHECK(loaded_vec[2] == 3)
 
-    decoded = json_loads(json_dumps([
+    decoded = file_json_loads(file_json_dumps([
         Point(1, 2, 3),
         Point(4, 5, 6),
     ]))
@@ -213,23 +213,23 @@ def test_decode_list():
     MINI_CHECK(TOLERANCE.is_close(decoded[1][0], 4.0))
 
 
-@MINI_TEST("Encoders", "Decode Dict")
+@MINI_TEST("FileEncoders", "Decode Dict")
 def test_decode_dict():
     import json
     from session_py import Vector
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
     loaded = json.loads(json.dumps({"a": 1, "b": 2}))
 
     MINI_CHECK(loaded["a"] == 1)
     MINI_CHECK(loaded["b"] == 2)
 
-    loaded_vec = json_loads(json_dumps(Vector(1, 2, 3)))
+    loaded_vec = file_json_loads(file_json_dumps(Vector(1, 2, 3)))
 
     MINI_CHECK(TOLERANCE.is_close(loaded_vec[0], 1.0))
 
 
-@MINI_TEST("Encoders", "List In List In List")
+@MINI_TEST("FileEncoders", "List In List In List")
 def test_list_in_list_in_list():
     import json
 
@@ -241,10 +241,10 @@ def test_list_in_list_in_list():
     MINI_CHECK(len(loaded) == 2)
 
 
-@MINI_TEST("Encoders", "Dict Of Lists")
+@MINI_TEST("FileEncoders", "Dict Of Lists")
 def test_dict_of_lists():
     from session_py import Point
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
     data = {
         "numbers": [1, 2, 3],
@@ -254,7 +254,7 @@ def test_dict_of_lists():
             Point(0, 1, 0),
         ],
     }
-    loaded = json_loads(json_dumps(data))
+    loaded = file_json_loads(file_json_dumps(data))
 
     MINI_CHECK(loaded["numbers"] == [1, 2, 3])
     MINI_CHECK(loaded["letters"][0] == "a")
@@ -262,34 +262,34 @@ def test_dict_of_lists():
     MINI_CHECK(TOLERANCE.is_close(loaded["points"][0][0], 1.0))
 
 
-@MINI_TEST("Encoders", "List Of Dict")
+@MINI_TEST("FileEncoders", "List Of Dict")
 def test_list_of_dict():
     from session_py import Point
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
     data = [
         {"name": "point1", "value": 10},
         {"name": "point2", "value": 20},
         {"geometry": Point(1, 2, 3)},
     ]
-    loaded = json_loads(json_dumps(data))
+    loaded = file_json_loads(file_json_dumps(data))
 
     MINI_CHECK(loaded[0]["name"] == "point1")
     MINI_CHECK(loaded[1]["value"] == 20)
     MINI_CHECK(TOLERANCE.is_close(loaded[2]["geometry"][2], 3.0))
 
 
-@MINI_TEST("Encoders", "Dict Of Dicts")
+@MINI_TEST("FileEncoders", "Dict Of Dicts")
 def test_dict_of_dicts():
     from session_py import Point
     from session_py import Vector
-    from session_py.encoders import json_dumps, json_loads
+    from session_py.file_encoders import file_json_dumps, file_json_loads
 
     data = {
         "config": {"tolerance": 0.001, "scale": 1000},
         "geometry": {"point": Point(1, 2, 3), "vector": Vector(0, 0, 1)},
     }
-    loaded = json_loads(json_dumps(data))
+    loaded = file_json_loads(file_json_dumps(data))
 
     MINI_CHECK(TOLERANCE.is_close(loaded["config"]["tolerance"], 0.001))
     MINI_CHECK(loaded["config"]["scale"] == 1000)

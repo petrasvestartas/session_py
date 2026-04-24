@@ -183,7 +183,7 @@ class ElementBeam(Element):
 
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
-        from .encoders import decode_node
+        from .file_encoders import file_decode_node
         elem = cls(
             width=data.get("width", 0.1),
             depth=data.get("depth", 0.2),
@@ -192,7 +192,7 @@ class ElementBeam(Element):
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
         if "session_transformation" in data:
-            elem.session_transformation = decode_node(data["session_transformation"])
+            elem.session_transformation = file_decode_node(data["session_transformation"])
         return elem
 
     ###########################################################################################

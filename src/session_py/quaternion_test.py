@@ -415,7 +415,7 @@ def test_quaternion_json_roundtrip():
     from session_py import Vector
     from pathlib import Path
 
-    # FUNCTION: q.json_dump / Quaternion::json_load
+    # FUNCTION: q.file_json_dump / Quaternion::file_json_load
     # WHAT: Write a quaternion to a JSON file, read it back.
     # WHEN TO USE: Human-readable persistence and debugging, or when sharing
     #       data with tools that consume JSON.
@@ -425,14 +425,14 @@ def test_quaternion_json_roundtrip():
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
+    #   file_json_dumps()    │ str          │ to JSON string
+    #   file_json_loads(s)   │ str          │ from JSON string
+    #   file_json_dump(path) │ file         │ write to file
+    #   file_json_load(path) │ file         │ read from file
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_quaternion.json"
-    q.json_dump(fname)
-    loaded = Quaternion.json_load(fname)
+    q.file_json_dump(fname)
+    loaded = Quaternion.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_quaternion")
     MINI_CHECK(TOLERANCE.is_close(loaded.scalar, q.scalar))

@@ -28,15 +28,15 @@ def test_vertex_constructor():
 @MINI_TEST("Vertex", "Json Roundtrip")
 def test_vertex_json_roundtrip():
     from session_py import Vertex
-    from session_py.encoders import json_dump
-    from session_py.encoders import json_load
+    from session_py.file_encoders import file_json_dump
+    from session_py.file_encoders import file_json_load
     from pathlib import Path
 
     original = Vertex("v0", "test_attribute")
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_vertex.json"
-    json_dump(original, fname)
-    loaded = json_load(fname)
+    file_json_dump(original, fname)
+    loaded = file_json_load(fname)
 
     MINI_CHECK(loaded.name == original.name)
     MINI_CHECK(loaded.attribute == original.attribute)
@@ -63,15 +63,15 @@ def test_edge_constructor():
 @MINI_TEST("Edge", "Json Roundtrip")
 def test_edge_json_roundtrip():
     from session_py import Edge
-    from session_py.encoders import json_dump
-    from session_py.encoders import json_load
+    from session_py.file_encoders import file_json_dump
+    from session_py.file_encoders import file_json_load
     from pathlib import Path
 
     original = Edge("v0", "v1", "test_edge_attr")
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_edge.json"
-    json_dump(original, fname)
-    loaded = json_load(fname)
+    file_json_dump(original, fname)
+    loaded = file_json_load(fname)
 
     MINI_CHECK(loaded.name == original.name)
     MINI_CHECK(loaded.v0 == original.v0)
@@ -141,14 +141,14 @@ def test_graph_json_roundtrip():
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
+    #   file_json_dumps()    │ str          │ to JSON string
+    #   file_json_loads(s)   │ str          │ from JSON string
+    #   file_json_dump(path) │ file         │ write to file
+    #   file_json_load(path) │ file         │ read from file
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_graph.json"
-    original.json_dump(fname)
-    loaded = Graph.json_load(fname)
+    original.file_json_dump(fname)
+    loaded = Graph.file_json_load(fname)
 
     MINI_CHECK(loaded.number_of_vertices() == 2)
     MINI_CHECK(loaded.number_of_edges() == 1)

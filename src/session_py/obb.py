@@ -649,39 +649,39 @@ class OBB:
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from polymorphic JSON format."""
-        from .encoders import decode_node
+        from .file_encoders import file_decode_node
 
-        center = decode_node(data["center"])
-        x_axis = decode_node(data["x_axis"])
-        y_axis = decode_node(data["y_axis"])
-        z_axis = decode_node(data["z_axis"])
-        half_size = decode_node(data["half_size"])
+        center = file_decode_node(data["center"])
+        x_axis = file_decode_node(data["x_axis"])
+        y_axis = file_decode_node(data["y_axis"])
+        z_axis = file_decode_node(data["z_axis"])
+        half_size = file_decode_node(data["half_size"])
 
         bbox = cls(center, x_axis, y_axis, z_axis, half_size)
         bbox.guid = guid if guid is not None else data.get("guid", bbox.guid)
         bbox.name = name if name is not None else data.get("name", bbox.name)
 
         if "xform" in data:
-            bbox.xform = decode_node(data["xform"])
+            bbox.xform = file_decode_node(data["xform"])
 
         return bbox
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, s):
+    def file_json_loads(cls, s):
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))

@@ -72,7 +72,7 @@ def test_beam_extend():
     MINI_CHECK(TOLERANCE.is_close(b.length, 4.0))
 
 
-@MINI_TEST("ElementBeam", "Aabb")
+@MINI_TEST("ElementBeam", "AABB")
 def test_beam_aabb():
     from session_py import ElementBeam
 
@@ -124,8 +124,8 @@ def test_beam_json_roundtrip():
     b.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_beam_element.json"
-    b.json_dump(fname)
-    loaded = ElementBeam.json_load(fname)
+    b.file_json_dump(fname)
+    loaded = ElementBeam.file_json_load(fname)
 
     MINI_CHECK(isinstance(loaded, ElementBeam))
     MINI_CHECK(loaded.name == "json_beam")

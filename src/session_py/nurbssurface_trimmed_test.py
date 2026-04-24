@@ -5,12 +5,12 @@ from .tolerance import TOLERANCE
 from .tolerance import PI
 
 
-@MINI_TEST("TrimmedSurface", "Constructor")
-def test_trimmedsurface_constructor():
+@MINI_TEST("NurbsSurfaceTrimmed", "Constructor")
+def test_nurbssurface_trimmed_constructor():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
 
     # Create a bilinear surface
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
@@ -25,7 +25,7 @@ def test_trimmedsurface_constructor():
         Point(0.9, 0.9, 0.0), Point(0.1, 0.9, 0.0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
 
     # String representations
     sstr = str(ts)
@@ -36,20 +36,20 @@ def test_trimmedsurface_constructor():
 
     MINI_CHECK(ts.is_valid())
     MINI_CHECK(ts.is_trimmed())
-    MINI_CHECK(ts.name == "my_trimmedsurface")
+    MINI_CHECK(ts.name == "my_nurbssurface_trimmed")
     MINI_CHECK(ts.guid)
-    MINI_CHECK("TrimmedSurface" in sstr)
-    MINI_CHECK("name=my_trimmedsurface" in srepr)
+    MINI_CHECK("NurbsSurfaceTrimmed" in sstr)
+    MINI_CHECK("name=my_nurbssurface_trimmed" in srepr)
     MINI_CHECK(tscopy.is_valid())
     MINI_CHECK(tscopy.guid != ts.guid)
     MINI_CHECK(tscopy == ts)
 
 
-@MINI_TEST("TrimmedSurface", "Constructor Planar")
-def test_trimmedsurface_constructor_planar():
+@MINI_TEST("NurbsSurfaceTrimmed", "Constructor Planar")
+def test_nurbssurface_trimmed_constructor_planar():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
     import math
 
     # Planar curve boundary
@@ -58,7 +58,7 @@ def test_trimmedsurface_constructor_planar():
         Point(6, 3, 0), Point(4, 5, 0), Point(1, 4, 0),
     ]
     bnd = NurbsCurve.create(True, 3, pts)
-    ts = TrimmedSurface.create_planar(bnd)
+    ts = NurbsSurfaceTrimmed.create_planar(bnd)
 
     # Rotated planar
     pts = [
@@ -69,23 +69,23 @@ def test_trimmedsurface_constructor_planar():
         Point(1, 3, 2),
     ]
     bnd = NurbsCurve.create(True, 3, pts)
-    ts = TrimmedSurface.create_planar(bnd)
+    ts = NurbsSurfaceTrimmed.create_planar(bnd)
 
     # Triangle
     bnd = NurbsCurve.create(True, 1, [Point(0, 0, 0), Point(6, 3, 3), Point(2, 5, 1)])
-    ts = TrimmedSurface.create_planar(bnd)
+    ts = NurbsSurfaceTrimmed.create_planar(bnd)
 
     # Trapezoid
     bnd = NurbsCurve.create(True, 1, [
         Point(0, 0, 6), Point(5, 0, 6), Point(4, 4, 2), Point(1, 4, 2),
     ])
-    ts = TrimmedSurface.create_planar(bnd)
+    ts = NurbsSurfaceTrimmed.create_planar(bnd)
 
     # Rectangle with a hole
     bnd = NurbsCurve.create(True, 1, [
         Point(0, 0, 0), Point(6, 0, 0), Point(6, 6, 0), Point(0, 6, 0),
     ])
-    ts = TrimmedSurface.create_planar(bnd)
+    ts = NurbsSurfaceTrimmed.create_planar(bnd)
     ts.add_hole(NurbsCurve.create(True, 1, [
         Point(2, 2, 0), Point(4, 2, 0), Point(4, 4, 0), Point(2, 4, 0),
     ]))
@@ -97,7 +97,7 @@ def test_trimmedsurface_constructor_planar():
         a = k * PI / 3.0
         pts.append(Point(R * math.cos(a), R * math.sin(a), R * math.cos(a) * 0.5))
     bnd = NurbsCurve.create(True, 1, pts)
-    ts = TrimmedSurface.create_planar(bnd)
+    ts = NurbsSurfaceTrimmed.create_planar(bnd)
     ts.add_holes([
         NurbsCurve.create(True, 1, [
             Point(1.5, 0.5, 0.75), Point(2.5, 0.5, 1.25), Point(2.0, 1.5, 1.0),
@@ -108,12 +108,12 @@ def test_trimmedsurface_constructor_planar():
     ])
 
 
-@MINI_TEST("TrimmedSurface", "Constructor Hole")
-def test_trimmedsurface_constructor_hole():
+@MINI_TEST("NurbsSurfaceTrimmed", "Constructor Hole")
+def test_nurbssurface_trimmed_constructor_hole():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
     import math
 
     # Create surface with bump
@@ -134,7 +134,7 @@ def test_trimmedsurface_constructor_hole():
         Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
 
     # Add hole as UV curve directly
     hole = NurbsCurve.create(True, 1, [
@@ -148,12 +148,12 @@ def test_trimmedsurface_constructor_hole():
     MINI_CHECK(ts.inner_loop_count() == 1)
 
 
-@MINI_TEST("TrimmedSurface", "Accessors")
-def test_trimmedsurface_accessors():
+@MINI_TEST("NurbsSurfaceTrimmed", "Accessors")
+def test_nurbssurface_trimmed_accessors():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -166,7 +166,7 @@ def test_trimmedsurface_accessors():
         Point(0.9, 0.9, 0), Point(0.1, 0.9, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
     ts.name = "test_accessors"
     ts.width = 2.5
 
@@ -182,12 +182,12 @@ def test_trimmedsurface_accessors():
     MINI_CHECK(ts.inner_loop_count() == 0)
 
 
-@MINI_TEST("TrimmedSurface", "Add Inner Loop")
-def test_trimmedsurface_add_inner_loop():
+@MINI_TEST("NurbsSurfaceTrimmed", "Add Inner Loop")
+def test_nurbssurface_trimmed_add_inner_loop():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -199,7 +199,7 @@ def test_trimmedsurface_add_inner_loop():
         Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
 
     # Add inner loops (holes in UV)
     hole1 = NurbsCurve.create(True, 1, [
@@ -223,12 +223,12 @@ def test_trimmedsurface_add_inner_loop():
     MINI_CHECK(ts.inner_loop_count() == 0)
 
 
-@MINI_TEST("TrimmedSurface", "Point At")
-def test_trimmedsurface_point_at():
+@MINI_TEST("NurbsSurfaceTrimmed", "Point At")
+def test_nurbssurface_trimmed_point_at():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -240,7 +240,7 @@ def test_trimmedsurface_point_at():
         Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
 
     u0, u1 = ts.surface().domain(0)
     v0, v1 = ts.surface().domain(1)
@@ -256,12 +256,12 @@ def test_trimmedsurface_point_at():
     MINI_CHECK(TOLERANCE.is_close(abs(nm[2]), 1.0))
 
 
-@MINI_TEST("TrimmedSurface", "Mesh")
-def test_trimmedsurface_mesh():
+@MINI_TEST("NurbsSurfaceTrimmed", "Mesh")
+def test_nurbssurface_trimmed_mesh():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -274,7 +274,7 @@ def test_trimmedsurface_mesh():
         Point(0.95, 0.95, 0), Point(0.05, 0.95, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
     m = ts.mesh()
 
     MINI_CHECK(not m.is_empty())
@@ -282,13 +282,13 @@ def test_trimmedsurface_mesh():
     MINI_CHECK(m.number_of_faces() > 0)
 
 
-@MINI_TEST("TrimmedSurface", "Transformation")
-def test_trimmedsurface_transformation():
+@MINI_TEST("NurbsSurfaceTrimmed", "Transformation")
+def test_nurbssurface_trimmed_transformation():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Xform
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -300,7 +300,7 @@ def test_trimmedsurface_transformation():
         Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
     ts.xform = Xform.translation(10.0, 20.0, 30.0)
     ts2 = ts.transformed()
 
@@ -313,13 +313,13 @@ def test_trimmedsurface_transformation():
     MINI_CHECK(TOLERANCE.is_close(pt[2], 30.0))
 
 
-@MINI_TEST("TrimmedSurface", "Json Roundtrip")
-def test_trimmedsurface_json_roundtrip():
+@MINI_TEST("NurbsSurfaceTrimmed", "Json Roundtrip")
+def test_nurbssurface_trimmed_json_roundtrip():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Color
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
     from pathlib import Path
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
@@ -333,36 +333,36 @@ def test_trimmedsurface_json_roundtrip():
         Point(0.9, 0.9, 0), Point(0.1, 0.9, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
-    ts.name = "test_trimmedsurface"
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
+    ts.name = "test_nurbssurface_trimmed"
     ts.width = 2.0
     ts.surfacecolor = Color(255, 128, 64, 255)
 
     # JSON object
     json_obj = ts.__jsondump__()
-    loaded_json = TrimmedSurface.__jsonload__(json_obj)
+    loaded_json = NurbsSurfaceTrimmed.__jsonload__(json_obj)
 
     # String
-    json_string = ts.json_dumps()
-    loaded_json_string = TrimmedSurface.json_loads(json_string)
+    json_string = ts.file_json_dumps()
+    loaded_json_string = NurbsSurfaceTrimmed.file_json_loads(json_string)
 
     # File
-    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_trimmedsurface.json"
-    ts.json_dump(filename)
-    loaded_from_file = TrimmedSurface.json_load(filename)
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface_trimmed.json"
+    ts.file_json_dump(filename)
+    loaded_from_file = NurbsSurfaceTrimmed.file_json_load(filename)
 
     MINI_CHECK(loaded_json == ts)
     MINI_CHECK(loaded_json_string == ts)
     MINI_CHECK(loaded_from_file == ts)
 
 
-@MINI_TEST("TrimmedSurface", "Protobuf Roundtrip")
-def test_trimmedsurface_protobuf_roundtrip():
+@MINI_TEST("NurbsSurfaceTrimmed", "Protobuf Roundtrip")
+def test_nurbssurface_trimmed_protobuf_roundtrip():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Color
-    from session_py.trimmedsurface import TrimmedSurface
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
     from pathlib import Path
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
@@ -376,19 +376,19 @@ def test_trimmedsurface_protobuf_roundtrip():
         Point(0.9, 0.9, 0), Point(0.1, 0.9, 0),
     ])
 
-    ts = TrimmedSurface.create(srf, outer)
-    ts.name = "test_trimmedsurface"
+    ts = NurbsSurfaceTrimmed.create(srf, outer)
+    ts.name = "test_nurbssurface_trimmed"
     ts.width = 2.0
     ts.surfacecolor = Color(255, 128, 64, 255)
 
     # String
     proto_string = ts.pb_dumps()
-    loaded_proto_string = TrimmedSurface.pb_loads(proto_string)
+    loaded_proto_string = NurbsSurfaceTrimmed.pb_loads(proto_string)
 
     # File
-    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_trimmedsurface.bin"
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface_trimmed.bin"
     ts.pb_dump(filename)
-    loaded = TrimmedSurface.pb_load(filename)
+    loaded = NurbsSurfaceTrimmed.pb_load(filename)
 
     MINI_CHECK(loaded_proto_string == ts)
     MINI_CHECK(loaded == ts)

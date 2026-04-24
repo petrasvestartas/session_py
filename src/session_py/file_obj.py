@@ -4,7 +4,7 @@ from .point import Point
 from .polyline import Polyline
 
 
-def write_obj(mesh: Mesh, filepath: str):
+def write_file_obj(mesh: Mesh, filepath: str):
     vertices, faces = mesh.to_vertices_and_faces()
     with open(filepath, "w") as f:
         for p in vertices:
@@ -15,7 +15,7 @@ def write_obj(mesh: Mesh, filepath: str):
                 f.write(f"f {idx}\n")
 
 
-def read_obj(filepath: str) -> Mesh:
+def read_file_obj(filepath: str) -> Mesh:
     verts: List[Point] = []
     faces: List[List[int]] = []
 
@@ -57,7 +57,7 @@ def read_obj(filepath: str) -> Mesh:
     return mesh
 
 
-def read_obj_polylines(filepath: str) -> List[Polyline]:
+def read_file_obj_polylines(filepath: str) -> List[Polyline]:
     verts: List[Point] = []
     polylines: List[Polyline] = []
     curv_indices: List[int] = []
@@ -85,7 +85,7 @@ def read_obj_polylines(filepath: str) -> List[Polyline]:
 
 def pair_polylines(polylines: List[Polyline], search_radius: float = 500.0) -> List[Tuple[int, int]]:
     from .aabb import AABB
-    from .rtree import RTree
+    from .spatial_rtree import SpatialRTree
     from .element_plate import ElementPlate
     NP = len(polylines)
     centroids: List[Point] = [Point(0, 0, 0)] * NP
@@ -100,7 +100,7 @@ def pair_polylines(polylines: List[Polyline], search_radius: float = 500.0) -> L
                 pts.pop()
         return pts
 
-    tree = RTree()
+    tree = SpatialRTree()
     for i in range(NP):
         pts = open_pts(polylines[i])
         cx = sum(p[0] for p in pts) / len(pts)
@@ -150,5 +150,5 @@ def pair_polylines(polylines: List[Polyline], search_radius: float = 500.0) -> L
     return pairs
 
 
-save_obj = write_obj
-load_obj = read_obj
+save_file_obj = write_file_obj
+load_file_obj = read_file_obj

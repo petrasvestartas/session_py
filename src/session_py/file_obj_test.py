@@ -5,15 +5,15 @@ import os
 from pathlib import Path
 
 
-@MINI_TEST("OBJ", "Read Bunny")
+@MINI_TEST("FileObj", "Read Bunny")
 def test_read_bunny():
     # load Stanford Bunny (real-world OBJ: 2503 vertices, 4968 faces)
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.obj"
     if not bunny_path.exists():
         return
     from session_py import Mesh
-    from session_py.obj import read_obj
-    mesh = read_obj(str(bunny_path))
+    from session_py.file_obj import read_file_obj
+    mesh = read_file_obj(str(bunny_path))
 
     MINI_CHECK(mesh.number_of_vertices() == 2503)
     MINI_CHECK(mesh.number_of_faces() == 4968)
@@ -25,11 +25,11 @@ def test_read_bunny():
     MINI_CHECK(all(len(f) >= 3 for f in faces))
 
 
-@MINI_TEST("OBJ", "Write Read Roundtrip")
+@MINI_TEST("FileObj", "Write Read Roundtrip")
 def test_write_read_roundtrip():
     # build a small mesh (4 verts, 2 faces), write to OBJ, read back, compare counts
     from session_py import Mesh, Point
-    from session_py.obj import read_obj, write_obj
+    from session_py.file_obj import read_file_obj, write_file_obj
     original_mesh = Mesh()
     v0 = original_mesh.add_vertex(Point(0.0, 0.0, 0.0))
     v1 = original_mesh.add_vertex(Point(1.0, 0.0, 0.0))
@@ -41,9 +41,9 @@ def test_write_read_roundtrip():
     MINI_CHECK(original_mesh.number_of_vertices() == 4)
     MINI_CHECK(original_mesh.number_of_faces() == 2)
     temp_file = str(Path(__file__).resolve().parents[2] / "serialization" / "test_temp_roundtrip.obj")
-    write_obj(original_mesh, temp_file)
+    write_file_obj(original_mesh, temp_file)
     MINI_CHECK(os.path.exists(temp_file))
-    loaded_mesh = read_obj(temp_file)
+    loaded_mesh = read_file_obj(temp_file)
     MINI_CHECK(loaded_mesh.number_of_vertices() == original_mesh.number_of_vertices())
     MINI_CHECK(loaded_mesh.number_of_faces() == original_mesh.number_of_faces())
     os.remove(temp_file)

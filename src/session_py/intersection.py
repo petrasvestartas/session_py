@@ -10,7 +10,7 @@ from .line import Line
 from .point import Point
 from .obb import OBB
 from .mesh import Mesh
-from .bvh import BVH
+from .spatial_bvh import SpatialBVH
 from .closest import Closest
 
 
@@ -147,6 +147,37 @@ def plane_plane(plane0, plane1) -> Optional[Line]:
         output_p[1] + d[1],
         output_p[2] + d[2],
     )
+
+
+def plane_plane_to_line_canonical(plane0, plane1) -> Optional[Line]:
+    # CGAL-canonical anchor (foot-of-perpendicular from world origin) used by
+    # wood's cgal::intersection_util::plane_plane. Independent of input-plane
+    # origin choice, giving bit-exact match to wood for parallel input planes.
+    n0 = plane0.z_axis
+    n1 = plane1.z_axis
+    dx = n1[1] * n0[2] - n1[2] * n0[1]
+    dy = n1[2] * n0[0] - n1[0] * n0[2]
+    dz = n1[0] * n0[1] - n1[1] * n0[0]
+    d_sq = dx * dx + dy * dy + dz * dz
+    if d_sq < 1e-20:
+        return None
+
+    o0 = plane0.origin
+    o1 = plane1.origin
+    k0 = n0[0] * o0[0] + n0[1] * o0[1] + n0[2] * o0[2]
+    k1 = n1[0] * o1[0] + n1[1] * o1[1] + n1[2] * o1[2]
+    n0n0 = n0[0] * n0[0] + n0[1] * n0[1] + n0[2] * n0[2]
+    n1n1 = n1[0] * n1[0] + n1[1] * n1[1] + n1[2] * n1[2]
+    n0n1 = n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2]
+    det = n0n0 * n1n1 - n0n1 * n0n1
+    if abs(det) < 1e-20:
+        return None
+    c0 = (k0 * n1n1 - k1 * n0n1) / det
+    c1 = (k1 * n0n0 - k0 * n0n1) / det
+    ax = c0 * n0[0] + c1 * n1[0]
+    ay = c0 * n0[1] + c1 * n1[1]
+    az = c0 * n0[2] + c1 * n1[2]
+    return Line(ax, ay, az, ax + dx, ay + dy, az + dz)
 
 
 def plane_value_at(plane, point: Point) -> float:
@@ -515,8 +546,8 @@ def ray_mesh_bvh(
     for v0, v1, v2 in tris:
         tri_boxes.append(OBB.from_points([v0, v1, v2]))
 
-    world_size = BVH.compute_world_size(tri_boxes)
-    bvh = BVH.from_boxes(tri_boxes, world_size)
+    world_size = SpatialBVH.compute_world_size(tri_boxes)
+    bvh = SpatialBVH.from_boxes(tri_boxes, world_size)
 
     origin = line.start()
     direction = line.to_vector().normalized()
@@ -945,7 +976,7 @@ def surface_plane(surface, plane, tolerance=None):
     import math
     from .nurbscurve import NurbsCurve
     from .nurbssurface import NurbsSurface
-    from .knot import CurveKnotStyle
+    from .nurbsknot import CurveNurbsKnotStyle
 
     if not surface.is_valid():
         return []
@@ -1273,9 +1304,9 @@ def surface_plane(surface, plane, tolerance=None):
                     cy_ = [0, 1, 1, 1, 0, -1, -1, -1, 0]
                     wts = [1, w, 1, w, 1, w, 1, w, 1]
                     crv = NurbsCurve(3, True, 3, 9)
-                    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+                    nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
                     for i in range(10):
-                        crv.set_knot(i, knots[i])
+                        crv.set_nurbsknot(i, nurbsknots[i])
                     for i in range(9):
                         px = cx3d + radius * (cx_[i] * ax[0] + cy_[i] * ay[0])
                         py = cy3d + radius * (cx_[i] * ax[1] + cy_[i] * ay[1])
@@ -1384,9 +1415,9 @@ def surface_plane(surface, plane, tolerance=None):
                         cy_ = [0, 1, 1, 1, 0, -1, -1, -1, 0]
                         wts = [1, w, 1, w, 1, w, 1, w, 1]
                         crv = NurbsCurve(3, True, 3, 9)
-                        knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+                        nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
                         for i in range(10):
-                            crv.set_knot(i, knots[i])
+                            crv.set_nurbsknot(i, nurbsknots[i])
                         for i in range(9):
                             px = cx3d + semi_a*cx_[i]*ea[0] + semi_b*cy_[i]*eb[0]
                             py = cy3d + semi_a*cx_[i]*ea[1] + semi_b*cy_[i]*eb[1]
@@ -1471,7 +1502,7 @@ def surface_plane(surface, plane, tolerance=None):
 
             if not crv_2d.is_valid():
                 if is_loop:
-                    crv_2d = NurbsCurve.create_interpolated(pts_2d, CurveKnotStyle.ChordPeriodic)
+                    crv_2d = NurbsCurve.create_interpolated(pts_2d, CurveNurbsKnotStyle.ChordPeriodic)
                 else:
                     crv_2d = NurbsCurve.create_interpolated(pts_2d)
 
@@ -2140,8 +2171,232 @@ def face_to_face(adjacency, polylines_list, planes_list, coplanar_tolerance=5.0)
     return results
 
 
+def polyline_boolean(a, b, clip_type: int):
+    """Thin wrapper over Polyline.boolean_op mirroring C++ Intersection::polyline_boolean."""
+    from .polyline import Polyline
+    return Polyline.boolean_op(a, b, clip_type)
+
+
+def polyline_boolean_2d_in_plane(
+    polyline0,
+    polyline1,
+    plane,
+    intersection_type: int,
+    include_triangles: bool = False,
+    min_area: float = 0.01,
+    collapse_eps: float = 0.0,
+):
+    # 2D boolean between two closed planar polylines, projected into the plane's
+    # canonical 2D frame (base1/base2). intersection_type: 0=Intersect, 1=Union,
+    # 2=Difference, 3=Xor. Returns the result polyline (closed, 3D) on success,
+    # or None on empty/degenerate/triangle-reject/sub-min_area. Verbatim port of
+    # C++ Intersection::polyline_boolean_2d_in_plane.
+    from .polyline import Polyline
+    from .boolean_polyline import BooleanPolyline
+
+    n0 = polyline0.point_count()
+    n1 = polyline1.point_count()
+    if n0 < 3 or n1 < 3:
+        return None
+
+    origin = polyline0.get_point(0)
+    xax = plane.base1()
+    yax = plane.base2()
+
+    def to_2d(pl):
+        n = pl.point_count()
+        pts2d = []
+        for i in range(n):
+            p = pl.get_point(i)
+            dx = p[0]-origin[0]; dy = p[1]-origin[1]; dz = p[2]-origin[2]
+            u = dx*xax[0] + dy*xax[1] + dz*xax[2]
+            v = dx*yax[0] + dy*yax[1] + dz*yax[2]
+            pts2d.append(Point(u, v, 0.0))
+        if len(pts2d) > 1:
+            f = pts2d[0]; l = pts2d[-1]
+            dx = f[0]-l[0]; dy = f[1]-l[1]
+            if dx*dx + dy*dy > 1e-12:
+                pts2d.append(Point(f[0], f[1], 0.0))
+        return Polyline(pts2d)
+
+    a2d = to_2d(polyline0)
+    b2d = to_2d(polyline1)
+
+    if 0 <= intersection_type <= 2:
+        result_2d = BooleanPolyline.compute(a2d, b2d, intersection_type)
+    elif intersection_type == 3:
+        # A XOR B = (A ∪ B) − (A ∩ B). Session's BooleanPolyline lacks Xor.
+        u = BooleanPolyline.compute(a2d, b2d, 1)
+        inter = BooleanPolyline.compute(a2d, b2d, 0)
+        if not u:
+            return None
+        result_2d = u if not inter else BooleanPolyline.compute(u[0], inter[0], 2)
+    else:
+        return None
+    if not result_2d:
+        return None
+
+    C = result_2d[0]
+    nc = C.point_count()
+    if nc > 1:
+        f = C.get_point(0); l = C.get_point(nc-1)
+        dx = f[0]-l[0]; dy = f[1]-l[1]
+        if dx*dx + dy*dy < 1e-12:
+            nc -= 1
+    if nc < 3:
+        return None
+
+    src2d = [C.get_point(i) for i in range(nc)]
+    if collapse_eps > 0.0:
+        eps_sq = collapse_eps * collapse_eps
+        collapsed = []
+        for p in src2d:
+            if collapsed:
+                dx = p[0] - collapsed[-1][0]
+                dy = p[1] - collapsed[-1][1]
+                if dx*dx + dy*dy < eps_sq:
+                    continue
+            collapsed.append(p)
+        if len(collapsed) >= 2:
+            dx = collapsed[-1][0] - collapsed[0][0]
+            dy = collapsed[-1][1] - collapsed[0][1]
+            if dx*dx + dy*dy < eps_sq:
+                collapsed.pop()
+        src2d = collapsed
+        nc = len(src2d)
+        if nc < 3:
+            return None
+    if nc == 3 and not include_triangles:
+        return None
+
+    area = 0.0
+    for i in range(nc):
+        p0 = src2d[i]
+        p1 = src2d[(i+1) % nc]
+        area += p0[0]*p1[1] - p1[0]*p0[1]
+    if abs(area) * 0.5 <= min_area:
+        return None
+
+    pts = []
+    for i in range(nc):
+        u = src2d[i][0]; v = src2d[i][1]
+        pts.append(Point(
+            origin[0] + u*xax[0] + v*yax[0],
+            origin[1] + u*xax[1] + v*yax[1],
+            origin[2] + u*xax[2] + v*yax[2],
+        ))
+    pts.append(pts[0])
+    return Polyline(pts)
+
+
+def offset_in_3d(polyline, plane, offset: float) -> bool:
+    # Native miter-join polygon offset in plane-space 2D. Verbatim port of
+    # Intersection::offset_in_3d. Mutates polyline in place and returns True
+    # on success. Uses plane.base1()/base2() canonical axes so the output is
+    # deterministic across plane constructions.
+    from .polyline import Polyline
+    n_raw = polyline.point_count()
+    if n_raw < 3:
+        return False
+
+    origin = polyline.get_point(0)
+    xax = plane.base1()
+    yax = plane.base2()
+
+    path = []
+    for i in range(n_raw):
+        p = polyline.get_point(i)
+        dx = p[0] - origin[0]; dy = p[1] - origin[1]; dz = p[2] - origin[2]
+        u = dx*xax[0] + dy*xax[1] + dz*xax[2]
+        v = dx*yax[0] + dy*yax[1] + dz*yax[2]
+        path.append((u, v))
+    if len(path) >= 2:
+        dx = path[-1][0] - path[0][0]; dy = path[-1][1] - path[0][1]
+        if dx*dx + dy*dy < 1e-12:
+            path.pop()
+    n = len(path)
+    if n < 3:
+        return False
+
+    signed_area = 0.0
+    for i in range(n):
+        ax, ay = path[i]
+        bx, by = path[(i+1) % n]
+        signed_area += ax * by - bx * ay
+    delta = -offset if signed_area < 0.0 else offset
+
+    normals = []
+    for i in range(n):
+        ax, ay = path[i]
+        bx, by = path[(i+1) % n]
+        ex = bx - ax; ey = by - ay
+        length = (ex*ex + ey*ey) ** 0.5
+        if length < 1e-12:
+            normals.append((0.0, 0.0))
+        else:
+            normals.append((ey/length, -ex/length))
+
+    out = []
+    for i in range(n):
+        npx, npy = normals[(i + n - 1) % n]
+        nnx, nny = normals[i]
+        cos_a = npx*nnx + npy*nny
+        sin_a = npx*nny - npy*nnx
+        denom = 1.0 + cos_a
+        concave = (cos_a > -0.999) and (sin_a * delta < 0.0) and (offset > 0.0)
+        px, py = path[i]
+        if concave:
+            out.append((px + npx * delta, py + npy * delta))
+            out.append((px, py))
+            out.append((px + nnx * delta, py + nny * delta))
+        elif abs(denom) < 1e-9:
+            bx = npx + nnx; by = npy + nny
+            bl = (bx*bx + by*by) ** 0.5
+            if bl < 1e-12:
+                out.append((px + nnx * delta, py + nny * delta))
+            else:
+                out.append((px + (bx/bl) * delta, py + (by/bl) * delta))
+        else:
+            k = delta / denom
+            out.append((px + (npx + nnx) * k, py + (npy + nny) * k))
+
+    nout = len(out)
+    if nout < 3:
+        return False
+
+    out_area = 0.0
+    for i in range(nout):
+        ax, ay = out[i]
+        bx, by = out[(i+1) % nout]
+        out_area += ax * by - bx * ay
+    if abs(out_area) * 0.5 < 0.0001:
+        return False
+
+    cp = 0
+    cd = (out[0][0] - path[0][0])**2 + (out[0][1] - path[0][1])**2
+    for i in range(1, nout):
+        d = (out[i][0] - path[0][0])**2 + (out[i][1] - path[0][1])**2
+        if d < cd:
+            cd = d; cp = i
+    if cp != 0:
+        out = out[cp:] + out[:cp]
+
+    pts = []
+    for u, v in out:
+        pts.append(Point(
+            origin[0] + u*xax[0] + v*yax[0],
+            origin[1] + u*xax[1] + v*yax[1],
+            origin[2] + u*xax[2] + v*yax[2],
+        ))
+    pts.append(pts[0])
+    new_poly = Polyline(pts)
+    # Replace coords in-place so caller references remain valid.
+    polyline.coords = new_poly.coords
+    return True
+
+
 def adjacency_search(elements, inflate=5.0):
-    """BVH/brute-force adjacency search. Returns flat list [a, b, -1, -1, ...]."""
+    """SpatialBVH/brute-force adjacency search. Returns flat list [a, b, -1, -1, ...]."""
     from .aabb import AABB
     N = len(elements)
     aabbs = []

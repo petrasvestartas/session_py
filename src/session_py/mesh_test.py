@@ -1033,7 +1033,6 @@ def test_mesh_geometric_properties():
     angles, arcs, points = mesh.dihedral_angles(0.3)
 
     for edge, angle in angles.items():
-        u, v = edge
         angle_in_degrees = angle
         MINI_CHECK(TOLERANCE.is_close(angle_in_degrees, 116.565051177078))
 
@@ -1208,13 +1207,13 @@ def test_mesh_json_roundtrip():
     loaded_json = Mesh.__jsonload__(d)
 
     # String
-    json_string = mesh.json_dumps()
-    loaded_string = Mesh.json_loads(json_string)
+    json_string = mesh.file_json_dumps()
+    loaded_string = Mesh.file_json_loads(json_string)
 
     # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.json"
-    mesh.json_dump(filename)
-    loaded_file = Mesh.json_load(filename)
+    mesh.file_json_dump(filename)
+    loaded_file = Mesh.file_json_load(filename)
 
     MINI_CHECK(loaded_json == mesh)
     MINI_CHECK(loaded_string == mesh)

@@ -471,15 +471,15 @@ def test_vector_json_roundtrip():
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   json_dumps()    │ str          │ to JSON string
-    #   json_loads(s)   │ str          │ from JSON string
-    #   json_dump(path) │ file         │ write to file
-    #   json_load(path) │ file         │ read from file
+    #   file_json_dumps()    │ str          │ to JSON string
+    #   file_json_loads(s)   │ str          │ from JSON string
+    #   file_json_dump(path) │ file         │ write to file
+    #   file_json_load(path) │ file         │ read from file
 
-    # json_dump(fname) / json_load(fname) - file-based serialization
+    # file_json_dump(fname) / file_json_load(fname) - file-based serialization
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_vector.json"
-    v.json_dump(fname)
-    loaded = Vector.json_load(fname)
+    v.file_json_dump(fname)
+    loaded = Vector.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_vector")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))

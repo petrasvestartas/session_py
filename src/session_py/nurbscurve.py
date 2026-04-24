@@ -9,20 +9,20 @@ from .plane import Plane
 from .tolerance import Tolerance
 from .xform import Xform
 from .color import Color
-from . import knot
-from .knot import CurveKnotStyle
+from . import nurbsknot
+from .nurbsknot import CurveNurbsKnotStyle
 
 
-def _evaluate_nurbs_blossom(cvdim, order, cv_stride, CV, knot, t):
-    if CV is None or t is None or knot is None:
+def _evaluate_nurbs_blossom(cvdim, order, cv_stride, CV, nurbsknot, t):
+    if CV is None or t is None or nurbsknot is None:
         return None
     if cv_stride < cvdim:
         return None
     degree = order - 1
     for i in range(1, 2 * degree):
-        if knot[i] - knot[i - 1] < 0.0:
+        if nurbsknot[i] - nurbsknot[i - 1] < 0.0:
             return None
-    if knot[degree] - knot[degree - 1] < Tolerance.ZERO_TOLERANCE:
+    if nurbsknot[degree] - nurbsknot[degree - 1] < Tolerance.ZERO_TOLERANCE:
         return None
     P = np.zeros(cvdim)
     space = np.zeros(order)
@@ -31,9 +31,9 @@ def _evaluate_nurbs_blossom(cvdim, order, cv_stride, CV, knot, t):
             space[j] = CV[j * cv_stride + coord]
         for j in range(1, order):
             for k in range(j, order):
-                denom = knot[degree + k - j] - knot[k - 1]
-                space[k - j] = ((knot[degree + k - j] - t[j - 1]) / denom * space[k - j] +
-                    (t[j - 1] - knot[k - 1]) / denom * space[k - j + 1])
+                denom = nurbsknot[degree + k - j] - nurbsknot[k - 1]
+                space[k - j] = ((nurbsknot[degree + k - j] - t[j - 1]) / denom * space[k - j] +
+                    (t[j - 1] - nurbsknot[k - 1]) / denom * space[k - j + 1])
         P[coord] = space[0]
     return P
 
@@ -60,13 +60,13 @@ def _get_raised_degree_cv(old_order, cvdim, old_cv_stride, oldCV, oldkn, newkn, 
     return newCV
 
 
-def _next_span_index(order, cv_count, knot, span_index):
-    if span_index < 0 or span_index > cv_count - order or knot is None:
+def _next_span_index(order, cv_count, nurbsknot, span_index):
+    if span_index < 0 or span_index > cv_count - order or nurbsknot is None:
         return -1
     if span_index < cv_count - order:
         span_index += 1
         while (span_index < cv_count - order and
-               knot[span_index + order - 2] == knot[span_index + order - 1]):
+               nurbsknot[span_index + order - 2] == nurbsknot[span_index + order - 1]):
             span_index += 1
     return span_index
 
@@ -101,8 +101,8 @@ class NurbsCurve:
         Number of control vertices.
     m_cv_stride : int
         Stride between control vertices in array.
-    m_knot : np.ndarray
-        Knot vector array.
+    m_nurbsknot : np.ndarray
+        NurbsKnot vector array.
     m_cv : np.ndarray
         Control vertex data array (homogeneous if rational).
     """
@@ -113,7 +113,7 @@ class NurbsCurve:
     ###########################################################################################
 
     def create(periodic: bool, degree: int, points: List[Point], 
-               dimension: int = 3, knot_delta: float = 1.0) -> 'NurbsCurve':
+               dimension: int = 3, nurbsknot_delta: float = 1.0) -> 'NurbsCurve':
         """Create NURBS curve from points.
 
         Parameters
@@ -126,8 +126,8 @@ class NurbsCurve:
             Control points for the curve.
         dimension : int, optional
             Dimension of the curve. Defaults to 3.
-        knot_delta : float, optional
-            Spacing between knots. Defaults to 1.0.
+        nurbsknot_delta : float, optional
+            Spacing between nurbsknots. Defaults to 1.0.
 
         Returns
         -------
@@ -136,17 +136,22 @@ class NurbsCurve:
         """
         curve = NurbsCurve()
         if periodic:
-            curve.create_periodic_uniform(dimension, degree + 1, points, knot_delta)
+            curve.create_periodic_uniform(dimension, degree + 1, points, nurbsknot_delta)
         else:
-            curve.create_clamped_uniform(dimension, degree + 1, points, knot_delta)
+            curve.create_clamped_uniform(dimension, degree + 1, points, nurbsknot_delta)
         if curve.is_valid():
-            L = curve.length()
+            if degree == 1 and len(points) == 2:
+                p0, p1 = points[0], points[1]
+                dx = p1[0] - p0[0]; dy = p1[1] - p0[1]; dz = p1[2] - p0[2]
+                L = (dx*dx + dy*dy + dz*dz) ** 0.5
+            else:
+                L = curve.length()
             if L > 0.0:
                 curve.set_domain(0.0, L)
         return curve
 
     @staticmethod
-    def create_interpolated(points, parameterization=CurveKnotStyle.Chord):
+    def create_interpolated(points, parameterization=CurveNurbsKnotStyle.Chord):
         n = len(points)
         if n < 2:
             return NurbsCurve()
@@ -154,9 +159,9 @@ class NurbsCurve:
         degree = 3
         order = degree + 1
 
-        periodic = parameterization in (CurveKnotStyle.UniformPeriodic,
-                                        CurveKnotStyle.ChordPeriodic,
-                                        CurveKnotStyle.ChordSquareRootPeriodic)
+        periodic = parameterization in (CurveNurbsKnotStyle.UniformPeriodic,
+                                        CurveNurbsKnotStyle.ChordPeriodic,
+                                        CurveNurbsKnotStyle.ChordSquareRootPeriodic)
 
         if periodic and n < 3:
             return NurbsCurve()
@@ -169,22 +174,22 @@ class NurbsCurve:
             cv_count = n + 3
             kc = cv_count + order - 2
 
-            base_map = {CurveKnotStyle.UniformPeriodic: CurveKnotStyle.Uniform,
-                        CurveKnotStyle.ChordSquareRootPeriodic: CurveKnotStyle.ChordSquareRoot}
-            base_style = base_map.get(parameterization, CurveKnotStyle.Chord)
+            base_map = {CurveNurbsKnotStyle.UniformPeriodic: CurveNurbsKnotStyle.Uniform,
+                        CurveNurbsKnotStyle.ChordSquareRootPeriodic: CurveNurbsKnotStyle.ChordSquareRoot}
+            base_style = base_map.get(parameterization, CurveNurbsKnotStyle.Chord)
 
             params = [0.0] * (n + 1)
-            if base_style == CurveKnotStyle.Uniform:
+            if base_style == CurveNurbsKnotStyle.Uniform:
                 for i in range(1, n + 1):
                     params[i] = float(i)
             else:
                 for i in range(1, n):
                     d = pdist(points[i-1], points[i])
-                    if base_style == CurveKnotStyle.ChordSquareRoot:
+                    if base_style == CurveNurbsKnotStyle.ChordSquareRoot:
                         d = math.sqrt(d)
                     params[i] = params[i-1] + d
                 d_close = pdist(points[n-1], points[0])
-                if base_style == CurveKnotStyle.ChordSquareRoot:
+                if base_style == CurveNurbsKnotStyle.ChordSquareRoot:
                     d_close = math.sqrt(d_close)
                 params[n] = params[n-1] + d_close
 
@@ -196,19 +201,19 @@ class NurbsCurve:
             if dmax <= 0.0 or dmax * 1.490116119385e-8 >= dmin:
                 return NurbsCurve()
 
-            knots_vec = [0.0] * kc
+            nurbsknots_vec = [0.0] * kc
             for i in range(n + 1):
-                knots_vec[i + 2] = params[i]
-            knots_vec[cv_count]     = knots_vec[3] - knots_vec[2] + knots_vec[cv_count - 1]
-            knots_vec[1]            = knots_vec[cv_count - 2] - knots_vec[cv_count - 1] + knots_vec[2]
-            knots_vec[cv_count + 1] = knots_vec[4] - knots_vec[3] + knots_vec[cv_count]
-            knots_vec[0]            = knots_vec[cv_count - 3] - knots_vec[cv_count - 2] + knots_vec[1]
+                nurbsknots_vec[i + 2] = params[i]
+            nurbsknots_vec[cv_count]     = nurbsknots_vec[3] - nurbsknots_vec[2] + nurbsknots_vec[cv_count - 1]
+            nurbsknots_vec[1]            = nurbsknots_vec[cv_count - 2] - nurbsknots_vec[cv_count - 1] + nurbsknots_vec[2]
+            nurbsknots_vec[cv_count + 1] = nurbsknots_vec[4] - nurbsknots_vec[3] + nurbsknots_vec[cv_count]
+            nurbsknots_vec[0]            = nurbsknots_vec[cv_count - 3] - nurbsknots_vec[cv_count - 2] + nurbsknots_vec[1]
 
             A = [[0.0] * n for _ in range(n)]
             rhs = [0.0] * (n * dim)
 
             for i in range(n):
-                basis = knot.eval_basis(order, knots_vec, i, params[i])
+                basis = nurbsknot.eval_basis(order, nurbsknots_vec, i, params[i])
                 c0 = i % n
                 c1 = (i + 1) % n
                 c2 = (i + 2) % n
@@ -249,7 +254,7 @@ class NurbsCurve:
                     cv[i*dim+d] = s / A[i][i]
 
             curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=cv_count)
-            curve.m_knot = np.array(knots_vec, dtype=np.float64)
+            curve.m_nurbsknot = np.array(nurbsknots_vec, dtype=np.float64)
             for i in range(n):
                 curve.set_cv(i, Point(cv[i*3], cv[i*3+1], cv[i*3+2]))
             curve.set_cv(n, curve.get_cv(0))
@@ -266,9 +271,9 @@ class NurbsCurve:
             pts[i, 1] = points[i][1]
             pts[i, 2] = points[i][2]
 
-        params = knot.compute_parameters(pts, parameterization)
-        knots_vec = knot.build_interp_knots(params, degree)
-        kc = len(knots_vec)
+        params = nurbsknot.compute_parameters(pts, parameterization)
+        nurbsknots_vec = nurbsknot.build_interp_nurbsknots(params, degree)
+        kc = len(nurbsknots_vec)
 
         def estimate_tangent(i0, i1, i2):
             d01 = pdist(points[i0], points[i1])
@@ -338,7 +343,7 @@ class NurbsCurve:
             rhs[d] = cv[dim + d]
 
         for i in range(1, n-1):
-            basis = knot.eval_basis(order, knots_vec, i, params[i])
+            basis = nurbsknot.eval_basis(order, nurbsknots_vec, i, params[i])
             lower[i] = basis[0]
             diag_arr[i] = basis[1]
             upper[i] = basis[2]
@@ -349,14 +354,14 @@ class NurbsCurve:
         for d in range(dim):
             rhs[(n-1) * dim + d] = cv[n * dim + d]
 
-        solution = knot.solve_tridiagonal(dim, sys_n, lower, diag_arr, upper, rhs)
+        solution = nurbsknot.solve_tridiagonal(dim, sys_n, lower, diag_arr, upper, rhs)
 
         for i in range(sys_n):
             for d in range(dim):
                 cv[(i+1) * dim + d] = solution[i * dim + d]
 
         curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=cv_count)
-        curve.m_knot = np.array(knots_vec, dtype=np.float64)
+        curve.m_nurbsknot = np.array(nurbsknots_vec, dtype=np.float64)
         curve.m_cv = np.zeros(cv_count * dim, dtype=np.float64)
         for i in range(cv_count):
             curve.set_cv(i, Point(cv[i*3], cv[i*3+1], cv[i*3+2]))
@@ -380,7 +385,7 @@ class NurbsCurve:
             if n <= num_cvs or num_cvs < order:
                 if n < 3:
                     return NurbsCurve()
-                return NurbsCurve.create_interpolated(points[:n], knot.CurveKnotStyle.ChordPeriodic)
+                return NurbsCurve.create_interpolated(points[:n], nurbsknot.CurveNurbsKnotStyle.ChordPeriodic)
 
             cv_count = num_cvs + degree
             kc = cv_count + order - 2
@@ -396,14 +401,14 @@ class NurbsCurve:
             ppts = []
             for i in range(n):
                 ppts.extend([points[i][0], points[i][1], points[i][2]])
-            knots_vec = knot.build_fitted_knots_periodic_adaptive(params, ppts, n, dim, num_cvs, degree)
+            nurbsknots_vec = nurbsknot.build_fitted_nurbsknots_periodic_adaptive(params, ppts, n, dim, num_cvs, degree)
 
             NtN = [[0.0] * num_cvs for _ in range(num_cvs)]
             NtQ = [0.0] * (num_cvs * dim)
 
             for k in range(n):
-                span = knot.find_span(order, cv_count, knots_vec, params[k])
-                basis = knot.eval_basis(order, knots_vec, span, params[k])
+                span = nurbsknot.find_span(order, cv_count, nurbsknots_vec, params[k])
+                basis = nurbsknot.eval_basis(order, nurbsknots_vec, span, params[k])
                 for a in range(order):
                     ci = (span + a) % num_cvs
                     for d in range(dim):
@@ -439,7 +444,7 @@ class NurbsCurve:
                     cv[i*dim+d] = s / NtN[i][i]
 
             curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=cv_count)
-            curve.m_knot = np.array(knots_vec, dtype=np.float64)
+            curve.m_nurbsknot = np.array(nurbsknots_vec, dtype=np.float64)
             curve.m_cv = np.zeros(cv_count * dim, dtype=np.float64)
             for i in range(num_cvs):
                 curve.set_cv(i, Point(cv[i*3], cv[i*3+1], cv[i*3+2]))
@@ -457,11 +462,11 @@ class NurbsCurve:
             pts[i, 1] = points[i][1]
             pts[i, 2] = points[i][2]
 
-        params = knot.compute_parameters(pts, knot.CurveKnotStyle.Chord)
+        params = nurbsknot.compute_parameters(pts, nurbsknot.CurveNurbsKnotStyle.Chord)
         flat_pts = []
         for i in range(m):
             flat_pts.extend([points[i][0], points[i][1], points[i][2]])
-        knots_vec = knot.build_fitted_knots_adaptive(params, flat_pts, m, dim, num_cvs, degree)
+        nurbsknots_vec = nurbsknot.build_fitted_nurbsknots_adaptive(params, flat_pts, m, dim, num_cvs, degree)
         n = num_cvs - 1
         sys_n = num_cvs - 2
         bw = degree
@@ -471,8 +476,8 @@ class NurbsCurve:
         rhs = [0.0] * (sys_n * dim)
 
         for k in range(1, m - 1):
-            span = knot.find_span(order, num_cvs, knots_vec, params[k])
-            basis = knot.eval_basis(order, knots_vec, span, params[k])
+            span = nurbsknot.find_span(order, num_cvs, nurbsknots_vec, params[k])
+            basis = nurbsknot.eval_basis(order, nurbsknots_vec, span, params[k])
 
             rk = [points[k][d] for d in range(dim)]
             for a in range(order):
@@ -498,11 +503,11 @@ class NurbsCurve:
                     rj = cj - 1
                     band[rj * bw1 + (rj - ri)] += basis[a] * basis[b]
 
-        if not knot.solve_banded_spd(dim, sys_n, bw, band, rhs):
+        if not nurbsknot.solve_banded_spd(dim, sys_n, bw, band, rhs):
             return NurbsCurve.create_interpolated(points)
 
         curve = NurbsCurve(dimension=dim, is_rational=False, order=order, cv_count=num_cvs)
-        curve.m_knot = np.array(knots_vec, dtype=np.float64)
+        curve.m_nurbsknot = np.array(nurbsknots_vec, dtype=np.float64)
         curve.m_cv = np.zeros(num_cvs * dim, dtype=np.float64)
         curve.set_cv(0, points[0])
         for i in range(sys_n):
@@ -530,11 +535,11 @@ class NurbsCurve:
         self.m_cv_stride = (dimension + 1) if is_rational else dimension
 
         if cv_count > 0 and order > 0 and cv_count >= order:
-            knot_count = order + cv_count - 2
-            self.m_knot = np.zeros(knot_count, dtype=np.float64)
+            nurbsknot_count = order + cv_count - 2
+            self.m_nurbsknot = np.zeros(nurbsknot_count, dtype=np.float64)
             self.m_cv = np.zeros(cv_count * self.m_cv_stride, dtype=np.float64)
         else:
-            self.m_knot = np.array([], dtype=np.float64)
+            self.m_nurbsknot = np.array([], dtype=np.float64)
             self.m_cv = np.array([], dtype=np.float64)
 
         self._rmf_cache = None
@@ -576,10 +581,10 @@ class NurbsCurve:
             return False
         if self.linecolors != other.linecolors:
             return False
-        if len(self.m_knot) != len(other.m_knot):
+        if len(self.m_nurbsknot) != len(other.m_nurbsknot):
             return False
-        for i in range(len(self.m_knot)):
-            if abs(float(self.m_knot[i]) - float(other.m_knot[i])) > Tolerance.ZERO_TOLERANCE:
+        for i in range(len(self.m_nurbsknot)):
+            if abs(float(self.m_nurbsknot[i]) - float(other.m_nurbsknot[i])) > Tolerance.ZERO_TOLERANCE:
                 return False
         if len(self.m_cv) != len(other.m_cv):
             return False
@@ -622,7 +627,7 @@ class NurbsCurve:
         self.m_order = 0
         self.m_cv_count = 0
         self.m_cv_stride = 0
-        self.m_knot = np.array([], dtype=np.float64)
+        self.m_nurbsknot = np.array([], dtype=np.float64)
         self.m_cv = np.array([], dtype=np.float64)
 
     def create_curve(self, dimension: int, is_rational: bool, 
@@ -638,8 +643,8 @@ class NurbsCurve:
         self.m_cv_stride = (dimension + 1) if is_rational else dimension
         
         # Allocate arrays
-        knot_count = order + cv_count - 2
-        self.m_knot = np.zeros(knot_count, dtype=np.float64)
+        nurbsknot_count = order + cv_count - 2
+        self.m_nurbsknot = np.zeros(nurbsknot_count, dtype=np.float64)
         self.m_cv = np.zeros(cv_count * self.m_cv_stride, dtype=np.float64)
         
         # Set weights to 1.0 if rational
@@ -650,7 +655,7 @@ class NurbsCurve:
         return True
 
     def create_clamped_uniform(self, dimension: int, order: int, 
-                              points: List[Point], knot_delta: float = 1.0) -> bool:
+                              points: List[Point], nurbsknot_delta: float = 1.0) -> bool:
         """Create clamped uniform NURBS curve from control points"""
         if not points or len(points) < order:
             return False
@@ -662,12 +667,12 @@ class NurbsCurve:
         for i, pt in enumerate(points):
             self.set_cv(i, pt)
         
-        self.m_knot = knot.make_clamped_uniform(self.m_order, self.m_cv_count, knot_delta)
+        self.m_nurbsknot = nurbsknot.make_clamped_uniform(self.m_order, self.m_cv_count, nurbsknot_delta)
         
         return True
 
     def create_periodic_uniform(self, dimension: int, order: int,
-                               points: List[Point], knot_delta: float = 1.0) -> bool:
+                               points: List[Point], nurbsknot_delta: float = 1.0) -> bool:
         """Create periodic uniform NURBS curve from control points"""
         point_count = len(points) if points else 0
         if point_count < order:
@@ -682,7 +687,7 @@ class NurbsCurve:
         for i in range(order - 1):
             self.set_cv(point_count + i, points[i % point_count])
 
-        self.m_knot = knot.make_periodic_uniform(self.m_order, self.m_cv_count, knot_delta)
+        self.m_nurbsknot = nurbsknot.make_periodic_uniform(self.m_order, self.m_cv_count, nurbsknot_delta)
 
         return True
 
@@ -703,14 +708,14 @@ class NurbsCurve:
             return False
         if self.m_cv_count < self.m_order:
             return False
-        if len(self.m_knot) != self.m_order + self.m_cv_count - 2:
+        if len(self.m_nurbsknot) != self.m_order + self.m_cv_count - 2:
             return False
         if len(self.m_cv) < self.m_cv_count * self.m_cv_stride:
             return False
         
-        # Check knot vector is non-decreasing
-        for i in range(len(self.m_knot) - 1):
-            if self.m_knot[i] > self.m_knot[i + 1] + Tolerance.ZERO_TOLERANCE:
+        # Check nurbsknot vector is non-decreasing
+        for i in range(len(self.m_nurbsknot) - 1):
+            if self.m_nurbsknot[i] > self.m_nurbsknot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
         
         return True
@@ -732,7 +737,7 @@ class NurbsCurve:
         if not self.is_valid():
             return False
 
-        # Check if knots and CVs wrap around
+        # Check if nurbsknots and CVs wrap around
         if not self.is_closed():
             return False
 
@@ -1076,8 +1081,8 @@ class NurbsCurve:
                 if abs(self.weight(i) - other.weight(i)) > tolerance:
                     return False
         if not ignore_parameterization:
-            for i in range(self.knot_count()):
-                if abs(self.m_knot[i] - other.m_knot[i]) > tolerance:
+            for i in range(self.nurbsknot_count()):
+                if abs(self.m_nurbsknot[i] - other.m_nurbsknot[i]) > tolerance:
                     return False
         return True
 
@@ -1087,16 +1092,16 @@ class NurbsCurve:
         d0, d1 = self.domain()
         if t < d0 or t > d1:
             return False
-        at_knot = False
-        knot_idx = 0
-        for i in range(self.knot_count()):
-            if abs(self.m_knot[i] - t) < Tolerance.ZERO_TOLERANCE:
-                at_knot = True
-                knot_idx = i
+        at_nurbsknot = False
+        nurbsknot_idx = 0
+        for i in range(self.nurbsknot_count()):
+            if abs(self.m_nurbsknot[i] - t) < Tolerance.ZERO_TOLERANCE:
+                at_nurbsknot = True
+                nurbsknot_idx = i
                 break
-        if not at_knot:
+        if not at_nurbsknot:
             return True
-        mult = self.knot_multiplicity(knot_idx)
+        mult = self.nurbsknot_multiplicity(nurbsknot_idx)
         if continuity_type == 0:
             return mult < self.m_order
         elif continuity_type == 1:
@@ -1106,19 +1111,19 @@ class NurbsCurve:
         else:
             return mult < self.m_order - 1
 
-    def is_valid_knot_vector(self) -> bool:
-        """Check if knot vector is valid"""
-        if len(self.m_knot) != self.knot_count():
+    def is_valid_nurbsknot_vector(self) -> bool:
+        """Check if nurbsknot vector is valid"""
+        if len(self.m_nurbsknot) != self.nurbsknot_count():
             return False
 
-        for i in range(len(self.m_knot) - 1):
-            if self.m_knot[i] > self.m_knot[i + 1] + Tolerance.ZERO_TOLERANCE:
+        for i in range(len(self.m_nurbsknot) - 1):
+            if self.m_nurbsknot[i] > self.m_nurbsknot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
 
         return True
 
     def is_clamped(self, end: int = 2) -> bool:
-        """Check if knot vector is clamped at ends.
+        """Check if nurbsknot vector is clamped at ends.
 
         Parameters
         ----------
@@ -1133,8 +1138,8 @@ class NurbsCurve:
         if not self.is_valid():
             return False
 
-        # Use knot module function
-        return knot.is_clamped(self.m_order, self.m_cv_count, self.m_knot, end)
+        # Use nurbsknot module function
+        return nurbsknot.is_clamped(self.m_order, self.m_cv_count, self.m_nurbsknot, end)
 
 
     ###########################################################################################
@@ -1157,19 +1162,19 @@ class NurbsCurve:
         """Size of each control vertex"""
         return (self.m_dim + 1) if self.m_is_rat else self.m_dim
 
-    def knot_count(self) -> int:
+    def nurbsknot_count(self) -> int:
         return self.m_order + self.m_cv_count - 2
 
     def span_count(self) -> int:
         return self.m_cv_count - self.m_order + 1
 
-    def get_knots(self) -> np.ndarray:
-        """Get all knot values"""
-        return self.m_knot.copy()
+    def get_nurbsknots(self) -> np.ndarray:
+        """Get all nurbsknot values"""
+        return self.m_nurbsknot.copy()
 
-    def knot_array(self) -> np.ndarray:
-        """Get pointer to knot array"""
-        return self.m_knot
+    def nurbsknot_array(self) -> np.ndarray:
+        """Get pointer to nurbsknot array"""
+        return self.m_nurbsknot
 
     def cv_array(self) -> np.ndarray:
         """Get pointer to CV array"""
@@ -1292,49 +1297,49 @@ class NurbsCurve:
 
 
     ###########################################################################################
-    # Knot Access
+    # NurbsKnot Access
     ###########################################################################################
 
-    def knot(self, knot_index: int) -> float:
-        """Get knot value at index"""
-        if knot_index < 0 or knot_index >= len(self.m_knot):
+    def nurbsknot(self, nurbsknot_index: int) -> float:
+        """Get nurbsknot value at index"""
+        if nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot):
             return 0.0
-        return self.m_knot[knot_index]
+        return self.m_nurbsknot[nurbsknot_index]
 
-    def set_knot(self, knot_index: int, knot_value: float) -> bool:
-        """Set knot value at index"""
-        if knot_index < 0 or knot_index >= len(self.m_knot):
+    def set_nurbsknot(self, nurbsknot_index: int, nurbsknot_value: float) -> bool:
+        """Set nurbsknot value at index"""
+        if nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot):
             return False
-        self.m_knot[knot_index] = knot_value
+        self.m_nurbsknot[nurbsknot_index] = nurbsknot_value
         self._invalidate_rmf_cache()
         return True
 
-    def knot_multiplicity(self, knot_index: int) -> int:
-        """Get knot multiplicity at index"""
-        if knot_index < 0 or knot_index >= len(self.m_knot):
+    def nurbsknot_multiplicity(self, nurbsknot_index: int) -> int:
+        """Get nurbsknot multiplicity at index"""
+        if nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot):
             return 0
         
-        knot_value = self.m_knot[knot_index]
+        nurbsknot_value = self.m_nurbsknot[nurbsknot_index]
         mult = 1
         
         # Count after
-        for i in range(knot_index + 1, len(self.m_knot)):
-            if abs(self.m_knot[i] - knot_value) < Tolerance.ZERO_TOLERANCE:
+        for i in range(nurbsknot_index + 1, len(self.m_nurbsknot)):
+            if abs(self.m_nurbsknot[i] - nurbsknot_value) < Tolerance.ZERO_TOLERANCE:
                 mult += 1
             else:
                 break
         
         # Count before
-        for i in range(knot_index - 1, -1, -1):
-            if abs(self.m_knot[i] - knot_value) < Tolerance.ZERO_TOLERANCE:
+        for i in range(nurbsknot_index - 1, -1, -1):
+            if abs(self.m_nurbsknot[i] - nurbsknot_value) < Tolerance.ZERO_TOLERANCE:
                 mult += 1
             else:
                 break
         
         return mult
 
-    def superfluous_knot(self, end: int) -> float:
-        """Get superfluous knot value at end.
+    def superfluous_nurbsknot(self, end: int) -> float:
+        """Get superfluous nurbsknot value at end.
 
         Parameters
         ----------
@@ -1344,42 +1349,42 @@ class NurbsCurve:
         Returns
         -------
         float
-            The superfluous knot value.
+            The superfluous nurbsknot value.
         """
         if not self.is_valid():
             return 0.0
 
-        kc = self.knot_count()
+        kc = self.nurbsknot_count()
         if end == 0:
-            # First superfluous knot: reflect first knot across knot[order-2]
-            return 2.0 * self.m_knot[0] - self.m_knot[self.m_order - 2]
+            # First superfluous nurbsknot: reflect first nurbsknot across nurbsknot[order-2]
+            return 2.0 * self.m_nurbsknot[0] - self.m_nurbsknot[self.m_order - 2]
         else:
-            # Last superfluous knot: reflect last knot across knot[cv_count-order]
-            return 2.0 * self.m_knot[kc - 1] - self.m_knot[self.m_cv_count - self.m_order]
+            # Last superfluous nurbsknot: reflect last nurbsknot across nurbsknot[cv_count-order]
+            return 2.0 * self.m_nurbsknot[kc - 1] - self.m_nurbsknot[self.m_cv_count - self.m_order]
 
-    def insert_knot(self, knot_value: float, knot_multiplicity: int = 1) -> bool:
+    def insert_nurbsknot(self, nurbsknot_value: float, nurbsknot_multiplicity: int = 1) -> bool:
         if not self.is_valid():
             return False
 
         p = self.degree()
-        if knot_multiplicity < 1 or knot_multiplicity > p:
+        if nurbsknot_multiplicity < 1 or nurbsknot_multiplicity > p:
             return False
 
         d0, d1 = self.domain()
-        if knot_value < d0 or knot_value > d1:
+        if nurbsknot_value < d0 or nurbsknot_value > d1:
             return False
 
-        # Handle end knots
-        if knot_value == d0:
-            if knot_multiplicity == p:
+        # Handle end nurbsknots
+        if nurbsknot_value == d0:
+            if nurbsknot_multiplicity == p:
                 return self.clamp_end(0)
-            if knot_multiplicity == 1:
+            if nurbsknot_multiplicity == 1:
                 return True
             return False
-        if knot_value == d1:
-            if knot_multiplicity == p:
+        if nurbsknot_value == d1:
+            if nurbsknot_multiplicity == p:
                 return self.clamp_end(1)
-            if knot_multiplicity == 1:
+            if nurbsknot_multiplicity == 1:
                 return True
             return False
 
@@ -1387,38 +1392,38 @@ class NurbsCurve:
         import math
 
         n = self.m_cv_count - 1
-        full_knot_count = self.m_cv_count + self.m_order
+        full_nurbsknot_count = self.m_cv_count + self.m_order
 
-        for insert_iter in range(knot_multiplicity):
-            # Build full knot vector
-            U = np.zeros(full_knot_count)
-            U[0] = self.m_knot[0]
-            for i in range(len(self.m_knot)):
-                U[i + 1] = self.m_knot[i]
-            U[full_knot_count - 1] = self.m_knot[-1]
+        for insert_iter in range(nurbsknot_multiplicity):
+            # Build full nurbsknot vector
+            U = np.zeros(full_nurbsknot_count)
+            U[0] = self.m_nurbsknot[0]
+            for i in range(len(self.m_nurbsknot)):
+                U[i + 1] = self.m_nurbsknot[i]
+            U[full_nurbsknot_count - 1] = self.m_nurbsknot[-1]
 
             # Count current multiplicity
             tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
-            mult = sum(1 for i in range(full_knot_count) if abs(U[i] - knot_value) <= tol)
+            mult = sum(1 for i in range(full_nurbsknot_count) if abs(U[i] - nurbsknot_value) <= tol)
             if mult >= p:
                 return False
 
             # Find span
-            span = self._find_span(knot_value)
+            span = self._find_span(nurbsknot_value)
             k = span + self.m_order - 1
 
-            # Single-knot insertion
-            m_full = full_knot_count - 1
-            new_full_knot_count = full_knot_count + 1
+            # Single-nurbsknot insertion
+            m_full = full_nurbsknot_count - 1
+            new_full_nurbsknot_count = full_nurbsknot_count + 1
             new_cv_count = self.m_cv_count + 1
 
-            U_new = np.zeros(new_full_knot_count)
+            U_new = np.zeros(new_full_nurbsknot_count)
             cv_new = np.zeros(new_cv_count * self.m_cv_stride)
 
-            # Copy unaffected knots
+            # Copy unaffected nurbsknots
             for i in range(k + 1):
                 U_new[i] = U[i]
-            U_new[k + 1] = knot_value
+            U_new[k + 1] = nurbsknot_value
             for i in range(k + 1, m_full + 1):
                 U_new[i + 1] = U[i]
 
@@ -1437,7 +1442,7 @@ class NurbsCurve:
             # Compute new CVs in affected region
             for i in range(k - p + 1, k + 1):
                 denom = U[i + p] - U[i]
-                alpha = (knot_value - U[i]) / denom if denom != 0.0 else 0.0
+                alpha = (nurbsknot_value - U[i]) / denom if denom != 0.0 else 0.0
 
                 src_prev = (i - 1) * self.m_cv_stride
                 src_curr = i * self.m_cv_stride
@@ -1450,10 +1455,10 @@ class NurbsCurve:
             self.m_cv_count = new_cv_count
             self.m_cv = cv_new
 
-            new_compressed_knot_count = self.m_order + self.m_cv_count - 2
-            self.m_knot = np.array([U_new[i + 1] for i in range(new_compressed_knot_count)])
+            new_compressed_nurbsknot_count = self.m_order + self.m_cv_count - 2
+            self.m_nurbsknot = np.array([U_new[i + 1] for i in range(new_compressed_nurbsknot_count)])
 
-            full_knot_count = new_full_knot_count
+            full_nurbsknot_count = new_full_nurbsknot_count
             n = self.m_cv_count - 1
 
         return True
@@ -1474,19 +1479,19 @@ class NurbsCurve:
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return 0.0
 
-        knot = self.m_knot[cv_index:]
+        nurbsknot = self.m_nurbsknot[cv_index:]
         order = self.m_order
 
-        if order <= 2 or knot[0] == knot[order - 2]:
-            return float(knot[0])
+        if order <= 2 or nurbsknot[0] == nurbsknot[order - 2]:
+            return float(nurbsknot[0])
 
         p = order - 1
-        k0 = knot[0]
-        k = knot[p // 2]
-        k1 = knot[p - 1]
+        k0 = nurbsknot[0]
+        k = nurbsknot[p // 2]
+        k1 = nurbsknot[p - 1]
         tol = (k1 - k0) * 1.490116119385e-8
 
-        g = sum(knot[i] for i in range(p)) / p
+        g = sum(nurbsknot[i] for i in range(p)) / p
 
         if abs(2.0 * k - (k0 + k1)) <= tol and abs(g - k) <= (abs(g) * 1.490116119385e-8 + tol):
             g = k
@@ -1512,7 +1517,7 @@ class NurbsCurve:
         """Get curve domain [start_param, end_param]"""
         if not self.is_valid():
             return (0.0, 0.0)
-        return (self.m_knot[self.m_order - 2], self.m_knot[self.m_cv_count - 1])
+        return (self.m_nurbsknot[self.m_order - 2], self.m_nurbsknot[self.m_cv_count - 1])
 
     def domain_start(self) -> float:
         """Get start of domain"""
@@ -1541,33 +1546,33 @@ class NurbsCurve:
             return False
 
         clamped_start = (self.m_order >= 2 and
-            abs(self.m_knot[0] - self.m_knot[self.m_order - 2]) < Tolerance.ZERO_TOLERANCE)
-        clamped_end = (self.m_cv_count < len(self.m_knot) and
-            abs(self.m_knot[-1] - self.m_knot[self.m_cv_count - 1]) < Tolerance.ZERO_TOLERANCE)
+            abs(self.m_nurbsknot[0] - self.m_nurbsknot[self.m_order - 2]) < Tolerance.ZERO_TOLERANCE)
+        clamped_end = (self.m_cv_count < len(self.m_nurbsknot) and
+            abs(self.m_nurbsknot[-1] - self.m_nurbsknot[self.m_cv_count - 1]) < Tolerance.ZERO_TOLERANCE)
 
         scale = (t1 - t0) / (old_t1 - old_t0)
-        for i in range(len(self.m_knot)):
-            self.m_knot[i] = t0 + (self.m_knot[i] - old_t0) * scale
+        for i in range(len(self.m_nurbsknot)):
+            self.m_nurbsknot[i] = t0 + (self.m_nurbsknot[i] - old_t0) * scale
 
         if clamped_start:
             for i in range(self.m_order - 1):
-                self.m_knot[i] = t0
+                self.m_nurbsknot[i] = t0
         if clamped_end:
-            for i in range(self.m_cv_count - 1, len(self.m_knot)):
-                self.m_knot[i] = t1
+            for i in range(self.m_cv_count - 1, len(self.m_nurbsknot)):
+                self.m_nurbsknot[i] = t1
 
         self._invalidate_rmf_cache()
         return True
 
     def get_span_vector(self) -> List[float]:
-        """Get span (distinct knot intervals) values"""
+        """Get span (distinct nurbsknot intervals) values"""
         if not self.is_valid():
             return []
         
         spans = []
         for i in range(self.m_order - 2, self.m_cv_count):
-            if i == self.m_order - 2 or abs(self.m_knot[i] - self.m_knot[i-1]) > Tolerance.ZERO_TOLERANCE:
-                spans.append(self.m_knot[i])
+            if i == self.m_order - 2 or abs(self.m_nurbsknot[i] - self.m_nurbsknot[i-1]) > Tolerance.ZERO_TOLERANCE:
+                spans.append(self.m_nurbsknot[i])
         
         return spans
 
@@ -1584,10 +1589,10 @@ class NurbsCurve:
         if t0 >= t1:
             return False, 0.0
         for i in range(self.m_order - 1, self.m_cv_count - 1):
-            t = float(self.m_knot[i])
+            t = float(self.m_nurbsknot[i])
             if t <= t0 or t >= t1:
                 continue
-            mult = self.knot_multiplicity(i)
+            mult = self.nurbsknot_multiplicity(i)
             found = False
             if continuity_type == 0 and mult >= self.m_order:
                 found = True
@@ -1659,8 +1664,8 @@ class NurbsCurve:
         mids_list = []
         halfs_list = []
         for span in range(n_spans):
-            span_a = self.m_knot[self.m_order - 2 + span]
-            span_b = self.m_knot[self.m_order - 1 + span]
+            span_a = self.m_nurbsknot[self.m_order - 2 + span]
+            span_b = self.m_nurbsknot[self.m_order - 1 + span]
             if span_b <= span_a:
                 continue
             span_width = (span_b - span_a) / SUBDIVISIONS
@@ -1792,6 +1797,17 @@ class NurbsCurve:
         dom_len = t1 - t0
         h = dom_len * 1e-8
 
+        if self.m_order == 2 and not self.m_is_rat and self.m_cv_count >= 2:
+            if include_endpoints:
+                ts = np.linspace(t0, t1, count)
+            else:
+                step = dom_len / (count + 1)
+                ts = t0 + step * np.arange(1, count + 1)
+            pts_arr = self._batch_point_at(ts)
+            points = [Point(pts_arr[i, 0], pts_arr[i, 1], pts_arr[i, 2]) for i in range(len(ts))]
+            params = ts.tolist()
+            return points, params
+
         GL_NODES = np.array([-0.9061798459386640, -0.5384693101056831, 0.0, 0.5384693101056831, 0.9061798459386640])
         GL_WEIGHTS = np.array([0.2369268850561891, 0.4786286704993665, 0.5688888888888889, 0.4786286704993665, 0.2369268850561891])
 
@@ -1842,7 +1858,6 @@ class NurbsCurve:
         n_segs = (count - 1) if include_endpoints else (count + 1)
         seg_len = total_len / n_segs
 
-        # Helper: compute derivative params with correct boundary logic
         def _deriv_params(params_arr):
             n_ = len(params_arr)
             tp_ = np.empty(n_)
@@ -1867,9 +1882,8 @@ class NurbsCurve:
         def speed_at(t):
             arr = np.array([t])
             tp_, tm_, dt_ = _deriv_params(arr)
-            pp_ = self._batch_point_at(tp_)
-            pm_ = self._batch_point_at(tm_)
-            d = (pp_[0] - pm_[0]) / dt_[0]
+            both = self._batch_point_at(np.concatenate([tp_, tm_]))
+            d = (both[0] - both[1]) / dt_[0]
             return math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
 
         def arc_length_gauss(ta, tb):
@@ -1877,9 +1891,9 @@ class NurbsCurve:
             half = (tb - ta) * 0.5
             gl_t = mid + half * GL_NODES
             tp_, tm_, dt_ = _deriv_params(gl_t)
-            pp_ = self._batch_point_at(tp_)
-            pm_ = self._batch_point_at(tm_)
-            d = (pp_ - pm_) / dt_[:, None]
+            k = len(tp_)
+            both = self._batch_point_at(np.concatenate([tp_, tm_]))
+            d = (both[:k] - both[k:]) / dt_[:, None]
             spd = np.sqrt(np.sum(d * d, axis=1))
             return half * float(np.dot(GL_WEIGHTS, spd))
 
@@ -1927,20 +1941,64 @@ class NurbsCurve:
 
             return t
 
-        t_results = []
-        for i in range(count):
-            if include_endpoints:
-                s_target = seg_len * i
-            else:
-                s_target = seg_len * (i + 1)
-            t_results.append(find_t_at_s(s_target))
+        if include_endpoints:
+            s_targets = seg_len * np.arange(count, dtype=np.float64)
+        else:
+            s_targets = seg_len * np.arange(1, count + 1, dtype=np.float64)
 
-        if t_results:
-            t_arr = np.array(t_results)
-            pts = self._batch_point_at(t_arr)
-            for i in range(len(t_results)):
-                points.append(Point(pts[i, 0], pts[i, 1], pts[i, 2]))
-                params.append(t_results[i])
+        clamped = np.clip(s_targets, 0.0, total_len)
+        idxs = np.clip(np.searchsorted(s_arr, clamped, side='right') - 1, 0, n_samples - 1)
+        s_lo_arr = s_arr[idxs]
+        s_hi_arr = s_arr[idxs + 1]
+        denom = np.where(s_hi_arr > s_lo_arr, s_hi_arr - s_lo_arr, 1.0)
+        frac = np.where(s_hi_arr > s_lo_arr, (clamped - s_lo_arr) / denom, 0.0)
+        t_cur = t_vals[idxs] + frac * (t_vals[idxs + 1] - t_vals[idxs])
+        t_lo_b = t_vals[idxs].copy()
+        t_hi_b = t_vals[idxs + 1].copy()
+
+        cn = len(t_cur)
+        for _ in range(20):
+            ta = t_vals[idxs]
+            tb = t_cur
+            mid_b = (ta + tb) * 0.5
+            half_b = (tb - ta) * 0.5
+            gl_t = mid_b[:, None] + half_b[:, None] * GL_NODES[None, :]
+            gl_flat = gl_t.ravel()
+            nc = len(gl_flat)
+            all_t = np.concatenate([gl_flat, t_cur])
+            near_s_all = all_t <= t0 + h
+            near_e_all = all_t >= t1 - h
+            tp_all = np.where(near_s_all, t0 + h, np.where(near_e_all, t1, all_t + h))
+            tm_all = np.where(near_s_all, t0, np.where(near_e_all, t1 - h, all_t - h))
+            dt_all = np.where(near_s_all | near_e_all, h, 2.0 * h)
+            k_all = len(all_t)
+            both = self._batch_point_at(np.concatenate([tp_all, tm_all]))
+            d_all = (both[:k_all] - both[k_all:]) / dt_all[:, None]
+            spd_all = np.sqrt(np.sum(d_all * d_all, axis=1))
+            spd_gl = spd_all[:nc].reshape(-1, 5)
+            arc_vals = half_b * np.sum(GL_WEIGHTS[None, :] * spd_gl, axis=1)
+            spd_cur = spd_all[nc:]
+
+            s_cur = s_lo_arr + arc_vals
+            error = s_cur - clamped
+            if np.max(np.abs(error)) < 1e-12:
+                break
+
+            safe_spd = np.where(spd_cur > 1e-14, spd_cur, 1.0)
+            t_new = t_cur - error / safe_spd
+            bad = (t_new <= t_lo_b) | (t_new >= t_hi_b) | (spd_cur < 1e-14)
+            bisect = np.where(error > 0, (t_lo_b + t_cur) * 0.5, (t_cur + t_hi_b) * 0.5)
+            t_next = np.where(bad, bisect, t_new)
+            pos_err = error > 0
+            t_hi_b = np.where(pos_err & bad, t_cur, t_hi_b)
+            t_lo_b = np.where((~pos_err) & bad, t_cur, t_lo_b)
+            t_cur = t_next
+
+        t_cur = np.where(s_targets <= 0.0, t0, np.where(s_targets >= total_len, t1, t_cur))
+
+        pts = self._batch_point_at(t_cur)
+        points = [Point(pts[i, 0], pts[i, 1], pts[i, 2]) for i in range(len(t_cur))]
+        params = t_cur.tolist()
 
         return points, params
 
@@ -2108,7 +2166,7 @@ class NurbsCurve:
         if not self.is_valid():
             return Point(0, 0, 0)
         
-        # Find span (returns index relative to shifted knot array)
+        # Find span (returns index relative to shifted nurbsknot array)
         span = self._find_span(t)
         if span < 0:
             return Point(0, 0, 0)
@@ -2543,9 +2601,7 @@ class NurbsCurve:
         return [self.perpendicular_plane_at(t, False) for t in params]
 
     def _batch_evaluate_deriv1(self, params: np.ndarray) -> np.ndarray:
-        n = len(params)
-        result = np.empty((n, 3))
-        kn = self.m_knot
+        kn = self.m_nurbsknot
         cv = self.m_cv
         order = self.m_order
         dim = self.m_dim
@@ -2553,7 +2609,103 @@ class NurbsCurve:
         cv_count = self.m_cv_count
         is_rat = self.m_is_rat
         p = order - 1
-        find_span_fn = knot.find_span
+        pp1 = p + 1
+
+        params = np.asarray(params, dtype=np.float64)
+        n = len(params)
+        if n == 0:
+            return np.empty((0, 3))
+        kn_arr = np.asarray(kn, dtype=np.float64)
+        cv_arr = np.asarray(cv, dtype=np.float64)
+
+        if cv_count >= order and len(kn_arr) >= cv_count:
+            interior = kn_arr[order - 2:cv_count]
+            spans = np.clip(np.searchsorted(interior, params, side='right') - 1, 0, cv_count - order)
+        else:
+            spans = np.zeros(n, dtype=np.int64)
+        offset = order - 2 + spans
+
+        ndu = np.zeros((n, pp1, pp1))
+        left = np.zeros((n, pp1))
+        right = np.zeros((n, pp1))
+        ndu[:, 0, 0] = 1.0
+        for j in range(1, pp1):
+            left[:, j] = params - kn_arr[offset + 1 - j]
+            right[:, j] = kn_arr[offset + j] - params
+            saved = np.zeros(n)
+            for r in range(j):
+                denom = right[:, r + 1] + left[:, j - r]
+                nz = np.abs(denom) > 1e-14
+                safe = np.where(nz, denom, 1.0)
+                ndu[:, j, r] = denom
+                temp = np.where(nz, ndu[:, r, j - 1] / safe, 0.0)
+                ndu[:, r, j] = saved + right[:, r + 1] * temp
+                saved = left[:, j - r] * temp
+            ndu[:, j, j] = saved
+
+        pk = p - 1
+        N1 = np.zeros((n, pp1))
+        for r in range(pp1):
+            d = np.zeros(n)
+            rk = r - 1
+            if r >= 1:
+                denom_a0 = ndu[:, pk + 1, rk]
+                nz0 = np.abs(denom_a0) > 1e-14
+                a0 = np.where(nz0, 1.0 / np.where(nz0, denom_a0, 1.0), 0.0)
+                d = a0 * ndu[:, rk, pk]
+            if r <= pk:
+                denom_ak = ndu[:, pk + 1, r]
+                nzk = np.abs(denom_ak) > 1e-14
+                ak = np.where(nzk, -1.0 / np.where(nzk, denom_ak, 1.0), 0.0)
+                d = d + ak * ndu[:, r, pk]
+            N1[:, r] = d * p
+
+        ci = np.clip(spans[:, None] + np.arange(order)[None, :], 0, cv_count - 1)
+        base = ci * stride
+        result = np.zeros((n, 3))
+        if not is_rat:
+            result[:, 0] = np.sum(N1 * cv_arr[base], axis=1)
+            if dim > 1:
+                result[:, 1] = np.sum(N1 * cv_arr[base + 1], axis=1)
+            if dim > 2:
+                result[:, 2] = np.sum(N1 * cv_arr[base + 2], axis=1)
+        else:
+            N0 = ndu[:, :, p]
+            w_cv = cv_arr[base + dim]
+            n0w = N0 * w_cv
+            n1w = N1 * w_cv
+            Aw0x = np.sum(n0w * cv_arr[base], axis=1)
+            Aw0y = np.sum(n0w * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
+            Aw0z = np.sum(n0w * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
+            Aw0w = np.sum(n0w, axis=1)
+            Aw1x = np.sum(n1w * cv_arr[base], axis=1)
+            Aw1y = np.sum(n1w * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
+            Aw1z = np.sum(n1w * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
+            Aw1w = np.sum(n1w, axis=1)
+            mask = np.abs(Aw0w) > 1e-10
+            inv_w = np.where(mask, 1.0 / np.where(mask, Aw0w, 1.0), 0.0)
+            C0x = Aw0x * inv_w
+            C0y = Aw0y * inv_w
+            C0z = Aw0z * inv_w
+            result[:, 0] = (Aw1x - Aw1w * C0x) * inv_w
+            if dim > 1:
+                result[:, 1] = (Aw1y - Aw1w * C0y) * inv_w
+            if dim > 2:
+                result[:, 2] = (Aw1z - Aw1w * C0z) * inv_w
+        return result
+
+    def _batch_evaluate_deriv1_scalar(self, params: np.ndarray) -> np.ndarray:
+        n = len(params)
+        result = np.empty((n, 3))
+        kn = self.m_nurbsknot
+        cv = self.m_cv
+        order = self.m_order
+        dim = self.m_dim
+        stride = self.m_cv_stride
+        cv_count = self.m_cv_count
+        is_rat = self.m_is_rat
+        p = order - 1
+        find_span_fn = nurbsknot.find_span
 
         for idx in range(n):
             t = params[idx]
@@ -2634,59 +2786,80 @@ class NurbsCurve:
         return result
 
     def _batch_point_at(self, params: np.ndarray) -> np.ndarray:
-        n = len(params)
-        result = np.empty((n, 3))
-        kn = self.m_knot
+        kn = self.m_nurbsknot
         cv = self.m_cv
         order = self.m_order
         dim = self.m_dim
         stride = self.m_cv_stride
         cv_count = self.m_cv_count
         is_rat = self.m_is_rat
-        find_span_fn = knot.find_span
 
-        for idx in range(n):
-            t = params[idx]
-            span = find_span_fn(order, cv_count, kn, t)
-            offset = order - 2 + span
-            N = [0.0] * order
-            left = [0.0] * order
-            right = [0.0] * order
-            N[0] = 1.0
-            for j in range(1, order):
-                left[j] = t - kn[offset + 1 - j]
-                right[j] = kn[offset + j] - t
-                saved = 0.0
-                for r in range(j):
-                    temp = N[r] / (right[r + 1] + left[j - r])
-                    N[r] = saved + right[r + 1] * temp
-                    saved = left[j - r] * temp
-                N[j] = saved
-            x = y = z = w = 0.0
-            for i in range(order):
-                ci = span + i
-                if ci >= cv_count:
-                    break
-                base = ci * stride
-                ni = N[i]
-                if is_rat:
-                    wi = cv[base + dim]
-                    nw = ni * wi
-                    x += nw * cv[base]
-                    y += nw * cv[base + 1] if dim > 1 else 0
-                    z += nw * cv[base + 2] if dim > 2 else 0
-                    w += nw
-                else:
-                    x += ni * cv[base]
-                    y += ni * cv[base + 1] if dim > 1 else 0
-                    z += ni * cv[base + 2] if dim > 2 else 0
-            if is_rat and abs(w) > 1e-10:
-                x /= w
-                y /= w
-                z /= w
-            result[idx, 0] = x
-            result[idx, 1] = y
-            result[idx, 2] = z
+        if order == 2 and not is_rat and cv_count >= 2 and len(kn) >= cv_count:
+            if not isinstance(params, np.ndarray) or params.dtype != np.float64:
+                params = np.asarray(params, dtype=np.float64)
+            xp = kn[:cv_count]
+            if xp[-1] >= xp[0] and np.all(np.diff(xp) >= 0):
+                n = len(params)
+                result = np.zeros((n, 3))
+                for d in range(min(dim, 3)):
+                    fp = cv[d:cv_count * stride:stride]
+                    result[:, d] = np.interp(params, xp, fp)
+                return result
+
+        if not isinstance(params, np.ndarray) or params.dtype != np.float64:
+            params = np.asarray(params, dtype=np.float64)
+        n = len(params)
+        if n == 0:
+            return np.empty((0, 3))
+        kn_arr = kn
+        cv_arr = cv
+
+        if cv_count >= order and len(kn_arr) >= order - 2 + (cv_count - order + 2):
+            interior = kn_arr[order - 2: cv_count]
+            spans = np.clip(np.searchsorted(interior, params, side='right') - 1, 0, cv_count - order)
+        else:
+            spans = np.zeros(n, dtype=np.int64)
+
+        offset = order - 2 + spans
+        N = np.zeros((n, order))
+        N[:, 0] = 1.0
+        left = np.empty((n, order))
+        right = np.empty((n, order))
+        for j in range(1, order):
+            left[:, j] = params - kn_arr[offset + 1 - j]
+            right[:, j] = kn_arr[offset + j] - params
+            saved = np.zeros(n)
+            for r in range(j):
+                denom = right[:, r + 1] + left[:, j - r]
+                temp = np.zeros(n)
+                np.divide(N[:, r], denom, out=temp, where=denom != 0.0)
+                N[:, r] = saved + right[:, r + 1] * temp
+                saved = left[:, j - r] * temp
+            N[:, j] = saved
+
+        ci = np.clip(spans[:, None] + np.arange(order)[None, :], 0, cv_count - 1)
+        base = ci * stride
+        result = np.zeros((n, 3))
+        if is_rat:
+            w_cv = cv_arr[base + dim]
+            nw = N * w_cv
+            x = np.einsum('nj,nj->n', nw, cv_arr[base])
+            y = np.einsum('nj,nj->n', nw, cv_arr[base + 1]) if dim > 1 else np.zeros(n)
+            z = np.einsum('nj,nj->n', nw, cv_arr[base + 2]) if dim > 2 else np.zeros(n)
+            w = nw.sum(axis=1)
+            mask = w != 0.0
+            safe_w = np.where(mask, w, 1.0)
+            result[:, 0] = np.where(mask, x / safe_w, x)
+            if dim > 1:
+                result[:, 1] = np.where(mask, y / safe_w, y)
+            if dim > 2:
+                result[:, 2] = np.where(mask, z / safe_w, z)
+        else:
+            result[:, 0] = np.einsum('nj,nj->n', N, cv_arr[base])
+            if dim > 1:
+                result[:, 1] = np.einsum('nj,nj->n', N, cv_arr[base + 1])
+            if dim > 2:
+                result[:, 2] = np.einsum('nj,nj->n', N, cv_arr[base + 2])
         return result
 
     def point_at_start(self) -> Point:
@@ -2750,9 +2923,9 @@ class NurbsCurve:
             return False
 
         t0, t1 = self.domain()
-        for i in range(len(self.m_knot)):
-            self.m_knot[i] = t0 + t1 - self.m_knot[i]
-        self.m_knot = np.flip(self.m_knot).copy()
+        for i in range(len(self.m_nurbsknot)):
+            self.m_nurbsknot[i] = t0 + t1 - self.m_nurbsknot[i]
+        self.m_nurbsknot = np.flip(self.m_nurbsknot).copy()
 
         cvs = self.cv_size()
         for i in range(self.m_cv_count // 2):
@@ -2812,35 +2985,35 @@ class NurbsCurve:
         trim_end = t1 < d1 - Tolerance.ZERO_TOLERANCE
 
         if trim_start:
-            curr_mult = sum(1 for k in self.m_knot if abs(k - t0) < Tolerance.ZERO_TOLERANCE)
+            curr_mult = sum(1 for k in self.m_nurbsknot if abs(k - t0) < Tolerance.ZERO_TOLERANCE)
             needed = p - curr_mult
             if needed > 0:
-                if not self.insert_knot(t0, needed):
+                if not self.insert_nurbsknot(t0, needed):
                     return False
         if trim_end:
-            curr_mult = sum(1 for k in self.m_knot if abs(k - t1) < Tolerance.ZERO_TOLERANCE)
+            curr_mult = sum(1 for k in self.m_nurbsknot if abs(k - t1) < Tolerance.ZERO_TOLERANCE)
             needed = p - curr_mult
             if needed > 0:
-                if not self.insert_knot(t1, needed):
+                if not self.insert_nurbsknot(t1, needed):
                     return False
 
-        full_knot_count = self.m_cv_count + self.m_order
-        U = [0.0] * full_knot_count
-        U[0] = self.m_knot[0]
-        for i in range(len(self.m_knot)):
-            U[i + 1] = self.m_knot[i]
-        U[full_knot_count - 1] = self.m_knot[-1]
+        full_nurbsknot_count = self.m_cv_count + self.m_order
+        U = [0.0] * full_nurbsknot_count
+        U[0] = self.m_nurbsknot[0]
+        for i in range(len(self.m_nurbsknot)):
+            U[i + 1] = self.m_nurbsknot[i]
+        U[full_nurbsknot_count - 1] = self.m_nurbsknot[-1]
 
         tol = Tolerance.ZERO_TOLERANCE
 
         start_span = -1
-        for i in range(full_knot_count - 1, -1, -1):
+        for i in range(full_nurbsknot_count - 1, -1, -1):
             if abs(U[i] - t0) < tol:
                 start_span = i
                 break
 
         end_span = -1
-        for i in range(full_knot_count):
+        for i in range(full_nurbsknot_count):
             if abs(U[i] - t1) < tol:
                 end_span = i
                 break
@@ -2861,23 +3034,23 @@ class NurbsCurve:
             else:
                 return False
 
-        new_knot_count = new_cv_count + self.m_order - 2
-        new_knot = [0.0] * new_knot_count
+        new_nurbsknot_count = new_cv_count + self.m_order - 2
+        new_nurbsknot = [0.0] * new_nurbsknot_count
 
         for i in range(max(p, 1) - 1):
-            new_knot[i] = t0
+            new_nurbsknot[i] = t0
 
-        mid_count = new_knot_count - 2 * (p - 1)
+        mid_count = new_nurbsknot_count - 2 * (p - 1)
         if mid_count > 0:
             for i in range(mid_count):
                 src_idx = start_span + i
-                if src_idx < full_knot_count:
-                    new_knot[p - 1 + i] = U[src_idx]
+                if src_idx < full_nurbsknot_count:
+                    new_nurbsknot[p - 1 + i] = U[src_idx]
                 else:
-                    new_knot[p - 1 + i] = t1
+                    new_nurbsknot[p - 1 + i] = t1
 
         for i in range(max(p, 1) - 1):
-            new_knot[new_knot_count - p + 1 + i] = t1
+            new_nurbsknot[new_nurbsknot_count - p + 1 + i] = t1
 
         cvs = self.m_cv_stride
         new_cv = [0.0] * (new_cv_count * cvs)
@@ -2888,7 +3061,7 @@ class NurbsCurve:
 
         self.m_cv_count = new_cv_count
         self.m_cv = new_cv
-        self.m_knot = new_knot
+        self.m_nurbsknot = new_nurbsknot
 
         return True
 
@@ -2937,7 +3110,7 @@ class NurbsCurve:
             # Extrapolate using de Boor algorithm
             self._evaluate_nurbs_de_boor_inplace(cv_dim, self.m_order, 0, 1, t0)
             for i in range(self.m_order - 1):
-                self.m_knot[i] = t0
+                self.m_nurbsknot[i] = t0
             changed = True
 
         # Extend end (t1 > current domain end)
@@ -2946,9 +3119,9 @@ class NurbsCurve:
             # Extrapolate using de Boor algorithm
             i0 = self.m_cv_count - self.m_order
             self._evaluate_nurbs_de_boor_inplace(cv_dim, self.m_order, i0, -1, t1)
-            kc = self.knot_count()
+            kc = self.nurbsknot_count()
             for i in range(self.m_cv_count - 1, kc):
-                self.m_knot[i] = t1
+                self.m_nurbsknot[i] = t1
             changed = True
 
         return changed
@@ -3010,7 +3183,7 @@ class NurbsCurve:
         return True
 
     def clamp_end(self, end: int) -> bool:
-        """Clamp ends (add multiplicity to end knots).
+        """Clamp ends (add multiplicity to end nurbsknots).
 
         Parameters
         ----------
@@ -3029,16 +3202,16 @@ class NurbsCurve:
 
         # Clamp start
         if end == 0 or end == 2:
-            t = self.m_knot[self.m_order - 2]
+            t = self.m_nurbsknot[self.m_order - 2]
             for i in range(self.m_order - 2):
-                self.m_knot[i] = t
+                self.m_nurbsknot[i] = t
 
         # Clamp end
         if end == 1 or end == 2:
-            t = self.m_knot[self.m_cv_count - 1]
-            kc = self.knot_count()
+            t = self.m_nurbsknot[self.m_cv_count - 1]
+            kc = self.nurbsknot_count()
             for i in range(self.m_cv_count, kc):
-                self.m_knot[i] = t
+                self.m_nurbsknot[i] = t
 
         return True
 
@@ -3062,7 +3235,7 @@ class NurbsCurve:
         import copy
         M_order = self.m_order
         M_cv_count = self.m_cv_count
-        M_knot = self.m_knot.copy()
+        M_nurbsknot = self.m_nurbsknot.copy()
         M_cv = self.m_cv.copy()
         M_cv_stride = self.m_cv_stride
         cvdim = self.cv_size()
@@ -3071,52 +3244,52 @@ class NurbsCurve:
         sc = 0
         deg = M_order - 1
         for i in range(deg, M_cv_count - 1):
-            if M_knot[i] < M_knot[i + 1] - Tolerance.ZERO_TOLERANCE:
+            if M_nurbsknot[i] < M_nurbsknot[i + 1] - Tolerance.ZERO_TOLERANCE:
                 sc += 1
         if sc == 0:
             sc = 1
 
         new_order = M_order + 1
-        mkc = len(M_knot)
+        mkc = len(M_nurbsknot)
 
-        # Build new knot vector: each distinct knot gets mult+1 copies
-        new_knots = []
+        # Build new nurbsknot vector: each distinct nurbsknot gets mult+1 copies
+        new_nurbsknots = []
         ki = 0
         while ki < mkc:
-            kn = M_knot[ki]
+            kn = M_nurbsknot[ki]
             mult = 1
-            while ki + mult < mkc and abs(M_knot[ki + mult] - kn) < Tolerance.ZERO_TOLERANCE:
+            while ki + mult < mkc and abs(M_nurbsknot[ki + mult] - kn) < Tolerance.ZERO_TOLERANCE:
                 mult += 1
             for _ in range(mult + 1):
-                new_knots.append(kn)
+                new_nurbsknots.append(kn)
             ki += mult
-        new_knots = np.array(new_knots, dtype=float)
-        new_cv_count = len(new_knots) - new_order + 2
+        new_nurbsknots = np.array(new_nurbsknots, dtype=float)
+        new_cv_count = len(new_nurbsknots) - new_order + 2
 
         self.m_order = new_order
         self.m_cv_count = new_cv_count
-        self.m_knot = new_knots
+        self.m_nurbsknot = new_nurbsknots
         self.m_cv = np.zeros(new_cv_count * self.m_cv_stride)
 
         # Compute new CVs per span using blossom
         siN = 0
         siM = 0
         for _ in range(sc):
-            knotN = self.m_knot[siN:]
-            knotM = M_knot[siM:]
+            nurbsknotN = self.m_nurbsknot[siN:]
+            nurbsknotM = M_nurbsknot[siM:]
             cvM = M_cv[siM * M_cv_stride:]
-            # Get span multiplicity at the span boundary in new knot vector
-            span_mult = self._forward_knot_mult(siN + self.degree() - 1)
+            # Get span multiplicity at the span boundary in new nurbsknot vector
+            span_mult = self._forward_nurbsknot_mult(siN + self.degree() - 1)
             skip = self.m_order - span_mult
             for j in range(skip, self.m_order):
                 cv_idx = siN + j
-                P = _get_raised_degree_cv(M_order, cvdim, M_cv_stride, cvM, knotM, knotN, j)
+                P = _get_raised_degree_cv(M_order, cvdim, M_cv_stride, cvM, nurbsknotM, nurbsknotN, j)
                 if P is None:
                     return False
                 idx = cv_idx * self.m_cv_stride
                 self.m_cv[idx:idx + cvdim] = P
-            siN = _next_span_index(self.m_order, self.m_cv_count, self.m_knot, siN)
-            siM = _next_span_index(M_order, M_cv_count, M_knot, siM)
+            siN = _next_span_index(self.m_order, self.m_cv_count, self.m_nurbsknot, siN)
+            siM = _next_span_index(M_order, M_cv_count, M_nurbsknot, siM)
 
         # Copy first and last CVs from original
         self.m_cv[0:cvdim] = M_cv[0:cvdim]
@@ -3125,17 +3298,17 @@ class NurbsCurve:
         self.m_cv[last_new:last_new + cvdim] = M_cv[last_old:last_old + cvdim]
         return True
 
-    def _forward_knot_mult(self, knot_index: int) -> int:
-        if knot_index < 0 or knot_index >= len(self.m_knot):
+    def _forward_nurbsknot_mult(self, nurbsknot_index: int) -> int:
+        if nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot):
             return 0
-        val = self.m_knot[knot_index]
+        val = self.m_nurbsknot[nurbsknot_index]
         mult = 1
-        i = knot_index + 1
-        while i < len(self.m_knot) and abs(self.m_knot[i] - val) < Tolerance.ZERO_TOLERANCE:
+        i = nurbsknot_index + 1
+        while i < len(self.m_nurbsknot) and abs(self.m_nurbsknot[i] - val) < Tolerance.ZERO_TOLERANCE:
             mult += 1
             i += 1
-        i = knot_index - 1
-        while i >= 0 and abs(self.m_knot[i] - val) < Tolerance.ZERO_TOLERANCE:
+        i = nurbsknot_index - 1
+        while i >= 0 and abs(self.m_nurbsknot[i] - val) < Tolerance.ZERO_TOLERANCE:
             mult += 1
             i -= 1
         return mult
@@ -3164,57 +3337,57 @@ class NurbsCurve:
 
         if self.is_periodic():
             sc = self.span_count()
-            kc = self.knot_count()
+            kc = self.nurbsknot_count()
             if sc >= kc - 2 * p + 1:
-                knot_index = -1
+                nurbsknot_index = -1
                 for i in range(kc):
-                    if self.m_knot[i] > t:
-                        knot_index = i
+                    if self.m_nurbsknot[i] > t:
+                        nurbsknot_index = i
                         break
-                if knot_index >= p and knot_index <= kc - p:
-                    k0 = self.m_knot[knot_index - 1]
-                    k1 = self.m_knot[knot_index]
+                if nurbsknot_index >= p and nurbsknot_index <= kc - p:
+                    k0 = self.m_nurbsknot[nurbsknot_index - 1]
+                    k1 = self.m_nurbsknot[nurbsknot_index]
                     d0 = t - k0
                     d1_val = k1 - t
                     need_insert = True
                     if d0 <= d1_val:
                         if d0 < Tolerance.ZERO_TOLERANCE:
-                            knot_index -= 1
+                            nurbsknot_index -= 1
                             need_insert = False
                     else:
                         if d1_val < Tolerance.ZERO_TOLERANCE:
                             need_insert = False
                     if need_insert:
-                        if not self.insert_knot(t, 1):
+                        if not self.insert_nurbsknot(t, 1):
                             return False
-                        kc = self.knot_count()
+                        kc = self.nurbsknot_count()
                         sc = self.span_count()
-                        knot_index = -1
+                        nurbsknot_index = -1
                         for i in range(kc):
-                            if self.m_knot[i] > t + Tolerance.ZERO_TOLERANCE:
-                                knot_index = i
+                            if self.m_nurbsknot[i] > t + Tolerance.ZERO_TOLERANCE:
+                                nurbsknot_index = i
                                 break
-                        if knot_index < 0:
+                        if nurbsknot_index < 0:
                             return False
-                    if knot_index >= p and knot_index < kc - p:
+                    if nurbsknot_index >= p and nurbsknot_index < kc - p:
                         cvc = self.m_cv_count
                         distinct_cvc = cvc - p
                         cvdim = self.cv_size()
-                        old_knots = list(self.m_knot)
+                        old_nurbsknots = list(self.m_nurbsknot)
                         old_cv = list(self.m_cv)
 
                         curr = p - 1
-                        for i in range(knot_index, sc + p - 1):
-                            self.m_knot[curr] = old_knots[i]
+                        for i in range(nurbsknot_index, sc + p - 1):
+                            self.m_nurbsknot[curr] = old_nurbsknots[i]
                             curr += 1
-                        for i in range(knot_index - p + 2):
-                            self.m_knot[curr] = old_knots[p - 1 + i] + dom_len
+                        for i in range(nurbsknot_index - p + 2):
+                            self.m_nurbsknot[curr] = old_nurbsknots[p - 1 + i] + dom_len
                             curr += 1
                         for i in range(p - 1):
-                            self.m_knot[curr + i] = self.m_knot[curr + i - 1] + self.m_knot[p + i] - self.m_knot[p + i - 1]
-                            self.m_knot[p - 2 - i] = self.m_knot[p - i - 1] - self.m_knot[curr - 1 - i] + self.m_knot[curr - 2 - i]
+                            self.m_nurbsknot[curr + i] = self.m_nurbsknot[curr + i - 1] + self.m_nurbsknot[p + i] - self.m_nurbsknot[p + i - 1]
+                            self.m_nurbsknot[p - 2 - i] = self.m_nurbsknot[p - i - 1] - self.m_nurbsknot[curr - 1 - i] + self.m_nurbsknot[curr - 2 - i]
 
-                        cv_id = knot_index - p + 1
+                        cv_id = nurbsknot_index - p + 1
                         for i in range(cvc):
                             src = cv_id % distinct_cvc
                             if src < 0:
@@ -3237,7 +3410,7 @@ class NurbsCurve:
         new_kc = order + new_cv_count - 2
 
         new_cv = [0.0] * (new_cv_count * self.m_cv_stride)
-        new_knots = [0.0] * new_kc
+        new_nurbsknots = [0.0] * new_kc
 
         for i in range(right.m_cv_count):
             for j in range(cvdim):
@@ -3248,17 +3421,17 @@ class NurbsCurve:
             for j in range(cvdim):
                 new_cv[dst * self.m_cv_stride + j] = left.m_cv[i * left.m_cv_stride + j]
 
-        rkc = right.knot_count()
+        rkc = right.nurbsknot_count()
         for i in range(rkc):
-            new_knots[i] = right.m_knot[i]
+            new_nurbsknots[i] = right.m_nurbsknot[i]
 
-        lkc = left.knot_count()
+        lkc = left.nurbsknot_count()
         for i in range(order - 1, lkc):
-            new_knots[rkc + i - (order - 1)] = left.m_knot[i] + shift
+            new_nurbsknots[rkc + i - (order - 1)] = left.m_nurbsknot[i] + shift
 
         self.m_cv_count = new_cv_count
         self.m_cv = new_cv
-        self.m_knot = new_knots
+        self.m_nurbsknot = new_nurbsknots
 
         self.set_domain(t, t + dom_len)
         self._invalidate_rmf_cache()
@@ -3362,7 +3535,7 @@ class NurbsCurve:
             "dimension": int(self.m_dim),
             "guid": self.guid,
             "is_rational": self.m_is_rat != 0,
-            "knots": self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot),
+            "nurbsknots": self.m_nurbsknot.tolist() if hasattr(self.m_nurbsknot, 'tolist') else list(self.m_nurbsknot),
             "linecolors": [v for c in self.linecolors for v in (c.r, c.g, c.b, c.a)],
             "name": self.name,
             "order": int(self.m_order),
@@ -3392,7 +3565,7 @@ class NurbsCurve:
         curve.m_order = data.get("order", 0)
         curve.m_cv_count = data.get("cv_count", 0)
         curve.m_cv_stride = data.get("cv_stride", curve.m_dim + (1 if curve.m_is_rat else 0))
-        curve.m_knot = np.array(data.get("knots", []), dtype=np.float64)
+        curve.m_nurbsknot = np.array(data.get("nurbsknots", []), dtype=np.float64)
         control_points = data.get("control_points", [])
         flat_cv = []
         for cp in control_points:
@@ -3400,25 +3573,25 @@ class NurbsCurve:
         curve.m_cv = np.array(flat_cv, dtype=np.float64)
         return curve
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, json_string):
+    def file_json_loads(cls, json_string):
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         """Read JSON from file."""
         import json
         with open(filepath, 'r') as f:
@@ -3436,7 +3609,7 @@ class NurbsCurve:
         proto.order = int(self.m_order)
         proto.cv_count = int(self.m_cv_count)
         proto.cv_stride = int(self.m_cv_stride)
-        proto.knots.extend(self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot))
+        proto.nurbsknots.extend(self.m_nurbsknot.tolist() if hasattr(self.m_nurbsknot, 'tolist') else list(self.m_nurbsknot))
         proto.cvs.extend(self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv))
         proto.width = float(self.width)
         from .proto import color_pb2
@@ -3460,7 +3633,7 @@ class NurbsCurve:
         proto.order = int(self.m_order)
         proto.cv_count = int(self.m_cv_count)
         proto.cv_stride = int(self.m_cv_stride)
-        proto.knots.extend(self.m_knot.tolist() if hasattr(self.m_knot, 'tolist') else list(self.m_knot))
+        proto.nurbsknots.extend(self.m_nurbsknot.tolist() if hasattr(self.m_nurbsknot, 'tolist') else list(self.m_nurbsknot))
         proto.cvs.extend(self.m_cv.tolist() if hasattr(self.m_cv, 'tolist') else list(self.m_cv))
         proto.width = float(self.width)
         for c in self.pointcolors:
@@ -3487,7 +3660,7 @@ class NurbsCurve:
         curve.m_order = proto.order
         curve.m_cv_count = proto.cv_count
         curve.m_cv_stride = proto.cv_stride
-        curve.m_knot = np.array(list(proto.knots), dtype=np.float64)
+        curve.m_nurbsknot = np.array(list(proto.nurbsknots), dtype=np.float64)
         curve.m_cv = np.array(list(proto.cvs), dtype=np.float64)
         curve.width = proto.width if proto.width != 0.0 else 1.0
         curve.pointcolors = [Color(c.r, c.g, c.b, c.a) for c in proto.pointcolors]
@@ -3544,20 +3717,20 @@ class NurbsCurve:
     ###########################################################################################
 
     def _find_span(self, t: float) -> int:
-        """Find knot span index for parameter t using binary search.
+        """Find nurbsknot span index for parameter t using binary search.
 
         Implementation matches OpenNURBS ON_NurbsSpanIndex.
 
         Returns
         -------
         int
-            Span index relative to shifted knot array (0-based from domain start)
+            Span index relative to shifted nurbsknot array (0-based from domain start)
         """
         if not self.is_valid():
             return -1
 
-        # Use knot module function
-        return knot.find_span(self.m_order, self.m_cv_count, self.m_knot, t)
+        # Use nurbsknot module function
+        return nurbsknot.find_span(self.m_order, self.m_cv_count, self.m_nurbsknot, t)
 
     def _basis_functions(self, span: int, t: float) -> np.ndarray:
         """Compute non-zero basis functions at parameter t.
@@ -3567,7 +3740,7 @@ class NurbsCurve:
         Parameters
         ----------
         span : int
-            Knot span index from _find_span() (relative to shifted array).
+            NurbsKnot span index from _find_span() (relative to shifted array).
         t : float
             Parameter value.
             
@@ -3580,14 +3753,14 @@ class NurbsCurve:
         left = np.zeros(self.m_order)
         right = np.zeros(self.m_order)
         
-        # Offset knot pointer like OpenNURBS does
+        # Offset nurbsknot pointer like OpenNURBS does
         offset = self.m_order - 2 + span
         
         N[0] = 1.0
         
         for j in range(1, self.m_order):
-            left[j] = t - self.m_knot[offset + 1 - j]
-            right[j] = self.m_knot[offset + j] - t
+            left[j] = t - self.m_nurbsknot[offset + 1 - j]
+            right[j] = self.m_nurbsknot[offset + j] - t
             saved = 0.0
             
             for r in range(j):
@@ -3608,7 +3781,7 @@ class NurbsCurve:
         Parameters
         ----------
         span : int
-            Knot span index from _find_span().
+            NurbsKnot span index from _find_span().
         t : float
             Parameter value.
         deriv_order : int
@@ -3627,16 +3800,16 @@ class NurbsCurve:
         right = np.zeros(p + 1)
         ndu = np.zeros((p + 1, p + 1))
 
-        # Offset knot pointer like OpenNURBS
+        # Offset nurbsknot pointer like OpenNURBS
         offset = self.m_order - 2 + span
 
         ndu[0, 0] = 1.0
         for j in range(1, p + 1):
-            left[j] = t - self.m_knot[offset + 1 - j]
-            right[j] = self.m_knot[offset + j] - t
+            left[j] = t - self.m_nurbsknot[offset + 1 - j]
+            right[j] = self.m_nurbsknot[offset + j] - t
             saved = 0.0
             for r in range(j):
-                # Store knot differences in ndu[j, r] for derivative computation
+                # Store nurbsknot differences in ndu[j, r] for derivative computation
                 ndu[j, r] = right[r + 1] + left[j - r]
                 temp = ndu[r, j - 1] / ndu[j, r] if abs(ndu[j, r]) > 1e-14 else 0.0
                 ndu[r, j] = saved + right[r + 1] * temp
@@ -3696,8 +3869,8 @@ class NurbsCurve:
             k0 = cv_start + i - 1 if direction > 0 else cv_start + order - i
             k1 = k0 + direction
 
-            a = self.m_knot[cv_start + (order - 1 if direction > 0 else 0)]
-            b = self.m_knot[cv_start + (i if direction > 0 else order - 1 - i)]
+            a = self.m_nurbsknot[cv_start + (order - 1 if direction > 0 else 0)]
+            b = self.m_nurbsknot[cv_start + (i if direction > 0 else order - 1 - i)]
 
             if abs(b - a) < 1e-14:
                 continue
@@ -3728,13 +3901,13 @@ class NurbsCurve:
         
         return True
 
-    def _clean_knots(self, tolerance: float = 0.0) -> bool:
-        """Clean up invalid knots (remove duplicates within tolerance).
+    def _clean_nurbsknots(self, tolerance: float = 0.0) -> bool:
+        """Clean up invalid nurbsknots (remove duplicates within tolerance).
         
         Parameters
         ----------
         tolerance : float, optional
-            Knot comparison tolerance. Defaults to 0.0.
+            NurbsKnot comparison tolerance. Defaults to 0.0.
             
         Returns
         -------
@@ -3747,14 +3920,14 @@ class NurbsCurve:
         if tolerance <= 0.0:
             tolerance = Tolerance.ZERO_TOLERANCE
         
-        # Remove knots that are too close together
-        cleaned_knots = [self.m_knot[0]]
-        for i in range(1, len(self.m_knot)):
-            if abs(self.m_knot[i] - cleaned_knots[-1]) > tolerance:
-                cleaned_knots.append(self.m_knot[i])
+        # Remove nurbsknots that are too close together
+        cleaned_nurbsknots = [self.m_nurbsknot[0]]
+        for i in range(1, len(self.m_nurbsknot)):
+            if abs(self.m_nurbsknot[i] - cleaned_nurbsknots[-1]) > tolerance:
+                cleaned_nurbsknots.append(self.m_nurbsknot[i])
         
-        if len(cleaned_knots) != len(self.m_knot):
-            self.m_knot = np.array(cleaned_knots)
+        if len(cleaned_nurbsknots) != len(self.m_nurbsknot):
+            self.m_nurbsknot = np.array(cleaned_nurbsknots)
         
         return True
 
@@ -3820,30 +3993,30 @@ class NurbsCurve:
         
         return True
 
-    def _repair_bad_knots(self, tolerance: float = 0.0, repair: bool = True) -> bool:
-        """Repair bad knots (too close, high multiplicity).
+    def _repair_bad_nurbsknots(self, tolerance: float = 0.0, repair: bool = True) -> bool:
+        """Repair bad nurbsknots (too close, high multiplicity).
         
         Parameters
         ----------
         tolerance : float, optional
-            Knot tolerance. Defaults to 0.0.
+            NurbsKnot tolerance. Defaults to 0.0.
         repair : bool, optional
-            If True, repairs knots; if False, only checks. Defaults to True.
+            If True, repairs nurbsknots; if False, only checks. Defaults to True.
             
         Returns
         -------
         bool
-            True if knots are valid or repaired.
+            True if nurbsknots are valid or repaired.
         """
         if not self.is_valid():
             return False
         
         if repair:
-            return self._clean_knots(tolerance)
+            return self._clean_nurbsknots(tolerance)
         
         # Just check
-        for i in range(len(self.m_knot) - 1):
-            if self.m_knot[i] > self.m_knot[i + 1] + Tolerance.ZERO_TOLERANCE:
+        for i in range(len(self.m_nurbsknot) - 1):
+            if self.m_nurbsknot[i] > self.m_nurbsknot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
         
         return True

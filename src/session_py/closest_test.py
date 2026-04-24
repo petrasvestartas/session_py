@@ -170,13 +170,13 @@ def test_closest_pointcloud_point():
     MINI_CHECK(i2 == 3)
 
 
-@MINI_TEST("Closest", "Pointcloud Point KDTree")
+@MINI_TEST("Closest", "Pointcloud Point SpatialKDTree")
 def test_closest_pointcloud_point_kdtree():
     from session_py import Closest
     from session_py import PointCloud
     from session_py import Point
 
-    # KDTree variant: same result as linear scan, O(log n) query
+    # SpatialKDTree variant: same result as linear scan, O(log n) query
     pc = PointCloud([
         Point(0.0, 0.0, 0.0),
         Point(5.0, 0.0, 0.0),

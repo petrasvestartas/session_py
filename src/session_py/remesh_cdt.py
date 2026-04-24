@@ -57,7 +57,7 @@ class _Tri:
 
 
 def _cps(p1, p2, p3):
-    cp = float(p2.x - p1.x) * float(p3.y - p2.y) - float(p2.y - p1.y) * float(p3.x - p2.x)
+    cp = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x)
     return 1 if cp > 0 else (-1 if cp < 0 else 0)
 
 
@@ -66,15 +66,19 @@ def _sqr(x):
 
 
 def _dist_sqr(a, b):
-    return _sqr(float(a.x - b.x)) + _sqr(float(a.y - b.y))
+    dx = a.x - b.x
+    dy = a.y - b.y
+    return dx * dx + dy * dy
 
 
 def _left_turning(p1, p2, p3):
-    return _cps(p1, p2, p3) < 0
+    cp = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x)
+    return cp < 0
 
 
 def _right_turning(p1, p2, p3):
-    return _cps(p1, p2, p3) > 0
+    cp = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x)
+    return cp > 0
 
 
 def _is_horiz(e):
@@ -159,15 +163,10 @@ def _path_from_tri(tri):
 
 
 def _in_circle(pA, pB, pC, pD):
-    m00 = float(pA.x - pD.x)
-    m01 = float(pA.y - pD.y)
-    m02 = _sqr(m00) + _sqr(m01)
-    m10 = float(pB.x - pD.x)
-    m11 = float(pB.y - pD.y)
-    m12 = _sqr(m10) + _sqr(m11)
-    m20 = float(pC.x - pD.x)
-    m21 = float(pC.y - pD.y)
-    m22 = _sqr(m20) + _sqr(m21)
+    dx = pD.x; dy = pD.y
+    m00 = pA.x - dx; m01 = pA.y - dy; m02 = m00*m00 + m01*m01
+    m10 = pB.x - dx; m11 = pB.y - dy; m12 = m10*m10 + m11*m11
+    m20 = pC.x - dx; m21 = pC.y - dy; m22 = m20*m20 + m21*m21
     return m00*(m11*m22-m21*m12) - m10*(m01*m22-m21*m02) + m20*(m01*m12-m11*m02)
 
 
@@ -466,40 +465,60 @@ class _Delaunay:
             self._tri_right(eX, vAlt, minY)
 
     def _force_legal(self, edge):
-        if not edge.triA or not edge.triB:
+        triA = edge.triA
+        triB = edge.triB
+        if not triA or not triB:
             return
+        eL = edge.vL
+        eR = edge.vR
         vertA = None
         vertB = None
         edgesA = [None, None, None]
         edgesB = [None, None, None]
+        triA_edges = triA.edges
         for i in range(3):
-            if edge.triA.edges[i] is edge:
+            te = triA_edges[i]
+            if te is edge:
                 continue
-            ec = _edge_contains(edge.triA.edges[i], edge.vL)
-            if ec == _EC_LEFT:
-                edgesA[1] = edge.triA.edges[i]
-                vertA = edge.triA.edges[i].vR
-            elif ec == _EC_RIGHT:
-                edgesA[1] = edge.triA.edges[i]
-                vertA = edge.triA.edges[i].vL
+            if te.vL is eL:
+                edgesA[1] = te
+                vertA = te.vR
+            elif te.vR is eL:
+                edgesA[1] = te
+                vertA = te.vL
             else:
-                edgesB[1] = edge.triA.edges[i]
+                edgesB[1] = te
+        triB_edges = triB.edges
         for i in range(3):
-            if edge.triB.edges[i] is edge:
+            te = triB_edges[i]
+            if te is edge:
                 continue
-            ec = _edge_contains(edge.triB.edges[i], edge.vL)
-            if ec == _EC_LEFT:
-                edgesA[2] = edge.triB.edges[i]
-                vertB = edge.triB.edges[i].vR
-            elif ec == _EC_RIGHT:
-                edgesA[2] = edge.triB.edges[i]
-                vertB = edge.triB.edges[i].vL
+            if te.vL is eL:
+                edgesA[2] = te
+                vertB = te.vR
+            elif te.vR is eL:
+                edgesA[2] = te
+                vertB = te.vL
             else:
-                edgesB[2] = edge.triB.edges[i]
-        if _cps(vertA.pt, edge.vL.pt, edge.vR.pt) == 0:
+                edgesB[2] = te
+        ap = vertA.pt
+        lp = eL.pt
+        rp = eR.pt
+        lpx = lp.x; lpy = lp.y; rpx = rp.x; rpy = rp.y
+        apx = ap.x; apy = ap.y
+        cp = (lpx - apx) * (rpy - lpy) - (lpy - apy) * (rpx - lpx)
+        if cp == 0:
             return
-        ict = _in_circle(vertA.pt, edge.vL.pt, edge.vR.pt, vertB.pt)
-        if ict == 0 or (_right_turning(vertA.pt, edge.vL.pt, edge.vR.pt) == (ict < 0)):
+        bp = vertB.pt
+        dx = bp.x; dy = bp.y
+        m00 = apx - dx; m01 = apy - dy; m02 = m00*m00 + m01*m01
+        m10 = lpx - dx; m11 = lpy - dy; m12 = m10*m10 + m11*m11
+        m20 = rpx - dx; m21 = rpy - dy; m22 = m20*m20 + m21*m21
+        ict = m00*(m11*m22-m21*m12) - m10*(m01*m22-m21*m02) + m20*(m01*m12-m11*m02)
+        if ict == 0:
+            return
+        right_turn = cp > 0
+        if right_turn == (ict < 0):
             return
         edge.vL = vertA
         edge.vR = vertB

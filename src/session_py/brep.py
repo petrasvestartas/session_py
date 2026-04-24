@@ -13,7 +13,7 @@ import numpy as _np
 _IDENTITY_XFORM = Xform.identity()
 _ZERO_GUID = "00000000-0000-0000-0000-000000000000"
 _BLACK_COLOR = Color.black()
-_KNOT_01 = _np.array([0., 1.], dtype=_np.float64)
+_NURBSKNOT_01 = _np.array([0., 1.], dtype=_np.float64)
 
 
 class BRepTrimType:
@@ -404,7 +404,7 @@ class BRep:
         def _cap_circle():
             import numpy as np
             c = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-            c.m_knot = np.array(_kn, dtype=np.float64)
+            c.m_nurbsknot = np.array(_kn, dtype=np.float64)
             c.m_cv = np.zeros(9 * 4, dtype=np.float64)
             for i in range(9):
                 c.set_cv_4d(i, (0.5+0.5*_cx[i])*_cw[i], (0.5+0.5*_cy[i])*_cw[i], 0.0, _cw[i])
@@ -562,7 +562,7 @@ class BRep:
                 brep.add_trim(c2d, eidx, outer_li, rev, BRepTrimType.Mated)
             inner_li = brep.add_loop(fi, BRepLoopType.Inner)
             hole_crv = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-            hole_crv.m_knot = np.array(_kn, dtype=np.float64)
+            hole_crv.m_nurbsknot = np.array(_kn, dtype=np.float64)
             hole_crv.m_cv = np.zeros(9 * 4, dtype=np.float64)
             cr = hole_radius / (2.0 * r)
             cx_uv, cy_uv = 0.5, 0.5
@@ -693,7 +693,7 @@ class BRep:
             c2d.pointcolors = []; c2d.linecolors = []; c2d.xform = _IDENTITY_XFORM; c2d._rmf_cache = None
             c2d.m_dim = 3; c2d.m_is_rat = crv.m_is_rat; c2d.m_order = crv.m_order
             c2d.m_cv_count = nc; c2d.m_cv_stride = (4 if crv.m_is_rat else 3)
-            c2d.m_knot = crv.m_knot
+            c2d.m_nurbsknot = crv.m_nurbsknot
             ox=float(org[0]); oy=float(org[1]); oz=float(org[2])
             xa0=float(xa[0]); xa1=float(xa[1]); xa2=float(xa[2])
             ya0=float(ya[0]); ya1=float(ya[1]); ya2=float(ya[2])
@@ -811,7 +811,7 @@ class BRep:
             srf.width = 1.0; srf.pointcolors = []; srf.facecolors = []; srf.linecolors = []
             srf.xform = _IDENTITY_XFORM; srf.m_mesh = None
             srf.m_dim = 3; srf.m_is_rat = 0; srf.m_order = [2, 2]; srf.m_cv_count = [2, 2]
-            srf.m_cv_stride = [6, 3]; srf.m_knot = [_KNOT_01, _KNOT_01]
+            srf.m_cv_stride = [6, 3]; srf.m_nurbsknot = [_NURBSKNOT_01, _NURBSKNOT_01]
             cv = _np.zeros(12, dtype=_np.float64); srf.m_cv = cv
             cv[0]=ox+umin*xa[0]+vmin*ya[0]; cv[1]=oy+umin*xa[1]+vmin*ya[1]; cv[2]=oz+umin*xa[2]+vmin*ya[2]
             cv[3]=ox+umin*xa[0]+vmax*ya[0]; cv[4]=oy+umin*xa[1]+vmax*ya[1]; cv[5]=oz+umin*xa[2]+vmax*ya[2]
@@ -835,13 +835,74 @@ class BRep:
 
     def mesh(self):
         from .mesh import Mesh
-        from .trimmedsurface import TrimmedSurface
-        all_polygons = []
-        for fi, face in enumerate(self.m_faces):
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+        nf = len(self.m_faces)
+
+        # Phase 1: Classify faces as direct (RemeshNurbsSurfaceGrid) or CDT
+        face_direct = [False] * nf
+        for fi in range(nf):
+            face = self.m_faces[fi]
             if face.surface_index < 0 or face.surface_index >= len(self.m_surfaces):
                 continue
             srf = self.m_surfaces[face.surface_index]
-            ts = TrimmedSurface()
+            has_inner = False
+            all_linear = True
+            outer_pts = []
+            for li in face.loop_indices:
+                if li < 0 or li >= len(self.m_loops):
+                    continue
+                loop = self.m_loops[li]
+                if loop.type == BRepLoopType.Inner:
+                    has_inner = True
+                for ti in loop.trim_indices:
+                    if ti < 0 or ti >= len(self.m_trims):
+                        continue
+                    trim = self.m_trims[ti]
+                    if trim.curve_2d_index < 0 or trim.curve_2d_index >= len(self.m_curves_2d):
+                        continue
+                    crv = self.m_curves_2d[trim.curve_2d_index]
+                    if crv.degree() > 1 or crv.is_rational():
+                        all_linear = False
+                    if loop.type == BRepLoopType.Outer and crv.degree() <= 1 and not crv.is_rational():
+                        for k in range(max(crv.cv_count() - 1, 0)):
+                            p = crv.get_cv(k)
+                            if p is not None:
+                                outer_pts.append(p)
+            direct = (not has_inner) and all_linear
+            if direct and outer_pts:
+                u0, u1 = srf.domain(0)
+                v0, v1 = srf.domain(1)
+                tol = max(u1 - u0, v1 - v0) * 0.01
+                bb_umin = bb_vmin = 1e30
+                bb_umax = bb_vmax = -1e30
+                for p in outer_pts:
+                    if p[0] < bb_umin: bb_umin = p[0]
+                    if p[0] > bb_umax: bb_umax = p[0]
+                    if p[1] < bb_vmin: bb_vmin = p[1]
+                    if p[1] > bb_vmax: bb_vmax = p[1]
+                if (abs(bb_umin - u0) > tol or abs(bb_umax - u1) > tol or
+                    abs(bb_vmin - v0) > tol or abs(bb_vmax - v1) > tol):
+                    direct = False
+            face_direct[fi] = direct
+
+        # Phase 2: Mesh direct faces
+        fmesh = [Mesh() for _ in range(nf)]
+        for fi in range(nf):
+            if not face_direct[fi]:
+                continue
+            face = self.m_faces[fi]
+            srf = self.m_surfaces[face.surface_index]
+            fmesh[fi] = srf.mesh()
+
+        # Phase 3: Mesh CDT faces
+        for fi in range(nf):
+            if face_direct[fi]:
+                continue
+            face = self.m_faces[fi]
+            if face.surface_index < 0 or face.surface_index >= len(self.m_surfaces):
+                continue
+            srf = self.m_surfaces[face.surface_index]
+            ts = NurbsSurfaceTrimmed()
             ts.m_surface = srf
             for li in face.loop_indices:
                 if li < 0 or li >= len(self.m_loops):
@@ -855,24 +916,38 @@ class BRep:
                     if trim.curve_2d_index < 0 or trim.curve_2d_index >= len(self.m_curves_2d):
                         continue
                     crv = self.m_curves_2d[trim.curve_2d_index]
-                    ndiv = max(crv.cv_count() * 4, 16) if crv.degree() > 1 else max(crv.cv_count() - 1, 4)
-                    pts, _ = crv.divide_by_count(ndiv)
-                    for k in range(len(pts) - 1):
-                        loop_pts.append(pts[k])
+                    if crv.degree() <= 1 and not crv.is_rational():
+                        for k in range(max(crv.cv_count() - 1, 0)):
+                            p = crv.get_cv(k)
+                            if p is not None:
+                                loop_pts.append(p)
+                    else:
+                        n = max(crv.cv_count() * 4, 16)
+                        pts, _ = crv.divide_by_count(n)
+                        for k in range(len(pts) - 1):
+                            loop_pts.append(pts[k])
                 if len(loop_pts) >= 3:
                     loop_crv = NurbsCurve.create(True, 1, loop_pts)
                     if loop.type == BRepLoopType.Outer:
                         ts.m_outer_loop = loop_crv
                     else:
                         ts.m_inner_loops.append(loop_crv)
-            face_mesh = ts.mesh()
+            fmesh[fi] = ts.mesh()
+
+        # Phase 4: Combine
+        all_polygons = []
+        for fi in range(nf):
+            face = self.m_faces[fi]
+            fm = fmesh[fi]
+            if not fm.face:
+                continue
             if face.reversed:
-                for vk, vd in face_mesh.vertex.items():
+                for vk, vd in fm.vertex.items():
                     n = vd.normal()
                     if n is not None:
                         vd.set_normal(-n[0], -n[1], -n[2])
-            for fk, fverts in face_mesh.face.items():
-                poly = [face_mesh.vertex[vi].position() for vi in fverts]
+            for fk, fverts in fm.face.items():
+                poly = [fm.vertex[vi].position() for vi in fverts]
                 all_polygons.append(poly)
         return Mesh.from_polylines(all_polygons)
 
@@ -1022,23 +1097,23 @@ class BRep:
                 b.m_faces.append(bf)
         return b
 
-    def json_dump(self, filepath):
+    def file_json_dump(self, filepath):
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=4)
 
     @classmethod
-    def json_load(cls, filepath):
+    def file_json_load(cls, filepath):
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
 
-    def json_dumps(self):
+    def file_json_dumps(self):
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def json_loads(cls, s):
+    def file_json_loads(cls, s):
         import json
         return cls.__jsonload__(json.loads(s))
 
