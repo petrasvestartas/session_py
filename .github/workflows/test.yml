@@ -1,0 +1,49 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, macos-15-intel, windows-latest]
+        python-version: ["3.11"]
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / py${{ matrix.python-version }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Run minitest
+        shell: bash
+        run: |
+          python <<'PY'
+          import importlib, glob, os, sys
+          from session_py import mini_test as mt
+
+          # Import every *_test.py so its @MINI_TEST decorators register
+          test_dir = os.path.join("src", "session_py")
+          for f in sorted(glob.glob(os.path.join(test_dir, "*_test.py"))):
+              mod = "session_py." + os.path.splitext(os.path.basename(f))[0]
+              importlib.import_module(mod)
+
+          try:
+              mt.run_all(language="python")
+          except SystemExit as e:
+              sys.exit(e.code or 0)
+          PY
