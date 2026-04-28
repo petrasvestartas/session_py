@@ -275,6 +275,109 @@ def test_mesh_loft():
     MINI_CHECK(not mesh_no_cap.is_closed())
 
 
+@MINI_TEST("Mesh", "Loft concave with holes and collinear")
+def test_mesh_loft_concave_with_holes_and_collinear():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
+
+    annen_bot = [
+        Polyline([
+            Point(2142.008, -530.170, 1172.487),
+            Point(2142.008, -530.170, -318.768),
+            Point(2142.008, -318.102, -318.768),
+            Point(2142.008, -347.792, -414.110),
+            Point(2142.008, -106.034, -414.110),
+            Point(2142.008, -135.724, -318.768),
+            Point(2142.008,  106.034, -318.768),
+            Point(2142.008,   76.344, -414.110),
+            Point(2142.008,  318.102, -414.110),
+            Point(2142.008,  288.412, -318.768),
+            Point(2142.008,  530.170, -318.768),
+            Point(2142.008,  530.170, 1172.487),
+            Point(2142.008, -530.170, 1172.487),
+        ]),
+        Polyline([
+            Point(2142.008, 97.448,  841.097),
+            Point(2142.008,  0.000,  841.097),
+            Point(2142.008,  0.000, 1006.792),
+            Point(2142.008, 97.448, 1006.792),
+            Point(2142.008, 97.448,  841.097),
+        ]),
+        Polyline([
+            Point(2142.008, 97.448, 178.317),
+            Point(2142.008,  0.000, 178.317),
+            Point(2142.008,  0.000, 344.012),
+            Point(2142.008, 97.448, 344.012),
+            Point(2142.008, 97.448, 178.317),
+        ]),
+    ]
+    annen_top = [
+        Polyline([
+            Point(2223.416, -530.170, 1172.487),
+            Point(2223.416, -530.170, -269.141),
+            Point(2223.416, -318.102, -269.141),
+            Point(2223.416, -347.792, -364.483),
+            Point(2223.416, -106.034, -364.483),
+            Point(2223.416, -135.724, -269.141),
+            Point(2223.416,  106.034, -269.141),
+            Point(2223.416,   76.344, -364.483),
+            Point(2223.416,  318.102, -364.483),
+            Point(2223.416,  288.412, -269.141),
+            Point(2223.416,  530.170, -269.141),
+            Point(2223.416,  530.170, 1172.487),
+            Point(2223.416, -530.170, 1172.487),
+        ]),
+        Polyline([
+            Point(2223.416, 97.448,  841.097),
+            Point(2223.416,  0.000,  841.097),
+            Point(2223.416,  0.000, 1006.792),
+            Point(2223.416, 97.448, 1006.792),
+            Point(2223.416, 97.448,  841.097),
+        ]),
+        Polyline([
+            Point(2223.416, 97.448, 178.317),
+            Point(2223.416,  0.000, 178.317),
+            Point(2223.416,  0.000, 344.012),
+            Point(2223.416, 97.448, 344.012),
+            Point(2223.416, 97.448, 178.317),
+        ]),
+    ]
+    annen = Mesh.loft(annen_bot, annen_top, True)
+    MINI_CHECK(annen.is_valid())
+    MINI_CHECK(annen.is_closed())
+    MINI_CHECK(len(annen.vertex) == 40)
+    MINI_CHECK(len(annen.face) == 22)
+
+    col_bot = [
+        Polyline([
+            Point( 0, 0, 0),
+            Point( 4, 0, 0),
+            Point( 7, 0, 0),
+            Point(12, 0, 0),
+            Point(12, 5, 0),
+            Point( 0, 5, 0),
+            Point( 0, 0, 0),
+        ]),
+    ]
+    col_top = [
+        Polyline([
+            Point( 0, 0, 1.5),
+            Point( 4, 0, 1.5),
+            Point( 7, 0, 1.5),
+            Point(12, 0, 1.5),
+            Point(12, 5, 1.5),
+            Point( 0, 5, 1.5),
+            Point( 0, 0, 1.5),
+        ]),
+    ]
+    colmesh = Mesh.loft(col_bot, col_top, True)
+    MINI_CHECK(colmesh.is_valid())
+    MINI_CHECK(colmesh.is_closed())
+    MINI_CHECK(len(colmesh.vertex) == 8)
+    MINI_CHECK(len(colmesh.face) == 6)
+
+
 @MINI_TEST("Mesh", "From Polygon With Holes Many")
 def test_mesh_from_polygon_with_holes_many():
     from session_py import Mesh

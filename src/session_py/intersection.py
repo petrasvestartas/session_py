@@ -1852,10 +1852,9 @@ def orthogonal_vector_between_two_plane_pairs(pp00, pp10, pp11):
 def closed_and_open_paths_2d(plate, joint, plane):
     """Clip an open joint outline against a closed plate polygon in 2D.
 
-    Native (no Clipper) port of the wood ``wood_element.cpp:438-651`` helper.
-    Returns the clipped 3D polyline plus parametric positions ``(t0, t1)``
-    on the plate edges, or ``None`` if the joint outline does not intersect
-    the plate polygon.
+    Port of the wood ``wood_element.cpp:438-651`` helper. Returns the clipped
+    3D polyline plus parametric positions ``(t0, t1)`` on the plate edges, or
+    ``None`` if the joint outline does not intersect the plate polygon.
 
     Parameters
     ----------
