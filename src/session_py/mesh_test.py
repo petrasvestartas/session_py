@@ -1415,5 +1415,303 @@ def test_mesh_protobuf_roundtrip():
     MINI_CHECK(loaded_holes.face_holes[hfk] == hmesh.face_holes[hfk])
 
 
+@MINI_TEST("Mesh", "Vertex Neighbors")
+def test_mesh_vertex_neighbors():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    n0 = mesh.vertex_neighbors(0)
+    n0v = mesh.vertex_vertices(0)
+    MINI_CHECK(n0 == n0v)
+    MINI_CHECK(len(n0) == 3)
+
+
+@MINI_TEST("Mesh", "Vertices On Boundary")
+def test_mesh_vertices_on_boundary():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    MINI_CHECK(len(mesh.vertices_on_boundary()) == 0)
+    mesh.remove_face(mesh.faces()[0])
+    vb = mesh.vertices_on_boundary()
+    MINI_CHECK(len(vb) == 4)
+
+
+@MINI_TEST("Mesh", "Edges On Boundary")
+def test_mesh_edges_on_boundary():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    MINI_CHECK(len(mesh.edges_on_boundary()) == 0)
+    mesh.remove_face(mesh.faces()[0])
+    eb = mesh.edges_on_boundary()
+    MINI_CHECK(len(eb) == 4)
+
+
+@MINI_TEST("Mesh", "Faces On Boundary")
+def test_mesh_faces_on_boundary():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    MINI_CHECK(len(mesh.faces_on_boundary()) == 0)
+    mesh.remove_face(mesh.faces()[0])
+    MINI_CHECK(len(mesh.faces_on_boundary()) == 4)
+
+
+@MINI_TEST("Mesh", "Halfedge Face")
+def test_mesh_halfedge_face():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    f = mesh.halfedge_face((0, 3))
+    MINI_CHECK(f == 0)
+    mesh.remove_face(0)
+    MINI_CHECK(mesh.halfedge_face((0, 3)) is None)
+
+
+@MINI_TEST("Mesh", "Halfedge After Before")
+def test_mesh_halfedge_after_before():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    after = mesh.halfedge_after((0, 3))
+    before = mesh.halfedge_before((0, 3))
+    MINI_CHECK(after == (3, 2))
+    MINI_CHECK(before == (1, 0))
+
+
+@MINI_TEST("Mesh", "Halfedge Loop")
+def test_mesh_halfedge_loop():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    loop = mesh.halfedge_loop((0, 3))
+    MINI_CHECK(len(loop) == 1)
+    MINI_CHECK(loop[0] == (0, 3))
+
+
+@MINI_TEST("Mesh", "Halfedge Strip")
+def test_mesh_halfedge_strip():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    strip = mesh.halfedge_strip((0, 3))
+    MINI_CHECK(len(strip) == 5)
+    MINI_CHECK(strip[0] == (0, 3))
+    MINI_CHECK(strip[-1] == (0, 3))
+
+
+@MINI_TEST("Mesh", "Vertex Sample")
+def test_mesh_vertex_sample():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    s = mesh.vertex_sample(3, seed=42)
+    MINI_CHECK(len(s) == 3)
+    MINI_CHECK(len(set(s)) == 3)
+    s2 = mesh.vertex_sample(3, seed=42)
+    MINI_CHECK(s == s2)
+
+
+@MINI_TEST("Mesh", "Edge Sample")
+def test_mesh_edge_sample():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    s = mesh.edge_sample(2, seed=7)
+    MINI_CHECK(len(s) == 2)
+    s2 = mesh.edge_sample(2, seed=7)
+    MINI_CHECK(s == s2)
+
+
+@MINI_TEST("Mesh", "Face Sample")
+def test_mesh_face_sample():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    s = mesh.face_sample(2, seed=11)
+    MINI_CHECK(len(s) == 2)
+    s2 = mesh.face_sample(2, seed=11)
+    MINI_CHECK(s == s2)
+
+
+@MINI_TEST("Mesh", "Face Center")
+def test_mesh_face_center():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(2.0, 2.0, 2.0)
+    c = mesh.face_center(0)
+    cc = mesh.face_centroid(0)
+    MINI_CHECK(c == cc)
+
+
+@MINI_TEST("Mesh", "Face Polygon")
+def test_mesh_face_polygon():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    poly = mesh.face_polygon(0)
+    pts = poly.get_points() if hasattr(poly, "get_points") else poly.points
+    MINI_CHECK(len(pts) == 5)
+    MINI_CHECK(pts[0] == pts[-1])
+
+
+@MINI_TEST("Mesh", "Flip Cycles")
+def test_mesh_flip_cycles():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    n0 = mesh.face_normal(0)
+    mesh.flip_cycles()
+    n0b = mesh.face_normal(0)
+    MINI_CHECK(abs(n0[0] + n0b[0]) < TOLERANCE.ZERO_TOLERANCE)
+    MINI_CHECK(abs(n0[1] + n0b[1]) < TOLERANCE.ZERO_TOLERANCE)
+    MINI_CHECK(abs(n0[2] + n0b[2]) < TOLERANCE.ZERO_TOLERANCE)
+
+
+@MINI_TEST("Mesh", "Face Normal Unitized")
+def test_mesh_face_normal_unitized():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(2.0, 2.0, 2.0)
+    nu = mesh.face_normal(0, unitized=True)
+    nn = mesh.face_normal(0, unitized=False)
+    MINI_CHECK(abs(nu.magnitude() - 1.0) < TOLERANCE.ZERO_TOLERANCE)
+    MINI_CHECK(nn.magnitude() > 1.0)
+
+
+@MINI_TEST("Mesh", "Default Attributes")
+def test_mesh_default_attributes():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_vertex_attributes(is_support=0.0, load_z=0.0)
+    mesh.update_default_face_attributes(stress=0.0)
+    mesh.update_default_edge_attributes(weight=1.0)
+    MINI_CHECK(mesh.default_vertex_attributes["is_support"] == 0.0)
+    MINI_CHECK(mesh.default_vertex_attributes["load_z"] == 0.0)
+    MINI_CHECK(mesh.default_face_attributes["stress"] == 0.0)
+    MINI_CHECK(mesh.default_edge_attributes["weight"] == 1.0)
+
+
+@MINI_TEST("Mesh", "Vertex Attribute")
+def test_mesh_vertex_attribute():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_vertex_attributes(is_support=0.0)
+    mesh.vertex_attribute(0, "is_support", 1.0)
+    MINI_CHECK(mesh.vertex_attribute(0, "is_support") == 1.0)
+    MINI_CHECK(mesh.vertex_attribute(1, "is_support") == 0.0)
+
+
+@MINI_TEST("Mesh", "Face Attribute")
+def test_mesh_face_attribute():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_face_attributes(stress=0.0)
+    mesh.face_attribute(0, "stress", 2.5)
+    MINI_CHECK(mesh.face_attribute(0, "stress") == 2.5)
+    MINI_CHECK(mesh.face_attribute(1, "stress") == 0.0)
+
+
+@MINI_TEST("Mesh", "Edge Attribute")
+def test_mesh_edge_attribute():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_edge_attributes(weight=1.0)
+    mesh.edge_attribute((0, 1), "weight", 5.0)
+    MINI_CHECK(mesh.edge_attribute((0, 1), "weight") == 5.0)
+    MINI_CHECK(mesh.edge_attribute((0, 3), "weight") == 1.0)
+
+
+@MINI_TEST("Mesh", "Vertices Attribute Bulk")
+def test_mesh_vertices_attribute_bulk():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_vertex_attributes(is_support=0.0)
+    mesh.vertices_attribute("is_support", 1.0, keys=[0, 1, 2])
+    vals = mesh.vertices_attribute("is_support")
+    MINI_CHECK(vals[0] == 1.0)
+    MINI_CHECK(vals[1] == 1.0)
+    MINI_CHECK(vals[2] == 1.0)
+    MINI_CHECK(vals[3] == 0.0)
+
+
+@MINI_TEST("Mesh", "Vertices Where")
+def test_mesh_vertices_where():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_vertex_attributes(is_support=0.0)
+    mesh.vertices_attribute("is_support", 1.0, keys=[0, 2, 4])
+    sup = mesh.vertices_where({"is_support": 1.0})
+    MINI_CHECK(len(sup) == 3)
+    MINI_CHECK(sorted(sup) == [0, 2, 4])
+
+
+@MINI_TEST("Mesh", "Faces Where")
+def test_mesh_faces_where():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_face_attributes(tag=0.0)
+    mesh.face_attribute(2, "tag", 7.0)
+    mesh.face_attribute(4, "tag", 7.0)
+    out = mesh.faces_where({"tag": 7.0})
+    MINI_CHECK(sorted(out) == [2, 4])
+
+
+@MINI_TEST("Mesh", "Edges Where")
+def test_mesh_edges_where():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_edge_attributes(weight=0.0)
+    mesh.edge_attribute((0, 1), "weight", 3.0)
+    out = mesh.edges_where({"weight": 3.0})
+    MINI_CHECK(len(out) == 1)
+    MINI_CHECK(out[0] == (0, 1))
+
+
+@MINI_TEST("Mesh", "Vertices Where Predicate")
+def test_mesh_vertices_where_predicate():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_vertex_attributes(load=0.0)
+    mesh.vertex_attribute(0, "load", 5.0)
+    mesh.vertex_attribute(1, "load", 10.0)
+    big = mesh.vertices_where_predicate(lambda k, a: a["load"] > 4.0)
+    MINI_CHECK(sorted(big) == [0, 1])
+
+
+@MINI_TEST("Mesh", "Faces Where Predicate")
+def test_mesh_faces_where_predicate():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_face_attributes(area=0.0)
+    mesh.face_attribute(0, "area", 2.0)
+    mesh.face_attribute(3, "area", 4.0)
+    big = mesh.faces_where_predicate(lambda k, a: a["area"] > 1.0)
+    MINI_CHECK(sorted(big) == [0, 3])
+
+
+@MINI_TEST("Mesh", "Edges Where Predicate")
+def test_mesh_edges_where_predicate():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.update_default_edge_attributes(weight=0.0)
+    mesh.edge_attribute((0, 1), "weight", 5.0)
+    big = mesh.edges_where_predicate(lambda e, a: a["weight"] > 1.0)
+    MINI_CHECK(len(big) == 1)
+    MINI_CHECK(big[0] == (0, 1))
+
+
 if __name__ == "__main__":
     run_all(language="python")
