@@ -42,6 +42,7 @@ from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
 from .matrix import Matrix
 from .convex_hull import ConvexHull
 from .spatial_kdtree import SpatialKDTree
+from .mesh_offset import MeshOffset
 
 __all__ = [
     "Color",
@@ -92,4 +93,5 @@ __all__ = [
     "Matrix",
     "ConvexHull",
     "SpatialKDTree",
+    "MeshOffset",
 ]

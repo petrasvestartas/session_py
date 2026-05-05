@@ -606,7 +606,7 @@ class Mesh:
         return RemeshCDT.from_polylines(pls, False, not sort_by_bbox)
 
     @staticmethod
-    def loft(polylines0: List, polylines1: List, cap: bool = True) -> "Mesh":
+    def loft(polylines0: List, polylines1: List, cap: bool = True, fix_collinear: bool = True) -> "Mesh":
         if not polylines0 or not polylines1 or len(polylines0) != len(polylines1):
             return Mesh()
         border_idx = 0
@@ -685,6 +685,36 @@ class Mesh:
                 if b_hpts:
                     mesh.face_holes[fk_bot] = [[bvk[off + j] for j in range(cnt)] for off, cnt, _, _ in poly_infos[1:]]
                 mesh.triangulation[fk_bot] = [[bvk[t[0]], bvk[t[2]], bvk[t[1]]] for t in bot_tris]
+                if fix_collinear:
+                    sc = 1e6
+                    vk2d = {bvk[i]: proj(all_bot[i]) for i in range(bot_n0)}
+                    fv = [bvk[bot_n0 - 1 - i] for i in range(bot_n0)]
+                    tl = mesh.triangulation[fk_bot]
+                    chg = True
+                    while chg:
+                        chg = False
+                        tv = set(v for t in tl for v in t)
+                        n = len(fv)
+                        for k in range(n):
+                            B = fv[k]
+                            if B in tv:
+                                continue
+                            A = fv[(k + n - 1) % n]; C = fv[(k + 1) % n]
+                            for j, t in enumerate(tl):
+                                if A in t and C in t:
+                                    if (t[0]==A or t[0]==C) and (t[1]==A or t[1]==C):
+                                        tl[j] = [t[0], B, t[2]]; tl.append([B, t[1], t[2]])
+                                    elif (t[1]==A or t[1]==C) and (t[2]==A or t[2]==C):
+                                        tl[j] = [t[0], t[1], B]; tl.append([t[0], B, t[2]])
+                                    else:
+                                        tl[j] = [t[0], t[1], B]; tl.append([B, t[1], t[2]])
+                                    chg = True; break
+                            if chg:
+                                break
+                    def _zero(t):
+                        u0, v0 = vk2d.get(t[0], (0.0, 0.0)); u1, v1 = vk2d.get(t[1], (0.0, 0.0)); u2, v2 = vk2d.get(t[2], (0.0, 0.0))
+                        return (round(u1*sc)-round(u0*sc))*(round(v2*sc)-round(v0*sc)) - (round(v1*sc)-round(v0*sc))*(round(u2*sc)-round(u0*sc)) == 0
+                    mesh.triangulation[fk_bot] = [t for t in tl if not _zero(t)]
             tpts = [Point(*proj(all_top[i]), 0.0) for i in range(top_n0)]
             t_hpts = [[Point(*proj(all_top[i]), 0.0) for i in range(off, off+cnt)] for _, _, off, cnt in poly_infos[1:]]
             top_tris = _cdt_triangulate(tpts, t_hpts if t_hpts else [])
@@ -693,13 +723,52 @@ class Mesh:
                 if t_hpts:
                     mesh.face_holes[fk_top] = [[tvk[off + j] for j in range(cnt)] for _, _, off, cnt in poly_infos[1:]]
                 mesh.triangulation[fk_top] = [[tvk[t[0]], tvk[t[1]], tvk[t[2]]] for t in top_tris]
+                if fix_collinear:
+                    sc = 1e6
+                    vk2d_t = {tvk[i]: proj(all_top[i]) for i in range(top_n0)}
+                    fv = [tvk[i] for i in range(top_n0)]
+                    tl = mesh.triangulation[fk_top]
+                    chg = True
+                    while chg:
+                        chg = False
+                        tv = set(v for t in tl for v in t)
+                        n = len(fv)
+                        for k in range(n):
+                            B = fv[k]
+                            if B in tv:
+                                continue
+                            A = fv[(k + n - 1) % n]; C = fv[(k + 1) % n]
+                            for j, t in enumerate(tl):
+                                if A in t and C in t:
+                                    if (t[0]==A or t[0]==C) and (t[1]==A or t[1]==C):
+                                        tl[j] = [t[0], B, t[2]]; tl.append([B, t[1], t[2]])
+                                    elif (t[1]==A or t[1]==C) and (t[2]==A or t[2]==C):
+                                        tl[j] = [t[0], t[1], B]; tl.append([t[0], B, t[2]])
+                                    else:
+                                        tl[j] = [t[0], t[1], B]; tl.append([B, t[1], t[2]])
+                                    chg = True; break
+                            if chg:
+                                break
+                    def _zero_t(t):
+                        u0, v0 = vk2d_t.get(t[0], (0.0, 0.0)); u1, v1 = vk2d_t.get(t[1], (0.0, 0.0)); u2, v2 = vk2d_t.get(t[2], (0.0, 0.0))
+                        return (round(u1*sc)-round(u0*sc))*(round(v2*sc)-round(v0*sc)) - (round(v1*sc)-round(v0*sc))*(round(u2*sc)-round(u0*sc)) == 0
+                    mesh.triangulation[fk_top] = [t for t in tl if not _zero_t(t)]
         def side_faces(bot_off, bot_n, top_off, top_n, bpts, tpts):
             def edsq(pts, i):
                 j = (i + 1) % len(pts)
                 dx = pts[j][0] - pts[i][0]; dy = pts[j][1] - pts[i][1]; dz = pts[j][2] - pts[i][2]
                 return dx*dx + dy*dy + dz*dz
             ia = max(range(bot_n), key=lambda i: edsq(bpts, i))
-            ib = max(range(top_n), key=lambda i: edsq(tpts, i))
+            ib = 0
+            if bot_n == top_n:
+                def align_cost(cand):
+                    total = 0.0
+                    for k in range(bot_n):
+                        xb, yb = proj(bpts[(ia+k)%bot_n])
+                        xt, yt = proj(tpts[(cand+k)%top_n])
+                        total += (xt-xb)**2 + (yt-yb)**2
+                    return total
+                ib = min(range(top_n), key=align_cost)
             if bot_n == top_n:
                 for k in range(bot_n):
                     cb = bot_off + (ia + k) % bot_n; ct = top_off + (ib + k) % top_n
@@ -952,12 +1021,12 @@ class Mesh:
         return [Mesh.from_polygon_with_holes(x, sort_by_bbox) for x in inputs]
 
     @staticmethod
-    def loft_many(pairs: List, cap: bool = True, parallel: bool = False) -> List["Mesh"]:
+    def loft_many(pairs: List, cap: bool = True, parallel: bool = False, fix_collinear: bool = True) -> List["Mesh"]:
         if parallel and len(pairs) > 1:
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor() as ex:
-                return list(ex.map(lambda p: Mesh.loft(p[0], p[1], cap), pairs))
-        return [Mesh.loft(p[0], p[1], cap) for p in pairs]
+                return list(ex.map(lambda p: Mesh.loft(p[0], p[1], cap, fix_collinear), pairs))
+        return [Mesh.loft(p[0], p[1], cap, fix_collinear) for p in pairs]
 
     ###########################################################################################
     # Boolean Queries
