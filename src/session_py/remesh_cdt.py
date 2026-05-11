@@ -834,10 +834,29 @@ def _cdt_triangulate(border_2d, holes_2d=None):
     while precision > 0 and max_coord * (10 ** precision) > 9e17:
         precision -= 1
     scale = 10 ** precision
-    flat = list(border_2d)
+
+    # Break y-collinearity between hole vertices and border vertices.
+    # The sweep-line CDT fails when a hole vertex shares the same int64
+    # y-coordinate as a border vertex (purely y-collinear constraint segments
+    # at different x positions break event ordering → 0 adjacent triangles for
+    # that hole). Fix: shift each conflicting hole vertex by -1 int64 unit in y
+    # (≈ 1/scale metres), which is imperceptible in practice.
+    border_ys = set(round(p[1] * scale) for p in border_2d)
+    holes_adj = []
     if holes_2d:
-        for h in holes_2d:
-            flat.extend(h)
+        for hole in holes_2d:
+            adj = []
+            for p in hole:
+                iy = round(p[1] * scale)
+                if iy in border_ys:
+                    adj.append((p[0], (iy - 1) / scale))
+                else:
+                    adj.append(p)
+            holes_adj.append(adj)
+
+    flat = list(border_2d)
+    for h in holes_adj:
+        flat.extend(h)
     pt_map = {}
     for i, p in enumerate(flat):
         key = (round(p[0] * scale), round(p[1] * scale))
@@ -851,13 +870,53 @@ def _cdt_triangulate(border_2d, holes_2d=None):
         return path
 
     paths = [make_path(border_2d)]
-    if holes_2d:
-        for h in holes_2d:
-            paths.append(make_path(h))
+    for h in holes_adj:
+        paths.append(make_path(h))
     d = _Delaunay(True)
     tris = d.execute(paths)
     if not tris:
         return []
+
+    # Post-process: remove triangles inside holes.
+    # Two tests (centroid-only — edge midpoints are intentionally excluded because
+    # valid triangles adjacent to a hole share an edge with the hole boundary, so
+    # their midpoints land exactly on the boundary and would be false-positives):
+    #   1. Vertex-set: all 3 vertices belong to the same hole → remove.
+    #   2. Centroid outside outer boundary or inside any hole → remove.
+    if holes_2d:
+        hole_vsets = [set((p.x, p.y) for p in paths[hi + 1]) for hi in range(len(holes_2d))]
+
+        def _pt_in_poly_int(px, py, poly):
+            inside = False
+            j = len(poly) - 1
+            for i in range(len(poly)):
+                xi, yi = poly[i].x, poly[i].y
+                xj, yj = poly[j].x, poly[j].y
+                if (yi > py) != (yj > py):
+                    if px < xj + (py - yj) * (xi - xj) / (yj - yi):
+                        inside = not inside
+                j = i
+            return inside
+
+        def _pt_invalid(px, py):
+            if not _pt_in_poly_int(px, py, paths[0]):
+                return True
+            for h_path in paths[1:]:
+                if _pt_in_poly_int(px, py, h_path):
+                    return True
+            return False
+
+        def _keep(tri):
+            t = [(p.x, p.y) for p in tri]
+            for vs in hole_vsets:
+                if t[0] in vs and t[1] in vs and t[2] in vs:
+                    return False
+            cx = (tri[0].x + tri[1].x + tri[2].x) // 3
+            cy = (tri[0].y + tri[1].y + tri[2].y) // 3
+            return not _pt_invalid(cx, cy)
+
+        tris = [tri for tri in tris if _keep(tri)]
+
     out = []
     for tri in tris:
         f = []

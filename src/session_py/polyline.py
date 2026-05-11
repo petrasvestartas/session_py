@@ -510,6 +510,43 @@ class Polyline:
         return mag
 
     @staticmethod
+    def quadratic_points(p0: Point, p1: Point, p2: Point, divisions: int = 7) -> "Polyline":
+        """Generate a polyline along a quadratic Bezier curve (parabola through 3 points).
+
+        Parameters
+        ----------
+        p0 : Point
+            Start point.
+        p1 : Point
+            Control point.
+        p2 : Point
+            End point.
+        divisions : int
+            Number of points along the curve (minimum 2).
+
+        Returns
+        -------
+        Polyline
+            Polyline of ``divisions`` points sampled uniformly in parameter t ∈ [0, 1].
+        """
+        if divisions < 2:
+            divisions = 2
+        pts = []
+        d = divisions - 1
+        for k in range(divisions):
+            t  = k / d
+            s  = 1.0 - t
+            s2 = s * s
+            ts = 2.0 * s * t
+            t2 = t * t
+            pts.append(Point(
+                s2 * p0.x + ts * p1.x + t2 * p2.x,
+                s2 * p0.y + ts * p1.y + t2 * p2.y,
+                s2 * p0.z + ts * p1.z + t2 * p2.z,
+            ))
+        return Polyline(pts)
+
+    @staticmethod
     def point_at(start: Point, end: Point, t: float) -> Point:
         """Get point at parameter t along a line segment (t=0 is start, t=1 is end)."""
         s = 1.0 - t
@@ -749,6 +786,87 @@ class Polyline:
         sum_z = sum(self.points[i].z for i in range(n))
 
         return Point(sum_x / n, sum_y / n, sum_z / n)
+
+    def cut_by_plane(self, plane: "Plane", flip=None) -> "Polyline":
+        """Cut polyline by plane, returning the portion on one side.
+
+        By default (``flip=None``) the side containing the arc-length midpoint
+        is kept.  Pass ``flip=False`` to keep the side opposite to the plane
+        normal, or ``flip=True`` to keep the normal-aligned side.
+
+        Parameters
+        ----------
+        plane : Plane
+            Cutting plane whose ``z_axis`` is the normal.
+        flip : bool or None
+            Manual override of which side to keep.  ``None`` picks the side
+            containing the polyline's arc-length midpoint.
+
+        Returns
+        -------
+        Polyline
+            The portion of the polyline on the chosen side, with
+            segment-plane intersection points inserted as needed.
+        """
+        if len(self.points) < 2:
+            return Polyline(list(self.points))
+
+        nx, ny, nz = plane.z_axis.x, plane.z_axis.y, plane.z_axis.z
+        ox, oy, oz = plane.origin.x, plane.origin.y, plane.origin.z
+
+        def signed_dist(pt):
+            return nx*(pt.x-ox) + ny*(pt.y-oy) + nz*(pt.z-oz)
+
+        if flip is None:
+            # Arc-length midpoint
+            half_len = self.length() * 0.5
+            acc = 0.0
+            mid = self.points[0]
+            for i in range(len(self.points) - 1):
+                a, b = self.points[i], self.points[i+1]
+                dx, dy, dz = b.x-a.x, b.y-a.y, b.z-a.z
+                seg_len = (dx*dx + dy*dy + dz*dz) ** 0.5
+                if acc + seg_len >= half_len:
+                    t = (half_len - acc) / seg_len if seg_len > 1e-14 else 0.0
+                    mid = Point(a.x + t*dx, a.y + t*dy, a.z + t*dz)
+                    break
+                acc += seg_len
+            keep_sign = 1.0 if signed_dist(mid) >= 0.0 else -1.0
+        else:
+            keep_sign = 1.0 if flip else -1.0
+
+        def on_keep_side(pt):
+            return signed_dist(pt) * keep_sign >= 0.0
+
+        result = []
+        pts = self.points
+        for i in range(len(pts) - 1):
+            a, b = pts[i], pts[i+1]
+            if on_keep_side(a):
+                result.append(a)
+            dA = signed_dist(a)
+            dB = signed_dist(b)
+            if (dA > 0.0) != (dB > 0.0):
+                t = dA / (dA - dB)
+                result.append(Point(a.x + t*(b.x-a.x),
+                                    a.y + t*(b.y-a.y),
+                                    a.z + t*(b.z-a.z)))
+        if on_keep_side(pts[-1]):
+            result.append(pts[-1])
+
+        # Remove consecutive near-duplicate points
+        tol = 1e-6
+        deduped = []
+        for p in result:
+            if not deduped:
+                deduped.append(p)
+            else:
+                prev = deduped[-1]
+                dx, dy, dz = p.x-prev.x, p.y-prev.y, p.z-prev.z
+                if (dx*dx + dy*dy + dz*dz) ** 0.5 > tol:
+                    deduped.append(p)
+
+        return Polyline(deduped)
 
     def point_in_polygon_2d(self, p) -> bool:
         """Winding-number point-in-polygon test. p.x/y tested; polygon vertex z ignored."""
