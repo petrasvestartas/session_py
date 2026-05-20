@@ -25,7 +25,7 @@
       255
     ],
     "facedata": {},
-    "guid": "9887e3b3-c68b-4113-be24-6fa6ecfc295e",
+    "guid": "c24856d7-d439-4b52-8f73-0dbeb522fe41",
     "halfedge": {
       "0": {
         "1": 0,
@@ -69,7 +69,7 @@
       "a": 255,
       "b": 255,
       "g": 255,
-      "guid": "22be2310-27b6-48eb-bf0f-9b917aed8cea",
+      "guid": "14bf652b-165b-4f68-81df-10f133f1b485",
       "name": "white",
       "r": 255,
       "type": "Color"
@@ -127,7 +127,7 @@
       1.0
     ],
     "xform": {
-      "guid": "bcb0bd4d-1191-4797-8be6-0bf2ba39c8a1",
+      "guid": "8616807d-6ee5-4a2c-8909-a62274c2b158",
       "m": [
         1.0,
         0.0,
@@ -151,10 +151,10 @@
     }
   },
   "geometry_type": "Mesh",
-  "guid": "b2c3da4c-460a-42d0-b743-b4662dc0cc3c",
+  "guid": "080d3d06-27b2-43c8-88d4-a5dd6bb52dd3",
   "name": "json_test",
   "session_transformation": {
-    "guid": "d7d9f5aa-b831-48ea-bb22-2b7837cec6ce",
+    "guid": "6069f2a6-b949-4ebb-88b2-2fd31aca4029",
     "m": [
       1.0,
       0.0,
