@@ -1640,6 +1640,372 @@ class Mesh:
             return None
         return list(self.halfedge[vertex_key].keys())
 
+    def vertex_neighbors(self, vertex_key: int, ordered: bool = False) -> Optional[List[int]]:
+        """Alias of vertex_vertices. With ordered=True returns neighbors in face-cycle order
+        around the vertex (boundary vertex starts/ends at boundary halfedges)."""
+        if vertex_key not in self.halfedge:
+            return None
+        nbrs = list(self.halfedge[vertex_key].keys())
+        if not ordered or len(nbrs) <= 1:
+            return nbrs
+        start = nbrs[0]
+        for n in nbrs:
+            if self.halfedge[vertex_key].get(n) is None:
+                start = n
+                break
+        fkey = self.halfedge.get(start, {}).get(vertex_key)
+        out = [start]
+        guard = 0
+        while fkey is not None and guard < 10000:
+            guard += 1
+            verts = self.face.get(fkey)
+            if verts is None:
+                break
+            i = verts.index(vertex_key)
+            nbr = verts[(i + 1) % len(verts)]
+            if nbr == start:
+                break
+            out.append(nbr)
+            fkey = self.halfedge.get(nbr, {}).get(vertex_key)
+        return out
+
+    ###########################################################################################
+    # Boundary
+    ###########################################################################################
+
+    def vertices_on_boundary(self) -> List[int]:
+        """Vertices touching at least one boundary halfedge."""
+        out = []
+        for v in self.vertex:
+            if self.is_vertex_on_boundary(v):
+                out.append(v)
+        return out
+
+    def edges_on_boundary(self) -> List[Tuple[int, int]]:
+        """Edges with no face on one side, oriented as boundary halfedges (face is None on (u,v))."""
+        out = []
+        for u, nbrs in self.halfedge.items():
+            for v, f in nbrs.items():
+                if f is None:
+                    out.append((u, v))
+        return out
+
+    def faces_on_boundary(self) -> List[int]:
+        """Faces with at least one edge on the boundary."""
+        out = []
+        for fkey in self.face:
+            if self.is_face_on_boundary(fkey):
+                out.append(fkey)
+        return out
+
+    ###########################################################################################
+    # Halfedge Navigation
+    ###########################################################################################
+
+    def halfedge_face(self, edge: Tuple[int, int]) -> Optional[int]:
+        """Face on halfedge u->v, or None for boundary halfedges."""
+        u, v = edge
+        return self.halfedge.get(u, {}).get(v)
+
+    def halfedge_after(self, edge: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        """Next halfedge in the same face cycle. Walks the boundary if face is None."""
+        u, v = edge
+        f = self.halfedge.get(u, {}).get(v)
+        if f is not None:
+            verts = self.face.get(f)
+            if verts is None:
+                return None
+            n = len(verts)
+            try:
+                i = verts.index(v)
+            except ValueError:
+                return None
+            return (v, verts[(i + 1) % n])
+        if v not in self.halfedge:
+            return None
+        for w, fw in self.halfedge[v].items():
+            if w != u and fw is None:
+                return (v, w)
+        return None
+
+    def halfedge_before(self, edge: Tuple[int, int]) -> Optional[Tuple[int, int]]:
+        """Previous halfedge in the same face cycle. Walks the boundary if face is None."""
+        u, v = edge
+        f = self.halfedge.get(u, {}).get(v)
+        if f is not None:
+            verts = self.face.get(f)
+            if verts is None:
+                return None
+            n = len(verts)
+            try:
+                i = verts.index(u)
+            except ValueError:
+                return None
+            return (verts[(i - 1) % n], u)
+        if u not in self.halfedge:
+            return None
+        for w, fw in self.halfedge[u].items():
+            if w != v and self.halfedge.get(w, {}).get(u) is None:
+                return (w, u)
+        return None
+
+    def halfedge_loop(self, edge: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """Compas-style: walk along the loop of halfedges in the direction of ``edge``,
+        stepping to the opposite ordered neighbor (requires valence 4 interior)."""
+        if self.is_edge_on_boundary(*edge):
+            return self._halfedge_loop_on_boundary(edge)
+        edges = [edge]
+        u, v = edge
+        guard = 0
+        while guard < 10000:
+            guard += 1
+            nbrs = self.vertex_neighbors(v, ordered=True)
+            if nbrs is None or len(nbrs) != 4:
+                break
+            try:
+                i = nbrs.index(u)
+            except ValueError:
+                break
+            u = v
+            v = nbrs[i - 2]
+            edges.append((u, v))
+            if v == edges[0][0]:
+                break
+        return edges
+
+    def _halfedge_loop_on_boundary(self, edge: Tuple[int, int]) -> List[Tuple[int, int]]:
+        edges = [edge]
+        u, v = edge
+        guard = 0
+        while guard < 10000:
+            guard += 1
+            nbrs = self.vertex_neighbors(v)
+            if nbrs is None or len(nbrs) == 2:
+                break
+            nbr = None
+            for temp in nbrs:
+                if temp == u:
+                    continue
+                if self.is_edge_on_boundary(v, temp):
+                    nbr = temp
+                    break
+            if nbr is None:
+                break
+            u, v = v, nbr
+            edges.append((u, v))
+            if v == edges[0][0]:
+                break
+        return edges
+
+    def halfedge_strip(self, edge: Tuple[int, int]) -> List[Tuple[int, int]]:
+        """Compas-style: walk across quads via the opposite halfedge. Closes by appending start."""
+        u, v = edge
+        edges = [edge]
+        guard = 0
+        while guard < 10000:
+            guard += 1
+            f = self.halfedge.get(u, {}).get(v)
+            if f is None:
+                break
+            verts = self.face.get(f)
+            if verts is None or len(verts) != 4:
+                break
+            i = verts.index(u)
+            u = verts[i - 1]
+            v = verts[i - 2]
+            edges.append((u, v))
+            if (u, v) == edge:
+                break
+        return edges
+
+    ###########################################################################################
+    # Sampling (deterministic LCG when seed given, for cross-language parity)
+    ###########################################################################################
+
+    @staticmethod
+    def _lcg_sample(keys: List, size: int, seed: Optional[int]) -> List:
+        if not keys or size <= 0:
+            return []
+        if seed is None:
+            import random as _r
+            return _r.sample(keys, min(size, len(keys)))
+        s = (seed & 0x7FFFFFFF) or 1
+        out = []
+        used = set()
+        n = len(keys)
+        size = min(size, n)
+        while len(out) < size:
+            s = (1103515245 * s + 12345) & 0x7FFFFFFF
+            i = s % n
+            if i not in used:
+                used.add(i)
+                out.append(keys[i])
+        return out
+
+    def vertex_sample(self, size: int = 1, seed: Optional[int] = None) -> List[int]:
+        return Mesh._lcg_sample(list(self.vertex.keys()), size, seed)
+
+    def edge_sample(self, size: int = 1, seed: Optional[int] = None) -> List[Tuple[int, int]]:
+        return Mesh._lcg_sample(self.edges(), size, seed)
+
+    def face_sample(self, size: int = 1, seed: Optional[int] = None) -> List[int]:
+        return Mesh._lcg_sample(list(self.face.keys()), size, seed)
+
+    ###########################################################################################
+    # Compas-style Aliases
+    ###########################################################################################
+
+    def face_center(self, face_key: int) -> Optional[Point]:
+        """Alias of face_centroid."""
+        return self.face_centroid(face_key)
+
+    def face_polygon(self, face_key: int):
+        """Closed Polyline of the face boundary (Polyline acting as a polygon)."""
+        pts = self.face_points(face_key)
+        if pts is None:
+            return None
+        from .polyline import Polyline
+        closed = list(pts)
+        if len(closed) >= 1 and closed[0] != closed[-1]:
+            closed.append(closed[0])
+        return Polyline(closed)
+
+    def flip_cycles(self) -> None:
+        """Alias of flip()."""
+        self.flip()
+
+    ###########################################################################################
+    # Attribute API
+    ###########################################################################################
+
+    def update_default_vertex_attributes(self, **kwargs) -> None:
+        """Merge defaults; existing per-vertex attributes are unchanged."""
+        for k, v in kwargs.items():
+            self.default_vertex_attributes[k] = v
+
+    def update_default_face_attributes(self, **kwargs) -> None:
+        for k, v in kwargs.items():
+            self.default_face_attributes[k] = v
+
+    def update_default_edge_attributes(self, **kwargs) -> None:
+        for k, v in kwargs.items():
+            self.default_edge_attributes[k] = v
+
+    def vertex_attribute(self, key: int, name: str, value=None):
+        """Get when value is None; set otherwise. Returns default if name unset."""
+        if key not in self.vertex:
+            return None
+        if value is None:
+            attrs = self.vertex[key].attributes
+            if name in attrs:
+                return attrs[name]
+            return self.default_vertex_attributes.get(name)
+        self.vertex[key].attributes[name] = value
+        return None
+
+    def face_attribute(self, fkey: int, name: str, value=None):
+        if fkey not in self.face:
+            return None
+        if value is None:
+            attrs = self.facedata.get(fkey, {})
+            if name in attrs:
+                return attrs[name]
+            return self.default_face_attributes.get(name)
+        self.facedata.setdefault(fkey, {})[name] = value
+        return None
+
+    def edge_attribute(self, edge: Tuple[int, int], name: str, value=None):
+        u, v = edge
+        if v not in self.halfedge.get(u, {}) and u not in self.halfedge.get(v, {}):
+            return None
+        key = (u, v) if (u, v) in self.edgedata else ((v, u) if (v, u) in self.edgedata else (u, v))
+        if value is None:
+            attrs = self.edgedata.get(key, {})
+            if name in attrs:
+                return attrs[name]
+            return self.default_edge_attributes.get(name)
+        self.edgedata.setdefault(key, {})[name] = value
+        return None
+
+    def vertices_attribute(self, name: str, value=None, keys: Optional[List[int]] = None):
+        """Bulk get/set. With value=None and keys=None, returns list over all vertices."""
+        if keys is None:
+            keys = list(self.vertex.keys())
+        if value is None:
+            return [self.vertex_attribute(k, name) for k in keys]
+        for k in keys:
+            self.vertex_attribute(k, name, value)
+        return None
+
+    def faces_attribute(self, name: str, value=None, keys: Optional[List[int]] = None):
+        if keys is None:
+            keys = list(self.face.keys())
+        if value is None:
+            return [self.face_attribute(k, name) for k in keys]
+        for k in keys:
+            self.face_attribute(k, name, value)
+        return None
+
+    def edges_attribute(self, name: str, value=None, keys: Optional[List[Tuple[int, int]]] = None):
+        if keys is None:
+            keys = self.edges()
+        if value is None:
+            return [self.edge_attribute(e, name) for e in keys]
+        for e in keys:
+            self.edge_attribute(e, name, value)
+        return None
+
+    def vertices_where(self, conditions: Dict[str, object]) -> List[int]:
+        """Vertices whose attributes match all (name, value) pairs."""
+        out = []
+        for k in self.vertex:
+            if all(self.vertex_attribute(k, n) == v for n, v in conditions.items()):
+                out.append(k)
+        return out
+
+    def faces_where(self, conditions: Dict[str, object]) -> List[int]:
+        out = []
+        for k in self.face:
+            if all(self.face_attribute(k, n) == v for n, v in conditions.items()):
+                out.append(k)
+        return out
+
+    def edges_where(self, conditions: Dict[str, object]) -> List[Tuple[int, int]]:
+        out = []
+        for e in self.edges():
+            if all(self.edge_attribute(e, n) == v for n, v in conditions.items()):
+                out.append(e)
+        return out
+
+    def vertices_where_predicate(self, predicate) -> List[int]:
+        """predicate(key, attrs_dict) -> bool. attrs_dict merges defaults with overrides."""
+        out = []
+        for k in self.vertex:
+            attrs = dict(self.default_vertex_attributes)
+            attrs.update(self.vertex[k].attributes)
+            if predicate(k, attrs):
+                out.append(k)
+        return out
+
+    def faces_where_predicate(self, predicate) -> List[int]:
+        out = []
+        for k in self.face:
+            attrs = dict(self.default_face_attributes)
+            attrs.update(self.facedata.get(k, {}))
+            if predicate(k, attrs):
+                out.append(k)
+        return out
+
+    def edges_where_predicate(self, predicate) -> List[Tuple[int, int]]:
+        out = []
+        for e in self.edges():
+            attrs = dict(self.default_edge_attributes)
+            ed = self.edgedata.get(e) or self.edgedata.get((e[1], e[0])) or {}
+            attrs.update(ed)
+            if predicate(e, attrs):
+                out.append(e)
+        return out
+
     ###########################################################################################
     # Geometric Properties
     ###########################################################################################
@@ -1798,8 +2164,8 @@ class Mesh:
         n = len(verts)
         return Point(x / n, y / n, z / n)
 
-    def face_normal(self, face_key: int) -> Optional[Vector]:
-        """Calculate the normal of a face."""
+    def face_normal(self, face_key: int, unitized: bool = True) -> Optional[Vector]:
+        """Calculate the normal of a face. When unitized=False, length encodes 2x face area."""
         vertices = self.face_vertices(face_key)
         if vertices is None or len(vertices) < 3:
             return None
@@ -1815,6 +2181,8 @@ class Mesh:
         v = Vector(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2])
 
         normal = u.cross(v)
+        if not unitized:
+            return Vector(normal[0], normal[1], normal[2])
         length = normal.magnitude()
 
         if length > Tolerance.ZERO_TOLERANCE:
