@@ -64,7 +64,7 @@ def test_point_constructor():
     MINI_CHECK(p.guid)
     MINI_CHECK(x == 10.0 and y == 20.0 and z == 30.0)
     MINI_CHECK(pstr == "10.0, 20.0, 30.0")
-    MINI_CHECK(prepr == "Point(my_point, 10.0, 20.0, 30.0, Color(blue, 0, 0, 255, 255), 1.0)")
+    MINI_CHECK(prepr == "Point(my_point, 10.0, 20.0, 30.0, Color(blue, 0.0, 0.0, 1.0, 1.0), 1.0)")
     MINI_CHECK(pcopy == p and pcopy.guid != p.guid)
     MINI_CHECK(pother != p)
     MINI_CHECK(pmult[0] == 20.0 and pmult[1] == 40.0 and pmult[2] == 60.0)
@@ -103,7 +103,7 @@ def test_point_json_roundtrip():
     p = Point(1.5, 2.5, 3.5)
     p.name = "test_point"
     p.width = 2.0
-    p.pointcolor = Color(255, 128, 64, 255)
+    p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
@@ -123,10 +123,10 @@ def test_point_json_roundtrip():
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])
     MINI_CHECK(loaded.width == p.width)
-    MINI_CHECK(loaded.pointcolor[0] == 255)
-    MINI_CHECK(loaded.pointcolor[1] == 128)
-    MINI_CHECK(loaded.pointcolor[2] == 64)
-    MINI_CHECK(loaded.pointcolor[3] == 255)
+    MINI_CHECK(loaded.pointcolor[0] == 1.0)
+    MINI_CHECK(loaded.pointcolor[1] == 0.5)
+    MINI_CHECK(loaded.pointcolor[2] == 0.25)
+    MINI_CHECK(loaded.pointcolor[3] == 1.0)
 
 
 @MINI_TEST("Point", "Protobuf Roundtrip")
@@ -138,7 +138,7 @@ def test_point_protobuf_roundtrip():
     p = Point(1.5, 2.5, 3.5)
     p.name = "test_point"
     p.width = 2.0
-    p.pointcolor = Color(255, 128, 64, 255)
+    p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
 
     #   pb_dumps()      │ bytes        │ to protobuf bytes
     #   pb_loads(b)     │ bytes        │ from protobuf bytes
@@ -155,10 +155,10 @@ def test_point_protobuf_roundtrip():
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])
     MINI_CHECK(loaded.width == p.width)
-    MINI_CHECK(loaded.pointcolor[0] == 255)
-    MINI_CHECK(loaded.pointcolor[1] == 128)
-    MINI_CHECK(loaded.pointcolor[2] == 64)
-    MINI_CHECK(loaded.pointcolor[3] == 255)
+    MINI_CHECK(loaded.pointcolor[0] == 1.0)
+    MINI_CHECK(loaded.pointcolor[1] == 0.5)
+    MINI_CHECK(loaded.pointcolor[2] == 0.25)
+    MINI_CHECK(loaded.pointcolor[3] == 1.0)
 
 
 @MINI_TEST("Point", "Is Ccw")

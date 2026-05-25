@@ -81,7 +81,7 @@ def test_polyline_constructor():
         Point(1.0, 1.0, 0.0),
         Point(0.0, 1.0, 0.0),
     ])
-    plc.linecolor = Color(255, 0, 0, 255, "red")
+    plc.linecolor = Color(1.0, 0.0, 0.0, 1.0, "red")
     plc.width = 2.5
 
     MINI_CHECK(len(coords) == 12 and coords[0] == 0.0 and coords[3] == 1.0)
@@ -103,7 +103,7 @@ def test_polyline_constructor():
     MINI_CHECK(radd.get_point(0)[0] == 1.0 and radd.get_point(0)[1] == 1.0)
     MINI_CHECK(rdif.get_point(0)[0] == -1.0 and rdif.get_point(0)[1] == -1.0)
     MINI_CHECK(neg.get_point(0)[0] == 3.0 and neg.get_point(3)[0] == 0.0)
-    MINI_CHECK(plc.linecolor[0] == 255 and plc.linecolor[1] == 0 and plc.width == 2.5)
+    MINI_CHECK(plc.linecolor[0] == 1.0 and plc.linecolor[1] == 0.0 and plc.width == 2.5)
 
 
 @MINI_TEST("Polyline", "From Coords")

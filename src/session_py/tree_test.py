@@ -13,7 +13,7 @@ def test_treenode_constructor():
 
     # Constructor with name
     n = TreeNode("my_named_node")
-    n.color = Color(255, 0, 0, 255)
+    n.color = Color(1.0, 0.0, 0.0, 1.0)
 
     # Minimal string representation
     nstr = str(n)
@@ -24,7 +24,7 @@ def test_treenode_constructor():
     MINI_CHECK(n0.name == "my_node")
     MINI_CHECK(n0.guid)
     MINI_CHECK(n.name == "my_named_node")
-    MINI_CHECK(n.color is not None and n.color[0] == 255)
+    MINI_CHECK(n.color is not None and n.color[0] == 1.0)
     MINI_CHECK("TreeNode(my_named_node" in nstr)
     MINI_CHECK(n == n)
     MINI_CHECK(n != nother)

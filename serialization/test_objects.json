@@ -1,25 +1,25 @@
 {
     "type": "Objects",
-    "guid": "9e98f6fa-8037-4334-809c-5e0063f858fe",
+    "guid": "168dfd8b-1dfc-48c4-82db-64b6481a44d7",
     "name": "my_objects",
     "points": [
         {
-            "guid": "eec6a758-e6f1-45eb-945c-c491bc66a7a6",
+            "guid": "659cd7b6-025b-4b15-8a7b-621ed16da053",
             "name": "my_point",
             "pointcolor": {
-                "a": 255,
-                "b": 255,
-                "g": 0,
-                "guid": "f739ab02-e51a-4fa2-846f-d79a6cf8c1a7",
+                "a": 1.0,
+                "b": 1.0,
+                "g": 0.0,
+                "guid": "75aacc66-096b-490a-aa65-3788936fe18a",
                 "name": "blue",
-                "r": 0,
+                "r": 0.0,
                 "type": "Color"
             },
             "type": "Point",
             "width": 1.0,
             "x": 1.0,
             "xform": {
-                "guid": "8616807d-6ee5-4a2c-8909-a62274c2b158",
+                "guid": "c7b5dd8f-a13e-49aa-b71c-56b84c7c59c5",
                 "m": [
                     1.0,
                     0.0,
@@ -45,22 +45,22 @@
             "z": 3.0
         },
         {
-            "guid": "ad17b03d-3242-4da6-adeb-c7da573ed026",
+            "guid": "f7e69445-5492-4ab5-ae44-f996baaec455",
             "name": "my_point",
             "pointcolor": {
-                "a": 255,
-                "b": 255,
-                "g": 0,
-                "guid": "f739ab02-e51a-4fa2-846f-d79a6cf8c1a7",
+                "a": 1.0,
+                "b": 1.0,
+                "g": 0.0,
+                "guid": "75aacc66-096b-490a-aa65-3788936fe18a",
                 "name": "blue",
-                "r": 0,
+                "r": 0.0,
                 "type": "Color"
             },
             "type": "Point",
             "width": 1.0,
             "x": 4.0,
             "xform": {
-                "guid": "8616807d-6ee5-4a2c-8909-a62274c2b158",
+                "guid": "c7b5dd8f-a13e-49aa-b71c-56b84c7c59c5",
                 "m": [
                     1.0,
                     0.0,

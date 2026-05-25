@@ -481,6 +481,21 @@ def test_xform_inverse():
     MINI_CHECK(TOLERANCE.is_point_close(roundtrip.vertex_point(7), Point(-1, 1, 1)))
 
 
+@MINI_TEST("Xform", "To Cols")
+def test_xform_to_cols():
+    from session_py import Xform
+
+    xf = Xform.translation(1.0, 2.0, 3.0)
+    cols = xf.to_cols()
+    MINI_CHECK(TOLERANCE.is_close(cols[0][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(cols[1][1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(cols[2][2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(cols[3][3], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(cols[3][0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(cols[3][1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(cols[3][2], 3.0))
+
+
 @MINI_TEST("Xform", "Transform Geometry")
 def test_xform_transform_geometry():
     from session_py import Xform

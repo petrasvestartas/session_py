@@ -22,7 +22,7 @@ class PointCloud:
 
         # Store as flat arrays
         self.coords: List[float] = []
-        self._colors: List[int] = []
+        self._colors: List[float] = []
         self._normals: List[float] = []
 
         if points is not None:
@@ -401,7 +401,7 @@ class PointCloud:
         proto.guid = self.guid
         proto.name = self.name
         proto.coords.extend(self.coords)
-        proto.colors.extend(self._colors)
+        proto.colors.extend([int(round(v * 255)) for v in self._colors])
         proto.normals.extend(self._normals)
         proto.point_size = self.point_size
 
@@ -421,7 +421,7 @@ class PointCloud:
 
         pc = cls.from_coords(
             list(proto.coords),
-            list(proto.colors),
+            [v / 255.0 for v in proto.colors],
             list(proto.normals)
         )
         pc.guid = proto.guid

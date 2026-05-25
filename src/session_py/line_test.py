@@ -75,7 +75,7 @@ def test_line_constructor():
 
     # Line with custom color and width
     lc = Line(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
-    lc.linecolor = Color(255, 0, 0, 255, "red")
+    lc.linecolor = Color(1.0, 0.0, 0.0, 1.0, "red")
     lc.width = 2.5
 
     # with_name constructor
@@ -106,7 +106,7 @@ def test_line_constructor():
     MINI_CHECK(l_pv[0] == 1.0 and l_pv[1] == 2.0 and l_pv[2] == 3.0)
     MINI_CHECK(l_pv[3] == 4.0 and l_pv[4] == 6.0 and l_pv[5] == 8.0)
     MINI_CHECK(l_pdl[0] == 0.0 and l_pdl[3] == 5.0)
-    MINI_CHECK(lc.linecolor[0] == 255 and lc.linecolor[1] == 0 and lc.width == 2.5)
+    MINI_CHECK(lc.linecolor[0] == 1.0 and lc.linecolor[1] == 0.0 and lc.width == 2.5)
     MINI_CHECK(lwn.name == "custom" and lwn[3] == 1.0)
     MINI_CHECK(TOLERANCE.is_close(ms[1], 1.0) and TOLERANCE.is_close(me[1], 1.0))
 

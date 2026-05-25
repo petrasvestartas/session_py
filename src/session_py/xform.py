@@ -732,6 +732,14 @@ class Xform:
                 return False
         return True
 
+    def to_cols(self):
+        return [
+            [self.m[0],  self.m[1],  self.m[2],  self.m[3] ],
+            [self.m[4],  self.m[5],  self.m[6],  self.m[7] ],
+            [self.m[8],  self.m[9],  self.m[10], self.m[11]],
+            [self.m[12], self.m[13], self.m[14], self.m[15]],
+        ]
+
     ###########################################################################################
     # Operators
     ###########################################################################################

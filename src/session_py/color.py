@@ -9,18 +9,18 @@ except ImportError:
     _HAS_PROTOBUF = False
 
 class Color:
-    """An index-based 0-255 color with RGBA values.
+    """An index-based 0.0-1.0 color with RGBA values.
 
     Parameters
     ----------
-    r : int, optional
-        Red component (0-255). Defaults to 255.
-    g : int, optional
-        Green component (0-255). Defaults to 255.
-    b : int, optional
-        Blue component (0-255). Defaults to 255.
-    a : int, optional
-        Alpha component (0-255). Defaults to 255.
+    r : float, optional
+        Red component (0.0-1.0). Defaults to 1.0.
+    g : float, optional
+        Green component (0.0-1.0). Defaults to 1.0.
+    b : float, optional
+        Blue component (0.0-1.0). Defaults to 1.0.
+    a : float, optional
+        Alpha component (0.0-1.0). Defaults to 1.0.
     name : str, optional
         Name of the color. Defaults to "white".
 
@@ -34,13 +34,13 @@ class Color:
 
     _cache: dict = {}
 
-    def __init__(self, r: int, g: int, b: int, a: int, name: str = "my_color"):
+    def __init__(self, r: float, g: float, b: float, a: float, name: str = "my_color"):
         self._guid = None
         self.name = name
-        self._r = max(0, min(255, int(r)))
-        self._g = max(0, min(255, int(g)))
-        self._b = max(0, min(255, int(b)))
-        self._a = max(0, min(255, int(a)))
+        self._r = max(0.0, min(1.0, float(r)))
+        self._g = max(0.0, min(1.0, float(g)))
+        self._b = max(0.0, min(1.0, float(b)))
+        self._a = max(0.0, min(1.0, float(a)))
 
     @property
     def guid(self) -> str:
@@ -58,7 +58,7 @@ class Color:
 
     @r.setter
     def r(self, value):
-        self._r = max(0, min(255, int(value)))
+        self._r = max(0.0, min(1.0, float(value)))
 
     @property
     def g(self):
@@ -66,7 +66,7 @@ class Color:
 
     @g.setter
     def g(self, value):
-        self._g = max(0, min(255, int(value)))
+        self._g = max(0.0, min(1.0, float(value)))
 
     @property
     def b(self):
@@ -74,7 +74,7 @@ class Color:
 
     @b.setter
     def b(self, value):
-        self._b = max(0, min(255, int(value)))
+        self._b = max(0.0, min(1.0, float(value)))
 
     @property
     def a(self):
@@ -82,7 +82,7 @@ class Color:
 
     @a.setter
     def a(self, value):
-        self._a = max(0, min(255, int(value)))
+        self._a = max(0.0, min(1.0, float(value)))
 
     ###########################################################################################
     # Operators
@@ -156,10 +156,10 @@ class Color:
         Returns
         -------
         list[float]
-            Array [r, g, b, a] with values normalized to [0.0, 1.0].
+            Array [r, g, b, a] with values in [0.0, 1.0].
 
         """
-        return [self[0] / 255.0, self[1] / 255.0, self[2] / 255.0, self[3] / 255.0]
+        return [self[0], self[1], self[2], self[3]]
 
     @classmethod
     def from_unified_array(cls, arr) -> "Color":
@@ -173,15 +173,10 @@ class Color:
         Returns
         -------
         :class:`Color`
-            A new Color with values converted to 0-255 range.
+            A new Color with values in [0.0, 1.0] range.
 
         """
-        return cls(
-            int(arr[0] * 255.0 + 0.5),
-            int(arr[1] * 255.0 + 0.5),
-            int(arr[2] * 255.0 + 0.5),
-            int(arr[3] * 255.0 + 0.5),
-        )
+        return cls(arr[0], arr[1], arr[2], arr[3])
 
     ###########################################################################################
     # Presets
@@ -191,154 +186,154 @@ class Color:
     def white(cls) -> "Color":
         """Create a white color."""
         if "white" not in cls._cache:
-            c = cls(255, 255, 255, 255); c.name = "white"; cls._cache["white"] = c
+            c = cls(1.0, 1.0, 1.0, 1.0); c.name = "white"; cls._cache["white"] = c
         return cls._cache["white"]
 
     @classmethod
     def black(cls) -> "Color":
         """Create a black color."""
         if "black" not in cls._cache:
-            c = cls(0, 0, 0, 255); c.name = "black"; cls._cache["black"] = c
+            c = cls(0.0, 0.0, 0.0, 1.0); c.name = "black"; cls._cache["black"] = c
         return cls._cache["black"]
 
     @classmethod
     def grey(cls) -> "Color":
         """Create a grey color."""
         if "grey" not in cls._cache:
-            c = cls(128, 128, 128, 255); c.name = "grey"; cls._cache["grey"] = c
+            c = cls(0.5, 0.5, 0.5, 1.0); c.name = "grey"; cls._cache["grey"] = c
         return cls._cache["grey"]
 
     @classmethod
     def red(cls) -> "Color":
         """Create a red color."""
         if "red" not in cls._cache:
-            c = cls(255, 0, 0, 255); c.name = "red"; cls._cache["red"] = c
+            c = cls(1.0, 0.0, 0.0, 1.0); c.name = "red"; cls._cache["red"] = c
         return cls._cache["red"]
 
     @classmethod
     def orange(cls) -> "Color":
         """Create an orange color."""
         if "orange" not in cls._cache:
-            c = cls(255, 128, 0, 255); c.name = "orange"; cls._cache["orange"] = c
+            c = cls(1.0, 0.5, 0.0, 1.0); c.name = "orange"; cls._cache["orange"] = c
         return cls._cache["orange"]
 
     @classmethod
     def yellow(cls) -> "Color":
         """Create a yellow color."""
         if "yellow" not in cls._cache:
-            c = cls(255, 255, 0, 255); c.name = "yellow"; cls._cache["yellow"] = c
+            c = cls(1.0, 1.0, 0.0, 1.0); c.name = "yellow"; cls._cache["yellow"] = c
         return cls._cache["yellow"]
 
     @classmethod
     def lime(cls) -> "Color":
         """Create a lime color."""
         if "lime" not in cls._cache:
-            c = cls(128, 255, 0, 255); c.name = "lime"; cls._cache["lime"] = c
+            c = cls(0.5, 1.0, 0.0, 1.0); c.name = "lime"; cls._cache["lime"] = c
         return cls._cache["lime"]
 
     @classmethod
     def green(cls) -> "Color":
         """Create a green color."""
         if "green" not in cls._cache:
-            c = cls(0, 255, 0, 255); c.name = "green"; cls._cache["green"] = c
+            c = cls(0.0, 1.0, 0.0, 1.0); c.name = "green"; cls._cache["green"] = c
         return cls._cache["green"]
 
     @classmethod
     def mint(cls) -> "Color":
         """Create a mint color."""
         if "mint" not in cls._cache:
-            c = cls(0, 255, 128, 255); c.name = "mint"; cls._cache["mint"] = c
+            c = cls(0.0, 1.0, 0.5, 1.0); c.name = "mint"; cls._cache["mint"] = c
         return cls._cache["mint"]
 
     @classmethod
     def cyan(cls) -> "Color":
         """Create a cyan color."""
         if "cyan" not in cls._cache:
-            c = cls(0, 255, 255, 255); c.name = "cyan"; cls._cache["cyan"] = c
+            c = cls(0.0, 1.0, 1.0, 1.0); c.name = "cyan"; cls._cache["cyan"] = c
         return cls._cache["cyan"]
 
     @classmethod
     def azure(cls) -> "Color":
         """Create an azure color."""
         if "azure" not in cls._cache:
-            c = cls(0, 128, 255, 255); c.name = "azure"; cls._cache["azure"] = c
+            c = cls(0.0, 0.5, 1.0, 1.0); c.name = "azure"; cls._cache["azure"] = c
         return cls._cache["azure"]
 
     @classmethod
     def blue(cls) -> "Color":
         """Create a blue color."""
         if "blue" not in cls._cache:
-            c = cls(0, 0, 255, 255); c.name = "blue"; cls._cache["blue"] = c
+            c = cls(0.0, 0.0, 1.0, 1.0); c.name = "blue"; cls._cache["blue"] = c
         return cls._cache["blue"]
 
     @classmethod
     def violet(cls) -> "Color":
         """Create a violet color."""
         if "violet" not in cls._cache:
-            c = cls(128, 0, 255, 255); c.name = "violet"; cls._cache["violet"] = c
+            c = cls(0.5, 0.0, 1.0, 1.0); c.name = "violet"; cls._cache["violet"] = c
         return cls._cache["violet"]
 
     @classmethod
     def magenta(cls) -> "Color":
         """Create a magenta color."""
         if "magenta" not in cls._cache:
-            c = cls(255, 0, 255, 255); c.name = "magenta"; cls._cache["magenta"] = c
+            c = cls(1.0, 0.0, 1.0, 1.0); c.name = "magenta"; cls._cache["magenta"] = c
         return cls._cache["magenta"]
 
     @classmethod
     def pink(cls) -> "Color":
         """Create a pink color."""
         if "pink" not in cls._cache:
-            c = cls(255, 0, 128, 255); c.name = "pink"; cls._cache["pink"] = c
+            c = cls(1.0, 0.0, 0.5, 1.0); c.name = "pink"; cls._cache["pink"] = c
         return cls._cache["pink"]
 
     @classmethod
     def maroon(cls) -> "Color":
         """Create a maroon color."""
         if "maroon" not in cls._cache:
-            c = cls(128, 0, 0, 255); c.name = "maroon"; cls._cache["maroon"] = c
+            c = cls(0.5, 0.0, 0.0, 1.0); c.name = "maroon"; cls._cache["maroon"] = c
         return cls._cache["maroon"]
 
     @classmethod
     def brown(cls) -> "Color":
         """Create a brown color."""
         if "brown" not in cls._cache:
-            c = cls(128, 64, 0, 255); c.name = "brown"; cls._cache["brown"] = c
+            c = cls(0.5, 0.25, 0.0, 1.0); c.name = "brown"; cls._cache["brown"] = c
         return cls._cache["brown"]
 
     @classmethod
     def olive(cls) -> "Color":
         """Create an olive color."""
         if "olive" not in cls._cache:
-            c = cls(128, 128, 0, 255); c.name = "olive"; cls._cache["olive"] = c
+            c = cls(0.5, 0.5, 0.0, 1.0); c.name = "olive"; cls._cache["olive"] = c
         return cls._cache["olive"]
 
     @classmethod
     def teal(cls) -> "Color":
         """Create a teal color."""
         if "teal" not in cls._cache:
-            c = cls(0, 128, 128, 255); c.name = "teal"; cls._cache["teal"] = c
+            c = cls(0.0, 0.5, 0.5, 1.0); c.name = "teal"; cls._cache["teal"] = c
         return cls._cache["teal"]
 
     @classmethod
     def navy(cls) -> "Color":
         """Create a navy color."""
         if "navy" not in cls._cache:
-            c = cls(0, 0, 128, 255); c.name = "navy"; cls._cache["navy"] = c
+            c = cls(0.0, 0.0, 0.5, 1.0); c.name = "navy"; cls._cache["navy"] = c
         return cls._cache["navy"]
 
     @classmethod
     def purple(cls) -> "Color":
         """Create a purple color."""
         if "purple" not in cls._cache:
-            c = cls(128, 0, 128, 255); c.name = "purple"; cls._cache["purple"] = c
+            c = cls(0.5, 0.0, 0.5, 1.0); c.name = "purple"; cls._cache["purple"] = c
         return cls._cache["purple"]
 
     @classmethod
     def silver(cls) -> "Color":
         """Create a silver color."""
         if "silver" not in cls._cache:
-            c = cls(192, 192, 192, 255); c.name = "silver"; cls._cache["silver"] = c
+            c = cls(0.75, 0.75, 0.75, 1.0); c.name = "silver"; cls._cache["silver"] = c
         return cls._cache["silver"]
 
     @classmethod
@@ -366,7 +361,7 @@ class Color:
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from polymorphic JSON format."""
-        color = cls(data["r"], data["g"], data["b"], data.get("a", 255))
+        color = cls(data["r"], data["g"], data["b"], data.get("a", 1.0))
         color.guid = guid if guid is not None else data.get("guid", color.guid)
         color.name = name if name is not None else data.get("name", color.name)
         return color
@@ -508,10 +503,10 @@ class Color:
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self[0]}, {self[1]}, {self[2]}, {self[3]}"
+        return f"{self[0]:.1f}, {self[1]:.1f}, {self[2]:.1f}, {self[3]:.1f}"
 
     def __repr__(self) -> str:
-        return f"Color({self.name}, {self[0]}, {self[1]}, {self[2]}, {self[3]})"
+        return f"Color({self.name}, {self[0]:.1f}, {self[1]:.1f}, {self[2]:.1f}, {self[3]:.1f})"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Color):

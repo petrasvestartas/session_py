@@ -68,13 +68,13 @@ def test_pointcloud_from_coords():
     from session_py import PointCloud
 
     coords = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
-    colors = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]
+    colors = [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0]
     normals = [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
     pc = PointCloud.from_coords(coords, colors, normals)
 
     MINI_CHECK(len(pc) == 3 and pc.color_count() == 3 and pc.normal_count() == 3)
     MINI_CHECK(TOLERANCE.is_close(pc.get_point(1)[0], 1.0))
-    MINI_CHECK(pc.get_color(1)[1] == 255)
+    MINI_CHECK(pc.get_color(1)[1] == 1.0)
     MINI_CHECK(TOLERANCE.is_close(pc.get_normal(1)[2], 1.0))
 
 
@@ -174,7 +174,7 @@ def test_pointcloud_color_count():
     from session_py import PointCloud
     from session_py import Color
 
-    pc = PointCloud(colors=[Color(255, 0, 0, 255), Color(0, 255, 0, 255)])
+    pc = PointCloud(colors=[Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)])
 
     MINI_CHECK(pc.color_count() == 2)
 
@@ -184,10 +184,10 @@ def test_pointcloud_get_color():
     from session_py import PointCloud
     from session_py import Color
 
-    pc = PointCloud(colors=[Color(255, 0, 0, 255), Color(0, 255, 0, 255)])
+    pc = PointCloud(colors=[Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)])
     c = pc.get_color(1)
 
-    MINI_CHECK(c[0] == 0 and c[1] == 255 and c[2] == 0 and c[3] == 255)
+    MINI_CHECK(c[0] == 0.0 and c[1] == 1.0 and c[2] == 0.0 and c[3] == 1.0)
 
 
 @MINI_TEST("PointCloud", "Set Color")
@@ -195,10 +195,10 @@ def test_pointcloud_set_color():
     from session_py import PointCloud
     from session_py import Color
 
-    pc = PointCloud(colors=[Color(0, 0, 0, 0)])
-    pc.set_color(0, Color(200, 100, 50, 255))
+    pc = PointCloud(colors=[Color(0.0, 0.0, 0.0, 0.0)])
+    pc.set_color(0, Color(1.0, 0.5, 0.25, 1.0))
 
-    MINI_CHECK(pc.get_color(0)[0] == 200 and pc.get_color(0)[1] == 100 and pc.get_color(0)[2] == 50 and pc.get_color(0)[3] == 255)
+    MINI_CHECK(pc.get_color(0)[0] == 1.0 and pc.get_color(0)[1] == 0.5 and pc.get_color(0)[2] == 0.25 and pc.get_color(0)[3] == 1.0)
 
 
 @MINI_TEST("PointCloud", "Add Color")
@@ -207,10 +207,10 @@ def test_pointcloud_add_color():
     from session_py import Color
 
     pc = PointCloud()
-    pc.add_color(Color(128, 64, 32, 255))
+    pc.add_color(Color(0.5, 0.25, 0.125, 1.0))
 
     MINI_CHECK(pc.color_count() == 1)
-    MINI_CHECK(pc.get_color(0)[0] == 128 and pc.get_color(0)[1] == 64 and pc.get_color(0)[2] == 32)
+    MINI_CHECK(pc.get_color(0)[0] == 0.5 and pc.get_color(0)[1] == 0.25 and pc.get_color(0)[2] == 0.125)
 
 
 @MINI_TEST("PointCloud", "Get Colors")
@@ -218,12 +218,12 @@ def test_pointcloud_get_colors():
     from session_py import PointCloud
     from session_py import Color
 
-    pc = PointCloud(colors=[Color(255, 0, 0, 255), Color(0, 255, 0, 255)])
+    pc = PointCloud(colors=[Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)])
     colors = pc.get_colors()
 
     MINI_CHECK(len(colors) == 2)
-    MINI_CHECK(colors[0][0] == 255)
-    MINI_CHECK(colors[1][1] == 255)
+    MINI_CHECK(colors[0][0] == 1.0)
+    MINI_CHECK(colors[1][1] == 1.0)
 
 
 @MINI_TEST("PointCloud", "Normal Count")
@@ -329,7 +329,7 @@ def test_pointcloud_json_roundtrip():
     pc = PointCloud(
         [Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)],
         [Vector(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0)],
-        [Color(255, 0, 0, 255), Color(0, 255, 0, 255)]
+        [Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)]
     )
     pc.name = "test_pointcloud"
 
@@ -347,7 +347,7 @@ def test_pointcloud_json_roundtrip():
     MINI_CHECK(loaded.name == "test_pointcloud")
     MINI_CHECK(len(loaded) == 2)
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(0)[0], 1.0))
-    MINI_CHECK(loaded.get_color(0)[0] == 255)
+    MINI_CHECK(loaded.get_color(0)[0] == 1.0)
     MINI_CHECK(TOLERANCE.is_close(loaded.get_normal(0)[2], 1.0))
 
 
@@ -362,7 +362,7 @@ def test_pointcloud_protobuf_roundtrip():
     pc = PointCloud(
         [Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)],
         [Vector(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0)],
-        [Color(255, 0, 0, 255), Color(0, 255, 0, 255)]
+        [Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)]
     )
     pc.name = "test_pointcloud"
 
@@ -373,7 +373,7 @@ def test_pointcloud_protobuf_roundtrip():
     MINI_CHECK(loaded.name == "test_pointcloud")
     MINI_CHECK(len(loaded) == 2)
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(0)[0], 1.0))
-    MINI_CHECK(loaded.get_color(0)[0] == 255)
+    MINI_CHECK(TOLERANCE.is_close(loaded.get_color(0)[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.get_normal(0)[2], 1.0))
 
 

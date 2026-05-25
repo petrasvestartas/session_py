@@ -10,13 +10,13 @@ def test_color_constructor():
     from session_py import Color
 
     # Constructor
-    red = Color(255, 0, 0, 255, "red")
+    red = Color(1.0, 0.0, 0.0, 1.0, "red")
 
     # Setters
-    red[0] = 255
-    red[1] = 0
-    red[2] = 0
-    red[3] = 255
+    red[0] = 1.0
+    red[1] = 0.0
+    red[2] = 0.0
+    red[3] = 1.0
 
     # Getters
     r = red[0]
@@ -30,19 +30,19 @@ def test_color_constructor():
 
     # Copy (duplicates everything except guid)
     ccopy = red.duplicate()
-    cother = Color(255, 0, 0, 255, "red")
+    cother = Color(1.0, 0.0, 0.0, 1.0, "red")
 
     MINI_CHECK(red.name == "red")
     MINI_CHECK(red.guid != "")
-    MINI_CHECK(red[0] == 255)
-    MINI_CHECK(red[1] == 0)
-    MINI_CHECK(red[2] == 0)
-    MINI_CHECK(red[3] == 255)
+    MINI_CHECK(red[0] == 1.0)
+    MINI_CHECK(red[1] == 0.0)
+    MINI_CHECK(red[2] == 0.0)
+    MINI_CHECK(red[3] == 1.0)
     MINI_CHECK(red.guid)
 
-    MINI_CHECK(r == 255 and g == 0 and b == 0 and a == 255)
-    MINI_CHECK(cstr == "255, 0, 0, 255")
-    MINI_CHECK(crepr == "Color(red, 255, 0, 0, 255)")
+    MINI_CHECK(r == 1.0 and g == 0.0 and b == 0.0 and a == 1.0)
+    MINI_CHECK(cstr == "1.0, 0.0, 0.0, 1.0")
+    MINI_CHECK(crepr == "Color(red, 1.0, 0.0, 0.0, 1.0)")
     MINI_CHECK(ccopy == cother)
     MINI_CHECK(ccopy.guid != red.guid)
 
@@ -52,7 +52,7 @@ def test_color_json_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    c = Color(255, 128, 64, 255, "test_color")
+    c = Color(1.0, 0.5, 0.25, 1.0, "test_color")
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
@@ -67,10 +67,10 @@ def test_color_json_roundtrip():
     loaded = Color.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_color")
-    MINI_CHECK(loaded[0] == 255)
-    MINI_CHECK(loaded[1] == 128)
-    MINI_CHECK(loaded[2] == 64)
-    MINI_CHECK(loaded[3] == 255)
+    MINI_CHECK(loaded[0] == 1.0)
+    MINI_CHECK(loaded[1] == 0.5)
+    MINI_CHECK(loaded[2] == 0.25)
+    MINI_CHECK(loaded[3] == 1.0)
 
 
 @MINI_TEST("Color", "Protobuf Roundtrip")
@@ -78,7 +78,7 @@ def test_color_protobuf_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    color = Color(255, 128, 64, 255, "test_color")
+    color = Color(1.0, 0.5, 0.25, 1.0, "test_color")
 
     #   pb_dumps()      │ bytes        │ to protobuf bytes
     #   pb_loads(b)     │ bytes        │ from protobuf bytes
@@ -90,23 +90,23 @@ def test_color_protobuf_roundtrip():
     loaded = Color.pb_load(path)
 
     MINI_CHECK(loaded.name == "test_color")
-    MINI_CHECK(loaded[0] == 255)
-    MINI_CHECK(loaded[1] == 128)
-    MINI_CHECK(loaded[2] == 64)
-    MINI_CHECK(loaded[3] == 255)
+    MINI_CHECK(loaded[0] == 1.0)
+    MINI_CHECK(loaded[1] == 0.5)
+    MINI_CHECK(loaded[2] == 0.25)
+    MINI_CHECK(loaded[3] == 1.0)
 
 
 @MINI_TEST("Color", "Conversion")
 def test_color_conversion():
     from session_py import Color
 
-    color = Color(255, 128, 64, 255)
+    color = Color(1.0, 0.5, 0.25, 1.0)
     flts = color.to_unified_array()
     ints = Color.from_unified_array(flts)
 
     MINI_CHECK(TOLERANCE.is_close(flts[0], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(flts[1], 0.50196078))
-    MINI_CHECK(TOLERANCE.is_close(flts[2], 0.25098039))
+    MINI_CHECK(TOLERANCE.is_close(flts[1], 0.5))
+    MINI_CHECK(TOLERANCE.is_close(flts[2], 0.25))
     MINI_CHECK(TOLERANCE.is_close(flts[3], 1.0))
     MINI_CHECK(ints == color)
 
@@ -137,28 +137,28 @@ def test_color_presets():
     purple = Color.purple()
     silver = Color.silver()
 
-    MINI_CHECK(white == Color(255, 255, 255, 255, "white"))
-    MINI_CHECK(black == Color(0, 0, 0, 255, "black"))
-    MINI_CHECK(grey == Color(128, 128, 128, 255, "grey"))
-    MINI_CHECK(red == Color(255, 0, 0, 255, "red"))
-    MINI_CHECK(orange == Color(255, 128, 0, 255, "orange"))
-    MINI_CHECK(yellow == Color(255, 255, 0, 255, "yellow"))
-    MINI_CHECK(lime == Color(128, 255, 0, 255, "lime"))
-    MINI_CHECK(green == Color(0, 255, 0, 255, "green"))
-    MINI_CHECK(mint == Color(0, 255, 128, 255, "mint"))
-    MINI_CHECK(cyan == Color(0, 255, 255, 255, "cyan"))
-    MINI_CHECK(azure == Color(0, 128, 255, 255, "azure"))
-    MINI_CHECK(blue == Color(0, 0, 255, 255, "blue"))
-    MINI_CHECK(violet == Color(128, 0, 255, 255, "violet"))
-    MINI_CHECK(magenta == Color(255, 0, 255, 255, "magenta"))
-    MINI_CHECK(pink == Color(255, 0, 128, 255, "pink"))
-    MINI_CHECK(maroon == Color(128, 0, 0, 255, "maroon"))
-    MINI_CHECK(brown == Color(128, 64, 0, 255, "brown"))
-    MINI_CHECK(olive == Color(128, 128, 0, 255, "olive"))
-    MINI_CHECK(teal == Color(0, 128, 128, 255, "teal"))
-    MINI_CHECK(navy == Color(0, 0, 128, 255, "navy"))
-    MINI_CHECK(purple == Color(128, 0, 128, 255, "purple"))
-    MINI_CHECK(silver == Color(192, 192, 192, 255, "silver"))
+    MINI_CHECK(white == Color(1.0, 1.0, 1.0, 1.0, "white"))
+    MINI_CHECK(black == Color(0.0, 0.0, 0.0, 1.0, "black"))
+    MINI_CHECK(grey == Color(0.5, 0.5, 0.5, 1.0, "grey"))
+    MINI_CHECK(red == Color(1.0, 0.0, 0.0, 1.0, "red"))
+    MINI_CHECK(orange == Color(1.0, 0.5, 0.0, 1.0, "orange"))
+    MINI_CHECK(yellow == Color(1.0, 1.0, 0.0, 1.0, "yellow"))
+    MINI_CHECK(lime == Color(0.5, 1.0, 0.0, 1.0, "lime"))
+    MINI_CHECK(green == Color(0.0, 1.0, 0.0, 1.0, "green"))
+    MINI_CHECK(mint == Color(0.0, 1.0, 0.5, 1.0, "mint"))
+    MINI_CHECK(cyan == Color(0.0, 1.0, 1.0, 1.0, "cyan"))
+    MINI_CHECK(azure == Color(0.0, 0.5, 1.0, 1.0, "azure"))
+    MINI_CHECK(blue == Color(0.0, 0.0, 1.0, 1.0, "blue"))
+    MINI_CHECK(violet == Color(0.5, 0.0, 1.0, 1.0, "violet"))
+    MINI_CHECK(magenta == Color(1.0, 0.0, 1.0, 1.0, "magenta"))
+    MINI_CHECK(pink == Color(1.0, 0.0, 0.5, 1.0, "pink"))
+    MINI_CHECK(maroon == Color(0.5, 0.0, 0.0, 1.0, "maroon"))
+    MINI_CHECK(brown == Color(0.5, 0.25, 0.0, 1.0, "brown"))
+    MINI_CHECK(olive == Color(0.5, 0.5, 0.0, 1.0, "olive"))
+    MINI_CHECK(teal == Color(0.0, 0.5, 0.5, 1.0, "teal"))
+    MINI_CHECK(navy == Color(0.0, 0.0, 0.5, 1.0, "navy"))
+    MINI_CHECK(purple == Color(0.5, 0.0, 0.5, 1.0, "purple"))
+    MINI_CHECK(silver == Color(0.75, 0.75, 0.75, 1.0, "silver"))
 
 
 if __name__ == "__main__":
