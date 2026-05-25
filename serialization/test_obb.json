@@ -1,15 +1,15 @@
 {
   "type": "OBB",
-  "guid": "68752484-4778-4f57-8671-bdc4dca0fe68",
+  "guid": "7b6d16db-7392-4e1b-892a-7965026e389e",
   "name": "test_bbox",
   "center": {
-    "guid": "7e01f586-be17-4622-9533-083a7f17f143",
+    "guid": "fe65986e-f458-4f4e-9c9f-5dbc38259990",
     "name": "my_point",
     "pointcolor": {
       "a": 1.0,
       "b": 1.0,
       "g": 0.0,
-      "guid": "5cfc15f9-c3dc-4215-b0de-58c0c702d563",
+      "guid": "cd121444-18c3-49a0-97eb-d47c3e5da16b",
       "name": "blue",
       "r": 0.0,
       "type": "Color"
@@ -18,7 +18,7 @@
     "width": 1.0,
     "x": 1.0,
     "xform": {
-      "guid": "40bdcfea-3e86-4126-bc2c-21269e57c7d8",
+      "guid": "d2d0862c-7907-4eeb-81cb-2b50e4c159e1",
       "m": [
         1.0,
         0.0,
@@ -44,12 +44,12 @@
     "z": 3.0
   },
   "x_axis": {
-    "guid": "a6c502d9-6c68-4d24-a6ae-8e9f7a566370",
+    "guid": "793dd16f-6b94-4f16-ab43-00bd70fec6ce",
     "name": "my_vector",
     "type": "Vector",
     "x": 1.0,
     "xform": {
-      "guid": "40bdcfea-3e86-4126-bc2c-21269e57c7d8",
+      "guid": "d2d0862c-7907-4eeb-81cb-2b50e4c159e1",
       "m": [
         1.0,
         0.0,
@@ -75,12 +75,12 @@
     "z": 0.0
   },
   "y_axis": {
-    "guid": "fe64b880-a647-47cd-bd45-c833dc2e7a0c",
+    "guid": "0694a7f9-0b67-441e-bf99-b59f0dcba266",
     "name": "my_vector",
     "type": "Vector",
     "x": 0.0,
     "xform": {
-      "guid": "40bdcfea-3e86-4126-bc2c-21269e57c7d8",
+      "guid": "d2d0862c-7907-4eeb-81cb-2b50e4c159e1",
       "m": [
         1.0,
         0.0,
@@ -106,12 +106,12 @@
     "z": 0.0
   },
   "z_axis": {
-    "guid": "35a056c0-6525-4f48-beff-d1a9d666ce3a",
+    "guid": "40869d63-b196-403e-86f4-5984a5b998cd",
     "name": "my_vector",
     "type": "Vector",
     "x": 0.0,
     "xform": {
-      "guid": "40bdcfea-3e86-4126-bc2c-21269e57c7d8",
+      "guid": "d2d0862c-7907-4eeb-81cb-2b50e4c159e1",
       "m": [
         1.0,
         0.0,
@@ -137,12 +137,12 @@
     "z": 1.0
   },
   "half_size": {
-    "guid": "be03671f-0ebc-4422-bf60-25b634343311",
+    "guid": "81306f09-b3ba-481e-a885-ff7f1b2a0498",
     "name": "my_vector",
     "type": "Vector",
     "x": 5.0,
     "xform": {
-      "guid": "40bdcfea-3e86-4126-bc2c-21269e57c7d8",
+      "guid": "d2d0862c-7907-4eeb-81cb-2b50e4c159e1",
       "m": [
         1.0,
         0.0,
