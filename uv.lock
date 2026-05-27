@@ -2707,7 +2707,7 @@ wheels = [
 
 [[package]]
 name = "session-py"
-version = "0.77.0"
+version = "0.94.0"
 source = { editable = "." }
 dependencies = [
     { name = "grpcio-tools", version = "1.70.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
@@ -2761,7 +2761,7 @@ requires-dist = [
     { name = "grpcio-tools", specifier = ">=1.60.0" },
     { name = "numba", marker = "extra == 'performance'", specifier = ">=0.56.0" },
     { name = "numpy", specifier = ">=1.20.0" },
-    { name = "protobuf", specifier = ">=5.0.0" },
+    { name = "protobuf", specifier = ">=5.29.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
 ]

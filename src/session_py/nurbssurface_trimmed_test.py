@@ -258,6 +258,7 @@ def test_nurbssurface_trimmed_point_at():
 
 @MINI_TEST("NurbsSurfaceTrimmed", "Mesh")
 def test_nurbssurface_trimmed_mesh():
+    import math
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
@@ -268,18 +269,74 @@ def test_nurbssurface_trimmed_mesh():
     srf.set_cv(1, 0, Point(6, 0, 0))
     srf.set_cv(0, 1, Point(0, 6, 0))
     srf.set_cv(1, 1, Point(6, 6, 0))
-
     outer = NurbsCurve.create(True, 1, [
         Point(0.05, 0.05, 0), Point(0.95, 0.05, 0),
         Point(0.95, 0.95, 0), Point(0.05, 0.95, 0),
     ])
-
     ts = NurbsSurfaceTrimmed.create(srf, outer)
     m = ts.mesh()
-
     MINI_CHECK(not m.is_empty())
-    MINI_CHECK(m.number_of_vertices() > 0)
-    MINI_CHECK(m.number_of_faces() > 0)
+    MINI_CHECK(m.number_of_vertices() >= 4)
+    MINI_CHECK(m.number_of_faces() >= 2)
+    for vd in m.vertex.values():
+        nx = vd.attributes.get("nx", 0.0)
+        ny = vd.attributes.get("ny", 0.0)
+        nz = vd.attributes.get("nz", 0.0)
+        MINI_CHECK(math.sqrt(nx*nx + ny*ny + nz*nz) > 0.5)
+
+    bnd = NurbsCurve.create(True, 1, [
+        Point(0, 0, 0), Point(6, 0, 0), Point(6, 6, 0), Point(0, 6, 0),
+    ])
+    ts_hole = NurbsSurfaceTrimmed.create_planar(bnd)
+    ts_hole.add_hole(NurbsCurve.create(True, 1, [
+        Point(2, 2, 0), Point(4, 2, 0), Point(4, 4, 0), Point(2, 4, 0),
+    ]))
+    mh = ts_hole.mesh()
+    MINI_CHECK(not mh.is_empty())
+    MINI_CHECK(mh.number_of_faces() >= 2)
+
+    cw = math.sqrt(2.0) / 2.0
+    ccx = [1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0, 1.0, 1.0]
+    ccy = [0.0, 1.0, 1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0]
+    cwt = [1.0, cw, 1.0, cw, 1.0, cw, 1.0, cw, 1.0]
+    import numpy as _np
+    circle_loop = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
+    circle_loop.m_nurbsknot = _np.array([0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0], dtype=_np.float64)
+    for i in range(9):
+        circle_loop.set_cv_4d(i, (0.5 + 0.5 * ccx[i]) * cwt[i], (0.5 + 0.5 * ccy[i]) * cwt[i], 0.0, cwt[i])
+    ts_circ = NurbsSurfaceTrimmed.create(srf, circle_loop)
+    mc = ts_circ.mesh()
+    MINI_CHECK(not mc.is_empty())
+    MINI_CHECK(mc.number_of_vertices() >= 30)
+    MINI_CHECK(mc.number_of_faces() >= 30)
+    for vd in mc.vertex.values():
+        nx = vd.attributes.get("nx", 0.0)
+        ny = vd.attributes.get("ny", 0.0)
+        nz = vd.attributes.get("nz", 0.0)
+        MINI_CHECK(math.sqrt(nx*nx + ny*ny + nz*nz) > 0.5)
+
+    n = 8
+    pts = []
+    for i in range(n):
+        for j in range(n):
+            x, y = float(i), float(j)
+            r2 = (x - 1.5)**2 + (y - 1.5)**2
+            z = 5.0 * math.exp(-r2) + 0.3 * math.sin(math.pi*x/7.0) * math.sin(math.pi*y/7.0)
+            pts.append(Point(x, y, z))
+    bump_srf = NurbsSurface.create(False, False, 3, 3, n, n, pts)
+    bump_outer = NurbsCurve.create(True, 1, [
+        Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0),
+    ])
+    ts_bump = NurbsSurfaceTrimmed.create(bump_srf, bump_outer)
+    mb = ts_bump.mesh()
+    MINI_CHECK(not mb.is_empty())
+    MINI_CHECK(mb.number_of_vertices() >= 20)
+    MINI_CHECK(mb.number_of_faces() >= 30)
+    for vd in mb.vertex.values():
+        nx = vd.attributes.get("nx", 0.0)
+        ny = vd.attributes.get("ny", 0.0)
+        nz = vd.attributes.get("nz", 0.0)
+        MINI_CHECK(math.sqrt(nx*nx + ny*ny + nz*nz) > 0.5)
 
 
 @MINI_TEST("NurbsSurfaceTrimmed", "Transformation")

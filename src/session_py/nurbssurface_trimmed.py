@@ -170,8 +170,10 @@ class NurbsSurfaceTrimmed:
         if self.m_surface.is_planar():
             from .remesh_cdt import _cdt_triangulate as _RemeshCDT_cdt
             def disc(crv):
-                n = max(crv.cv_count() * 4, 16) if crv.degree() > 1 else max(crv.cv_count() - 1, 4)
-                pts, _ = crv.divide_by_count(n)
+                if crv.degree() <= 1:
+                    return [crv.get_cv(i) for i in range(crv.cv_count() - 1)]
+                n = max(crv.cv_count() * 4, 16)
+                pts, _ = crv.divide_by_count(n + 1)
                 return pts
             outer_pts = disc(self.m_outer_loop)
             hole_pts = [disc(inner) for inner in self.m_inner_loops]
@@ -219,97 +221,70 @@ class NurbsSurfaceTrimmed:
                 result.vertex[vk].set_normal(nrm[0], nrm[1], nrm[2])
             return result
 
-        # Non-planar: grid + point-in-polygon discard
-        dom_u = self.m_surface.domain(0)
-        dom_v = self.m_surface.domain(1)
-        range_u = dom_u[1] - dom_u[0]
-        range_v = dom_v[1] - dom_v[0]
-        if range_u < 1e-15 or range_v < 1e-15:
-            return self.m_surface.mesh()
-        p00 = self.m_surface.point_at(dom_u[0], dom_v[0])
-        p10 = self.m_surface.point_at(dom_u[1], dom_v[0])
-        p01 = self.m_surface.point_at(dom_u[0], dom_v[1])
-        u_len = math.sqrt((p10[0]-p00[0])**2+(p10[1]-p00[1])**2+(p10[2]-p00[2])**2)
-        v_len = math.sqrt((p01[0]-p00[0])**2+(p01[1]-p00[1])**2+(p01[2]-p00[2])**2)
-        max_dim = max(u_len, v_len)
-        max_edge = max_dim / 10.0 if max_dim > 1e-10 else 0.1
-        nu = max(12, int(math.ceil(u_len / max_edge)) + 1) if u_len > 1e-10 else 12
-        nv = max(12, int(math.ceil(v_len / max_edge)) + 1) if v_len > 1e-10 else 12
-        us = [dom_u[0] + i * range_u / (nu - 1) for i in range(nu)]
-        vs = [dom_v[0] + i * range_v / (nv - 1) for i in range(nv)]
-        full = Mesh()
+        # Non-planar: UV grid triangulation with per-vertex parametric normals
         import numpy as _np
         from .point import Point as _Pt
-        _us_a = _np.asarray(us, dtype=_np.float64)
-        _vs_a = _np.asarray(vs, dtype=_np.float64)
-        _gu = _np.repeat(_us_a, nv)
-        _gv = _np.tile(_vs_a, nu)
-        _xyz = self.m_surface.batch_point_at(_gu, _gv)
-        for idx in range(nu * nv):
-            vk = full.add_vertex(_Pt(_xyz[idx, 0], _xyz[idx, 1], _xyz[idx, 2]))
-            full.vertex[vk].attributes["u"] = float(_gu[idx])
-            full.vertex[vk].attributes["v"] = float(_gv[idx])
-        for i in range(nu - 1):
-            for j in range(nv - 1):
-                v00 = i * nv + j
-                v10 = (i + 1) * nv + j
-                v01 = i * nv + (j + 1)
-                v11 = (i + 1) * nv + (j + 1)
-                if (i + j) % 2 == 0:
-                    full.add_face([v00, v10, v11])
-                    full.add_face([v00, v11, v01])
-                else:
-                    full.add_face([v00, v10, v01])
-                    full.add_face([v10, v11, v01])
-        from .point import Point
-        from .polyline import Polyline
-        def discretize(crv):
+        def disc_np(crv):
+            if crv.degree() <= 1:
+                return [(float(crv.get_cv(i)[0]), float(crv.get_cv(i)[1])) for i in range(crv.cv_count() - 1)]
             n = max(crv.cv_count() * 4, 16)
-            pts, _ = crv.divide_by_count(n)
-            return Polyline([Point(p[0], p[1], 0.0) for p in pts])
-        outer_polygon = discretize(self.m_outer_loop)
-        inner_polygons = [discretize(inner) for inner in self.m_inner_loops]
-        keep_verts = set()
-        for vk, vd in full.vertex.items():
-            u_raw = vd.attributes.get("u", 0.0)
-            v_raw = vd.attributes.get("v", 0.0)
-            pt = Point(u_raw, v_raw, 0.0)
-            if not outer_polygon.point_in_polygon_2d(pt):
-                continue
-            in_hole = False
-            for ip in inner_polygons:
-                if ip.point_in_polygon_2d(pt):
-                    in_hole = True
-                    break
-            if not in_hole:
-                keep_verts.add(vk)
+            pts, _ = crv.divide_by_count(n + 1)
+            return [(float(p[0]), float(p[1])) for p in pts[:-1]]
+        border_uv = disc_np(self.m_outer_loop)
+        holes_uv = [disc_np(inner) for inner in self.m_inner_loops]
+        def pip(px, py, poly):
+            inside = False
+            j = len(poly) - 1
+            for i in range(len(poly)):
+                xi, yi = poly[i]; xj, yj = poly[j]
+                if ((yi > py) != (yj > py)) and (px < (xj - xi) * (py - yi) / (yj - yi + 1e-300) + xi):
+                    inside = not inside
+                j = i
+            return inside
+        def inside_trim(pu, pv):
+            if not pip(pu, pv, border_uv): return False
+            for h in holes_uv:
+                if pip(pu, pv, h): return False
+            return True
+        u_min = min(p[0] for p in border_uv); u_max = max(p[0] for p in border_uv)
+        v_min = min(p[1] for p in border_uv); v_max = max(p[1] for p in border_uv)
+        n_grid = 10
+        us = _np.linspace(u_min, u_max, n_grid + 1)
+        vs = _np.linspace(v_min, v_max, n_grid + 1)
+        uv_grid = [[(float(us[i]), float(vs[j])) for j in range(n_grid + 1)] for i in range(n_grid + 1)]
+        u_flat = _np.array([uv_grid[i][j][0] for i in range(n_grid+1) for j in range(n_grid+1)], dtype=_np.float64)
+        v_flat = _np.array([uv_grid[i][j][1] for i in range(n_grid+1) for j in range(n_grid+1)], dtype=_np.float64)
+        xyz = self.m_surface.batch_point_at(u_flat, v_flat)
+        pts3d_grid = [_Pt(float(xyz[k, 0]), float(xyz[k, 1]), float(xyz[k, 2])) for k in range(len(u_flat))]
+        idx = lambda i, j: i * (n_grid + 1) + j
         polygons = []
-        for fk, fverts in full.face.items():
-            if all(vi in keep_verts for vi in fverts):
-                polygons.append([full.vertex[vi].position() for vi in fverts])
+        uv_per_poly = []
+        for i in range(n_grid):
+            for j in range(n_grid):
+                cx0 = (uv_grid[i][j][0] + uv_grid[i+1][j][0] + uv_grid[i][j+1][0]) / 3
+                cy0 = (uv_grid[i][j][1] + uv_grid[i+1][j][1] + uv_grid[i][j+1][1]) / 3
+                if inside_trim(cx0, cy0):
+                    a, b, c = idx(i, j), idx(i+1, j), idx(i, j+1)
+                    polygons.append([pts3d_grid[a], pts3d_grid[b], pts3d_grid[c]])
+                    uv_per_poly.append([(u_flat[a], v_flat[a]), (u_flat[b], v_flat[b]), (u_flat[c], v_flat[c])])
+                cx1 = (uv_grid[i+1][j][0] + uv_grid[i+1][j+1][0] + uv_grid[i][j+1][0]) / 3
+                cy1 = (uv_grid[i+1][j][1] + uv_grid[i+1][j+1][1] + uv_grid[i][j+1][1]) / 3
+                if inside_trim(cx1, cy1):
+                    a, b, c = idx(i+1, j), idx(i+1, j+1), idx(i, j+1)
+                    polygons.append([pts3d_grid[a], pts3d_grid[b], pts3d_grid[c]])
+                    uv_per_poly.append([(u_flat[a], v_flat[a]), (u_flat[b], v_flat[b]), (u_flat[c], v_flat[c])])
+        if not polygons:
+            return Mesh()
         result = Mesh.from_polylines(polygons)
-        max_vkey = max(result.vertex.keys()) if result.vertex else 0
-        vnx = [0.0] * (max_vkey + 1)
-        vny = [0.0] * (max_vkey + 1)
-        vnz = [0.0] * (max_vkey + 1)
-        for fi, vids in result.face.items():
-            if len(vids) < 3:
-                continue
-            p0 = result.vertex[vids[0]]
-            p1 = result.vertex[vids[1]]
-            p2 = result.vertex[vids[2]]
-            e1x, e1y, e1z = p1.x-p0.x, p1.y-p0.y, p1.z-p0.z
-            e2x, e2y, e2z = p2.x-p0.x, p2.y-p0.y, p2.z-p0.z
-            fnx = e1y*e2z - e1z*e2y
-            fny = e1z*e2x - e1x*e2z
-            fnz = e1x*e2y - e1y*e2x
-            for vi in vids:
-                vnx[vi] += fnx; vny[vi] += fny; vnz[vi] += fnz
-        for vk in result.vertex:
-            ln = math.sqrt(vnx[vk]**2 + vny[vk]**2 + vnz[vk]**2)
-            if ln > 1e-15:
-                vnx[vk] /= ln; vny[vk] /= ln; vnz[vk] /= ln
-            result.vertex[vk].set_normal(vnx[vk], vny[vk], vnz[vk])
+        pts3d_arr = _np.array([[p[0], p[1], p[2]] for tri in polygons for p in tri], dtype=_np.float64)
+        uv_flat2 = [(u, v) for tri_uv in uv_per_poly for (u, v) in tri_uv]
+        for vk, vd in result.vertex.items():
+            p = vd.position()
+            diffs = pts3d_arr - _np.array([p.x, p.y, p.z])
+            best_i = int(_np.argmin((diffs**2).sum(axis=1)))
+            u_val, v_val = uv_flat2[best_i]
+            nrm = self.m_surface.normal_at(u_val, v_val)
+            vd.set_normal(nrm[0], nrm[1], nrm[2])
         return result
 
     def transform(self, xf=None):
