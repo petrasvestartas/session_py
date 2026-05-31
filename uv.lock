@@ -2707,7 +2707,7 @@ wheels = [
 
 [[package]]
 name = "session-py"
-version = "0.94.0"
+version = "0.97.0"
 source = { editable = "." }
 dependencies = [
     { name = "grpcio-tools", version = "1.70.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },

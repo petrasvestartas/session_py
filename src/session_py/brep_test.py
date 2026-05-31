@@ -411,6 +411,19 @@ def test_brep_create_block_with_hole():
     MINI_CHECK(m.number_of_faces() > 0)
 
 
+@MINI_TEST("BRep", "Mesh Orientation")
+def test_brep_mesh_orientation():
+    from session_py.brep import BRep
+    from session_py import Mesh
+
+    # Reversed faces must flip winding; the bug inflated volume() past the solid box.
+    bh = BRep.create_block_with_hole(8.0, 6.0, 4.0, 1.5)
+    vol = bh.mesh().volume()
+
+    MINI_CHECK(vol > 60.0)
+    MINI_CHECK(vol < 175.0)
+
+
 @MINI_TEST("BRep", "Protobuf Roundtrip")
 def test_protobuf_roundtrip():
     from session_py import BRep

@@ -866,12 +866,17 @@ class Primitives:
 
         v_params = [0.0] * n_sections
         for k in range(1, n_sections):
-            pk_prev = curves[k - 1].point_at_middle()
-            pk_curr = curves[k].point_at_middle()
-            dx = pk_curr[0] - pk_prev[0]
-            dy = pk_curr[1] - pk_prev[1]
-            dz = pk_curr[2] - pk_prev[2]
-            v_params[k] = v_params[k - 1] + math.sqrt(dx * dx + dy * dy + dz * dz)
+            # Average chord length over corresponding control points (robust section
+            # spacing, vs a single midpoint sample which mis-spaces rotated/reshaped sections).
+            s = 0.0
+            for i in range(cv_count_u):
+                a = curves[k - 1].get_cv(i)
+                b = curves[k].get_cv(i)
+                dx = b[0] - a[0]
+                dy = b[1] - a[1]
+                dz = b[2] - a[2]
+                s += math.sqrt(dx * dx + dy * dy + dz * dz)
+            v_params[k] = v_params[k - 1] + s / cv_count_u
 
         total_len = v_params[-1]
         if total_len > 1e-14:
@@ -1139,7 +1144,7 @@ class Primitives:
 
         working_profile = profile.duplicate()
 
-        n = min(max(rail.span_count() * 2 + 1, 5), 20)
+        n = min(max(rail.span_count() * 2 + 1, 5), 200)
         frames = rail.get_perpendicular_planes(n)
         if not frames:
             return NurbsSurface()
@@ -1233,7 +1238,7 @@ class Primitives:
         n_shapes = len(compat_shapes)
         shape_params = [0.0 if n_shapes == 1 else float(k) / (n_shapes - 1) for k in range(n_shapes)]
 
-        n = min(max(max(rail1.span_count(), rail2.span_count()) * 2 + 1, 5), 20)
+        n = min(max(max(rail1.span_count(), rail2.span_count()) * 2 + 1, 5), 200)
 
         pts1, _params1 = rail1.divide_by_count(n + 1, True)
         pts2, _params2 = rail2.divide_by_count(n + 1, True)

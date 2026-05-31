@@ -152,6 +152,9 @@ class NurbsCurve:
 
     @staticmethod
     def create_interpolated(points, parameterization=CurveNurbsKnotStyle.Chord):
+        # parameterization maps to Rhino's CurveKnotStyle: Uniform/Chord/ChordSquareRoot
+        # (centripetal). Rhino's CreateInterpolatedCurve(points, degree) API defaults to Uniform;
+        # the InterpCrv command commonly uses Chord. Pass the style explicitly to match Rhino.
         n = len(points)
         if n < 2:
             return NurbsCurve()

@@ -941,13 +941,13 @@ class BRep:
             fm = fmesh[fi]
             if not fm.face:
                 continue
-            if face.reversed:
-                for vk, vd in fm.vertex.items():
-                    n = vd.normal()
-                    if n is not None:
-                        vd.set_normal(-n[0], -n[1], -n[2])
+            # Reversed faces must have their triangle winding flipped so the facet
+            # orientation matches the face's outward normal (from_polylines rebuilds
+            # vertices from positions, so flipping per-vertex normals here has no effect).
             for fk, fverts in fm.face.items():
                 poly = [fm.vertex[vi].position() for vi in fverts]
+                if face.reversed:
+                    poly.reverse()
                 all_polygons.append(poly)
         return Mesh.from_polylines(all_polygons)
 
@@ -969,7 +969,10 @@ class BRep:
         si = self.m_faces[face_idx].surface_index
         if si < 0 or si >= len(self.m_surfaces):
             return Vector()
-        return self.m_surfaces[si].normal_at(u, v)
+        n = self.m_surfaces[si].normal_at(u, v)
+        if self.m_faces[face_idx].reversed:
+            return -n
+        return n
 
     ###########################################################################
     # Transformation
