@@ -112,6 +112,50 @@ def test_closest_surface_point():
     MINI_CHECK(dist2 < 0.01)
 
 
+@MINI_TEST("Closest", "Surface Curve")
+def test_closest_surface_curve():
+    import math
+    from session_py import Closest
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py.primitives import Primitives
+    from session_py.tolerance import PI
+
+    cyl = Primitives.cylinder_surface(0.0, 0.0, 0.0, 1.0, 4.0)
+    u0, u1 = cyl.domain(0)
+    v0, v1 = cyl.domain(1)
+    ps = cyl.point_at(u0, 0.5)
+    seam_ang = math.atan2(ps[1], ps[0])
+    crv_pts = []
+    for i in range(21):
+        a = seam_ang - 0.8 + 1.6 * i / 20.0
+        z = 1.0 + 2.0 * i / 20.0
+        crv_pts.append(Point(math.cos(a), math.sin(a), z))
+    crv = NurbsCurve.create_interpolated(crv_pts)
+
+    pcurves = Closest.surface_curve(cyl, crv)
+
+    MINI_CHECK(len(pcurves) == 2)
+    on_border = 0
+    inside = True
+    for pcurve in pcurves:
+        MINI_CHECK(pcurve.is_valid())
+        for e in [0.0, 1.0]:
+            p2 = pcurve.point_at(e)
+            if abs(p2[0] - u0) < 1e-9 or abs(p2[0] - u1) < 1e-9:
+                on_border += 1
+        for i in range(17):
+            p2 = pcurve.point_at(i / 16.0)
+            if p2[0] < u0 - 1e-6 or p2[0] > u1 + 1e-6 or p2[1] < v0 - 1e-6 or p2[1] > v1 + 1e-6:
+                inside = False
+    MINI_CHECK(on_border == 2)
+    MINI_CHECK(inside)
+
+    off = NurbsCurve.create(False, 1, [Point(20.0, 20.0, 20.0), Point(30.0, 30.0, 30.0)])
+
+    MINI_CHECK(len(Closest.surface_curve(cyl, off)) == 0)
+
+
 @MINI_TEST("Closest", "Mesh Point")
 def test_closest_mesh_point():
     from session_py import Closest

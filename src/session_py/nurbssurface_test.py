@@ -874,6 +874,124 @@ def test_meshing():
     MINI_CHECK(mesh_planar_adaptive.is_valid())
 
 
+@MINI_TEST("NurbsSurface", "Split By Plane")
+def test_nurbssurface_split_by_plane():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+    from session_py.primitives import Primitives
+
+    cyl = Primitives.cylinder_surface(0.0, 0.0, 0.0, 1.0, 4.0)
+    plane = Plane.from_point_normal(Point(0.0, 0.0, 2.0), Vector(0.3, 0.0, 1.0))
+
+    parts = cyl.split_by_plane(plane)
+
+    MINI_CHECK(len(parts) == 2)
+    for ts in parts:
+        MINI_CHECK(ts.is_trimmed())
+        m = ts.mesh_q(20.0, 0.005)
+        MINI_CHECK(m.number_of_faces() > 0)
+
+    sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 1.0)
+    plane2 = Plane.from_point_normal(Point(0.0, 0.0, 0.3), Vector(0.0, 0.0, 1.0))
+
+    caps = sphere.split_by_plane(plane2)
+
+    MINI_CHECK(len(caps) == 2)
+
+
+@MINI_TEST("NurbsSurface", "Split By Curves")
+def test_nurbssurface_split_by_curves():
+    import math
+    from session_py import Closest
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py.primitives import Primitives
+
+    wave = Primitives.wave_surface(10.0, 1.0)
+    lift_pts = []
+    for i in range(21):
+        x = 10.0 * i / 20.0
+        y = 5.0 + 2.0 * math.sin(x)
+        u, v, d = Closest.surface_point(wave, Point(x, y, 0.0))
+        lift_pts.append(wave.point_at(u, v))
+    crv = NurbsCurve.create_interpolated(lift_pts)
+
+    parts = wave.split_by_curves([crv])
+
+    MINI_CHECK(len(parts) == 2)
+    MINI_CHECK(parts[0].is_trimmed())
+    MINI_CHECK(parts[1].is_trimmed())
+
+    off = NurbsCurve.create(False, 1, [Point(50.0, 50.0, 50.0), Point(60.0, 60.0, 60.0)])
+
+    whole = wave.split_by_curves([off])
+
+    MINI_CHECK(len(whole) == 1)
+
+
+@MINI_TEST("NurbsSurface", "Split By Line")
+def test_nurbssurface_split_by_line():
+    from session_py import Line
+    from session_py import Point
+    from session_py.primitives import Primitives
+
+    wave = Primitives.wave_surface(10.0, 1.0)
+    line = Line.from_points(Point(-1.0, 5.0, 0.0), Point(11.0, 5.0, 0.0))
+
+    parts = wave.split_by_line(line)
+
+    MINI_CHECK(len(parts) == 2)
+    MINI_CHECK(parts[0].is_trimmed())
+    MINI_CHECK(parts[1].is_trimmed())
+
+
+@MINI_TEST("NurbsSurface", "Split By Surface")
+def test_nurbssurface_split_by_surface():
+    from session_py import NurbsSurface
+    from session_py import Point
+    from session_py.primitives import Primitives
+
+    cyl = Primitives.cylinder_surface(0.0, 0.0, -2.0, 1.0, 4.0)
+    flat = NurbsSurface.create(False, False, 1, 1, 2, 2, [
+        Point(-3.0, -3.0, 0.0),
+        Point(-3.0, 3.0, 0.0),
+        Point(3.0, -3.0, 0.0),
+        Point(3.0, 3.0, 0.0),
+    ])
+
+    parts = cyl.split_by_surface(flat)
+
+    MINI_CHECK(len(parts) == 2)
+    for ts in parts:
+        MINI_CHECK(ts.is_trimmed())
+        m = ts.mesh_q(20.0, 0.005)
+        MINI_CHECK(m.number_of_faces() > 0)
+
+
+@MINI_TEST("NurbsSurface", "Split By Brep")
+def test_nurbssurface_split_by_brep():
+    from session_py import NurbsSurface
+    from session_py import BRep
+    from session_py import Point
+
+    flat = NurbsSurface.create(False, False, 1, 1, 2, 2, [
+        Point(-3.0, -3.0, 0.0),
+        Point(-3.0, 3.0, 0.0),
+        Point(3.0, -3.0, 0.0),
+        Point(3.0, 3.0, 0.0),
+    ])
+    cutter = BRep.create_box(2.0, 2.0, 2.0)
+
+    parts = flat.split_by_brep(cutter)
+
+    MINI_CHECK(len(parts) == 2)
+    for ts in parts:
+        MINI_CHECK(ts.is_trimmed())
+        m = ts.mesh_q(20.0, 0.005)
+        MINI_CHECK(m.number_of_faces() > 0)
+
+
 @MINI_TEST("NurbsSurface", "Json Roundtrip")
 def test_json_roundtrip():
     from session_py import NurbsSurface

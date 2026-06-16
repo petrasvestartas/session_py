@@ -15,6 +15,28 @@ from .nurbscurve import NurbsCurve
 from . import nurbsknot
 
 
+def _surface_aabb(srf, n=6):
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    lo = [1e30, 1e30, 1e30]
+    hi = [-1e30, -1e30, -1e30]
+    for i in range(n + 1):
+        for j in range(n + 1):
+            p = srf.point_at(u0 + (u1 - u0) * i / n, v0 + (v1 - v0) * j / n)
+            for k in range(3):
+                if p[k] < lo[k]: lo[k] = p[k]
+                if p[k] > hi[k]: hi[k] = p[k]
+    return lo, hi
+
+
+def _aabb_overlap_pad(a, b):
+    m = max(a[1][0] - a[0][0], a[1][1] - a[0][1], a[1][2] - a[0][2]) * 1e-3
+    for k in range(3):
+        if a[0][k] - m > b[1][k] or b[0][k] - m > a[1][k]:
+            return False
+    return True
+
+
 class NurbsSurface:
     """A Non-Uniform Rational B-Spline (NURBS) surface.
     
@@ -2458,7 +2480,100 @@ class NurbsSurface:
     ###########################################################################
     # GEOMETRIC OPERATIONS (ADDITIONAL)
     ###########################################################################
-    
+
+    def split_by_plane(self, plane, tolerance=None):
+        """Split this surface by a plane into trimmed faces.
+
+        Computes the surface/plane intersection with UV pcurves and splits
+        the UV domain along them.
+
+        Returns
+        -------
+        list of NurbsSurfaceTrimmed
+        """
+        from .intersection import surface_plane_uv
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+        pairs = surface_plane_uv(self, plane, tolerance)
+        pcurves = []
+        for pair in pairs:
+            pcurves.append(pair[1])
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
+    def split_by_surface(self, cutter, tolerance=None):
+        """Split this surface by another surface.
+
+        Computes the surface/surface intersection and splits the UV domain
+        along the pcurves on this surface.
+
+        Returns
+        -------
+        list of NurbsSurfaceTrimmed
+        """
+        from .intersection import surface_surface
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+        triples = surface_surface(self, cutter, tolerance)
+        pcurves = []
+        for triple in triples:
+            pcurves.append(triple[1])
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
+    def split_by_curves(self, curves, tolerance=None):
+        """Split this surface by 3D curves lying on (or near) it.
+
+        Each curve is pulled back to UV via closest-point projection; curves
+        whose pullback fails (off-surface) are skipped.
+
+        Returns
+        -------
+        list of NurbsSurfaceTrimmed
+        """
+        from .closest import Closest
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+        pcurves = []
+        for crv in curves:
+            for pcurve in Closest.surface_curve(self, crv, 0.0, 0.0, tolerance):
+                pcurves.append(pcurve)
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
+    def split_by_line(self, line, tolerance=None):
+        """Split this surface by a line pulled onto it (Rhino "pull then split").
+
+        The line is converted to a degree-1 curve and projected onto the
+        surface by closest points; the surface is split along the pulled
+        curve. A pulled curve that does not reach the boundary or another
+        cutter is discarded. For a planar cut, use split_by_plane.
+
+        Returns
+        -------
+        list of NurbsSurfaceTrimmed
+        """
+        from .nurbscurve import NurbsCurve
+        pts = [line.start(), line.end()]
+        crv = NurbsCurve.create(False, 1, pts)
+        return self.split_by_curves([crv], tolerance)
+
+    def split_by_brep(self, brep, tolerance=None):
+        """Split this surface by every face of a BRep.
+
+        Each cutter face is intersected with this surface (planar faces via the
+        fast plane path, others via surface/surface); all cut pcurves split the
+        UV domain at once.
+
+        Returns
+        -------
+        list of NurbsSurfaceTrimmed
+        """
+        from .intersection import cut_curves_on_surface
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+        target_bb = _surface_aabb(self)
+        pcurves = []
+        for cutter in brep.m_surfaces:
+            if not _aabb_overlap_pad(target_bb, _surface_aabb(cutter)):
+                continue
+            for pc in cut_curves_on_surface(self, cutter, tolerance):
+                pcurves.append(pc)
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
     def iso_curve(self, dir: int, c: float) -> Optional['NurbsCurve']:
         """Get isoparametric curve at parameter.
         

@@ -331,6 +331,386 @@ class Closest:
         return (u, v, final_dist)
 
     @staticmethod
+    def surface_curve(surface, curve, t0: float = 0.0, t1: float = 0.0, tolerance=None):
+        """Project a 3D curve onto a surface (curve pullback).
+
+        Samples the curve, inverts each sample with warm-started windowed
+        point inversion, unwraps across seams of closed surfaces, refines
+        adaptively, and refits seam-split UV pcurves (x=u, y=v, z=0) with
+        domain [0, 1]. Returns an empty list if the curve does not lie on the
+        surface within the rejection tolerance.
+
+        Parameters
+        ----------
+        surface : NurbsSurface
+            The surface to project onto.
+        curve : NurbsCurve
+            The 3D curve to pull back.
+        t0, t1 : float
+            Curve sub-domain. 0 means use the curve domain end.
+        tolerance : float, optional
+            Fit deviation budget. Defaults to a trace-step heuristic.
+
+        Returns
+        -------
+        list of NurbsCurve
+            Seam-split UV pcurves.
+        """
+        from session_py.nurbscurve import NurbsCurve
+        from session_py.nurbsknot import CurveNurbsKnotStyle
+
+        if not surface.is_valid() or not curve.is_valid():
+            return []
+
+        u0, u1 = surface.domain(0)
+        v0, v1 = surface.domain(1)
+        range_u = u1 - u0
+        range_v = v1 - v0
+        closed_u = surface.is_closed(0)
+        closed_v = surface.is_closed(1)
+
+        ct0, ct1 = curve.domain()
+        if t0 <= 0.0:
+            t0 = ct0
+        if t1 <= 0.0:
+            t1 = ct1
+        t0 = max(t0, ct0)
+        t1 = min(t1, ct1)
+        if t1 - t0 < 1e-14:
+            return []
+
+        spans_u = surface.get_span_vector(0)
+        spans_v = surface.get_span_vector(1)
+        nu = max(len(spans_u) - 1, 1) * 4
+        nv = max(len(spans_v) - 1, 1) * 4
+        du = range_u / nu
+        dv = range_v / nv
+
+        mu = (u0 + u1) * 0.5
+        mv = (v0 + v1) * 0.5
+        pmid = surface.point_at(mu, mv)
+        wu_probe = min(mu + du, u1)
+        wv_probe = min(mv + dv, v1)
+        uv_to_3d_u = pmid.distance(surface.point_at(wu_probe, mv)) / du
+        uv_to_3d_v = pmid.distance(surface.point_at(mu, wv_probe)) / dv
+        uv_to_3d = max(uv_to_3d_u, uv_to_3d_v)
+        uv_to_3d_min = min(uv_to_3d_u, uv_to_3d_v)
+        if uv_to_3d < 1e-10:
+            uv_to_3d = 1.0
+        if uv_to_3d_min < 1e-10:
+            uv_to_3d_min = 1.0
+
+        step = min(du, dv) * 0.25
+        if tolerance is not None and tolerance > 0.0:
+            fit_tol = tolerance
+        else:
+            fit_tol = step * (uv_to_3d + uv_to_3d_min) * 0.5
+        reject_tol = fit_tol * 100.0
+        # Absolute "lies on the surface" gate (fraction of the surface size).
+        # Used to (a) reject a curve that nowhere touches the surface and
+        # (b) stop bisecting stick-out portions of a curve that extends past
+        # the face, both of which otherwise burn a full 4096-sample bisection.
+        corner_diag = surface.point_at(u0, v0).distance(surface.point_at(u1, v1))
+        if corner_diag < 1e-12:
+            corner_diag = max(range_u, range_v)
+        on_surf_tol = corner_diag * 0.05
+
+        def wrap_u(u):
+            if closed_u:
+                t = math.fmod(u - u0, range_u)
+                if t < 0:
+                    t += range_u
+                return u0 + t
+            return max(u0, min(u, u1))
+
+        def wrap_v(v):
+            if closed_v:
+                t = math.fmod(v - v0, range_v)
+                if t < 0:
+                    t += range_v
+                return v0 + t
+            return max(v0, min(v, v1))
+
+        def invert_near(pt, up, vp, wu, wv):
+            # Windowed inversion with seam-aware candidate windows
+            u_centers = [up]
+            if closed_u:
+                if up - wu < u0:
+                    u_centers.append(up + range_u)
+                if up + wu > u1:
+                    u_centers.append(up - range_u)
+            v_centers = [vp]
+            if closed_v:
+                if vp - wv < v0:
+                    v_centers.append(vp + range_v)
+                if vp + wv > v1:
+                    v_centers.append(vp - range_v)
+            best = (up, vp, float('inf'))
+            for uc in u_centers:
+                for vc in v_centers:
+                    wu0 = max(uc - wu, u0)
+                    wu1 = min(uc + wu, u1)
+                    wv0 = max(vc - wv, v0)
+                    wv1 = min(vc + wv, v1)
+                    if wu1 - wu0 < 1e-14 or wv1 - wv0 < 1e-14:
+                        continue
+                    res = Closest.surface_point(surface, pt, wu0, wu1, wv0, wv1)
+                    if res[2] < best[2]:
+                        best = res
+                    if best[2] < fit_tol * 0.01:
+                        break
+            return best
+
+        def unwrap_to(prev_u, prev_v, u, v):
+            if closed_u:
+                while u - prev_u > range_u * 0.5:
+                    u -= range_u
+                while u - prev_u < -range_u * 0.5:
+                    u += range_u
+            if closed_v:
+                while v - prev_v > range_v * 0.5:
+                    v -= range_v
+                while v - prev_v < -range_v * 0.5:
+                    v += range_v
+            return u, v
+
+        # 1. Initial samples with warm-started inversion
+        n0 = max(16, 4 * curve.span_count())
+        samples = []  # list of [t, u_unwrapped, v_unwrapped, residual]
+        max_residual = 0.0
+        min_residual = float('inf')
+        for i in range(n0 + 1):
+            t = t0 + (t1 - t0) * i / n0
+            pt = curve.point_at(t)
+            if i == 0:
+                ru, rv, rd = Closest.surface_point(surface, pt, 0.0, 0.0, 0.0, 0.0)
+                uu, vv = ru, rv
+            else:
+                prev = samples[-1]
+                wu = max(du, dv) * 2.0 + abs(prev[1] - samples[max(0, len(samples)-2)][1])
+                wv = max(du, dv) * 2.0 + abs(prev[2] - samples[max(0, len(samples)-2)][2])
+                ru, rv, rd = invert_near(pt, wrap_u(prev[1]), wrap_v(prev[2]), wu, wv)
+                if rd > reject_tol:
+                    ru, rv, rd = Closest.surface_point(surface, pt, 0.0, 0.0, 0.0, 0.0)
+                uu, vv = unwrap_to(prev[1], prev[2], ru, rv)
+            samples.append([t, uu, vv, rd])
+            max_residual = max(max_residual, rd)
+            min_residual = min(min_residual, rd)
+
+        # Reject a curve that nowhere lies on the surface (no sample touches it).
+        if max_residual > reject_tol or min_residual > on_surf_tol:
+            return []
+
+        # 2. Adaptive bisection where the lifted UV midpoint strays from the curve
+        depth = 0
+        while depth < 8:
+            inserted = 0
+            i = 0
+            while i < len(samples) - 1:
+                a = samples[i]
+                b = samples[i + 1]
+                tm = (a[0] + b[0]) * 0.5
+                um = (a[1] + b[1]) * 0.5
+                vm = (a[2] + b[2]) * 0.5
+                pm = curve.point_at(tm)
+                lift = surface.point_at(wrap_u(um), wrap_v(vm))
+                if lift.distance(pm) > fit_tol and len(samples) < 4096:
+                    wu = max(abs(b[1] - a[1]), du) * 1.0
+                    wv = max(abs(b[2] - a[2]), dv) * 1.0
+                    ru, rv, rd = invert_near(pm, wrap_u(um), wrap_v(vm), wu, wv)
+                    if rd > on_surf_tol:
+                        # Midpoint is off the surface: this is a stick-out
+                        # portion of a curve that extends past the face, not a
+                        # curvature stray. Do not refine it (avoids an
+                        # unbounded bisection of an off-surface segment).
+                        i += 1
+                        continue
+                    uu, vv = unwrap_to(a[1], a[2], ru, rv)
+                    samples.insert(i + 1, [tm, uu, vv, rd])
+                    inserted += 1
+                    i += 2
+                else:
+                    i += 1
+            if inserted == 0:
+                break
+            depth += 1
+
+        pts = [[s[1], s[2]] for s in samples]
+
+        # 3. Closed-loop closure and seam-crossing split (same scheme as surface_plane_uv)
+        p_first = curve.point_at(samples[0][0])
+        p_last = curve.point_at(samples[-1][0])
+        is_loop = p_first.distance(p_last) < fit_tol * 4.0 and len(pts) >= 6
+
+        closure_du = 0.0
+        closure_dv = 0.0
+        if is_loop:
+            pts = pts[:-1]
+            du_j = pts[0][0] - pts[-1][0]
+            dv_j = pts[0][1] - pts[-1][1]
+            if closed_u:
+                while du_j > range_u * 0.5:
+                    du_j -= range_u
+                while du_j < -range_u * 0.5:
+                    du_j += range_u
+            if closed_v:
+                while dv_j > range_v * 0.5:
+                    dv_j -= range_v
+                while dv_j < -range_v * 0.5:
+                    dv_j += range_v
+            closure_du = (pts[-1][0] + du_j) - pts[0][0]
+            closure_dv = (pts[-1][1] + dv_j) - pts[0][1]
+            pts.append([pts[0][0] + closure_du, pts[0][1] + closure_dv])
+
+        out_pts = [pts[0]]
+        cross_idx = []
+        for i in range(1, len(pts)):
+            pa = pts[i - 1]
+            pb = pts[i]
+            crossings = []
+            if closed_u and abs(pb[0] - pa[0]) > 1e-15:
+                k0 = math.floor((pa[0] - u0) / range_u)
+                k1 = math.floor((pb[0] - u0) / range_u)
+                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
+                    L = u0 + k * range_u
+                    t = (L - pa[0]) / (pb[0] - pa[0])
+                    if 0.0 < t < 1.0:
+                        crossings.append((t, 0, L))
+            if closed_v and abs(pb[1] - pa[1]) > 1e-15:
+                k0 = math.floor((pa[1] - v0) / range_v)
+                k1 = math.floor((pb[1] - v0) / range_v)
+                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
+                    L = v0 + k * range_v
+                    t = (L - pa[1]) / (pb[1] - pa[1])
+                    if 0.0 < t < 1.0:
+                        crossings.append((t, 1, L))
+            crossings.sort()
+            for t, axis, L in crossings:
+                cu = pa[0] + (pb[0] - pa[0]) * t
+                cv_ = pa[1] + (pb[1] - pa[1]) * t
+                if axis == 0:
+                    cu = L
+                else:
+                    cv_ = L
+                out_pts.append([cu, cv_])
+                cross_idx.append(len(out_pts) - 1)
+            out_pts.append([pb[0], pb[1]])
+            # An interior sample sitting exactly on a seam level is a crossing
+            if i < len(pts) - 1:
+                on_seam = False
+                if closed_u:
+                    k = round((pb[0] - u0) / range_u)
+                    L = u0 + k * range_u
+                    if abs(pb[0] - L) < range_u * 1e-9 and abs(pb[0] - pa[0]) > range_u * 1e-9:
+                        out_pts[-1][0] = L
+                        on_seam = True
+                if closed_v:
+                    k = round((pb[1] - v0) / range_v)
+                    L = v0 + k * range_v
+                    if abs(pb[1] - L) < range_v * 1e-9 and abs(pb[1] - pa[1]) > range_v * 1e-9:
+                        out_pts[-1][1] = L
+                        on_seam = True
+                if on_seam:
+                    cross_idx.append(len(out_pts) - 1)
+
+        wrap_drift = abs(closure_du) > range_u * 0.5 or abs(closure_dv) > range_v * 0.5
+        if len(cross_idx) == 0:
+            pieces = [(out_pts, is_loop and not wrap_drift)]
+        else:
+            pieces = []
+            if is_loop:
+                for a, b in zip(cross_idx, cross_idx[1:]):
+                    pieces.append((out_pts[a:b + 1], False))
+                wrap_piece = [list(p) for p in out_pts[cross_idx[-1]:]]
+                for p in out_pts[1:cross_idx[0] + 1]:
+                    wrap_piece.append([p[0] + closure_du, p[1] + closure_dv])
+                pieces.append((wrap_piece, False))
+            else:
+                bounds = [0] + cross_idx + [len(out_pts) - 1]
+                for a, b in zip(bounds, bounds[1:]):
+                    if b > a:
+                        pieces.append((out_pts[a:b + 1], False))
+
+        # 4. Refit each piece as a UV pcurve
+        result = []
+        for piece_pts, piece_loop in pieces:
+            if len(piece_pts) < 2:
+                continue
+            mid = piece_pts[len(piece_pts) // 2]
+            if closed_u:
+                k_u = math.floor((mid[0] - u0) / range_u)
+                if k_u != 0:
+                    for p in piece_pts:
+                        p[0] -= k_u * range_u
+            if closed_v:
+                k_v = math.floor((mid[1] - v0) / range_v)
+                if k_v != 0:
+                    for p in piece_pts:
+                        p[1] -= k_v * range_v
+
+            pts_uv = [Point(p[0], p[1], 0.0) for p in piece_pts]
+            mp = len(pts_uv)
+            fit_tol_uv = step
+            total_turning = 0.0
+            for i in range(1, mp - 1):
+                dx1 = pts_uv[i][0] - pts_uv[i-1][0]
+                dy1 = pts_uv[i][1] - pts_uv[i-1][1]
+                dx2 = pts_uv[i+1][0] - pts_uv[i][0]
+                dy2 = pts_uv[i+1][1] - pts_uv[i][1]
+                l1 = math.hypot(dx1, dy1)
+                l2 = math.hypot(dx2, dy2)
+                if l1 > 1e-14 and l2 > 1e-14:
+                    c = (dx1*dx2 + dy1*dy2) / (l1*l2)
+                    c = max(-1.0, min(1.0, c))
+                    total_turning += math.acos(c)
+
+            chords = [0.0] * mp
+            total_len = 0.0
+            for i in range(1, mp):
+                total_len += pts_uv[i].distance(pts_uv[i-1])
+                chords[i] = total_len
+            if piece_loop and mp > 1:
+                total_len += pts_uv[0].distance(pts_uv[mp-1])
+            if total_len > 1e-14:
+                for i in range(1, mp):
+                    chords[i] /= total_len
+
+            target_cvs = max(8, int(total_turning / 0.5) + 6)
+            max_cvs = mp - 1
+            pcurve = NurbsCurve()
+            for attempt in range(5):
+                if target_cvs > max_cvs:
+                    break
+                pcurve = NurbsCurve.create_fitted(pts_uv, target_cvs, 3, piece_loop)
+                if not pcurve.is_valid():
+                    break
+                ft0, ft1 = pcurve.domain()
+                max_dev = 0.0
+                for i in range(mp):
+                    t = ft0 + (ft1 - ft0) * chords[i]
+                    max_dev = max(max_dev, pcurve.point_at(t).distance(pts_uv[i]))
+                if max_dev < fit_tol_uv:
+                    break
+                target_cvs = min(target_cvs * 2, max_cvs)
+
+            if not pcurve.is_valid():
+                if piece_loop:
+                    pcurve = NurbsCurve.create_interpolated(pts_uv, CurveNurbsKnotStyle.ChordPeriodic)
+                else:
+                    pcurve = NurbsCurve.create_interpolated(pts_uv)
+            if not pcurve.is_valid() and len(pts_uv) >= 2:
+                # Last resort: a degree-1 polyline through the inverted UV samples
+                # (always valid; lies on the surface piecewise-linearly in UV).
+                pcurve = NurbsCurve.create(False, 1, pts_uv)
+            if not pcurve.is_valid():
+                continue
+
+            pcurve.set_domain(0.0, 1.0)
+            result.append(pcurve)
+
+        return result
+
+    @staticmethod
     def _closest_point_on_triangle(p, a, b, c):
         abx, aby, abz = b[0]-a[0], b[1]-a[1], b[2]-a[2]
         acx, acy, acz = c[0]-a[0], c[1]-a[1], c[2]-a[2]

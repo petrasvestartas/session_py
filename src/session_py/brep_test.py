@@ -449,5 +449,95 @@ def test_protobuf_roundtrip():
     MINI_CHECK(loaded == b)
 
 
+@MINI_TEST("BRep", "Split By Plane")
+def test_brep_split_by_plane():
+    from session_py import BRep
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+    from session_py.brep import BRepLoopType
+
+    box = BRep.create_box(2.0, 2.0, 2.0)
+    plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    split = box.split_by_plane(plane)
+    box_area = box.mesh().area()
+    split_area = split.mesh().area()
+    inner = 0
+    for face in split.m_faces:
+        for li in face.loop_indices:
+            if split.m_loops[li].type == BRepLoopType.Inner:
+                inner += 1
+
+    MINI_CHECK(split.face_count() == 10)
+    MINI_CHECK(abs(split_area - box_area) < box_area * 0.01)
+    MINI_CHECK(not split.mesh().is_empty())
+    MINI_CHECK(inner == 0)
+
+    cylinder = BRep.create_cylinder(1.0, 4.0)
+    mid = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    cut = cylinder.split_by_plane(mid)
+
+    MINI_CHECK(cut.face_count() == 4)
+    MINI_CHECK(abs(cut.mesh().area() - cylinder.mesh().area()) < cylinder.mesh().area() * 0.02)
+
+
+@MINI_TEST("BRep", "Split By Plane Pieces")
+def test_brep_split_by_plane_pieces():
+    from session_py import BRep
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    box = BRep.create_box(2.0, 2.0, 2.0)
+    plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    pieces = box.split_by_plane_pieces(plane)
+    total = 0.0
+    for piece in pieces:
+        total += piece.mesh().area()
+
+    MINI_CHECK(len(pieces) == 2)
+    MINI_CHECK(pieces[0].face_count() == 5)
+    MINI_CHECK(pieces[1].face_count() == 5)
+    MINI_CHECK(abs(total - box.mesh().area()) < box.mesh().area() * 0.01)
+
+    far = Plane.from_point_normal(Point(0.0, 0.0, 5.0), Vector(0.0, 0.0, 1.0))
+    whole = box.split_by_plane_pieces(far)
+
+    MINI_CHECK(len(whole) == 1)
+    MINI_CHECK(whole[0].face_count() == 6)
+
+
+@MINI_TEST("BRep", "Split By Line")
+def test_brep_split_by_line():
+    from session_py import BRep
+    from session_py import Line
+    from session_py import Point
+
+    box = BRep.create_box(2.0, 2.0, 2.0)
+    line = Line.from_points(Point(0.0, -2.0, 1.0), Point(0.0, 2.0, 1.0))
+    split = box.split_by_line(line)
+    box_area = box.mesh().area()
+    split_area = split.mesh().area()
+
+    MINI_CHECK(split.face_count() == 7)
+    MINI_CHECK(abs(split_area - box_area) < box_area * 0.01)
+    MINI_CHECK(not split.mesh().is_empty())
+
+
+@MINI_TEST("BRep", "Split By Brep")
+def test_brep_split_by_brep():
+    from session_py import BRep
+
+    target = BRep.create_box(4.0, 4.0, 2.0)
+    cutter = BRep.create_box(2.0, 2.0, 6.0)
+    split = target.split_by_brep(cutter)
+    target_area = target.mesh().area()
+    split_area = split.mesh().area()
+
+    MINI_CHECK(split.face_count() == 8)
+    MINI_CHECK(abs(split_area - target_area) < target_area * 0.01)
+    MINI_CHECK(not split.mesh().is_empty())
+
+
 if __name__ == "__main__":
     run_all("python")

@@ -16,6 +16,39 @@ _BLACK_COLOR = Color.black()
 _NURBSKNOT_01 = _np.array([0., 1.], dtype=_np.float64)
 
 
+def _aabb_from_surface(srf, n=6):
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    lo = [1e30, 1e30, 1e30]
+    hi = [-1e30, -1e30, -1e30]
+    for i in range(n + 1):
+        for j in range(n + 1):
+            p = srf.point_at(u0 + (u1 - u0) * i / n, v0 + (v1 - v0) * j / n)
+            for k in range(3):
+                if p[k] < lo[k]: lo[k] = p[k]
+                if p[k] > hi[k]: hi[k] = p[k]
+    return lo, hi
+
+
+def _aabb_from_curve(crv, n=16):
+    c0, c1 = crv.domain()
+    lo = [1e30, 1e30, 1e30]
+    hi = [-1e30, -1e30, -1e30]
+    for i in range(n + 1):
+        p = crv.point_at(c0 + (c1 - c0) * i / n)
+        for k in range(3):
+            if p[k] < lo[k]: lo[k] = p[k]
+            if p[k] > hi[k]: hi[k] = p[k]
+    return lo, hi
+
+
+def _aabb_overlap(a, b, m):
+    for k in range(3):
+        if a[0][k] - m > b[1][k] or b[0][k] - m > a[1][k]:
+            return False
+    return True
+
+
 class BRepTrimType:
     Boundary = 0
     Mated = 1
@@ -828,6 +861,294 @@ class BRep:
             brep.m_topology_vertices[e.start_vertex].edge_indices.append(ei)
             brep.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
         return brep
+
+    ###########################################################################
+    # Splitting
+    ###########################################################################
+
+    def _split(self, cut_pcurves_for, tolerance=None):
+        """Split every face by per-face cut pcurves; rebuild a new BRep.
+
+        cut_pcurves_for(surface) returns the cutter's UV pcurves on that
+        surface (empty if the cutter misses it). Faces the cutter crosses are
+        subdivided via the loop-aware arrangement; uncut faces and faces with
+        inner loops are copied unchanged. Vertices and edges are deduplicated
+        in 3D so shared boundaries become mated.
+        """
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+
+        result = BRep()
+        result.name = self.name
+        _vmap = {}
+        _emap = {}
+
+        def find_or_add_vertex(p):
+            key = (int(round(p[0]*1e6)), int(round(p[1]*1e6)), int(round(p[2]*1e6)))
+            existing = _vmap.get(key)
+            if existing is not None:
+                return existing
+            idx = result.add_vertex(p)
+            tv = BRepVertex(); tv.point_index = idx
+            result.m_topology_vertices.append(tv)
+            _vmap[key] = idx
+            return idx
+
+        def lift(srf, pc):
+            n = max(pc.cv_count() * 4, 8)
+            c0, c1 = pc.domain()
+            pts3 = []
+            for i in range(n + 1):
+                uv = pc.point_at(c0 + (c1 - c0) * i / n)
+                pts3.append(srf.point_at(uv[0], uv[1]))
+            c3d = NurbsCurve.create(False, 1, pts3)
+            return c3d, pts3[0], pts3[-1], pts3[n // 2]
+
+        def append_face(srf, loops):
+            si = result.add_surface(srf)
+            fi = result.add_face(si, False)
+            for ltype, pcs in loops:
+                li = result.add_loop(fi, ltype)
+                for pc in pcs:
+                    if pc is None or not pc.is_valid():
+                        continue
+                    c3d, p0, p1, pm = lift(srf, pc)
+                    ci3d = result.add_curve_3d(c3d)
+                    va = find_or_add_vertex(p0)
+                    vb = find_or_add_vertex(p1)
+                    lo, hi = (va, vb) if va <= vb else (vb, va)
+                    ekey = (lo, hi,
+                            int(round(pm[0]*1e6)), int(round(pm[1]*1e6)), int(round(pm[2]*1e6)))
+                    prior = _emap.get(ekey)
+                    if prior is not None:
+                        ei = prior
+                        ttype = BRepTrimType.Mated
+                    else:
+                        ei = result.add_edge(ci3d, lo, hi)
+                        _emap[ekey] = ei
+                        ttype = BRepTrimType.Boundary
+                    ci2d = result.add_curve_2d(pc)
+                    result.add_trim(ci2d, ei, li, False, ttype)
+
+        for face in self.m_faces:
+            if face.surface_index < 0 or face.surface_index >= len(self.m_surfaces):
+                continue
+            srf = self.m_surfaces[face.surface_index]
+            outer_pcs = []
+            inner_loops = []
+            has_inner = False
+            for li in face.loop_indices:
+                if li < 0 or li >= len(self.m_loops):
+                    continue
+                loop = self.m_loops[li]
+                pcs = []
+                for ti in loop.trim_indices:
+                    if ti < 0 or ti >= len(self.m_trims):
+                        continue
+                    trim = self.m_trims[ti]
+                    if 0 <= trim.curve_2d_index < len(self.m_curves_2d):
+                        pcs.append(self.m_curves_2d[trim.curve_2d_index])
+                if loop.type == BRepLoopType.Inner:
+                    has_inner = True
+                    inner_loops.append(pcs)
+                else:
+                    outer_pcs = pcs
+
+            cut_pcs = cut_pcurves_for(srf)
+            if not cut_pcs or has_inner:
+                loops = [(BRepLoopType.Outer, outer_pcs)]
+                for il in inner_loops:
+                    loops.append((BRepLoopType.Inner, il))
+                append_face(srf, loops)
+                continue
+
+            parts = NurbsSurfaceTrimmed.split_by_uv_curves(
+                srf, outer_pcs + cut_pcs, tolerance,
+                use_domain_border=False, n_boundary=len(outer_pcs))
+            if len(parts) <= 1:
+                loops = [(BRepLoopType.Outer, outer_pcs)]
+                append_face(srf, loops)
+                continue
+            for part in parts:
+                loops = [(BRepLoopType.Outer, [part.m_outer_loop])]
+                for il in part.m_inner_loops:
+                    loops.append((BRepLoopType.Inner, [il]))
+                append_face(part.m_surface, loops)
+
+        for ei, e in enumerate(result.m_topology_edges):
+            if 0 <= e.start_vertex < len(result.m_topology_vertices):
+                result.m_topology_vertices[e.start_vertex].edge_indices.append(ei)
+            if e.end_vertex != e.start_vertex and 0 <= e.end_vertex < len(result.m_topology_vertices):
+                result.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
+        return result
+
+    def split_by_plane(self, plane, tolerance=None):
+        """Split this BRep by a plane. Returns a new subdivided BRep."""
+        from .intersection import surface_plane_uv
+
+        def cut_for(srf):
+            return [pair[1] for pair in surface_plane_uv(srf, plane, tolerance)]
+        return self._split(cut_for, tolerance)
+
+    def split_by_surface(self, cutter, tolerance=None):
+        """Split this BRep by another surface. Returns a new subdivided BRep."""
+        from .intersection import surface_surface
+        cutter_bb = _aabb_from_surface(cutter)
+
+        def cut_for(srf):
+            srf_bb = _aabb_from_surface(srf)
+            margin = max(srf_bb[1][0] - srf_bb[0][0], srf_bb[1][1] - srf_bb[0][1],
+                         srf_bb[1][2] - srf_bb[0][2]) * 1e-3
+            if not _aabb_overlap(srf_bb, cutter_bb, margin):
+                return []
+            return [triple[1] for triple in surface_surface(srf, cutter, tolerance)]
+        return self._split(cut_for, tolerance)
+
+    def split_by_curves(self, curves, tolerance=None):
+        """Split this BRep by 3D curves pulled onto each face. New BRep."""
+        from .closest import Closest
+        curve_bbs = [_aabb_from_curve(c) for c in curves]
+
+        def cut_for(srf):
+            srf_bb = _aabb_from_surface(srf)
+            margin = max(srf_bb[1][0] - srf_bb[0][0], srf_bb[1][1] - srf_bb[0][1],
+                         srf_bb[1][2] - srf_bb[0][2]) * 1e-3
+            out = []
+            for crv, cbb in zip(curves, curve_bbs):
+                if not _aabb_overlap(srf_bb, cbb, margin):
+                    continue
+                for pc in Closest.surface_curve(srf, crv, 0.0, 0.0, tolerance):
+                    out.append(pc)
+            return out
+        return self._split(cut_for, tolerance)
+
+    def split_by_line(self, line, tolerance=None):
+        """Split this BRep by a line pulled onto each face. New BRep."""
+        pts = [line.start(), line.end()]
+        crv = NurbsCurve.create(False, 1, pts)
+        return self.split_by_curves([crv], tolerance)
+
+    def _subset(self, face_indices):
+        """Build a standalone BRep from a subset of this BRep's faces.
+
+        Copies only the referenced geometry and topology, remapping indices.
+        """
+        sub = BRep()
+        sub.name = self.name
+        s_map = {}
+        c3_map = {}
+        c2_map = {}
+        v_map = {}
+        e_map = {}
+        l_map = {}
+
+        def map_surface(i):
+            if i not in s_map:
+                s_map[i] = sub.add_surface(self.m_surfaces[i])
+            return s_map[i]
+
+        def map_vertex(i):
+            if i not in v_map:
+                pt = self.m_vertices[self.m_topology_vertices[i].point_index]
+                idx = sub.add_vertex(pt)
+                tv = BRepVertex(); tv.point_index = idx
+                sub.m_topology_vertices.append(tv)
+                v_map[i] = len(sub.m_topology_vertices) - 1
+            return v_map[i]
+
+        def map_edge(i):
+            if i < 0:
+                return -1
+            if i not in e_map:
+                e = self.m_topology_edges[i]
+                ci3 = c3_map.get(e.curve_3d_index)
+                if ci3 is None and 0 <= e.curve_3d_index < len(self.m_curves_3d):
+                    ci3 = sub.add_curve_3d(self.m_curves_3d[e.curve_3d_index])
+                    c3_map[e.curve_3d_index] = ci3
+                sv = map_vertex(e.start_vertex) if 0 <= e.start_vertex < len(self.m_topology_vertices) else -1
+                ev = map_vertex(e.end_vertex) if 0 <= e.end_vertex < len(self.m_topology_vertices) else -1
+                e_map[i] = sub.add_edge(ci3 if ci3 is not None else -1, sv, ev)
+            return e_map[i]
+
+        for fi in face_indices:
+            face = self.m_faces[fi]
+            si = map_surface(face.surface_index)
+            new_fi = sub.add_face(si, face.reversed)
+            for li in face.loop_indices:
+                loop = self.m_loops[li]
+                new_li = sub.add_loop(new_fi, loop.type)
+                for ti in loop.trim_indices:
+                    trim = self.m_trims[ti]
+                    ci2 = c2_map.get(trim.curve_2d_index)
+                    if ci2 is None and 0 <= trim.curve_2d_index < len(self.m_curves_2d):
+                        ci2 = sub.add_curve_2d(self.m_curves_2d[trim.curve_2d_index])
+                        c2_map[trim.curve_2d_index] = ci2
+                    sub.add_trim(ci2 if ci2 is not None else -1, map_edge(trim.edge_index),
+                                 new_li, trim.reversed, trim.type)
+        for ei, e in enumerate(sub.m_topology_edges):
+            if 0 <= e.start_vertex < len(sub.m_topology_vertices):
+                sub.m_topology_vertices[e.start_vertex].edge_indices.append(ei)
+            if e.end_vertex != e.start_vertex and 0 <= e.end_vertex < len(sub.m_topology_vertices):
+                sub.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
+        return sub
+
+    def split_by_plane_pieces(self, plane, tolerance=None):
+        """Split this BRep by a plane and separate the result into the pieces
+        on each side of the plane. Returns a list of BReps (one per side)."""
+        whole = self.split_by_plane(plane, tolerance)
+        o = plane.origin
+        n = plane.z_axis
+        pos = []
+        neg = []
+        for fi, face in enumerate(whole.m_faces):
+            srf = whole.m_surfaces[face.surface_index]
+            # Classify by the centroid of the face's outer loop lifted to 3D
+            # (the underlying surface center is shared by both cut halves).
+            sx = sy = sz = 0.0
+            cnt = 0
+            for li in face.loop_indices:
+                loop = whole.m_loops[li]
+                if loop.type != BRepLoopType.Outer:
+                    continue
+                for ti in loop.trim_indices:
+                    pc = whole.m_curves_2d[whole.m_trims[ti].curve_2d_index]
+                    d0, d1 = pc.domain()
+                    for k in range(8):
+                        uv = pc.point_at(d0 + (d1 - d0) * k / 8.0)
+                        p = srf.point_at(uv[0], uv[1])
+                        sx += p[0]; sy += p[1]; sz += p[2]; cnt += 1
+            if cnt == 0:
+                continue
+            cx, cy, cz = sx / cnt, sy / cnt, sz / cnt
+            d = (cx - o[0]) * n[0] + (cy - o[1]) * n[1] + (cz - o[2]) * n[2]
+            (pos if d >= 0.0 else neg).append(fi)
+        pieces = []
+        for idxs in (pos, neg):
+            if idxs:
+                pieces.append(whole._subset(idxs))
+        return pieces
+
+    def split_by_brep(self, cutter, tolerance=None):
+        """Split this BRep by every face of another BRep. New BRep.
+
+        Each target face is cut by every overlapping cutter face (planar faces
+        via the fast plane path, others via surface/surface).
+        """
+        from .intersection import cut_curves_on_surface
+        cutter_surfaces = cutter.m_surfaces
+        cutter_bbs = [_aabb_from_surface(cs) for cs in cutter_surfaces]
+
+        def cut_for(srf):
+            srf_bb = _aabb_from_surface(srf)
+            margin = max(srf_bb[1][0] - srf_bb[0][0], srf_bb[1][1] - srf_bb[0][1],
+                         srf_bb[1][2] - srf_bb[0][2]) * 1e-3
+            out = []
+            for cs, cbb in zip(cutter_surfaces, cutter_bbs):
+                if not _aabb_overlap(srf_bb, cbb, margin):
+                    continue
+                for pc in cut_curves_on_surface(srf, cs, tolerance):
+                    out.append(pc)
+            return out
+        return self._split(cut_for, tolerance)
 
     ###########################################################################
     # Meshing

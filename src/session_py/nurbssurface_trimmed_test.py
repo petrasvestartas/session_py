@@ -339,6 +339,39 @@ def test_nurbssurface_trimmed_mesh():
         MINI_CHECK(math.sqrt(nx*nx + ny*ny + nz*nz) > 0.5)
 
 
+@MINI_TEST("NurbsSurfaceTrimmed", "Split By UV Curves")
+def test_nurbssurface_trimmed_split_by_uv_curves():
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py.primitives import Primitives
+
+    srf = Primitives.wave_surface(10.0, 1.0)
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    pts = [Point(u0 + (u1-u0)*0.4, v0, 0.0), Point(u0 + (u1-u0)*0.6, v1, 0.0)]
+    line = NurbsCurve.create(False, 1, pts)
+
+    parts = NurbsSurfaceTrimmed.split_by_uv_curves(srf, [line])
+
+    MINI_CHECK(len(parts) == 2)
+    MINI_CHECK(parts[0].is_trimmed())
+    MINI_CHECK(parts[1].is_trimmed())
+
+    circle = Primitives.circle((u0+u1)*0.5, (v0+v1)*0.5, 0.0, (u1-u0)*0.2)
+
+    ring = NurbsSurfaceTrimmed.split_by_uv_curves(srf, [circle])
+
+    MINI_CHECK(len(ring) == 2)
+    MINI_CHECK(ring[0].inner_loop_count() + ring[1].inner_loop_count() == 1)
+
+    dangling = NurbsCurve.create(False, 1, [Point(3.0, 3.0, 0.0), Point(5.0, 5.0, 0.0)])
+
+    whole = NurbsSurfaceTrimmed.split_by_uv_curves(srf, [dangling])
+
+    MINI_CHECK(len(whole) == 1)
+
+
 @MINI_TEST("NurbsSurfaceTrimmed", "Transformation")
 def test_nurbssurface_trimmed_transformation():
     from session_py import NurbsSurface

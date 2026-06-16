@@ -169,6 +169,10 @@ class NurbsCurve:
         if periodic and n < 3:
             return NurbsCurve()
 
+        # Two points: Rhino emits a degree-1 line (2 CVs), not a cubic.
+        if n == 2 and not periodic:
+            return NurbsCurve.create(False, 1, list(points))
+
         def pdist(a, b):
             dx, dy, dz = a[0]-b[0], a[1]-b[1], a[2]-b[2]
             return math.sqrt(dx*dx + dy*dy + dz*dz)
@@ -358,6 +362,8 @@ class NurbsCurve:
             rhs[(n-1) * dim + d] = cv[n * dim + d]
 
         solution = nurbsknot.solve_tridiagonal(dim, sys_n, lower, diag_arr, upper, rhs)
+        if solution is None:
+            return NurbsCurve()
 
         for i in range(sys_n):
             for d in range(dim):
@@ -517,6 +523,108 @@ class NurbsCurve:
             curve.set_cv(i + 1, Point(rhs[i*3], rhs[i*3+1], rhs[i*3+2]))
         curve.set_cv(n, points[m-1])
         return curve
+
+    @staticmethod
+    def join(curves, tolerance=None):
+        """Join curve segments into chains by endpoint matching.
+
+        Segments are greedily chained (reversed as needed), made compatible
+        (common degree, common rationality), and concatenated with C0
+        continuity (junction nurbsknot at multiplicity = degree).
+
+        Parameters
+        ----------
+        curves : list of NurbsCurve
+            Segments to join. Inputs are not modified.
+        tolerance : float, optional
+            Endpoint matching distance. Defaults to Tolerance.ZERO_TOLERANCE.
+
+        Returns
+        -------
+        list of NurbsCurve
+            One curve per chain (singletons returned as duplicates).
+        """
+        tol = tolerance if tolerance is not None else Tolerance.ZERO_TOLERANCE
+        segs = []
+        for c in curves:
+            if c is not None and c.is_valid():
+                segs.append(c.duplicate())
+        chains = []
+        used = [False] * len(segs)
+        for i in range(len(segs)):
+            if used[i]:
+                continue
+            used[i] = True
+            chain = [segs[i]]
+            if not segs[i].is_closed():
+                grown = True
+                while grown:
+                    grown = False
+                    start = chain[0].point_at_start()
+                    end = chain[-1].point_at_end()
+                    for j in range(len(segs)):
+                        if used[j] or segs[j].is_closed():
+                            continue
+                        s = segs[j].point_at_start()
+                        e = segs[j].point_at_end()
+                        if s.distance(end) <= tol:
+                            chain.append(segs[j])
+                        elif e.distance(end) <= tol:
+                            segs[j].reverse()
+                            chain.append(segs[j])
+                        elif e.distance(start) <= tol:
+                            chain.insert(0, segs[j])
+                        elif s.distance(start) <= tol:
+                            segs[j].reverse()
+                            chain.insert(0, segs[j])
+                        else:
+                            continue
+                        used[j] = True
+                        grown = True
+                        break
+            chains.append(chain)
+        result = []
+        for chain in chains:
+            if len(chain) == 1:
+                result.append(chain[0])
+                continue
+            rational = False
+            max_degree = 1
+            for c in chain:
+                if c.is_rational():
+                    rational = True
+                if c.degree() > max_degree:
+                    max_degree = c.degree()
+            for c in chain:
+                if rational:
+                    c.make_rational()
+                c.clamp_end(2)
+                c.increase_degree(max_degree)
+            joined = chain[0]
+            for c in chain[1:]:
+                stride = joined.m_cv_stride
+                cvdim = joined.cv_size()
+                _, a1 = joined.domain()
+                s0, s1 = c.domain()
+                c.set_domain(a1, a1 + (s1 - s0))
+                if rational:
+                    w_end = joined.weight(joined.m_cv_count - 1)
+                    w_start = c.weight(0)
+                    if abs(w_start) > Tolerance.ZERO_TOLERANCE:
+                        scale = w_end / w_start
+                        for k in range(len(c.m_cv)):
+                            c.m_cv[k] = c.m_cv[k] * scale
+                joined_cv = np.asarray(joined.m_cv, dtype=np.float64)
+                c_cv = np.asarray(c.m_cv, dtype=np.float64)
+                last = (joined.m_cv_count - 1) * stride
+                for k in range(cvdim):
+                    joined_cv[last + k] = 0.5 * (joined_cv[last + k] + c_cv[k])
+                joined.m_nurbsknot = np.concatenate([np.asarray(joined.m_nurbsknot, dtype=np.float64), np.asarray(c.m_nurbsknot, dtype=np.float64)[joined.m_order - 1:]])
+                joined.m_cv = np.concatenate([joined_cv, c_cv[stride:]])
+                joined.m_cv_count = joined.m_cv_count + c.m_cv_count - 1
+            joined._invalidate_rmf_cache()
+            result.append(joined)
+        return result
 
     ###########################################################################################
     # Constructors & Destructor

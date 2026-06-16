@@ -479,6 +479,456 @@ class NurbsSurfaceTrimmed:
             ts.m_outer_loop = NurbsCurve.create(False, 1, uv_pts)
         return ts
 
+    @staticmethod
+    def split_by_uv_curves(srf, pcurves, tolerance=None, use_domain_border=True, n_boundary=0):
+        """Split a surface into trimmed faces by UV pcurves.
+
+        Builds a planar arrangement of the UV domain rectangle and the given
+        pcurves (NurbsCurves with x=u, y=v, z=0), extracts faces, and emits one
+        NurbsSurfaceTrimmed per face. Loops are exact trims of the input
+        pcurves joined with straight border segments. Dangling open cutters
+        that do not reach the border or another cutter are discarded.
+
+        When ``use_domain_border`` is False, the four domain border sides are
+        not added; the caller must supply closed boundary loops as pcurves
+        (used by BRep splitting to split a face inside its own trim region).
+        ``n_boundary`` then gives the number of leading pcurves that form the
+        region boundary; their vertices anchor the arrangement so the exterior
+        cycle is not mistaken for a hole.
+        """
+        def _is_boundary(cidx):
+            return cidx < 0 or (not use_domain_border and 0 <= cidx < n_boundary)
+        import math
+        from .point import Point
+
+        if not srf.is_valid():
+            return []
+
+        u0, u1 = srf.domain(0)
+        v0, v1 = srf.domain(1)
+        range_u = u1 - u0
+        range_v = v1 - v0
+
+        spans_u = srf.get_span_vector(0)
+        spans_v = srf.get_span_vector(1)
+        nu = max(len(spans_u) - 1, 1) * 4
+        nv = max(len(spans_v) - 1, 1) * 4
+        du = range_u / nu
+        dv = range_v / nv
+        mu = (u0 + u1) * 0.5
+        mv = (v0 + v1) * 0.5
+        pmid = srf.point_at(mu, mv)
+        uv_to_3d_u = pmid.distance(srf.point_at(min(mu + du, u1), mv)) / du
+        uv_to_3d_v = pmid.distance(srf.point_at(mu, min(mv + dv, v1))) / dv
+        uv_to_3d = max(uv_to_3d_u, uv_to_3d_v)
+        if uv_to_3d < 1e-10:
+            uv_to_3d = 1.0
+
+        if tolerance is not None and tolerance > 0.0:
+            snap_uv = max(1e-9, tolerance / uv_to_3d)
+        else:
+            snap_uv = min(range_u, range_v) * 1e-7
+
+        # ---- 1. Sample cutters into tagged UV polylines ----
+        samp_tol = max(range_u, range_v) * 1e-3
+        polylines = []  # dict: cidx, pts (list [u,v]), ts (curve params)
+
+        def snap_border(p):
+            if abs(p[0] - u0) < snap_uv:
+                p[0] = u0
+            if abs(p[0] - u1) < snap_uv:
+                p[0] = u1
+            if abs(p[1] - v0) < snap_uv:
+                p[1] = v0
+            if abs(p[1] - v1) < snap_uv:
+                p[1] = v1
+
+        for cidx, crv in enumerate(pcurves):
+            if crv is None or not crv.is_valid():
+                continue
+            ct0, ct1 = crv.domain()
+            entries = []
+            n = max(crv.cv_count() * 4, 16)
+            for i in range(n + 1):
+                t = ct0 + (ct1 - ct0) * i / n
+                p = crv.point_at(t)
+                entries.append([t, p[0], p[1]])
+            depth = 0
+            while depth < 6:
+                inserted = 0
+                i = 0
+                while i < len(entries) - 1:
+                    a = entries[i]
+                    b = entries[i + 1]
+                    tm = (a[0] + b[0]) * 0.5
+                    pm = crv.point_at(tm)
+                    exu = b[1] - a[1]
+                    exv = b[2] - a[2]
+                    l2 = exu*exu + exv*exv
+                    if l2 > 1e-30:
+                        s = ((pm[0]-a[1])*exu + (pm[1]-a[2])*exv) / l2
+                        cx = a[1] + s*exu
+                        cy = a[2] + s*exv
+                        dev = math.hypot(pm[0]-cx, pm[1]-cy)
+                    else:
+                        dev = 0.0
+                    if dev > samp_tol and len(entries) < 4096:
+                        entries.insert(i + 1, [tm, pm[0], pm[1]])
+                        inserted += 1
+                        i += 2
+                    else:
+                        i += 1
+                if inserted == 0:
+                    break
+                depth += 1
+            pts = []
+            ts = []
+            for t, pu, pv in entries:
+                p = [min(max(pu, u0), u1), min(max(pv, v0), v1)]
+                snap_border(p)
+                if pts and abs(p[0]-pts[-1][0]) < 1e-15 and abs(p[1]-pts[-1][1]) < 1e-15:
+                    continue
+                pts.append(p)
+                ts.append(t)
+            if len(pts) < 2:
+                continue
+            # A cutter lying entirely on one border line coincides with the
+            # domain edge (e.g. a cut circle on the seam) and splits nothing.
+            # When the caller supplies its own boundary loops (no domain
+            # border), those loops legitimately run along the domain edges.
+            if use_domain_border and (
+               all(abs(p[0] - u0) < snap_uv for p in pts) or
+               all(abs(p[0] - u1) < snap_uv for p in pts) or
+               all(abs(p[1] - v0) < snap_uv for p in pts) or
+               all(abs(p[1] - v1) < snap_uv for p in pts)):
+                continue
+            polylines.append({'cidx': cidx, 'pts': pts, 'ts': ts})
+
+        # Border sides as polylines: cidx -1 bottom, -2 right, -3 top, -4 left
+        if use_domain_border:
+            polylines.append({'cidx': -1, 'pts': [[u0, v0], [u1, v0]], 'ts': [u0, u1]})
+            polylines.append({'cidx': -2, 'pts': [[u1, v0], [u1, v1]], 'ts': [v0, v1]})
+            polylines.append({'cidx': -3, 'pts': [[u1, v1], [u0, v1]], 'ts': [u1, u0]})
+            polylines.append({'cidx': -4, 'pts': [[u0, v1], [u0, v0]], 'ts': [v1, v0]})
+
+        # ---- 2. Segment-segment intersections (Newton-refined on real curves) ----
+        def seg_seg(p1, p2, p3, p4):
+            d1u = p2[0] - p1[0]
+            d1v = p2[1] - p1[1]
+            d2u = p4[0] - p3[0]
+            d2v = p4[1] - p3[1]
+            den = d1u * d2v - d1v * d2u
+            if abs(den) < 1e-20:
+                return None
+            s = ((p3[0]-p1[0]) * d2v - (p3[1]-p1[1]) * d2u) / den
+            t = ((p3[0]-p1[0]) * d1v - (p3[1]-p1[1]) * d1u) / den
+            if -1e-12 <= s <= 1.0 + 1e-12 and -1e-12 <= t <= 1.0 + 1e-12:
+                return (s, t)
+            return None
+
+        def newton_cc(ca, ta, cb, tb):
+            for _ in range(8):
+                da = ca.evaluate(ta, 1)
+                db = cb.evaluate(tb, 1)
+                fu = da[0][0] - db[0][0]
+                fv = da[0][1] - db[0][1]
+                if math.hypot(fu, fv) < snap_uv * 0.01:
+                    break
+                j00 = da[1][0]
+                j01 = -db[1][0]
+                j10 = da[1][1]
+                j11 = -db[1][1]
+                den = j00 * j11 - j01 * j10
+                if abs(den) < 1e-20:
+                    break
+                ta -= (fu * j11 - j01 * fv) / den
+                tb -= (j00 * fv - fu * j10) / den
+                a0, a1 = ca.domain()
+                b0, b1 = cb.domain()
+                ta = min(max(ta, a0), a1)
+                tb = min(max(tb, b0), b1)
+            return ta, tb
+
+        splits = {}  # (poly_index, seg_index) -> list of (frac, u, v, t_on_curve)
+        for pi in range(len(polylines)):
+            for pj in range(pi + 1, len(polylines)):
+                A = polylines[pi]
+                B = polylines[pj]
+                if _is_boundary(A['cidx']) and _is_boundary(B['cidx']):
+                    continue
+                aminu = min(p[0] for p in A['pts']) - snap_uv
+                amaxu = max(p[0] for p in A['pts']) + snap_uv
+                aminv = min(p[1] for p in A['pts']) - snap_uv
+                amaxv = max(p[1] for p in A['pts']) + snap_uv
+                bminu = min(p[0] for p in B['pts'])
+                bmaxu = max(p[0] for p in B['pts'])
+                bminv = min(p[1] for p in B['pts'])
+                bmaxv = max(p[1] for p in B['pts'])
+                if bminu > amaxu or bmaxu < aminu or bminv > amaxv or bmaxv < aminv:
+                    continue
+                for ia in range(len(A['pts']) - 1):
+                    for ib in range(len(B['pts']) - 1):
+                        hit = seg_seg(A['pts'][ia], A['pts'][ia+1], B['pts'][ib], B['pts'][ib+1])
+                        if hit is None:
+                            continue
+                        s, t = hit
+                        ta = A['ts'][ia] + (A['ts'][ia+1] - A['ts'][ia]) * s
+                        tb = B['ts'][ib] + (B['ts'][ib+1] - B['ts'][ib]) * t
+                        hu = A['pts'][ia][0] + (A['pts'][ia+1][0] - A['pts'][ia][0]) * s
+                        hv = A['pts'][ia][1] + (A['pts'][ia+1][1] - A['pts'][ia][1]) * s
+                        if A['cidx'] >= 0 and B['cidx'] >= 0:
+                            ta, tb = newton_cc(pcurves[A['cidx']], ta, pcurves[B['cidx']], tb)
+                            pa = pcurves[A['cidx']].point_at(ta)
+                            hu, hv = pa[0], pa[1]
+                        elif A['cidx'] >= 0:
+                            pa = pcurves[A['cidx']].point_at(ta)
+                            hu, hv = pa[0], pa[1]
+                        elif B['cidx'] >= 0:
+                            pb = pcurves[B['cidx']].point_at(tb)
+                            hu, hv = pb[0], pb[1]
+                        hp = [hu, hv]
+                        snap_border(hp)
+                        if B['cidx'] < 0:
+                            if B['cidx'] in (-1, -3):
+                                tb = hp[0]
+                            else:
+                                tb = hp[1]
+                        if A['cidx'] < 0:
+                            if A['cidx'] in (-1, -3):
+                                ta = hp[0]
+                            else:
+                                ta = hp[1]
+                        splits.setdefault((pi, ia), []).append((s, hp[0], hp[1], ta))
+                        splits.setdefault((pj, ib), []).append((t, hp[0], hp[1], tb))
+
+        # ---- 3. Rebuild polylines with split vertices; build the vertex pool ----
+        cell_map = {}
+        verts = []
+
+        def vert_id(p):
+            ci = int(math.floor(p[0] / snap_uv))
+            cj = int(math.floor(p[1] / snap_uv))
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    bucket = cell_map.get((ci+di, cj+dj))
+                    if bucket is None:
+                        continue
+                    for vk in bucket:
+                        q = verts[vk]
+                        if math.hypot(q[0]-p[0], q[1]-p[1]) <= snap_uv:
+                            return vk
+            vk = len(verts)
+            verts.append([p[0], p[1]])
+            cell_map.setdefault((ci, cj), []).append(vk)
+            return vk
+
+        edges = []  # dict: a, b, cidx, ta, tb
+
+        for pi, poly in enumerate(polylines):
+            chain = []  # (vid, t_on_curve)
+            for i in range(len(poly['pts'])):
+                chain.append((vert_id(poly['pts'][i]), poly['ts'][i]))
+                if i < len(poly['pts']) - 1 and (pi, i) in splits:
+                    evs = sorted(splits[(pi, i)])
+                    for frac, hu, hv, tc in evs:
+                        chain.append((vert_id([hu, hv]), tc))
+            for i in range(len(chain) - 1):
+                a, ta = chain[i]
+                b, tb = chain[i + 1]
+                if a == b:
+                    continue
+                edges.append({'a': a, 'b': b, 'cidx': poly['cidx'], 'ta': ta, 'tb': tb})
+
+        # ---- 4. Prune dangling edges (valence-1 chains) ----
+        alive = [True] * len(edges)
+        changed = True
+        while changed:
+            changed = False
+            degree = {}
+            for ei, e in enumerate(edges):
+                if not alive[ei]:
+                    continue
+                degree[e['a']] = degree.get(e['a'], 0) + 1
+                degree[e['b']] = degree.get(e['b'], 0) + 1
+            for ei, e in enumerate(edges):
+                if not alive[ei]:
+                    continue
+                if degree.get(e['a'], 0) == 1 or degree.get(e['b'], 0) == 1:
+                    alive[ei] = False
+                    changed = True
+
+        live_edges = [e for ei, e in enumerate(edges) if alive[ei]]
+        if not live_edges:
+            return []
+
+        # ---- 5. Half-edge face extraction (leftmost-turn walk) ----
+        out_map = {}  # vid -> list of he indices
+        hes = []  # (tail, head, edge_ref, dir_flag)
+        for e in live_edges:
+            hes.append([e['a'], e['b'], e, 1])
+            hes.append([e['b'], e['a'], e, 0])
+        for hi, he in enumerate(hes):
+            out_map.setdefault(he[0], []).append(hi)
+        for vid in out_map:
+            out_map[vid].sort(key=lambda hi: math.atan2(verts[hes[hi][1]][1] - verts[vid][1], verts[hes[hi][1]][0] - verts[vid][0]))
+
+        twin = {}
+        for hi in range(0, len(hes), 2):
+            twin[hi] = hi + 1
+            twin[hi + 1] = hi
+
+        next_he = {}
+        for vid, outs in out_map.items():
+            for hi in outs:
+                tw = twin[hi]
+                # at vertex vid, incoming tw arrives; next outgoing is the one
+                # clockwise from the reversed incoming (leftmost turn)
+                pos = outs.index(hi)
+                nxt = outs[(pos - 1) % len(outs)]
+                next_he[tw] = nxt
+
+        visited = [False] * len(hes)
+        faces = []  # list of list of he indices
+        for hi in range(len(hes)):
+            if visited[hi]:
+                continue
+            cycle = []
+            cur = hi
+            while not visited[cur]:
+                visited[cur] = True
+                cycle.append(cur)
+                cur = next_he[cur]
+            if len(cycle) >= 2:
+                faces.append(cycle)
+
+        def face_area(cycle):
+            s = 0.0
+            for hi in cycle:
+                a = verts[hes[hi][0]]
+                b = verts[hes[hi][1]]
+                s += a[0]*b[1] - b[0]*a[1]
+            return s * 0.5
+
+        border_vids = set()
+        for e in live_edges:
+            if _is_boundary(e['cidx']):
+                border_vids.add(e['a'])
+                border_vids.add(e['b'])
+
+        def point_in_cycle(p, cycle):
+            inside = False
+            n = len(cycle)
+            for hi in cycle:
+                a = verts[hes[hi][0]]
+                b = verts[hes[hi][1]]
+                if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < (b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0]:
+                    inside = not inside
+            return inside
+
+        pos_faces = []
+        neg_faces = []
+        for cycle in faces:
+            area = face_area(cycle)
+            if area > snap_uv * snap_uv:
+                pos_faces.append((cycle, area))
+            elif area < -snap_uv * snap_uv:
+                touches_border = any(hes[hi][0] in border_vids for hi in cycle)
+                if not touches_border:
+                    neg_faces.append(cycle)
+
+        # ---- 6. Assign floating hole loops to their containing faces ----
+        holes_of = {fi: [] for fi in range(len(pos_faces))}
+        for cycle in neg_faces:
+            sample = verts[hes[cycle[0]][0]]
+            best = -1
+            best_area = float('inf')
+            for fi, (fc, area) in enumerate(pos_faces):
+                if area < best_area and point_in_cycle(sample, fc):
+                    # the hole vertex lies ON the cycle of its own disk face;
+                    # skip faces sharing vertices with the hole cycle
+                    hole_vids = set(hes[hi][0] for hi in cycle)
+                    face_vids = set(hes[hi][0] for hi in fc)
+                    if hole_vids == face_vids:
+                        continue
+                    best = fi
+                    best_area = area
+            if best >= 0:
+                holes_of[best].append(cycle)
+
+        # ---- 7. Emit one trimmed surface per face ----
+        def cycle_to_loop(cycle):
+            # Collapse consecutive same-curve half-edges into exact trims,
+            # border runs into straight segments, then join into one loop
+            runs = []
+            for hi in cycle:
+                tail, head, e, fwd = hes[hi]
+                ta = e['ta'] if fwd else e['tb']
+                tb = e['tb'] if fwd else e['ta']
+                if runs and runs[-1]['cidx'] == e['cidx'] and runs[-1]['vb'] == tail:
+                    runs[-1]['vb'] = head
+                    runs[-1]['tb'] = tb
+                else:
+                    runs.append({'cidx': e['cidx'], 'va': tail, 'vb': head, 'ta': ta, 'tb': tb})
+            pieces = []
+            for run in runs:
+                if run['cidx'] >= 0:
+                    crv = pcurves[run['cidx']]
+                    c0, c1 = crv.domain()
+                    lo = min(run['ta'], run['tb'])
+                    hi_ = max(run['ta'], run['tb'])
+                    piece = crv.duplicate()
+                    if hi_ - lo < (c1 - c0) - 1e-12 and hi_ - lo > 1e-14:
+                        if not piece.trim(lo, hi_):
+                            piece = None
+                    if piece is not None and piece.is_valid():
+                        pieces.append(piece)
+                        continue
+                pa = verts[run['va']]
+                pb = verts[run['vb']]
+                if math.hypot(pb[0]-pa[0], pb[1]-pa[1]) > 1e-14:
+                    seg_pts = [Point(pa[0], pa[1], 0.0), Point(pb[0], pb[1], 0.0)]
+                    pieces.append(NurbsCurve.create(False, 1, seg_pts))
+            if not pieces:
+                return NurbsCurve()
+            joined = NurbsCurve.join(pieces, snap_uv * 4.0)
+            if len(joined) == 1 and joined[0].is_closed():
+                return joined[0]
+            # Fallback: polyline loop from the face walk
+            loop_pts = []
+            for hi in cycle:
+                a = verts[hes[hi][0]]
+                loop_pts.append(Point(a[0], a[1], 0.0))
+            loop_pts.append(Point(loop_pts[0][0], loop_pts[0][1], 0.0))
+            return NurbsCurve.create(False, 1, loop_pts)
+
+        def loop_signed_area(loop):
+            n = 64
+            l0, l1 = loop.domain()
+            s = 0.0
+            prev = loop.point_at(l0)
+            for i in range(1, n + 1):
+                p = loop.point_at(l0 + (l1 - l0) * i / n)
+                s += prev[0]*p[1] - p[0]*prev[1]
+                prev = p
+            return s * 0.5
+
+        result = []
+        for fi, (cycle, area) in enumerate(pos_faces):
+            outer = cycle_to_loop(cycle)
+            if not outer.is_valid():
+                continue
+            if loop_signed_area(outer) < 0.0:
+                outer.reverse()
+            ts = NurbsSurfaceTrimmed.create(srf, outer)
+            for hole_cycle in holes_of[fi]:
+                hole = cycle_to_loop(hole_cycle)
+                if hole.is_valid():
+                    if loop_signed_area(hole) > 0.0:
+                        hole.reverse()
+                    ts.add_inner_loop(hole)
+            result.append(ts)
+        return result
+
     def surface(self):
         return self.m_surface
 
