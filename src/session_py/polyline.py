@@ -1634,6 +1634,66 @@ class Polyline:
     def simplify(self, tolerance):
         pts = Polyline.simplify_points(self.points, tolerance)
         return Polyline(pts)
+    def translated(self, v):
+        result = copy.deepcopy(self)
+        result.translate(v)
+        return result
+
+    def remove_consecutive_duplicates(self, tol=Tolerance.APPROXIMATION):
+        pts = self.get_points()
+        cleaned = []
+        tol_sq = tol * tol
+        for p in pts:
+            if not cleaned:
+                cleaned.append(p)
+                continue
+            dx = p[0] - cleaned[-1][0]
+            dy = p[1] - cleaned[-1][1]
+            dz = p[2] - cleaned[-1][2]
+            if dx*dx + dy*dy + dz*dz >= tol_sq:
+                cleaned.append(p)
+        new_poly = Polyline(cleaned)
+        self.coords = new_poly.coords
+        self._plane = None
+
+    @staticmethod
+    def two_rects_from_frame(p, segment_vector, zaxis, middle, radius, length, flip_male):
+        y_axis = zaxis.cross(segment_vector)
+        x_axis = y_axis.cross(segment_vector)
+        x_axis.normalize_self()
+        y_axis.normalize_self()
+        x_axis = x_axis * radius
+        y_axis = y_axis * radius
+        sv0 = segment_vector * (length * -0.5)
+        sv1 = segment_vector * (length * 0.5)
+        v = [
+            Vector(-x_axis[0] - y_axis[0], -x_axis[1] - y_axis[1], -x_axis[2] - y_axis[2]),
+            Vector( x_axis[0] - y_axis[0],  x_axis[1] - y_axis[1],  x_axis[2] - y_axis[2]),
+            Vector( x_axis[0] + y_axis[0],  x_axis[1] + y_axis[1],  x_axis[2] + y_axis[2]),
+            Vector(-x_axis[0] + y_axis[0], -x_axis[1] + y_axis[1], -x_axis[2] + y_axis[2]),
+        ]
+        if not middle:
+            if flip_male == 1:
+                v = v[1:] + v[:1]
+            elif flip_male == -1:
+                v = v[-1:] + v[:-1]
+        def pt(sv, uv):
+            return Point(p[0]+sv[0]+uv[0], p[1]+sv[1]+uv[1], p[2]+sv[2]+uv[2])
+        rect0 = Polyline([
+            pt(sv0, v[1]),
+            pt(sv1, v[1]),
+            pt(sv1, v[0]),
+            pt(sv0, v[0]),
+            pt(sv0, v[1]),
+        ])
+        rect1 = Polyline([
+            pt(sv0, v[2]),
+            pt(sv1, v[2]),
+            pt(sv1, v[3]),
+            pt(sv0, v[3]),
+            pt(sv0, v[2]),
+        ])
+        return rect0, rect1
 
     @staticmethod
     def boolean_op(a, b, clip_type, plane=None):

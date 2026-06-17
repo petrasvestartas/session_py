@@ -800,6 +800,48 @@ def test_polyline_grid_of_points():
         MINI_CHECK(p[1] > 0.0 and p[1] < 4.0)
 
 
+@MINI_TEST("Polyline", "Polylabel")
+def test_polyline_polylabel():
+    from session_py import Polyline
+    from session_py import Point
+
+    poly = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
+        Point(0.0, 10.0, 0.0),
+    ])
+    polys = [poly]
+    res = Polyline.polylabel(polys, 0.5)
+    c = res[0]
+    r = res[2]
+
+    MINI_CHECK(abs(c[0] - 5.0) < 0.6)
+    MINI_CHECK(abs(c[1] - 5.0) < 0.6)
+    MINI_CHECK(abs(r - 5.0) < 0.6)
+
+
+@MINI_TEST("Polyline", "Polylabel Circle Division Points")
+def test_polyline_polylabel_circle_division_points():
+    from session_py import Polyline
+    from session_py import Point
+    from session_py import Vector
+
+    poly = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
+        Point(0.0, 10.0, 0.0),
+    ])
+    polys = [poly]
+    direction = Vector(0.0, 0.0, 0.0)
+    pts = Polyline.polylabel_circle_division_points(direction, polys, 4, 0.5, 1.0, True)
+
+    MINI_CHECK(len(pts) == 4)
+    for p in pts:
+        MINI_CHECK(abs(p[2]) < 1e-6)
+
+
 @MINI_TEST("Polyline", "Boolean Op")
 def test_polyline_boolean_op():
     from session_py import Point

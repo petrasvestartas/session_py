@@ -4077,3 +4077,144 @@ def adjacency_search(elements, inflate=5.0):
                 adjacency.extend([i, j, -1, -1])
     return adjacency
 
+def line_line_classified(
+    s0: Line,
+    s1: Line,
+    n_segs_0: int,
+    n_segs_1: int,
+    cur_seg_0: int,
+    cur_seg_1: int,
+    above_closer_to_edge: float,
+) -> Optional[tuple]:
+    """Port of cgal_box_search.h:252-496. Classifies two finite segments s0/s1
+    as end-to-end, side-to-end, or cross based on above_closer_to_edge in [0,1].
+    n_segs_*/cur_seg_* give the segment's position within its parent polyline
+    (used for full-polyline parameter remapping that determines type0/type1).
+    Returns (p0, p1, v0, v1, normal, type0, type1, is_parallel):
+      p0/p1 = closest approach points (clamped to [0,1] on each segment);
+      v0/v1 = unit directions, flipped away from the far end when type=0;
+      normal = unit perpendicular to both segments (Plane.base1 if parallel);
+      type0/type1 = 0 means segment-end, 1 means segment-interior;
+      is_parallel = True when v0 x v1 is near-zero.
+    Returns None for degenerate cases."""
+    from .plane import Plane
+    DIST_SQ = 1e-6
+    EPS_PAR = 1.0  # degrees
+
+    v0 = s0.to_vector()
+    v1 = s1.to_vector()
+    normal = v0.cross(v1)
+    nmag2 = normal[0]*normal[0] + normal[1]*normal[1] + normal[2]*normal[2]
+    ang = v0.angle(v1, False, True)
+    is_parallel = (nmag2 < 1e-24) or ((90.0 - abs(ang - 90.0)) < EPS_PAR)
+    if is_parallel:
+        tmp_origin = s0.start()
+        tmp_normal = v0
+        pl_tmp = Plane.from_point_normal(tmp_origin, tmp_normal)
+        normal = pl_tmp.base1()
+    normal.normalize_self()
+
+    def eq(a, b):
+        dx = a[0]-b[0]; dy = a[1]-b[1]; dz = a[2]-b[2]
+        return dx*dx+dy*dy+dz*dz < DIST_SQ
+
+    def endcase(pp, dv0, dv1):
+        p0 = pp; p1 = pp
+        v0 = dv0; v0.normalize_self()
+        v1 = dv1; v1.normalize_self()
+        return (p0, p1, v0, v1, normal, 0, 0, is_parallel)
+
+    if eq(s0.start(), s1.start()):
+        return endcase(s0.start(), s0.end()-s0.start(), s1.end()-s1.start())
+    if eq(s0.start(), s1.end()):
+        return endcase(s0.start(), s0.end()-s0.start(), s1.start()-s1.end())
+    if eq(s0.end(), s1.start()):
+        return endcase(s0.end(), s0.start()-s0.end(), s1.end()-s1.start())
+    if eq(s0.end(), s1.end()):
+        return endcase(s0.end(), s0.start()-s0.end(), s1.start()-s1.end())
+
+    if is_parallel:
+        v0.normalize_self()
+        v1.normalize_self()
+
+        def signed_t(src, unit, q):
+            return (q[0]-src[0])*unit[0] + (q[1]-src[1])*unit[1] + (q[2]-src[2])*unit[2]
+
+        def proj_onto_line(L, q):
+            return L.closest_point(q, False)[1]
+
+        pts = []
+
+        def push(q):
+            q0 = proj_onto_line(s0, q)
+            q1 = proj_onto_line(s1, q)
+            pts.append((signed_t(s0.start(), v0, q0),
+                        signed_t(s1.start(), v1, q1)))
+
+        push(s0.start()); push(s0.end())
+        push(s1.start()); push(s1.end())
+        pts.sort(key=lambda a: a[0])
+        seg0_a = Point(s0.start()[0]+pts[1][0]*v0[0],
+                       s0.start()[1]+pts[1][0]*v0[1],
+                       s0.start()[2]+pts[1][0]*v0[2])
+        seg0_b = Point(s0.start()[0]+pts[2][0]*v0[0],
+                       s0.start()[1]+pts[2][0]*v0[1],
+                       s0.start()[2]+pts[2][0]*v0[2])
+        seg1_a = Point(s1.start()[0]+pts[1][1]*v1[0],
+                       s1.start()[1]+pts[1][1]*v1[1],
+                       s1.start()[2]+pts[1][1]*v1[2])
+        seg1_b = Point(s1.start()[0]+pts[2][1]*v1[0],
+                       s1.start()[1]+pts[2][1]*v1[1],
+                       s1.start()[2]+pts[2][1]*v1[2])
+        m0 = Point((seg0_a[0]+seg0_b[0])*0.5, (seg0_a[1]+seg0_b[1])*0.5, (seg0_a[2]+seg0_b[2])*0.5)
+        m1 = Point((seg1_a[0]+seg1_b[0])*0.5, (seg1_a[1]+seg1_b[1])*0.5, (seg1_a[2]+seg1_b[2])*0.5)
+        avg = Point((m0[0]+m1[0])*0.5, (m0[1]+m1[1])*0.5, (m0[2]+m1[2])*0.5)
+        p0 = proj_onto_line(s0, avg)
+        p1 = proj_onto_line(s1, avg)
+
+        def t_of(L, q):
+            return L.closest_point(q, False)[0]
+
+        t0_v = t_of(s0, p0)
+        t1_v = t_of(s1, p1)
+        if t0_v > 0.5:
+            v0 = Vector(-v0[0], -v0[1], -v0[2])
+        if t1_v > 0.5:
+            v1 = Vector(-v1[0], -v1[1], -v1[2])
+        return (p0, p1, v0, v1, normal, 0, 0, is_parallel)
+
+    v0.normalize_self()
+    v1.normalize_self()
+    result = line_line_parameters(s0, s1, 0.0, False, True)
+    if result is None:
+        return None
+    t0_v, t1_v = result
+    t0c = max(0.0, min(1.0, t0_v))
+    t1c = max(0.0, min(1.0, t1_v))
+    p0 = s0.point_at(t0c)
+    p1 = s1.point_at(t1c)
+
+    tt0 = (t0c + float(cur_seg_0)) / float(n_segs_0)
+    tt1 = (t1c + float(cur_seg_1)) / float(n_segs_1)
+    close0 = 2.0 * abs(0.5 - tt0)
+    close1 = 2.0 * abs(0.5 - tt1)
+
+    if above_closer_to_edge < 0.0:
+        type0 = 1; type1 = 1
+    elif above_closer_to_edge > 1.0:
+        type0 = 0 if tt0 < tt1 else 1
+        type1 = 1 if tt0 < tt1 else 0
+    else:
+        type0 = 0 if close0 > above_closer_to_edge else 1
+        type1 = 0 if close1 > above_closer_to_edge else 1
+        if close0 > close1 and type0 == 0 and type1 == 0:
+            type0 = 0; type1 = 1
+        elif close0 < close1 and type0 == 0 and type1 == 0:
+            type0 = 1; type1 = 0
+
+    if tt0 > 0.5 and type0 == 0:
+        v0 = Vector(-v0[0], -v0[1], -v0[2])
+    if tt1 > 0.5 and type1 == 0:
+        v1 = Vector(-v1[0], -v1[1], -v1[2])
+    return (p0, p1, v0, v1, normal, type0, type1, is_parallel)
+

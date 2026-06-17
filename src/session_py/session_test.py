@@ -504,5 +504,111 @@ def test_session_tree_transformation_hierarchy():
     MINI_CHECK(abs(v0[2] - 0.0) < 1e-4)
 
 
+@MINI_TEST("Session", "Add ElementFeature")
+def test_session_add_elementfeature():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    p1 = Point(0.0, 0.0, 0.0)
+    p2 = Point(1.0, 0.0, 0.0)
+    session.add_point(p1)
+    session.add_point(p2)
+
+    class FaceElementFeature:
+        def __init__(self):
+            import uuid
+            self._guid = str(uuid.uuid4())
+            self.face_id_a = 0
+            self.face_id_b = 0
+        @property
+        def guid(self): return self._guid
+
+    f = FaceElementFeature()
+    fguid = session.add_elementfeature(p1.guid, p2.guid, f)
+
+    MINI_CHECK(bool(fguid))
+    MINI_CHECK(fguid in session.edge_elementfeatures)
+    MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
+
+
+@MINI_TEST("Session", "Add Component")
+def test_session_add_component():
+    import uuid
+    from session_py import Session
+    from session_py.file_encoders import file_register_class
+
+    class Box:
+        def __init__(self, width=1.0, height=2.0):
+            self._guid = str(uuid.uuid4())
+            self.name = "my_box"
+            self.width = width
+            self.height = height
+        @property
+        def guid(self): return self._guid
+        def __jsondump__(self):
+            return {"type": "Box", "guid": self.guid, "name": self.name,
+                    "width": self.width, "height": self.height}
+        @classmethod
+        def __jsonload__(cls, data, guid=None, name=None):
+            obj = cls(data["width"], data["height"])
+            obj._guid = guid or data.get("guid", obj._guid)
+            obj.name  = name or data.get("name", obj.name)
+            return obj
+
+    file_register_class("Box", Box)
+
+    session = Session()
+    box = Box(width=3.0, height=5.0)
+    guid = box.guid
+
+    session.add_component(box)
+
+    MINI_CHECK(len(session.objects.components) == 1)
+    MINI_CHECK(session.lookup[guid] is box)
+    MINI_CHECK(session.graph.has_node(guid))
+
+
+@MINI_TEST("Session", "Component Json Roundtrip")
+def test_session_component_json_roundtrip():
+    import uuid
+    from session_py import Session
+    from session_py.file_encoders import file_register_class
+    from pathlib import Path
+
+    class Box:
+        def __init__(self, width=1.0, height=2.0):
+            self._guid = str(uuid.uuid4())
+            self.name = "my_box"
+            self.width = width
+            self.height = height
+        @property
+        def guid(self): return self._guid
+        def __jsondump__(self):
+            return {"type": "Box", "guid": self.guid, "name": self.name,
+                    "width": self.width, "height": self.height}
+        @classmethod
+        def __jsonload__(cls, data, guid=None, name=None):
+            obj = cls(data["width"], data["height"])
+            obj._guid = guid or data.get("guid", obj._guid)
+            obj.name  = name or data.get("name", obj.name)
+            return obj
+
+    file_register_class("Box", Box)
+
+    original = Session()
+    box = Box(width=3.0, height=5.0)
+    guid = box.guid
+    original.add_component(box)
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_component.json"
+    original.file_json_dump(fname)
+    loaded = Session.file_json_load(fname)
+
+    MINI_CHECK(len(loaded.objects.components) == 1)
+    MINI_CHECK(loaded.objects.components[0].width == 3.0)
+    MINI_CHECK(loaded.objects.components[0].guid == guid)
+
+
 if __name__ == "__main__":
     run_all(language="python")

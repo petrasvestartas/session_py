@@ -232,5 +232,54 @@ def test_boolean_polyline_large_coords_auto_scale():
     MINI_CHECK(diff[0].point_count() > 0)
 
 
+@MINI_TEST("Boolean Polyline Open", "Horizontal Line Vs Unit Square")
+def test_boolean_polyline_open_horizontal_line_vs_unit_square():
+    from session_py import Polyline
+    from session_py import Point
+    from session_py.boolean_polyline import BooleanPolyline
+
+    open_line = Polyline([Point(-2, 0, 0), Point(2, 0, 0)])
+    sq = Polyline([Point(-1,-1,0), Point(1,-1,0), Point(1,1,0), Point(-1,1,0), Point(-1,-1,0)])
+    out = BooleanPolyline.clip_open_against_closed(open_line, sq)
+    MINI_CHECK(len(out) == 1)
+    MINI_CHECK(out[0].point_count() == 2)
+    p0 = out[0].get_point(0)
+    p1 = out[0].get_point(1)
+    MINI_CHECK(abs(abs(p0[0]) - 1.0) < 1e-6)
+    MINI_CHECK(abs(abs(p1[0]) - 1.0) < 1e-6)
+    MINI_CHECK(abs(p0[1]) < 1e-6)
+    MINI_CHECK(abs(p1[1]) < 1e-6)
+
+
+@MINI_TEST("Boolean Polyline Open", "Diagonal Line Vs Unit Square")
+def test_boolean_polyline_open_diagonal_line_vs_unit_square():
+    from session_py import Polyline
+    from session_py import Point
+    from session_py.boolean_polyline import BooleanPolyline
+
+    open_line = Polyline([Point(-2, -2, 0), Point(2, 2, 0)])
+    sq = Polyline([Point(-1,-1,0), Point(1,-1,0), Point(1,1,0), Point(-1,1,0), Point(-1,-1,0)])
+    out = BooleanPolyline.clip_open_against_closed(open_line, sq)
+    MINI_CHECK(len(out) == 1)
+    MINI_CHECK(out[0].point_count() == 2)
+    p0 = out[0].get_point(0)
+    p1 = out[0].get_point(1)
+    MINI_CHECK(abs(abs(p0[0]) - 1.0) < 1e-6)
+    MINI_CHECK(abs(abs(p1[0]) - 1.0) < 1e-6)
+
+
+@MINI_TEST("Boolean Polyline Open", "Interior Open Path Passes Through")
+def test_boolean_polyline_open_interior_open_path_passes_through():
+    from session_py import Polyline
+    from session_py import Point
+    from session_py.boolean_polyline import BooleanPolyline
+
+    open_path = Polyline([Point(-2, 0, 0), Point(0, 0.2, 0), Point(2, 0, 0)])
+    sq = Polyline([Point(-1,-1,0), Point(1,-1,0), Point(1,1,0), Point(-1,1,0), Point(-1,-1,0)])
+    out = BooleanPolyline.clip_open_against_closed(open_path, sq)
+    MINI_CHECK(len(out) == 1)
+    MINI_CHECK(out[0].point_count() >= 3)
+
+
 if __name__ == "__main__":
     run_all("python")

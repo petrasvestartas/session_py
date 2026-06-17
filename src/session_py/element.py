@@ -108,6 +108,25 @@ class Element:
     @property
     def is_dirty(self):
         return self._is_dirty
+    @property
+    def cached_aabb(self):
+        return self._aabb
+
+    @property
+    def cached_obb(self):
+        return self._obb
+
+    @property
+    def cached_collision_mesh(self):
+        return self._collision_mesh
+
+    @property
+    def cached_point(self):
+        return self._point
+
+    @property
+    def features_count(self):
+        return len(self._features)
 
     ###########################################################################################
     # Operators

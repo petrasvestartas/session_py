@@ -3875,7 +3875,8 @@ class NurbsCurve:
             saved = 0.0
             
             for r in range(j):
-                temp = N[r] / (right[r + 1] + left[j - r])
+                denom = right[r + 1] + left[j - r]
+                temp = N[r] / denom if denom != 0.0 else 0.0
                 N[r] = saved + right[r + 1] * temp
                 saved = left[j - r] * temp
             

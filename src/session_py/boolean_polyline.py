@@ -1484,7 +1484,7 @@ class BooleanPolyline:
             max_coord = max(max_coord, abs(cb[i * 3]), abs(cb[i * 3 + 1]))
         if max_coord < 1e-12:
             max_coord = 1.0
-        bool_scale = math.floor(math.sqrt(float(2**63 - 1)) / max_coord * 0.99)
+        bool_scale = math.floor(math.sqrt(float(2**63 - 1)) / (2.0 * max_coord))
         bool_inv_scale = 1.0 / bool_scale
 
         sc = VattiScratch()
@@ -1567,6 +1567,38 @@ class BooleanPolyline:
             if not any_cross:
                 a_in_b = pip_i(va[0], vb)
                 b_in_a = pip_i(vb[0], va)
+                # Validate containment with centroid -- pip_i can return true for a
+                # vertex of A that lies on B's boundary (shared vertex / shared
+                # edge), giving a false-positive containment. A convex polygon's
+                # centroid is strictly interior to itself, so if A is truly
+                # contained in B, A's centroid must also test inside B. If it
+                # doesn't, the vertex test was a boundary artefact.
+                ca_cen = BIVec2(0, 0)
+                cb_cen = BIVec2(0, 0)
+                for i in range(na):
+                    ca_cen.x += va[i].x
+                    ca_cen.y += va[i].y
+                ca_cen.x = int(ca_cen.x / na)
+                ca_cen.y = int(ca_cen.y / na)
+                for i in range(nb):
+                    cb_cen.x += vb[i].x
+                    cb_cen.y += vb[i].y
+                cb_cen.x = int(cb_cen.x / nb)
+                cb_cen.y = int(cb_cen.y / nb)
+                if a_in_b and not pip_i(ca_cen, vb):
+                    a_in_b = False
+                if b_in_a and not pip_i(cb_cen, va):
+                    b_in_a = False
+                # If vertex tests fail, try centroids -- catches near-identical
+                # polygons with shared vertices (boundary points return false).
+                if not a_in_b and not b_in_a:
+                    a_in_b = pip_i(ca_cen, vb)
+                    b_in_a = pip_i(cb_cen, va)
+                    # If centroid also lands on boundary (exact y-match),
+                    # perturb by 1 int64 unit to escape the edge.
+                    if not a_in_b and not b_in_a:
+                        a_in_b = pip_i(BIVec2(ca_cen.x + 1, ca_cen.y + 1), vb)
+                        b_in_a = pip_i(BIVec2(cb_cen.x + 1, cb_cen.y + 1), va)
                 if clip_type == 0:
                     if a_in_b:
                         return [a]
@@ -1643,3 +1675,262 @@ class BooleanPolyline:
                 continue
             out.append(Polyline.from_coords(coords))
         return out
+
+    @staticmethod
+    def clip_open_against_closed(open_subject, closed_clip):
+        result = []
+        cs = open_subject.coords
+        cc = closed_clip.coords
+        ns = len(cs) // 3
+        nc = len(cc) // 3
+
+        if nc >= 2:
+            dx = cc[(nc - 1) * 3] - cc[0]
+            dy = cc[(nc - 1) * 3 + 1] - cc[1]
+            if dx * dx + dy * dy < 1e-20:
+                nc -= 1
+        if ns < 2 or nc < 3:
+            return result
+
+        def point_in_poly(px, py):
+            inside = False
+            j = nc - 1
+            for i in range(nc):
+                xi = cc[i * 3]
+                yi = cc[i * 3 + 1]
+                xj = cc[j * 3]
+                yj = cc[j * 3 + 1]
+                crosses = (yi > py) != (yj > py)
+                if crosses:
+                    xint = xj + (py - yj) * (xi - xj) / (yi - yj)
+                    if px < xint:
+                        inside = not inside
+                j = i
+            return inside
+
+        cur = []
+
+        def flush():
+            if len(cur) < 6:
+                cur.clear()
+                return
+            result.append(Polyline.from_coords(list(cur)))
+            cur.clear()
+
+        def push_xy(x, y):
+            n = len(cur)
+            if n >= 3:
+                lx = cur[n - 3]
+                ly = cur[n - 2]
+                if abs(lx - x) < 1e-9 and abs(ly - y) < 1e-9:
+                    return
+            cur.append(x)
+            cur.append(y)
+            cur.append(0.0)
+
+        a_inside = point_in_poly(cs[0], cs[1])
+        if a_inside:
+            push_xy(cs[0], cs[1])
+
+        for si in range(ns - 1):
+            ax = cs[si * 3]
+            ay = cs[si * 3 + 1]
+            bx = cs[(si + 1) * 3]
+            by = cs[(si + 1) * 3 + 1]
+            dx = bx - ax
+            dy = by - ay
+            ts = []
+            ej = nc - 1
+            for ei in range(nc):
+                ex = cc[ei * 3] - cc[ej * 3]
+                ey = cc[ei * 3 + 1] - cc[ej * 3 + 1]
+                denom = dx * (-ey) - dy * (-ex)
+                if abs(denom) >= 1e-18:
+                    rx = cc[ej * 3] - ax
+                    ry = cc[ej * 3 + 1] - ay
+                    t = (rx * (-ey) - ry * (-ex)) / denom
+                    u = (rx * (-dy) - ry * (-dx)) / denom
+                    if t > 1e-12 and t <= 1.0 + 1e-12 and u >= -1e-9 and u <= 1.0 + 1e-9:
+                        ts.append(0.0 if t < 0.0 else (1.0 if t > 1.0 else t))
+                ej = ei
+            ts.sort()
+            prev_t = 0.0
+            for t in ts:
+                if t - prev_t < 1e-12:
+                    prev_t = t
+                    continue
+                mid_t = 0.5 * (prev_t + t)
+                mx = ax + dx * mid_t
+                my = ay + dy * mid_t
+                mid_in = point_in_poly(mx, my)
+                ix = ax + dx * t
+                iy = ay + dy * t
+                if mid_in:
+                    push_xy(ix, iy)
+                    flush()
+                else:
+                    push_xy(ix, iy)
+                prev_t = t
+            if prev_t < 1.0 - 1e-12:
+                mid_t = 0.5 * (prev_t + 1.0)
+                mx = ax + dx * mid_t
+                my = ay + dy * mid_t
+                if point_in_poly(mx, my):
+                    push_xy(bx, by)
+        flush()
+        return result
+    @staticmethod
+    def compute_raw(a_xy, na, b_xy, nb, clip_type, out_xy, max_out):
+        # Raw-array version: takes flat 2D coords (x,y pairs, stride=2),
+        # writes flat 2D result coords into out_xy. No Polyline construction.
+        # Returns number of result points (0 if no intersection).
+        if na >= 2:
+            dx = a_xy[(na - 1) * 2] - a_xy[0]
+            dy = a_xy[(na - 1) * 2 + 1] - a_xy[1]
+            if dx * dx + dy * dy < 1e-20:
+                na -= 1
+        if nb >= 2:
+            dx = b_xy[(nb - 1) * 2] - b_xy[0]
+            dy = b_xy[(nb - 1) * 2 + 1] - b_xy[1]
+            if dx * dx + dy * dy < 1e-20:
+                nb -= 1
+        if na < 3 or nb < 3:
+            return 0
+
+        max_coord = 0.0
+        for i in range(na):
+            max_coord = max(max_coord, abs(a_xy[i * 2]), abs(a_xy[i * 2 + 1]))
+        for i in range(nb):
+            max_coord = max(max_coord, abs(b_xy[i * 2]), abs(b_xy[i * 2 + 1]))
+        if max_coord < 1e-12:
+            max_coord = 1.0
+        bool_scale = math.floor(math.sqrt(float(2**63 - 1)) / (2.0 * max_coord))
+        bool_inv_scale = 1.0 / bool_scale
+
+        sc = VattiScratch()
+
+        va = []
+        vb = []
+        for i in range(na):
+            va.append(BIVec2(round(a_xy[i * 2] * bool_scale), round(a_xy[i * 2 + 1] * bool_scale)))
+        aMinX = aMaxX = va[0].x
+        aMinY = aMaxY = va[0].y
+        for i in range(1, na):
+            x, y = va[i].x, va[i].y
+            if x < aMinX:
+                aMinX = x
+            elif x > aMaxX:
+                aMaxX = x
+            if y < aMinY:
+                aMinY = y
+            elif y > aMaxY:
+                aMaxY = y
+
+        for i in range(nb):
+            vb.append(BIVec2(round(b_xy[i * 2] * bool_scale), round(b_xy[i * 2 + 1] * bool_scale)))
+        bMinX = bMaxX = vb[0].x
+        bMinY = bMaxY = vb[0].y
+        for i in range(1, nb):
+            x, y = vb[i].x, vb[i].y
+            if x < bMinX:
+                bMinX = x
+            elif x > bMaxX:
+                bMaxX = x
+            if y < bMinY:
+                bMinY = y
+            elif y > bMaxY:
+                bMaxY = y
+
+        if aMaxX < bMinX or bMaxX < aMinX or aMaxY < bMinY or bMaxY < aMinY:
+            return 0
+
+        v_add_path(va, na, 0, sc)
+        v_add_path(vb, nb, 1, sc)
+
+        if not v_execute_internal(sc, clip_type):
+            return 0
+
+        total_pts = 0
+        for outrec in sc.outrec_list:
+            if outrec.pts is None:
+                continue
+            v_clean_collinear(sc, outrec)
+            if outrec.pts is None:
+                continue
+            op = outrec.pts
+            if op is None or op.next is op or op.next is op.prev or v_very_small_tri(op):
+                continue
+            o = op.next
+            last = o.pt
+            if total_pts < max_out:
+                out_xy[total_pts * 2] = last.x * bool_inv_scale
+                out_xy[total_pts * 2 + 1] = last.y * bool_inv_scale
+            total_pts += 1
+            o = o.next
+            while o is not op.next:
+                if o.pt != last:
+                    last = o.pt
+                    if total_pts < max_out:
+                        out_xy[total_pts * 2] = last.x * bool_inv_scale
+                        out_xy[total_pts * 2 + 1] = last.y * bool_inv_scale
+                    total_pts += 1
+                o = o.next
+        return total_pts
+    @staticmethod
+    def compute_count(a, b, clip_type):
+        ca = a.coords
+        cb = b.coords
+        na = len(ca) // 3
+        nb = len(cb) // 3
+        if na >= 2:
+            dx = ca[(na - 1) * 3] - ca[0]
+            dy = ca[(na - 1) * 3 + 1] - ca[1]
+            if dx * dx + dy * dy < 1e-20:
+                na -= 1
+        if nb >= 2:
+            dx = cb[(nb - 1) * 3] - cb[0]
+            dy = cb[(nb - 1) * 3 + 1] - cb[1]
+            if dx * dx + dy * dy < 1e-20:
+                nb -= 1
+        if na < 3 or nb < 3:
+            return 0
+
+        max_coord = 0.0
+        for i in range(na):
+            max_coord = max(max_coord, abs(ca[i * 3]), abs(ca[i * 3 + 1]))
+        for i in range(nb):
+            max_coord = max(max_coord, abs(cb[i * 3]), abs(cb[i * 3 + 1]))
+        if max_coord < 1e-12:
+            max_coord = 1.0
+        bool_scale = math.floor(math.sqrt(float(2**63 - 1)) / (2.0 * max_coord))
+
+        sc = VattiScratch()
+
+        va_head, aMinX, aMaxX, aMinY, aMaxY = v_add_path_from_doubles(ca, na, 0, sc, bool_scale)
+        vb_head, bMinX, bMaxX, bMinY, bMaxY = v_add_path_from_doubles(cb, nb, 1, sc, bool_scale)
+        if va_head is None or vb_head is None:
+            return 0
+        if aMaxX < bMinX or bMaxX < aMinX or aMaxY < bMinY or bMaxY < aMinY:
+            return 0
+
+        if not v_execute_internal(sc, clip_type):
+            return 0
+
+        # Just count output points -- no conversion, no Polyline allocation
+        total_pts = 0
+        for outrec in sc.outrec_list:
+            if outrec.pts is None:
+                continue
+            v_clean_collinear(sc, outrec)
+            if outrec.pts is None:
+                continue
+            op = outrec.pts
+            if op is None or op.next is op or op.next is op.prev or v_very_small_tri(op):
+                continue
+            o = op
+            while True:
+                total_pts += 1
+                o = o.next
+                if o is op:
+                    break
+        return total_pts

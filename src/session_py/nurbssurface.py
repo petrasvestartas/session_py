@@ -1267,12 +1267,7 @@ class NurbsSurface:
         nurbsknot = self.m_nurbsknot[dir]
 
         if nurbsknot[nurbsknot_base - 1] == nurbsknot[nurbsknot_base]:
-            out = np.zeros(order)
-            if t <= nurbsknot[nurbsknot_base]:
-                out[0] = 1.0
-            else:
-                out[order - 1] = 1.0
-            return out
+            return np.zeros(order)
 
         N = np.zeros(order * order)
         N[order * order - 1] = 1.0
