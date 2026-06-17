@@ -84,6 +84,7 @@ def test_mesh_offset_file_json_dump():
     from session_py import MeshOffset
     from session_py import Mesh
     from session_py import Point
+    from pathlib import Path
     pts = [
         Point(0, 0, 0),
         Point(1, 0, 0),
@@ -92,8 +93,9 @@ def test_mesh_offset_file_json_dump():
     ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0, 1, 2, 3]])
     result = MeshOffset.from_mesh(mesh, 1.0)
-    result.file_json_dump("mesh_offset_test_dump.json")
-    loaded = Mesh.file_json_load("mesh_offset_test_dump.json")
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.json"
+    result.file_json_dump(fname)
+    loaded = Mesh.file_json_load(fname)
     MINI_CHECK(loaded.is_valid())
     MINI_CHECK(loaded.number_of_vertices() == result.number_of_vertices())
     MINI_CHECK(loaded.number_of_faces() == result.number_of_faces())
@@ -102,7 +104,9 @@ def test_mesh_offset_file_json_dump():
 @MINI_TEST("MeshOffset", "file_json_load")
 def test_mesh_offset_file_json_load():
     from session_py import Mesh
-    loaded = Mesh.file_json_load("mesh_offset_test_dump.json")
+    from pathlib import Path
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.json"
+    loaded = Mesh.file_json_load(fname)
     MINI_CHECK(loaded.is_valid())
     MINI_CHECK(loaded.number_of_vertices() == 8)
     MINI_CHECK(loaded.number_of_faces() == 6)
@@ -113,6 +117,7 @@ def test_mesh_offset_to_proto():
     from session_py import MeshOffset
     from session_py import Mesh
     from session_py import Point
+    from pathlib import Path
     pts = [
         Point(0, 0, 0),
         Point(1, 0, 0),
@@ -121,8 +126,9 @@ def test_mesh_offset_to_proto():
     ]
     mesh = Mesh.from_vertices_and_faces(pts, [[0, 1, 2, 3]])
     result = MeshOffset.from_mesh(mesh, 1.0)
-    result.pb_dump("mesh_offset_test.pb")
-    loaded = Mesh.pb_load("mesh_offset_test.pb")
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.bin"
+    result.pb_dump(fname)
+    loaded = Mesh.pb_load(fname)
     MINI_CHECK(loaded.is_valid())
     MINI_CHECK(loaded.number_of_vertices() == result.number_of_vertices())
     MINI_CHECK(loaded.number_of_faces() == result.number_of_faces())
@@ -131,7 +137,9 @@ def test_mesh_offset_to_proto():
 @MINI_TEST("MeshOffset", "from_proto")
 def test_mesh_offset_from_proto():
     from session_py import Mesh
-    loaded = Mesh.pb_load("mesh_offset_test.pb")
+    from pathlib import Path
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.bin"
+    loaded = Mesh.pb_load(fname)
     MINI_CHECK(loaded.is_valid())
     MINI_CHECK(loaded.number_of_vertices() == 8)
     MINI_CHECK(loaded.number_of_faces() == 6)
