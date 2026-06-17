@@ -1375,6 +1375,195 @@ class NurbsSurfaceTrimmed:
         if not result.face:
             return srf.mesh()
         return result
+    @staticmethod
+    def split_by_planes(srf, planes):
+        # Split a surface into every non-empty region carved by `planes` (all 2^K sign
+        # combinations). Each region comes back as a first-class multi-plane
+        # NurbsSurfaceTrimmed so the viewer can select / hide / transform each piece.
+        # Plane normals define which half is f<=0. Compute-on-demand: planes are passed in
+        # as a list of (Point, Vector); no cut state is persisted.
+        from .vector import Vector
+        k = len(planes)
+        if k == 0 or k > 16:
+            return []
+        out = []
+        for mask in range(1 << k):
+            cp = []
+            for i in range(k):
+                q, n = planes[i]
+                flip = ((mask >> i) & 1) == 1
+                if flip:
+                    nn = Vector(-n[0], -n[1], -n[2])
+                else:
+                    nn = Vector(n[0], n[1], n[2])
+                cp.append((q, nn))
+            ts = NurbsSurfaceTrimmed()
+            ts.m_surface = srf.duplicate()
+            m = ts.mesh_by_planes(cp, 20.0, 0.01)
+            if m.number_of_faces() > 0:
+                out.append(ts)
+        return out
+
+
+    def mesh_by_planes(self, planes, max_angle_deg, chord_factor):
+        # Multi-plane SPLIT clip: keep the region inside ALL half-spaces { (S-q).n <= 0 }.
+        # Tessellates the surface into a triangle soup (span-adaptive UV grid), then clips that
+        # soup sequentially by each plane (Sutherland-Hodgman per triangle, crossings Newton-
+        # refined onto the crossing plane), so K planes carve a clean region without per-cell CSG.
+        # Coincident 3D verts are welded. planes is a list of (Point, Vector) tuples.
+        import math
+        from collections import defaultdict
+        from .mesh import Mesh
+        srf = self.m_surface
+        pl = []
+        for (q, n) in planes:
+            nx, ny, nz = n[0], n[1], n[2]
+            l = math.sqrt(nx*nx + ny*ny + nz*nz)
+            if l < 1e-12:
+                continue
+            pl.append(((q[0], q[1], q[2]), (nx/l, ny/l, nz/l)))
+        if not pl:
+            return srf.mesh()
+
+        def e3(u, v):
+            p = srf.point_at(u, v)
+            return (p[0], p[1], p[2])
+
+        def field_k(k, u, v):
+            p = e3(u, v)
+            q, n = pl[k]
+            return (p[0]-q[0])*n[0] + (p[1]-q[1])*n[1] + (p[2]-q[2])*n[2]
+
+        def refine_k(k, u, v):
+            _q, n = pl[k]
+            for _ in range(12):
+                fv = field_k(k, u, v)
+                if abs(fv) < 1e-9:
+                    break
+                h = 1e-4
+                a = e3(u+h, v); b = e3(u-h, v); c = e3(u, v+h); d = e3(u, v-h)
+                gu = ((a[0]-b[0])*n[0] + (a[1]-b[1])*n[1] + (a[2]-b[2])*n[2]) / (2*h)
+                gv = ((c[0]-d[0])*n[0] + (c[1]-d[1])*n[1] + (c[2]-d[2])*n[2]) / (2*h)
+                g2 = gu*gu + gv*gv
+                if g2 < 1e-20:
+                    break
+                u -= fv*gu/g2; v -= fv*gv/g2
+            return u, v
+
+        usp = srf.get_span_vector(0)
+        vsp = srf.get_span_vector(1)
+        if len(usp) < 2 or len(vsp) < 2:
+            return srf.mesh()
+        deg_u = srf.degree(0); deg_v = srf.degree(1)
+        bmin = [1e30]*3; bmax = [-1e30]*3
+        for i in range(srf.cv_count(0)):
+            for j in range(srf.cv_count(1)):
+                p = srf.get_cv(i, j)
+                for k in range(3):
+                    bmin[k] = min(bmin[k], p[k]); bmax[k] = max(bmax[k], p[k])
+        diag = math.sqrt(sum((bmax[k]-bmin[k])**2 for k in range(3))) or 1.0
+        ctol = diag * chord_factor
+
+        def span_subs(dr, sp, osp, deg):
+            n = len(sp) - 1
+            out = [2 if deg > 1 else 1] * n
+            smid = (osp[0] + osp[-1]) * 0.5
+            for i in range(n):
+                t0, t1 = sp[i], sp[i+1]
+                if deg > 1:
+                    ma = 0.0; pn = None
+                    for k in range(5):
+                        t = t0 + k*(t1-t0)/4
+                        nm = srf.normal_at(t, smid) if dr == 0 else srf.normal_at(smid, t)
+                        if pn is not None:
+                            dpd = max(-1.0, min(1.0, pn[0]*nm[0]+pn[1]*nm[1]+pn[2]*nm[2]))
+                            ma += math.acos(dpd) * 180.0 / math.pi
+                        pn = (nm[0], nm[1], nm[2])
+                    out[i] = max(out[i], max(1, min(int(math.ceil(ma/max_angle_deg)), 64)))
+                p0 = e3(t0, smid) if dr == 0 else e3(smid, t0)
+                p1 = e3(t1, smid) if dr == 0 else e3(smid, t1)
+                dev = 0.0
+                for k in range(1, 4):
+                    fr = k/4; tm = t0 + fr*(t1-t0)
+                    pm = e3(tm, smid) if dr == 0 else e3(smid, tm)
+                    lx, ly, lz = (p0[0]+fr*(p1[0]-p0[0]), p0[1]+fr*(p1[1]-p0[1]), p0[2]+fr*(p1[2]-p0[2]))
+                    dev = max(dev, math.sqrt((pm[0]-lx)**2 + (pm[1]-ly)**2 + (pm[2]-lz)**2))
+                if dev > ctol:
+                    out[i] = max(out[i], min(int(math.ceil(math.sqrt(dev/ctol))), 64))
+            return out
+
+        us_subs = span_subs(0, usp, vsp, deg_u)
+        vs_subs = span_subs(1, vsp, usp, deg_v)
+        us = []
+        for i in range(len(usp)-1):
+            for s in range(us_subs[i]):
+                us.append(usp[i] + s*(usp[i+1]-usp[i])/us_subs[i])
+        us.append(usp[-1])
+        vs = []
+        for i in range(len(vsp)-1):
+            for s in range(vs_subs[i]):
+                vs.append(vsp[i] + s*(vsp[i+1]-vsp[i])/vs_subs[i])
+        vs.append(vsp[-1])
+        nu, nv = len(us), len(vs)
+        if nu < 2 or nv < 2:
+            return srf.mesh()
+        tris = []
+        for i in range(nu-1):
+            for j in range(nv-1):
+                a = (us[i], vs[j]); b = (us[i+1], vs[j]); c = (us[i+1], vs[j+1]); d = (us[i], vs[j+1])
+                tris.append([a, b, c]); tris.append([a, c, d])
+        eps = 1e-9
+        for k in range(len(pl)):
+            nxt = []
+            for t in tris:
+                poly = []
+                for e in range(3):
+                    p = t[e]; q = t[(e+1) % 3]
+                    fp = field_k(k, p[0], p[1]); fq = field_k(k, q[0], q[1])
+                    pin = fp <= eps; qin = fq <= eps
+                    if pin:
+                        poly.append(p)
+                    if pin != qin:
+                        tt = fp/(fp-fq) if abs(fp-fq) > 1e-30 else 0.5
+                        cu = p[0] + (q[0]-p[0])*tt; cv = p[1] + (q[1]-p[1])*tt
+                        poly.append(refine_k(k, cu, cv))
+                for w in range(1, len(poly)-1):
+                    nxt.append([poly[0], poly[w], poly[w+1]])
+            tris = nxt
+            if not tris:
+                break
+        if not tris:
+            return Mesh()
+        result = Mesh()
+        wt = diag * 1e-5; cell = wt or 1.0
+        cmap = defaultdict(list)
+
+        def weld(u, v):
+            P = srf.point_at(u, v)
+            x, y, z = P[0], P[1], P[2]
+            ci, cj, ck = math.floor(x/cell), math.floor(y/cell), math.floor(z/cell)
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    for dk in (-1, 0, 1):
+                        for (px, py, pz, vk) in cmap[(ci+di, cj+dj, ck+dk)]:
+                            if (px-x)**2 + (py-y)**2 + (pz-z)**2 <= wt*wt:
+                                return vk
+            vk = result.add_vertex(P)
+            nm = srf.normal_at(u, v)
+            result.vertex[vk].set_normal(nm[0], nm[1], nm[2])
+            cmap[(ci, cj, ck)].append((x, y, z, vk))
+            return vk
+
+        for t in tris:
+            a = weld(t[0][0], t[0][1])
+            b = weld(t[1][0], t[1][1])
+            c = weld(t[2][0], t[2][1])
+            if a == b or b == c or c == a:
+                continue
+            result.add_face([a, b, c])
+        if not result.face:
+            return Mesh()
+        return result
 
     def transform(self, xf=None):
         if xf is None:

@@ -1234,6 +1234,8 @@ class BRep:
                     if ti < 0 or ti >= len(self.m_trims):
                         continue
                     trim = self.m_trims[ti]
+                    if trim.type == BRepTrimType.Singular:
+                        continue
                     if trim.curve_2d_index < 0 or trim.curve_2d_index >= len(self.m_curves_2d):
                         continue
                     crv = self.m_curves_2d[trim.curve_2d_index]
