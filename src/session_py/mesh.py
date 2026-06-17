@@ -263,6 +263,12 @@ class Mesh:
         self._objectcolor = None
         self.color_mode = ColorMode.OBJECTCOLOR
         self._xform = None
+        self._triangle_bvh_built = False
+        self._triangle_bvh = None
+        self._triangle_aabbs_cache = []
+        self._triangle_indices_cache = []
+        self._triangle_face_subidx_cache = []
+        self._vertices_cache = []
 
     @property
     def guid(self) -> str:
@@ -1165,6 +1171,7 @@ class Mesh:
         self._widths.clear()
         self._objectcolor = None
         self.color_mode = ColorMode.OBJECTCOLOR
+        self._triangle_bvh_built = False
 
     def set_pointcolors(self, colors):
         self._pointcolors = list(colors)
@@ -1396,6 +1403,7 @@ class Mesh:
         self.vertex[vertex_key] = VertexData(position)
         self.halfedge[vertex_key] = {}
         self._pointcolors.append(Color.white())
+        self._triangle_bvh_built = False
 
         return vertex_key
 
@@ -1436,6 +1444,7 @@ class Mesh:
         self.face[face_key] = vertices.copy()
         self.triangulation.pop(face_key, None)
         self._facecolors.append(Color.white())
+        self._triangle_bvh_built = False
 
         for i in range(len(vertices)):
             u = vertices[i]
@@ -1481,6 +1490,7 @@ class Mesh:
         n_faces = len(self.face)
         if len(self._facecolors) > n_faces:
             self._facecolors = self._facecolors[:n_faces]
+        self._triangle_bvh_built = False
 
     def remove_vertex(self, vkey: int) -> None:
         if vkey not in self.vertex:
@@ -1498,6 +1508,7 @@ class Mesh:
         n_vertices = len(self.vertex)
         if len(self._pointcolors) > n_vertices:
             self._pointcolors = self._pointcolors[:n_vertices]
+        self._triangle_bvh_built = False
 
     def remove_edge(self, u: int, v: int) -> None:
         faces_to_remove = set()
@@ -1519,6 +1530,7 @@ class Mesh:
         if len(self._linecolors) > n_edges:
             self._linecolors = self._linecolors[:n_edges]
             self._widths = self._widths[:n_edges]
+        self._triangle_bvh_built = False
 
     def flip_face(self, fkey: int) -> None:
         if fkey not in self.face:
@@ -2406,12 +2418,144 @@ class Mesh:
             vdata[0] = pos[0]
             vdata[1] = pos[1]
             vdata[2] = pos[2]
+        self._triangle_bvh_built = False
 
     def transformed(self, xf=None):
         import copy
         result = copy.deepcopy(self)
         result.transform(xf)
         return result
+
+    ###########################################################################################
+    # Triangle BVH (closest point / ray queries)
+    ###########################################################################################
+
+    def build_triangle_bvh(self, force: bool = False) -> None:
+        """Build (and cache) a BVH over the mesh's triangulated faces."""
+        if self._triangle_bvh_built and not force:
+            return
+
+        from session_py.spatial_bvh import SpatialBVH
+        from session_py.aabb import AABB
+
+        self._triangle_aabbs_cache = []
+        self._triangle_indices_cache = []
+        self._triangle_face_subidx_cache = []
+        self._vertices_cache = []
+
+        vertices, faces_vec = self.to_vertices_and_faces()
+        self._vertices_cache = vertices
+
+        vertex_keys = sorted(self.vertex.keys())
+        vkey_to_idx = {}
+        for i in range(len(vertex_keys)):
+            vkey_to_idx[vertex_keys[i]] = i
+
+        face_keys = sorted(self.face.keys())
+
+        tasks = []
+        for fi in range(len(faces_vec)):
+            fv = faces_vec[fi]
+            if len(fv) < 3:
+                continue
+            if len(fv) >= 5 and fi < len(face_keys):
+                tri = self.triangulation.get(face_keys[fi])
+                if tri is not None:
+                    for j in range(len(tri)):
+                        t = tri[j]
+                        tasks.append((vkey_to_idx[t[0]], vkey_to_idx[t[1]], vkey_to_idx[t[2]], fi, j))
+                    continue
+            for j in range(1, len(fv) - 1):
+                tasks.append((fv[0], fv[j], fv[j + 1], fi, j))
+
+        for i0, i1, i2, face_idx, sub_idx in tasks:
+            p0 = self._vertices_cache[i0]
+            p1 = self._vertices_cache[i1]
+            p2 = self._vertices_cache[i2]
+
+            min_x = min(p0[0], p1[0], p2[0]) - 0.001
+            min_y = min(p0[1], p1[1], p2[1]) - 0.001
+            min_z = min(p0[2], p1[2], p2[2]) - 0.001
+            max_x = max(p0[0], p1[0], p2[0]) + 0.001
+            max_y = max(p0[1], p1[1], p2[1]) + 0.001
+            max_z = max(p0[2], p1[2], p2[2]) + 0.001
+
+            cx = (min_x + max_x) * 0.5
+            cy = (min_y + max_y) * 0.5
+            cz = (min_z + max_z) * 0.5
+            hx = (max_x - min_x) * 0.5
+            hy = (max_y - min_y) * 0.5
+            hz = (max_z - min_z) * 0.5
+
+            self._triangle_aabbs_cache.append(AABB(cx, cy, cz, hx, hy, hz))
+            self._triangle_indices_cache.append((i0, i1, i2))
+            self._triangle_face_subidx_cache.append((face_idx, sub_idx))
+
+        # Compute world size from object bounds (triangle AABBs)
+        min_x = float('inf')
+        min_y = float('inf')
+        min_z = float('inf')
+        max_x = float('-inf')
+        max_y = float('-inf')
+        max_z = float('-inf')
+        for bb in self._triangle_aabbs_cache:
+            bx0 = bb.cx - bb.hx
+            bx1 = bb.cx + bb.hx
+            by0 = bb.cy - bb.hy
+            by1 = bb.cy + bb.hy
+            bz0 = bb.cz - bb.hz
+            bz1 = bb.cz + bb.hz
+            if bx0 < min_x:
+                min_x = bx0
+            if bx1 > max_x:
+                max_x = bx1
+            if by0 < min_y:
+                min_y = by0
+            if by1 > max_y:
+                max_y = by1
+            if bz0 < min_z:
+                min_z = bz0
+            if bz1 > max_z:
+                max_z = bz1
+        extent_x = max(abs(min_x), abs(max_x))
+        extent_y = max(abs(min_y), abs(max_y))
+        extent_z = max(abs(min_z), abs(max_z))
+        max_extent = max(extent_x, extent_y, extent_z)
+        world_size = max(2.2 * max_extent, 10.0)
+
+        self._triangle_bvh = SpatialBVH()
+        self._triangle_bvh.build_from_aabbs(self._triangle_aabbs_cache, world_size)
+        self._triangle_bvh_built = True
+
+    def get_cached_bvh(self):
+        """Return the cached triangle BVH (or None if not built)."""
+        return self._triangle_bvh
+
+    def get_triangle_by_id(self, tri_id: int):
+        """Return (found, face_idx, sub_idx, v0, v1, v2) for a cached triangle id."""
+        if tri_id < 0:
+            return (False, 0, 0, None, None, None)
+        if tri_id >= len(self._triangle_indices_cache) or tri_id >= len(self._triangle_face_subidx_cache):
+            return (False, 0, 0, None, None, None)
+        tri = self._triangle_indices_cache[tri_id]
+        fs = self._triangle_face_subidx_cache[tri_id]
+        face_idx = fs[0]
+        sub_idx = fs[1]
+        if tri[0] >= len(self._vertices_cache) or tri[1] >= len(self._vertices_cache) or tri[2] >= len(self._vertices_cache):
+            return (False, 0, 0, None, None, None)
+        v0 = self._vertices_cache[tri[0]]
+        v1 = self._vertices_cache[tri[1]]
+        v2 = self._vertices_cache[tri[2]]
+        return (True, face_idx, sub_idx, v0, v1, v2)
+
+    def clear_triangle_bvh(self) -> None:
+        """Drop the cached triangle BVH."""
+        self._triangle_bvh_built = False
+        self._triangle_bvh = None
+        self._triangle_aabbs_cache = []
+        self._triangle_indices_cache = []
+        self._triangle_face_subidx_cache = []
+        self._vertices_cache = []
 
     ###########################################################################################
     # JSON

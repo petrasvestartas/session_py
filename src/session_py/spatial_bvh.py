@@ -597,6 +597,137 @@ class SpatialBVH:
         # Don't build Box tree - arena is sufficient
         self.root = None
 
+    def build_from_aabbs(self, aabbs: List[AABB], world_size: float) -> None:
+        """Build the BVH directly from axis-aligned AABBs, keeping the pointer tree (`root`)."""
+        if not aabbs:
+            self.root = None
+            return
+
+        self.world_size = world_size
+        N = len(aabbs)
+
+        objects = []
+        for i in range(N):
+            ab = aabbs[i]
+            morton_code = calculate_morton_code(ab.cx, ab.cy, ab.cz, self.world_size)
+            objects.append({"id": i, "morton_code": morton_code, "aabb": ab})
+
+        _radix_sort(objects)
+
+        if N == 1:
+            leaf = SpatialBVHNode()
+            leaf.object_id = objects[0]["id"]
+            leaf.aabb = objects[0]["aabb"]
+            self.root = leaf
+            return
+
+        codes = [obj["morton_code"] for obj in objects]
+
+        def common_prefix(i: int, j: int) -> int:
+            if j < 0 or j >= N:
+                return -1
+            ci = codes[i]
+            cj = codes[j]
+            if ci != cj:
+                return _clz32(ci ^ cj)
+            return 32 + _clz32(i ^ j)
+
+        def determine_range(i: int) -> Tuple[int, int]:
+            d = 1 if common_prefix(i, i + 1) - common_prefix(i, i - 1) > 0 else -1
+            delta_min = common_prefix(i, i - d)
+
+            length = 1
+            while common_prefix(i, i + length * d) > delta_min:
+                length <<= 1
+
+            bound = 0
+            t = length >> 1
+            while t > 0:
+                if common_prefix(i, i + (bound + t) * d) > delta_min:
+                    bound += t
+                t >>= 1
+
+            j = i + bound * d
+            return (min(i, j), max(i, j))
+
+        def find_split(first: int, last: int) -> int:
+            common = common_prefix(first, last)
+            split = first
+            step = last - first
+
+            while step > 1:
+                step = (step + 1) >> 1
+                new_split = split + step
+                if new_split < last:
+                    split_prefix = common_prefix(first, new_split)
+                    if split_prefix > common:
+                        split = new_split
+
+            return split
+
+        leaves = []
+        for i in range(N):
+            leaf = SpatialBVHNode()
+            leaf.object_id = objects[i]["id"]
+            leaf.aabb = objects[i]["aabb"]
+            leaves.append(leaf)
+
+        internals = []
+        for i in range(N - 1):
+            internals.append(SpatialBVHNode())
+
+        has_parent = [False] * (N - 1)
+        for i in range(N - 1):
+            first, last = determine_range(i)
+            split = find_split(first, last)
+
+            if split == first:
+                internals[i].left = leaves[split]
+            else:
+                internals[i].left = internals[split]
+                has_parent[split] = True
+
+            if split + 1 == last:
+                internals[i].right = leaves[split + 1]
+            else:
+                internals[i].right = internals[split + 1]
+                has_parent[split + 1] = True
+
+        root_idx = 0
+        for i in range(N - 1):
+            if not has_parent[i]:
+                root_idx = i
+                break
+        self.root = internals[root_idx]
+
+        def compute_aabb(node: SpatialBVHNode) -> None:
+            if not node or node.is_leaf():
+                return
+
+            compute_aabb(node.left)
+            compute_aabb(node.right)
+
+            a = node.left.aabb
+            b = node.right.aabb
+
+            min_x = min(a.cx - a.hx, b.cx - b.hx)
+            min_y = min(a.cy - a.hy, b.cy - b.hy)
+            min_z = min(a.cz - a.hz, b.cz - b.hz)
+            max_x = max(a.cx + a.hx, b.cx + b.hx)
+            max_y = max(a.cy + a.hy, b.cy + b.hy)
+            max_z = max(a.cz + a.hz, b.cz + b.hz)
+
+            node.aabb = AABB(
+                (min_x + max_x) * 0.5,
+                (min_y + max_y) * 0.5,
+                (min_z + max_z) * 0.5,
+                (max_x - min_x) * 0.5,
+                (max_y - min_y) * 0.5,
+                (max_z - min_z) * 0.5,
+            )
+
+        compute_aabb(self.root)
+
     def merge_aabb(self, aabb1: OBB, aabb2: OBB) -> OBB:
         """Merge two AABBs into a single encompassing AABB."""
         min_x = min(

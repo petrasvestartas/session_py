@@ -754,30 +754,59 @@ class Closest:
         return Point(a[0] + abx*v + acx*w, a[1] + aby*v + acy*w, a[2] + abz*v + acz*w)
 
     @staticmethod
+    def _aabb_min_distance(aabb, p):
+        dx = max(0.0, max(aabb.cx - aabb.hx - p[0], p[0] - aabb.cx - aabb.hx))
+        dy = max(0.0, max(aabb.cy - aabb.hy - p[1], p[1] - aabb.cy - aabb.hy))
+        dz = max(0.0, max(aabb.cz - aabb.hz - p[2], p[2] - aabb.cz - aabb.hz))
+        return (dx * dx + dy * dy + dz * dz) ** 0.5
+
+    @staticmethod
     def mesh_point(mesh, test_point):
+        import heapq
+
         if mesh.number_of_faces() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
 
-        vertices, faces = mesh.to_vertices_and_faces()
-        sorted_face_keys = sorted(mesh.face.keys())
+        mesh.build_triangle_bvh()
+        bvh = mesh.get_cached_bvh()
+
+        face_keys = sorted(mesh.face.keys())
 
         best_point = Point(0, 0, 0)
         best_face_key = 0
         best_dist = float('inf')
 
-        for fi, fv in enumerate(faces):
-            if len(fv) < 3:
-                continue
-            v0 = vertices[fv[0]]
-            for j in range(1, len(fv) - 1):
-                v1 = vertices[fv[j]]
-                v2 = vertices[fv[j + 1]]
-                cp = Closest._closest_point_on_triangle(test_point, v0, v1, v2)
-                dist = cp.distance(test_point)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_point = cp
-                    best_face_key = sorted_face_keys[fi]
+        if bvh is None or bvh.root is None:
+            return (best_point, best_face_key, best_dist)
+
+        counter = 0
+        pq = [(Closest._aabb_min_distance(bvh.root.aabb, test_point), counter, bvh.root)]
+
+        while pq:
+            d, _, node = heapq.heappop(pq)
+            if d >= best_dist:
+                break
+
+            if node.is_leaf():
+                found, face_idx, sub_idx, v0, v1, v2 = mesh.get_triangle_by_id(node.object_id)
+                if found:
+                    cp = Closest._closest_point_on_triangle(test_point, v0, v1, v2)
+                    dist = cp.distance(test_point)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_point = cp
+                        best_face_key = face_keys[face_idx]
+            else:
+                if node.left is not None:
+                    ld = Closest._aabb_min_distance(node.left.aabb, test_point)
+                    if ld < best_dist:
+                        counter += 1
+                        heapq.heappush(pq, (ld, counter, node.left))
+                if node.right is not None:
+                    rd = Closest._aabb_min_distance(node.right.aabb, test_point)
+                    if rd < best_dist:
+                        counter += 1
+                        heapq.heappush(pq, (rd, counter, node.right))
 
         return (best_point, best_face_key, best_dist)
 

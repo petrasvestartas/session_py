@@ -595,15 +595,74 @@ def _curve_signed_distance_to_plane(pt, plane):
     return v.dot(plane.z_axis)
 
 
+def _curve_find_root_bisection(curve, plane, t0, t1, tolerance):
+    """Bisection root find; returns (found, t_result)."""
+    max_iterations = 50
+    d0 = _curve_signed_distance_to_plane(curve.point_at(t0), plane)
+    d1 = _curve_signed_distance_to_plane(curve.point_at(t1), plane)
+
+    if d0 * d1 > 0:
+        return False, 0.0
+
+    for _ in range(max_iterations):
+        t_mid = (t0 + t1) * 0.5
+        d_mid = _curve_signed_distance_to_plane(curve.point_at(t_mid), plane)
+
+        if abs(d_mid) < tolerance or (t1 - t0) < tolerance:
+            return True, t_mid
+
+        if d0 * d_mid < 0:
+            t1 = t_mid
+            d1 = d_mid
+        else:
+            t0 = t_mid
+            d0 = d_mid
+
+    t_result = (t0 + t1) * 0.5
+    return abs(_curve_signed_distance_to_plane(curve.point_at(t_result), plane)) < tolerance * 10.0, t_result
+
+
+def _curve_refine_intersection_newton(curve, plane, t, tolerance):
+    """Newton polish of a root; returns the refined t."""
+    max_iterations = 10
+    step_tolerance = tolerance * 0.01
+
+    for _ in range(max_iterations):
+        pt = curve.point_at(t)
+        tangent = curve.tangent_at(t)
+
+        f = _curve_signed_distance_to_plane(pt, plane)
+        df = tangent.dot(plane.z_axis)
+
+        if abs(f) < tolerance:
+            return t
+        if abs(df) < 1e-12:
+            return t
+
+        dt = -f / df
+        if abs(dt) < step_tolerance:
+            return t
+
+        t += dt
+
+        t0, t1 = curve.domain()
+        if t < t0:
+            t = t0
+        if t > t1:
+            t = t1
+
+    return t
+
+
 def curve_plane(curve, plane, tolerance=None):
     """Find all intersections between NURBS curve and plane."""
-    if tolerance is None:
-        tolerance = Tolerance.ZERO_TOLERANCE
+    intersections = []
 
     if not curve.is_valid():
-        return []
+        return intersections
+    if tolerance is None or tolerance <= 0.0:
+        tolerance = Tolerance.ZERO_TOLERANCE
 
-    results = []
     t_start, t_end = curve.domain()
     span_params = curve.get_span_vector()
 
@@ -618,36 +677,57 @@ def curve_plane(curve, plane, tolerance=None):
         d1 = _curve_signed_distance_to_plane(curve.point_at(t1), plane)
 
         if d0 * d1 < 0:
-            ta, tb = t0, t1
-            tm = (ta + tb) * 0.5
-            for _ in range(50):
-                tm = (ta + tb) * 0.5
-                dm = _curve_signed_distance_to_plane(curve.point_at(tm), plane)
-                if abs(dm) < tolerance:
-                    break
-                if dm * d0 < 0:
-                    tb = tm
-                else:
-                    ta = tm
-            results.append(tm)
+            found, t_intersection = _curve_find_root_bisection(curve, plane, t0, t1, tolerance)
+            if found:
+                t_intersection = _curve_refine_intersection_newton(curve, plane, t_intersection, tolerance)
+                intersections.append(t_intersection)
         elif abs(d0) < tolerance:
-            if not results or abs(results[-1] - t0) >= tolerance:
-                results.append(t0)
+            add = True
+            if intersections and abs(intersections[-1] - t0) < tolerance:
+                add = False
+            if add:
+                intersections.append(t0)
 
     d_end = _curve_signed_distance_to_plane(curve.point_at(t_end), plane)
     if abs(d_end) < tolerance:
-        if not results or abs(results[-1] - t_end) >= tolerance:
-            results.append(t_end)
+        add = True
+        if intersections and abs(intersections[-1] - t_end) < tolerance:
+            add = False
+        if add:
+            intersections.append(t_end)
 
-    results.sort()
-    if len(results) > 1:
-        unique_results = [results[0]]
-        for i in range(1, len(results)):
-            if abs(results[i] - unique_results[-1]) >= tolerance * 2.0:
-                unique_results.append(results[i])
-        results = unique_results
+    if curve.degree() > 3 and len(intersections) < curve.degree():
+        num_samples = curve.degree() * 4
+        dt = (t_end - t_start) / num_samples
 
-    return results
+        for i in range(num_samples):
+            t0 = t_start + i * dt
+            t1 = t_start + (i + 1) * dt
+
+            d0 = _curve_signed_distance_to_plane(curve.point_at(t0), plane)
+            d1 = _curve_signed_distance_to_plane(curve.point_at(t1), plane)
+
+            if d0 * d1 < 0:
+                found, t_intersection = _curve_find_root_bisection(curve, plane, t0, t1, tolerance)
+                if found:
+                    is_new = True
+                    for existing in intersections:
+                        if abs(existing - t_intersection) < tolerance * 2.0:
+                            is_new = False
+                            break
+                    if is_new:
+                        t_intersection = _curve_refine_intersection_newton(curve, plane, t_intersection, tolerance)
+                        intersections.append(t_intersection)
+
+    intersections.sort()
+    if len(intersections) > 1:
+        unique_results = [intersections[0]]
+        for i in range(1, len(intersections)):
+            if abs(intersections[i] - unique_results[-1]) >= tolerance * 2.0:
+                unique_results.append(intersections[i])
+        intersections = unique_results
+
+    return intersections
 
 
 def curve_plane_points(curve, plane, tolerance=None):
