@@ -23,7 +23,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.20.0",
     "protobuf>=6.33.5",
-    "grpcio-tools>=1.81.1",
+    "grpcio-tools>=1.68.0",
 ]
 
 [project.optional-dependencies]
