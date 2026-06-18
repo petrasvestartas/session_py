@@ -2952,12 +2952,15 @@ class NurbsCurve:
         base = ci * stride
         result = np.zeros((n, 3))
         if is_rat:
+            # Control points are stored in homogeneous form (x*w, y*w, z*w, w), so the
+            # numerator is sum(N * Pw) and the denominator sum(N * w) — multiplying the
+            # numerator by w again double-counts the weight and collapses non-unit-weight
+            # spans toward the control polygon.
             w_cv = cv_arr[base + dim]
-            nw = N * w_cv
-            x = np.einsum('nj,nj->n', nw, cv_arr[base])
-            y = np.einsum('nj,nj->n', nw, cv_arr[base + 1]) if dim > 1 else np.zeros(n)
-            z = np.einsum('nj,nj->n', nw, cv_arr[base + 2]) if dim > 2 else np.zeros(n)
-            w = nw.sum(axis=1)
+            x = np.einsum('nj,nj->n', N, cv_arr[base])
+            y = np.einsum('nj,nj->n', N, cv_arr[base + 1]) if dim > 1 else np.zeros(n)
+            z = np.einsum('nj,nj->n', N, cv_arr[base + 2]) if dim > 2 else np.zeros(n)
+            w = np.einsum('nj,nj->n', N, w_cv)
             mask = w != 0.0
             safe_w = np.where(mask, w, 1.0)
             result[:, 0] = np.where(mask, x / safe_w, x)
