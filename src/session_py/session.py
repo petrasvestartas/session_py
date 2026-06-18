@@ -333,35 +333,6 @@ class Session:
             Edge attribute description.
         """
         self.graph.add_edge(guid1, guid2, attribute)
-    def add_elementfeature(self, guid_a: str, guid_b: str, feature) -> str:
-        """Attach a structured element feature to a graph edge between two objects.
-
-        Mirrors C++ ``Session::add_elementfeature``: the feature is keyed by its
-        own guid (a fresh uuid is generated when the feature has none), stored in
-        ``edge_elementfeatures``, and a graph edge labelled with that key is added.
-
-        Parameters
-        ----------
-        guid_a : str
-            GUID of the first object.
-        guid_b : str
-            GUID of the second object.
-        feature : object
-            Any element-feature object exposing a ``guid``.
-
-        Returns
-        -------
-        str
-            The key under which the feature was stored.
-        """
-        if getattr(self, "edge_elementfeatures", None) is None:
-            self.edge_elementfeatures = {}
-        key = getattr(feature, "guid", "") or ""
-        if not key:
-            key = str(uuid.uuid4())
-        self.edge_elementfeatures[key] = feature
-        self.graph.add_edge(guid_a, guid_b, key)
-        return key
 
     ###########################################################################################
     # Details - Lookup

@@ -504,34 +504,6 @@ def test_session_tree_transformation_hierarchy():
     MINI_CHECK(abs(v0[2] - 0.0) < 1e-4)
 
 
-@MINI_TEST("Session", "Add ElementFeature")
-def test_session_add_elementfeature():
-    from session_py import Session
-    from session_py import Point
-
-    session = Session()
-    p1 = Point(0.0, 0.0, 0.0)
-    p2 = Point(1.0, 0.0, 0.0)
-    session.add_point(p1)
-    session.add_point(p2)
-
-    class FaceElementFeature:
-        def __init__(self):
-            import uuid
-            self._guid = str(uuid.uuid4())
-            self.face_id_a = 0
-            self.face_id_b = 0
-        @property
-        def guid(self): return self._guid
-
-    f = FaceElementFeature()
-    fguid = session.add_elementfeature(p1.guid, p2.guid, f)
-
-    MINI_CHECK(bool(fguid))
-    MINI_CHECK(fguid in session.edge_elementfeatures)
-    MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
-
-
 @MINI_TEST("Session", "Add Component")
 def test_session_add_component():
     import uuid
