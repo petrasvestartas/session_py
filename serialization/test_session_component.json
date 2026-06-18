@@ -1,0 +1,58 @@
+{
+  "type": "Session",
+  "guid": "1c3ca913-de1e-42b1-af61-410cfbe844e9",
+  "name": "my_session",
+  "objects": {
+    "type": "Objects",
+    "guid": "d2e121f6-98a9-497d-9fcb-d26aad73a567",
+    "name": "my_objects",
+    "points": [],
+    "lines": [],
+    "planes": [],
+    "bboxes": [],
+    "polylines": [],
+    "pointclouds": [],
+    "meshes": [],
+    "nurbscurves": [],
+    "nurbssurfaces": [],
+    "breps": [],
+    "elements": [],
+    "components": [
+      {
+        "type": "Box",
+        "guid": "fd8eabc3-4714-4cb5-ad58-0fa734306a1d",
+        "name": "my_box",
+        "width": 3.0,
+        "height": 5.0
+      }
+    ]
+  },
+  "tree": {
+    "type": "Tree",
+    "guid": "6c5a8946-cf13-4118-a7e1-a6c7ed3a7264",
+    "name": "my_session_tree",
+    "root": {
+      "type": "TreeNode",
+      "guid": "e612d738-e5d8-40ab-a8d8-3f28a0afb4e5",
+      "name": "my_session",
+      "children": []
+    }
+  },
+  "graph": {
+    "type": "Graph",
+    "guid": "da3bf3b6-7b0f-4d8b-9c86-e7a6673d24ff",
+    "name": "my_session_graph",
+    "vertices": [
+      {
+        "type": "Vertex",
+        "guid": "2d77380e-3a50-4b84-8e39-9057ea76a17f",
+        "name": "fd8eabc3-4714-4cb5-ad58-0fa734306a1d",
+        "attribute": "component_my_box",
+        "index": 0
+      }
+    ],
+    "edges": [],
+    "vertex_count": 1,
+    "edge_count": 0
+  }
+}
