@@ -14,8 +14,12 @@ def remesh_nurbssurface_grid(surface, max_u: int, max_v: int):
 class RemeshNurbsSurfaceGrid:
     @staticmethod
     def from_u_v(s, max_u: int, max_v: int):
+        return RemeshNurbsSurfaceGrid.from_u_v_q(s, max_u, max_v, 20.0, 0.005)
+
+    @staticmethod
+    def from_u_v_q(s, max_u: int, max_v: int, max_angle_deg: float, chord_factor: float):
         from .mesh import Mesh
-        MAX_ANGLE = 20.0
+        MAX_ANGLE = max_angle_deg
         usp = list(s.get_span_vector(0))
         vsp = list(s.get_span_vector(1))
         ns_u = len(usp) - 1
@@ -77,7 +81,7 @@ class RemeshNurbsSurfaceGrid:
                         if total_angle > max_angle:
                             max_angle = total_angle
                     subs[i] = max(1, min(int(math.ceil(max_angle / MAX_ANGLE)), 24))
-                chord_tol = bbox_diag * 0.005
+                chord_tol = bbox_diag * chord_factor
                 max_dev = 0.0
                 nc = min(n_other, 3)
                 for ci in range(nc + 1):
@@ -156,7 +160,7 @@ class RemeshNurbsSurfaceGrid:
         # Bilinear twist check (skip for singular surfaces — fan triangulation handles those)
         if deg_u == 1 and deg_v == 1 and not s.is_singular(0) and not s.is_singular(2):
             import numpy as _np
-            chord_tol = bbox_diag * 0.005 if bbox_diag > 0 else 1e-6
+            chord_tol = bbox_diag * chord_factor if bbox_diag > 0 else 1e-6
             u0_a = _np.array(usp[:-1], dtype=_np.float64)
             u1_a = _np.array(usp[1:], dtype=_np.float64)
             v0_a = _np.array(vsp[:-1], dtype=_np.float64)

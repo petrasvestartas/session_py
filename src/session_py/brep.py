@@ -1273,6 +1273,210 @@ class BRep:
                     poly.reverse()
                 all_polygons.append(poly)
         return Mesh.from_polylines(all_polygons)
+    def face_meshes(self):
+        return self.face_meshes_q(None)
+
+    def face_meshes_q(self, quality=None):
+        from .mesh import Mesh
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+        from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
+        nf = len(self.m_faces)
+
+        # Phase 1: classify
+        face_direct = [False] * nf
+        for fi in range(nf):
+            face = self.m_faces[fi]
+            if face.surface_index < 0 or face.surface_index >= len(self.m_surfaces):
+                continue
+            srf = self.m_surfaces[face.surface_index]
+            has_inner = False
+            all_linear = True
+            outer_pts = []
+            for li in face.loop_indices:
+                if li < 0 or li >= len(self.m_loops):
+                    continue
+                loop = self.m_loops[li]
+                if loop.type == BRepLoopType.Inner:
+                    has_inner = True
+                for ti in loop.trim_indices:
+                    if ti < 0 or ti >= len(self.m_trims):
+                        continue
+                    trim = self.m_trims[ti]
+                    if trim.curve_2d_index < 0 or trim.curve_2d_index >= len(self.m_curves_2d):
+                        continue
+                    crv = self.m_curves_2d[trim.curve_2d_index]
+                    if crv.degree() > 1 or crv.is_rational():
+                        all_linear = False
+                    if loop.type == BRepLoopType.Outer and crv.degree() <= 1 and not crv.is_rational():
+                        for k in range(max(crv.cv_count() - 1, 0)):
+                            p = crv.get_cv(k)
+                            if p is not None:
+                                outer_pts.append(p)
+            direct = (not has_inner) and all_linear
+            if direct and outer_pts:
+                u0, u1 = srf.domain(0)
+                v0, v1 = srf.domain(1)
+                tol = max(u1 - u0, v1 - v0) * 0.01
+                bb_umin = bb_vmin = 1e30
+                bb_umax = bb_vmax = -1e30
+                for p in outer_pts:
+                    if p[0] < bb_umin: bb_umin = p[0]
+                    if p[0] > bb_umax: bb_umax = p[0]
+                    if p[1] < bb_vmin: bb_vmin = p[1]
+                    if p[1] > bb_vmax: bb_vmax = p[1]
+                if (abs(bb_umin - u0) > tol or abs(bb_umax - u1) > tol or
+                    abs(bb_vmin - v0) > tol or abs(bb_vmax - v1) > tol):
+                    direct = False
+            face_direct[fi] = direct
+
+        # Phase 2: direct faces. Mesh each via the grid mesher, then record the 3D
+        # boundary discretisation along every edge shared with a CDT face.
+        fmesh = [Mesh() for _ in range(nf)]
+        edge_bnd = {}
+        for fi in range(nf):
+            if not face_direct[fi]:
+                continue
+            face = self.m_faces[fi]
+            srf = self.m_surfaces[face.surface_index]
+            if quality is not None:
+                a, c = quality
+                fmesh[fi] = RemeshNurbsSurfaceGrid.from_u_v_q(srf, 0, 0, a, c)
+            else:
+                fmesh[fi] = srf.mesh()
+            u0, u1 = srf.domain(0)
+            v0, v1 = srf.domain(1)
+            utol = (u1 - u0) * 0.001
+            vtol = (v1 - v0) * 0.001
+            for li in face.loop_indices:
+                if li < 0 or li >= len(self.m_loops):
+                    continue
+                for ti in self.m_loops[li].trim_indices:
+                    if ti < 0 or ti >= len(self.m_trims):
+                        continue
+                    eidx = self.m_trims[ti].edge_index
+                    if eidx < 0 or eidx >= len(self.m_topology_edges):
+                        continue
+                    if eidx in edge_bnd:
+                        continue
+                    shared = False
+                    for oti in self.m_topology_edges[eidx].trim_indices:
+                        if oti == ti or oti < 0 or oti >= len(self.m_trims):
+                            continue
+                        oli = self.m_trims[oti].loop_index
+                        if oli < 0 or oli >= len(self.m_loops):
+                            continue
+                        ofi = self.m_loops[oli].face_index
+                        if ofi >= 0 and ofi < nf and not face_direct[ofi]:
+                            shared = True
+                            break
+                    if not shared:
+                        continue
+                    c2di = self.m_trims[ti].curve_2d_index
+                    if c2di < 0 or c2di >= len(self.m_curves_2d):
+                        continue
+                    c2d = self.m_curves_2d[c2di]
+                    sp = c2d.get_cv(0)
+                    ep = c2d.get_cv(max(c2d.cv_count() - 1, 0))
+                    if sp is None or ep is None:
+                        continue
+                    at_v0 = abs(sp[1] - v0) < vtol and abs(ep[1] - v0) < vtol
+                    at_v1 = abs(sp[1] - v1) < vtol and abs(ep[1] - v1) < vtol
+                    at_u0 = abs(sp[0] - u0) < utol and abs(ep[0] - u0) < utol
+                    at_u1 = abs(sp[0] - u1) < utol and abs(ep[0] - u1) < utol
+                    if not at_v0 and not at_v1 and not at_u0 and not at_u1:
+                        continue
+                    pts = []
+                    for vd in fmesh[fi].vertex.values():
+                        if "u" not in vd.attributes or "v" not in vd.attributes:
+                            continue
+                        iu = vd.attributes["u"]
+                        iv = vd.attributes["v"]
+                        if at_v0 and abs(iv - v0) < vtol * 0.1:
+                            pts.append((iu, vd.position()))
+                        elif at_v1 and abs(iv - v1) < vtol * 0.1:
+                            pts.append((iu, vd.position()))
+                        elif at_u0 and abs(iu - u0) < utol * 0.1:
+                            pts.append((iv, vd.position()))
+                        elif at_u1 and abs(iu - u1) < utol * 0.1:
+                            pts.append((iv, vd.position()))
+                    pts.sort(key=lambda a: a[0])
+                    if len(pts) >= 2:
+                        edge_bnd[eidx] = [p for _, p in pts]
+
+        # Phase 3: Mesh CDT faces via NurbsSurfaceTrimmed. For edges shared with a
+        # direct face, reuse that face's boundary points projected into this bilinear UV.
+        for fi in range(nf):
+            if face_direct[fi]:
+                continue
+            face = self.m_faces[fi]
+            if face.surface_index < 0 or face.surface_index >= len(self.m_surfaces):
+                continue
+            srf = self.m_surfaces[face.surface_index]
+            proj = None
+            a_cv = srf.get_cv(0, 0)
+            b_cv = srf.get_cv(1, 0)
+            c_cv = srf.get_cv(0, 1)
+            if a_cv is not None and b_cv is not None and c_cv is not None and srf.degree(0) == 1 and srf.degree(1) == 1:
+                eu = [b_cv[0] - a_cv[0], b_cv[1] - a_cv[1], b_cv[2] - a_cv[2]]
+                ev = [c_cv[0] - a_cv[0], c_cv[1] - a_cv[1], c_cv[2] - a_cv[2]]
+                eu2 = eu[0] * eu[0] + eu[1] * eu[1] + eu[2] * eu[2]
+                ev2 = ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2]
+                if eu2 > 1e-28 and ev2 > 1e-28:
+                    proj = (a_cv, eu, ev, eu2, ev2)
+            ts = NurbsSurfaceTrimmed()
+            ts.m_surface = srf
+            for li in face.loop_indices:
+                if li < 0 or li >= len(self.m_loops):
+                    continue
+                loop = self.m_loops[li]
+                loop_pts = []
+                for ti in loop.trim_indices:
+                    if ti < 0 or ti >= len(self.m_trims):
+                        continue
+                    trim = self.m_trims[ti]
+                    if trim.type == BRepTrimType.Singular:
+                        continue
+                    eidx = trim.edge_index
+                    if proj is not None and eidx >= 0 and eidx in edge_bnd:
+                        a, eu, ev, eu2, ev2 = proj
+                        for pt in edge_bnd[eidx]:
+                            d = [pt[0] - a[0], pt[1] - a[1], pt[2] - a[2]]
+                            u = (d[0] * eu[0] + d[1] * eu[1] + d[2] * eu[2]) / eu2
+                            v = (d[0] * ev[0] + d[1] * ev[1] + d[2] * ev[2]) / ev2
+                            loop_pts.append(Point(u, v, 0.0))
+                    else:
+                        if trim.curve_2d_index < 0 or trim.curve_2d_index >= len(self.m_curves_2d):
+                            continue
+                        crv = self.m_curves_2d[trim.curve_2d_index]
+                        if crv.degree() <= 1 and not crv.is_rational():
+                            for k in range(max(crv.cv_count() - 1, 0)):
+                                p = crv.get_cv(k)
+                                if p is not None:
+                                    loop_pts.append(p)
+                        else:
+                            n = max(crv.cv_count() * 4, 16)
+                            pts, _ = crv.divide_by_count(n)
+                            for k in range(len(pts) - 1):
+                                loop_pts.append(pts[k])
+                if len(loop_pts) >= 3:
+                    loop_crv = NurbsCurve.create(True, 1, loop_pts)
+                    if loop.type == BRepLoopType.Outer:
+                        ts.m_outer_loop = loop_crv
+                    else:
+                        ts.m_inner_loops.append(loop_crv)
+            fmesh[fi] = ts.mesh()
+
+        # Apply reversed flag: flip BOTH winding and normals.
+        for fi in range(nf):
+            if self.m_faces[fi].reversed:
+                fmesh[fi].flip()
+                for vd in fmesh[fi].vertex.values():
+                    n = vd.normal()
+                    if n is not None:
+                        vd.set_normal(-n[0], -n[1], -n[2])
+
+        return fmesh
+
 
     ###########################################################################
     # Evaluation
