@@ -1206,8 +1206,9 @@ class BRep:
                     direct = False
             face_direct[fi] = direct
 
-        # Phase 2: Mesh direct faces
+        # Phase 2: Mesh direct faces, extract boundary 3D points for shared edges
         fmesh = [Mesh() for _ in range(nf)]
+        edge_bnd = {}
         for fi in range(nf):
             if not face_direct[fi]:
                 continue
@@ -1215,7 +1216,70 @@ class BRep:
             srf = self.m_surfaces[face.surface_index]
             fmesh[fi] = srf.mesh()
 
-        # Phase 3: Mesh CDT faces
+            u0, u1 = srf.domain(0)
+            v0, v1 = srf.domain(1)
+            utol = (u1 - u0) * 0.001
+            vtol = (v1 - v0) * 0.001
+
+            for li in face.loop_indices:
+                if li < 0 or li >= len(self.m_loops):
+                    continue
+                for ti in self.m_loops[li].trim_indices:
+                    if ti < 0 or ti >= len(self.m_trims):
+                        continue
+                    eidx = self.m_trims[ti].edge_index
+                    if eidx < 0 or eidx >= len(self.m_topology_edges):
+                        continue
+                    if eidx in edge_bnd:
+                        continue
+
+                    shared = False
+                    for oti in self.m_topology_edges[eidx].trim_indices:
+                        if oti == ti:
+                            continue
+                        oli = self.m_trims[oti].loop_index
+                        if oli < 0 or oli >= len(self.m_loops):
+                            continue
+                        ofi = self.m_loops[oli].face_index
+                        if 0 <= ofi < nf and not face_direct[ofi]:
+                            shared = True
+                            break
+                    if not shared:
+                        continue
+
+                    c2di = self.m_trims[ti].curve_2d_index
+                    if c2di < 0 or c2di >= len(self.m_curves_2d):
+                        continue
+                    c2d = self.m_curves_2d[c2di]
+                    sp = c2d.get_cv(0)
+                    ep = c2d.get_cv(c2d.cv_count() - 1)
+
+                    at_v0 = abs(sp[1] - v0) < vtol and abs(ep[1] - v0) < vtol
+                    at_v1 = abs(sp[1] - v1) < vtol and abs(ep[1] - v1) < vtol
+                    at_u0 = abs(sp[0] - u0) < utol and abs(ep[0] - u0) < utol
+                    at_u1 = abs(sp[0] - u1) < utol and abs(ep[0] - u1) < utol
+                    if not at_v0 and not at_v1 and not at_u0 and not at_u1:
+                        continue
+
+                    pts = []
+                    for vk, vd in fmesh[fi].vertex.items():
+                        if "u" not in vd.attributes or "v" not in vd.attributes:
+                            continue
+                        iu = vd.attributes["u"]
+                        iv = vd.attributes["v"]
+                        if at_v0 and abs(iv - v0) < vtol * 0.1:
+                            pts.append((iu, vd.position()))
+                        elif at_v1 and abs(iv - v1) < vtol * 0.1:
+                            pts.append((iu, vd.position()))
+                        elif at_u0 and abs(iu - u0) < utol * 0.1:
+                            pts.append((iv, vd.position()))
+                        elif at_u1 and abs(iu - u1) < utol * 0.1:
+                            pts.append((iv, vd.position()))
+                    pts.sort(key=lambda a: a[0])
+                    if len(pts) >= 2:
+                        edge_bnd[eidx] = [pt for _, pt in pts]
+
+        # Phase 3: Mesh CDT faces, using matched boundary points for shared edges
         for fi in range(nf):
             if face_direct[fi]:
                 continue
@@ -1223,6 +1287,16 @@ class BRep:
             if face.surface_index < 0 or face.surface_index >= len(self.m_surfaces):
                 continue
             srf = self.m_surfaces[face.surface_index]
+
+            p00 = srf.get_cv(0, 0)
+            p10 = srf.get_cv(1, 0)
+            p01 = srf.get_cv(0, 1)
+            eux = p10[0] - p00[0]; euy = p10[1] - p00[1]; euz = p10[2] - p00[2]
+            evx = p01[0] - p00[0]; evy = p01[1] - p00[1]; evz = p01[2] - p00[2]
+            eu2 = eux * eux + euy * euy + euz * euz
+            ev2 = evx * evx + evy * evy + evz * evz
+            can_project = (srf.degree(0) == 1 and srf.degree(1) == 1 and eu2 > 1e-28 and ev2 > 1e-28)
+
             ts = NurbsSurfaceTrimmed()
             ts.m_surface = srf
             for li in face.loop_indices:
@@ -1236,19 +1310,28 @@ class BRep:
                     trim = self.m_trims[ti]
                     if trim.type == BRepTrimType.Singular:
                         continue
-                    if trim.curve_2d_index < 0 or trim.curve_2d_index >= len(self.m_curves_2d):
-                        continue
-                    crv = self.m_curves_2d[trim.curve_2d_index]
-                    if crv.degree() <= 1 and not crv.is_rational():
-                        for k in range(max(crv.cv_count() - 1, 0)):
-                            p = crv.get_cv(k)
-                            if p is not None:
-                                loop_pts.append(p)
+                    eidx = trim.edge_index
+
+                    if can_project and eidx >= 0 and eidx in edge_bnd:
+                        for pt in edge_bnd[eidx]:
+                            dx = pt[0] - p00[0]; dy = pt[1] - p00[1]; dz = pt[2] - p00[2]
+                            u = (dx * eux + dy * euy + dz * euz) / eu2
+                            v = (dx * evx + dy * evy + dz * evz) / ev2
+                            loop_pts.append(Point(u, v, 0))
                     else:
-                        n = max(crv.cv_count() * 4, 16)
-                        pts, _ = crv.divide_by_count(n)
-                        for k in range(len(pts) - 1):
-                            loop_pts.append(pts[k])
+                        if trim.curve_2d_index < 0 or trim.curve_2d_index >= len(self.m_curves_2d):
+                            continue
+                        crv = self.m_curves_2d[trim.curve_2d_index]
+                        if crv.degree() <= 1 and not crv.is_rational():
+                            for k in range(max(crv.cv_count() - 1, 0)):
+                                p = crv.get_cv(k)
+                                if p is not None:
+                                    loop_pts.append(p)
+                        else:
+                            n = max(crv.cv_count() * 4, 16)
+                            pts, _ = crv.divide_by_count(n)
+                            for k in range(len(pts) - 1):
+                                loop_pts.append(pts[k])
                 if len(loop_pts) >= 3:
                     loop_crv = NurbsCurve.create(True, 1, loop_pts)
                     if loop.type == BRepLoopType.Outer:
@@ -1272,7 +1355,7 @@ class BRep:
                 if face.reversed:
                     poly.reverse()
                 all_polygons.append(poly)
-        return Mesh.from_polylines(all_polygons)
+        return Mesh.from_polylines(all_polygons, 1e-6)
     def face_meshes(self):
         return self.face_meshes_q(None)
 
