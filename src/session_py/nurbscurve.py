@@ -10,7 +10,7 @@ from .tolerance import Tolerance
 from .xform import Xform
 from .color import Color
 from . import nurbsknot
-from .nurbsknot import CurveNurbsKnotStyle
+from .nurbsknot import CurveNurbsKnotStyle, CurveInterpStyle
 
 
 def _evaluate_nurbs_blossom(cvdim, order, cv_stride, CV, nurbsknot, t):
@@ -140,10 +140,17 @@ class NurbsCurve:
         else:
             curve.create_clamped_uniform(dimension, degree + 1, points, nurbsknot_delta)
         if curve.is_valid():
-            if degree == 1 and len(points) == 2:
-                p0, p1 = points[0], points[1]
-                dx = p1[0] - p0[0]; dy = p1[1] - p0[1]; dz = p1[2] - p0[2]
-                L = (dx*dx + dy*dy + dz*dz) ** 0.5
+            # A degree-1 curve is a polyline: its arc length is the exact sum of segment lengths
+            # (plus the closing segment when periodic). Computing it directly avoids the general
+            # quadrature length(), which dominated every polyline build (lift / mesh / split).
+            if degree == 1:
+                np_ = len(points)
+                def _seg(a, b):
+                    dx = points[b][0]-points[a][0]; dy = points[b][1]-points[a][1]; dz = points[b][2]-points[a][2]
+                    return (dx*dx + dy*dy + dz*dz) ** 0.5
+                L = sum(_seg(i - 1, i) for i in range(1, np_))
+                if periodic and np_ > 1:
+                    L += _seg(np_ - 1, 0)
             else:
                 L = curve.length()
             if L > 0.0:
@@ -151,10 +158,13 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def create_interpolated(points, parameterization=CurveNurbsKnotStyle.Chord):
+    def create_interpolated(points, parameterization=CurveNurbsKnotStyle.Chord,
+                            end_condition=CurveInterpStyle.Rhino):
         # parameterization maps to Rhino's CurveKnotStyle: Uniform/Chord/ChordSquareRoot
         # (centripetal). Rhino's CreateInterpolatedCurve(points, degree) API defaults to Uniform;
         # the InterpCrv command commonly uses Chord. Pass the style explicitly to match Rhino.
+        # end_condition selects the boundary tangent rule: Rhino (Bessel, default) or
+        # Occt (cubic Lagrange derivative, reproduces OCCT GeomAPI_Interpolate exactly).
         n = len(points)
         if n < 2:
             return NurbsCurve()
@@ -305,10 +315,43 @@ class NurbsCurve:
             l = math.sqrt(dx*dx + dy*dy + dz*dz)
             return Vector(dx/l, dy/l, dz/l) if l > 0 else Vector(0, 0, 0)
 
-        if n >= 3:
+        # Un-normalized derivative of the cubic (or quadratic, when n==3) Lagrange
+        # polynomial through `m` consecutive points, evaluated at parameter t.
+        # Reproduces OCCT GeomAPI_Interpolate::BuildTangents (PLib::EvalLagrange).
+        def lagrange_tangent(i0, m, t):
+            res = [0.0, 0.0, 0.0]
+            for j in range(m):
+                uj = params[i0 + j]
+                dsum = 0.0
+                for i in range(m):
+                    if i == j:
+                        continue
+                    term = 1.0 / (uj - params[i0 + i])
+                    for k in range(m):
+                        if k == j or k == i:
+                            continue
+                        term *= (t - params[i0 + k]) / (uj - params[i0 + k])
+                    dsum += term
+                Pj = points[i0 + j]
+                for d in range(3):
+                    res[d] += Pj[d] * dsum
+            return Vector(res[0], res[1], res[2])
+
+        if end_condition == CurveInterpStyle.Occt and n >= 3:
+            # OCCT mode: un-normalized Lagrange derivative at the endpoints. The
+            # derivative-constraint poles satisfy C'(u0) = 3/(params[1]-params[0])*(P1-P0),
+            # so P1 = P0 + (params[1]-params[0])/3 * tan_start (symmetric at the end).
+            deg_t = 2 if n == 3 else 3
+            tan_start = lagrange_tangent(0, deg_t + 1, params[0])
+            tan_end = lagrange_tangent(n - 1 - deg_t, deg_t + 1, params[n - 1])
+            s0 = (params[1] - params[0]) / 3.0
+            s1 = -(params[n-1] - params[n-2]) / 3.0
+        elif n >= 3:
             tan_start = estimate_tangent(0, 1, 2)
             end_raw = estimate_tangent(n-1, n-2, n-3)
             tan_end = Vector(-end_raw[0], -end_raw[1], -end_raw[2])
+            s0 = pdist(points[0], points[1]) / 3.0
+            s1 = -pdist(points[n-1], points[n-2]) / 3.0
         else:
             dx = points[1][0] - points[0][0]
             dy = points[1][1] - points[0][1]
@@ -320,20 +363,17 @@ class NurbsCurve:
             else:
                 tan_start = Vector(0, 0, 0)
                 tan_end = Vector(0, 0, 0)
-
-        d_start = pdist(points[0], points[1])
-        d_end = pdist(points[n-1], points[n-2])
+            s0 = pdist(points[0], points[1]) / 3.0
+            s1 = -pdist(points[n-1], points[n-2]) / 3.0
 
         cv = [0.0] * (cv_count * dim)
         for d in range(dim):
             cv[d] = points[0][d]
-        s0 = d_start / 3.0
         for d in range(dim):
             cv[dim + d] = points[0][d] + s0 * tan_start[d]
         for i in range(1, n-1):
             for d in range(dim):
                 cv[(i+1) * dim + d] = points[i][d]
-        s1 = -d_end / 3.0
         for d in range(dim):
             cv[n * dim + d] = points[n-1][d] + s1 * tan_end[d]
         for d in range(dim):
@@ -375,6 +415,45 @@ class NurbsCurve:
         for i in range(cv_count):
             curve.set_cv(i, Point(cv[i*3], cv[i*3+1], cv[i*3+2]))
 
+        return curve
+
+    @staticmethod
+    def create_from_parameters(points, weights, knots, mults, degree, periodic=False):
+        """Create a NURBS curve from explicit parameters (OCCT / compas_occt convention:
+        distinct knots + per-knot multiplicities). Mirrors OCCNurbsCurve.from_parameters and
+        underlies from_points / from_line / from_circle / from_ellipse. The internal (OpenNURBS)
+        knot vector is the expanded full knot vector with first and last entries dropped; the
+        domain becomes [knots[0], knots[-1]]."""
+        n = len(points)
+        order = degree + 1
+        if n < order:
+            return NurbsCurve()
+        if len(weights) != n or len(knots) != len(mults) or len(knots) == 0:
+            return NurbsCurve()
+        if periodic:
+            return NurbsCurve()  # periodic from_parameters not yet supported
+
+        rational = any(abs(w - 1.0) > Tolerance.ZERO_TOLERANCE for w in weights)
+
+        # Expand distinct knots by multiplicity into the full (OCCT-style) knot vector.
+        full = []
+        for v, m in zip(knots, mults):
+            full.extend([float(v)] * int(m))
+
+        kc = order + n - 2
+        if len(full) != kc + 2:  # must equal n + order
+            return NurbsCurve()
+
+        dim = 3
+        curve = NurbsCurve(dimension=dim, is_rational=rational, order=order, cv_count=n)
+        curve.m_nurbsknot = np.array(full[1:kc + 1], dtype=np.float64)
+        curve.m_cv = np.zeros(n * curve.m_cv_stride, dtype=np.float64)
+        for i in range(n):
+            if rational:
+                w = weights[i]
+                curve.set_cv_4d(i, points[i][0] * w, points[i][1] * w, points[i][2] * w, w)
+            else:
+                curve.set_cv(i, Point(points[i][0], points[i][1], points[i][2]))
         return curve
 
     @staticmethod
@@ -2410,6 +2489,53 @@ class NurbsCurve:
 
         return result
 
+    def curvature_at(self, t: float) -> float:
+        """Curvature magnitude (1/radius) at parameter t.
+
+        Uses analytic 1st/2nd derivatives: kappa = |C' x C''| / |C'|^3.
+        Matches OCCT GeomLProp_CLProps.Curvature.
+        """
+        d = self.evaluate(t, 2)
+        if len(d) < 3:
+            return 0.0
+        s = d[1].magnitude()
+        if s < 1e-12:
+            return 0.0
+        return d[1].cross(d[2]).magnitude() / (s * s * s)
+
+    def closest_parameter(self, test_point: 'Point') -> float:
+        """Parameter of the closest point on the curve to test_point (grid seed + Newton).
+
+        Matches OCCT GeomAPI_ProjectPointOnCurve.
+        """
+        from session_py.closest import Closest
+        return Closest.curve_point(self, test_point)[0]
+
+    def closest_point(self, test_point: 'Point') -> 'Point':
+        """Closest point on the curve to test_point."""
+        return self.point_at(self.closest_parameter(test_point))
+
+    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False):
+        """Parameters (u, v) where this curve is closest to another curve.
+
+        Matches OCCT GeomAPI_ExtremaCurveCurve. If return_distance, returns ((u, v), dist).
+        """
+        from session_py.closest import Closest
+        u, v, dist = Closest.curve_curve(self, other)
+        if return_distance:
+            return (u, v), dist
+        return (u, v)
+
+    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False):
+        """Points (pa, pb) where this curve is closest to another curve."""
+        from session_py.closest import Closest
+        u, v, dist = Closest.curve_curve(self, other)
+        pa = self.point_at(u)
+        pb = other.point_at(v)
+        if return_distance:
+            return (pa, pb), dist
+        return (pa, pb)
+
     def tangent_at(self, t: float) -> Vector:
         """Evaluate tangent vector at parameter t (normalized)"""
         if not self.is_valid():
@@ -2922,8 +3048,11 @@ class NurbsCurve:
         n = len(params)
         if n == 0:
             return np.empty((0, 3))
-        kn_arr = kn
-        cv_arr = cv
+        # The general (degree>1) path below indexes kn/cv with an integer array, which only
+        # works on an ndarray; pcurves rebuilt during split/boolean may store m_nurbsknot /
+        # m_cv as plain Python lists, so coerce defensively.
+        kn_arr = kn if isinstance(kn, np.ndarray) else np.asarray(kn, dtype=np.float64)
+        cv_arr = cv if isinstance(cv, np.ndarray) else np.asarray(cv, dtype=np.float64)
 
         if cv_count >= order and len(kn_arr) >= order - 2 + (cv_count - order + 2):
             interior = kn_arr[order - 2: cv_count]

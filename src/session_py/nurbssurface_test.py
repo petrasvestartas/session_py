@@ -104,6 +104,51 @@ def test_nurbssurface_constructor():
     MINI_CHECK(TOLERANCE.is_point_close(p[4][6], Point(5.000000000000000, 5.000000000000000, 0.000000000000000)))
 
 
+@MINI_TEST("NurbsSurface", "Create From Parameters")
+def test_nurbssurface_create_from_parameters():
+    from session_py import NurbsSurface
+    from session_py import Point
+
+    # Mirrors compas_occt OCCNurbsSurface.from_parameters / from_points (surface_from_points.py).
+    # Validated pointwise against OCCT (validation/compare_surface_eval.py).
+    grid = [
+        [Point(0, 0, 0), Point(1, 0, 0), Point(2, 0, 0), Point(3, 0, 0)],
+        [Point(0, 1, 0), Point(1, 1, 2), Point(2, 1, 2), Point(3, 1, 0)],
+        [Point(0, 2, 0), Point(1, 2, 2), Point(2, 2, 2), Point(3, 2, 0)],
+        [Point(0, 3, 0), Point(1, 3, 0), Point(2, 3, 0), Point(3, 3, 0)],
+    ]
+    w = [[1.0] * 4 for _ in range(4)]
+    s = NurbsSurface.create_from_parameters(grid, w, [0, 1], [0, 1], [4, 4], [4, 4], 3, 3)
+    MINI_CHECK(s.is_valid())
+    MINI_CHECK(s.degree(0) == 3 and s.degree(1) == 3)
+    MINI_CHECK(s.cv_count(0) == 4 and s.cv_count(1) == 4)
+    MINI_CHECK(not s.is_rational())
+    u0, u1 = s.domain(0)
+    v0, v1 = s.domain(1)
+    MINI_CHECK(abs(u0) < 1e-12 and abs(u1 - 1.0) < 1e-12)
+    MINI_CHECK(abs(v0) < 1e-12 and abs(v1 - 1.0) < 1e-12)
+    MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.0, 0.0), Point(0, 0, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(s.point_at(1.0, 1.0), Point(3, 3, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.5, 0.5), Point(1.5, 1.5, 1.125)))
+    MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.37, 0.41), Point(1.11, 1.23, 1.01496402)))
+
+    # frame_at (surface_frames.py): origin == point_at, z-axis == normal_at.
+    # Normal validated vs OCCT D1uxD1v (validation/compare_surface_eval.py).
+    fr = s.frame_at(0.3, 0.4)
+    MINI_CHECK(TOLERANCE.is_point_close(fr.origin, s.point_at(0.3, 0.4)))
+    n = s.normal_at(0.3, 0.4)
+    za = fr.z_axis
+    MINI_CHECK(abs(za[0] - n[0]) < 1e-9 and abs(za[1] - n[1]) < 1e-9 and abs(za[2] - n[2]) < 1e-9)
+
+    # intersections_with_line (surface_intersections_with_line.py): a vertical line
+    # through (1.5, 1.5) hits the surface once at (1.5, 1.5, 1.125). Validated vs
+    # OCCT GeomAPI_IntCS (validation harness, dev <= 1.6e-16).
+    from session_py import Line
+    hits = s.intersections_with_line(Line(1.5, 1.5, -5, 1.5, 1.5, 5))
+    MINI_CHECK(len(hits) == 1)
+    MINI_CHECK(TOLERANCE.is_point_close(hits[0], Point(1.5, 1.5, 1.125)))
+
+
 @MINI_TEST("NurbsSurface", "Booleans Queries")
 def test_booleans_queries():
     from session_py import NurbsSurface
@@ -1073,6 +1118,22 @@ def test_protobuf_roundtrip():
 
     MINI_CHECK(loaded_proto_string == surface)
     MINI_CHECK(loaded == surface)
+
+
+@MINI_TEST("NurbsSurface", "ClosestPoint")
+def test_nurbssurface_closest_point():
+    from session_py import Primitives, Point
+    # Sphere radius 2 at origin: closest surface point to an outside point is radial.
+    sphere = Primitives.sphere_surface(0, 0, 0, 2.0)
+    cp = sphere.closest_point(Point(5, 0, 0))
+    MINI_CHECK(abs(cp[0] - 2.0) < 1e-4 and abs(cp[1]) < 1e-4 and abs(cp[2]) < 1e-4)
+    # Curvature: sphere radius R has Gaussian K = 1/R^2, |mean| = 1/R.
+    u0, u1 = sphere.domain(0)
+    v0, v1 = sphere.domain(1)
+    um = u0 + 0.37 * (u1 - u0)
+    vm = v0 + 0.41 * (v1 - v0)
+    MINI_CHECK(abs(sphere.gaussian_curvature(um, vm) - 0.25) < 1e-3)
+    MINI_CHECK(abs(abs(sphere.mean_curvature(um, vm)) - 0.5) < 1e-3)
 
 
 if __name__ == "__main__":

@@ -401,6 +401,11 @@ class NurbsSurfaceTrimmed:
         self.m_surface = NurbsSurface()
         self.m_outer_loop = NurbsCurve()
         self.m_inner_loops = []
+        # Transient build-time hint (not serialized/compared): the outer/inner loops as their
+        # natural arrangement-run segments, head-to-tail. Populated by split_by_uv_curves so
+        # BRep._split builds per-segment edges that mate with adjacent faces (watertight imprint).
+        self.m_outer_segments = []
+        self.m_inner_segments = []
 
     @property
     def guid(self) -> str:
@@ -856,9 +861,9 @@ class NurbsSurfaceTrimmed:
                 holes_of[best].append(cycle)
 
         # ---- 7. Emit one trimmed surface per face ----
-        def cycle_to_loop(cycle):
-            # Collapse consecutive same-curve half-edges into exact trims,
-            # border runs into straight segments, then join into one loop
+        def cycle_to_segments(cycle):
+            # Collapse consecutive same-curve half-edges into exact trims (border runs become
+            # straight segments), each oriented tail->head. Returns the run pieces head-to-tail.
             runs = []
             for hi in cycle:
                 tail, head, e, fwd = hes[hi]
@@ -871,35 +876,45 @@ class NurbsSurfaceTrimmed:
                     runs.append({'cidx': e['cidx'], 'va': tail, 'vb': head, 'ta': ta, 'tb': tb})
             pieces = []
             for run in runs:
+                made = False
                 if run['cidx'] >= 0:
                     crv = pcurves[run['cidx']]
                     c0, c1 = crv.domain()
                     lo = min(run['ta'], run['tb'])
                     hi_ = max(run['ta'], run['tb'])
                     piece = crv.duplicate()
+                    piece_ok = True
                     if hi_ - lo < (c1 - c0) - 1e-12 and hi_ - lo > 1e-14:
                         if not piece.trim(lo, hi_):
-                            piece = None
-                    if piece is not None and piece.is_valid():
+                            piece_ok = False
+                    if piece_ok and piece.is_valid():
+                        if run['ta'] > run['tb']:
+                            piece.reverse()  # orient tail->head
                         pieces.append(piece)
-                        continue
-                pa = verts[run['va']]
-                pb = verts[run['vb']]
-                if math.hypot(pb[0]-pa[0], pb[1]-pa[1]) > 1e-14:
-                    seg_pts = [Point(pa[0], pa[1], 0.0), Point(pb[0], pb[1], 0.0)]
-                    pieces.append(NurbsCurve.create(False, 1, seg_pts))
+                        made = True
+                if not made:
+                    pa = verts[run['va']]
+                    pb = verts[run['vb']]
+                    if math.hypot(pb[0]-pa[0], pb[1]-pa[1]) > 1e-14:
+                        seg_pts = [Point(pa[0], pa[1], 0.0), Point(pb[0], pb[1], 0.0)]
+                        pieces.append(NurbsCurve.create(False, 1, seg_pts))
+            return pieces
+
+        def cycle_to_loop(cycle):
+            # Returns (loop, segments, seg_valid). seg_valid True only when the run pieces join
+            # into one closed loop (and so reconstruct it exactly for per-segment edge imprinting).
+            pieces = cycle_to_segments(cycle)
             if not pieces:
-                return NurbsCurve()
+                return NurbsCurve(), [], False
             joined = NurbsCurve.join(pieces, snap_uv * 4.0)
             if len(joined) == 1 and joined[0].is_closed():
-                return joined[0]
-            # Fallback: polyline loop from the face walk
+                return joined[0], pieces, True
             loop_pts = []
             for hi in cycle:
                 a = verts[hes[hi][0]]
                 loop_pts.append(Point(a[0], a[1], 0.0))
             loop_pts.append(Point(loop_pts[0][0], loop_pts[0][1], 0.0))
-            return NurbsCurve.create(False, 1, loop_pts)
+            return NurbsCurve.create(False, 1, loop_pts), [], False
 
         def loop_signed_area(loop):
             n = 64
@@ -912,20 +927,32 @@ class NurbsSurfaceTrimmed:
                 prev = p
             return s * 0.5
 
+        def reverse_segments(segs):
+            segs.reverse()
+            for s in segs:
+                s.reverse()
+
         result = []
         for fi, (cycle, area) in enumerate(pos_faces):
-            outer = cycle_to_loop(cycle)
+            outer, outer_segs, outer_seg_valid = cycle_to_loop(cycle)
             if not outer.is_valid():
                 continue
             if loop_signed_area(outer) < 0.0:
                 outer.reverse()
+                if outer_seg_valid:
+                    reverse_segments(outer_segs)
             ts = NurbsSurfaceTrimmed.create(srf, outer)
+            if outer_seg_valid:
+                ts.m_outer_segments = outer_segs
             for hole_cycle in holes_of[fi]:
-                hole = cycle_to_loop(hole_cycle)
+                hole, hole_segs, hole_seg_valid = cycle_to_loop(hole_cycle)
                 if hole.is_valid():
                     if loop_signed_area(hole) > 0.0:
                         hole.reverse()
+                        if hole_seg_valid:
+                            reverse_segments(hole_segs)
                     ts.add_inner_loop(hole)
+                    ts.m_inner_segments.append(hole_segs if hole_seg_valid else [])
             result.append(ts)
         return result
 

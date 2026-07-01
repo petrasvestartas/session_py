@@ -1664,9 +1664,36 @@ def _clip_pcurve_to_cutter(target, pc, cutter):
     corner_diag = cutter.point_at(cu0, cv0).distance(cutter.point_at(cu1, cv1))
     on_tol = max(1e-7, corner_diag * 1e-4)
 
+    # _clip_pcurve_to_cutter is only ever called for a PLANAR cutter (the caller guards on
+    # cutter.is_planar), so the closest-point gap to the finite cutter face is the analytic
+    # point-to-rectangle distance: project p3 into the face's (eu,ev) frame, clamp the
+    # parameters to the face rect, measure the 3D residual. This replaces a per-sample grid
+    # search (Closest.surface_point) that dominated SSI time, with an O(1) projection.
+    q00 = cutter.point_at(cu0, cv0)
+    q10 = cutter.point_at(cu1, cv0)
+    q01 = cutter.point_at(cu0, cv1)
+    eu0, eu1, eu2_ = q10[0]-q00[0], q10[1]-q00[1], q10[2]-q00[2]
+    ev0, ev1, ev2_ = q01[0]-q00[0], q01[1]-q00[1], q01[2]-q00[2]
+    eu_sq = eu0*eu0 + eu1*eu1 + eu2_*eu2_
+    ev_sq = ev0*ev0 + ev1*ev1 + ev2_*ev2_
+    q00x, q00y, q00z = q00[0], q00[1], q00[2]
+    fast_planar = eu_sq > 1e-28 and ev_sq > 1e-28
+
     def gap(t):
         uv = pc.point_at(t)
         p3 = target.point_at(uv[0], uv[1])
+        if fast_planar:
+            dx = p3[0]-q00x; dy = p3[1]-q00y; dz = p3[2]-q00z
+            a = (dx*eu0 + dy*eu1 + dz*eu2_) / eu_sq
+            b = (dx*ev0 + dy*ev1 + dz*ev2_) / ev_sq
+            if a < 0.0: a = 0.0
+            elif a > 1.0: a = 1.0
+            if b < 0.0: b = 0.0
+            elif b > 1.0: b = 1.0
+            cx = q00x + a*eu0 + b*ev0
+            cy = q00y + a*eu1 + b*ev1
+            cz = q00z + a*eu2_ + b*ev2_
+            return ((p3[0]-cx)**2 + (p3[1]-cy)**2 + (p3[2]-cz)**2) ** 0.5
         return Closest.surface_point(cutter, p3, 0.0, 0.0, 0.0, 0.0)[2]
 
     def refine(t_in, t_out):
@@ -1703,14 +1730,210 @@ def _clip_pcurve_to_cutter(target, pc, cutter):
     return pieces
 
 
+def _analytic_sphere_pullback(srf, recog, c3d):
+    """Analytic pull-back of a 3D curve onto a recognized SPHERE, replicating OCCT
+    ProjLib_Sphere's per-point inverse (EvalPnt2d): in the sphere's local frame the
+    longitude = atan2(y, x) is EXACT (so a seam-straddling circle crosses the u-seam
+    EXACTLY on u=u0/u=u1 -- the thing the iterative projector got ~0.18 wrong), and the
+    nonlinear meridian v is found by table inversion. Returns the seam-split arcs (a
+    circle straddling the seam -> 2 arcs, each anchored on the seam) as exact-endpoint
+    degree-1 polylines. Empty if not a usable sphere/circle.
+    """
+    import math
+    from .nurbscurve import NurbsCurve
+    from .point import Point
+
+    if recog is None or recog[0] != 'sphere':
+        return []
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    range_u = u1 - u0
+    if range_u < 1e-9:
+        return []
+
+    def dot(a, b):
+        return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
+
+    C = recog[1]
+    um = 0.5*(u0 + u1); vm = 0.5*(v0 + v1)
+    # Polar axis Zs (south->north pole), and the equatorial frame Xs (u=u0 meridian dir), Ys.
+    sp = srf.point_at(um, v0); npp = srf.point_at(um, v1)
+    Zs = [npp[0]-sp[0], npp[1]-sp[1], npp[2]-sp[2]]
+    zn = math.sqrt(dot(Zs, Zs))
+    if zn < 1e-12:
+        return []
+    Zs = [Zs[0]/zn, Zs[1]/zn, Zs[2]/zn]
+    P0 = srf.point_at(u0, vm)
+    x0 = [P0[0]-C[0], P0[1]-C[1], P0[2]-C[2]]
+    h0 = dot(x0, Zs)
+    Xs = [x0[0]-h0*Zs[0], x0[1]-h0*Zs[1], x0[2]-h0*Zs[2]]
+    xn = math.sqrt(dot(Xs, Xs))
+    if xn < 1e-12:
+        return []
+    Xs = [Xs[0]/xn, Xs[1]/xn, Xs[2]/xn]
+    Ys = [Zs[1]*Xs[2]-Zs[2]*Xs[1], Zs[2]*Xs[0]-Zs[0]*Xs[2], Zs[0]*Xs[1]-Zs[1]*Xs[0]]
+    PI = math.pi; TWO_PI = 2.0*PI
+    # (u -> longitude) table along the equator. The NURBS sphere's u is the RATIONAL-quadratic
+    # circle parameter, which is NOT linear in longitude (only correct at 45-deg multiples) -- a
+    # linear u = u0 + (lon/2pi)*range_u approximation distorts the pulled-back circle so it bounds
+    # ~2% too little flux (wrong volume). Invert the true parametrization: tabulate longitude(u)
+    # on the equator (v-independent for a surface of revolution), then binary-search per point.
+    NT = 128
+    tu = [0.0]*(NT+1); tlon = [0.0]*(NT+1)
+    for k in range(NT+1):
+        u = u0 + range_u*k/NT
+        p = srf.point_at(u, vm)
+        r = [p[0]-C[0], p[1]-C[1], p[2]-C[2]]
+        lon = math.atan2(dot(r, Ys), dot(r, Xs))
+        if k > 0:
+            while lon - tlon[k-1] > PI:
+                lon -= TWO_PI
+            while lon - tlon[k-1] < -PI:
+                lon += TWO_PI
+        tu[k] = u; tlon[k] = lon
+    lon_incr = tlon[NT] >= tlon[0]
+    lon_lo = min(tlon[0], tlon[NT]); lon_hi = max(tlon[0], tlon[NT])
+
+    def u_from_lon(lon):
+        while lon < lon_lo - 1e-9:
+            lon += TWO_PI
+        while lon > lon_hi + 1e-9:
+            lon -= TWO_PI
+        lo, hi = 0, NT
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            above = (tlon[mid] < lon) if lon_incr else (tlon[mid] > lon)
+            if above:
+                lo = mid
+            else:
+                hi = mid
+        denom = tlon[hi] - tlon[lo]
+        f = (lon - tlon[lo]) / denom if abs(denom) > 1e-15 else 0.0
+        return tu[lo] + (tu[hi] - tu[lo])*f
+
+    # height(v) along a meridian (independent of u by sphere symmetry) is MONOTONE pole-to-pole.
+    tv = [0.0]*(NT+1); th = [0.0]*(NT+1)
+    for k in range(NT+1):
+        v = v0 + (v1-v0)*k/NT
+        p = srf.point_at(um, v)
+        r = [p[0]-C[0], p[1]-C[1], p[2]-C[2]]
+        tv[k] = v; th[k] = dot(r, Zs)
+    incr = th[NT] >= th[0]
+    if abs(th[NT] - th[0]) < 1e-12:
+        return []
+
+    def v_from_height(h):
+        if incr:
+            if h <= th[0]:
+                return tv[0]
+            if h >= th[NT]:
+                return tv[NT]
+        else:
+            if h >= th[0]:
+                return tv[0]
+            if h <= th[NT]:
+                return tv[NT]
+        lo, hi = 0, NT
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            above = (th[mid] < h) if incr else (th[mid] > h)
+            if above:
+                lo = mid
+            else:
+                hi = mid
+        denom = th[hi] - th[lo]
+        f = (h - th[lo]) / denom if abs(denom) > 1e-15 else 0.0
+        return tv[lo] + (tv[hi] - tv[lo])*f
+
+    # Sample the 3D curve; project each point analytically -> (u_unwrapped, v).
+    t0, t1 = c3d.domain()
+    n = max(c3d.cv_count() * 8, 120)
+    uv = []
+    prev_u = 0.0
+    for i in range(n+1):
+        p = c3d.point_at(t0 + (t1-t0)*i/n)
+        r = [p[0]-C[0], p[1]-C[1], p[2]-C[2]]
+        lon = math.atan2(dot(r, Ys), dot(r, Xs))   # (-pi, pi], exact
+        h = dot(r, Zs)
+        u = u_from_lon(lon)                         # exact NURBS u (not the linear approx)
+        if i > 0:
+            while u - prev_u > range_u*0.5:
+                u -= range_u
+            while u - prev_u < -range_u*0.5:
+                u += range_u
+        prev_u = u
+        uv.append((u, v_from_height(h)))
+    if len(uv) < 2:
+        return []
+    # Split the continuous (u,v) polyline into arcs by "domain copy" index k = floor((u-u0)/range).
+    # When k changes between consecutive samples the curve crosses a seam: end the current arc
+    # EXACTLY on the seam (u0 or u1) and start the next on the opposite seam, each shifted into
+    # [u0,u1]. So a circle straddling the seam -> two arcs anchored exactly on u0 and u1.
+    out = []
+    seg = []
+
+    def kof(u):
+        return int(math.floor((u - u0) / range_u + 1e-9))
+
+    cur_k = kof(uv[0][0])
+    seg.append(Point(uv[0][0] - cur_k*range_u, uv[0][1], 0.0))
+    for i in range(1, len(uv)):
+        ki = kof(uv[i][0])
+        while ki != cur_k:
+            step = 1 if ki > cur_k else -1
+            nk = cur_k + step
+            seam_cont = u0 + (nk if step > 0 else cur_k) * range_u  # the boundary being crossed
+            denom = uv[i][0] - uv[i-1][0]
+            f = (seam_cont - uv[i-1][0]) / denom if abs(denom) > 1e-15 else 0.0
+            f = min(max(f, 0.0), 1.0)
+            vc = uv[i-1][1] + (uv[i][1] - uv[i-1][1])*f
+            seg.append(Point(seam_cont - cur_k*range_u, vc, 0.0))   # end at u1 (step>0) or u0
+            if len(seg) >= 2:
+                out.append(NurbsCurve.create(False, 1, seg))
+            seg = []
+            seg.append(Point(seam_cont - nk*range_u, vc, 0.0))      # start at u0 (step>0) or u1
+            cur_k = nk
+        seg.append(Point(uv[i][0] - cur_k*range_u, uv[i][1], 0.0))
+    if len(seg) >= 2:
+        out.append(NurbsCurve.create(False, 1, seg))
+    return out
+
+
 def cut_curves_on_surface(target, cutter, tolerance=None):
     """Return the cutter surface's UV pcurves on the target surface.
 
     Fast path: if the cutter is planar, intersect the target with the cutter's
     plane (surface_plane_uv) and clip the result to the cutter footprint.
     Otherwise use the surface/surface intersection (already domain-clipped).
+
+    SPHERE target: mirror the C++ dispatch (intersection.cpp cut_curves_on_surface).
+    Pull the FULL analytic 3D intersection curve back via the OCCT-style per-point
+    inverse (analytic_sphere_pullback -> exact seam crossings, so a seam-straddling cut
+    circle splits into two arcs anchored on u0/u1 instead of being dropped). Fall back to
+    the iterative surface_curve projection, then the default pcurve, when that is empty.
     """
     from .plane import Plane
+    from .closest import Closest
+
+    rtol = max(tolerance if (tolerance and tolerance > 0) else 1e-7, 1e-7) * 1e4
+    rt = _recognize_surface(target, rtol)
+    if rt is not None and rt[0] == 'sphere':
+        cutter_planar = cutter.is_planar(None, 1e-6)
+        out = []
+        for triple in surface_surface(target, cutter, tolerance):
+            c3d = triple[0]
+            pcs = _analytic_sphere_pullback(target, rt, c3d)
+            if not pcs:
+                pcs = Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance)
+            if not pcs:
+                pcs = [triple[1]]
+            for pc in pcs:
+                if cutter_planar:
+                    out.extend(_clip_pcurve_to_cutter(target, pc, cutter))
+                else:
+                    out.append(pc)
+        return out
+
     if cutter.is_planar(None, 1e-6):
         cu0, cu1 = cutter.domain(0)
         cv0, cv1 = cutter.domain(1)
@@ -2412,6 +2635,278 @@ def _recognize_surface(surface, tol):
     return None
 
 
+def _analytic_pcurve(srf, recog, c3d):
+    """OCCT ProjLib-style closed-form pull-back of a 3D curve onto a recognized surface.
+    Currently handles the CONE case (a coaxial circle perpendicular to the axis -> an exact
+    v=const line); returns None otherwise (the caller falls back to iterative projection)."""
+    import math
+    from .nurbscurve import NurbsCurve
+    if recog is None:
+        return None
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+
+    def dot(p, q):
+        return p[0]*q[0] + p[1]*q[1] + p[2]*q[2]
+
+    if recog[0] == 'cone':
+        # A circle perpendicular to the cone axis (a coaxial "parallel") -> exact v=const line.
+        # (recog[3] is the cone HALF-ANGLE, not a length, so use a curve-length scale for tols.)
+        ax = recog[2]
+        an = math.sqrt(dot(ax, ax))
+        if an < 1e-12:
+            return None
+        ax = (ax[0]/an, ax[1]/an, ax[2]/an)
+        A = recog[1]   # apex
+
+        def height(p):
+            return (p[0]-A[0])*ax[0] + (p[1]-A[1])*ax[1] + (p[2]-A[2])*ax[2]
+
+        t0, t1 = c3d.domain()
+        clen = c3d.point_at(t0).distance(c3d.point_at(0.5*(t0+t1)))
+        hscale = max(clen, 1e-9)
+        hmin = 1e300; hmax = -1e300; hsum = 0.0; ns = 0
+        for i in range(33):
+            h = height(c3d.point_at(t0 + (t1-t0)*i/32))
+            hmin = min(hmin, h); hmax = max(hmax, h); hsum += h; ns += 1
+        if hmax - hmin > hscale * 1e-4:
+            return None   # oblique conic -> projection
+        if c3d.point_at(t0).distance(c3d.point_at(t1)) > hscale * 1e-3:
+            return None   # not a full wrap
+        hc = hsum / ns
+        um2 = 0.5*(u0+u1)
+        va = v0; vb = v1
+        ha = height(srf.point_at(um2, va)); hb = height(srf.point_at(um2, vb))
+        if (hc-ha)*(hc-hb) > 0:
+            return None   # height out of v-range
+        for _ in range(60):
+            vmid = 0.5*(va+vb)
+            hm = height(srf.point_at(um2, vmid))
+            if (hm-hc)*(ha-hc) <= 0:
+                vb = vmid
+            else:
+                va = vmid; ha = hm
+        vc = 0.5*(va+vb)
+        return NurbsCurve.create(False, 1, [Point(u0, vc, 0.0), Point(u1, vc, 0.0)])
+
+    return None
+
+
+# --- analytic SSI helpers (V3 = plain (x,y,z) tuples) -------------------------------------------
+def _ssi_unit(v):
+    import math
+    l = math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])
+    return (v[0]/l, v[1]/l, v[2]/l) if l > 1e-300 else v
+
+
+def _ssi_dot(u, v):
+    return u[0]*v[0] + u[1]*v[1] + u[2]*v[2]
+
+
+def _ssi_cross(u, v):
+    return (u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0])
+
+
+def _point_axis_dist(apt, adir, P):
+    import math
+    u = _ssi_unit(adir)
+    dp = (P[0]-apt[0], P[1]-apt[1], P[2]-apt[2])
+    t = _ssi_dot(dp, u)
+    perp = (dp[0]-t*u[0], dp[1]-t*u[1], dp[2]-t*u[2])
+    return math.sqrt(_ssi_dot(perp, perp))
+
+
+def _axial_coord(apt, adir, P):
+    u = _ssi_unit(adir)
+    return (P[0]-apt[0])*u[0] + (P[1]-apt[1])*u[1] + (P[2]-apt[2])*u[2]
+
+
+def _axes_coaxial(p1, d1, p2, d2, tol):
+    import math
+    u1 = _ssi_unit(d1); u2 = _ssi_unit(d2)
+    cx = _ssi_cross(u1, u2)
+    if math.sqrt(_ssi_dot(cx, cx)) > tol:
+        return False
+    return _point_axis_dist(p1, u1, p2) <= tol
+
+
+def _cyl_span(srf, apt, adir):
+    u = _ssi_unit(adir)
+    u0, u1 = srf.domain(0); v0, v1 = srf.domain(1)
+    um = 0.5 * (u0 + u1)
+    smin = 1e300; smax = -1e300
+    for vv in (v0, v1):
+        p = srf.point_at(um, vv)
+        s = (p[0]-apt[0])*u[0] + (p[1]-apt[1])*u[1] + (p[2]-apt[2])*u[2]
+        smin = min(smin, s); smax = max(smax, s)
+    return smin, smax
+
+
+def _lines_closest_point(p1, d1, p2, d2, tol):
+    import math
+    u = _ssi_unit(d1); v = _ssi_unit(d2)
+    w0 = (p1[0]-p2[0], p1[1]-p2[1], p1[2]-p2[2])
+    a = _ssi_dot(u, u); b = _ssi_dot(u, v); c = _ssi_dot(v, v)
+    d = _ssi_dot(u, w0); e = _ssi_dot(v, w0)
+    den = a*c - b*b
+    if abs(den) < 1e-12:
+        return None
+    sc = (b*e - c*d) / den; tc = (a*e - b*d) / den
+    q1 = (p1[0]+sc*u[0], p1[1]+sc*u[1], p1[2]+sc*u[2])
+    q2 = (p2[0]+tc*v[0], p2[1]+tc*v[1], p2[2]+tc*v[2])
+    diff = (q1[0]-q2[0], q1[1]-q2[1], q1[2]-q2[2])
+    if math.sqrt(_ssi_dot(diff, diff)) > tol:
+        return None
+    return (0.5*(q1[0]+q2[0]), 0.5*(q1[1]+q2[1]), 0.5*(q1[2]+q2[2]))
+
+
+def _ssi_cylinder_sphere(cyl, sph):
+    """Coaxial cylinder/sphere -> 0, 1, or 2 exact circles. Returns None if the axes are not
+    coaxial (caller marches), else a list (possibly empty)."""
+    import math
+    kTol = 1e-6
+    P = cyl[1]; w = _ssi_unit(cyl[2]); rc = cyl[3]
+    C = sph[1]; R = sph[2]
+    if _point_axis_dist(P, w, C) > kTol:
+        return None
+    out = []
+    if R < rc - kTol:
+        return out
+    dist = math.sqrt(max(0.0, R*R - rc*rc))
+    xa, ya = _ortho_basis(w)
+    if dist <= kTol:
+        out.append(_exact_circle(C[0], C[1], C[2], xa, ya, rc))
+        return out
+    for s in (dist, -dist):
+        cc = (C[0]+s*w[0], C[1]+s*w[1], C[2]+s*w[2])
+        out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rc))
+    return out
+
+
+def _ssi_cylinder_cone(cyl, cone):
+    """Coaxial cylinder/cone -> 1 exact circle. Returns None if not coaxial (caller marches)."""
+    import math
+    kTol = 1e-6
+    Pc = cyl[1]; w = _ssi_unit(cyl[2]); rc = cyl[3]
+    apex = cone[1]; a = _ssi_unit(cone[2]); alpha = cone[3]
+    if not _axes_coaxial(Pc, w, apex, a, kTol):
+        return None
+    ta = math.tan(alpha)
+    if ta < 1e-9:
+        return None
+    s = rc / ta
+    out = []
+    if s < kTol:
+        return out
+    cc = (apex[0]+s*a[0], apex[1]+s*a[1], apex[2]+s*a[2])
+    xa, ya = _ortho_basis(a)
+    out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rc))
+    return out
+
+
+def _ssi_cone_sphere(cone, sph):
+    """Coaxial cone/sphere -> 1 or 2 exact circles. Returns None if not coaxial (caller marches)."""
+    import math
+    kTol = 1e-6
+    apex = cone[1]; a = _ssi_unit(cone[2]); alpha = cone[3]
+    C = sph[1]; R = sph[2]
+    if _point_axis_dist(apex, a, C) > kTol:
+        return None
+    dsign = _axial_coord(apex, a, C)
+    d = abs(dsign)
+    dir = (-a[0], -a[1], -a[2]) if (d > kTol and dsign < 0.0) else a
+    t = math.tan(alpha); t2 = t*t
+    A = 1.0 + t2; B = 2.0*t2*d; Cq = t2*d*d - R*R
+    disc = B*B - 4.0*A*Cq
+    out = []
+    if disc < -kTol:
+        return out
+    sq = math.sqrt(max(0.0, disc))
+    if sq <= kTol:
+        xs = [-B/(2.0*A)]
+    else:
+        xs = [(-B - sq)/(2.0*A), (-B + sq)/(2.0*A)]
+    xa, ya = _ortho_basis(a)
+    for x in xs:
+        sAx = d + x
+        if sAx < kTol:
+            continue
+        rr = t * sAx
+        if rr < kTol:
+            continue
+        cc = (apex[0]+sAx*dir[0], apex[1]+sAx*dir[1], apex[2]+sAx*dir[2])
+        out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rr))
+    return out
+
+
+def _ssi_cylinder_cylinder(sa, A, sb, B):
+    """Two cylinders: parallel -> 0/1/2 line segments (clipped to the shared axial span);
+    equal-radius skew/intersecting axes -> 2 exact ellipses. Returns None if not analytically
+    handled (caller marches)."""
+    import math
+    from .nurbscurve import NurbsCurve
+    kTol = 1e-6
+    P1 = A[1]; w1 = _ssi_unit(A[2]); R1 = A[3]
+    P2 = B[1]; w2 = _ssi_unit(B[2]); R2 = B[3]
+    cx = _ssi_cross(w1, w2)
+    sinmag = math.sqrt(_ssi_dot(cx, cx))
+    out = []
+    if sinmag <= kTol:
+        dline = _point_axis_dist(P1, w1, P2)
+        if dline <= kTol:
+            if abs(R1 - R2) <= kTol:
+                return None   # coincident axes, equal radius -> degenerate -> marcher
+            return out         # coaxial, different radius -> no intersection
+        off = _ssi_dot((P2[0]-P1[0], P2[1]-P1[1], P2[2]-P1[2]), w1)
+        P2p = (P2[0]-off*w1[0], P2[1]-off*w1[1], P2[2]-off*w1[2])
+        d = dline
+        if d > R1 + R2 + kTol:
+            return out
+        if d < abs(R1 - R2) - kTol:
+            return out
+        xdir = _ssi_unit((P2p[0]-P1[0], P2p[1]-P1[1], P2p[2]-P1[2]))
+        ydir = _ssi_unit(_ssi_cross(w1, xdir))
+        aa = (R1*R1 - R2*R2 + d*d) / (2.0*d)
+        h = math.sqrt(max(0.0, R1*R1 - aa*aa))
+        foot = (P1[0]+aa*xdir[0], P1[1]+aa*xdir[1], P1[2]+aa*xdir[2])
+        s0a, s1a = _cyl_span(sa, P1, w1)
+        s0b, s1b = _cyl_span(sb, P1, w1)
+        slo = max(s0a, s0b); shi = min(s1a, s1b)
+        if shi - slo <= kTol:
+            return out
+
+        def emit(bp):
+            e0 = (bp[0]+slo*w1[0], bp[1]+slo*w1[1], bp[2]+slo*w1[2])
+            e1 = (bp[0]+shi*w1[0], bp[1]+shi*w1[1], bp[2]+shi*w1[2])
+            ln = NurbsCurve.create(False, 1, [Point(e0[0], e0[1], e0[2]), Point(e1[0], e1[1], e1[2])])
+            ln.set_domain(0.0, 1.0)
+            out.append(ln)
+
+        if h <= kTol:
+            emit(foot)
+        else:
+            emit((foot[0]+h*ydir[0], foot[1]+h*ydir[1], foot[2]+h*ydir[2]))
+            emit((foot[0]-h*ydir[0], foot[1]-h*ydir[1], foot[2]-h*ydir[2]))
+        return out
+    Rmax = max(R1, R2)
+    if Rmax < 1e-12 or abs(R1 - R2) / Rmax > 1e-6:
+        return None
+    Pint = _lines_closest_point(P1, w1, P2, w2, kTol)
+    if Pint is None:
+        return None
+    R = 0.5 * (R1 + R2)
+    ang = math.acos(max(-1.0, min(1.0, _ssi_dot(w1, w2))))
+    sh = math.sin(0.5*ang); ch = math.cos(0.5*ang)
+    if sh < 1e-9 or ch < 1e-9:
+        return None
+    minor = _ssi_unit(cx)
+    maj1 = _ssi_unit((w1[0]+w2[0], w1[1]+w2[1], w1[2]+w2[2]))
+    maj2 = _ssi_unit((w1[0]-w2[0], w1[1]-w2[1], w1[2]-w2[2]))
+    out.append(_exact_ellipse(Pint[0], Pint[1], Pint[2], maj1, minor, R/sh, R))
+    out.append(_exact_ellipse(Pint[0], Pint[1], Pint[2], maj2, minor, R/ch, R))
+    return out
+
+
 def _analytic_ssi(a, b, tolerance):
     """Closed-form intersection for recognized quadric pairs (exact conics).
     Returns a list of (curve_3d, pcurve_a, pcurve_b), or None if the pair is
@@ -2572,21 +3067,43 @@ def _analytic_ssi(a, b, tolerance):
                 xa, ya = _ortho_basis(nu)
                 c3 = _exact_circle(cc[0], cc[1], cc[2], xa, ya, math.sqrt(rr2))
         c3_list = single(c3)
+    # Coaxial / canonical quadric pairs (exact conics from IntAna_QuadQuadGeo). Each helper
+    # returns None when the pair is recognized but not analytically handled (-> marcher), or a
+    # list (possibly empty = recognized, no intersection).
+    elif ra[0] == 'cylinder' and rb[0] == 'sphere':
+        c3_list = _ssi_cylinder_sphere(ra, rb)
+    elif ra[0] == 'sphere' and rb[0] == 'cylinder':
+        c3_list = _ssi_cylinder_sphere(rb, ra)
+    elif ra[0] == 'cylinder' and rb[0] == 'cone':
+        c3_list = _ssi_cylinder_cone(ra, rb)
+    elif ra[0] == 'cone' and rb[0] == 'cylinder':
+        c3_list = _ssi_cylinder_cone(rb, ra)
+    elif ra[0] == 'cone' and rb[0] == 'sphere':
+        c3_list = _ssi_cone_sphere(ra, rb)
+    elif ra[0] == 'sphere' and rb[0] == 'cone':
+        c3_list = _ssi_cone_sphere(rb, ra)
+    elif ra[0] == 'cylinder' and rb[0] == 'cylinder':
+        c3_list = _ssi_cylinder_cylinder(a, ra, b, rb)
     else:
         return None   # not an analytically-exact pair -> marcher
 
     if c3_list is None:
         return None   # recognized but not analytically handled -> marcher
 
-    # The 3D curves are exact; use the first pcurve piece on each surface (a
-    # curve crossing a surface seam pulls back to several UV pieces — c3 stays
-    # whole). Skip a curve whose pullback fails entirely.
+    # The 3D curves are exact; pull back onto each surface. Try the closed-form analytic pcurve
+    # first (OCCT ProjLib-style, no sampling -- e.g. a coaxial circle on a cone -> exact v=const
+    # line); fall back to iterative projection otherwise. A curve crossing a surface seam pulls
+    # back to several UV pieces (c3 stays whole); skip a curve whose pullback fails entirely.
     triples = []
     for c3 in c3_list:
-        pas = Closest.surface_curve(a, c3)
-        pbs = Closest.surface_curve(b, c3)
-        if pas and pbs:
-            triples.append((c3, pas[0], pbs[0]))
+        pa = _analytic_pcurve(a, ra, c3)
+        pb = _analytic_pcurve(b, rb, c3)
+        if pa is None or not pa.is_valid():
+            v = Closest.surface_curve(a, c3); pa = v[0] if v else None
+        if pb is None or not pb.is_valid():
+            v = Closest.surface_curve(b, c3); pb = v[0] if v else None
+        if pa is not None and pa.is_valid() and pb is not None and pb.is_valid():
+            triples.append((c3, pa, pb))
     return triples
 
 
@@ -2959,17 +3476,21 @@ def surface_surface(a, b, tolerance=None):
         if len(quad) < 4:
             continue
 
-        # Trace-level dedup against already kept traces
+        # Trace-level dedup against already kept traces. The tolerance must be tight relative to the
+        # spacing between DISTINCT intersection branches: two perpendicular cylinders (Steinmetz) have
+        # 4 arcs only ~1.4 apart at the 0.25/0.75 samples, so the old h_init*6 (~2.3) wrongly merged
+        # 3 of the 4 arcs into one. Use h_init*2 and scan EVERY kept point (a true duplicate lies
+        # within ~1 marching step everywhere; distinct branches do not).
         m = len(quad)
         trace_pts3 = [eval3_q(q) for q in quad]
-        dup_tol = h_init * 6.0
+        dup_tol = h_init * 2.0
         dup = False
         for other in kept_pts3:
             all_close = True
             for f in [0.25, 0.5, 0.75]:
                 cp = trace_pts3[int((m - 1) * f)]
                 dmin = dup_tol + 1.0
-                for k in range(0, len(other), 5):
+                for k in range(0, len(other), 1):
                     op = other[k]
                     dmin = min(dmin, math.sqrt((cp[0]-op[0])**2 + (cp[1]-op[1])**2 + (cp[2]-op[2])**2))
                 if dmin > dup_tol:

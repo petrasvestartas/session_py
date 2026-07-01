@@ -23,6 +23,20 @@ class CurveNurbsKnotStyle(IntEnum):
     ChordSquareRootPeriodic = 5  # Periodic + centripetal
 
 
+class CurveInterpStyle(IntEnum):
+    """End-tangent (boundary) condition for cubic interpolation.
+
+    Both styles share chord-length parameters and clamped knots; they differ only
+    in how the start/end tangents (and hence the 2nd/penultimate control points)
+    are estimated:
+      - Rhino: normalized Bessel tangents (matches Rhino / OpenNURBS).
+      - Occt:  un-normalized derivative of the cubic Lagrange polynomial through the
+               first/last 4 points (matches OCCT GeomAPI_Interpolate::BuildTangents).
+    """
+    Rhino = 0
+    Occt = 1
+
+
 def nurbsknot_count(order: int, cv_count: int) -> int:
     """Compute the number of nurbsknots in a nurbsknot vector.
     

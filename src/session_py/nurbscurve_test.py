@@ -50,7 +50,7 @@ def test_nurbscurve_constructor():
 def test_nurbscurve_create_interpolated():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbsknot import CurveNurbsKnotStyle
+    from session_py.nurbsknot import CurveNurbsKnotStyle, CurveInterpStyle
 
     points = [
         Point(14, 9, 0),
@@ -80,6 +80,16 @@ def test_nurbscurve_create_interpolated():
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(3), Point(24.678472471, 0.354555126, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(5), Point(39.626394361, 15.472490151, 0.0)))
 
+    # OCCT parity: with CurveInterpStyle.Occt the control points match
+    # OCCT GeomAPI_Interpolate exactly (oracle: validation/compare_interp.py).
+    co = NurbsCurve.create_interpolated(points, CurveNurbsKnotStyle.Chord, CurveInterpStyle.Occt)
+    MINI_CHECK(co.cv_count() == 7)
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(0), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(6), points[4]))
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(1), Point(17.3526678158, 24.4472657919, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(3), Point(24.7854378511, 2.1457823679, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(5), Point(39.1865250566, 18.5349257754, 0.0)))
+
     # Periodic closed curve
     closed_pts = [
         Point(4, 20, 0),
@@ -100,6 +110,44 @@ def test_nurbscurve_create_interpolated():
     MINI_CHECK(cp.degree() == 3)
     MINI_CHECK(cp.cv_count() == 13)
     MINI_CHECK(cp.is_closed())
+
+
+@MINI_TEST("NurbsCurve", "Create From Parameters")
+def test_nurbscurve_create_from_parameters():
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    # Mirrors compas_occt OCCNurbsCurve.from_parameters / from_points / from_circle.
+    # Validated bit-for-bit against OCCT (validation/compare_curve_eval.py).
+
+    # from_points: 4 control points, clamped cubic (knots [0,1] mults [4,4]).
+    p4 = [Point(0, 0, 0), Point(3, 6, 0), Point(6, -3, 3), Point(10, 0, 0)]
+    c = NurbsCurve.create_from_parameters(p4, [1.0, 1.0, 1.0, 1.0], [0.0, 1.0], [4, 4], 3)
+    MINI_CHECK(c.is_valid())
+    MINI_CHECK(c.degree() == 3)
+    MINI_CHECK(c.cv_count() == 4)
+    MINI_CHECK(not c.is_rational())
+    d0, d1 = c.domain()
+    MINI_CHECK(abs(d0 - 0.0) < 1e-12 and abs(d1 - 1.0) < 1e-12)
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), Point(0, 0, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(3), Point(10, 0, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(0.5), Point(4.625, 1.125, 1.125)))
+
+    # from_circle (radius 1): degree-2 rational, 9 poles, exact unit circle.
+    w = 0.5 * math.sqrt(2.0)
+    cpts = [Point(0, -1, 0), Point(-1, -1, 0), Point(-1, 0, 0), Point(-1, 1, 0), Point(0, 1, 0),
+            Point(1, 1, 0), Point(1, 0, 0), Point(1, -1, 0), Point(0, -1, 0)]
+    circle = NurbsCurve.create_from_parameters(
+        cpts, [1, w, 1, w, 1, w, 1, w, 1], [0.0, 0.25, 0.5, 0.75, 1.0], [3, 2, 2, 2, 3], 2)
+    MINI_CHECK(circle.is_valid())
+    MINI_CHECK(circle.degree() == 2)
+    MINI_CHECK(circle.cv_count() == 9)
+    MINI_CHECK(circle.is_rational())
+    MINI_CHECK(TOLERANCE.is_point_close(circle.point_at(0.5), Point(0, 1, 0)))
+    MINI_CHECK(TOLERANCE.is_point_close(circle.point_at(0.125), Point(-w, -w, 0)))
+    for k in range(17):
+        pp = circle.point_at(k / 16.0)
+        MINI_CHECK(abs(math.sqrt(pp[0] * pp[0] + pp[1] * pp[1]) - 1.0) < 1e-9)
 
 
 @MINI_TEST("NurbsCurve", "Create Fitted")
@@ -777,6 +825,49 @@ def test_nurbscurve_protobuf_roundtrip():
 
     MINI_CHECK(loaded_proto_string == curve)
     MINI_CHECK(loaded == curve)
+
+
+@MINI_TEST("NurbsCurve", "Curvature")
+def test_nurbscurve_curvature():
+    from session_py import NurbsCurve, Point
+    from session_py.primitives import Primitives
+
+    # A circle of radius R is an exact rational NURBS with constant curvature 1/R.
+    r = 2.0
+    circle = Primitives.circle(0.0, 0.0, 0.0, r)
+    t0, t1 = circle.domain()
+    for i in range(9):
+        t = t0 + (t1 - t0) * i / 8.0
+        MINI_CHECK(abs(circle.curvature_at(t) - 1.0 / r) < 1e-6)
+
+    # Closest point: an outside point projects radially onto the circle.
+    cp = circle.closest_point(Point(5, 0, 0))
+    MINI_CHECK(abs(cp[0] - 2.0) < 1e-5 and abs(cp[1]) < 1e-5 and abs(cp[2]) < 1e-5)
+
+    # Project onto a 3D interpolated curve (curve_closest_point.py). Reference from
+    # OCCT GeomAPI_ProjectPointOnCurve (validation/compare_curve_ops.py).
+    from session_py.nurbsknot import CurveNurbsKnotStyle, CurveInterpStyle
+    ipts = [Point(0, 0, 0), Point(3, 0, 2), Point(6, 0, -3), Point(8, 0, 0)]
+    ic = NurbsCurve.create_interpolated(ipts, CurveNurbsKnotStyle.Chord, CurveInterpStyle.Occt)
+    pc = ic.closest_point(Point(2, -1, 0))
+    MINI_CHECK(TOLERANCE.is_point_close(pc, Point(0.5808155659, 0.0, 0.9672315271)))
+
+    # Curve-curve closest (curve_closest_parameters_curve.py). Reference from
+    # OCCT GeomAPI_ExtremaCurveCurve (u=0.475768, v=0.336691).
+    c0 = NurbsCurve.create_from_parameters(
+        [Point(0, 0, 0), Point(3, 6, 0), Point(6, -3, 3), Point(10, 0, 0)], [1, 1, 1, 1], [0, 1], [4, 4], 3)
+    c1 = NurbsCurve.create_from_parameters(
+        [Point(6, -3, 0), Point(3, 1, 0), Point(6, 6, 3), Point(3, 12, 0)], [1, 1, 1, 1], [0, 1], [4, 4], 3)
+    (u, v), d = c0.closest_parameters_curve(c1, return_distance=True)
+    MINI_CHECK(abs(u - 0.4757682937) < 1e-6 and abs(v - 0.3366914716) < 1e-6)
+    (pa, pb), _ = c0.closest_points_curve(c1, return_distance=True)
+    MINI_CHECK(TOLERANCE.is_point_close(pa, Point(4.389607399, 1.285537564, 1.067964425)))
+    MINI_CHECK(TOLERANCE.is_point_close(pb, Point(4.552264625, 1.380381100, 0.676740741)))
+
+    # A straight line has zero curvature.
+    line_pts = [Point(0, 0, 0), Point(1, 0, 0), Point(2, 0, 0), Point(3, 0, 0)]
+    line = NurbsCurve.create(False, 1, line_pts)
+    MINI_CHECK(line.curvature_at(line.domain_middle()) < 1e-9)
 
 
 if __name__ == "__main__":

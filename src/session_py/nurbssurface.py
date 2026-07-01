@@ -225,6 +225,61 @@ class NurbsSurface:
                 surf.set_cv(i, j, points[i * cv_count_v + j])
         return surf
 
+    @staticmethod
+    def create_from_parameters(points, weights, knots_u, knots_v, mults_u, mults_v,
+                               degree_u, degree_v, periodic_u=False, periodic_v=False):
+        """Create a NURBS surface from explicit parameters (OCCT / compas_occt convention:
+        distinct knots + per-knot multiplicities, per direction). Mirrors
+        OCCNurbsSurface.from_parameters and underlies from_points / from_meshgrid.
+
+        `points` and `weights` follow the compas grid convention: a list of v-rows, each
+        with u columns, i.e. points[iv][iu]. The internal (OpenNURBS) knot vectors are the
+        expanded full knot vectors with first and last entries dropped; the domains become
+        [knots_u[0], knots_u[-1]] x [knots_v[0], knots_v[-1]].
+        """
+        nv = len(points)
+        nu = len(points[0]) if nv else 0
+        order_u = degree_u + 1
+        order_v = degree_v + 1
+        if nu < order_u or nv < order_v:
+            return NurbsSurface()
+        if periodic_u or periodic_v:
+            return NurbsSurface()  # periodic from_parameters not yet supported
+        if len(knots_u) != len(mults_u) or len(knots_v) != len(mults_v):
+            return NurbsSurface()
+
+        rational = any(abs(w - 1.0) > Tolerance.ZERO_TOLERANCE for row in weights for w in row)
+
+        def expand(knots, mults):
+            full = []
+            for v, m in zip(knots, mults):
+                full.extend([float(v)] * int(m))
+            return full
+
+        full_u = expand(knots_u, mults_u)   # len nu + order_u
+        full_v = expand(knots_v, mults_v)   # len nv + order_v
+        kc_u = order_u + nu - 2
+        kc_v = order_v + nv - 2
+        if len(full_u) != kc_u + 2 or len(full_v) != kc_v + 2:
+            return NurbsSurface()
+
+        surf = NurbsSurface.create_raw(3, rational, order_u, order_v, nu, nv)
+        if surf is None:
+            return NurbsSurface()
+        surf.m_nurbsknot[0] = np.array(full_u[1:kc_u + 1], dtype=np.float64)
+        surf.m_nurbsknot[1] = np.array(full_v[1:kc_v + 1], dtype=np.float64)
+
+        # i in u (0..nu-1), j in v (0..nv-1); compas grid is points[v][u].
+        for i in range(nu):
+            for j in range(nv):
+                p = points[j][i]
+                if rational:
+                    w = weights[j][i]
+                    surf.set_cv_4d(i, j, p[0] * w, p[1] * w, p[2] * w, w)
+                else:
+                    surf.set_cv(i, j, Point(p[0], p[1], p[2]))
+        return surf
+
     def _create_impl(self, dimension: int, is_rational: bool,
                order0: int, order1: int,
                cv_count0: int, cv_count1: int) -> bool:
@@ -1363,6 +1418,63 @@ class NurbsSurface:
     # EVALUATION
     ###########################################################################
     
+    def closest_parameters(self, test_point: Point):
+        """Parameters (u, v) of the closest point on the surface to test_point.
+
+        Matches OCCT GeomAPI_ProjectPointOnSurface.
+        """
+        from session_py.closest import Closest
+        u, v, _dist = Closest.surface_point(self, test_point)
+        return (u, v)
+
+    def closest_point(self, test_point: Point) -> Point:
+        """Closest point on the surface to test_point."""
+        u, v = self.closest_parameters(test_point)
+        return self.point_at(u, v)
+
+    def _fundamental_forms(self, u: float, v: float):
+        """First/second fundamental forms (E,F,G,L,M,N) at (u,v); None if degenerate."""
+        d = self.evaluate(u, v, 2)
+        if len(d) < 6:
+            return None
+        # evaluate() result order is [S, Sv, Svv, Su, Suv, Suu].
+        sv, svv, su, suv, suu = d[1], d[2], d[3], d[4], d[5]
+        cr = su.cross(sv)
+        if cr.magnitude() < 1e-10:
+            return None
+        nrm = cr.normalized()
+        E = su.dot(su); F = su.dot(sv); G = sv.dot(sv)
+        L = suu.dot(nrm); M = suv.dot(nrm); N = svv.dot(nrm)
+        return (E, F, G, L, M, N)
+
+    def gaussian_curvature(self, u: float, v: float) -> float:
+        """Gaussian curvature K = (LN - M^2)/(EG - F^2) at (u,v).
+
+        Matches OCCT GeomLProp_SLProps.GaussianCurvature.
+        """
+        ff = self._fundamental_forms(u, v)
+        if ff is None:
+            return 0.0
+        E, F, G, L, M, N = ff
+        denom = E * G - F * F
+        if abs(denom) < 1e-10:
+            return 0.0
+        return (L * N - M * M) / denom
+
+    def mean_curvature(self, u: float, v: float) -> float:
+        """Mean curvature H = (EN - 2FM + GL)/(2(EG - F^2)) at (u,v).
+
+        Matches OCCT GeomLProp_SLProps.MeanCurvature (magnitude; sign follows Su x Sv).
+        """
+        ff = self._fundamental_forms(u, v)
+        if ff is None:
+            return 0.0
+        E, F, G, L, M, N = ff
+        denom = E * G - F * F
+        if abs(denom) < 1e-10:
+            return 0.0
+        return (E * N - 2.0 * F * M + G * L) / (2.0 * denom)
+
     def point_at(self, u: float, v: float) -> Point:
         """Evaluate point on surface at parameter (u, v).
         
@@ -1502,6 +1614,97 @@ class NurbsSurface:
         j = 0 if v_end == 0 else self.m_cv_count[1] - 1
         return self.get_cv(i, j)
     
+    def frame_at(self, u: float, v: float) -> 'Plane':
+        """Local frame at (u, v): origin = S(u,v), x-axis = dS/du, y-axis = dS/dv.
+
+        Mirrors OCCNurbsSurface.frame_at (which returns a compas Frame from the two
+        surface tangents). The returned Plane orthonormalizes the axes; its normal
+        (z-axis) equals normal_at(u, v).
+        """
+        d = self.evaluate(u, v, 1)
+        if len(d) < 3:
+            return Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
+        origin = Point(d[0][0], d[0][1], d[0][2])
+        su = d[2]  # dS/du
+        sv = d[1]  # dS/dv
+        return Plane(origin, Vector(su[0], su[1], su[2]), Vector(sv[0], sv[1], sv[2]))
+
+    def intersections_with_line(self, line) -> List[Point]:
+        """Intersection points of an (infinite) line with the surface.
+
+        Mirrors OCCNurbsSurface.intersections_with_line (OCCT GeomAPI_IntCS). Solves
+        S(u,v) on the line by Newton on F(u,v) = (n1.(S-P0), n2.(S-P0)) where n1,n2 span
+        the plane perpendicular to the line direction; seeded by a dense (u,v) grid.
+        """
+        if not self.is_valid():
+            return []
+        p0 = line.start()
+        pe = line.end()
+        d = Vector(pe[0] - p0[0], pe[1] - p0[1], pe[2] - p0[2])
+        dl = d.magnitude()
+        if dl < 1e-14:
+            return []
+        d = d / dl
+        # Two unit vectors spanning the plane perpendicular to d.
+        helper = Vector(1, 0, 0) if abs(d[0]) < 0.9 else Vector(0, 1, 0)
+        n1 = d.cross(helper)
+        n1 = n1 / n1.magnitude()
+        n2 = d.cross(n1)
+        n2 = n2 / n2.magnitude()
+
+        u0, u1 = self.domain(0)
+        v0, v1 = self.domain(1)
+        nu = max(12, self.cv_count(0) * 4)
+        nv = max(12, self.cv_count(1) * 4)
+
+        def f_of(u, v):
+            p = self.point_at(u, v)
+            rx = p[0] - p0[0]; ry = p[1] - p0[1]; rz = p[2] - p0[2]
+            return (n1[0]*rx + n1[1]*ry + n1[2]*rz, n2[0]*rx + n2[1]*ry + n2[2]*rz, p)
+
+        results = []
+        seen = []
+        for a in range(nu + 1):
+            for b in range(nv + 1):
+                u = u0 + (u1 - u0) * a / nu
+                v = v0 + (v1 - v0) * b / nv
+                ok = True
+                for _ in range(40):
+                    der = self.evaluate(u, v, 1)
+                    if len(der) < 3:
+                        ok = False; break
+                    p = der[0]; sv = der[1]; su = der[2]
+                    rx = p[0] - p0[0]; ry = p[1] - p0[1]; rz = p[2] - p0[2]
+                    f1 = n1[0]*rx + n1[1]*ry + n1[2]*rz
+                    f2 = n2[0]*rx + n2[1]*ry + n2[2]*rz
+                    if abs(f1) < 1e-12 and abs(f2) < 1e-12:
+                        break
+                    j11 = n1[0]*su[0] + n1[1]*su[1] + n1[2]*su[2]
+                    j12 = n1[0]*sv[0] + n1[1]*sv[1] + n1[2]*sv[2]
+                    j21 = n2[0]*su[0] + n2[1]*su[1] + n2[2]*su[2]
+                    j22 = n2[0]*sv[0] + n2[1]*sv[1] + n2[2]*sv[2]
+                    det = j11*j22 - j12*j21
+                    if abs(det) < 1e-14:
+                        ok = False; break
+                    du = -(j22*f1 - j12*f2) / det
+                    dv = -(-j21*f1 + j11*f2) / det
+                    u += du; v += dv
+                    if u < u0 or u > u1 or v < v0 or v > v1:
+                        ok = False; break
+                    if abs(du) < 1e-13 and abs(dv) < 1e-13:
+                        break
+                if not ok:
+                    continue
+                f1, f2, p = f_of(u, v)
+                if abs(f1) > 1e-7 or abs(f2) > 1e-7:
+                    continue
+                pt = Point(p[0], p[1], p[2])
+                if any(pt.distance(q) < 1e-6 for q in seen):
+                    continue
+                seen.append(pt)
+                results.append(pt)
+        return results
+
     def normal_at(self, u: float, v: float) -> Vector:
         """Get normal vector at parameter (u, v).
         
@@ -1600,6 +1803,17 @@ class NurbsSurface:
                     a[0] -= c * prev[0]
                     a[1] -= c * prev[1]
                     a[2] -= c * prev[2]
+            # Mixed terms (NURBS Book A4.4): -sum_{i=1}^{k} sum_{j=1}^{l} C(k,i) C(l,j) w[i][j] SKL[k-i][l-j].
+            # Previously omitted -> rational mixed derivatives (e.g. Suv) were wrong.
+            from math import comb
+            for i in range(1, k + 1):
+                for j in range(1, l + 1):
+                    prev = aders.get((k - i, l - j))
+                    if prev is not None:
+                        c = comb(k, i) * comb(l, j) * wders.get((i, j), 0)
+                        a[0] -= c * prev[0]
+                        a[1] -= c * prev[1]
+                        a[2] -= c * prev[2]
             v = Vector(a[0] / w00, a[1] / w00, a[2] / w00)
             aders[(k, l)] = v
             result.append(v)

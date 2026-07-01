@@ -2,6 +2,7 @@
 
 from typing import Tuple
 import math
+import numpy as np
 
 from session_py.point import Point
 from session_py.vector import Vector
@@ -44,7 +45,10 @@ class Closest:
         t0 = max(t0, domain_start)
         t1 = min(t1, domain_end)
 
-        num_samples = max(10, curve.degree() * 2)
+        # Dense seed grid: sample every knot span several times so the global
+        # minimum's basin is captured before Newton refines (matches OCCT's robust
+        # initial sampling in GeomAPI_ProjectPointOnCurve).
+        num_samples = max(50, curve.cv_count() * 10)
         dt = (t1 - t0) / num_samples
 
         best_t = t0
@@ -57,38 +61,37 @@ class Closest:
                 best_dist = dist
                 best_t = t
 
-        max_iterations = 20
-        step_tolerance = (t1 - t0) * 1e-10
+        max_iterations = 32
+        step_tolerance = (t1 - t0) * 1e-12
 
         t = best_t
 
+        # Newton on h(t) = (C(t) - P) . C'(t)  (= 0 at a foot of perpendicular).
+        # h'(t) = |C'(t)|^2 + (C(t) - P) . C''(t).  Use the RAW derivatives C', C''.
         for _ in range(max_iterations):
-            pt = curve.point_at(t)
-            tangent = curve.tangent_at(t)
+            derivs = curve.evaluate(t, 2)
+            if len(derivs) < 3:
+                break
+            pt = derivs[0]
+            d1 = derivs[1]
+            d2 = derivs[2]
 
-            delta = Vector(
-                test_point[0] - pt[0],
-                test_point[1] - pt[1],
-                test_point[2] - pt[2]
-            )
+            rx = pt[0] - test_point[0]
+            ry = pt[1] - test_point[1]
+            rz = pt[2] - test_point[2]
 
-            f = -delta.dot(tangent)
+            f = rx * d1[0] + ry * d1[1] + rz * d1[2]
 
             if abs(f) < step_tolerance:
                 break
 
-            derivs = curve.evaluate(t, 2)
-            if len(derivs) < 3:
+            df = (d1[0] * d1[0] + d1[1] * d1[1] + d1[2] * d1[2]
+                  + rx * d2[0] + ry * d2[1] + rz * d2[2])
+
+            if abs(df) < 1e-14:
                 break
 
-            d2 = Vector(derivs[2][0], derivs[2][1], derivs[2][2])
-            tangent_mag = tangent.magnitude()
-            df = delta.dot(d2) - tangent_mag * tangent_mag
-
-            if abs(df) < 1e-12:
-                break
-
-            dt_step = f / df
+            dt_step = -f / df
 
             if abs(dt_step) > (t1 - t0) * 0.5:
                 dt_step = math.copysign((t1 - t0) * 0.5, dt_step)
@@ -116,6 +119,65 @@ class Closest:
             final_dist = dist_end
 
         return (t, final_dist)
+
+    @staticmethod
+    def curve_curve(curve0, curve1) -> Tuple[float, float, float]:
+        """Closest approach between two NURBS curves (dense grid seed + 2D Newton).
+
+        Minimizes f(u,v) = |C0(u) - C1(v)|^2. Returns (u, v, distance).
+        Matches OCCT GeomAPI_ExtremaCurveCurve.
+        """
+        if not curve0.is_valid() or not curve1.is_valid():
+            return (0.0, 0.0, float('inf'))
+
+        u0, u1 = curve0.domain()
+        v0, v1 = curve1.domain()
+        n0 = max(40, curve0.cv_count() * 8)
+        n1 = max(40, curve1.cv_count() * 8)
+
+        us = np.linspace(u0, u1, n0 + 1)
+        vs = np.linspace(v0, v1, n1 + 1)
+        p0 = curve0._batch_point_at(us)   # (n0+1, 3)
+        p1 = curve1._batch_point_at(vs)   # (n1+1, 3)
+        # Pairwise squared distances: (n0+1, n1+1)
+        diff = p0[:, None, :] - p1[None, :, :]
+        d2 = np.sum(diff * diff, axis=2)
+        i, j = np.unravel_index(int(np.argmin(d2)), d2.shape)
+        u, v = float(us[i]), float(vs[j])
+
+        for _ in range(64):
+            e0 = curve0.evaluate(u, 2)
+            e1 = curve1.evaluate(v, 2)
+            c0, c0p, c0pp = e0[0], e0[1], e0[2]
+            c1, c1p, c1pp = e1[0], e1[1], e1[2]
+            rx = c0[0] - c1[0]; ry = c0[1] - c1[1]; rz = c0[2] - c1[2]
+
+            gu = rx * c0p[0] + ry * c0p[1] + rz * c0p[2]          # 0.5 df/du
+            gv = -(rx * c1p[0] + ry * c1p[1] + rz * c1p[2])        # 0.5 df/dv
+
+            huu = (c0p[0] ** 2 + c0p[1] ** 2 + c0p[2] ** 2
+                   + rx * c0pp[0] + ry * c0pp[1] + rz * c0pp[2])
+            huv = -(c0p[0] * c1p[0] + c0p[1] * c1p[1] + c0p[2] * c1p[2])
+            hvv = (c1p[0] ** 2 + c1p[1] ** 2 + c1p[2] ** 2
+                   - (rx * c1pp[0] + ry * c1pp[1] + rz * c1pp[2]))
+
+            det = huu * hvv - huv * huv
+            if abs(det) < 1e-14:
+                break
+            du = -(hvv * gu - huv * gv) / det
+            dv = -(-huv * gu + huu * gv) / det
+
+            # Limit step to half the domain to stay in the basin.
+            du = math.copysign(min(abs(du), (u1 - u0) * 0.5), du) if du else 0.0
+            dv = math.copysign(min(abs(dv), (v1 - v0) * 0.5), dv) if dv else 0.0
+
+            u = min(max(u + du, u0), u1)
+            v = min(max(v + dv, v0), v1)
+            if max(abs(du), abs(dv)) < 1e-13:
+                break
+
+        dist = curve0.point_at(u).distance(curve1.point_at(v))
+        return (u, v, dist)
 
     @staticmethod
     def line_point(line: Line, test_point: Point) -> Tuple[Point, float, float]:
