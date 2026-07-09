@@ -1244,6 +1244,11 @@ def test_mesh_geometric_properties():
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[18], Vector(-0.9341723589627158,  0.0,                -0.3568220897730899)))
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[19], Vector(-0.9341723589627158,  0.0,                 0.3568220897730899)))
 
+    # compute vertex normals
+    mesh.compute_vertex_normals()
+    for v in mesh.vertices():
+        stored = mesh.vertex[v].normal()
+        MINI_CHECK(TOLERANCE.is_vector_close(Vector(stored[0], stored[1], stored[2]), vertex_normals[v]))
 
     # volume
     volume = mesh.volume()

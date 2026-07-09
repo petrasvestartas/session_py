@@ -1461,7 +1461,7 @@ class Mesh:
 
             if is_new_edge:
                 self.halfedge[v][u] = None
-                self._linecolors.append(Color.white())
+                self._linecolors.append(Color.black())
                 self._widths.append(1.0)
 
         return face_key
@@ -2342,6 +2342,12 @@ class Mesh:
             if length > Tolerance.ZERO_TOLERANCE:
                 normals[vk] = Vector(v[0]/length, v[1]/length, v[2]/length)
         return normals
+
+    def compute_vertex_normals(self):
+        """Compute area-weighted vertex normals and store them on each vertex."""
+        normals = self.vertex_normals()
+        for key, n in normals.items():
+            self.vertex[key].set_normal(n[0], n[1], n[2])
 
     def volume(self) -> float:
         total = 0.0
