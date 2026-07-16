@@ -22,8 +22,10 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.20.0",
-    "protobuf>=6.33.5",
-    "grpcio-tools>=1.68.0",
+    "protobuf>=7.35.0",
+    # exact pin: CI diffs regenerated *_pb2.py against committed files, and the
+    # version banner protoc stamps into them follows this package's version
+    "grpcio-tools==1.82.1",
 ]
 
 [project.optional-dependencies]
