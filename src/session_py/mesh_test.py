@@ -1853,5 +1853,20 @@ def test_mesh_edges_where_predicate():
     MINI_CHECK(big[0] == (0, 1))
 
 
+
+@MINI_TEST("Mesh", "Refresh Guid")
+def test_mesh_refresh_guid():
+    from session_py import Mesh
+    import copy as copy_module
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    original = mesh.guid
+    copy = copy_module.deepcopy(mesh)
+
+    MINI_CHECK(copy.guid == original)
+    copy.refresh_guid()
+    MINI_CHECK(copy.guid != original)
+    MINI_CHECK(mesh.guid == original)
+
+
 if __name__ == "__main__":
     run_all(language="python")

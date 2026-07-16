@@ -1,10 +1,10 @@
 {
   "type": "Session",
-  "guid": "e895b31b-205a-44bb-8d14-7fc84e977847",
+  "guid": "f944a2f3-1b87-41b4-9605-bde9d1a1e252",
   "name": "my_session",
   "objects": {
     "type": "Objects",
-    "guid": "4d3d0ff5-5f95-4643-a9a0-349cab49bd02",
+    "guid": "e9c8e309-2ee2-45fa-8cde-aa1a6eda545e",
     "name": "my_objects",
     "points": [],
     "lines": [],
@@ -20,7 +20,7 @@
     "components": [
       {
         "type": "Box",
-        "guid": "578912f5-9600-4fa5-a767-e1b0835766b9",
+        "guid": "773e9c8c-faa6-428c-8cb5-bdda36c76e7f",
         "name": "my_box",
         "width": 3.0,
         "height": 5.0
@@ -29,24 +29,24 @@
   },
   "tree": {
     "type": "Tree",
-    "guid": "d0a71820-b4f5-457d-89d3-eb5319f23f86",
+    "guid": "14021bd7-9214-4926-99e1-2d4686678b4c",
     "name": "my_session_tree",
     "root": {
       "type": "TreeNode",
-      "guid": "1f7f6494-1c6a-4024-bb64-b29113292ddb",
+      "guid": "25d88f9b-77af-4964-a693-b3e75ef89cdb",
       "name": "my_session",
       "children": []
     }
   },
   "graph": {
     "type": "Graph",
-    "guid": "73e12e2b-2bea-41c0-9b55-a1f5cf604562",
+    "guid": "a22f28ea-eca0-46ef-849d-06ee1462a0c6",
     "name": "my_session_graph",
     "vertices": [
       {
         "type": "Vertex",
-        "guid": "460ddd05-fdea-4c68-b173-2202876de29f",
-        "name": "578912f5-9600-4fa5-a767-e1b0835766b9",
+        "guid": "d50a3e30-f3e3-4389-b227-61ea07fef4cd",
+        "name": "773e9c8c-faa6-428c-8cb5-bdda36c76e7f",
         "attribute": "component_my_box",
         "index": 0
       }

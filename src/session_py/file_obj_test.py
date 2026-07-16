@@ -49,5 +49,25 @@ def test_write_read_roundtrip():
     os.remove(temp_file)
 
 
+@MINI_TEST("FileObj", "String Roundtrip")
+def test_string_roundtrip():
+    from session_py import Mesh, Point
+    from session_py.file_obj import read_file_obj_from_str, write_file_obj_to_string
+    from session_py.tolerance import TOLERANCE
+    original_mesh = Mesh()
+    v0 = original_mesh.add_vertex(Point(0.0, 0.0, 0.0))
+    v1 = original_mesh.add_vertex(Point(1.0, 0.0, 0.0))
+    v2 = original_mesh.add_vertex(Point(0.0, 1.0, 0.0))
+    v3 = original_mesh.add_vertex(Point(0.0, 0.0, 1.0))
+    original_mesh.add_face([v0, v1, v2])
+    original_mesh.add_face([v0, v1, v3])
+    s = write_file_obj_to_string(original_mesh)
+    loaded_mesh = read_file_obj_from_str(s)
+
+    MINI_CHECK(loaded_mesh.number_of_vertices() == original_mesh.number_of_vertices())
+    MINI_CHECK(loaded_mesh.number_of_faces() == original_mesh.number_of_faces())
+    MINI_CHECK(TOLERANCE.is_close(loaded_mesh.area(), original_mesh.area()))
+
+
 if __name__ == "__main__":
     run_all("python")

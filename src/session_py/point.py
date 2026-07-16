@@ -54,6 +54,10 @@ class Point:
     def guid(self, value: str):
         self._guid = value
 
+    def refresh_guid(self):
+        """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
+        self._guid = None
+
     @property
     def pointcolor(self):
         if self._pointcolor is None:
