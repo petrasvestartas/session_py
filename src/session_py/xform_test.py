@@ -492,6 +492,44 @@ def test_xform_inverse():
     MINI_CHECK(prod.is_identity())
 
 
+@MINI_TEST("Xform", "Transform Point")
+def test_xform_transform_point():
+    from session_py import Xform
+    from session_py import Point
+
+    t = Xform.translation(10.0, 20.0, 30.0)
+    s = Xform.scale_xyz(2.0, 3.0, 4.0)
+    composite = t * s
+    p = composite.transform_point(Point(1.0, 1.0, 1.0))
+    MINI_CHECK(TOLERANCE.is_point_close(p, Point(12.0, 23.0, 34.0)))
+
+    pr = Xform.identity()
+    pr.m[0] = 1.2
+    pr.m[5] = 0.8
+    pr.m[10] = 1.1
+    pr.m[14] = 0.5
+    pr.m[11] = -1.0
+    pr.m[15] = 0.0
+    q = pr.transform_point(Point(1.0, 1.0, 2.0))
+    MINI_CHECK(TOLERANCE.is_point_close(q, Point(-0.6, -0.4, -1.35)))
+
+
+@MINI_TEST("Xform", "Transform Vector")
+def test_xform_transform_vector():
+    from session_py import Xform
+    from session_py import Vector
+
+    t = Xform.translation(10.0, 20.0, 30.0)
+    s = Xform.scale_xyz(2.0, 3.0, 4.0)
+    composite = t * s
+    v = composite.transform_vector(Vector(1.0, 1.0, 1.0))
+    MINI_CHECK(TOLERANCE.is_vector_close(v, Vector(2.0, 3.0, 4.0)))
+
+    r = Xform.rotation_z(90.0, True)
+    u = r.transform_vector(Vector.x_axis())
+    MINI_CHECK(TOLERANCE.is_vector_close(u, Vector.y_axis()))
+
+
 @MINI_TEST("Xform", "To Cols")
 def test_xform_to_cols():
     from session_py import Xform

@@ -332,6 +332,19 @@ def test_session_ray_cast():
 
     MINI_CHECK(len(hits) >= 1)
 
+    from session_py import Xform
+    placed = Mesh()
+    placed.add_vertex(Point(-1.0, -1.0, 0.0), 0)
+    placed.add_vertex(Point(1.0, -1.0, 0.0), 1)
+    placed.add_vertex(Point(0.0, 1.0, 0.0), 2)
+    placed.add_face([0, 1, 2])
+    placed.xform = Xform.translation(100.0, 0.0, 0.0)
+    session.add_mesh(placed)
+    hits2 = session.ray_cast(Point(100.0, 0.0, 2.0), Vector(0.0, 0.0, -1.0))
+
+    MINI_CHECK(len(hits2) >= 1)
+    MINI_CHECK(TOLERANCE.is_close(hits2[0].point[0], 100.0))
+
 
 @MINI_TEST("Session", "Get Object")
 def test_session_get_object():

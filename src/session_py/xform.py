@@ -669,6 +669,26 @@ class Xform:
         return xform
 
     ###########################################################################################
+    # Apply Transformations
+    ###########################################################################################
+
+    def transform_point(self, p):
+        x = self.m[0] * p[0] + self.m[4] * p[1] + self.m[8] * p[2] + self.m[12]
+        y = self.m[1] * p[0] + self.m[5] * p[1] + self.m[9] * p[2] + self.m[13]
+        z = self.m[2] * p[0] + self.m[6] * p[1] + self.m[10] * p[2] + self.m[14]
+        w = self.m[3] * p[0] + self.m[7] * p[1] + self.m[11] * p[2] + self.m[15]
+        from .point import Point
+        if abs(w) < 1e-12:
+            return Point(x, y, z)
+        return Point(x / w, y / w, z / w)
+
+    def transform_vector(self, v):
+        x = self.m[0] * v[0] + self.m[4] * v[1] + self.m[8] * v[2]
+        y = self.m[1] * v[0] + self.m[5] * v[1] + self.m[9] * v[2]
+        z = self.m[2] * v[0] + self.m[6] * v[1] + self.m[10] * v[2]
+        return Vector(x, y, z)
+
+    ###########################################################################################
     # Details
     ###########################################################################################
 

@@ -366,9 +366,17 @@ class Session:
         if not geometry:
             return False
 
-        # Remove from points collection
-        if isinstance(geometry, Point):
-            self.objects.points.remove(geometry)
+        # Remove from all object collections
+        self.objects.points = [p for p in self.objects.points if p.guid != guid]
+        self.objects.lines = [l for l in self.objects.lines if l.guid != guid]
+        self.objects.polylines = [p for p in self.objects.polylines if p.guid != guid]
+        self.objects.planes = [p for p in self.objects.planes if p.guid != guid]
+        self.objects.bboxes = [b for b in self.objects.bboxes if b.guid != guid]
+        self.objects.meshes = [m for m in self.objects.meshes if m.guid != guid]
+        self.objects.pointclouds = [p for p in self.objects.pointclouds if p.guid != guid]
+        self.objects.nurbscurves = [c for c in self.objects.nurbscurves if c.guid != guid]
+        self.objects.nurbssurfaces = [s for s in self.objects.nurbssurfaces if s.guid != guid]
+        self.objects.breps = [b for b in self.objects.breps if b.guid != guid]
 
         # Remove from lookup table
         del self.lookup[guid]
@@ -410,6 +418,9 @@ class Session:
         from .pointcloud import PointCloud
         from .mesh import Mesh
         from .plane import Plane
+        from .brep import BRep
+        from .nurbscurve import NurbsCurve
+        from .nurbssurface import NurbsSurface
 
         if isinstance(geometry, Point):
             return OBB.from_point(geometry, inflate)
@@ -421,8 +432,8 @@ class Session:
         elif isinstance(geometry, PointCloud):
             return OBB.from_points(geometry.points, inflate)
         elif isinstance(geometry, Mesh):
-            # Extract vertices from mesh
-            points = [v.position() for v in geometry.vertex.values()]
+            # Extract vertices from mesh; xform is the placement, so bake it
+            points = [geometry.xform.transform_point(v.position()) for v in geometry.vertex.values()]
             if not points:
                 return OBB.from_point(Point(0, 0, 0), inflate)
             return OBB.from_points(points, inflate)
@@ -445,6 +456,41 @@ class Session:
         elif isinstance(geometry, Plane):
             # Create bounded box around plane origin
             return OBB.from_point(geometry.origin, inflate * 10.0)
+        elif isinstance(geometry, NurbsCurve):
+            points = []
+            for i in range(geometry.cv_count()):
+                p = geometry.get_cv(i)
+                if p is not None:
+                    points.append(p)
+            if not points:
+                return OBB.from_point(Point(0, 0, 0), inflate)
+            return OBB.from_points(points, inflate)
+        elif isinstance(geometry, NurbsSurface):
+            points = []
+            for i in range(geometry.cv_count_dir(0)):
+                for j in range(geometry.cv_count_dir(1)):
+                    p = geometry.get_cv(i, j)
+                    if p is not None:
+                        points.append(p)
+            if not points:
+                return OBB.from_point(Point(0, 0, 0), inflate)
+            return OBB.from_points(points, inflate)
+        elif isinstance(geometry, BRep):
+            points = [geometry.xform.transform_point(p) for p in geometry.m_vertices]
+            # Sample surface points to cover curved surfaces (e.g. sphere with only pole vertices)
+            for srf in geometry.m_surfaces:
+                u0, u1 = srf.domain(0)
+                v0, v1 = srf.domain(1)
+                for ui in range(3):
+                    for vi in range(3):
+                        u = u0 + (u1 - u0) * ui / 2.0
+                        v = v0 + (v1 - v0) * vi / 2.0
+                        p = srf.point_at(u, v)
+                        if p is not None:
+                            points.append(geometry.xform.transform_point(p))
+            if not points:
+                return OBB.from_point(Point(0, 0, 0), inflate)
+            return OBB.from_points(points, inflate)
         else:
             from .element import Element
             if isinstance(geometry, Element):
@@ -592,9 +638,16 @@ class Session:
                 if best_p is not None:
                     hit_point = best_p
             elif isinstance(geom, Mesh):
-                pts = ray_mesh_bvh(ray_line, geom, 1e-6, False)
-                if pts:
-                    hit_point = pts[0]
+                # xform is the placement: cast in the mesh's LOCAL frame, return a WORLD hit
+                inv = geom.xform.inverse()
+                if inv is not None:
+                    local_ray = Line.from_points(
+                        inv.transform_point(ray_line.start()),
+                        inv.transform_point(ray_line.end()),
+                    )
+                    pts = ray_mesh_bvh(local_ray, geom, 1e-6, False)
+                    if pts:
+                        hit_point = geom.xform.transform_point(pts[0])
             elif isinstance(geom, Point):
                 ok, hp, t = point_hit(geom)
                 if ok:
