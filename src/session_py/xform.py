@@ -10,7 +10,6 @@ from .vector import Vector
 
 
 class Xform:
-    _identity_cache = None
 
     ###########################################################################################
     # Constructors
@@ -80,9 +79,7 @@ class Xform:
 
     @staticmethod
     def identity():
-        if Xform._identity_cache is None:
-            Xform._identity_cache = Xform()
-        return Xform._identity_cache
+        return Xform()
 
     @staticmethod
     def from_matrix(m):
@@ -676,53 +673,41 @@ class Xform:
     ###########################################################################################
 
     def inverse(self) -> Optional["Xform"]:
-        a00 = self.m[0]
-        a01 = self.m[4]
-        a02 = self.m[8]
-        a10 = self.m[1]
-        a11 = self.m[5]
-        a12 = self.m[9]
-        a20 = self.m[2]
-        a21 = self.m[6]
-        a22 = self.m[10]
-        det = (
-            a00 * (a11 * a22 - a12 * a21)
-            - a01 * (a10 * a22 - a12 * a20)
-            + a02 * (a10 * a21 - a11 * a20)
-        )
+        s0 = self.m[0] * self.m[5] - self.m[1] * self.m[4]
+        s1 = self.m[0] * self.m[9] - self.m[1] * self.m[8]
+        s2 = self.m[0] * self.m[13] - self.m[1] * self.m[12]
+        s3 = self.m[4] * self.m[9] - self.m[5] * self.m[8]
+        s4 = self.m[4] * self.m[13] - self.m[5] * self.m[12]
+        s5 = self.m[8] * self.m[13] - self.m[9] * self.m[12]
+        c5 = self.m[10] * self.m[15] - self.m[11] * self.m[14]
+        c4 = self.m[6] * self.m[15] - self.m[7] * self.m[14]
+        c3 = self.m[6] * self.m[11] - self.m[7] * self.m[10]
+        c2 = self.m[2] * self.m[15] - self.m[3] * self.m[14]
+        c1 = self.m[2] * self.m[11] - self.m[3] * self.m[10]
+        c0 = self.m[2] * self.m[7] - self.m[3] * self.m[6]
+        det = s0 * c5 - s1 * c4 + s2 * c3 + s3 * c2 - s4 * c1 + s5 * c0
         if abs(det) < 1e-12:
             return None
         inv_det = 1.0 / det
-        m00 = (a11 * a22 - a12 * a21) * inv_det
-        m01 = (a02 * a21 - a01 * a22) * inv_det
-        m02 = (a01 * a12 - a02 * a11) * inv_det
-        m10 = (a12 * a20 - a10 * a22) * inv_det
-        m11 = (a00 * a22 - a02 * a20) * inv_det
-        m12 = (a02 * a10 - a00 * a12) * inv_det
-        m20 = (a10 * a21 - a11 * a20) * inv_det
-        m21 = (a01 * a20 - a00 * a21) * inv_det
-        m22 = (a00 * a11 - a01 * a10) * inv_det
-        tx = self.m[12]
-        ty = self.m[13]
-        tz = self.m[14]
-        itx = -(m00 * tx + m01 * ty + m02 * tz)
-        ity = -(m10 * tx + m11 * ty + m12 * tz)
-        itz = -(m20 * tx + m21 * ty + m22 * tz)
         res = Xform()
         res.guid = ""
         res.name = ""
-        res.m[0] = m00
-        res.m[4] = m01
-        res.m[8] = m02
-        res.m[12] = itx
-        res.m[1] = m10
-        res.m[5] = m11
-        res.m[9] = m12
-        res.m[13] = ity
-        res.m[2] = m20
-        res.m[6] = m21
-        res.m[10] = m22
-        res.m[14] = itz
+        res.m[0] = (self.m[5] * c5 - self.m[9] * c4 + self.m[13] * c3) * inv_det
+        res.m[4] = (-self.m[4] * c5 + self.m[8] * c4 - self.m[12] * c3) * inv_det
+        res.m[8] = (self.m[7] * s5 - self.m[11] * s4 + self.m[15] * s3) * inv_det
+        res.m[12] = (-self.m[6] * s5 + self.m[10] * s4 - self.m[14] * s3) * inv_det
+        res.m[1] = (-self.m[1] * c5 + self.m[9] * c2 - self.m[13] * c1) * inv_det
+        res.m[5] = (self.m[0] * c5 - self.m[8] * c2 + self.m[12] * c1) * inv_det
+        res.m[9] = (-self.m[3] * s5 + self.m[11] * s2 - self.m[15] * s1) * inv_det
+        res.m[13] = (self.m[2] * s5 - self.m[10] * s2 + self.m[14] * s1) * inv_det
+        res.m[2] = (self.m[1] * c4 - self.m[5] * c2 + self.m[13] * c0) * inv_det
+        res.m[6] = (-self.m[0] * c4 + self.m[4] * c2 - self.m[12] * c0) * inv_det
+        res.m[10] = (self.m[3] * s4 - self.m[7] * s2 + self.m[15] * s0) * inv_det
+        res.m[14] = (-self.m[2] * s4 + self.m[6] * s2 - self.m[14] * s0) * inv_det
+        res.m[3] = (-self.m[1] * c3 + self.m[5] * c1 - self.m[9] * c0) * inv_det
+        res.m[7] = (self.m[0] * c3 - self.m[4] * c1 + self.m[8] * c0) * inv_det
+        res.m[11] = (-self.m[3] * s3 + self.m[7] * s1 - self.m[11] * s0) * inv_det
+        res.m[15] = (self.m[2] * s3 - self.m[6] * s1 + self.m[10] * s0) * inv_det
         return res
 
     def is_identity(self):
