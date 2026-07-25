@@ -812,6 +812,15 @@ class Line:
         proto.xform.name = self.xform.name
         proto.xform.matrix.extend(self.xform.m)
 
+        # Set width and linecolor
+        proto.width = self.width
+        proto.linecolor.guid = self.linecolor.guid
+        proto.linecolor.name = self.linecolor.name
+        proto.linecolor.r = self.linecolor.r
+        proto.linecolor.g = self.linecolor.g
+        proto.linecolor.b = self.linecolor.b
+        proto.linecolor.a = self.linecolor.a
+
         return proto.SerializeToString()
 
     @classmethod
@@ -846,6 +855,18 @@ class Line:
             line.xform = Xform()
             line.xform.name = proto.xform.name
             line.xform.m = list(proto.xform.matrix)
+
+        # Load width and linecolor
+        if proto.width > 0.0:
+            line.width = proto.width
+        if proto.HasField('linecolor'):
+            line.linecolor = Color(
+                proto.linecolor.r,
+                proto.linecolor.g,
+                proto.linecolor.b,
+                proto.linecolor.a,
+                proto.linecolor.name,
+            )
 
         return line
 

@@ -26,6 +26,7 @@ from .tolerance import Tolerance, TOLERANCE
 from .session_config import SessionConfig, SESSION_CONFIG
 from . import file_encoders
 from .file_obj import load_file_obj, save_file_obj
+from .io import read_xyz, write_xyz, read_xyz_from_str, write_xyz_to_string
 from . import intersection
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
@@ -77,6 +78,10 @@ __all__ = [
     "file_encoders",
     "load_file_obj",
     "save_file_obj",
+    "read_xyz",
+    "write_xyz",
+    "read_xyz_from_str",
+    "write_xyz_to_string",
     "intersection",
     "NurbsCurve",
     "NurbsSurface",

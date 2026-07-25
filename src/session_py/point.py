@@ -61,7 +61,7 @@ class Point:
     @property
     def pointcolor(self):
         if self._pointcolor is None:
-            self._pointcolor = Color.blue()
+            self._pointcolor = Color.black()
         return self._pointcolor
 
     @pointcolor.setter
