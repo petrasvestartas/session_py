@@ -592,6 +592,7 @@ def test_brep_volume():
     MINI_CHECK(BRep.create_sphere(2).face_count() == 1)
 
 
+@MINI_TEST("BRep", "Block With Hole Volume")
 def test_brep_block_with_hole_volume():
     # Box(4) with a through cylindrical hole (r=1): the annular top/bottom faces have an inner
     # loop, so volume()'s face-interior sample must land on the MATERIAL (not in the hole) for
@@ -605,6 +606,7 @@ def test_brep_block_with_hole_volume():
     MINI_CHECK(bh.is_solid())
 
 
+@MINI_TEST("BRep", "Boolean Example brep_booleans")
 def test_brep_boolean_example_brep_booleans():
     # Reproduces docs/examples/breps/brep_booleans.py: Box(2) + Cylinder(r=0.7, h=3, centred).
     # OCCT (oracle): fuse 9.539380400258997/10, cut 4.921239199482002/7, common 3.078760800517997/3.
@@ -628,6 +630,7 @@ def test_brep_boolean_example_brep_booleans():
     MINI_CHECK(com.is_solid())
 
 
+@MINI_TEST("BRep", "Boolean Off-Center Cyl")
 def test_brep_boolean_offcenter_cylinder():
     # Cylinder through a box, shifted +0.5 in x. OCCT (oracle): cut 64-4pi/7, common 4pi/3, fuse 64+2pi/10.
     import math
@@ -652,6 +655,7 @@ def test_brep_boolean_offcenter_cylinder():
     MINI_CHECK(fus.is_solid())
 
 
+@MINI_TEST("BRep", "Boolean Contained Box")
 def test_brep_boolean_contained_box():
     # B (vol 8) fully inside A (vol 64). OCCT (oracle): cut 56/12, common 8/6, fuse 64/6.
     from .brep import BRep
@@ -671,6 +675,7 @@ def test_brep_boolean_contained_box():
     MINI_CHECK(fus.is_solid())
 
 
+@MINI_TEST("BRep", "Boolean Contained Sphere")
 def test_brep_boolean_contained_sphere():
     # Sphere (r=1.5) fully inside box(4): no surface intersection (no seam-straddling),
     # exercises robust volume() over a full periodic sphere + degenerate-pole-edge is_solid().
@@ -694,6 +699,7 @@ def test_brep_boolean_contained_sphere():
     MINI_CHECK(fus.is_solid())
 
 
+@MINI_TEST("BRep", "Boolean Box-Box")
 def test_brep_boolean_box_box():
     # Pure-planar partial overlap. A=[-2,2]^3 (64); B=[1,3]x[-1,1]^2 (8); overlap 4.
     # OCCT (oracle): cut 60/11, common 4/6, fuse 68/11.
@@ -714,6 +720,7 @@ def test_brep_boolean_box_box():
     MINI_CHECK(fus.is_solid())
 
 
+@MINI_TEST("BRep", "Boolean Sphere Split")
 def test_brep_boolean_sphere_split():
     # Box(4) - Sphere(2.5): the sphere pokes through every box face. The +x cap straddles the
     # periodic u-seam; the analytic sphere pull-back (replicating OCCT ProjLib_Sphere's per-point
