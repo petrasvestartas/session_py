@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "session_py"
-version = "0.124.0"
+version = "0.125.0"
 description = "A minimal Python geometry library"
 authors = [{name = "Petras Vestartas", email = "petrasvestartas@gmail.com"}]
 license = {text = "MIT"}
