@@ -221,6 +221,24 @@ class Session:
             self.add(node, parent)
         return node
 
+    def order(self):
+        """Canonical object order: the objects lists walked in one fixed type sequence -
+        deterministic across runs AND languages (lookup/map iteration is neither).
+        Viewers and reconcile key their rows off this."""
+        return (
+            [p.guid for p in self.objects.points]
+            + [l.guid for l in self.objects.lines]
+            + [p.guid for p in self.objects.planes]
+            + [b.guid for b in self.objects.bboxes]
+            + [p.guid for p in self.objects.polylines]
+            + [p.guid for p in self.objects.pointclouds]
+            + [m.guid for m in self.objects.meshes]
+            + [n.guid for n in self.objects.nurbscurves]
+            + [n.guid for n in self.objects.nurbssurfaces]
+            + [b.guid for b in self.objects.breps]
+            + [e.guid for e in self.objects.elements]
+        )
+
     def add_point(self, point, parent=None) -> TreeNode:
         return self._add_object(self.objects.points, point, "point", parent)
 
@@ -377,6 +395,7 @@ class Session:
         self.objects.nurbscurves = [c for c in self.objects.nurbscurves if c.guid != guid]
         self.objects.nurbssurfaces = [s for s in self.objects.nurbssurfaces if s.guid != guid]
         self.objects.breps = [b for b in self.objects.breps if b.guid != guid]
+        self.objects.elements = [e for e in self.objects.elements if e.guid != guid]
 
         # Remove from lookup table
         del self.lookup[guid]

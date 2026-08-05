@@ -364,14 +364,29 @@ def test_session_get_object():
 def test_session_remove_object():
     from session_py import Session
     from session_py import Point
+    from session_py import ElementPlate
+    from pathlib import Path
 
     session = Session()
     point = Point(1.0, 2.0, 3.0)
     session.add_point(point)
     removed = session.remove_object(point.guid)
 
+    polygon = [Point(0.0,0.0,0.0), Point(2.0,0.0,0.0), Point(2.0,2.0,0.0), Point(0.0,2.0,0.0)]
+    plate = ElementPlate(polygon=polygon, thickness=0.2, name="p1")
+    eguid = plate.guid
+    session.add_element(plate)
+    eremoved = session.remove_object(eguid)
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_remove.bin"
+    session.pb_dump(fname)
+    loaded = Session.pb_load(fname)
+
     MINI_CHECK(removed)
     MINI_CHECK(point.guid not in session.lookup)
+    MINI_CHECK(eremoved)
+    MINI_CHECK(len(session.objects.elements) == 0)
+    MINI_CHECK(eguid not in loaded.lookup)  # removed objects must not resurrect on save/load
 
 
 @MINI_TEST("Session", "Get Geometry")
@@ -453,6 +468,54 @@ def test_session_protobuf_roundtrip():
 
     MINI_CHECK(loaded.name == session.name)
     MINI_CHECK(len(loaded.lookup) == len(session.lookup))
+
+
+@MINI_TEST("Session", "Lookup Mutation Roundtrip")
+def test_session_lookup_mutation_roundtrip():
+    from session_py import Session
+    from session_py import Line
+    from pathlib import Path
+
+    session = Session()
+    line = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    guid = line.guid
+    session.add_line(line)
+
+    session.lookup[guid].width = 5.0
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_lookup.bin"
+    session.pb_dump(fname)
+    loaded = Session.pb_load(fname)
+
+    MINI_CHECK(loaded.objects.lines[0].width == 5.0)
+    MINI_CHECK(loaded.lookup[guid].width == 5.0)
+
+
+@MINI_TEST("Session", "Order")
+def test_session_order():
+    from session_py import Session
+    from session_py import Line
+    from session_py import Point
+    from pathlib import Path
+
+    session = Session()
+    line = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    point = Point(1.0, 2.0, 3.0)
+    line_guid = line.guid
+    point_guid = point.guid
+    session.add_line(line)
+    session.add_point(point)
+
+    order = session.order()
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_order.bin"
+    session.pb_dump(fname)
+    loaded = Session.pb_load(fname)
+
+    MINI_CHECK(len(order) == 2)
+    MINI_CHECK(order[0] == point_guid)
+    MINI_CHECK(order[1] == line_guid)
+    MINI_CHECK(loaded.order() == order)
 
 
 @MINI_TEST("Session", "Tree Transformation Hierarchy")
