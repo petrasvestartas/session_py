@@ -294,8 +294,8 @@ def test_pointcloud_transform():
     from session_py import Xform
 
     pc = PointCloud([Point(1.0, 2.0, 3.0)])
-    pc.xform = Xform.translation(10.0, 20.0, 30.0)
-    pc.transform()
+    pc_xf = Xform.translation(10.0, 20.0, 30.0)
+    pc.transform(pc_xf)
 
     MINI_CHECK(TOLERANCE.is_close(pc.get_point(0)[0], 11.0))
     MINI_CHECK(TOLERANCE.is_close(pc.get_point(0)[1], 22.0))
@@ -309,8 +309,8 @@ def test_pointcloud_transformed():
     from session_py import Xform
 
     pc = PointCloud([Point(1.0, 2.0, 3.0)])
-    pc.xform = Xform.translation(10.0, 20.0, 30.0)
-    pc2 = pc.transformed()
+    pc_xf = Xform.translation(10.0, 20.0, 30.0)
+    pc2 = pc.transformed(pc_xf)
 
     MINI_CHECK(TOLERANCE.is_close(pc2.get_point(0)[0], 11.0))
     MINI_CHECK(TOLERANCE.is_close(pc2.get_point(0)[1], 22.0))

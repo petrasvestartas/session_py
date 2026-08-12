@@ -7,6 +7,7 @@ from .graph import Graph
 from .spatial_bvh import SpatialBVH
 from .obb import OBB
 from .tolerance import Tolerance
+from .xform import Xform
 
 
 class RayHit(NamedTuple):
@@ -39,6 +40,11 @@ class Session:
         Hierarchical tree structure for organizing geometry objects.
     graph : :class:`Graph`
         Graph structure for storing relationships between geometry objects.
+    xforms : dict[str, :class:`Xform`]
+        Guid -> LOCAL transform, relative to the tree parent. THE only place a transform is
+        stored: geometry types carry no transformation member. Cumulative placement comes from
+        `world_xform`, which multiplies down the tree. Serialized explicitly by
+        __jsondump__/pb_dumps in `order()` sequence (a dict has no deterministic order).
     name : str
         Name of the Session.
 
@@ -51,6 +57,7 @@ class Session:
         self.lookup: Dict[str, Any] = {}
         self.tree = Tree(name=f"{name}_tree")
         self.graph = Graph(name=f"{name}_graph")
+        self.xforms: Dict[str, Xform] = {}
         # SpatialBVH for collision detection (auto-computed world size)
         self.bvh = SpatialBVH()
 
@@ -75,6 +82,80 @@ class Session:
         return f"Session({self.guid}, {self.name}, {self.objects.to_str()}, {self.tree.to_str()}, {self.graph.to_str()})"
 
     ###########################################################################################
+    # XFORMS - the one place a transformation is stored
+    ###########################################################################################
+
+    def set_xform(self, guid: str, xform: Xform) -> None:
+        """Set the LOCAL transform of an object, relative to its tree parent."""
+        self.xforms[guid] = xform
+
+    def xform(self, guid: str) -> Xform:
+        """The LOCAL transform of an object, identity when none was set."""
+        return self.xforms.get(guid, Xform.identity())
+
+    def remove_xform(self, guid: str) -> bool:
+        """Remove an object's local transform, returning whether one was present."""
+        return self.xforms.pop(guid, None) is not None
+
+    def world_xform(self, guid: str) -> Xform:
+        """The CUMULATIVE placement of an object: every ancestor's transform multiplied down
+        the tree onto its own. An object with no tree node is its own root and returns its
+        local transform - objects added without a parent are never attached, so treating a
+        missing node as identity would silently move them to the origin.
+        """
+        acc = self.xform(guid)
+        node = self.tree.get_node_by_name(guid)
+        if node is not None:
+            # ancestors() runs immediate parent -> root, so left-multiplying each in turn
+            # yields root * ... * parent * local - the same order the tree walk composes.
+            for ancestor in node.ancestors:
+                xf = self.xforms.get(ancestor.name)
+                if xf is not None:
+                    acc = xf * acc
+        return acc
+
+    def world_xforms(self) -> Dict[str, Xform]:
+        """Every object's cumulative placement, computed in ONE downward pass. Use this instead
+        of calling `world_xform` per object: that does a whole-tree scan to find each node,
+        which is quadratic over a session.
+        """
+        out: Dict[str, Xform] = {}
+
+        def walk(node: TreeNode, parent_xform: Xform) -> None:
+            local = self.xforms.get(node.name)
+            current = parent_xform * local if local is not None else parent_xform
+            out[node.name] = current
+            for child in node.children:
+                walk(child, current)
+
+        if self.tree.root is not None:
+            walk(self.tree.root, Xform.identity())
+        # Objects that were added without a parent have no tree node; they are their own roots.
+        for guid, xform in self.xforms.items():
+            out.setdefault(guid, xform)
+        return out
+
+    def _xforms_ordered(self) -> List[Tuple[str, Xform]]:
+        """The xforms in canonical `order()` sequence, identity entries omitted - the exact
+        sequence __jsondump__ and pb_dumps write, so both formats share one order."""
+        ordered = []
+        for guid in self.order():
+            xform = self.xforms.get(guid)
+            if xform is not None and not xform.is_identity():
+                ordered.append((guid, xform))
+        # Group nodes carry transforms but hold no geometry, so they are absent from order();
+        # they follow sorted by guid, which keeps the sequence deterministic across languages.
+        listed = {guid for guid, _ in ordered}
+        rest = [
+            (guid, xform)
+            for guid, xform in self.xforms.items()
+            if guid not in listed and not xform.is_identity()
+        ]
+        rest.sort(key=lambda item: item[0])
+        ordered.extend(rest)
+        return ordered
+
+    ###########################################################################################
     # JSON (polymorphic)
     ###########################################################################################
 
@@ -87,6 +168,10 @@ class Session:
             "objects": self.objects.__jsondump__(),
             "tree": self.tree.__jsondump__(),
             "graph": self.graph.__jsondump__(),
+            "xforms": [
+                {"guid": guid, "xform": xform.__jsondump__()}
+                for guid, xform in self._xforms_ordered()
+            ],
         }
 
     @classmethod
@@ -106,6 +191,13 @@ class Session:
             session.tree = file_decode_node(data["tree"])  # Tree
         if data.get("graph"):
             session.graph = file_decode_node(data["graph"])  # Graph
+
+        for entry in data.get("xforms", []):
+            xform_data = entry.get("xform")
+            if xform_data:
+                session.xforms[entry["guid"]] = Xform.__jsonload__(
+                    xform_data, xform_data.get("guid"), xform_data.get("name")
+                )
 
         # Rebuild lookup from all objects
         for point in session.objects.points:
@@ -163,6 +255,13 @@ class Session:
         proto.objects.ParseFromString(self.objects.pb_dumps())
         proto.tree.ParseFromString(self.tree.pb_dumps())
         proto.graph.ParseFromString(self.graph.pb_dumps())
+        # Xforms in canonical order() sequence - a map would not be deterministic
+        for guid, xform in self._xforms_ordered():
+            entry = proto.xforms.add()
+            entry.guid = guid
+            entry.xform.guid = xform.guid
+            entry.xform.name = xform.name
+            entry.xform.matrix.extend(xform.m)
         return proto.SerializeToString()
 
     @classmethod
@@ -175,6 +274,12 @@ class Session:
         session.objects = Objects.from_proto(proto.objects)
         session.tree = Tree.pb_loads(proto.tree.SerializeToString())
         session.graph = Graph.pb_loads(proto.graph.SerializeToString())
+        for entry in proto.xforms:
+            if entry.HasField("xform"):
+                xform = Xform.from_matrix(list(entry.xform.matrix))
+                xform.guid = entry.xform.guid
+                xform.name = entry.xform.name
+                session.xforms[entry.guid] = xform
         for point in session.objects.points:
             session.lookup[point.guid] = point
         for line in session.objects.lines:
@@ -399,6 +504,7 @@ class Session:
 
         # Remove from lookup table
         del self.lookup[guid]
+        self.xforms.pop(guid, None)
 
         # Remove from tree - find node by guid first
         node = self.tree.find_node_by_guid(guid)
@@ -416,13 +522,16 @@ class Session:
     ###########################################################################################
 
     @staticmethod
-    def _compute_bounding_box(geometry) -> OBB:
-        """Compute bounding box for a geometry object, inflated by tolerance.
+    def _compute_bounding_box(geometry, xform: Xform) -> OBB:
+        """Bounding box of an object in WORLD placement, inflated by tolerance.
 
         Parameters
         ----------
         geometry : object
             Any geometry object (Point, Line, Mesh, etc.)
+        xform : Xform
+            Its cumulative transform from `world_xform` - the geometry itself stores no
+            placement, so it must be supplied here.
 
         Returns
         -------
@@ -430,6 +539,7 @@ class Session:
             Inflated bounding box for collision detection.
         """
         inflate = Tolerance.APPROXIMATION
+        tp = xform.transform_point
 
         # Import geometry types
         from .line import Line
@@ -442,17 +552,17 @@ class Session:
         from .nurbssurface import NurbsSurface
 
         if isinstance(geometry, Point):
-            return OBB.from_point(geometry, inflate)
+            return OBB.from_point(tp(geometry), inflate)
         elif isinstance(geometry, Line):
-            points = [geometry.start(), geometry.end()]
+            points = [tp(geometry.start()), tp(geometry.end())]
             return OBB.from_points(points, inflate)
         elif isinstance(geometry, Polyline):
-            return OBB.from_points(geometry.points, inflate)
+            return OBB.from_points([tp(p) for p in geometry.points], inflate)
         elif isinstance(geometry, PointCloud):
-            return OBB.from_points(geometry.points, inflate)
+            return OBB.from_points([tp(p) for p in geometry.points], inflate)
         elif isinstance(geometry, Mesh):
-            # Extract vertices from mesh; xform is the placement, so bake it
-            points = [geometry.xform.transform_point(v.position()) for v in geometry.vertex.values()]
+            # Extract vertices from mesh; the session holds the placement, so bake it
+            points = [tp(v.position()) for v in geometry.vertex.values()]
             if not points:
                 return OBB.from_point(Point(0, 0, 0), inflate)
             return OBB.from_points(points, inflate)
@@ -471,16 +581,17 @@ class Session:
                     geometry.half_size[2] + inflate,
                 ),
             )
+            inflated.transform(xform)
             return inflated
         elif isinstance(geometry, Plane):
             # Create bounded box around plane origin
-            return OBB.from_point(geometry.origin, inflate * 10.0)
+            return OBB.from_point(tp(geometry.origin), inflate * 10.0)
         elif isinstance(geometry, NurbsCurve):
             points = []
             for i in range(geometry.cv_count()):
                 p = geometry.get_cv(i)
                 if p is not None:
-                    points.append(p)
+                    points.append(tp(p))
             if not points:
                 return OBB.from_point(Point(0, 0, 0), inflate)
             return OBB.from_points(points, inflate)
@@ -490,12 +601,12 @@ class Session:
                 for j in range(geometry.cv_count_dir(1)):
                     p = geometry.get_cv(i, j)
                     if p is not None:
-                        points.append(p)
+                        points.append(tp(p))
             if not points:
                 return OBB.from_point(Point(0, 0, 0), inflate)
             return OBB.from_points(points, inflate)
         elif isinstance(geometry, BRep):
-            points = [geometry.xform.transform_point(p) for p in geometry.m_vertices]
+            points = [tp(p) for p in geometry.m_vertices]
             # Sample surface points to cover curved surfaces (e.g. sphere with only pole vertices)
             for srf in geometry.m_surfaces:
                 u0, u1 = srf.domain(0)
@@ -506,14 +617,17 @@ class Session:
                         v = v0 + (v1 - v0) * vi / 2.0
                         p = srf.point_at(u, v)
                         if p is not None:
-                            points.append(geometry.xform.transform_point(p))
+                            points.append(tp(p))
             if not points:
                 return OBB.from_point(Point(0, 0, 0), inflate)
             return OBB.from_points(points, inflate)
         else:
             from .element import Element
             if isinstance(geometry, Element):
-                return geometry.aabb
+                import copy
+                box = copy.deepcopy(geometry.aabb)  # never mutate the element's cached box
+                box.transform(xform)
+                return box
             # Fallback
             return OBB.from_point(Point(0, 0, 0), inflate)
 
@@ -534,8 +648,10 @@ class Session:
         # Collect all objects with their bounding boxes and GUIDs
         boxes_with_guids = []
 
+        identity = Xform.identity()
+        world = self.world_xforms()  # one downward pass, not one tree scan per object
         for guid, geometry in self.lookup.items():
-            bbox = self._compute_bounding_box(geometry)
+            bbox = self._compute_bounding_box(geometry, world.get(guid, identity))
             boxes_with_guids.append((bbox, guid))
 
         if not boxes_with_guids:
@@ -582,9 +698,13 @@ class Session:
             origin[2] + dir_unit[2] * FAR,
         )
 
+        # Placements come from the session, not the geometry; resolve them all up front
+        identity = Xform.identity()
+        world = self.world_xforms()
+
         boxes_with_guids: List[Tuple[OBB, str]] = []
         for guid, geometry in self.lookup.items():
-            bbox = self._compute_bounding_box(geometry)
+            bbox = self._compute_bounding_box(geometry, world.get(guid, identity))
             boxes_with_guids.append((bbox, guid))
         if not boxes_with_guids:
             return []
@@ -623,6 +743,7 @@ class Session:
             geom = self.lookup.get(guid)
             if geom is None:
                 continue
+            placement = world.get(guid, identity)
 
             hit_point: Optional[Point] = None
 
@@ -657,8 +778,8 @@ class Session:
                 if best_p is not None:
                     hit_point = best_p
             elif isinstance(geom, Mesh):
-                # xform is the placement: cast in the mesh's LOCAL frame, return a WORLD hit
-                inv = geom.xform.inverse()
+                # The session holds the placement: cast in the mesh's LOCAL frame, return a WORLD hit
+                inv = placement.inverse()
                 if inv is not None:
                     local_ray = Line.from_points(
                         inv.transform_point(ray_line.start()),
@@ -666,7 +787,7 @@ class Session:
                     )
                     pts = ray_mesh_bvh(local_ray, geom, 1e-6, False)
                     if pts:
-                        hit_point = geom.xform.transform_point(pts[0])
+                        hit_point = placement.transform_point(pts[0])
             elif isinstance(geom, Point):
                 ok, hp, t = point_hit(geom)
                 if ok:
@@ -768,68 +889,53 @@ class Session:
     ###########################################################################################
 
     def get_geometry(self) -> Objects:
-        """Get all geometry with transformations applied from tree hierarchy.
+        """All geometry with its hierarchical placement BAKED into the coordinates.
 
-        Recursively traverses the tree and applies parent transformations to children.
-        Each child's transformation is the composition of all ancestor transformations
-        multiplied by its own transformation.
+        Each object is transformed by its cumulative `world_xform` - its own transform with
+        every ancestor's multiplied down the tree. The result is a FLATTENED snapshot: every
+        guid's world transform is identity by construction, so never pair it back with
+        `self.xforms` or the placement would be applied twice.
 
         Returns
         -------
         Objects
             Collection of transformed geometry objects.
         """
-        from .xform import Xform
         import copy
 
-        # Deep copy all objects
-        transformed_objects = copy.deepcopy(self.objects)
+        objects = copy.deepcopy(self.objects)
+        world = self.world_xforms()
 
+        def placement(src):
+            """The guid comes from the ORIGINAL: Point and Element mint a new guid on deepcopy,
+            so the copy can no longer be matched against the session."""
+            xform = world.get(src.guid)
+            return None if xform is None or xform.is_identity() else xform
 
-        # Rebuild lookup from copied objects
-        transformed_lookup = {}
-        for collection in [
-            transformed_objects.points,
-            transformed_objects.lines,
-            transformed_objects.planes,
-            transformed_objects.bboxes,
-            transformed_objects.polylines,
-            transformed_objects.pointclouds,
-            transformed_objects.meshes,
-            transformed_objects.elements,
-        ]:
-            for geom in collection:
-                transformed_lookup[geom.guid] = geom
+        def bake(originals, copies):
+            """No type is skipped: the old rebuilt lookup left out nurbscurves, nurbssurfaces
+            and breps, so a placement in the tree silently did nothing for them."""
+            for src, dst in zip(originals, copies):
+                xform = placement(src)
+                if xform is None:
+                    continue
+                dst.transform(xform)
 
-        def transform_node(node: TreeNode, parent_xform: Xform) -> None:
-            """Recursively transform geometry in tree node and its children."""
+        bake(self.objects.points, objects.points)
+        bake(self.objects.lines, objects.lines)
+        bake(self.objects.planes, objects.planes)
+        bake(self.objects.bboxes, objects.bboxes)
+        bake(self.objects.polylines, objects.polylines)
+        bake(self.objects.pointclouds, objects.pointclouds)
+        bake(self.objects.meshes, objects.meshes)
+        bake(self.objects.nurbscurves, objects.nurbscurves)
+        bake(self.objects.nurbssurfaces, objects.nurbssurfaces)
+        bake(self.objects.breps, objects.breps)
 
-            # Get geometry from the lookup,
-            geom = transformed_lookup.get(node.name)
+        # An Element holds its own geometry, so its placement is baked through session_geometry.
+        for src, dst in zip(self.objects.elements, objects.elements):
+            xform = placement(src)
+            if xform is not None:
+                dst.place(xform)
 
-            if geom is not None:
-                geom.xform = parent_xform * geom.xform
-                current_xform = geom.xform
-            else:
-                current_xform = parent_xform
-
-            for child in node.children:
-                transform_node(child, current_xform)
-
-        if self.tree.root:
-            transform_node(self.tree.root, Xform.identity())
-
-        # Apply accumulated transformations to actual geometry coordinates
-        for collection in [
-            transformed_objects.points,
-            transformed_objects.lines,
-            transformed_objects.planes,
-            transformed_objects.bboxes,
-            transformed_objects.polylines,
-            transformed_objects.pointclouds,
-            transformed_objects.meshes,
-        ]:
-            for geom in collection:
-                geom.transform()
-
-        return transformed_objects
+        return objects

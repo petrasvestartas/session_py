@@ -45,8 +45,8 @@ def test_element_constructor():
     MINI_CHECK(e != e3)
 
 
-@MINI_TEST("Element", "Session Transformation")
-def test_session_transformation():
+@MINI_TEST("Element", "Place")
+def test_place():
     from session_py import Mesh
     from session_py import Xform
     from session_py import Element
@@ -57,10 +57,11 @@ def test_session_transformation():
     )
     e = Element(geometry=m)
     xf = Xform.translation(10.0, 20.0, 30.0)
-    e.session_transformation = xf
+    e.place(xf)
 
     MINI_CHECK(e.is_dirty)
-    MINI_CHECK(e.session_transformation == xf)
+    min_x = min(v.x for v in e.geometry.vertex.values())
+    MINI_CHECK(min_x > 9.0)
 
 
 @MINI_TEST("Element", "Add Feature")
@@ -129,8 +130,8 @@ def test_session_geometry():
         [[0, 1, 2, 3]],
     )
     e = Element(geometry=m)
-    e.session_transformation = Xform.translation(10.0, 0.0, 0.0)
-    sg = e.session_geometry
+    e_xf = Xform.translation(10.0, 0.0, 0.0)
+    sg = e.session_geometry(e_xf)
 
     MINI_CHECK(isinstance(sg, Mesh))
     verts = list(sg.vertex.values())
@@ -199,7 +200,6 @@ def test_brep_aabb():
 @MINI_TEST("Element", "Json Roundtrip")
 def test_json_roundtrip():
     from session_py import Mesh
-    from session_py import Xform
     from session_py import Element
     from pathlib import Path
 
@@ -208,7 +208,6 @@ def test_json_roundtrip():
         [[0, 1, 2, 3]],
     )
     e = Element(geometry=m, name="json_test")
-    e.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_element.json"
     e.file_json_dump(fname)
@@ -223,13 +222,11 @@ def test_json_roundtrip():
 @MINI_TEST("Element", "Protobuf Roundtrip")
 def test_protobuf_roundtrip():
     from session_py import BRep
-    from session_py import Xform
     from session_py import Element
     from pathlib import Path
 
     b = BRep.create_box(2.0, 3.0, 4.0)
     e = Element(geometry=b, name="proto_test")
-    e.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_element.bin"
     e.pb_dump(path)

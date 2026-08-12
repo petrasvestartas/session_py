@@ -7,7 +7,6 @@ from .vector import Vector
 from .tolerance import Tolerance
 from .tolerance import PI
 from .color import Color
-from .xform import Xform
 from .obb import OBB
 from .spatial_bvh import SpatialBVH
 from .remesh_cdt import _cdt_triangulate as _cdt_triangulate
@@ -262,7 +261,6 @@ class Mesh:
         self._widths = []
         self._objectcolor = None
         self.color_mode = ColorMode.OBJECTCOLOR
-        self._xform = None
         self._triangle_bvh_built = False
         self._triangle_bvh = None
         self._triangle_aabbs_cache = []
@@ -283,16 +281,6 @@ class Mesh:
     def refresh_guid(self):
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
-
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
 
     def duplicate(self) -> "Mesh":
         import copy
@@ -323,7 +311,6 @@ class Mesh:
         m._widths = list(self._widths)
         m._objectcolor = self._objectcolor
         m.color_mode = self.color_mode
-        m.xform = self.xform
         return m
 
     def __eq__(self, other):
@@ -334,8 +321,6 @@ class Mesh:
         if self.vertex != other.vertex:
             return False
         if self.face != other.face:
-            return False
-        if self.xform != other.xform:
             return False
         return True
 
@@ -2419,21 +2404,19 @@ class Mesh:
     # Transformation
     ###########################################################################################
 
-    def transform(self, xf=None):
-        xform = xf if xf is not None else self.xform
+    def transform(self, xform):
         for vdata in self.vertex.values():
             pos = vdata.position()
-            pos.xform = xform
-            pos.transform()
+            pos.transform(xform)
             vdata[0] = pos[0]
             vdata[1] = pos[1]
             vdata[2] = pos[2]
         self._triangle_bvh_built = False
 
-    def transformed(self, xf=None):
+    def transformed(self, xform):
         import copy
         result = copy.deepcopy(self)
-        result.transform(xf)
+        result.transform(xform)
         return result
 
     ###########################################################################################
@@ -2651,7 +2634,6 @@ class Mesh:
             "type": f"{self.__class__.__name__}",
             "vertex": vertex_data,
             "widths": self._widths,
-            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -2741,10 +2723,6 @@ class Mesh:
             mesh._max_vertex = data["max_vertex"]
         if "max_face" in data:
             mesh._max_face = data["max_face"]
-
-        if "xform" in data:
-            from .xform import Xform as _Xform
-            mesh.xform = _Xform.__jsonload__(data["xform"])
 
         # Load colors from flat RGBA arrays
         if "pointcolors" in data:
@@ -2904,12 +2882,6 @@ class Mesh:
         _cm_map = {"objectcolor": 0, "pointcolors": 1, "facecolors": 2, "none": 3}
         proto.color_mode = _cm_map.get(self.color_mode.value, 0)
 
-        # Xform
-        from .proto import xform_pb2
-        proto.xform.guid = self.xform.guid
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-
         return proto.SerializeToString()
 
     def pb_fill(self, proto):
@@ -2977,16 +2949,12 @@ class Mesh:
         proto.objectcolor.a = self.objectcolor[3]
         _cm_map = {"objectcolor": 0, "pointcolors": 1, "facecolors": 2, "none": 3}
         proto.color_mode = _cm_map.get(self.color_mode.value, 0)
-        proto.xform.guid = self.xform.guid
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
 
     @classmethod
     def pb_loads(cls, data):
         """Create Mesh from protobuf binary data."""
         from .proto import mesh_pb2
         from .color import Color
-        from .xform import Xform
 
         proto = mesh_pb2.Mesh()
         proto.ParseFromString(data)
@@ -3068,12 +3036,6 @@ class Mesh:
         _cm_map = {0: "objectcolor", 1: "pointcolors", 2: "facecolors", 3: "none"}
         mesh.color_mode = ColorMode(_cm_map.get(getattr(proto, 'color_mode', 0), "objectcolor"))
 
-        # Xform
-        mesh.xform = Xform()
-        mesh.xform.guid = proto.xform.guid
-        mesh.xform.name = proto.xform.name
-        mesh.xform.m = list(proto.xform.matrix)
-
         # Update max counters
         if mesh.vertex:
             mesh._max_vertex = max(mesh.vertex.keys()) + 1
@@ -3086,7 +3048,6 @@ class Mesh:
     def from_proto(cls, proto):
         """Create Mesh from proto message directly (no SerializeToString)."""
         from .color import Color
-        from .xform import Xform
 
         mesh = cls()
         mesh.guid = proto.guid
@@ -3155,11 +3116,6 @@ class Mesh:
         mesh._objectcolor.name = oc.name
         _cm_map = {0: "objectcolor", 1: "pointcolors", 2: "facecolors", 3: "none"}
         mesh.color_mode = ColorMode(_cm_map.get(getattr(proto, 'color_mode', 0), "objectcolor"))
-
-        mesh.xform = Xform()
-        mesh.xform.guid = proto.xform.guid
-        mesh.xform.name = proto.xform.name
-        mesh.xform.m = list(proto.xform.matrix)
 
         if mesh.vertex:
             mesh._max_vertex = max(mesh.vertex.keys()) + 1

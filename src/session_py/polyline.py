@@ -3,7 +3,6 @@ import copy
 from typing import List, Optional, Tuple, Union
 
 from .color import Color
-from .xform import Xform
 from .plane import Plane
 from .point import Point
 from .tolerance import Tolerance
@@ -27,7 +26,6 @@ class Polyline:
         self.name = "my_polyline"
         self.width = 1.0
         self._linecolor = None
-        self._xform = None
 
         # Flat coordinate array [x0, y0, z0, x1, y1, z1, ...]
         self.coords: List[float] = []
@@ -97,16 +95,6 @@ class Polyline:
     @linecolor.setter
     def linecolor(self, value):
         self._linecolor = value
-
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
 
     @classmethod
     def from_coords(cls, coords: List[float]) -> "Polyline":
@@ -291,7 +279,6 @@ class Polyline:
         result.name = self.name
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor)
-        result.xform = copy.deepcopy(self.xform)
         result.plane = copy.deepcopy(self.plane)
         result.reverse()
         return result
@@ -330,7 +317,6 @@ class Polyline:
         result.name = self.name
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor)
-        result.xform = copy.deepcopy(self.xform)
         result.plane = copy.deepcopy(self.plane)
         result += vector
         return result
@@ -355,7 +341,6 @@ class Polyline:
         result.name = self.name
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor)
-        result.xform = copy.deepcopy(self.xform)
         result.plane = copy.deepcopy(self.plane)
         result -= vector
         return result
@@ -372,7 +357,6 @@ class Polyline:
         result.name = self.name
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor)
-        result.xform = copy.deepcopy(self.xform)
         result.plane = copy.deepcopy(self.plane)
         return result
 
@@ -388,7 +372,6 @@ class Polyline:
         result.name = self.name
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor)
-        result.xform = copy.deepcopy(self.xform)
         result.plane = copy.deepcopy(self.plane)
         return result
 
@@ -396,50 +379,21 @@ class Polyline:
         """Negate polyline (reverse point order)."""
         return self.reversed()
 
-    def transform(self):
-        """Apply the stored xform transformation to the polyline.
-
-        Transforms all points in-place and resets xform to identity.
-        """
+    def transform(self, xform):
+        """Apply a transformation to the polyline, in place."""
         for i in range(self.point_count()):
             idx = i * 3
             pt = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
-            pt.xform = self.xform
-            pt.transform()
+            pt.transform(xform)
             self.coords[idx] = pt[0]
             self.coords[idx + 1] = pt[1]
             self.coords[idx + 2] = pt[2]
-        self.xform = Xform.identity()
 
-    def transformed(self):
+    def transformed(self, xform):
         """Return a transformed copy of the polyline."""
         result = copy.deepcopy(self)
-        result.transform()
+        result.transform(xform)
         return result
-
-    def transformed_xform(self, xf):
-        """Return a copy of this polyline with ``xf`` applied to every point.
-
-        Mirrors C++ ``Polyline::transformed_xform``: applies a column-major
-        affine transformation matrix.
-
-        Parameters
-        ----------
-        xf : :class:`Xform`
-
-        Returns
-        -------
-        :class:`Polyline`
-        """
-        m = xf.m
-        new_pts = []
-        for i in range(self.point_count()):
-            p = self.get_point(i)
-            x = m[0]*p[0] + m[4]*p[1] + m[8]*p[2]  + m[12]
-            y = m[1]*p[0] + m[5]*p[1] + m[9]*p[2]  + m[13]
-            z = m[2]*p[0] + m[6]*p[1] + m[10]*p[2] + m[14]
-            new_pts.append(Point(x, y, z))
-        return Polyline(new_pts)
 
     def translate(self, v):
         """Translate every point of this polyline by ``v`` (in place).
@@ -1343,7 +1297,6 @@ class Polyline:
             "name": self.name,
             "type": f"{self.__class__.__name__}",
             "width": self.width,
-            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -1384,8 +1337,6 @@ class Polyline:
             polyline.width = data["width"]
         if "linecolor" in data:
             polyline.linecolor = file_decode_node(data["linecolor"])
-        if "xform" in data:
-            polyline.xform = file_decode_node(data["xform"])
 
         return polyline
 
@@ -1461,10 +1412,6 @@ class Polyline:
         proto.linecolor.b = self.linecolor[2]
         proto.linecolor.a = self.linecolor[3]
 
-        # Set xform
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-
         return proto.SerializeToString()
 
     def pb_fill(self, proto):
@@ -1478,8 +1425,6 @@ class Polyline:
         proto.linecolor.g = self.linecolor[1]
         proto.linecolor.b = self.linecolor[2]
         proto.linecolor.a = self.linecolor[3]
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
 
     @classmethod
     def pb_loads(cls, data):
@@ -1514,11 +1459,6 @@ class Polyline:
             proto.linecolor.a
         )
         polyline.linecolor.name = proto.linecolor.name
-
-        # Load xform
-        polyline.xform = Xform()
-        polyline.xform.name = proto.xform.name
-        polyline.xform.m = list(proto.xform.matrix)
 
         return polyline
 
@@ -1718,7 +1658,7 @@ class Polyline:
                 if dx*dx+dy*dy < 1.0:
                     coords[(n-1)*3] = coords[0]; coords[(n-1)*3+1] = coords[1]
             p2d = Polyline.__new__(Polyline)
-            p2d._guid = None; p2d.name = ""; p2d.width = 1.0; p2d._linecolor = None; p2d._xform = None; p2d._plane = None
+            p2d._guid = None; p2d.name = ""; p2d.width = 1.0; p2d._linecolor = None; p2d._plane = None
             p2d.coords = coords
             return p2d
         def ensure_ccw(p2d):

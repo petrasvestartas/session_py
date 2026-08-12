@@ -76,7 +76,6 @@ class NurbsSurface:
         self.pointcolors = []
         self.facecolors = []
         self.linecolors = []
-        self._xform = None
 
         # Core NURBS data
         self.m_dim = 0
@@ -119,16 +118,6 @@ class NurbsSurface:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
-
     ###########################################################################
     # INITIALIZATION & CREATION
     ###########################################################################
@@ -141,7 +130,6 @@ class NurbsSurface:
         self.pointcolors = []
         self.facecolors = []
         self.linecolors = []
-        self._xform = None
 
         self.m_dim = 0
         self.m_is_rat = 0
@@ -688,8 +676,6 @@ class NurbsSurface:
         if self.facecolors != other.facecolors:
             return False
         if self.linecolors != other.linecolors:
-            return False
-        if self.xform != other.xform:
             return False
 
         # Compare NURBS structure
@@ -1828,39 +1814,35 @@ class NurbsSurface:
     # TRANSFORMATION
     ###########################################################################
     
-    def transform(self, xform: Optional[Xform] = None) -> bool:
+    def transform(self, xform: Xform) -> bool:
         """Apply transformation to surface (in-place).
         
         Parameters
         ----------
-        xform : Xform, optional
-            Transformation to apply. If None, uses self.xform.
+        xform : Xform
+            Transformation to apply.
         
         Returns
         -------
         bool
             True if successful, False otherwise.
         """
-        if xform is None:
-            xform = self.xform
-        
         for i in range(self.m_cv_count[0]):
             for j in range(self.m_cv_count[1]):
                 pt = self.get_cv(i, j)
                 if pt is not None:
-                    pt.xform = xform
-                    pt.transform()
+                    pt.transform(xform)
                     self.set_cv(i, j, pt)
         
         return True
     
-    def transformed(self, xform: Optional[Xform] = None) -> 'NurbsSurface':
+    def transformed(self, xform: Xform) -> 'NurbsSurface':
         """Get transformed copy of surface.
         
         Parameters
         ----------
-        xform : Xform, optional
-            Transformation to apply. If None, uses self.xform.
+        xform : Xform
+            Transformation to apply.
         
         Returns
         -------
@@ -1881,7 +1863,6 @@ class NurbsSurface:
         copy.pointcolors = list(self.pointcolors)
         copy.facecolors = list(self.facecolors)
         copy.linecolors = list(self.linecolors)
-        copy.xform = self.xform
         
         copy.transform(xform)
         return copy
@@ -2670,26 +2651,6 @@ class NurbsSurface:
     # TRANSFORMATION (OVERLOADS)
     ###########################################################################
     
-    def transform_stored(self) -> bool:
-        """Apply stored xform transformation (in-place).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        return self.transform(self.xform)
-    
-    def transformed_stored(self) -> 'NurbsSurface':
-        """Get transformed copy using stored xform.
-        
-        Returns
-        -------
-        NurbsSurface
-            Transformed copy.
-        """
-        return self.transformed(self.xform)
-    
     ###########################################################################
     # GEOMETRIC OPERATIONS (ADDITIONAL)
     ###########################################################################
@@ -2900,7 +2861,6 @@ class NurbsSurface:
             'pointcolors': [v for c in self.pointcolors for v in (c.r, c.g, c.b, c.a)],
             'type': 'NurbsSurface',
             'width': self.width,
-            'xform': self.xform.__jsondump__(),
         }
         if self.m_mesh is not None:
             d['mesh'] = self.m_mesh.__jsondump__()
@@ -2942,10 +2902,6 @@ class NurbsSurface:
         if 'linecolors' in data:
             arr = data['linecolors']
             srf.linecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
-        if 'xform' in data and data['xform'] is not None:
-            from .xform import Xform
-            srf.xform = Xform.__jsonload__(data['xform'])
-
         if data.get('mesh'):
             from .mesh import Mesh
             srf.m_mesh = Mesh.__jsonload__(data['mesh'])
@@ -3040,10 +2996,6 @@ class NurbsSurface:
             cp = proto.linecolors.add()
             cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
 
-        # Transform
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-
         # Cached mesh
         if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
             mesh_data = self.m_mesh.pb_dumps()
@@ -3076,8 +3028,6 @@ class NurbsSurface:
         for c in self.linecolors:
             cp = proto.linecolors.add()
             cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
         if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
             proto.cached_mesh.ParseFromString(self.m_mesh.pb_dumps())
 
@@ -3097,7 +3047,6 @@ class NurbsSurface:
         """
         from .proto import nurbssurface_pb2
         from .color import Color
-        from .xform import Xform
         import numpy as np
 
         proto = nurbssurface_pb2.NurbsSurface()
@@ -3132,11 +3081,6 @@ class NurbsSurface:
         surface.pointcolors = [Color(c.r, c.g, c.b, c.a) for c in proto.pointcolors]
         surface.facecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.facecolors]
         surface.linecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.linecolors]
-
-        # Load xform
-        surface.xform = Xform()
-        surface.xform.name = proto.xform.name
-        surface.xform.m = list(proto.xform.matrix)
 
         # Load cached mesh
         if proto.HasField('cached_mesh') and len(proto.cached_mesh.vertices) > 0:

@@ -104,8 +104,8 @@ def test_beam_session_geometry():
     from session_py import Mesh
 
     b = ElementBeam(width=0.1, depth=0.2, length=3.0)
-    b.session_transformation = Xform.translation(10.0, 0.0, 0.0)
-    sg = b.session_geometry
+    b_xf = Xform.translation(10.0, 0.0, 0.0)
+    sg = b.session_geometry(b_xf)
 
     MINI_CHECK(isinstance(sg, Mesh))
     verts = list(sg.vertex.values())
@@ -117,11 +117,9 @@ def test_beam_session_geometry():
 @MINI_TEST("ElementBeam", "Json Roundtrip")
 def test_beam_json_roundtrip():
     from session_py import ElementBeam
-    from session_py import Xform
     from pathlib import Path
 
     b = ElementBeam(width=0.15, depth=0.3, length=5.0, name="json_beam")
-    b.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_beam_element.json"
     b.file_json_dump(fname)
@@ -137,11 +135,9 @@ def test_beam_json_roundtrip():
 @MINI_TEST("ElementBeam", "Protobuf Roundtrip")
 def test_beam_protobuf_roundtrip():
     from session_py import ElementBeam
-    from session_py import Xform
     from pathlib import Path
 
     b = ElementBeam(width=0.15, depth=0.3, length=5.0, name="proto_beam")
-    b.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_beam_element.bin"
     b.pb_dump(path)

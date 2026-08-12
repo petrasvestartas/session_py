@@ -148,8 +148,8 @@ def test_brep_transformation():
     from session_py import Xform
 
     b = BRep.create_box(2.0, 3.0, 4.0)
-    b.xform = Xform.translation(10.0, 20.0, 30.0)
-    moved = b.transformed()
+    b_xf = Xform.translation(10.0, 20.0, 30.0)
+    moved = b.transformed(b_xf)
 
     pt = moved.point_at(0, 0.0, 0.0)
     pt_orig = b.point_at(0, 0.0, 0.0)
@@ -157,6 +157,12 @@ def test_brep_transformation():
     MINI_CHECK(abs(pt[0] - pt_orig[0] - 10.0) < 0.01)
     MINI_CHECK(abs(pt[1] - pt_orig[1] - 20.0) < 0.01)
     MINI_CHECK(abs(pt[2] - pt_orig[2] - 30.0) < 0.01)
+
+    v = moved.m_vertices[0]
+    v_orig = b.m_vertices[0]
+    MINI_CHECK(abs(v[0] - v_orig[0] - 10.0) < 0.01)
+    MINI_CHECK(abs(v[1] - v_orig[1] - 20.0) < 0.01)
+    MINI_CHECK(abs(v[2] - v_orig[2] - 30.0) < 0.01)
 
 
 @MINI_TEST("BRep", "Json Roundtrip")
@@ -614,8 +620,8 @@ def test_brep_boolean_example_brep_booleans():
     from .xform import Xform
     box = BRep.create_box(2, 2, 2)
     cyl = BRep.create_cylinder(0.7, 3.0)
-    cyl.xform = Xform.translation(0, 0, -1.5)
-    cyl = cyl.transformed()
+    cyl_xf = Xform.translation(0, 0, -1.5)
+    cyl = cyl.transformed(cyl_xf)
     fus = box.boolean_union(cyl)
     cut = box.boolean_difference(cyl)
     com = box.boolean_intersection(cyl)
@@ -639,8 +645,8 @@ def test_brep_boolean_offcenter_cylinder():
     PI = math.pi
     box = BRep.create_box(4, 4, 4)
     cyl = BRep.create_cylinder(1.0, 6.0)
-    cyl.xform = Xform.translation(0.5, 0, -3)
-    cyl = cyl.transformed()
+    cyl_xf = Xform.translation(0.5, 0, -3)
+    cyl = cyl.transformed(cyl_xf)
     cut = box.boolean_difference(cyl)
     com = box.boolean_intersection(cyl)
     fus = box.boolean_union(cyl)
@@ -707,8 +713,8 @@ def test_brep_boolean_box_box():
     from .xform import Xform
     ba = BRep.create_box(4, 4, 4)
     bb = BRep.create_box(2, 2, 2)
-    bb.xform = Xform.translation(2, 0, 0)
-    bb = bb.transformed()
+    bb_xf = Xform.translation(2, 0, 0)
+    bb = bb.transformed(bb_xf)
     cut = ba.boolean_difference(bb)
     com = ba.boolean_intersection(bb)
     fus = ba.boolean_union(bb)

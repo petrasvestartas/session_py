@@ -1269,33 +1269,29 @@ def test_mesh_transformation():
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2]])
     v0 = mesh.vertices()[0]
 
-    # transform() — apply stored xform in-place; xform field unchanged
+    # transform(xf) — apply in place
     mesh1 = mesh.duplicate()
-    mesh1.xform = Xform.translation(0.0, 0.0, 1.0)
-    mesh1.transform()
+    mesh1_xf = Xform.translation(0.0, 0.0, 1.0)
+    mesh1.transform(mesh1_xf)
 
-    MINI_CHECK(not mesh1.xform.is_identity())
     MINI_CHECK(mesh1.vertex_point(v0)[2] == 1.0)
 
-    # transform(xf) — apply given xform in-place; stored xform unchanged
+    # transform(xf) — apply in place, matrix built separately
     mesh2 = mesh.duplicate()
     x = Xform.translation(0.0, 0.0, 1.0)
     mesh2.transform(x)
-    MINI_CHECK(mesh2.xform.is_identity())
     MINI_CHECK(mesh2.vertex_point(v0)[2] == 1.0)
 
-    # transformed() — copy with stored xform applied
+    # transformed(xf) — returns a copy
     mesh3 = mesh.duplicate()
-    mesh3.xform = Xform.translation(0.0, 0.0, 10.0)
-    mesh3t = mesh3.transformed()
-    MINI_CHECK(not mesh3t.xform.is_identity())
+    mesh3_xf = Xform.translation(0.0, 0.0, 10.0)
+    mesh3t = mesh3.transformed(mesh3_xf)
     MINI_CHECK(mesh3t.vertex_point(v0)[2] == 10.0)
 
     # transformed(xf) — copy with given xform applied
     mesh4 = mesh.duplicate()
     x = Xform.translation(0.0, 0.0, 10.0)
     mesh4t = mesh4.transformed(x)
-    MINI_CHECK(mesh4t.xform.is_identity())
     MINI_CHECK(mesh4t.vertex_point(v0)[2] == 10.0)
 
 
@@ -1303,12 +1299,10 @@ def test_mesh_transformation():
 def test_mesh_json_roundtrip():
     from session_py import Mesh
     from session_py import Point
-    from session_py import Xform
     from pathlib import Path
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh"
-    mesh.xform = Xform.translation(1.0, 2.0, 3.0)
 
     # JSON object
     d = mesh.__jsondump__()
@@ -1366,12 +1360,10 @@ def test_mesh_json_roundtrip():
 def test_mesh_protobuf_roundtrip():
     from session_py import Mesh
     from session_py import Point
-    from session_py import Xform
     from pathlib import Path
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh_proto"
-    mesh.xform = Xform.translation(1.0, 2.0, 3.0)
 
     # String
     proto_bytes = mesh.pb_dumps()

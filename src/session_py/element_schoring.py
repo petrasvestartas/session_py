@@ -80,13 +80,12 @@ class ElementSchoring(Element):
     def __init__(
         self,
         dataset=None,
-        transformation=None,
         features=None,
         name=None,
         data_dir=None,
         geometry_as_brep=False,
     ):
-        super().__init__(geometry=None, transformation=transformation, name=name or "my_schoring")
+        super().__init__(geometry=None, name=name or "my_schoring")
         if features:
             self._features = list(features)
         self.dataset = dataset
@@ -152,8 +151,9 @@ class ElementSchoring(Element):
     def polylines_to_elements(lines_unordered, data_dir=None):
         """Build a chain of schoring elements (foot, body_start, body_end, head) for each vertical line.
 
-        Mirrors the compas_tf SchoringElement.polylines_to_models logic but returns a flat
-        list of ElementSchoring with their session_transformation set, instead of a Model.
+        Mirrors the compas_tf SchoringElement.polylines_to_models logic. An Element no longer
+        stores a placement, so this returns a flat list of ``(ElementSchoring, Xform)`` pairs:
+        hand each pair to ``session.add_element(elem, parent)`` + ``session.set_xform(elem.guid, xf)``.
         """
         from .line import Line
 
@@ -180,6 +180,7 @@ class ElementSchoring(Element):
 
         elements = []
         groups = []
+        placements = {}
         for i, line in enumerate(lines):
             length = line.length()
             filenames = Dataset.select_by_type("a", length, data_dir=data_dir)
@@ -229,12 +230,12 @@ class ElementSchoring(Element):
             )
             body_end_plane = Plane(origin=body_end_origin, x_axis=body_start_yaxis, y_axis=body_start_zaxis_dir)
 
-            foot.session_transformation = xform_frame_source
-            body_start.session_transformation = _xform_from_plane(body_start_plane)
-            body_end.session_transformation = _xform_from_plane(body_end_plane)
-            head.session_transformation = xform_frame_target
+            placements[id(foot)] = xform_frame_source
+            placements[id(body_start)] = _xform_from_plane(body_start_plane)
+            placements[id(body_end)] = _xform_from_plane(body_end_plane)
+            placements[id(head)] = xform_frame_target
 
-        return elements
+        return [(e, placements.get(id(e), Xform.identity())) for e in elements]
 
     ###########################################################################################
     # Operators
@@ -251,7 +252,6 @@ class ElementSchoring(Element):
         result.frames = [copy.deepcopy(p, memo) for p in getattr(self, "frames", [])]
         result.max_extension_length = getattr(self, "max_extension_length", 0.0)
         result._geometry = copy.deepcopy(self._geometry, memo)
-        result._session_transformation = copy.deepcopy(self._session_transformation, memo)
         result._features = list(self._features)
         result._is_dirty = True
         result._aabb = None
@@ -290,7 +290,6 @@ class ElementSchoring(Element):
             "geometry_type": type(self._geometry).__name__ if self._geometry else "None",
             "guid": self.guid,
             "name": self.name,
-            "session_transformation": self.session_transformation.__jsondump__(),
             "type": "ElementSchoring",
         }
 
@@ -305,8 +304,6 @@ class ElementSchoring(Element):
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         if name is not None:
             elem.name = name
-        if "session_transformation" in data:
-            elem.session_transformation = file_decode_node(data["session_transformation"])
         return elem
 
     ###########################################################################################
@@ -323,8 +320,6 @@ class ElementSchoring(Element):
             "dataset": self.dataset,
             "data_dir": self.data_dir,
         }).encode()
-        proto.session_transformation.name = self.session_transformation.name
-        proto.session_transformation.matrix.extend(self.session_transformation.m)
         return proto.SerializeToString()
 
     @classmethod
@@ -339,8 +334,4 @@ class ElementSchoring(Element):
         )
         elem.guid = proto.guid
         elem.name = proto.name
-        xf = Xform()
-        xf.name = proto.session_transformation.name
-        xf.m = list(proto.session_transformation.matrix)
-        elem.session_transformation = xf
         return elem

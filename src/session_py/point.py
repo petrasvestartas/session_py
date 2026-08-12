@@ -1,7 +1,6 @@
 import uuid
 import math
 from .color import Color
-from .xform import Xform
 from .vector import Vector
 from .tolerance import Tolerance
 import copy
@@ -32,7 +31,7 @@ class Point:
 
     """
 
-    __slots__ = ("_guid", "name", "_x", "_y", "_z", "width", "_pointcolor", "_xform")
+    __slots__ = ("_guid", "name", "_x", "_y", "_z", "width", "_pointcolor")
 
     def __init__(self, x=0.0, y=0.0, z=0.0, name="my_point"):
         self._guid = None
@@ -42,7 +41,6 @@ class Point:
         self._z = z
         self.width = 1.0
         self._pointcolor = None
-        self._xform = None
 
     @property
     def guid(self) -> str:
@@ -68,16 +66,6 @@ class Point:
     def pointcolor(self, value):
         self._pointcolor = value
 
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
-
     ###########################################################################################
     # Operators
     ###########################################################################################
@@ -98,7 +86,6 @@ class Point:
         result._z = self._z
         result.width = self.width
         result.pointcolor = copy.deepcopy(self.pointcolor, memo)
-        result.xform = copy.deepcopy(self.xform, memo)
         return result
 
     def duplicate(self):
@@ -260,25 +247,18 @@ class Point:
     # Transformation
     ###########################################################################################
 
-    def transform(self):
-        """Apply the stored xform transformation to the point coordinates.
-
-        Transforms the point in-place and resets xform to identity.
-        """
+    def transform(self, xform):
+        """Apply a transformation to the point coordinates, in place."""
         x, y, z = self[0], self[1], self[2]
-        m = self.xform.m
+        m = xform.m
         w = m[3]*x + m[7]*y + m[11]*z + m[15]
         w_inv = 1.0 / w if abs(w) > 1e-10 else 1.0
         self[0] = (m[0]*x + m[4]*y + m[8]*z + m[12]) * w_inv
         self[1] = (m[1]*x + m[5]*y + m[9]*z + m[13]) * w_inv
         self[2] = (m[2]*x + m[6]*y + m[10]*z + m[14]) * w_inv
-        self.xform = Xform.identity()
 
-    def transformed(self):
-        """Return a transformed copy of the point.
-
-        Returns a new point with the transformation applied.
-        The original point and its xform remain unchanged.
+    def transformed(self, xform):
+        """Return a transformed copy of the point, leaving the original unchanged.
 
         Returns
         -------
@@ -287,7 +267,7 @@ class Point:
         """
 
         result = copy.deepcopy(self)
-        result.transform()
+        result.transform(xform)
         return result
 
     ###########################################################################################
@@ -554,7 +534,6 @@ class Point:
             "type": f"{self.__class__.__name__}",
             "width": self.width,
             "x": self[0],
-            "xform": self.xform.__jsondump__(),
             "y": self[1],
             "z": self[2],
         }
@@ -573,9 +552,6 @@ class Point:
         # Always assign metadata (per project convention)
         pt.guid = guid if guid is not None else data.get("guid", pt.guid)
         pt.name = name if name is not None else data.get("name", pt.name)
-
-        if "xform" in data:
-            pt.xform = file_decode_node(data["xform"])
 
         return pt
 
@@ -653,10 +629,6 @@ class Point:
         proto.pointcolor.b = self.pointcolor[2]
         proto.pointcolor.a = self.pointcolor[3]
         
-        # Set xform (uses 'matrix' not 'm', no guid in proto schema)
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-        
         return proto.SerializeToString()
 
     @classmethod
@@ -676,7 +648,6 @@ class Point:
         """
         from .proto import point_pb2
         from .color import Color
-        from .xform import Xform
         
         proto = point_pb2.Point()
         proto.ParseFromString(data)
@@ -694,11 +665,6 @@ class Point:
             proto.pointcolor.a
         )
         pt.pointcolor.name = proto.pointcolor.name
-        
-        # Load xform (uses 'matrix' not 'm', no guid in proto schema)
-        pt.xform = Xform()
-        pt.xform.name = proto.xform.name
-        pt.xform.m = list(proto.xform.matrix)
         
         return pt
 
@@ -748,7 +714,6 @@ class Point:
             and round(self[2], Tolerance.ROUNDING) == round(other[2], Tolerance.ROUNDING)
             and round(self.width, Tolerance.ROUNDING) == round(other.width, Tolerance.ROUNDING)
             and self.pointcolor == other.pointcolor
-            and self.xform == other.xform
         )
 
     def __ne__(self, other):

@@ -143,13 +143,12 @@ def test_polyline_transformation():
         Point(1.0, 1.0, 0.0),
         Point(0.0, 1.0, 0.0),
     ])
-    pl.xform = Xform.translation(10.0, 0.0, 0.0)
-    pl_transformed = pl.transformed()
-    pl.transform()
+    pl_xf = Xform.translation(10.0, 0.0, 0.0)
+    pl_transformed = pl.transformed(pl_xf)
+    pl.transform(pl_xf)
 
     MINI_CHECK(pl_transformed.get_point(0)[0] == 10.0 and pl_transformed.get_point(1)[0] == 11.0)
     MINI_CHECK(pl.get_point(0)[0] == 10.0 and pl.get_point(1)[0] == 11.0)
-    MINI_CHECK(pl.xform == Xform.identity())
 
 
 @MINI_TEST("Polyline", "Json Roundtrip")
@@ -1027,16 +1026,6 @@ def test_polyline_simplify_two_points():
     result = Polyline.simplify_points(pts, 0.001)
 
     MINI_CHECK(len(result) == 2)
-
-
-@MINI_TEST("Polyline", "Transformed Xform")
-def test_polyline_transformed_xform():
-    from session_py import Point, Polyline, Xform
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
-    xf = Xform.translation(10.0, 0.0, 0.0)
-    pl_x = pl.transformed_xform(xf)
-    MINI_CHECK(TOLERANCE.is_close(pl_x.get_point(0)[0], 10.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_x.get_point(1)[0], 11.0))
 
 
 @MINI_TEST("Polyline", "Translate")

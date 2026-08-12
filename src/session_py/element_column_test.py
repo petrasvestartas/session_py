@@ -104,8 +104,8 @@ def test_column_session_geometry():
     from session_py import Mesh
 
     c = ElementColumn(width=0.4, depth=0.4, height=3.0)
-    c.session_transformation = Xform.translation(10.0, 0.0, 0.0)
-    sg = c.session_geometry
+    c_xf = Xform.translation(10.0, 0.0, 0.0)
+    sg = c.session_geometry(c_xf)
 
     MINI_CHECK(isinstance(sg, Mesh))
     verts = list(sg.vertex.values())
@@ -116,11 +116,9 @@ def test_column_session_geometry():
 @MINI_TEST("ElementColumn", "Json Roundtrip")
 def test_column_json_roundtrip():
     from session_py import ElementColumn
-    from session_py import Xform
     from pathlib import Path
 
     c = ElementColumn(width=0.5, depth=0.6, height=4.0, name="json_col")
-    c.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_column_element.json"
     c.file_json_dump(fname)
@@ -136,11 +134,9 @@ def test_column_json_roundtrip():
 @MINI_TEST("ElementColumn", "Protobuf Roundtrip")
 def test_column_protobuf_roundtrip():
     from session_py import ElementColumn
-    from session_py import Xform
     from pathlib import Path
 
     c = ElementColumn(width=0.5, depth=0.6, height=4.0, name="proto_col")
-    c.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_column_element.bin"
     c.pb_dump(path)

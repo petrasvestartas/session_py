@@ -338,8 +338,9 @@ def test_session_ray_cast():
     placed.add_vertex(Point(1.0, -1.0, 0.0), 1)
     placed.add_vertex(Point(0.0, 1.0, 0.0), 2)
     placed.add_face([0, 1, 2])
-    placed.xform = Xform.translation(100.0, 0.0, 0.0)
+    placed_guid = placed.guid
     session.add_mesh(placed)
+    session.set_xform(placed_guid, Xform.translation(100.0, 0.0, 0.0))
     hits2 = session.ray_cast(Point(100.0, 0.0, 2.0), Vector(0.0, 0.0, -1.0))
 
     MINI_CHECK(len(hits2) >= 1)
@@ -518,6 +519,91 @@ def test_session_order():
     MINI_CHECK(loaded.order() == order)
 
 
+@MINI_TEST("Session", "Set Xform")
+def test_session_set_xform():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+    session.add_point(point)
+
+    shift = Xform.translation(5.0, 0.0, 0.0)
+    session.set_xform(guid, shift)
+
+    MINI_CHECK(session.xform(guid) == shift)
+    # No parent was passed, so the object has no tree node: it is its own root and keeps
+    # its placement. Falling back to identity here would move it to the origin.
+    MINI_CHECK(session.world_xform(guid) == shift)
+    MINI_CHECK(session.world_xforms()[guid] == shift)
+    MINI_CHECK(session.xform("missing") == Xform.identity())
+    MINI_CHECK(session.remove_xform(guid))
+    MINI_CHECK(session.xform(guid) == Xform.identity())
+
+
+@MINI_TEST("Session", "World Xform Hierarchy")
+def test_session_world_xform_hierarchy():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(0.0, 0.0, 0.0)
+    c = Point(0.0, 0.0, 0.0)
+    a_guid = a.guid
+    b_guid = b.guid
+    c_guid = c.guid
+    a_node = session.add_point(a)
+    b_node = session.add_point(b)
+    c_node = session.add_point(c)
+
+    session.add(a_node)
+    session.add(b_node, a_node)
+    session.add(c_node, b_node)
+
+    # Rotation and translation do not commute, so a reversed fold fails these checks.
+    a_xform = Xform.rotation_z(PI / 2.0)
+    b_xform = Xform.translation(2.0, 0.0, 0.0)
+    c_xform = Xform.rotation_z(PI / 2.0)
+    session.set_xform(a_guid, a_xform)
+    session.set_xform(b_guid, b_xform)
+    session.set_xform(c_guid, c_xform)
+
+    world = session.world_xforms()
+
+    MINI_CHECK(session.world_xform(a_guid) == a_xform)
+    MINI_CHECK(session.world_xform(b_guid) == a_xform * b_xform)
+    MINI_CHECK(session.world_xform(c_guid) == a_xform * b_xform * c_xform)
+    MINI_CHECK(world[c_guid] == session.world_xform(c_guid))
+
+
+@MINI_TEST("Session", "Xform Roundtrip")
+def test_session_xform_roundtrip():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+    from pathlib import Path
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+    session.add_point(point)
+    session.set_xform(guid, Xform.translation(7.0, 8.0, 9.0))
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_xform.bin"
+    session.pb_dump(fname)
+    loaded = Session.pb_load(fname)
+    json_loaded = Session.file_json_loads(session.file_json_dumps())
+
+    MINI_CHECK(loaded.xform(guid) == session.xform(guid))
+    MINI_CHECK(len(loaded.xforms) == 1)
+    MINI_CHECK(json_loaded.xform(guid) == session.xform(guid))
+    MINI_CHECK(len(json_loaded.xforms) == 1)
+
+
 @MINI_TEST("Session", "Tree Transformation Hierarchy")
 def test_session_tree_transformation_hierarchy():
     from session_py import Session
@@ -553,10 +639,13 @@ def test_session_tree_transformation_hierarchy():
         return mesh
 
     box1 = create_box(Point(0, 0, 0), 2.0)
+    box1_guid = box1.guid
     box1_node = scene.add_mesh(box1)
     box2 = create_box(Point(0, 0, 0), 2.0)
+    box2_guid = box2.guid
     box2_node = scene.add_mesh(box2)
     box3 = create_box(Point(0, 0, 0), 2.0)
+    box3_guid = box3.guid
     box3_node = scene.add_mesh(box3)
 
     scene.add(box1_node)
@@ -566,18 +655,21 @@ def test_session_tree_transformation_hierarchy():
     plane_from = Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
     plane_to = Plane(Point(0, 0, 1.0), Vector(1, 0, 0), Vector(0, 1, 0))
     xy_to_top = Xform.plane_to_plane(plane_from, plane_to)
-    box1.xform = Xform.rotation_z(PI / 1.5) * xy_to_top
-    box2.xform = Xform.translation(2.0, 0, 0) * Xform.rotation_z(PI / 6.0)
-    box3.xform = Xform.translation(2.0, 0, 0)
+    scene.set_xform(box1_guid, Xform.rotation_z(PI / 1.5) * xy_to_top)
+    scene.set_xform(box2_guid, Xform.translation(2.0, 0, 0) * Xform.rotation_z(PI / 6.0))
+    scene.set_xform(box3_guid, Xform.translation(2.0, 0, 0))
 
+    # get_geometry BAKES the cumulative placement into the coordinates, so the deepest box
+    # must land exactly where its world xform sends the original corner.
+    world3 = scene.world_xform(box3_guid)
+    expected = world3.transform_point(Point(-1.0, -1.0, -1.0))
     transformed = scene.get_geometry()
+    baked = transformed.meshes[2].vertex_point(0)
 
     MINI_CHECK(len(transformed.meshes) == 3)
-    m1 = transformed.meshes[0]
-    v0 = m1.vertex[0]
-    MINI_CHECK(abs(v0[0] - 1.36603) < 1e-4)
-    MINI_CHECK(abs(v0[1] - (-0.366025)) < 1e-4)
-    MINI_CHECK(abs(v0[2] - 0.0) < 1e-4)
+    MINI_CHECK(TOLERANCE.is_close(baked[0], expected[0]))
+    MINI_CHECK(TOLERANCE.is_close(baked[1], expected[1]))
+    MINI_CHECK(TOLERANCE.is_close(baked[2], expected[2]))
 
 
 @MINI_TEST("Session", "Add Component")

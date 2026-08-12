@@ -254,6 +254,7 @@ class SpatialRTree:
             nn = [None]
             self._add_branch(branch, node, nn)
             return nn[0]
+        assert False
         return None
 
     def _insert_branch_internal(self, branch, level):

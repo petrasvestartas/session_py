@@ -263,7 +263,7 @@ class OBB:
         max_x = max_y = max_z = float('-inf')
 
         for pt in points:
-            local_pt = Point(pt[0], pt[1], pt[2]); local_pt.xform = plane_to_xy; local_pt = local_pt.transformed()
+            local_pt = Point(pt[0], pt[1], pt[2]).transformed(plane_to_xy)
             min_x = min(min_x, local_pt[0])
             min_y = min(min_y, local_pt[1])
             min_z = min(min_z, local_pt[2])
@@ -279,7 +279,7 @@ class OBB:
         )
 
         xy_to_plane = Xform.xy_to_plane(origin, x_axis, y_axis, z_axis)
-        local_center.xform = xy_to_plane; world_center = local_center.transformed()
+        world_center = local_center.transformed(xy_to_plane)
 
         return cls(world_center, x_axis, y_axis, z_axis, half_size)
 
@@ -604,29 +604,19 @@ class OBB:
     # Transformation
     ###########################################################################################
 
-    def transform(self):
-        """Apply the stored xform transformation to the bounding box.
+    def transform(self, xform):
+        """Apply a transformation to the bounding box, in place."""
+        self.center.transform(xform)
+        self.x_axis.transform(xform)
+        self.y_axis.transform(xform)
+        self.z_axis.transform(xform)
 
-        Transforms the bounding box in-place and resets xform to identity.
-        """
-        from .xform import Xform
-
-        self.center.xform = self.xform
-        self.center.transform()
-        self.x_axis.xform = self.xform
-        self.x_axis.transform()
-        self.y_axis.xform = self.xform
-        self.y_axis.transform()
-        self.z_axis.xform = self.xform
-        self.z_axis.transform()
-        self.xform = Xform.identity()
-
-    def transformed(self):
+    def transformed(self, xform):
         """Return a transformed copy of the bounding box."""
         import copy
 
         result = copy.deepcopy(self)
-        result.transform()
+        result.transform(xform)
         return result
 
     ###########################################################################################
@@ -661,9 +651,6 @@ class OBB:
         bbox.guid = guid if guid is not None else data.get("guid", bbox.guid)
         bbox.name = name if name is not None else data.get("name", bbox.name)
 
-        if "xform" in data:
-            bbox.xform = file_decode_node(data["xform"])
-
         return bbox
 
     def file_json_dumps(self):
@@ -696,10 +683,6 @@ class OBB:
         proto.half_size.ParseFromString(self.half_size.pb_dumps())
         proto.guid = self.guid
         proto.name = self.name
-        if hasattr(self, 'xform'):
-            proto.xform.guid = self.xform.guid
-            proto.xform.name = self.xform.name
-            proto.xform.matrix.extend(self.xform.m)
         return proto.SerializeToString()
 
     @classmethod
@@ -715,9 +698,6 @@ class OBB:
         bbox = cls(center, x_axis, y_axis, z_axis, half_size)
         bbox.guid = proto.guid
         bbox.name = proto.name
-        if proto.HasField('xform'):
-            from .xform import Xform
-            bbox.xform = Xform.pb_loads(proto.xform.SerializeToString())
         return bbox
 
     def pb_dump(self, filepath):

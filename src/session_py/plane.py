@@ -4,7 +4,6 @@ from .color import Color
 from .point import Point
 from .vector import Vector
 from .tolerance import Tolerance
-from .xform import Xform
 
 
 class Plane:
@@ -50,7 +49,6 @@ class Plane:
         self.name = name
         self.width = width
         self._linecolor = None
-        self._xform = None
 
         if origin is None:
             self._origin = Point(0.0, 0.0, 0.0)
@@ -83,16 +81,6 @@ class Plane:
     @guid.setter
     def guid(self, value: str):
         self._guid = value
-
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
 
     @property
     def linecolor(self):
@@ -178,7 +166,6 @@ class Plane:
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
-        plane.xform = Xform.identity()
         plane._origin = point
         plane._z_axis = Vector(normal[0], normal[1], normal[2])
         if normalize:
@@ -215,7 +202,6 @@ class Plane:
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
-        plane.xform = Xform.identity()
         plane._origin = points[0]
 
         v1 = points[1] - points[0]
@@ -281,7 +267,6 @@ class Plane:
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
-        plane.xform = Xform.identity()
         plane._origin = Point(cx, cy, cz)
         plane._x_axis = x_axis
         plane._y_axis = y_axis
@@ -310,7 +295,6 @@ class Plane:
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
-        plane.xform = Xform.identity()
         plane._origin = point1
 
         direction = point2 - point1
@@ -340,7 +324,6 @@ class Plane:
         plane.name = "xy_plane"
         plane.width = 1.0
         plane._linecolor = None
-        plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.x_axis()
         plane._y_axis = Vector.y_axis()
@@ -365,7 +348,6 @@ class Plane:
         plane.name = "yz_plane"
         plane.width = 1.0
         plane._linecolor = None
-        plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.y_axis()
         plane._y_axis = Vector.z_axis()
@@ -390,7 +372,6 @@ class Plane:
         plane.name = "xz_plane"
         plane.width = 1.0
         plane._linecolor = None
-        plane.xform = Xform.identity()
         plane._origin = Point(0.0, 0.0, 0.0)
         plane._x_axis = Vector.x_axis()
         plane._y_axis = Vector(0.0, 0.0, -1.0)
@@ -408,7 +389,6 @@ class Plane:
         p.name = "my_plane"
         p.width = 1.0
         p._linecolor = None
-        p.xform = Xform.identity()
         p._origin = Point(0, 0, 0)
         p._x_axis = Vector(0, 0, 0)
         p._y_axis = Vector(0, 0, 0)
@@ -429,7 +409,6 @@ class Plane:
         p.name = "my_plane"
         p.width = 1.0
         p._linecolor = None
-        p.xform = Xform.identity()
         p._origin = origin
         p._x_axis = x_axis
         p._y_axis = y_axis
@@ -444,27 +423,19 @@ class Plane:
     # Operators
     ###########################################################################################
 
-    def transform(self):
-        """Apply the stored xform transformation to the plane.
+    def transform(self, xform):
+        """Apply a transformation to the plane, in place."""
+        self._origin.transform(xform)
+        self._x_axis.transform(xform)
+        self._y_axis.transform(xform)
+        self._z_axis.transform(xform)
 
-        Transforms the plane in-place and resets xform to identity.
-        """
-        self._origin.xform = self.xform
-        self._origin.transform()
-        self._x_axis.xform = self.xform
-        self._x_axis.transform()
-        self._y_axis.xform = self.xform
-        self._y_axis.transform()
-        self._z_axis.xform = self.xform
-        self._z_axis.transform()
-        self.xform = Xform.identity()
-
-    def transformed(self):
+    def transformed(self, xform):
         """Return a transformed copy of the plane."""
         import copy
 
         result = copy.deepcopy(self)
-        result.transform()
+        result.transform(xform)
         return result
 
     def duplicate(self):
@@ -555,7 +526,6 @@ class Plane:
             result.name = self.name
             result.width = self.width
             result._linecolor = None
-            result.xform = Xform.identity()
             result._origin = self._origin + other
             result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
             result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])
@@ -571,7 +541,6 @@ class Plane:
             result.guid = self.guid
             result.name = self.name
             result.width = self.width
-            result.xform = Xform.identity()
             result._origin = self._origin - other
             result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
             result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])
@@ -850,7 +819,6 @@ class Plane:
             "name": self.name,
             "type": f"{self.__class__.__name__}",
             "width": self.width,
-            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -891,10 +859,6 @@ class Plane:
         # Load linecolor
         if "linecolor" in data:
             plane.linecolor = file_decode_node(data["linecolor"])
-
-        # Load xform if present
-        if "xform" in data:
-            plane.xform = file_decode_node(data["xform"])
 
         return plane
 
@@ -978,10 +942,6 @@ class Plane:
         proto.linecolor.b = self.linecolor[2]
         proto.linecolor.a = self.linecolor[3]
 
-        # Set xform
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-
         return proto.SerializeToString()
 
     @classmethod
@@ -1022,12 +982,6 @@ class Plane:
             proto.linecolor.a
         )
         plane.linecolor.name = proto.linecolor.name
-
-        # Load xform if present
-        if proto.HasField('xform'):
-            plane.xform = Xform()
-            plane.xform.name = proto.xform.name
-            plane.xform.m = list(proto.xform.matrix)
 
         return plane
 

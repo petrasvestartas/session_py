@@ -4,11 +4,10 @@ from .xform import Xform
 
 
 class Element:
-    def __init__(self, geometry=None, transformation=None, name="my_element"):
+    def __init__(self, geometry=None, name="my_element"):
         self._guid = None
         self.name = name
         self._geometry = geometry
-        self._session_transformation = transformation
         self._features = []
         self._is_dirty = True
         self._aabb = None
@@ -34,27 +33,16 @@ class Element:
     def geometry(self):
         return self._geometry
 
-    @property
-    def session_transformation(self):
-        if self._session_transformation is None:
-            self._session_transformation = Xform.identity()
-        return self._session_transformation
-
-    @session_transformation.setter
-    def session_transformation(self, value):
-        self._session_transformation = value
-        self._is_dirty = True
-
-    @property
-    def session_geometry(self):
+    def session_geometry(self, xform):
+        """The element's geometry placed by ``xform``. The placement is supplied by the caller -
+        an Element no longer stores one; the Session does. Pass identity for local geometry.
+        """
         if self._geometry is None:
             return None
         geo = copy.deepcopy(self._geometry)
         geo = self.apply_features(geo)
-        xf = self.session_transformation
-        if not xf.is_identity():
-            geo.xform = xf * geo.xform
-            geo.transform()
+        if not xform.is_identity():
+            geo.transform(xform)
         return geo
 
     @property
@@ -139,7 +127,6 @@ class Element:
         result.guid = str(uuid.uuid4())
         result.name = copy.deepcopy(self.name, memo)
         result._geometry = copy.deepcopy(self._geometry, memo)
-        result._session_transformation = copy.deepcopy(self._session_transformation, memo)
         result._features = list(self._features)
         result._is_dirty = True
         result._aabb = None
@@ -181,6 +168,13 @@ class Element:
         self._features.append(feature)
         self._is_dirty = True
 
+    def place(self, xform):
+        """Bake a placement into this element's own geometry, invalidating the cached boxes.
+        The Session owns the placement, so it hands it in here rather than the Element storing it.
+        """
+        self._geometry = self.session_geometry(xform)
+        self._is_dirty = True
+
     def set_geometry(self, geometry):
         self._geometry = geometry
         self._is_dirty = True
@@ -209,7 +203,7 @@ class Element:
     def compute_aabb(self):
         from .obb import OBB
         from .point import Point
-        geo = self.session_geometry
+        geo = self.session_geometry(Xform.identity())
         if geo is None:
             return OBB.from_point(Point(0, 0, 0), 0.0)
         return self._obb_from_geometry(geo, aabb=True)
@@ -217,14 +211,14 @@ class Element:
     def compute_obb(self):
         from .obb import OBB
         from .point import Point
-        geo = self.session_geometry
+        geo = self.session_geometry(Xform.identity())
         if geo is None:
             return OBB.from_point(Point(0, 0, 0), 0.0)
         return self._obb_from_geometry(geo, aabb=False)
 
     def compute_collision_mesh(self):
         from .mesh import Mesh
-        geo = self.session_geometry
+        geo = self.session_geometry(Xform.identity())
         if geo is None:
             return Mesh()
         if isinstance(geo, Mesh):
@@ -235,7 +229,7 @@ class Element:
         from .point import Point
         from .mesh import Mesh
         from .brep import BRep
-        geo = self.session_geometry
+        geo = self.session_geometry(Xform.identity())
         if geo is None:
             return Point(0, 0, 0)
         if isinstance(geo, Mesh):
@@ -308,7 +302,6 @@ class Element:
             "geometry_type": geo_type,
             "guid": self.guid,
             "name": self.name,
-            "session_transformation": self.session_transformation.__jsondump__(),
             "type": "Element",
         }
 
@@ -323,8 +316,6 @@ class Element:
         elem = cls(geometry=geometry)
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
-        if "session_transformation" in data:
-            elem.session_transformation = file_decode_node(data["session_transformation"])
         return elem
 
     def file_json_dumps(self):
@@ -361,14 +352,11 @@ class Element:
             proto.geometry_data = self._geometry.pb_dumps()
         else:
             proto.geometry_type = "None"
-        proto.session_transformation.name = self.session_transformation.name
-        proto.session_transformation.matrix.extend(self.session_transformation.m)
         return proto.SerializeToString()
 
     @classmethod
     def pb_loads(cls, data):
         from .proto import element_pb2
-        from .xform import Xform
         proto = element_pb2.Element()
         proto.ParseFromString(data)
         geometry = None
@@ -377,10 +365,6 @@ class Element:
         elem = cls(geometry=geometry)
         elem.guid = proto.guid
         elem.name = proto.name
-        xf = Xform()
-        xf.name = proto.session_transformation.name
-        xf.m = list(proto.session_transformation.matrix)
-        elem.session_transformation = xf
         return elem
 
     @staticmethod

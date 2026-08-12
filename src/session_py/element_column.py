@@ -1,12 +1,11 @@
 import uuid
 import copy
 from .element import Element
-from .xform import Xform
 
 
 class ElementColumn(Element):
-    def __init__(self, width=0.4, depth=0.4, height=3.0, transformation=None, name="my_column"):
-        super().__init__(geometry=None, transformation=transformation, name=name)
+    def __init__(self, width=0.4, depth=0.4, height=3.0, name="my_column"):
+        super().__init__(geometry=None, name=name)
         self._width = width
         self._depth = depth
         self._height = height
@@ -134,7 +133,6 @@ class ElementColumn(Element):
         result._depth = self._depth
         result._height = self._height
         result._geometry = copy.deepcopy(self._geometry, memo)
-        result._session_transformation = copy.deepcopy(self._session_transformation, memo)
         result._features = list(self._features)
         result._is_dirty = True
         result._aabb = None
@@ -176,7 +174,6 @@ class ElementColumn(Element):
             "guid": self.guid,
             "height": self._height,
             "name": self.name,
-            "session_transformation": self.session_transformation.__jsondump__(),
             "type": "ElementColumn",
             "width": self._width,
         }
@@ -191,8 +188,6 @@ class ElementColumn(Element):
         )
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
-        if "session_transformation" in data:
-            elem.session_transformation = file_decode_node(data["session_transformation"])
         return elem
 
     ###########################################################################################
@@ -211,8 +206,6 @@ class ElementColumn(Element):
             "depth": self._depth,
             "height": self._height,
         }).encode()
-        proto.session_transformation.name = self.session_transformation.name
-        proto.session_transformation.matrix.extend(self.session_transformation.m)
         return proto.SerializeToString()
 
     @classmethod
@@ -229,8 +222,4 @@ class ElementColumn(Element):
         )
         elem.guid = proto.guid
         elem.name = proto.name
-        xf = Xform()
-        xf.name = proto.session_transformation.name
-        xf.m = list(proto.session_transformation.matrix)
-        elem.session_transformation = xf
         return elem

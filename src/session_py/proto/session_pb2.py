@@ -26,15 +26,18 @@ from . import objects_pb2 as objects__pb2
 from . import tree_pb2 as tree__pb2
 from . import graph_pb2 as graph__pb2
 from . import boundingbox_pb2 as boundingbox__pb2
+from . import xform_pb2 as xform__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rsession.proto\x12\rsession_proto\x1a\robjects.proto\x1a\ntree.proto\x1a\x0bgraph.proto\x1a\x11\x62oundingbox.proto\"\xc5\x01\n\x07Session\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\'\n\x07objects\x18\x03 \x01(\x0b\x32\x16.session_proto.Objects\x12!\n\x04tree\x18\x04 \x01(\x0b\x32\x13.session_proto.Tree\x12#\n\x05graph\x18\x05 \x01(\x0b\x32\x14.session_proto.Graph\x12-\n\tbvh_boxes\x18\x06 \x03(\x0b\x32\x1a.session_proto.BoundingBoxb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rsession.proto\x12\rsession_proto\x1a\robjects.proto\x1a\ntree.proto\x1a\x0bgraph.proto\x1a\x11\x62oundingbox.proto\x1a\x0bxform.proto\"?\n\nXformEntry\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12#\n\x05xform\x18\x02 \x01(\x0b\x32\x14.session_proto.Xform\"\xf0\x01\n\x07Session\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\'\n\x07objects\x18\x03 \x01(\x0b\x32\x16.session_proto.Objects\x12!\n\x04tree\x18\x04 \x01(\x0b\x32\x13.session_proto.Tree\x12#\n\x05graph\x18\x05 \x01(\x0b\x32\x14.session_proto.Graph\x12-\n\tbvh_boxes\x18\x06 \x03(\x0b\x32\x1a.session_proto.BoundingBox\x12)\n\x06xforms\x18\x07 \x03(\x0b\x32\x19.session_proto.XformEntryb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'session_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_SESSION']._serialized_start=92
-  _globals['_SESSION']._serialized_end=289
+  _globals['_XFORMENTRY']._serialized_start=104
+  _globals['_XFORMENTRY']._serialized_end=167
+  _globals['_SESSION']._serialized_start=170
+  _globals['_SESSION']._serialized_end=410
 # @@protoc_insertion_point(module_scope)

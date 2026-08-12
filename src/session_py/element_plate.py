@@ -1,7 +1,6 @@
 import uuid
 import copy
 from .element import Element
-from .xform import Xform
 
 
 class ElementPlate(Element):
@@ -15,8 +14,8 @@ class ElementPlate(Element):
                 result.pop()
         return result
 
-    def __init__(self, polygon=None, thickness=0.1, transformation=None, name="my_plate", polygon_top=None):
-        super().__init__(geometry=None, transformation=transformation, name=name)
+    def __init__(self, polygon=None, thickness=0.1, name="my_plate", polygon_top=None):
+        super().__init__(geometry=None, name=name)
         from .point import Point
         if polygon is None:
             polygon = [
@@ -239,7 +238,6 @@ class ElementPlate(Element):
         result._key = self._key
         result._component_plane = copy.deepcopy(self._component_plane, memo)
         result._geometry = copy.deepcopy(self._geometry, memo)
-        result._session_transformation = copy.deepcopy(self._session_transformation, memo)
         result._features = list(self._features)
         result._is_dirty = True
         result._aabb = None
@@ -291,7 +289,6 @@ class ElementPlate(Element):
             "name": self.name,
             "polygon": [[p[0], p[1], p[2]] for p in self._polygon],
             "polygon_top": [[p[0], p[1], p[2]] for p in self._polygon_top],
-            "session_transformation": self.session_transformation.__jsondump__(),
             "thickness": self._thickness,
             "type": "ElementPlate",
         }
@@ -310,8 +307,6 @@ class ElementPlate(Element):
         )
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
-        if "session_transformation" in data:
-            elem.session_transformation = file_decode_node(data["session_transformation"])
         elem._joint_types = data.get("joint_types", [])
         elem._j_mf = data.get("j_mf", [])
         elem._key = data.get("key", "")
@@ -336,8 +331,6 @@ class ElementPlate(Element):
             "polygon_top": [[p[0], p[1], p[2]] for p in self._polygon_top],
             "thickness": self._thickness,
         }).encode()
-        proto.session_transformation.name = self.session_transformation.name
-        proto.session_transformation.matrix.extend(self.session_transformation.m)
         proto.joint_types.extend(self._joint_types)
         for face_joints in self._j_mf:
             fj = element_pb2.FaceJoints()
@@ -378,10 +371,6 @@ class ElementPlate(Element):
         )
         elem.guid = proto.guid
         elem.name = proto.name
-        xf = Xform()
-        xf.name = proto.session_transformation.name
-        xf.m = list(proto.session_transformation.matrix)
-        elem.session_transformation = xf
         elem._joint_types = list(proto.joint_types)
         elem._j_mf = []
         for fj in proto.j_mf:

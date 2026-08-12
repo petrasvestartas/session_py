@@ -727,32 +727,28 @@ def test_nurbscurve_transformations():
         Point(4.0, 0.0, 0.0)
     ]
 
-    # transform() - Apply stored xform (in-place)
+    # transform(xform) - in place
     curve1 = NurbsCurve.create(False, 2, points)
-    curve1.xform = Xform.translation(0.0, 0.0, 1.0)
-    curve1.transform()
-    MINI_CHECK(curve1.xform.is_identity() == False)
+    curve1_xf = Xform.translation(0.0, 0.0, 1.0)
+    curve1.transform(curve1_xf)
     MINI_CHECK(curve1.cv(0)[2] == 1.0)
 
     # transform(xform) - Apply custom xform (in-place)
     curve2 = NurbsCurve.create(False, 2, points)
     x = Xform.translation(0.0, 0.0, 1.0)
     curve2.transform(x)
-    MINI_CHECK(curve2.xform.is_identity() == True)
     MINI_CHECK(curve2.cv(0)[2] == 1.0)
 
-    # transformed() - Get copy with stored xform applied
+    # transformed(xform) - returns a copy
     curve3 = NurbsCurve.create(False, 2, points)
-    curve3.xform = Xform.translation(0.0, 0.0, 10.0)
-    curve3_transformed = curve3.transformed()
-    MINI_CHECK(curve3_transformed.xform.is_identity() == False)
+    curve3_xf = Xform.translation(0.0, 0.0, 10.0)
+    curve3_transformed = curve3.transformed(curve3_xf)
     MINI_CHECK(curve3_transformed.cv(0)[2] == 10.0)
 
     # transformed(xform) - Get copy with custom xform
     curve4 = NurbsCurve.create(False, 2, points)
     x = Xform.translation(0.0, 0.0, 10.0)
     curve4_transformed = curve4.transformed(x)
-    MINI_CHECK(curve4_transformed.xform.is_identity() == True)
     MINI_CHECK(curve4_transformed.cv(0)[2] == 10.0)
 
 

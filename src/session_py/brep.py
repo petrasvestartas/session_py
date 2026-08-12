@@ -4,13 +4,11 @@ import math
 
 from .point import Point
 from .vector import Vector
-from .xform import Xform
 from .color import Color
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 
 import numpy as _np
-_IDENTITY_XFORM = Xform.identity()
 _ZERO_GUID = "00000000-0000-0000-0000-000000000000"
 _BLACK_COLOR = Color.black()
 _NURBSKNOT_01 = _np.array([0., 1.], dtype=_np.float64)
@@ -309,7 +307,6 @@ class BRep:
         self.name = "my_brep"
         self.width = 1.0
         self._surfacecolor = None
-        self._xform = None
         self.m_surfaces = []
         self.m_curves_3d = []
         self.m_curves_2d = []
@@ -344,16 +341,6 @@ class BRep:
     def surfacecolor(self, value):
         self._surfacecolor = value
 
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
-
     def __str__(self):
         return f"BRep(name={self.name}, faces={self.face_count()}, edges={self.edge_count()}, vertices={self.vertex_count()})"
 
@@ -368,8 +355,6 @@ class BRep:
         if self.width != other.width:
             return False
         if self.surfacecolor != other.surfacecolor:
-            return False
-        if self.xform != other.xform:
             return False
         if len(self.m_faces) != len(other.m_faces):
             return False
@@ -390,7 +375,6 @@ class BRep:
         b.name = self.name
         b.width = self.width
         b.surfacecolor = copy.deepcopy(self.surfacecolor)
-        b.xform = copy.deepcopy(self.xform)
         b.m_surfaces = copy.deepcopy(self.m_surfaces)
         b.m_curves_3d = copy.deepcopy(self.m_curves_3d)
         b.m_curves_2d = copy.deepcopy(self.m_curves_2d)
@@ -1443,7 +1427,7 @@ class BRep:
     def from_nurbscurves(curves, holes=None):
         brep = BRep.__new__(BRep)
         brep.guid = _ZERO_GUID; brep.name = "polysurface"; brep.width = 1.0
-        brep.surfacecolor = _BLACK_COLOR; brep.xform = _IDENTITY_XFORM
+        brep.surfacecolor = _BLACK_COLOR
         brep.m_surfaces = []; brep.m_curves_3d = []; brep.m_curves_2d = []
         brep.m_vertices = []; brep.m_topology_vertices = []; brep.m_topology_edges = []
         brep.m_trims = []; brep.m_loops = []; brep.m_faces = []
@@ -1467,7 +1451,7 @@ class BRep:
             nc = crv.m_cv_count
             c2d = NurbsCurve.__new__(NurbsCurve)
             c2d.guid = _ZERO_GUID; c2d.name = ""; c2d.width = 1.0
-            c2d.pointcolors = []; c2d.linecolors = []; c2d.xform = _IDENTITY_XFORM; c2d._rmf_cache = None
+            c2d.pointcolors = []; c2d.linecolors = []; c2d._rmf_cache = None
             c2d.m_dim = 3; c2d.m_is_rat = crv.m_is_rat; c2d.m_order = crv.m_order
             c2d.m_cv_count = nc; c2d.m_cv_stride = (4 if crv.m_is_rat else 3)
             c2d.m_nurbsknot = crv.m_nurbsknot
@@ -1586,7 +1570,7 @@ class BRep:
             srf = NurbsSurface.__new__(NurbsSurface)
             srf.guid = _ZERO_GUID; srf.name = ""; srf.surfacecolor = _BLACK_COLOR
             srf.width = 1.0; srf.pointcolors = []; srf.facecolors = []; srf.linecolors = []
-            srf.xform = _IDENTITY_XFORM; srf.m_mesh = None
+            srf.m_mesh = None
             srf.m_dim = 3; srf.m_is_rat = 0; srf.m_order = [2, 2]; srf.m_cv_count = [2, 2]
             srf.m_cv_stride = [6, 3]; srf.m_nurbsknot = [_NURBSKNOT_01, _NURBSKNOT_01]
             cv = _np.zeros(12, dtype=_np.float64); srf.m_cv = cv
@@ -3155,24 +3139,19 @@ class BRep:
     # Transformation
     ###########################################################################
 
-    def transform(self, xform=None):
-        if xform is None:
-            xform = self.xform
+    def transform(self, xform):
         for srf in self.m_surfaces:
-            srf.xform = xform
-            srf.transform()
+            srf.transform(xform)
         for crv in self.m_curves_3d:
-            crv.xform = xform
-            crv.transform()
+            crv.transform(xform)
+        m = xform.m
         for i, pt in enumerate(self.m_vertices):
-            m = xform.m
-            x = m[0]*pt[0] + m[1]*pt[1] + m[2]*pt[2] + m[3]
-            y = m[4]*pt[0] + m[5]*pt[1] + m[6]*pt[2] + m[7]
-            z = m[8]*pt[0] + m[9]*pt[1] + m[10]*pt[2] + m[11]
+            x = m[0]*pt[0] + m[4]*pt[1] + m[8]*pt[2] + m[12]
+            y = m[1]*pt[0] + m[5]*pt[1] + m[9]*pt[2] + m[13]
+            z = m[2]*pt[0] + m[6]*pt[1] + m[10]*pt[2] + m[14]
             self.m_vertices[i] = Point(x, y, z)
-        self.xform = Xform.identity()
 
-    def transformed(self, xform=None):
+    def transformed(self, xform):
         b = self.duplicate()
         b.transform(xform)
         return b
@@ -3215,7 +3194,6 @@ class BRep:
         j["type"] = "BRep"
         j["vertices"] = [[v[0], v[1], v[2]] for v in self.m_vertices]
         j["width"] = self.width
-        j["xform"] = self.xform.__jsondump__()
         return j
 
     @classmethod
@@ -3226,8 +3204,6 @@ class BRep:
         b.width = data.get("width", 1.0)
         if "surfacecolor" in data:
             b.surfacecolor = Color.__jsonload__(data["surfacecolor"])
-        if "xform" in data:
-            b.xform = Xform.__jsonload__(data["xform"])
         if "curves_2d" in data:
             b.m_curves_2d = [NurbsCurve.__jsonload__(c) for c in data["curves_2d"]]
         if "curves_3d" in data:
@@ -3353,8 +3329,6 @@ class BRep:
         proto.surfacecolor.g = self.surfacecolor.g
         proto.surfacecolor.b = self.surfacecolor.b
         proto.surfacecolor.a = self.surfacecolor.a
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
         return proto.SerializeToString()
 
     @classmethod
@@ -3411,10 +3385,6 @@ class BRep:
         cp = proto.surfacecolor
         b.surfacecolor = Color(cp.r, cp.g, cp.b, cp.a)
         b.surfacecolor.name = cp.name
-        xp = proto.xform
-        b.xform = Xform()
-        b.xform.name = xp.name
-        b.xform.m = list(xp.matrix)
         return b
 
     def pb_dump(self, filepath):

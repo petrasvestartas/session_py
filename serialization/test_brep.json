@@ -16,7 +16,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "9ac34e4d-3df5-4740-b547-618558d6a457",
+            "guid": "db2ffcb3-8628-4a34-994e-ea6b8fbf6515",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -27,30 +27,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "2a7d52b0-d490-480a-9e11-99561b106097",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -68,7 +45,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "775c583f-459a-4b4c-9ea8-1a988bb8fe75",
+            "guid": "6bc98cc7-aa7b-4c4e-8f25-60308ce7304b",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -79,30 +56,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "eea65204-4cc5-4533-9ff1-e09abc55dcfd",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -120,7 +74,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "04da4fbb-576c-41a9-8274-5f48e1f297b7",
+            "guid": "ca412572-1326-4394-9757-14a9ac4ea03d",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -131,30 +85,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "6d847afe-5eae-42e3-9f8a-488fe0b3bc9c",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -172,7 +103,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "252b56bc-4b2f-4882-87e6-f05de66625e1",
+            "guid": "5e0ec00f-4680-469d-a724-3cb1b75e43d8",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -183,30 +114,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "523f6635-fb2d-4c4c-81e1-2cf7353bf11b",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -224,7 +132,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "f0f1b696-35e9-464c-b412-24411d9e9770",
+            "guid": "c20da34f-aa0b-4215-bec0-05037b029fa7",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -235,30 +143,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "976d1b0b-8d52-44a9-b9ea-8c43e929a5a9",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -276,7 +161,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "50b05b9b-cb48-4dea-bd40-c08b5c6dbf15",
+            "guid": "51a779ca-27cc-412a-a472-21e9c5b993db",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -287,30 +172,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "6cfb3559-3103-419d-89cb-f16fecb3e700",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -328,7 +190,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "d1b49bc4-af7f-4859-96e0-76194543d802",
+            "guid": "511b73d5-2cc1-421e-a985-9e36682da1ec",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -339,30 +201,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "6b3c8594-4736-4967-8953-0486cd4e15c1",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -380,7 +219,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "37e77105-1e77-4011-a7aa-7b6358a81a3c",
+            "guid": "c27ac31c-4632-489c-9f63-07ab8b48028d",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -391,30 +230,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "baab4bd1-41c1-4bcf-ac00-04ab0967eb4a",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -432,7 +248,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "2ead02dc-a005-4a03-b125-85ebbfacc2a5",
+            "guid": "9117b8f5-0537-4137-80e5-7432c7d155dd",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -443,30 +259,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "e719a0bd-0be3-4bbb-b283-ccd1112c5fc8",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -484,7 +277,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "4ed5403b-0fcb-47de-9dfd-9eedc9149770",
+            "guid": "c7c81d67-4d1f-4767-b92c-fe1b627375c8",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -495,30 +288,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "4d20eab8-b33d-4224-a577-865f9558c9f8",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -536,7 +306,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "d86dae43-0530-4f75-84ac-dfc12cb04da8",
+            "guid": "aa166fdb-b57a-4355-8568-65e209110766",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -547,30 +317,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "75edecc4-9544-4454-9d0c-999de3c3f0c8",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -588,7 +335,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "0fecd8bf-257a-4f50-a4ba-ecf241a87bc7",
+            "guid": "5e400586-9938-457f-896b-fbb29fa5b635",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -599,30 +346,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "f5a9d55e-4233-4b60-ac99-97293b1a7432",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -640,7 +364,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "7cf33182-a97f-40b9-a865-cf95168d5d34",
+            "guid": "fc8d04f3-33cc-4a7e-8da6-09b0011e68dc",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -651,30 +375,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "5a67d4b7-a330-4077-bb0e-d5f4c53155f0",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -692,7 +393,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "3a671e95-72fa-4703-8a25-846724405684",
+            "guid": "eea2594a-2e84-4349-8b48-08f16c7fa53e",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -703,30 +404,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "ff921267-366c-486c-8fdd-ac1d961e0604",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -744,7 +422,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "910329fb-3385-4779-a752-d33b5689ab4f",
+            "guid": "3f0f3726-ce9f-4f16-88fc-14771b879011",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -755,30 +433,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "0762315e-bd35-4707-8c21-247a7d1271d0",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -796,7 +451,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "c81d9bde-98d2-4512-88bb-947b3420a479",
+            "guid": "ee8644ca-5c08-4dc9-8925-2c3cc29b5aa5",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -807,30 +462,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "4f01fc67-83ad-4981-a4aa-e449f90008f1",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -848,7 +480,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "c6393884-ca86-444f-baf1-1cf786fe60f0",
+            "guid": "a72c2c0e-e01d-4e0a-acfe-3684899da6a6",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -859,30 +491,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "b1628981-3e7f-440c-afc1-4b9cce67b8c1",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -900,7 +509,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "14fa52ae-3435-4cc3-8ec3-bfb31bef36e4",
+            "guid": "e69f1896-f07c-4bbc-87e5-9fdaccd8c009",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -911,30 +520,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "37f62244-4ee7-4620-af49-69cd6637ef82",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -952,7 +538,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "fc6720ea-6ad9-45e5-af57-ef7689a71a13",
+            "guid": "f3083f1d-008f-4a1f-8f3a-f9e23bf57759",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -963,30 +549,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "05f5cf3e-bb8e-472a-ab48-092e8b1ba85d",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1004,7 +567,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "4ed3355d-7e82-4799-8816-69ea1188ec85",
+            "guid": "7d5bd3bf-17f6-4d97-bbbe-45b53f9314ea",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1015,30 +578,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "adfdabfb-a6f7-4d9e-acb3-b14948ed9467",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1056,7 +596,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "37aa9970-a6ff-44e5-bf8a-0a4847f9460f",
+            "guid": "763ac2a4-19b2-451c-81f7-4aa55eaae079",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1067,30 +607,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "def73065-ab04-468f-99a7-4e52841393a9",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1108,7 +625,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "2b4fc622-319b-4bd9-a518-fb309bb4290d",
+            "guid": "f7621031-835b-49aa-b1ac-1d1237f2e2f1",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1119,30 +636,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "5d5fe06e-badc-4f50-8327-6435c5b0579a",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1160,7 +654,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "0a786515-6c8d-4135-95bf-5bde64421284",
+            "guid": "06daef82-05c1-43c0-8d02-17502396f43e",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1171,30 +665,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "d4d33709-8c68-4f34-8b9d-f0b64db232ec",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1212,7 +683,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "ec3ef4a0-f63f-46cb-8167-62556c1d7401",
+            "guid": "b0f236b2-5b22-48bd-b10b-6410ccc05970",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1223,30 +694,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "d03a40c6-8199-4895-8c9d-bb83aca76792",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         }
     ],
     "curves_3d": [
@@ -1266,7 +714,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "f917044d-5f1a-4bd7-80db-2e643fb0f917",
+            "guid": "2e57f078-1e16-4ba0-9139-029f5b0eed51",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1277,30 +725,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "af1fd1d3-747d-4452-8f16-ea19f8661735",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1318,7 +743,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "18f68f1d-cbb3-43f6-bf34-ae3fc3ba1066",
+            "guid": "c443e61b-1aa1-485a-be53-5e09716b9ef1",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1329,30 +754,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "299052a5-daa2-4014-94ec-f55e4d0dbde2",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1370,7 +772,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "ec66b053-e81e-4df2-b96b-777496c31835",
+            "guid": "5a3d0c55-c8f1-4b62-b201-7035b4daa608",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1381,30 +783,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "9d39bf15-652d-42b2-9c71-20c894d5ce5e",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1422,7 +801,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "c09a8428-2b8c-4e06-8d83-d0f5e3f8e624",
+            "guid": "ec166330-6418-4ae4-bf56-b9bbf9862c47",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1433,30 +812,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "81e1c24a-22c5-4f1a-aae8-7ba0c9fe902d",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1474,7 +830,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "09e68460-bce8-4588-af2a-9656f29054fe",
+            "guid": "2f7bb2f7-3be1-46c2-bbf5-e04d7af2f708",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1485,30 +841,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "f719de35-b678-4538-b648-6e8fb60e8ed7",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1526,7 +859,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "3fc1df41-492b-4257-9367-10c6af79de6a",
+            "guid": "6c5c055e-1020-4f11-8653-860897fb3e64",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1537,30 +870,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "068db91f-0b0e-4d2a-a95d-1b0206aacd51",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1578,7 +888,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "82278acc-aed6-44cb-9e4c-a19496543a13",
+            "guid": "512c2e42-a123-42f1-86c1-220cc53d7140",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1589,30 +899,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "9edede7e-5bd2-4f59-b91a-62ad09daa56e",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1630,7 +917,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "bc2130a3-a088-48a7-86af-2f87078c353d",
+            "guid": "1d99c633-f4b2-4a3e-8e64-7be03fdf8082",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1641,30 +928,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "c7042180-b923-4ea9-94cf-7ae3696e73a8",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1682,7 +946,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "e83fae12-cbf6-489f-b9e1-6f32c2c64da9",
+            "guid": "7809f0bd-0e3a-4292-a3cf-8507c4ec8c54",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1693,30 +957,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "5d1bb2d3-86f5-423e-8f0f-7060e76cf2ed",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1734,7 +975,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "d875ba5a-75d0-4b5c-87cf-b28c3bc2459f",
+            "guid": "30882817-e8e9-4e76-af30-fba8f17412d5",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1745,30 +986,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "acf28dc3-a5d9-422e-abdb-156395bdd41a",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1786,7 +1004,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "b482a9ee-d315-4ad3-b19e-6b0e2baf4127",
+            "guid": "ae4390eb-66e8-4882-8fe4-84db3736c6ef",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1797,30 +1015,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "867d5f0e-5cf4-4fed-9596-715011b02cdc",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -1838,7 +1033,7 @@
             "cv_count": 2,
             "cv_stride": 3,
             "dimension": 3,
-            "guid": "d75abef9-d173-4c6e-b6bc-f9b1f101eae3",
+            "guid": "1a2f5ae2-92a4-4465-9e57-5557359a1b53",
             "is_rational": false,
             "nurbsknots": [
                 0.0,
@@ -1849,30 +1044,7 @@
             "order": 2,
             "pointcolors": [],
             "type": "NurbsCurve",
-            "width": 1.0,
-            "xform": {
-                "guid": "c453311f-7372-4233-a82f-9f77e87f5ef5",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         }
     ],
     "faces": [
@@ -1919,7 +1091,7 @@
             "surface_index": 5
         }
     ],
-    "guid": "ef8b5784-4e0e-4f54-bede-abbf4ce4776c",
+    "guid": "389eb061-98a4-4ef2-9d95-a74328c10685",
     "loops": [
         {
             "face_index": 0,
@@ -2003,7 +1175,7 @@
             "cv_count_v": 2,
             "dimension": 3,
             "facecolors": [],
-            "guid": "280f0276-8484-4c44-88a5-f5eaf13ca570",
+            "guid": "69fbdeb0-1dbb-4817-8e26-ccee5e4652e4",
             "is_rational": false,
             "nurbsknots_u": [
                 0.0,
@@ -2019,30 +1191,7 @@
             "order_v": 2,
             "pointcolors": [],
             "type": "NurbsSurface",
-            "width": 1.0,
-            "xform": {
-                "guid": "f4c49a2c-29e0-4b2c-bb7a-cee9dd640775",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -2063,7 +1212,7 @@
             "cv_count_v": 2,
             "dimension": 3,
             "facecolors": [],
-            "guid": "3f45c87f-f003-4107-ac7a-414c965a65c0",
+            "guid": "b2ab6943-e455-400f-b6d5-6c0b79100930",
             "is_rational": false,
             "nurbsknots_u": [
                 0.0,
@@ -2079,30 +1228,7 @@
             "order_v": 2,
             "pointcolors": [],
             "type": "NurbsSurface",
-            "width": 1.0,
-            "xform": {
-                "guid": "67d5bb53-7d04-49df-9871-45dbdcf9dcd8",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -2123,7 +1249,7 @@
             "cv_count_v": 2,
             "dimension": 3,
             "facecolors": [],
-            "guid": "5d007bea-60c4-49df-85a0-fa232021b79f",
+            "guid": "14c09a8b-fe19-409f-9f34-aabd2ed060bb",
             "is_rational": false,
             "nurbsknots_u": [
                 0.0,
@@ -2139,30 +1265,7 @@
             "order_v": 2,
             "pointcolors": [],
             "type": "NurbsSurface",
-            "width": 1.0,
-            "xform": {
-                "guid": "63123aa8-1dbe-43f4-b76d-e10e5f03cbf8",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -2183,7 +1286,7 @@
             "cv_count_v": 2,
             "dimension": 3,
             "facecolors": [],
-            "guid": "ceb1ef42-47e5-4ec2-8b5d-9a8d349032e8",
+            "guid": "dfe4089c-6141-4522-991e-fa321fbd3af6",
             "is_rational": false,
             "nurbsknots_u": [
                 0.0,
@@ -2199,30 +1302,7 @@
             "order_v": 2,
             "pointcolors": [],
             "type": "NurbsSurface",
-            "width": 1.0,
-            "xform": {
-                "guid": "e09c5d4a-ef76-4a57-b003-62f9dda67c4d",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -2243,7 +1323,7 @@
             "cv_count_v": 2,
             "dimension": 3,
             "facecolors": [],
-            "guid": "935f2421-fcb5-432a-8168-3f4d7ed731b5",
+            "guid": "6407ab5f-ca79-43e7-b4df-120b05145227",
             "is_rational": false,
             "nurbsknots_u": [
                 0.0,
@@ -2259,30 +1339,7 @@
             "order_v": 2,
             "pointcolors": [],
             "type": "NurbsSurface",
-            "width": 1.0,
-            "xform": {
-                "guid": "d21c16b9-b8f5-4fdf-9e66-47d18582e30b",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         },
         {
             "control_points": [
@@ -2303,7 +1360,7 @@
             "cv_count_v": 2,
             "dimension": 3,
             "facecolors": [],
-            "guid": "efe2c65a-6536-4724-acd1-342e1247f56d",
+            "guid": "0d2e2204-ff3a-4133-a51d-5cefb0cbe7c3",
             "is_rational": false,
             "nurbsknots_u": [
                 0.0,
@@ -2319,37 +1376,14 @@
             "order_v": 2,
             "pointcolors": [],
             "type": "NurbsSurface",
-            "width": 1.0,
-            "xform": {
-                "guid": "53586d6c-547f-4dd6-8950-81400dc861b1",
-                "m": [
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    1.0
-                ],
-                "name": "my_xform",
-                "type": "Xform"
-            }
+            "width": 1.0
         }
     ],
     "surfacecolor": {
         "a": 1.0,
         "b": 1.0,
         "g": 1.0,
-        "guid": "a46501de-cd77-47ff-adeb-dd724f00c311",
+        "guid": "84c3bd38-1766-46c6-a71a-e1d7020253f1",
         "name": "my_color",
         "r": 1.0,
         "type": "Color"
@@ -2743,28 +1777,5 @@
             2.0
         ]
     ],
-    "width": 2.0,
-    "xform": {
-        "guid": "53960b4c-8f0e-4bff-81db-fdc80579050e",
-        "m": [
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0
-        ],
-        "name": "my_xform",
-        "type": "Xform"
-    }
+    "width": 2.0
 }

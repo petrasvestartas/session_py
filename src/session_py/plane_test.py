@@ -209,8 +209,8 @@ def test_plane_transform():
     from session_py import Xform
 
     pl = Plane.xy_plane()
-    pl.xform = Xform.translation(1.0, 2.0, 3.0)
-    pl.transform()
+    pl_xf = Xform.translation(1.0, 2.0, 3.0)
+    pl.transform(pl_xf)
 
     MINI_CHECK(TOLERANCE.is_close(pl.origin[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pl.origin[1], 2.0))
@@ -223,8 +223,8 @@ def test_plane_transformed():
     from session_py import Xform
 
     pl = Plane.xy_plane()
-    pl.xform = Xform.translation(1.0, 2.0, 3.0)
-    pl2 = pl.transformed()
+    pl_xf = Xform.translation(1.0, 2.0, 3.0)
+    pl2 = pl.transformed(pl_xf)
 
     MINI_CHECK(TOLERANCE.is_close(pl2.origin[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pl2.origin[1], 2.0))

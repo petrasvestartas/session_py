@@ -5,7 +5,6 @@ from typing import List, Optional
 from .color import Color
 from .point import Point
 from .vector import Vector
-from .xform import Xform
 
 
 class PointCloud:
@@ -18,7 +17,6 @@ class PointCloud:
         self._guid = None
         self.name = "my_pointcloud"
         self.point_size = 1.0
-        self._xform = None
 
         # Store as flat arrays
         self.coords: List[float] = []
@@ -47,17 +45,6 @@ class PointCloud:
     @guid.setter
     def guid(self, value: str):
         self._guid = value
-
-    @property
-    def xform(self):
-        """Transformation matrix applied by transform()/transformed()."""
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
 
     @classmethod
     def from_coords(cls, coords: List[float],
@@ -258,13 +245,12 @@ class PointCloud:
     # Transform
     ###########################################################################################
 
-    def transform(self) -> None:
-        """Apply the stored xform transformation to the point cloud in-place."""
+    def transform(self, xform) -> None:
+        """Apply a transformation to the point cloud in-place."""
         for i in range(self.point_count()):
             idx = i * 3
             pt = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
-            pt.xform = self.xform
-            pt.transform()
+            pt.transform(xform)
             self.coords[idx] = pt[0]
             self.coords[idx + 1] = pt[1]
             self.coords[idx + 2] = pt[2]
@@ -272,18 +258,15 @@ class PointCloud:
         for i in range(self.normal_count()):
             idx = i * 3
             n = Vector(self._normals[idx], self._normals[idx + 1], self._normals[idx + 2])
-            n.xform = self.xform
-            n.transform()
+            n.transform(xform)
             self._normals[idx] = n[0]
             self._normals[idx + 1] = n[1]
             self._normals[idx + 2] = n[2]
 
-        self.xform = Xform.identity()
-
-    def transformed(self) -> "PointCloud":
+    def transformed(self, xform) -> "PointCloud":
         """Return a transformed copy of the point cloud."""
         result = copy.deepcopy(self)
-        result.transform()
+        result.transform(xform)
         return result
 
     ###########################################################################################
@@ -341,7 +324,6 @@ class PointCloud:
             "normals": self._normals,
             "point_size": self.point_size,
             "type": f"{self.__class__.__name__}",
-            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -359,8 +341,6 @@ class PointCloud:
 
         if "point_size" in data:
             pc.point_size = data["point_size"]
-        if "xform" in data:
-            pc.xform = file_decode_node(data["xform"])
 
         return pc
 
@@ -405,10 +385,6 @@ class PointCloud:
         proto.normals.extend(self._normals)
         proto.point_size = self.point_size
 
-        # Serialize xform
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-
         return proto.SerializeToString()
 
     @classmethod
@@ -427,13 +403,6 @@ class PointCloud:
         pc.guid = proto.guid
         pc.name = proto.name
         pc.point_size = proto.point_size if proto.point_size > 0 else 1.0
-
-        # Deserialize xform
-        if proto.HasField("xform"):
-            pc.xform.name = proto.xform.name
-            for i, val in enumerate(proto.xform.matrix):
-                if i < 16:
-                    pc.xform.m[i] = val
 
         return pc
 

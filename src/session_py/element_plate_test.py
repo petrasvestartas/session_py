@@ -149,7 +149,6 @@ def test_plate_triangle():
 def test_plate_json_roundtrip():
     from session_py import ElementPlate
     from session_py import Point
-    from session_py import Xform
     from pathlib import Path
 
     polygon = [
@@ -159,7 +158,6 @@ def test_plate_json_roundtrip():
         Point(0, 2, 0),
     ]
     p = ElementPlate(polygon=polygon, thickness=0.3, name="json_plate")
-    p.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element.json"
     p.file_json_dump(fname)
@@ -176,7 +174,6 @@ def test_plate_json_roundtrip():
 def test_plate_protobuf_roundtrip():
     from session_py import ElementPlate
     from session_py import Point
-    from session_py import Xform
     from pathlib import Path
 
     polygon = [
@@ -186,7 +183,6 @@ def test_plate_protobuf_roundtrip():
         Point(0, 2, 0),
     ]
     p = ElementPlate(polygon=polygon, thickness=0.3, name="proto_plate")
-    p.session_transformation = Xform.translation(1.0, 2.0, 3.0)
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element.bin"
     p.pb_dump(path)

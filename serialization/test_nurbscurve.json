@@ -29,7 +29,7 @@
   "cv_count": 5,
   "cv_stride": 3,
   "dimension": 3,
-  "guid": "2c538ec9-23ec-4bc0-a850-7d2f3d79292a",
+  "guid": "b8f95254-40bf-4d07-bf4d-3e16aaacd0a7",
   "is_rational": false,
   "nurbsknots": [
     0.0,
@@ -44,28 +44,5 @@
   "order": 3,
   "pointcolors": [],
   "type": "NurbsCurve",
-  "width": 1.0,
-  "xform": {
-    "guid": "c4ee37c7-36f3-483e-97fc-f6effa4edb9c",
-    "m": [
-      1.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      1.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      1.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      1.0
-    ],
-    "name": "my_xform",
-    "type": "Xform"
-  }
+  "width": 1.0
 }

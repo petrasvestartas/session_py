@@ -391,8 +391,8 @@ def test_nurbssurface_trimmed_transformation():
     ])
 
     ts = NurbsSurfaceTrimmed.create(srf, outer)
-    ts.xform = Xform.translation(10.0, 20.0, 30.0)
-    ts2 = ts.transformed()
+    ts_xf = Xform.translation(10.0, 20.0, 30.0)
+    ts2 = ts.transformed(ts_xf)
 
     u0, u1 = ts2.surface().domain(0)
     v0, v1 = ts2.surface().domain(1)

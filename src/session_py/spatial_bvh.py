@@ -1,6 +1,6 @@
 # SpatialBVH — binary tree with OBB leaves, Morton-code (LBVH) construction.
 # Use for: collision detection and closest-point between many dynamic objects.
-#   Handles oriented boxes; supports OBB-OBB overlap as the inner test.
+#   Handles oriented boxes via their tight world-space AABBs (half-axes projected).
 # Prefer over SpatialAABBTree when objects rotate or you need OBB tightness.
 # Prefer over SpatialRTree  when all queries are nearest-object, not region overlap.
 # Prefer over SpatialKDTree when objects are volumetric (not point clouds).
@@ -92,6 +92,14 @@ def calculate_morton_code(
     iz = (iz * 0x00000005) & 0x49249249
 
     return ix | (iy << 1) | (iz << 2)
+
+
+def _aabb_from_obb(b: OBB) -> AABB:
+    """World-axis AABB of an OBB: project each half-axis onto the world axes."""
+    hx = b.half_size[0] * abs(b.x_axis[0]) + b.half_size[1] * abs(b.y_axis[0]) + b.half_size[2] * abs(b.z_axis[0])
+    hy = b.half_size[0] * abs(b.x_axis[1]) + b.half_size[1] * abs(b.y_axis[1]) + b.half_size[2] * abs(b.z_axis[1])
+    hz = b.half_size[0] * abs(b.x_axis[2]) + b.half_size[1] * abs(b.y_axis[2]) + b.half_size[2] * abs(b.z_axis[2])
+    return AABB(b.center[0], b.center[1], b.center[2], hx, hy, hz)
 
 
 def _clz32(x: int) -> int:
@@ -196,6 +204,12 @@ def _check_collisions_jit(
 
         total_checks += 1
 
+        # Grow the stack when fewer than 4 free slots remain
+        if stack_ptr + 4 >= stack.shape[0]:
+            new_stack = np.zeros((stack.shape[0] * 2, 2), dtype=np.int32)
+            new_stack[: stack.shape[0]] = stack
+            stack = new_stack
+
         a_obj_id = arena_object_id[a_idx]
         b_obj_id = arena_object_id[b_idx]
         a_leaf = a_obj_id >= 0
@@ -205,6 +219,8 @@ def _check_collisions_jit(
         if a_leaf and b_leaf:
             i = a_obj_id
             j = b_obj_id
+            if i > j:
+                i, j = j, i
             if 0 <= i < j < n_boxes:
                 all_collisions.append((i, j))
                 visited[i] = True
@@ -377,14 +393,19 @@ class SpatialBVH:
     def build_with_guids(self, boxes_with_guids: List[Tuple[OBB, str]]):
         """Build SpatialBVH from bounding boxes with GUIDs."""
         if not boxes_with_guids:
-            self.root = None
             self.object_guids = []
+            self.build([])
             return
 
         bounding_boxes = [bbox for bbox, _ in boxes_with_guids]
         self.object_guids = [guid for _, guid in boxes_with_guids]
         self.world_size = self.compute_world_size(bounding_boxes)
         self.build(bounding_boxes)
+
+    def build_from_boxes(self, boxes: List[OBB], ws: float) -> None:
+        """Build from bounding boxes with an explicit world size."""
+        self.world_size = ws
+        self.build(boxes)
 
     def build(self, bounding_boxes: List[OBB]) -> None:
         """Build the SpatialBVH tree from bounding boxes using LBVH algorithm."""
@@ -405,14 +426,7 @@ class SpatialBVH:
             morton_code = calculate_morton_code(
                 bbox.center[0], bbox.center[1], bbox.center[2], self.world_size
             )
-            aabb = AABB(
-                bbox.center[0],
-                bbox.center[1],
-                bbox.center[2],
-                bbox.half_size[0],
-                bbox.half_size[1],
-                bbox.half_size[2],
-            )
+            aabb = _aabb_from_obb(bbox)
             objects.append({"id": i, "morton_code": morton_code, "aabb": aabb})
 
         # Radix sort by Morton code
@@ -552,7 +566,12 @@ class SpatialBVH:
         compute_aabb(self.root)
 
         # Build flat arena for fast queries (NumPy arrays)
-        total_nodes = N + (N - 1)  # leaves + internals
+        self._build_arena(N + (N - 1))  # leaves + internals
+        # Don't build Box tree - arena is sufficient
+        self.root = None
+
+    def _build_arena(self, total_nodes: int) -> None:
+        """Flatten the pointer tree at `self.root` into the NumPy arena."""
         self.arena_left = np.full(total_nodes, -1, dtype=np.int32)
         self.arena_right = np.full(total_nodes, -1, dtype=np.int32)
         self.arena_object_id = np.full(total_nodes, -1, dtype=np.int32)
@@ -594,13 +613,11 @@ class SpatialBVH:
             return idx
 
         self.arena_root = build_arena(self.root)
-        # Don't build Box tree - arena is sufficient
-        self.root = None
 
     def build_from_aabbs(self, aabbs: List[AABB], world_size: float) -> None:
         """Build the BVH directly from axis-aligned AABBs, keeping the pointer tree (`root`)."""
         if not aabbs:
-            self.root = None
+            self.build([])
             return
 
         self.world_size = world_size
@@ -619,6 +636,7 @@ class SpatialBVH:
             leaf.object_id = objects[0]["id"]
             leaf.aabb = objects[0]["aabb"]
             self.root = leaf
+            self._build_arena(1)
             return
 
         codes = [obj["morton_code"] for obj in objects]
@@ -727,6 +745,7 @@ class SpatialBVH:
             )
 
         compute_aabb(self.root)
+        self._build_arena(N + (N - 1))
 
     def merge_aabb(self, aabb1: OBB, aabb2: OBB) -> OBB:
         """Merge two AABBs into a single encompassing AABB."""
@@ -895,6 +914,8 @@ class SpatialBVH:
 
             if a_leaf and b_leaf:
                 i, j = a_obj_id, b_obj_id
+                if i > j:
+                    i, j = j, i
                 if 0 <= i < j < len(bounding_boxes):
                     all_collisions.append((i, j))
                     visited[i], visited[j] = True, True
@@ -1016,17 +1037,51 @@ class SpatialBVH:
 
         return any_found
 
+    def find_collisions(
+        self, object_id: int, query_bbox: OBB, bounding_boxes: List[OBB]
+    ) -> Tuple[List[int], int]:
+        """Collisions of one object against the tree, excluding self; returns (object_ids, check_count)."""
+        collisions: List[int] = []
+        check_count = 0
+        if self.arena_root < 0 or self.arena_aabb is None:
+            return collisions, check_count
+        query = _aabb_from_obb(query_bbox)
+        stack: List[int] = [self.arena_root]
+        while stack:
+            idx = stack.pop()
+            a = self.arena_aabb[idx]
+            if not self._aabb_intersect_internal(query, AABB(a[0], a[1], a[2], a[3], a[4], a[5])):
+                continue
+            check_count += 1
+            obj_id = int(self.arena_object_id[idx])
+            if obj_id >= 0:
+                if (
+                    obj_id != object_id
+                    and obj_id < len(bounding_boxes)
+                    and self._aabb_intersect_internal(query, _aabb_from_obb(bounding_boxes[obj_id]))
+                ):
+                    collisions.append(obj_id)
+                continue
+            left_idx = int(self.arena_left[idx])
+            right_idx = int(self.arena_right[idx])
+            if left_idx >= 0:
+                stack.append(left_idx)
+            if right_idx >= 0:
+                stack.append(right_idx)
+        return collisions, check_count
+
     def query_aabb(self, query: OBB) -> List[int]:
         """Return object_ids of all leaves whose AABB overlaps the query box."""
         hits: List[int] = []
         if self.arena_root < 0 or self.arena_aabb is None:
             return hits
-        qcx = query.center[0]
-        qcy = query.center[1]
-        qcz = query.center[2]
-        qhx = query.half_size[0]
-        qhy = query.half_size[1]
-        qhz = query.half_size[2]
+        q = _aabb_from_obb(query)
+        qcx = q.cx
+        qcy = q.cy
+        qcz = q.cz
+        qhx = q.hx
+        qhy = q.hy
+        qhz = q.hz
         stack: List[int] = [self.arena_root]
         while stack:
             idx = stack.pop()

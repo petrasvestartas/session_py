@@ -733,33 +733,29 @@ def test_transformations():
         Point(5.0, 5.0, 0.0),
     ]
 
-    # Variant 1: transform() - Apply stored xform (in-place)
+    # Variant 1: transform(xform) - in place
     surface1 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
-    surface1.xform = Xform.translation(0.0, 0.0, 1.0)
-    surface1.transform()
+    surface1_xf = Xform.translation(0.0, 0.0, 1.0)
+    surface1.transform(surface1_xf)
 
-    MINI_CHECK(surface1.xform.is_identity() == False)
     MINI_CHECK(surface1.cv(0, 0)[2] == 1.0)
 
-    # Variant 2: transform(xform) - Apply custom xform (in-place)
+    # Variant 2: transform(xform) - in place, matrix built separately
     surface2 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     x = Xform.translation(0.0, 0.0, 1.0)
     surface2.transform(x)
-    MINI_CHECK(surface2.xform.is_identity() == True)
     MINI_CHECK(surface2.cv(0, 0)[2] == 1.0)
 
-    # Variant 3: transformed() - Get copy with stored xform applied
+    # Variant 3: transformed(xform) - returns a copy
     surface3 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
-    surface3.xform = Xform.translation(0.0, 0.0, 10.0)
-    surface3_transformed = surface3.transformed()
-    MINI_CHECK(surface3_transformed.xform.is_identity() == False)
+    surface3_xf = Xform.translation(0.0, 0.0, 10.0)
+    surface3_transformed = surface3.transformed(surface3_xf)
     MINI_CHECK(surface3_transformed.cv(0, 0)[2] == 10.0)
 
-    # Variant 4: transformed(xform) - Get copy with custom xform
+    # Variant 4: transformed(xform) - returns a copy, matrix built separately
     surface4 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     x = Xform.translation(0.0, 0.0, 10.0)
     surface4_transformed = surface4.transformed(x)
-    MINI_CHECK(surface4_transformed.xform.is_identity() == True)
     MINI_CHECK(surface4_transformed.cv(0, 0)[2] == 10.0)
 
 

@@ -6,7 +6,6 @@ from .closest import Closest
 from .nurbssurface import NurbsSurface
 from .nurbscurve import NurbsCurve
 from .primitives import Primitives
-from .xform import Xform
 from .color import Color
 
 
@@ -397,7 +396,6 @@ class NurbsSurfaceTrimmed:
         self.name = "my_nurbssurface_trimmed"
         self.width = 1.0
         self._surfacecolor = None
-        self._xform = None
         self.m_surface = NurbsSurface()
         self.m_outer_loop = NurbsCurve()
         self.m_inner_loops = []
@@ -426,16 +424,6 @@ class NurbsSurfaceTrimmed:
     @surfacecolor.setter
     def surfacecolor(self, value):
         self._surfacecolor = value
-
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
 
     @staticmethod
     def create(surface, outer_loop):
@@ -1592,16 +1580,12 @@ class NurbsSurfaceTrimmed:
             return Mesh()
         return result
 
-    def transform(self, xf=None):
-        if xf is None:
-            self.m_surface.transform(self.xform)
-            self.xform = Xform.identity()
-        else:
-            self.m_surface.transform(xf)
+    def transform(self, xform):
+        self.m_surface.transform(xform)
 
-    def transformed(self):
+    def transformed(self, xform):
         ts = self.duplicate()
-        ts.transform()
+        ts.transform(xform)
         return ts
 
     def duplicate(self):
@@ -1617,8 +1601,6 @@ class NurbsSurfaceTrimmed:
         if self.width != other.width:
             return False
         if self.surfacecolor != other.surfacecolor:
-            return False
-        if self.xform != other.xform:
             return False
         if self.m_surface != other.m_surface:
             return False
@@ -1651,7 +1633,6 @@ class NurbsSurfaceTrimmed:
         d['surfacecolor'] = self.surfacecolor.__jsondump__()
         d['type'] = 'NurbsSurfaceTrimmed'
         d['width'] = self.width
-        d['xform'] = self.xform.__jsondump__()
         return d
 
     @classmethod
@@ -1662,8 +1643,6 @@ class NurbsSurfaceTrimmed:
         ts.width = data.get('width', 1.0)
         if 'surfacecolor' in data:
             ts.surfacecolor = Color.__jsonload__(data['surfacecolor'])
-        if 'xform' in data:
-            ts.xform = Xform.__jsonload__(data['xform'])
         if 'surface' in data:
             ts.m_surface = NurbsSurface.__jsonload__(data['surface'])
         if 'outer_loop' in data:
@@ -1718,10 +1697,6 @@ class NurbsSurfaceTrimmed:
         proto.surfacecolor.b = self.surfacecolor[2]
         proto.surfacecolor.a = self.surfacecolor[3]
 
-        # Transform
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-
         return proto.SerializeToString()
 
     @classmethod
@@ -1758,11 +1733,6 @@ class NurbsSurfaceTrimmed:
             proto.surfacecolor.a
         )
         ts.surfacecolor.name = proto.surfacecolor.name
-
-        # Transform
-        ts.xform = Xform()
-        ts.xform.name = proto.xform.name
-        ts.xform.m = list(proto.xform.matrix)
 
         return ts
 

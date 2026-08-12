@@ -304,8 +304,7 @@ class Primitives:
         mesh = Mesh()
         vertex_keys = []
         for v in vertices:
-            v.xform = xform; transformed = v.transformed()
-            vertex_keys.append(mesh.add_vertex(transformed))
+            vertex_keys.append(mesh.add_vertex(v.transformed(xform)))
         for tri in triangles:
             face_vertices = [vertex_keys[tri[0]], vertex_keys[tri[1]], vertex_keys[tri[2]]]
             mesh.add_face(face_vertices)
@@ -385,16 +384,14 @@ class Primitives:
 
         body_vertex_map = []
         for v in body_geometry[0]:
-            v.xform = body_xform; transformed = v.transformed()
-            body_vertex_map.append(mesh.add_vertex(transformed))
+            body_vertex_map.append(mesh.add_vertex(v.transformed(body_xform)))
         for tri in body_geometry[1]:
             face_vertices = [body_vertex_map[tri[0]], body_vertex_map[tri[1]], body_vertex_map[tri[2]]]
             mesh.add_face(face_vertices)
 
         cone_vertex_map = []
         for v in cone_geometry[0]:
-            v.xform = cone_xform; transformed = v.transformed()
-            cone_vertex_map.append(mesh.add_vertex(transformed))
+            cone_vertex_map.append(mesh.add_vertex(v.transformed(cone_xform)))
         for tri in cone_geometry[1]:
             face_vertices = [cone_vertex_map[tri[0]], cone_vertex_map[tri[1]], cone_vertex_map[tri[2]]]
             mesh.add_face(face_vertices)

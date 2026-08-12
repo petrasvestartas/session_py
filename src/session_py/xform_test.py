@@ -43,15 +43,13 @@ def test_xform_constructor():
     s = Xform.scale_xyz(2.0, 1.0, 1.0)
     combined = t * s
     p = Point(1.0, 0.0, 0.0)
-    p.xform = combined
-    result = p.transformed()
+    result = p.transformed(combined)
 
     # In-place multiplication (*=)
     t2 = Xform.translation(10.0, 0.0, 0.0)
     t2 *= s
     p = Point(1.0, 0.0, 0.0)
-    p.xform = t2
-    result2 = p.transformed()
+    result2 = p.transformed(t2)
 
     MINI_CHECK(x.name == "my_xform")
     MINI_CHECK(x.guid != "")
@@ -407,9 +405,7 @@ def test_xform_project_to_plane():
     proj = Xform.project_to_plane(plane)
     xf = proj * move
     def tp(x, y, z):
-        p = Point(x, y, z)
-        p.xform = xf
-        return p.transformed()
+        return Point(x, y, z).transformed(xf)
     outline = Polyline([
         tp(-1, -1, -1),
         tp(1, -1, -1),
@@ -440,9 +436,7 @@ def test_xform_project_to_plane_by_axis():
     proj = Xform.project_to_plane_by_axis(plane, direction)
     xf = proj * move
     def tp(x, y, z):
-        p = Point(x, y, z)
-        p.xform = xf
-        return p.transformed()
+        return Point(x, y, z).transformed(xf)
     outline = Polyline([
         tp(-1, -1, 1),
         tp(1, -1, -1),
@@ -559,28 +553,23 @@ def test_xform_transform_geometry():
 
     # Transform Point: (1,2,3) -> (11,22,33)
     pt = Point(1.0, 2.0, 3.0)
-    pt.xform = t
-    pt_transformed = pt.transformed()
+    pt_transformed = pt.transformed(t)
 
     # Transform Vector: translation should NOT affect vectors
     v = Vector(1.0, 0.0, 0.0)
-    v.xform = t
-    v_transformed = v.transformed()
+    v_transformed = v.transformed(t)
 
     # Transform Line: (0,0,0)-(1,0,0) -> (10,20,30)-(11,20,30)
     ln = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-    ln.xform = t
-    ln_transformed = ln.transformed()
+    ln_transformed = ln.transformed(t)
 
     # Transform Plane: origin (0,0,0) -> (10,20,30)
     pl = Plane(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0))
-    pl.xform = t
-    pl_transformed = pl.transformed()
+    pl_transformed = pl.transformed(t)
 
     # Transform Polyline: 3 points translated
     poly = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)])
-    poly.xform = t
-    poly_transformed = poly.transformed()
+    poly_transformed = poly.transformed(t)
     pts = poly_transformed.get_points()
 
     MINI_CHECK(TOLERANCE.is_point_close(pt_transformed, Point(11.0, 22.0, 33.0)))

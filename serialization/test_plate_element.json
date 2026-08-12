@@ -76,7 +76,7 @@
       1.0
     ],
     "facedata": {},
-    "guid": "da68fd1e-5dbc-4ebc-bda5-ff220b65e2cb",
+    "guid": "ecfa09f9-edb1-4b09-8771-4775e1e3782a",
     "halfedge": {
       "0": {
         "1": 2,
@@ -176,7 +176,7 @@
       "a": 1.0,
       "b": 1.0,
       "g": 1.0,
-      "guid": "b439dfc8-0579-4e3e-9019-3127dd82ed6e",
+      "guid": "e66f7efd-88b1-49f7-b521-dfc13cd5cb72",
       "name": "white",
       "r": 1.0,
       "type": "Color"
@@ -280,33 +280,10 @@
       1.0,
       1.0,
       1.0
-    ],
-    "xform": {
-      "guid": "ede243e6-6638-4633-a8e3-544627409be4",
-      "m": [
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        1.0
-      ],
-      "name": "my_xform",
-      "type": "Xform"
-    }
+    ]
   },
   "geometry_type": "Mesh",
-  "guid": "02691bd5-cc8a-4e2f-99ad-3e92bf1d9e11",
+  "guid": "47e74082-1a0b-48d3-b244-6c51234458ee",
   "j_mf": [],
   "joint_types": [],
   "key": "",
@@ -355,29 +332,6 @@
       -0.3
     ]
   ],
-  "session_transformation": {
-    "guid": "02359777-72b4-438c-b450-42c9eb815585",
-    "m": [
-      1.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      1.0,
-      0.0,
-      0.0,
-      0.0,
-      0.0,
-      1.0,
-      0.0,
-      1.0,
-      2.0,
-      3.0,
-      1.0
-    ],
-    "name": "my_xform",
-    "type": "Xform"
-  },
   "thickness": 0.3,
   "type": "ElementPlate"
 }

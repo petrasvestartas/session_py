@@ -23,18 +23,17 @@ _sym_db = _symbol_database.Default()
 
 
 from . import color_pb2 as color__pb2
-from . import xform_pb2 as xform__pb2
 from . import nurbssurface_pb2 as nurbssurface__pb2
 from . import nurbscurve_pb2 as nurbscurve__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1anurbssurface_trimmed.proto\x12\rsession_proto\x1a\x0b\x63olor.proto\x1a\x0bxform.proto\x1a\x12nurbssurface.proto\x1a\x10nurbscurve.proto\"\x9e\x02\n\x13NurbsSurfaceTrimmed\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12,\n\x07surface\x18\x03 \x01(\x0b\x32\x1b.session_proto.NurbsSurface\x12-\n\nouter_loop\x18\x04 \x01(\x0b\x32\x19.session_proto.NurbsCurve\x12.\n\x0binner_loops\x18\x05 \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12\r\n\x05width\x18\x06 \x01(\x01\x12*\n\x0csurfacecolor\x18\x07 \x01(\x0b\x32\x14.session_proto.Color\x12#\n\x05xform\x18\x08 \x01(\x0b\x32\x14.session_proto.Xformb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1anurbssurface_trimmed.proto\x12\rsession_proto\x1a\x0b\x63olor.proto\x1a\x12nurbssurface.proto\x1a\x10nurbscurve.proto\"\xff\x01\n\x13NurbsSurfaceTrimmed\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12,\n\x07surface\x18\x03 \x01(\x0b\x32\x1b.session_proto.NurbsSurface\x12-\n\nouter_loop\x18\x04 \x01(\x0b\x32\x19.session_proto.NurbsCurve\x12.\n\x0binner_loops\x18\x05 \x03(\x0b\x32\x19.session_proto.NurbsCurve\x12\r\n\x05width\x18\x06 \x01(\x01\x12*\n\x0csurfacecolor\x18\x07 \x01(\x0b\x32\x14.session_proto.ColorJ\x04\x08\x08\x10\tb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'nurbssurface_trimmed_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_NURBSSURFACETRIMMED']._serialized_start=110
-  _globals['_NURBSSURFACETRIMMED']._serialized_end=396
+  _globals['_NURBSSURFACETRIMMED']._serialized_start=97
+  _globals['_NURBSSURFACETRIMMED']._serialized_end=352
 # @@protoc_insertion_point(module_scope)

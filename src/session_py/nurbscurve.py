@@ -716,7 +716,6 @@ class NurbsCurve:
         self.width = 1.0
         self.pointcolors = []
         self.linecolors = []
-        self._xform = None
 
         self.m_dim = dimension
         self.m_is_rat = 1 if is_rational else 0
@@ -747,16 +746,6 @@ class NurbsCurve:
     def refresh_guid(self):
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
-
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, NurbsCurve):
@@ -3689,13 +3678,13 @@ class NurbsCurve:
     # Transformation
     ###########################################################################################
 
-    def transform(self, xform: Xform = None) -> bool:
+    def transform(self, xform: Xform) -> bool:
         """Apply transformation to the curve.
 
         Parameters
         ----------
-        xform : Xform, optional
-            Transformation to apply. If None, uses stored self.xform.
+        xform : Xform
+            Transformation to apply.
 
         Returns
         -------
@@ -3705,8 +3694,7 @@ class NurbsCurve:
         if not self.is_valid():
             return False
 
-        xf = xform if xform is not None else self.xform
-        m = xf.m
+        m = xform.m
         cv = self.m_cv
         stride = self.m_cv_stride
         dim = self.m_dim
@@ -3740,13 +3728,13 @@ class NurbsCurve:
 
         return True
 
-    def transformed(self, xform: Xform = None) -> 'NurbsCurve':
+    def transformed(self, xform: Xform) -> 'NurbsCurve':
         """Get transformed copy of the curve.
 
         Parameters
         ----------
-        xform : Xform, optional
-            Transformation to apply. If None, uses stored self.xform.
+        xform : Xform
+            Transformation to apply.
 
         Returns
         -------
@@ -3754,10 +3742,7 @@ class NurbsCurve:
             Transformed copy of the curve.
         """
         result = self.duplicate()
-        result.xform = self.xform.duplicate()
-
-        xf = xform if xform is not None else self.xform
-        result.transform(xf)
+        result.transform(xform)
 
         return result
 
@@ -3789,7 +3774,6 @@ class NurbsCurve:
             "pointcolors": [v for c in self.pointcolors for v in (c.r, c.g, c.b, c.a)],
             "type": "NurbsCurve",
             "width": float(self.width),
-            "xform": self.xform.__jsondump__(),
         }
 
     @classmethod
@@ -3805,8 +3789,6 @@ class NurbsCurve:
         if "linecolors" in data:
             arr = data["linecolors"]
             curve.linecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
-        if "xform" in data:
-            curve.xform = Xform.__jsonload__(data["xform"])
         curve.m_dim = data.get("dimension", 0)
         curve.m_is_rat = 1 if data.get("is_rational", False) else 0
         curve.m_order = data.get("order", 0)
@@ -3866,9 +3848,6 @@ class NurbsCurve:
         for c in self.linecolors:
             cp = proto.linecolors.add()
             cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        proto.xform.guid = self.xform.guid
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m.flatten().tolist() if hasattr(self.xform.m, 'flatten') else list(self.xform.m))
         return proto.SerializeToString()
 
     def pb_fill(self, proto):
@@ -3889,9 +3868,6 @@ class NurbsCurve:
         for c in self.linecolors:
             cp = proto.linecolors.add()
             cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        proto.xform.guid = self.xform.guid
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m if isinstance(self.xform.m, list) else self.xform.m.flatten().tolist())
 
     @classmethod
     def pb_loads(cls, data):
@@ -3912,12 +3888,6 @@ class NurbsCurve:
         curve.width = proto.width if proto.width != 0.0 else 1.0
         curve.pointcolors = [Color(c.r, c.g, c.b, c.a) for c in proto.pointcolors]
         curve.linecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.linecolors]
-        if proto.HasField('xform'):
-            curve.xform = Xform()
-            curve.xform.guid = proto.xform.guid
-            curve.xform.name = proto.xform.name
-            if proto.xform.matrix:
-                curve.xform.m = np.array(list(proto.xform.matrix), dtype=np.float64).reshape(4, 4)
         return curve
 
     def pb_dump(self, filepath):

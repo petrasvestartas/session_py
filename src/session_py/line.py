@@ -1,6 +1,5 @@
 import uuid
 from .color import Color
-from .xform import Xform
 from .point import Point
 from .vector import Vector
 
@@ -46,7 +45,6 @@ class Line:
         self._z1 = z1
         self.width = 1.0
         self._linecolor = None
-        self._xform = None
 
     @property
     def guid(self) -> str:
@@ -71,16 +69,6 @@ class Line:
     @linecolor.setter
     def linecolor(self, value):
         self._linecolor = value
-
-    @property
-    def xform(self):
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
-
-    @xform.setter
-    def xform(self, value):
-        self._xform = value
 
     def duplicate(self):
         """Create a deep copy of this line with a new GUID.
@@ -574,18 +562,13 @@ class Line:
         """Negate line (flip direction)."""
         return Line(self._x1, self._y1, self._z1, self._x0, self._y0, self._z0)
 
-    def transform(self):
-        """Apply the stored xform transformation to the line coordinates.
-
-        Transforms the line in-place and resets xform to identity.
-        """
+    def transform(self, xform):
+        """Apply a transformation to the line coordinates, in place."""
         start = Point(self._x0, self._y0, self._z0)
         end = Point(self._x1, self._y1, self._z1)
 
-        start.xform = self.xform
-        start.transform()
-        end.xform = self.xform
-        end.transform()
+        start.transform(xform)
+        end.transform(xform)
 
         self._x0 = start[0]
         self._y0 = start[1]
@@ -593,13 +576,9 @@ class Line:
         self._x1 = end[0]
         self._y1 = end[1]
         self._z1 = end[2]
-        self.xform = Xform.identity()
 
-    def transformed(self):
-        """Return a transformed copy of the line.
-
-        Returns a new line with the transformation applied.
-        The original line and its xform remain unchanged.
+    def transformed(self, xform):
+        """Return a transformed copy of the line, leaving the original unchanged.
 
         Returns
         -------
@@ -609,7 +588,7 @@ class Line:
         import copy
 
         result = copy.deepcopy(self)
-        result.transform()
+        result.transform(xform)
         return result
 
     def overlap(self, other):
@@ -684,7 +663,6 @@ class Line:
             "width": self.width,
             "x0": self._x0,
             "x1": self._x1,
-            "xform": self.xform.__jsondump__(),
             "y0": self._y0,
             "y1": self._y1,
             "z0": self._z0,
@@ -767,9 +745,6 @@ class Line:
         if "linecolor" in data:
             line.linecolor = file_decode_node(data["linecolor"])
 
-        if "xform" in data:
-            line.xform = file_decode_node(data["xform"])
-
         return line
 
     ###########################################################################################
@@ -808,10 +783,6 @@ class Line:
         proto.end.name = ""
         proto.end.width = 1.0
 
-        # Set xform
-        proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
-
         # Set width and linecolor
         proto.width = self.width
         proto.linecolor.guid = self.linecolor.guid
@@ -849,12 +820,6 @@ class Line:
         )
         line.guid = proto.guid
         line.name = proto.name
-
-        # Load xform if present
-        if proto.HasField('xform'):
-            line.xform = Xform()
-            line.xform.name = proto.xform.name
-            line.xform.m = list(proto.xform.matrix)
 
         # Load width and linecolor
         if proto.width > 0.0:

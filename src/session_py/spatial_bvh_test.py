@@ -351,8 +351,8 @@ def test_bvh_fixed_100_boxes():
     bvh = SpatialBVH.from_boxes(boxes, 100.0)
     pairs, colliding_indices, checks = bvh.check_all_collisions(boxes)
     pairs.sort()
-    MINI_CHECK(len(pairs) > 0)
-    MINI_CHECK(len(pairs) <= 26)
+    MINI_CHECK(len(pairs) == 13)
+    MINI_CHECK((4, 74) in pairs)
     for i, j in pairs:
         MINI_CHECK(0 <= i < 100)
         MINI_CHECK(0 <= j < 100)
@@ -396,6 +396,147 @@ def test_bvh_query_aabb():
         Vector(0.0, 0.0, 1.0), Vector(5.0, 5.0, 2.0))
     hits_all = bvh.query_aabb(query_all)
     MINI_CHECK(len(hits_all) == 3)
+
+
+@MINI_TEST("SpatialBVH", "Build From Boxes")
+def test_bvh_build_from_boxes():
+    from session_py.spatial_bvh import SpatialBVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    boxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(0.5, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(10.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+    ]
+    bvh = SpatialBVH()
+    bvh.build_from_boxes(boxes, 100.0)
+    pairs, indices, checks = bvh.check_all_collisions(boxes)
+
+    MINI_CHECK(TOLERANCE.is_close(bvh.world_size, 100.0))
+    MINI_CHECK(len(pairs) == 1)
+    MINI_CHECK((0, 1) in pairs)
+
+
+@MINI_TEST("SpatialBVH", "Build From Aabbs")
+def test_bvh_build_from_aabbs():
+    from session_py.spatial_bvh import SpatialBVH
+    from session_py import AABB
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    aabbs = [
+        AABB(0.0, 0.0, 0.0, 2.0, 2.0, 2.0),
+        AABB(3.0, 0.0, 0.0, 2.0, 2.0, 2.0),
+        AABB(50.0, 0.0, 0.0, 2.0, 2.0, 2.0),
+    ]
+    bvh = SpatialBVH()
+    bvh.build_from_aabbs(aabbs, 100.0)
+    query = OBB(Point(0.0, 0.0, 0.0),
+                Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+                Vector(0.0, 0.0, 1.0), Vector(2.0, 2.0, 2.0))
+    hits = bvh.query_aabb(query)
+
+    MINI_CHECK(len(hits) == 2)
+    MINI_CHECK(0 in hits)
+    MINI_CHECK(1 in hits)
+
+
+@MINI_TEST("SpatialBVH", "Build With Guids")
+def test_bvh_build_with_guids():
+    from session_py.spatial_bvh import SpatialBVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    boxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(0.5, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(10.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+    ]
+    boxes_with_guids = [
+        (boxes[0], "a"),
+        (boxes[1], "b"),
+        (boxes[2], "c"),
+    ]
+    bvh = SpatialBVH()
+    bvh.build_with_guids(boxes_with_guids)
+
+    MINI_CHECK(len(bvh.object_guids) == 3)
+    MINI_CHECK(bvh.object_guids[0] == "a")
+    MINI_CHECK(TOLERANCE.is_close(bvh.world_size, 24.2))
+
+
+@MINI_TEST("SpatialBVH", "Check All Collisions Guids")
+def test_bvh_check_all_collisions_guids():
+    from session_py.spatial_bvh import SpatialBVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    boxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(0.5, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(10.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+    ]
+    boxes_with_guids = [
+        (boxes[0], "a"),
+        (boxes[1], "b"),
+        (boxes[2], "c"),
+    ]
+    bvh = SpatialBVH()
+    bvh.build_with_guids(boxes_with_guids)
+    guid_pairs = bvh.check_all_collisions_guids(boxes)
+
+    MINI_CHECK(len(guid_pairs) == 1)
+    MINI_CHECK(guid_pairs[0] == ("a", "b"))
+
+
+@MINI_TEST("SpatialBVH", "Find Collisions")
+def test_bvh_find_collisions():
+    from session_py.spatial_bvh import SpatialBVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    boxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(0.5, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(10.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+    ]
+    bvh = SpatialBVH.from_boxes(boxes, 100.0)
+    c0, checks0 = bvh.find_collisions(0, boxes[0], boxes)
+    c2, checks2 = bvh.find_collisions(2, boxes[2], boxes)
+
+    MINI_CHECK(c0 == [1])
+    MINI_CHECK(len(c2) == 0)
+    MINI_CHECK(checks0 > 0)
 
 
 if __name__ == "__main__":

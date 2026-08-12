@@ -85,13 +85,12 @@ def test_transformation():
     from session_py import Xform
     
     p = Point(1.0, 2.0, 3.0)
-    p.xform = Xform.translation(1.0, 2.0, 3.0)
-    p_transformed = p.transformed() # Make a copy
-    p.transform() # After the call, "xform" is reset
+    p_xf = Xform.translation(1.0, 2.0, 3.0)
+    p_transformed = p.transformed(p_xf) # Make a copy
+    p.transform(p_xf)
 
     MINI_CHECK(p_transformed[0] == 2.0 and p_transformed[1] == 4.0 and p_transformed[2] == 6.0)
     MINI_CHECK(p[0] == 2.0 and p[1] == 4.0 and p[2] == 6.0)
-    MINI_CHECK(p.xform == Xform.identity())
 
 
 @MINI_TEST("Point", "Json Roundtrip")
