@@ -4,7 +4,7 @@
       "a": 1.0,
       "b": 1.0,
       "g": 0.0,
-      "guid": "bd4ee62c-7ba9-4315-ac58-2fdf7b93fa3f",
+      "guid": "561fd9c2-9715-40ad-b6e4-a269ab8a6d0a",
       "name": "blue",
       "r": 0.0,
       "type": "Color"
@@ -23,7 +23,7 @@
       0.0,
       1.0
     ],
-    "guid": "be05d40d-8843-4e52-b9bd-b0c8f0b2274a",
+    "guid": "e963c236-9a96-4eb8-9d09-96e026074053",
     "name": "my_plane",
     "type": "Plane",
     "width": 1.0
@@ -104,7 +104,7 @@
       1.0
     ],
     "facedata": {},
-    "guid": "bcdff0fe-08a5-4306-82a5-bc4d2fb17b39",
+    "guid": "cc256953-2591-4184-ae6c-e6fd046601cf",
     "halfedge": {
       "0": {
         "1": 2,
@@ -204,7 +204,7 @@
       "a": 1.0,
       "b": 1.0,
       "g": 1.0,
-      "guid": "aa5052a2-71ea-4673-b8d5-f08cab551f78",
+      "guid": "77415cf5-0e2f-46af-9826-da827f7ec667",
       "name": "white",
       "r": 1.0,
       "type": "Color"
@@ -311,7 +311,7 @@
     ]
   },
   "geometry_type": "Mesh",
-  "guid": "919b371b-9c0a-445e-91e8-5f265599f12e",
+  "guid": "1c46fc14-f099-4e87-8c07-6e6af78f6574",
   "j_mf": [
     [
       [
