@@ -76,7 +76,7 @@
       1.0
     ],
     "facedata": {},
-    "guid": "0a3e1ac5-19b7-4cab-8ede-9de5c2049991",
+    "guid": "470e4b3c-cab2-4b1e-8d69-7127b593209c",
     "halfedge": {
       "0": {
         "3": 0,
@@ -176,7 +176,7 @@
       "a": 1.0,
       "b": 1.0,
       "g": 1.0,
-      "guid": "e66f7efd-88b1-49f7-b521-dfc13cd5cb72",
+      "guid": "aa5052a2-71ea-4673-b8d5-f08cab551f78",
       "name": "white",
       "r": 1.0,
       "type": "Color"
@@ -283,7 +283,7 @@
     ]
   },
   "geometry_type": "Mesh",
-  "guid": "d555f5fe-f04e-456c-9bfd-e566f4ce519a",
+  "guid": "73c336f8-8a74-4f59-9162-685783ad25ee",
   "length": 5.0,
   "name": "json_beam",
   "type": "ElementBeam",

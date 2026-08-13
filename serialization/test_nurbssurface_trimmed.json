@@ -1,5 +1,5 @@
 {
-  "guid": "271f600c-829c-4b95-b2db-0463b75b03ac",
+  "guid": "7e5565a0-d4a9-4b24-8194-3cb66c77d572",
   "inner_loops": [],
   "name": "test_nurbssurface_trimmed",
   "outer_loop": {
@@ -33,7 +33,7 @@
     "cv_count": 5,
     "cv_stride": 3,
     "dimension": 3,
-    "guid": "394d99a2-284c-43c0-964b-b2813b8cb466",
+    "guid": "25c9ff17-9ce9-48d1-92e0-1e8d612617e2",
     "is_rational": false,
     "nurbsknots": [
       0.0,
@@ -68,7 +68,7 @@
     "cv_count_v": 2,
     "dimension": 3,
     "facecolors": [],
-    "guid": "153c31e4-1d8a-4609-b39e-dfec196b60f0",
+    "guid": "44a382b4-9259-45d4-abbb-6766c7a699e8",
     "is_rational": false,
     "nurbsknots_u": [
       0.0,
@@ -90,7 +90,7 @@
     "a": 1.0,
     "b": 1.0,
     "g": 1.0,
-    "guid": "c843d7cd-cbd9-4662-bd2d-f9f1db7e8286",
+    "guid": "e77a4558-42c7-4f74-aa47-504a626b91cf",
     "name": "my_color",
     "r": 1.0,
     "type": "Color"
