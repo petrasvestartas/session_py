@@ -8,7 +8,7 @@ class SessionConfig:
             cls._instance.scale_factor = 1.0
         return cls._instance
 
-    def reset(self):
+    def reset(self) -> None:
         self.explode_mesh_faces = False
         self.scale_factor = 1.0
 

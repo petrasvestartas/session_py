@@ -1,13 +1,34 @@
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Tuple
+from typing import Optional
+from typing import NamedTuple
+from typing import Union
+from typing import TYPE_CHECKING
 import uuid
-from typing import Any, Dict, List, Tuple, Optional, NamedTuple
 from .objects import Objects
 from .point import Point
-from .tree import Tree, TreeNode
+from .tree import Tree
+from .tree import TreeNode
 from .graph import Graph
 from .spatial_bvh import SpatialBVH
 from .obb import OBB
 from .tolerance import Tolerance
 from .xform import Xform
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .brep import BRep
+    from .element import Element
+    from .line import Line
+    from .mesh import Mesh
+    from .nurbscurve import NurbsCurve
+    from .nurbssurface import NurbsSurface
+    from .plane import Plane
+    from .pointcloud import PointCloud
+    from .polyline import Polyline
+    from .vector import Vector
 
 
 class RayHit(NamedTuple):
@@ -50,7 +71,7 @@ class Session:
 
     """
 
-    def __init__(self, name="my_session"):
+    def __init__(self, name: str = "my_session"):
         self._guid = None
         self.name = name
         self.objects = Objects()
@@ -72,7 +93,7 @@ class Session:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     def __str__(self) -> str:
@@ -227,27 +248,27 @@ class Session:
 
         return session
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s):
+    def file_json_loads(cls, s: str) -> "Session":
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Session":
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import session_pb2
         proto = session_pb2.Session()
         proto.name = self.name
@@ -265,7 +286,7 @@ class Session:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Session":
         from .proto import session_pb2
         proto = session_pb2.Session()
         proto.ParseFromString(data)
@@ -304,12 +325,12 @@ class Session:
             session.lookup[element.guid] = element
         return session
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Session":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
 
@@ -326,7 +347,7 @@ class Session:
             self.add(node, parent)
         return node
 
-    def order(self):
+    def order(self) -> List[str]:
         """Canonical object order: the objects lists walked in one fixed type sequence -
         deterministic across runs AND languages (lookup/map iteration is neither).
         Viewers and reconcile key their rows off this."""
@@ -344,40 +365,40 @@ class Session:
             + [e.guid for e in self.objects.elements]
         )
 
-    def add_point(self, point, parent=None) -> TreeNode:
+    def add_point(self, point: Point, parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.points, point, "point", parent)
 
-    def add_line(self, line, parent=None) -> TreeNode:
+    def add_line(self, line: "Line", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.lines, line, "line", parent)
 
-    def add_plane(self, plane, parent=None) -> TreeNode:
+    def add_plane(self, plane: "Plane", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.planes, plane, "plane", parent)
 
-    def add_obb(self, bbox, parent=None) -> TreeNode:
+    def add_obb(self, bbox: "OBB", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.bboxes, bbox, "bbox", parent)
 
-    def add_polyline(self, polyline, parent=None) -> TreeNode:
+    def add_polyline(self, polyline: "Polyline", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.polylines, polyline, "polyline", parent)
 
-    def add_pointcloud(self, pointcloud, parent=None) -> TreeNode:
+    def add_pointcloud(self, pointcloud: "PointCloud", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.pointclouds, pointcloud, "pointcloud", parent)
 
-    def add_mesh(self, mesh, parent=None) -> TreeNode:
+    def add_mesh(self, mesh: "Mesh", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.meshes, mesh, "mesh", parent)
 
-    def add_nurbscurve(self, nurbscurve, parent=None) -> TreeNode:
+    def add_nurbscurve(self, nurbscurve: "NurbsCurve", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.nurbscurves, nurbscurve, "nurbscurve", parent)
 
-    def add_nurbssurface(self, nurbssurface, parent=None) -> TreeNode:
+    def add_nurbssurface(self, nurbssurface: "NurbsSurface", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.nurbssurfaces, nurbssurface, "nurbssurface", parent)
 
-    def add_brep(self, brep, parent=None) -> TreeNode:
+    def add_brep(self, brep: "BRep", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.breps, brep, "brep", parent)
 
-    def add_element(self, element, parent=None) -> TreeNode:
+    def add_element(self, element: "Element", parent: Optional[TreeNode] = None) -> TreeNode:
         return self._add_object(self.objects.elements, element, "element", parent)
 
-    def add_component(self, component, parent=None) -> TreeNode:
+    def add_component(self, component: Any, parent: Optional[TreeNode] = None) -> TreeNode:
         """Add a custom component (any object with guid, name, __jsondump__, __jsonload__)."""
         return self._add_object(self.objects.components, component, "component", parent)
 
@@ -398,8 +419,9 @@ class Session:
                     return child
         raise ValueError(f"Group '{name}' not found")
 
-    def compute_face_to_face(self, inflate=5.0, coplanar_tolerance=50.0):
-        from .intersection import adjacency_search, face_to_face
+    def compute_face_to_face(self, inflate: float = 5.0, coplanar_tolerance: float = 50.0) -> None:
+        from .intersection import adjacency_search
+        from .intersection import face_to_face
         from .polyline import Polyline
         elems = self.objects.elements
         N = len(elems)
@@ -428,7 +450,7 @@ class Session:
             self.add_edge(elems[a].guid, elems[b].guid,
                 f"{fi},{fj},{type_val},{jpl.guid}")
 
-    def add(self, node: TreeNode, parent: TreeNode = None) -> None:
+    def add(self, node: TreeNode, parent: Optional[TreeNode] = None) -> None:
         """Add a TreeNode to the tree hierarchy.
 
         Parameters
@@ -642,7 +664,7 @@ class Session:
 
         Returns
         -------
-        list of tuple
+        list[tuple[str, str]]
             List of (guid1, guid2) tuples representing colliding geometry pairs.
         """
         # Collect all objects with their bounding boxes and GUIDs
@@ -673,7 +695,7 @@ class Session:
         return collision_pairs
 
     def ray_cast(
-        self, origin: Point, direction, tolerance: float = 1e-3
+        self, origin: Point, direction: "Vector", tolerance: float = 1e-3
     ) -> List[RayHit]:
         from .line import Line
         from .vector import Vector
@@ -681,7 +703,10 @@ class Session:
         from .plane import Plane
         from .obb import OBB
         from .mesh import Mesh
-        from .intersection import line_line, line_plane, ray_box, ray_mesh_bvh
+        from .intersection import line_line
+        from .intersection import line_plane
+        from .intersection import ray_box
+        from .intersection import ray_mesh_bvh
 
         dir_vec = Vector(direction[0], direction[1], direction[2])
         if dir_vec.magnitude() <= 0.0:

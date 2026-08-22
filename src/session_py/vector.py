@@ -1,7 +1,16 @@
+from typing import Union
+from typing import TYPE_CHECKING
 import copy
 import uuid
 import math
-from .tolerance import Tolerance, TO_DEGREES, TO_RADIANS
+from .tolerance import Tolerance
+from .tolerance import TO_DEGREES
+from .tolerance import TO_RADIANS
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .xform import Xform
+    from .point import Point
 
 
 class Vector:
@@ -31,7 +40,7 @@ class Vector:
 
     """
 
-    def __init__(self, x=0.0, y=0.0, z=0.0):
+    def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0):
         self._guid = None
         self.name = "my_vector"
         self._x = x
@@ -47,38 +56,38 @@ class Vector:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @property
-    def x(self):
+    def x(self) -> float:
         """Get X coordinate."""
         return self._x
 
     @x.setter
-    def x(self, value):
+    def x(self, value: float) -> None:
         """Set X coordinate."""
         self._x = value
         self._has_magnitude = False
 
     @property
-    def y(self):
+    def y(self) -> float:
         """Get Y coordinate."""
         return self._y
 
     @y.setter
-    def y(self, value):
+    def y(self, value: float) -> None:
         """Set Y coordinate."""
         self._y = value
         self._has_magnitude = False
 
     @property
-    def z(self):
+    def z(self) -> float:
         """Get Z coordinate."""
         return self._z
 
     @z.setter
-    def z(self, value):
+    def z(self, value: float) -> None:
         """Set Z coordinate."""
         self._z = value
         self._has_magnitude = False
@@ -100,7 +109,7 @@ class Vector:
         result._has_magnitude = self._has_magnitude
         return result
 
-    def duplicate(self):
+    def duplicate(self) -> "Vector":
         """Create a deep copy of this vector with a new GUID.
 
         Returns
@@ -121,12 +130,12 @@ class Vector:
     def __repr__(self):
         return f"Vector({self.guid}, {self.name}, {self[0]}, {self[1]}, {self[2]})"
 
-    def str(self):
+    def str(self) -> str:
         """Simple string form: just coordinates formatted to 6 decimals."""
         from .tolerance import Tolerance
         return f"{round(self[0], Tolerance.ROUNDING):.6f}, {round(self[1], Tolerance.ROUNDING):.6f}, {round(self[2], Tolerance.ROUNDING):.6f}"
 
-    def repr(self):
+    def repr(self) -> str:
         """Detailed representation with name, coordinates, and magnitude."""
         from .tolerance import Tolerance
         mag = self.magnitude()
@@ -222,7 +231,7 @@ class Vector:
     ###########################################################################################
 
     @staticmethod
-    def zero():
+    def zero() -> "Vector":
         """Get a zero vector (0, 0, 0).
 
         Returns
@@ -234,7 +243,7 @@ class Vector:
         return Vector(0.0, 0.0, 0.0)
 
     @staticmethod
-    def x_axis():
+    def x_axis() -> "Vector":
         """Get unit vector along the x-axis.
 
         Returns
@@ -246,7 +255,7 @@ class Vector:
         return Vector(1.0, 0.0, 0.0)
 
     @staticmethod
-    def y_axis():
+    def y_axis() -> "Vector":
         """Get unit vector along the y-axis.
 
         Returns
@@ -258,7 +267,7 @@ class Vector:
         return Vector(0.0, 1.0, 0.0)
 
     @staticmethod
-    def z_axis():
+    def z_axis() -> "Vector":
         """Get unit vector along the z-axis.
 
         Returns
@@ -270,7 +279,7 @@ class Vector:
         return Vector(0.0, 0.0, 1.0)
 
     @staticmethod
-    def from_points(p0, p1):
+    def from_points(p0: "Point", p1: "Point") -> "Vector":
         """Vector from p0 to p1 (p1 - p0).
 
         Parameters
@@ -292,7 +301,7 @@ class Vector:
     # Transform
     ###########################################################################################
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         """Apply a transformation to the vector coordinates, in place.
 
         Only the rotation/scale part applies: a vector has no position to translate.
@@ -303,7 +312,7 @@ class Vector:
         self[1] = m[1]*x + m[5]*y + m[9]*z
         self[2] = m[2]*x + m[6]*y + m[10]*z
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "Vector":
         """Return a transformed copy of the vector, leaving the original unchanged.
 
         Returns
@@ -319,7 +328,7 @@ class Vector:
     # Details
     ###########################################################################################
 
-    def scale(self, factor):
+    def scale(self, factor: float) -> None:
         """Scale the vector by a factor.
 
         Parameters
@@ -333,17 +342,17 @@ class Vector:
         self._z *= factor
         self._has_magnitude = False
 
-    def scale_up(self):
+    def scale_up(self) -> None:
         """Scale the vector up by the global scale factor (SCALE)."""
         from .tolerance import SCALE
         self.scale(SCALE)
 
-    def scale_down(self):
+    def scale_down(self) -> None:
         """Scale the vector down by the global scale factor (1/SCALE)."""
         from .tolerance import SCALE
         self.scale(1.0 / SCALE)
 
-    def reverse(self):
+    def reverse(self) -> "Vector":
         """Reverse the vector (negate all components).
 
         Returns
@@ -413,7 +422,7 @@ class Vector:
 
         return mag
 
-    def magnitude(self):
+    def magnitude(self) -> float:
         """Get the cached magnitude of the vector, computing it if necessary.
 
         Returns
@@ -427,7 +436,7 @@ class Vector:
 
         return self._magnitude
 
-    def magnitude_squared(self):
+    def magnitude_squared(self) -> float:
         """Get the squared magnitude of the vector (avoids sqrt for performance).
 
         Returns
@@ -437,7 +446,7 @@ class Vector:
         """
         return self._x * self._x + self._y * self._y + self._z * self._z
 
-    def normalize_self(self):
+    def normalize_self(self) -> None:
         """Normalize the vector in place (make it unit magnitude).
 
         Returns
@@ -455,7 +464,7 @@ class Vector:
             return True
         return False
 
-    def normalized(self):
+    def normalized(self) -> "Vector":
         """Return a normalized copy of the vector.
 
         Returns
@@ -467,7 +476,7 @@ class Vector:
         normalized_vector.normalize_self()
         return normalized_vector
 
-    def dot(self, other):
+    def dot(self, other: "Vector") -> float:
         """Calculate dot product with another vector.
 
         Parameters
@@ -483,7 +492,7 @@ class Vector:
         """
         return self._x * other._x + self._y * other._y + self._z * other._z
 
-    def cross(self, other):
+    def cross(self, other: "Vector") -> "Vector":
         """Calculate cross product with another vector.
 
         Parameters
@@ -502,7 +511,7 @@ class Vector:
         z = self._x * other._y - self._y * other._x
         return Vector(x, y, z)
 
-    def is_parallel_to(self, v):
+    def is_parallel_to(self, v: "Vector") -> int:
         """Check if this vector is parallel/antiparallel to another.
 
         Parameters
@@ -532,7 +541,7 @@ class Vector:
         else:
             return 0  # Not parallel
 
-    def angle(self, other, sign_by_cross_product=False, degrees=True, tolerance=1e-12):
+    def angle(self, other: "Vector", sign_by_cross_product: bool = False, degrees: bool = True, tolerance: float = 1e-12) -> float:
         """Angle between this vector and another.
 
         Parameters
@@ -575,7 +584,7 @@ class Vector:
             return math.degrees(angle)
         return angle
 
-    def projection(self, projection_vector, tolerance=1e-12):
+    def projection(self, projection_vector: "Vector", tolerance: float = 1e-12) -> tuple:
         """Project this vector onto another vector.
 
         Parameters
@@ -617,7 +626,7 @@ class Vector:
             out_perpendicular_length,
         )
 
-    def get_leveled_vector(self, vertical_height):
+    def get_leveled_vector(self, vertical_height: float) -> "Vector":
         """Get a copy scaled by a vertical height along the Z-axis.
 
         Parameters
@@ -646,11 +655,11 @@ class Vector:
 
     @staticmethod
     def cosine_law(
-        triangle_edge_length_a,
-        triangle_edge_length_b,
-        angle_in_between_edges,
-        degrees=True,
-    ):
+        triangle_edge_length_a: float,
+        triangle_edge_length_b: float,
+        angle_in_between_edges: float,
+        degrees: bool = True,
+    ) -> float:
         """Calculate third side of triangle using the cosine law.
 
         Parameters
@@ -682,11 +691,11 @@ class Vector:
 
     @staticmethod
     def sine_law_angle(
-        triangle_edge_length_a,
-        angle_in_front_of_a,
-        triangle_edge_length_b,
-        degrees=True,
-    ):
+        triangle_edge_length_a: float,
+        angle_in_front_of_a: float,
+        triangle_edge_length_b: float,
+        degrees: bool = True,
+    ) -> float:
         """Calculate angle using the sine law.
 
         Parameters
@@ -718,8 +727,8 @@ class Vector:
 
     @staticmethod
     def sine_law_length(
-        triangle_edge_length_a, angle_in_front_of_a, angle_in_front_of_b, degrees=True
-    ):
+        triangle_edge_length_a: float, angle_in_front_of_a: float, angle_in_front_of_b: float, degrees: bool = True
+    ) -> float:
         """Calculate side length using the sine law.
 
         Parameters
@@ -746,11 +755,11 @@ class Vector:
 
     @staticmethod
     def angle_from_cosine_law(
-        triangle_edge_length_a,
-        triangle_edge_length_b,
-        triangle_edge_length_c,
-        degrees=True,
-    ):
+        triangle_edge_length_a: float,
+        triangle_edge_length_b: float,
+        triangle_edge_length_c: float,
+        degrees: bool = True,
+    ) -> float:
         """Calculate angle opposite to side c using the cosine law.
 
         Parameters
@@ -785,11 +794,11 @@ class Vector:
 
     @staticmethod
     def side_from_sine_law(
-        angle_in_front_of_result_side,
-        angle_in_front_of_known_side,
-        known_side_length,
-        degrees=True,
-    ):
+        angle_in_front_of_result_side: float,
+        angle_in_front_of_known_side: float,
+        known_side_length: float,
+        degrees: bool = True,
+    ) -> float:
         """Calculate side length using the sine law.
 
         Given two angles and the side opposite to one of them, calculates
@@ -820,7 +829,7 @@ class Vector:
         return (known_side_length * math.sin(angle_a)) / math.sin(angle_b)
 
     @staticmethod
-    def angle_between_vector_xy_components(vector, degrees=True):
+    def angle_between_vector_xy_components(vector: "Vector", degrees: bool = True) -> float:
         """Angle of vector's XY projection from +X axis (atan2).
 
         Parameters
@@ -840,7 +849,7 @@ class Vector:
         return math.atan2(vector[1], vector[0]) * to_degrees
 
     @staticmethod
-    def sum_of_vectors(vectors):
+    def sum_of_vectors(vectors: list["Vector"]) -> "Vector":
         """Sum a list of vectors (component-wise).
 
         Parameters
@@ -862,7 +871,7 @@ class Vector:
         return Vector(x, y, z)
 
     @staticmethod
-    def average(vectors):
+    def average(vectors: list["Vector"]) -> "Vector":
         """Compute the average of a list of vectors.
 
         Parameters
@@ -882,7 +891,7 @@ class Vector:
         count = len(vectors)
         return Vector(s._x / count, s._y / count, s._z / count)
 
-    def is_perpendicular_to(self, other):
+    def is_perpendicular_to(self, other: "Vector") -> bool:
         """Check if this vector is perpendicular to another.
 
         Parameters
@@ -898,7 +907,7 @@ class Vector:
         """
         return abs(self.dot(other)) < Tolerance.ZERO_TOLERANCE
 
-    def is_zero(self):
+    def is_zero(self) -> bool:
         """Check if this vector is a zero vector.
 
         Returns
@@ -909,7 +918,7 @@ class Vector:
         """
         return self._compute_magnitude() < Tolerance.ZERO_TOLERANCE
 
-    def coordinate_direction_3angles(self, degrees=True):
+    def coordinate_direction_3angles(self, degrees: bool = True) -> tuple:
         """Compute coordinate direction angles (alpha, beta, gamma).
 
         Parameters
@@ -943,7 +952,7 @@ class Vector:
 
         return (alpha, beta, gamma)
 
-    def coordinate_direction_2angles(self, degrees=True):
+    def coordinate_direction_2angles(self, degrees: bool = True) -> tuple:
         """Compute coordinate direction angles (phi, theta).
 
         Parameters
@@ -971,7 +980,7 @@ class Vector:
 
         return (phi, theta)
 
-    def perpendicular_to(self, v):
+    def perpendicular_to(self, v: "Vector") -> bool:
         """Set this vector to be perpendicular to `v`.
 
         Parameters
@@ -1021,7 +1030,7 @@ class Vector:
         self._x, self._y, self._z = coords
         self._has_magnitude = False
 
-    def reflect(self, plane_normal):
+    def reflect(self, plane_normal: "Vector") -> "Vector":
         """Reflect this vector across a plane defined by its normal.
 
         Parameters
@@ -1043,12 +1052,12 @@ class Vector:
         )
 
     @staticmethod
-    def average_normal(points):
+    def average_normal(points: list["Point"]) -> "Vector":
         """Average outward normal of a polygon defined by ``points`` (Newell's method).
 
         Parameters
         ----------
-        points : list of :class:`Point`
+        points : list[:class:`Point`]
 
         Returns
         -------
@@ -1082,7 +1091,7 @@ class Vector:
         vec.name = name if name is not None else data.get("name", vec.name)
         return vec
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file.
 
         Parameters
@@ -1096,7 +1105,7 @@ class Vector:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Vector":
         """Read JSON from file.
 
         Parameters
@@ -1115,13 +1124,13 @@ class Vector:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Vector":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -1130,7 +1139,7 @@ class Vector:
     # Protobuf Serialization
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format.
 
         Returns
@@ -1150,7 +1159,7 @@ class Vector:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Vector":
         """Create Vector from protobuf binary data.
 
         Parameters
@@ -1174,7 +1183,7 @@ class Vector:
 
         return v
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -1188,7 +1197,7 @@ class Vector:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Vector":
         """Read protobuf from file.
 
         Parameters
@@ -1207,12 +1216,12 @@ class Vector:
         return cls.pb_loads(data)
 
 
-def average_normal(pts):
+def average_normal(pts: list["Point"]) -> "Vector":
     """Compute the average normal of a polygon defined by a list of points.
 
     Parameters
     ----------
-    pts : list of :class:`Point`
+    pts : list[:class:`Point`]
         The polygon vertices. May be closed (first == last).
 
     Returns
@@ -1243,7 +1252,7 @@ def average_normal(pts):
     return avg
 
 
-def interpolate_points(from_pt, to_pt, steps, type=0):
+def interpolate_points(from_pt: "Point", to_pt: "Point", steps: int, type: int = 0) -> list["Point"]:
     """Interpolate points between two endpoints.
 
     Parameters
@@ -1259,7 +1268,7 @@ def interpolate_points(from_pt, to_pt, steps, type=0):
 
     Returns
     -------
-    list of :class:`Point`
+    list[:class:`Point`]
         Interpolated points.
 
     """

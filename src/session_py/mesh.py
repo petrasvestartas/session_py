@@ -1,7 +1,23 @@
+from typing import Any
+from typing import Optional
+from typing import TYPE_CHECKING
+from typing import overload
+from typing import List
+from typing import Dict
+from typing import Tuple
+from typing import Union
+from typing import Callable
 import uuid
 import math
 from enum import Enum
-from typing import Optional, List, Dict, Tuple
+
+if TYPE_CHECKING:
+    from .proto import mesh_pb2
+    from pathlib import Path
+    from .xform import Xform
+    from .line import Line
+    from .polyline import Polyline
+
 from .point import Point
 from .vector import Vector
 from .tolerance import Tolerance
@@ -45,7 +61,7 @@ class VertexData:
         Custom vertex attributes.
     """
 
-    def __init__(self, point: Point = None):
+    def __init__(self, point: Optional[Point] = None):
         if point is None:
             point = Point(0.0, 0.0, 0.0)
         self.x = point[0]
@@ -79,7 +95,7 @@ class VertexData:
         """Get the vertex position as a Point."""
         return Point(self.x, self.y, self.z)
 
-    def set_position(self, point: Point):
+    def set_position(self, point: Point) -> None:
         """Set the vertex position from a Point."""
         self.x = point[0]
         self.y = point[1]
@@ -93,7 +109,7 @@ class VertexData:
             self.attributes.get("b", 0.5),
         ]
 
-    def set_color(self, r: float, g: float, b: float):
+    def set_color(self, r: float, g: float, b: float) -> None:
         """Set the vertex color."""
         self.attributes["r"] = r
         self.attributes["g"] = g
@@ -109,7 +125,7 @@ class VertexData:
             return [self.attributes["nx"], self.attributes["ny"], self.attributes["nz"]]
         return None
 
-    def set_normal(self, nx: float, ny: float, nz: float):
+    def set_normal(self, nx: float, ny: float, nz: float) -> None:
         """Set the vertex normal."""
         self.attributes["nx"] = nx
         self.attributes["ny"] = ny
@@ -198,7 +214,7 @@ class LoftPanel:
 
 
 class LoftAdjPair:
-    def __init__(self, pi, wi, pj, wj):
+    def __init__(self, pi: int, wi: "LoftWallFace", pj: int, wj: "LoftWallFace"):
         self.pi = pi
         self.wi = wi
         self.pj = pj
@@ -275,10 +291,10 @@ class Mesh:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
-    def refresh_guid(self):
+    def refresh_guid(self) -> None:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
@@ -345,7 +361,7 @@ class Mesh:
 
         Parameters
         ----------
-        polygons : list of list of Point
+        polygons : list[list[Point]]
             List of polygons, each polygon is a list of points.
         precision : float, optional
             Precision for vertex merging. If None, exact matching is used.
@@ -1143,7 +1159,7 @@ class Mesh:
             self.number_of_vertices() - self.number_of_edges() + self.number_of_faces()
         )
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all mesh data."""
         self.halfedge.clear()
         self.vertex.clear()
@@ -1162,54 +1178,54 @@ class Mesh:
         self.color_mode = ColorMode.OBJECTCOLOR
         self._triangle_bvh_built = False
 
-    def set_pointcolors(self, colors):
+    def set_pointcolors(self, colors: List[Color]) -> None:
         self._pointcolors = list(colors)
         self.color_mode = ColorMode.POINTCOLORS
 
-    def set_facecolors(self, colors):
+    def set_facecolors(self, colors: List[Color]) -> None:
         self._facecolors = list(colors)
         self.color_mode = ColorMode.FACECOLORS
 
-    def set_linecolors(self, colors, widths=None):
+    def set_linecolors(self, colors: List[Color], widths: Optional[List[float]] = None) -> None:
         self._linecolors = list(colors)
         if widths is not None:
             self._widths = list(widths)
 
-    def set_objectcolor(self, color):
+    def set_objectcolor(self, color: Color) -> None:
         self._objectcolor = color
 
     @property
-    def pointcolors(self): return self._pointcolors
+    def pointcolors(self) -> list: return self._pointcolors
     @property
-    def facecolors(self): return self._facecolors
+    def facecolors(self) -> list: return self._facecolors
     @property
-    def linecolors(self): return self._linecolors
-    def get_pointcolors(self): return self._pointcolors
-    def get_facecolors(self): return self._facecolors
-    def get_linecolors(self): return self._linecolors
+    def linecolors(self) -> list: return self._linecolors
+    def get_pointcolors(self) -> List[Color]: return self._pointcolors
+    def get_facecolors(self) -> List[Color]: return self._facecolors
+    def get_linecolors(self) -> List[Color]: return self._linecolors
     @property
-    def widths(self): return self._widths
+    def widths(self) -> list: return self._widths
     @property
-    def objectcolor(self):
+    def objectcolor(self) -> Optional[Color]:
         if getattr(self, '_objectcolor', None) is None:
             self._objectcolor = Color.white()
         return self._objectcolor
 
     @objectcolor.setter
-    def objectcolor(self, value):
+    def objectcolor(self, value: Optional[Color]) -> None:
         self._objectcolor = value
 
-    def clear_pointcolors(self):
+    def clear_pointcolors(self) -> None:
         self._pointcolors.clear()
         if self.color_mode == ColorMode.POINTCOLORS:
             self.color_mode = ColorMode.OBJECTCOLOR
 
-    def clear_facecolors(self):
+    def clear_facecolors(self) -> None:
         self._facecolors.clear()
         if self.color_mode == ColorMode.FACECOLORS:
             self.color_mode = ColorMode.OBJECTCOLOR
 
-    def clear_linecolors(self):
+    def clear_linecolors(self) -> None:
         self._linecolors.clear()
         self._widths.clear()
 
@@ -1403,7 +1419,7 @@ class Mesh:
 
         Parameters
         ----------
-        vertices : list of int
+        vertices : list[int]
             The vertex keys forming the face.
         fkey : int, optional
             Optional face key. If None, auto-generated.
@@ -1569,7 +1585,7 @@ class Mesh:
             return None
         return [f for f in (f0, f1) if f is not None]
 
-    def edge_line(self, u: int, v: int):
+    def edge_line(self, u: int, v: int) -> Optional["Line"]:
         """Get the edge as a Line."""
         uv = v in self.halfedge.get(u, {})
         vu = u in self.halfedge.get(v, {})
@@ -1605,7 +1621,7 @@ class Mesh:
             return None
         return [self.vertex_point(vk) for vk in fv]
 
-    def face_polyline(self, face_key: int):
+    def face_polyline(self, face_key: int) -> Optional["Polyline"]:
         """Get the face as a Polyline."""
         pts = self.face_points(face_key)
         if pts is None:
@@ -1860,7 +1876,7 @@ class Mesh:
         """Alias of face_centroid."""
         return self.face_centroid(face_key)
 
-    def face_polygon(self, face_key: int):
+    def face_polygon(self, face_key: int) -> Optional["Polyline"]:
         """Closed Polyline of the face boundary (Polyline acting as a polygon)."""
         pts = self.face_points(face_key)
         if pts is None:
@@ -1879,20 +1895,26 @@ class Mesh:
     # Attribute API
     ###########################################################################################
 
-    def update_default_vertex_attributes(self, **kwargs) -> None:
+    def update_default_vertex_attributes(self, **kwargs: object) -> None:
         """Merge defaults; existing per-vertex attributes are unchanged."""
         for k, v in kwargs.items():
             self.default_vertex_attributes[k] = v
 
-    def update_default_face_attributes(self, **kwargs) -> None:
+    def update_default_face_attributes(self, **kwargs: object) -> None:
         for k, v in kwargs.items():
             self.default_face_attributes[k] = v
 
-    def update_default_edge_attributes(self, **kwargs) -> None:
+    def update_default_edge_attributes(self, **kwargs: object) -> None:
         for k, v in kwargs.items():
             self.default_edge_attributes[k] = v
 
-    def vertex_attribute(self, key: int, name: str, value=None):
+    @overload
+    def vertex_attribute(self, key: int, name: str) -> Any: ...
+
+    @overload
+    def vertex_attribute(self, key: int, name: str, value: object) -> None: ...
+
+    def vertex_attribute(self, key: int, name: str, value: object = None) -> Any:
         """Get when value is None; set otherwise. Returns default if name unset."""
         if key not in self.vertex:
             return None
@@ -1904,7 +1926,13 @@ class Mesh:
         self.vertex[key].attributes[name] = value
         return None
 
-    def face_attribute(self, fkey: int, name: str, value=None):
+    @overload
+    def face_attribute(self, fkey: int, name: str) -> Any: ...
+
+    @overload
+    def face_attribute(self, fkey: int, name: str, value: object) -> None: ...
+
+    def face_attribute(self, fkey: int, name: str, value: object = None) -> Any:
         if fkey not in self.face:
             return None
         if value is None:
@@ -1915,7 +1943,13 @@ class Mesh:
         self.facedata.setdefault(fkey, {})[name] = value
         return None
 
-    def edge_attribute(self, edge: Tuple[int, int], name: str, value=None):
+    @overload
+    def edge_attribute(self, edge: Tuple[int, int], name: str) -> Any: ...
+
+    @overload
+    def edge_attribute(self, edge: Tuple[int, int], name: str, value: object) -> None: ...
+
+    def edge_attribute(self, edge: Tuple[int, int], name: str, value: object = None) -> Any:
         u, v = edge
         if v not in self.halfedge.get(u, {}) and u not in self.halfedge.get(v, {}):
             return None
@@ -1928,7 +1962,13 @@ class Mesh:
         self.edgedata.setdefault(key, {})[name] = value
         return None
 
-    def vertices_attribute(self, name: str, value=None, keys: Optional[List[int]] = None):
+    @overload
+    def vertices_attribute(self, name: str, value: None = None, keys: Optional[List[int]] = None) -> List[Any]: ...
+
+    @overload
+    def vertices_attribute(self, name: str, value: object = None, keys: Optional[List[int]] = None) -> None: ...
+
+    def vertices_attribute(self, name: str, value: object = None, keys: Optional[List[int]] = None) -> Optional[List[Any]]:
         """Bulk get/set. With value=None and keys=None, returns list over all vertices."""
         if keys is None:
             keys = list(self.vertex.keys())
@@ -1938,7 +1978,13 @@ class Mesh:
             self.vertex_attribute(k, name, value)
         return None
 
-    def faces_attribute(self, name: str, value=None, keys: Optional[List[int]] = None):
+    @overload
+    def faces_attribute(self, name: str, value: None = None, keys: Optional[List[int]] = None) -> List[Any]: ...
+
+    @overload
+    def faces_attribute(self, name: str, value: object = None, keys: Optional[List[int]] = None) -> None: ...
+
+    def faces_attribute(self, name: str, value: object = None, keys: Optional[List[int]] = None) -> Optional[List[Any]]:
         if keys is None:
             keys = list(self.face.keys())
         if value is None:
@@ -1947,7 +1993,13 @@ class Mesh:
             self.face_attribute(k, name, value)
         return None
 
-    def edges_attribute(self, name: str, value=None, keys: Optional[List[Tuple[int, int]]] = None):
+    @overload
+    def edges_attribute(self, name: str, value: None = None, keys: Optional[List[Tuple[int, int]]] = None) -> List[Any]: ...
+
+    @overload
+    def edges_attribute(self, name: str, value: object = None, keys: Optional[List[Tuple[int, int]]] = None) -> None: ...
+
+    def edges_attribute(self, name: str, value: object = None, keys: Optional[List[Tuple[int, int]]] = None) -> Optional[List[Any]]:
         if keys is None:
             keys = self.edges()
         if value is None:
@@ -1978,7 +2030,7 @@ class Mesh:
                 out.append(e)
         return out
 
-    def vertices_where_predicate(self, predicate) -> List[int]:
+    def vertices_where_predicate(self, predicate: Callable) -> List[int]:
         """predicate(key, attrs_dict) -> bool. attrs_dict merges defaults with overrides."""
         out = []
         for k in self.vertex:
@@ -1988,7 +2040,7 @@ class Mesh:
                 out.append(k)
         return out
 
-    def faces_where_predicate(self, predicate) -> List[int]:
+    def faces_where_predicate(self, predicate: Callable) -> List[int]:
         out = []
         for k in self.face:
             attrs = dict(self.default_face_attributes)
@@ -1997,7 +2049,7 @@ class Mesh:
                 out.append(k)
         return out
 
-    def edges_where_predicate(self, predicate) -> List[Tuple[int, int]]:
+    def edges_where_predicate(self, predicate: Callable) -> List[Tuple[int, int]]:
         out = []
         for e in self.edges():
             attrs = dict(self.default_edge_attributes)
@@ -2052,7 +2104,7 @@ class Mesh:
         dot = max(-1.0, min(1.0, n0[0]*n1[0] + n0[1]*n1[1] + n0[2]*n1[2]))
         return (PI - math.acos(dot)) * 180.0 / PI
 
-    def dihedral_angles(self, scale: float = 0.3, with_arcs: bool = True, with_points: bool = True):
+    def dihedral_angles(self, scale: float = 0.3, with_arcs: bool = True, with_points: bool = True) -> Tuple[Dict[Tuple[int, int], float], List["Polyline"], List[Point]]:
         """Calculate dihedral angles for all interior edges.
         Returns (angles, arcs, points): angles dict (u,v)->radians; arcs slerp polylines if scale>0;
         points at arc midpoint (scale>0) or edge midpoint (scale==0). arcs/points empty if flags false."""
@@ -2332,7 +2384,7 @@ class Mesh:
                 normals[vk] = Vector(v[0]/length, v[1]/length, v[2]/length)
         return normals
 
-    def compute_vertex_normals(self):
+    def compute_vertex_normals(self) -> None:
         """Compute area-weighted vertex normals and store them on each vertex."""
         normals = self.vertex_normals()
         for key, n in normals.items():
@@ -2404,7 +2456,7 @@ class Mesh:
     # Transformation
     ###########################################################################################
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         for vdata in self.vertex.values():
             pos = vdata.position()
             pos.transform(xform)
@@ -2413,7 +2465,7 @@ class Mesh:
             vdata[2] = pos[2]
         self._triangle_bvh_built = False
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "Mesh":
         import copy
         result = copy.deepcopy(self)
         result.transform(xform)
@@ -2520,11 +2572,11 @@ class Mesh:
         self._triangle_bvh.build_from_aabbs(self._triangle_aabbs_cache, world_size)
         self._triangle_bvh_built = True
 
-    def get_cached_bvh(self):
+    def get_cached_bvh(self) -> Optional["SpatialBVH"]:
         """Return the cached triangle BVH (or None if not built)."""
         return self._triangle_bvh
 
-    def get_triangle_by_id(self, tri_id: int):
+    def get_triangle_by_id(self, tri_id: int) -> Tuple[bool, int, int, Optional[Point], Optional[Point], Optional[Point]]:
         """Return (found, face_idx, sub_idx, v0, v1, v2) for a cached triangle id."""
         if tri_id < 0:
             return (False, 0, 0, None, None, None)
@@ -2747,27 +2799,27 @@ class Mesh:
 
         return mesh
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Mesh":
         """Read JSON from file."""
         import json
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Mesh":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -2776,7 +2828,7 @@ class Mesh:
     # Protobuf
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format."""
         from .proto import mesh_pb2
 
@@ -2884,9 +2936,10 @@ class Mesh:
 
         return proto.SerializeToString()
 
-    def pb_fill(self, proto):
+    def pb_fill(self, proto: "mesh_pb2.Mesh") -> None:
         """Fill an existing Mesh proto message directly (avoids serialize/deserialize cycle)."""
-        from .proto import mesh_pb2, color_pb2
+        from .proto import mesh_pb2
+        from .proto import color_pb2
         proto.guid = self.guid
         proto.name = self.name
         for vkey, vdata in self.vertex.items():
@@ -2951,7 +3004,7 @@ class Mesh:
         proto.color_mode = _cm_map.get(self.color_mode.value, 0)
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Mesh":
         """Create Mesh from protobuf binary data."""
         from .proto import mesh_pb2
         from .color import Color
@@ -3045,7 +3098,7 @@ class Mesh:
         return mesh
 
     @classmethod
-    def from_proto(cls, proto):
+    def from_proto(cls, proto: "mesh_pb2.Mesh") -> "Mesh":
         """Create Mesh from proto message directly (no SerializeToString)."""
         from .color import Color
 
@@ -3124,14 +3177,14 @@ class Mesh:
 
         return mesh
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file."""
         data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Mesh":
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             data = f.read()
@@ -3141,22 +3194,22 @@ class Mesh:
     # Color and Width Management
     ###########################################################################################
 
-    def set_vertex_color(self, index: int, color: Color):
+    def set_vertex_color(self, index: int, color: Color) -> None:
         """Set color for a specific vertex."""
         if 0 <= index < len(self._pointcolors):
             self._pointcolors[index] = color
 
-    def set_face_color(self, index: int, color: Color):
+    def set_face_color(self, index: int, color: Color) -> None:
         """Set color for a specific face."""
         if 0 <= index < len(self._facecolors):
             self._facecolors[index] = color
 
-    def set_edge_color(self, index: int, color: Color):
+    def set_edge_color(self, index: int, color: Color) -> None:
         """Set color for a specific edge."""
         if 0 <= index < len(self._linecolors):
             self._linecolors[index] = color
 
-    def set_edge_width(self, index: int, width: float):
+    def set_edge_width(self, index: int, width: float) -> None:
         """Set width for a specific edge."""
         if 0 <= index < len(self._widths):
             self._widths[index] = width

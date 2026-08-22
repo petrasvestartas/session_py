@@ -1,5 +1,5 @@
-import json
 from typing import Any
+import json
 import importlib
 
 
@@ -68,7 +68,7 @@ class GeometryFileEncoder(json.JSONEncoder):
 
     """
 
-    def default(self, obj):
+    def default(self, obj: Any) -> Any:
         # Check if object has __jsondump__ method
         if hasattr(obj, "__jsondump__"):
             return obj.__jsondump__()
@@ -91,7 +91,7 @@ class GeometryFileDecoder(json.JSONDecoder):
 
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(object_hook=self.object_hook, *args, **kwargs)
 
     def object_hook(self, obj: dict) -> Any:
@@ -137,7 +137,7 @@ class GeometryFileDecoder(json.JSONDecoder):
         return obj
 
 
-def file_json_dump(data: Any, filepath: str, pretty: bool = True):
+def file_json_dump(data: Any, filepath: str, pretty: bool = True) -> None:
     """Write data to JSON file with geometry object support.
 
     Parameters

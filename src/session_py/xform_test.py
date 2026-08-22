@@ -632,7 +632,9 @@ def test_xform_protobuf_roundtrip():
 
 @MINI_TEST("Xform", "From Change Of Basis")
 def test_xform_from_change_of_basis():
-    from session_py import Point, Polyline, Xform
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Xform
     rect0 = Polyline([
         Point(0.0, 0.0, 0.0),
         Point(2.0, 0.0, 0.0),

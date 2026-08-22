@@ -10,7 +10,7 @@ def test_nurbssurface_trimmed_constructor():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
 
     # Create a bilinear surface
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
@@ -49,7 +49,7 @@ def test_nurbssurface_trimmed_constructor():
 def test_nurbssurface_trimmed_constructor_planar():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
     import math
 
     # Planar curve boundary
@@ -113,7 +113,7 @@ def test_nurbssurface_trimmed_constructor_hole():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
     import math
 
     # Create surface with bump
@@ -153,7 +153,7 @@ def test_nurbssurface_trimmed_accessors():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -187,7 +187,7 @@ def test_nurbssurface_trimmed_add_inner_loop():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -228,7 +228,7 @@ def test_nurbssurface_trimmed_point_at():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -262,7 +262,7 @@ def test_nurbssurface_trimmed_mesh():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -343,8 +343,8 @@ def test_nurbssurface_trimmed_mesh():
 def test_nurbssurface_trimmed_split_by_uv_curves():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
-    from session_py.primitives import Primitives
+    from session_py import NurbsSurfaceTrimmed
+    from session_py import Primitives
 
     srf = Primitives.wave_surface(10.0, 1.0)
     u0, u1 = srf.domain(0)
@@ -378,7 +378,7 @@ def test_nurbssurface_trimmed_transformation():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Xform
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
     srf.set_cv(0, 0, Point(0, 0, 0))
@@ -409,7 +409,7 @@ def test_nurbssurface_trimmed_json_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Color
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
     from pathlib import Path
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)
@@ -452,7 +452,7 @@ def test_nurbssurface_trimmed_protobuf_roundtrip():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Color
-    from session_py.nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from session_py import NurbsSurfaceTrimmed
     from pathlib import Path
 
     srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2, False, False, 1.0, 1.0)

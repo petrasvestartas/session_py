@@ -273,7 +273,8 @@ def test_plane_protobuf_roundtrip():
 
 @MINI_TEST("Plane", "Has On Negative Side")
 def test_plane_has_on_negative_side():
-    from session_py import Plane, Point
+    from session_py import Plane
+    from session_py import Point
     pl = Plane.xy_plane()
     above = Point(0.0, 0.0, 1.0)
     below = Point(0.0, 0.0, -1.0)

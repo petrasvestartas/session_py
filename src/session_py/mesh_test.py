@@ -1414,7 +1414,9 @@ def test_mesh_protobuf_roundtrip():
 
 @MINI_TEST("Mesh", "Loft plate_failing 15-vert outer + 3 holes")
 def test_mesh_loft_plate_failing():
-    from session_py import Mesh, Point, Polyline
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
     bot = [
         Polyline([
             Point( 734.392021, -1906.59468,  1101.588031),
@@ -1462,7 +1464,9 @@ def test_mesh_loft_plate_failing():
 
 @MINI_TEST("Mesh", "Loft plate_v2 15-vert outer + 3 holes")
 def test_mesh_loft_plate_v2():
-    from session_py import Mesh, Point, Polyline
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
     top = [
         Polyline([
             Point( 734.392021,  -28.40532,  1101.588031),

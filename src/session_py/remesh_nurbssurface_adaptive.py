@@ -1,6 +1,7 @@
-import math
-from bisect import bisect_left, bisect_right
 from typing import TYPE_CHECKING
+import math
+from bisect import bisect_left
+from bisect import bisect_right
 
 from .tolerance import PI
 

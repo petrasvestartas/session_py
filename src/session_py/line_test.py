@@ -132,6 +132,7 @@ def test_line_json_roundtrip():
 
     l = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     l.name = "test_line"
+    l.dash = [3.0, 2.0]
 
     #   __jsondump__()  │ dict         │ to JSON object (internal use)
     #   __jsonload__(d) │ dict         │ from JSON object (internal use)
@@ -164,6 +165,7 @@ def test_line_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[3], 168.4))
     MINI_CHECK(TOLERANCE.is_close(loaded[4], 210.5))
     MINI_CHECK(TOLERANCE.is_close(loaded[5], 252.6))
+    MINI_CHECK(loaded.dash == [3.0, 2.0])
 
 
 @MINI_TEST("Line", "Protobuf Roundtrip")
@@ -173,6 +175,7 @@ def test_line_protobuf_roundtrip():
 
     l = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     l.name = "test_line"
+    l.dash = [3.0, 2.0]
 
     #   pb_dumps()      │ bytes        │ to protobuf bytes
     #   pb_loads(b)     │ bytes        │ from protobuf bytes
@@ -199,6 +202,7 @@ def test_line_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[3], 168.4))
     MINI_CHECK(TOLERANCE.is_close(loaded[4], 210.5))
     MINI_CHECK(TOLERANCE.is_close(loaded[5], 252.6))
+    MINI_CHECK(loaded.dash == [3.0, 2.0])
     MINI_CHECK(loaded.guid == l.guid)
 
 
@@ -326,7 +330,8 @@ def test_line_subdivide():
 
 @MINI_TEST("Line", "Overlap")
 def test_line_overlap():
-    from session_py import Line, Point
+    from session_py import Line
+    from session_py import Point
     l0 = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
     l1 = Line.from_points(Point(5.0, 0.0, 0.0), Point(15.0, 0.0, 0.0))
     out = l0.overlap(l1)
@@ -337,7 +342,8 @@ def test_line_overlap():
 
 @MINI_TEST("Line", "Overlap Average")
 def test_line_overlap_average():
-    from session_py import Line, Point
+    from session_py import Line
+    from session_py import Point
     l0 = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
     l1 = Line.from_points(Point(5.0, 0.0, 0.0), Point(15.0, 0.0, 0.0))
     out = l0.overlap_average(l1)
@@ -348,7 +354,8 @@ def test_line_overlap_average():
 
 @MINI_TEST("Line", "Extend")
 def test_line_extend():
-    from session_py import Line, Point
+    from session_py import Line
+    from session_py import Point
     l = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
     l.extend(1.0, 2.0)
     MINI_CHECK(TOLERANCE.is_close(l.start()[0], -1.0))

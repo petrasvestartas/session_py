@@ -948,7 +948,8 @@ def test_polyline_merge_collinear():
 @MINI_TEST("Polyline", "Simplify Points")
 def test_polyline_simplify_points():
     import math
-    from session_py import Polyline, Point
+    from session_py import Polyline
+    from session_py import Point
     pts = []
     for i in range(100):
         x = float(i)
@@ -968,7 +969,8 @@ def test_polyline_simplify_points():
 
 @MINI_TEST("Polyline", "Simplify")
 def test_polyline_simplify():
-    from session_py import Polyline, Point
+    from session_py import Polyline
+    from session_py import Point
     pts = []
     for i in range(20):
         x = float(i)
@@ -985,7 +987,8 @@ def test_polyline_simplify():
 
 @MINI_TEST("Polyline", "Simplify Collinear")
 def test_polyline_simplify_collinear():
-    from session_py import Polyline, Point
+    from session_py import Polyline
+    from session_py import Point
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -1002,7 +1005,8 @@ def test_polyline_simplify_collinear():
 
 @MINI_TEST("Polyline", "Simplify Zigzag")
 def test_polyline_simplify_zigzag():
-    from session_py import Polyline, Point
+    from session_py import Polyline
+    from session_py import Point
     pts = []
     for i in range(10):
         x = float(i)
@@ -1018,7 +1022,8 @@ def test_polyline_simplify_zigzag():
 
 @MINI_TEST("Polyline", "Simplify Two Points")
 def test_polyline_simplify_two_points():
-    from session_py import Polyline, Point
+    from session_py import Polyline
+    from session_py import Point
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 1.0, 1.0),
@@ -1030,7 +1035,9 @@ def test_polyline_simplify_two_points():
 
 @MINI_TEST("Polyline", "Translate")
 def test_polyline_translate():
-    from session_py import Point, Polyline, Vector
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
     pl = Polyline([
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -1044,7 +1051,8 @@ def test_polyline_translate():
 
 @MINI_TEST("Polyline", "Extend Edge Equally")
 def test_polyline_extend_edge_equally():
-    from session_py import Point, Polyline
+    from session_py import Point
+    from session_py import Polyline
     pl = Polyline([
         Point(0.0, 0.0, 0.0),
         Point(10.0, 0.0, 0.0),

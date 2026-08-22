@@ -1,10 +1,12 @@
 """Generic hot-reload for any Python package without restarting Rhino."""
+from typing import List
+from typing import Optional
 import sys
 import importlib
 from pathlib import Path
 
 
-def reload_package(package_name, verbose=True):
+def reload_package(package_name: str, verbose: bool = True) -> List[str]:
     """Reload all modules of a package in dependency order.
 
     Works with any package, not just session_py.
@@ -63,7 +65,7 @@ def reload_package(package_name, verbose=True):
     return reloaded
 
 
-def clear_package(package_name, verbose=True):
+def clear_package(package_name: str, verbose: bool = True) -> List[str]:
     """Remove all modules of a package from cache (nuclear option).
 
     After calling this, you must re-import the package.
@@ -85,7 +87,7 @@ def clear_package(package_name, verbose=True):
     return removed
 
 
-def reload_file(filepath, verbose=True):
+def reload_file(filepath: str, verbose: bool = True) -> Optional[str]:
     """Reload a single .py file if it's loaded as a module.
 
     Usage:
@@ -111,27 +113,27 @@ def reload_file(filepath, verbose=True):
     return None
 
 
-def reload_session():
+def reload_session() -> List[str]:
     """Shortcut for reload_package('session_py')."""
     return reload_package("session_py")
 
 
-def clear_session():
+def clear_session() -> List[str]:
     """Shortcut for clear_package('session_py')."""
     return clear_package("session_py")
 
 
-def reload_rhino():
+def reload_rhino() -> List[str]:
     """Shortcut for reload_package('session_rhino')."""
     return reload_package("session_rhino")
 
 
-def clear_rhino():
+def clear_rhino() -> List[str]:
     """Shortcut for clear_package('session_rhino')."""
     return clear_package("session_rhino")
 
 
-def reload_all():
+def reload_all() -> None:
     """Reload both session_py and session_rhino."""
     reload_package("session_py")
     reload_package("session_rhino")

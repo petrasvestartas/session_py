@@ -1,3 +1,6 @@
+from typing import Iterator
+from typing import Optional
+from typing import Sequence
 import math
 from contextlib import contextmanager
 
@@ -56,15 +59,15 @@ class Tolerance:
 
     def __init__(
         self,
-        unit="M",
-        absolute=None,
-        relative=None,
-        angular=None,
-        approximation=None,
-        precision=None,
-        lineardeflection=None,
-        angulardeflection=None,
-        name=None,
+        unit: str = "M",
+        absolute: Optional[float] = None,
+        relative: Optional[float] = None,
+        angular: Optional[float] = None,
+        approximation: Optional[float] = None,
+        precision: Optional[int] = None,
+        lineardeflection: Optional[float] = None,
+        angulardeflection: Optional[float] = None,
+        name: Optional[str]=None,
     ):
         if not self._is_inited:
             self._unit = None
@@ -95,7 +98,7 @@ class Tolerance:
         if angulardeflection is not None:
             self.angulardeflection = angulardeflection
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset all precision settings to their default values."""
         self._absolute = None
         self._relative = None
@@ -106,51 +109,51 @@ class Tolerance:
         self._angulardeflection = None
 
     @property
-    def unit(self):
+    def unit(self) -> str:
         return self._unit or "M"
 
     @unit.setter
-    def unit(self, value):
+    def unit(self, value: str) -> None:
         if value not in ["M", "MM"]:
             raise ValueError(f"Invalid unit: {value}")
         self._unit = value
 
     @property
-    def units(self):
+    def units(self) -> str:
         return self._unit or "M"
 
     @units.setter
-    def units(self, value):
+    def units(self, value: str) -> None:
         if value not in ["M", "MM"]:
             raise ValueError(f"Invalid unit: {value}")
         self._unit = value
 
     @property
-    def absolute(self):
+    def absolute(self) -> float:
         return self._absolute if self._absolute is not None else self.ABSOLUTE
 
     @absolute.setter
-    def absolute(self, value):
+    def absolute(self, value: float) -> None:
         self._absolute = value
 
     @property
-    def relative(self):
+    def relative(self) -> float:
         return self._relative if self._relative is not None else self.RELATIVE
 
     @relative.setter
-    def relative(self, value):
+    def relative(self, value: float) -> None:
         self._relative = value
 
     @property
-    def angular(self):
+    def angular(self) -> float:
         return self._angular if self._angular is not None else self.ANGULAR
 
     @angular.setter
-    def angular(self, value):
+    def angular(self, value: float) -> None:
         self._angular = value
 
     @property
-    def approximation(self):
+    def approximation(self) -> float:
         return (
             self._approximation
             if self._approximation is not None
@@ -158,21 +161,21 @@ class Tolerance:
         )
 
     @approximation.setter
-    def approximation(self, value):
+    def approximation(self, value: float) -> None:
         self._approximation = value
 
     @property
-    def precision(self):
+    def precision(self) -> int:
         return self._precision if self._precision is not None else self.PRECISION
 
     @precision.setter
-    def precision(self, value):
+    def precision(self, value: int) -> None:
         if value == 0:
             raise ValueError("Precision cannot be zero.")
         self._precision = value
 
     @property
-    def lineardeflection(self):
+    def lineardeflection(self) -> float:
         return (
             self._lineardeflection
             if self._lineardeflection is not None
@@ -180,11 +183,11 @@ class Tolerance:
         )
 
     @lineardeflection.setter
-    def lineardeflection(self, value):
+    def lineardeflection(self, value: float) -> None:
         self._lineardeflection = value
 
     @property
-    def angulardeflection(self):
+    def angulardeflection(self) -> float:
         return (
             self._angulardeflection
             if self._angulardeflection is not None
@@ -192,39 +195,39 @@ class Tolerance:
         )
 
     @angulardeflection.setter
-    def angulardeflection(self, value):
+    def angulardeflection(self, value: float) -> None:
         self._angulardeflection = value
 
-    def tolerance(self, truevalue, rtol, atol):
+    def tolerance(self, truevalue: float, rtol: float, atol: float) -> float:
         """Compute the tolerance for a comparison."""
         return rtol * abs(truevalue) + atol
 
-    def compare(self, a, b, rtol, atol):
+    def compare(self, a: float, b: float, rtol: float, atol: float) -> bool:
         """Compare two values."""
         return abs(a - b) <= self.tolerance(b, rtol, atol)
 
-    def is_zero(self, a):
+    def is_zero(self, a: float) -> bool:
         """Check if a value is close enough to zero to be considered zero."""
         return abs(a) <= self.absolute
 
-    def is_positive(self, a):
+    def is_positive(self, a: float) -> bool:
         """Check if a value can be considered a strictly positive number."""
         return a > self.absolute
 
-    def is_negative(self, a):
+    def is_negative(self, a: float) -> bool:
         """Check if a value can be considered a strictly negative number."""
         return a < -self.absolute
 
-    def is_between(self, value, minval, maxval):
+    def is_between(self, value: float, minval: float, maxval: float) -> bool:
         """Check if a value is between two other values."""
         atol = self.absolute
         return minval - atol <= value <= maxval + atol
 
-    def is_close(self, a, b):
+    def is_close(self, a: float, b: float) -> bool:
         """Check if two values are close enough to be considered equal."""
         return self.compare(a, b, self.relative, self.absolute)
 
-    def is_allclose(self, A, B):
+    def is_allclose(self, A: Sequence, B: Sequence) -> bool:
         """Check if two lists of values are element-wise close enough to be considered equal."""
         rtol = self.relative
         atol = self.absolute
@@ -237,29 +240,29 @@ class Tolerance:
             for a, b in zip(A, B)
         )
 
-    def is_angle_zero(self, a):
+    def is_angle_zero(self, a: float) -> bool:
         """Check if an angle is close enough to zero to be considered zero."""
         return abs(a) <= self.angular
 
-    def is_angles_close(self, a, b):
+    def is_angles_close(self, a: float, b: float) -> bool:
         """Check if two angles are close enough to be considered equal."""
         return abs(a - b) <= self.angular
 
-    def is_point_close(self, a, b):
+    def is_point_close(self, a: Sequence[float], b: Sequence[float]) -> bool:
         """Check if two 3D points are equal within absolute tolerance."""
         dx = b.x - a.x
         dy = b.y - a.y
         dz = b.z - a.z
         return (dx * dx + dy * dy + dz * dz) <= self.absolute * self.absolute
 
-    def is_vector_close(self, a, b):
+    def is_vector_close(self, a: Sequence[float], b: Sequence[float]) -> bool:
         """Check if two 3D vectors are equal within absolute tolerance."""
         dx = b.x - a.x
         dy = b.y - a.y
         dz = b.z - a.z
         return (dx * dx + dy * dy + dz * dz) <= self.absolute * self.absolute
 
-    def key(self, xyz, precision=None, sanitize=True):
+    def key(self, xyz: Sequence[float], precision: Optional[int] = None, sanitize: bool = True) -> str:
         """Compute the geometric key of a point."""
         x, y, z = xyz
         if not precision:
@@ -287,7 +290,7 @@ class Tolerance:
 
         return f"{x:.{precision}f},{y:.{precision}f},{z:.{precision}f}"
 
-    def key_xy(self, xy, precision=None, sanitize=True):
+    def key_xy(self, xy: Sequence[float], precision: Optional[int] = None, sanitize: bool = True) -> str:
         """Compute the geometric key of a point in the XY plane."""
         x, y = xy
         if not precision:
@@ -315,7 +318,7 @@ class Tolerance:
 
         return f"{x:.{precision}f},{y:.{precision}f}"
 
-    def format_number(self, number, precision=None):
+    def format_number(self, number: float, precision: Optional[int] = None) -> str:
         """Format a number as a string."""
         if not precision:
             precision = self.precision
@@ -333,7 +336,7 @@ class Tolerance:
 
         return f"{number:.{precision}f}"
 
-    def precision_from_tolerance(self, tol=None):
+    def precision_from_tolerance(self, tol: Optional[float] = None) -> int:
         """Compute the precision from a given tolerance."""
         tol = tol or self.absolute
         if tol < 1:
@@ -343,7 +346,7 @@ class Tolerance:
         raise NotImplementedError
 
     @contextmanager
-    def temporary(self, **kwargs):
+    def temporary(self, **kwargs: float) -> Iterator[None]:
         """Context manager for temporarily changing tolerance settings."""
         saved = {
             "_unit": self._unit,
@@ -364,15 +367,15 @@ class Tolerance:
                 setattr(self, k, v)
 
     @staticmethod
-    def to_radians(degrees):
+    def to_radians(degrees: float) -> float:
         return degrees * (math.pi / 180.0)
 
     @staticmethod
-    def to_degrees(radians):
+    def to_degrees(radians: float) -> float:
         return radians * (180.0 / math.pi)
 
     @staticmethod
-    def round_to(value, ndigits):
+    def round_to(value: float, ndigits: int) -> float:
         factor = 10 ** ndigits
         return round(value * factor) / factor
 
@@ -380,7 +383,7 @@ class Tolerance:
         return f"Tolerance(unit='{self.unit}', absolute={self.absolute}, relative={self.relative}, angular={self.angular}, approximation={self.approximation}, precision={self.precision}, lineardeflection={self.lineardeflection}, angulardeflection={self.angulardeflection})"
 
 
-def is_finite(x):
+def is_finite(x: float) -> bool:
     """Test if a number is finite (equivalent to C++ IS_FINITE function)."""
     return math.isfinite(x)
 

@@ -1,6 +1,13 @@
+from typing import Optional
+from typing import List
+from typing import Tuple
+from typing import Union
+from typing import TYPE_CHECKING
 import math
 import uuid
-from typing import Optional, List, Tuple
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class Matrix:
@@ -18,7 +25,7 @@ class Matrix:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @property
@@ -428,24 +435,24 @@ class Matrix:
         m.name = name
         return m
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Matrix":
         import json
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data, data.get("guid"), data.get("name"))
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Matrix":
         import json
         data = json.loads(json_string)
         return cls.__jsonload__(data, data.get("guid"), data.get("name"))
@@ -474,11 +481,11 @@ class Matrix:
         m.name = proto.name
         return m
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath) -> "Matrix":
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Matrix":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())

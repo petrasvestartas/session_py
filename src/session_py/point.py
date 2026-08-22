@@ -1,9 +1,15 @@
+from typing import Union
+from typing import TYPE_CHECKING
 import uuid
 import math
 from .color import Color
 from .vector import Vector
 from .tolerance import Tolerance
 import copy
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .xform import Xform
 
 
 class Point:
@@ -33,7 +39,7 @@ class Point:
 
     __slots__ = ("_guid", "name", "_x", "_y", "_z", "width", "_pointcolor")
 
-    def __init__(self, x=0.0, y=0.0, z=0.0, name="my_point"):
+    def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, name: str = "my_point"):
         self._guid = None
         self.name = name
         self._x = x
@@ -49,21 +55,21 @@ class Point:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
-    def refresh_guid(self):
+    def refresh_guid(self) -> None:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
     @property
-    def pointcolor(self):
+    def pointcolor(self) -> "Color":
         if self._pointcolor is None:
             self._pointcolor = Color.black()
         return self._pointcolor
 
     @pointcolor.setter
-    def pointcolor(self, value):
+    def pointcolor(self, value: "Color") -> None:
         self._pointcolor = value
 
     ###########################################################################################
@@ -88,7 +94,7 @@ class Point:
         result.pointcolor = copy.deepcopy(self.pointcolor, memo)
         return result
 
-    def duplicate(self):
+    def duplicate(self) -> "Point":
         """Create a deep copy of this point with a new GUID.
 
         Returns
@@ -102,7 +108,7 @@ class Point:
         return result
 
     @staticmethod
-    def sum(p0, p1):
+    def sum(p0: "Point", p1: "Point") -> "Point":
         """Returns a new point that is the sum of two points.
 
         Parameters
@@ -121,7 +127,7 @@ class Point:
         return Point(p0[0] + p1[0], p0[1] + p1[1], p0[2] + p1[2])
 
     @staticmethod
-    def sub(p0, p1):
+    def sub(p0: "Point", p1: "Point") -> "Point":
         """Returns a new point that is the difference of two points.
 
         Parameters
@@ -144,32 +150,32 @@ class Point:
     ###########################################################################################
 
     @property
-    def x(self):
+    def x(self) -> float:
         """Get the X coordinate."""
         return self._x
 
     @x.setter
-    def x(self, value):
+    def x(self, value: float) -> None:
         """Set the X coordinate."""
         self._x = value
 
     @property
-    def y(self):
+    def y(self) -> float:
         """Get the Y coordinate."""
         return self._y
 
     @y.setter
-    def y(self, value):
+    def y(self, value: float) -> None:
         """Set the Y coordinate."""
         self._y = value
 
     @property
-    def z(self):
+    def z(self) -> float:
         """Get the Z coordinate."""
         return self._z
 
     @z.setter
-    def z(self, value):
+    def z(self, value: float) -> None:
         """Set the Z coordinate."""
         self._z = value
 
@@ -247,7 +253,7 @@ class Point:
     # Transformation
     ###########################################################################################
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         """Apply a transformation to the point coordinates, in place."""
         x, y, z = self[0], self[1], self[2]
         m = xform.m
@@ -257,7 +263,7 @@ class Point:
         self[1] = (m[1]*x + m[5]*y + m[9]*z + m[13]) * w_inv
         self[2] = (m[2]*x + m[6]*y + m[10]*z + m[14]) * w_inv
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "Point":
         """Return a transformed copy of the point, leaving the original unchanged.
 
         Returns
@@ -275,7 +281,7 @@ class Point:
     ###########################################################################################
 
     @staticmethod
-    def is_ccw(a, b, c):
+    def is_ccw(a: "Point", b: "Point", c: "Point") -> bool:
         """Check if the points are in counter-clockwise order on xy plane.
 
         Parameters
@@ -296,7 +302,7 @@ class Point:
 
         return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
 
-    def mid_point(self, p):
+    def mid_point(self, p: "Point") -> "Point":
         """Calculate the mid point between this point and another point.
 
         Parameters
@@ -313,7 +319,7 @@ class Point:
 
         return Point((self[0] + p[0]) / 2, (self[1] + p[1]) / 2, (self[2] + p[2]) / 2)
 
-    def distance(self, p, double_min=1e-12):
+    def distance(self, p: "Point", double_min: float = 1e-12) -> float:
         """Calculate the distance between this point and another point.
 
         Parameters
@@ -352,7 +358,7 @@ class Point:
 
         return length
 
-    def squared_distance(self, p, double_min=1e-12):
+    def squared_distance(self, p: "Point", double_min: float = 1e-12) -> float:
         """Calculate the squared distance between this point and another point.
 
         Parameters
@@ -392,12 +398,12 @@ class Point:
         return length
 
     @staticmethod
-    def area(points):
+    def area(points: list["Point"]) -> float:
         """Calculate the area of a 2d polygon.
 
         Parameters
         ----------
-        points : list of :class:`Point`
+        points : list[:class:`Point`]
             The points of the polygon.
 
         Returns
@@ -417,12 +423,12 @@ class Point:
         return abs(area) / 2.0
 
     @staticmethod
-    def centroid_quad(vertices):
+    def centroid_quad(vertices: list["Point"]) -> "Point":
         """Calculate the centroid of a quadrilateral.
 
         Parameters
         ----------
-        vertices : list of :class:`Point`
+        vertices : list[:class:`Point`]
             The vertices of the quadrilateral.
 
         Returns
@@ -460,12 +466,12 @@ class Point:
         return Point(result[0], result[1], result[2])
 
     @staticmethod
-    def centroid(points):
+    def centroid(points: list["Point"]) -> "Point":
         """Average of an arbitrary list of points.
 
         Parameters
         ----------
-        points : list of :class:`Point`
+        points : list[:class:`Point`]
 
         Returns
         -------
@@ -484,7 +490,7 @@ class Point:
         return Point(cx / n, cy / n, cz / n)
 
     @staticmethod
-    def dihedral_angle_deg(p, q, r, s):
+    def dihedral_angle_deg(p: "Point", q: "Point", r: "Point", s: "Point") -> float:
         """Approximate dihedral angle in degrees between half-planes (p,q,r) and (p,q,s).
 
         Half-plane normals are built via the shared edge ``pq``.
@@ -555,7 +561,7 @@ class Point:
 
         return pt
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file.
 
         Parameters
@@ -569,7 +575,7 @@ class Point:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Point":
         """Read JSON from file.
 
         Parameters
@@ -588,13 +594,13 @@ class Point:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Point":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -603,7 +609,7 @@ class Point:
     # Protobuf Serialization
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format.
 
         Returns
@@ -632,7 +638,7 @@ class Point:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Point":
         """Create Point from protobuf binary data.
 
         Parameters
@@ -668,7 +674,7 @@ class Point:
         
         return pt
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -682,7 +688,7 @@ class Point:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Point":
         """Read protobuf from file.
 
         Parameters

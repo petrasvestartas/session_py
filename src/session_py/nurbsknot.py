@@ -7,8 +7,10 @@ These functions operate on numpy arrays and can be used independently
 or called by NurbsCurve and NurbsSurface classes.
 """
 
+from typing import Tuple
+from typing import Optional
+from typing import List
 import numpy as np
-from typing import Tuple, Optional, List
 from enum import IntEnum
 import math
 
@@ -408,7 +410,7 @@ def get_domain(order: int, cv_count: int, nurbsknot: np.ndarray) -> Tuple[float,
     
     Returns
     -------
-    tuple of float
+    tuple[float, float]
         (t0, t1) domain interval.
     
     Notes
@@ -985,7 +987,7 @@ def eval_basis(order: int, nurbsknot: np.ndarray, span: int, t: float) -> List[f
     return basis
 
 
-def build_fitted_nurbsknots(params, num_cvs: int, degree: int):
+def build_fitted_nurbsknots(params: List[float], num_cvs: int, degree: int) -> List[float]:
     m = len(params)
     n_interior = num_cvs - degree - 1
     order = degree + 1
@@ -1007,7 +1009,7 @@ def build_fitted_nurbsknots(params, num_cvs: int, degree: int):
     return nurbsknots
 
 
-def build_fitted_nurbsknots_adaptive(params, points, point_count, dim, num_cvs, degree, scale=3.0):
+def build_fitted_nurbsknots_adaptive(params: List[float], points: List[float], point_count: int, dim: int, num_cvs: int, degree: int, scale: float = 3.0) -> List[float]:
     m = point_count
     if m < 3 or points is None:
         return build_fitted_nurbsknots(params, num_cvs, degree)
@@ -1051,7 +1053,7 @@ def build_fitted_nurbsknots_adaptive(params, points, point_count, dim, num_cvs, 
     return nurbsknots
 
 
-def build_fitted_nurbsknots_periodic_adaptive(params, points, n, dim, num_cvs, degree, scale=3.0):
+def build_fitted_nurbsknots_periodic_adaptive(params: List[float], points: List[float], n: int, dim: int, num_cvs: int, degree: int, scale: float = 3.0) -> List[float]:
     cv_count = num_cvs + degree
     order = degree + 1
     kc = cv_count + order - 2
@@ -1107,7 +1109,7 @@ def build_fitted_nurbsknots_periodic_adaptive(params, points, n, dim, num_cvs, d
     return nurbsknots
 
 
-def solve_banded_spd(dim: int, n: int, half_bw: int, band, rhs):
+def solve_banded_spd(dim: int, n: int, half_bw: int, band: List[float], rhs: List[float]) -> bool:
     bw1 = half_bw + 1
 
     for i in range(n):

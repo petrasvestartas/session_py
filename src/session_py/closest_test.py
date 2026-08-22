@@ -2,6 +2,7 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
+from .tolerance import PI
 
 
 @MINI_TEST("Closest", "Line Point")
@@ -118,8 +119,7 @@ def test_closest_surface_curve():
     from session_py import Closest
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.primitives import Primitives
-    from session_py.tolerance import PI
+    from session_py import Primitives
 
     cyl = Primitives.cylinder_surface(0.0, 0.0, 0.0, 1.0, 4.0)
     u0, u1 = cyl.domain(0)

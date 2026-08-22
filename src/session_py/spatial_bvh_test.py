@@ -6,7 +6,7 @@ from .tolerance import TOLERANCE
 
 @MINI_TEST("SpatialBVH", "Constructor")
 def test_bvh_constructor():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -71,7 +71,7 @@ def test_bvh_morton_code_spatial_locality():
 
 @MINI_TEST("SpatialBVH", "Node Creation")
 def test_bvh_node_creation():
-    from session_py.spatial_bvh import SpatialBVHNode
+    from session_py import SpatialBVHNode
 
     node = SpatialBVHNode()
 
@@ -83,7 +83,7 @@ def test_bvh_node_creation():
 
 @MINI_TEST("SpatialBVH", "Node Leaf")
 def test_bvh_node_leaf():
-    from session_py.spatial_bvh import SpatialBVHNode
+    from session_py import SpatialBVHNode
 
     node = SpatialBVHNode()
 
@@ -94,7 +94,7 @@ def test_bvh_node_leaf():
 
 @MINI_TEST("SpatialBVH", "Creation")
 def test_bvh_creation():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
 
     bvh = SpatialBVH(100.0)
 
@@ -106,7 +106,7 @@ def test_bvh_creation():
 
 @MINI_TEST("SpatialBVH", "Build Empty")
 def test_bvh_build_empty():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
 
     boxes = []
     bvh = SpatialBVH.from_boxes(boxes, 100.0)
@@ -116,7 +116,7 @@ def test_bvh_build_empty():
 
 @MINI_TEST("SpatialBVH", "Build Single")
 def test_bvh_build_single():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -131,7 +131,7 @@ def test_bvh_build_single():
 
 @MINI_TEST("SpatialBVH", "Build Multiple")
 def test_bvh_build_multiple():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -151,7 +151,7 @@ def test_bvh_build_multiple():
 
 @MINI_TEST("SpatialBVH", "Aabb Intersect")
 def test_bvh_aabb_intersect():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -167,7 +167,7 @@ def test_bvh_aabb_intersect():
 
 @MINI_TEST("SpatialBVH", "Check All Collisions")
 def test_bvh_check_all_collisions():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -189,7 +189,7 @@ def test_bvh_check_all_collisions():
 
 @MINI_TEST("SpatialBVH", "Nearest Neighbors")
 def test_bvh_nearest_neighbors():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -214,7 +214,7 @@ def test_bvh_nearest_neighbors():
 
 @MINI_TEST("SpatialBVH", "Merge Aabb")
 def test_bvh_merge_aabb():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -230,7 +230,7 @@ def test_bvh_merge_aabb():
 
 @MINI_TEST("SpatialBVH", "Fixed 100 Boxes")
 def test_bvh_fixed_100_boxes():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -361,7 +361,7 @@ def test_bvh_fixed_100_boxes():
 
 @MINI_TEST("SpatialBVH", "Query Aabb")
 def test_bvh_query_aabb():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -400,7 +400,7 @@ def test_bvh_query_aabb():
 
 @MINI_TEST("SpatialBVH", "Build From Boxes")
 def test_bvh_build_from_boxes():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -427,7 +427,7 @@ def test_bvh_build_from_boxes():
 
 @MINI_TEST("SpatialBVH", "Build From Aabbs")
 def test_bvh_build_from_aabbs():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import AABB
     from session_py import OBB
     from session_py import Point
@@ -452,7 +452,7 @@ def test_bvh_build_from_aabbs():
 
 @MINI_TEST("SpatialBVH", "Build With Guids")
 def test_bvh_build_with_guids():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -483,7 +483,7 @@ def test_bvh_build_with_guids():
 
 @MINI_TEST("SpatialBVH", "Check All Collisions Guids")
 def test_bvh_check_all_collisions_guids():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector
@@ -514,7 +514,7 @@ def test_bvh_check_all_collisions_guids():
 
 @MINI_TEST("SpatialBVH", "Find Collisions")
 def test_bvh_find_collisions():
-    from session_py.spatial_bvh import SpatialBVH
+    from session_py import SpatialBVH
     from session_py import OBB
     from session_py import Point
     from session_py import Vector

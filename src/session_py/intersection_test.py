@@ -727,7 +727,7 @@ def test_intersection_surface_plane_uv():
     from session_py import Plane
     from session_py import Point
     from session_py import Vector
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     cyl = Primitives.cylinder_surface(0.0, 0.0, 0.0, 1.0, 4.0)
     plane = Plane.from_point_normal(Point(0.0, 0.0, 2.0), Vector(0.3, 0.0, 1.0))
@@ -773,7 +773,7 @@ def test_intersection_surface_surface():
     from session_py import intersection
     from session_py import NurbsSurface
     from session_py import Point
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     def lies_on_curve(curve3d, pcurve, surface):
         u0, u1 = surface.domain(0)
@@ -833,7 +833,7 @@ def test_intersection_surface_surface_accuracy():
     from session_py import intersection
     from session_py import NurbsSurface
     from session_py import Point
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     # Every intersection point must lie on BOTH analytic surfaces to ~1e-6.
     # Measured exactly (closed-form distance), independent of OCCT/parameterization.
@@ -1071,7 +1071,10 @@ def test_intersection_line_line_3d():
 
 @MINI_TEST("Intersection", "Polyline Plane To Line")
 def test_intersection_polyline_plane_to_line():
-    from session_py import Plane, Point, Polyline, Vector
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
     from session_py.intersection import polyline_plane_to_line
     poly = Polyline([
         Point(0.0, 0.0, 0.0),
@@ -1089,7 +1092,10 @@ def test_intersection_polyline_plane_to_line():
 
 @MINI_TEST("Intersection", "Quad From Line Top Bottom Planes")
 def test_intersection_quad_from_line_top_bottom_planes():
-    from session_py import Line, Plane, Point, Vector
+    from session_py import Line
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
     from session_py.intersection import quad_from_line_top_bottom_planes
     face = Plane.xy_plane()
     line = Line(0.0, 0.0, 0.0, 10.0, 0.0, 0.0)
@@ -1105,7 +1111,9 @@ def test_intersection_quad_from_line_top_bottom_planes():
 
 @MINI_TEST("Intersection", "Orthogonal Vector Between Two Plane Pairs")
 def test_intersection_orthogonal_vector_between_two_plane_pairs():
-    from session_py import Plane, Point, Vector
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
     from session_py.intersection import orthogonal_vector_between_two_plane_pairs
     pp00 = Plane.xy_plane()
     pp10 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
@@ -1120,7 +1128,9 @@ def test_intersection_orthogonal_vector_between_two_plane_pairs():
 
 @MINI_TEST("Intersection", "Closed And Open Paths 2D")
 def test_intersection_closed_and_open_paths_2d():
-    from session_py import Plane, Point, Polyline
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
     from session_py.intersection import closed_and_open_paths_2d
     plate = Polyline([
         Point(0.0, 0.0, 0.0),

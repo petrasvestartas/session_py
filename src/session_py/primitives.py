@@ -1,3 +1,4 @@
+from typing import List
 import numpy as np
 import math
 import copy
@@ -311,17 +312,17 @@ class Primitives:
         return mesh
 
     @staticmethod
-    def cylinder_mesh(line, radius):
+    def cylinder_mesh(line: Line, radius: float) -> "Mesh":
         return Primitives._transform_geometry(Primitives._unit_cylinder_geometry(), Primitives._line_to_cylinder_transform(line, radius))
 
     @staticmethod
-    def capsule_mesh(line, radius):
+    def capsule_mesh(line: Line, radius: float) -> "Mesh":
         start, end = line.start(), line.end()
         return Primitives._transform_geometry(
             Primitives._capsule_geometry(start, end, radius), Xform.identity())
 
     @staticmethod
-    def edge_pipes(mesh, radius):
+    def edge_pipes(mesh: "Mesh", radius: float) -> List["Mesh"]:
         from session_py.line import Line
         edges = mesh.edges()
         result = []
@@ -337,7 +338,7 @@ class Primitives:
         return result
 
     @staticmethod
-    def arrow_mesh(line, radius):
+    def arrow_mesh(line: Line, radius: float) -> "Mesh":
         start = line.start()
         line_vec = line.to_vector()
         length = line.length()
@@ -472,7 +473,7 @@ class Primitives:
                     c.insert_nurbsknot(unified[ui], 1)
 
     @staticmethod
-    def cylinder_surface(cx, cy, cz, radius, height):
+    def cylinder_surface(cx: float, cy: float, cz: float, radius: float, height: float) -> NurbsSurface:
         w = math.sqrt(2.0) / 2.0
         circle_weights = [1, w, 1, w, 1, w, 1, w, 1]
         circle_x = [1, 1, 0, -1, -1, -1, 0, 1, 1]
@@ -496,7 +497,7 @@ class Primitives:
         return srf
 
     @staticmethod
-    def cone_surface(cx, cy, cz, radius, height):
+    def cone_surface(cx: float, cy: float, cz: float, radius: float, height: float) -> NurbsSurface:
         w = math.sqrt(2.0) / 2.0
         circle_weights = [1, w, 1, w, 1, w, 1, w, 1]
         circle_x = [1, 1, 0, -1, -1, -1, 0, 1, 1]
@@ -521,7 +522,7 @@ class Primitives:
         return srf
 
     @staticmethod
-    def torus_surface(cx, cy, cz, major_radius, minor_radius):
+    def torus_surface(cx: float, cy: float, cz: float, major_radius: float, minor_radius: float) -> NurbsSurface:
         w = math.sqrt(2.0) / 2.0
         cw = [1, w, 1, w, 1, w, 1, w, 1]
         cos_a = [1, 1, 0, -1, -1, -1, 0, 1, 1]
@@ -549,7 +550,7 @@ class Primitives:
         return srf
 
     @staticmethod
-    def sphere_surface(cx, cy, cz, radius):
+    def sphere_surface(cx: float, cy: float, cz: float, radius: float) -> NurbsSurface:
         w = math.sqrt(2.0) / 2.0
         cw = [1, w, 1, w, 1, w, 1, w, 1]
         cos_a = [1, 1, 0, -1, -1, -1, 0, 1, 1]
@@ -579,7 +580,7 @@ class Primitives:
         return srf
 
     @staticmethod
-    def quad_sphere(cx, cy, cz, radius):
+    def quad_sphere(cx: float, cy: float, cz: float, radius: float) -> List[NurbsSurface]:
         R = radius
         a = R / math.sqrt(3.0)
         e = R * math.sqrt(3.0) / 2.0
@@ -618,7 +619,7 @@ class Primitives:
         return faces
 
     @staticmethod
-    def create_ruled(curveA, curveB):
+    def create_ruled(curveA: NurbsCurve, curveB: NurbsCurve) -> NurbsSurface:
         if not curveA.is_valid() or not curveB.is_valid():
             return NurbsSurface()
 
@@ -680,7 +681,7 @@ class Primitives:
         return surface
 
     @staticmethod
-    def create_extrusion(curve, direction):
+    def create_extrusion(curve: NurbsCurve, direction: Vector) -> NurbsSurface:
         if not curve.is_valid():
             return NurbsSurface()
         translated = curve.duplicate()
@@ -689,7 +690,7 @@ class Primitives:
         return Primitives.create_ruled(curve, translated)
 
     @staticmethod
-    def create_planar(boundary):
+    def create_planar(boundary: NurbsCurve) -> NurbsSurface:
         if not boundary.is_valid():
             return NurbsSurface()
 
@@ -839,7 +840,7 @@ class Primitives:
         return make_bilinear(orig, xax, yax, min_u, max_u, min_v, max_v)
 
     @staticmethod
-    def create_loft(input_curves, degree_v=3):
+    def create_loft(input_curves: List[NurbsCurve], degree_v: int = 3) -> NurbsSurface:
         if len(input_curves) < 2:
             return NurbsSurface()
         for c in input_curves:
@@ -1019,7 +1020,7 @@ class Primitives:
         return surface
 
     @staticmethod
-    def create_revolve(profile, axis_origin, axis_direction, angle):
+    def create_revolve(profile: NurbsCurve, axis_origin: Point, axis_direction: Vector, angle: float) -> NurbsSurface:
         if not profile.is_valid():
             return NurbsSurface()
         ax_len = axis_direction.magnitude()
@@ -1131,11 +1132,11 @@ class Primitives:
         return surface
 
     @staticmethod
-    def create_revolve_full(profile, axis_origin, axis_direction):
+    def create_revolve_full(profile: NurbsCurve, axis_origin: Point, axis_direction: Vector) -> NurbsSurface:
         return Primitives.create_revolve(profile, axis_origin, axis_direction, 2.0 * Tolerance.PI)
 
     @staticmethod
-    def create_sweep1(rail, profile):
+    def create_sweep1(rail: NurbsCurve, profile: NurbsCurve) -> NurbsSurface:
         if not rail.is_valid() or not profile.is_valid():
             return NurbsSurface()
 
@@ -1221,7 +1222,7 @@ class Primitives:
         return Primitives.create_loft(positioned_profiles, loft_degree)
 
     @staticmethod
-    def create_sweep2(rail1, rail2, shapes):
+    def create_sweep2(rail1: NurbsCurve, rail2: NurbsCurve, shapes: List[NurbsCurve]) -> NurbsSurface:
         if not rail1.is_valid() or not rail2.is_valid() or not shapes:
             return NurbsSurface()
         for s in shapes:
@@ -1395,7 +1396,7 @@ class Primitives:
         return Primitives.create_loft(positioned_profiles, loft_degree)
 
     @staticmethod
-    def create_edge(c0, c1, c2, c3):
+    def create_edge(c0: NurbsCurve, c1: NurbsCurve, c2: NurbsCurve, c3: NurbsCurve) -> NurbsSurface:
         if not c0.is_valid() or not c1.is_valid() or not c2.is_valid() or not c3.is_valid():
             return NurbsSurface()
 
@@ -1499,11 +1500,11 @@ class Primitives:
         return surface
 
     @staticmethod
-    def create_interpolated(points, parameterization=nurbsknot.CurveNurbsKnotStyle.Chord):
+    def create_interpolated(points: List[Point], parameterization: "nurbsknot.CurveNurbsKnotStyle" = nurbsknot.CurveNurbsKnotStyle.Chord) -> NurbsCurve:
         return NurbsCurve.create_interpolated(points, parameterization)
 
     @staticmethod
-    def quad_mesh(surface, u_count, v_count):
+    def quad_mesh(surface: NurbsSurface, u_count: int, v_count: int) -> "Mesh":
         mesh = Mesh()
         du = surface.domain(0)
         dv = surface.domain(1)
@@ -1540,7 +1541,7 @@ class Primitives:
         return mesh
 
     @staticmethod
-    def diamond_mesh(surface, u_count, v_count):
+    def diamond_mesh(surface: NurbsSurface, u_count: int, v_count: int) -> "Mesh":
         mesh = Mesh()
         du = surface.domain(0)
         dv = surface.domain(1)
@@ -1585,7 +1586,7 @@ class Primitives:
         return mesh
 
     @staticmethod
-    def hex_mesh(surface, u_count, v_count, t=1.0/3.0):
+    def hex_mesh(surface: NurbsSurface, u_count: int, v_count: int, t: float = 1.0/3.0) -> "Mesh":
         mesh = Mesh()
         du = surface.domain(0)
         dv = surface.domain(1)
@@ -1656,7 +1657,7 @@ class Primitives:
         return mesh
 
     @staticmethod
-    def tetrahedron(edge=2.0):
+    def tetrahedron(edge: float = 2.0) -> "Mesh":
         a = edge / 2.0
         h = edge * math.sqrt(2.0 / 3.0)
         r = edge / math.sqrt(3.0)
@@ -1671,7 +1672,7 @@ class Primitives:
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def cube(edge=2.0):
+    def cube(edge: float = 2.0) -> "Mesh":
         a = edge / 2.0
         v0, v1, v2, v3 = Point(-a, -a, -a), Point(a, -a, -a), Point(a, a, -a), Point(-a, a, -a)
         v4, v5, v6, v7 = Point(-a, -a, a), Point(a, -a, a), Point(a, a, a), Point(-a, a, a)
@@ -1683,7 +1684,7 @@ class Primitives:
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def octahedron(edge=2.0):
+    def octahedron(edge: float = 2.0) -> "Mesh":
         a = edge / math.sqrt(2.0)
         px, nx = Point(a, 0, 0), Point(-a, 0, 0)
         py, ny = Point(0, a, 0), Point(0, -a, 0)
@@ -1695,7 +1696,7 @@ class Primitives:
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def icosahedron(edge=2.0):
+    def icosahedron(edge: float = 2.0) -> "Mesh":
         phi = (1.0 + math.sqrt(5.0)) / 2.0
         s = edge / 2.0
         sp = s * phi
@@ -1714,7 +1715,7 @@ class Primitives:
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def wave_surface(size, amplitude):
+    def wave_surface(size: float, amplitude: float) -> NurbsSurface:
         n = 13
         PI2 = 2.0 * PI
         pts = []

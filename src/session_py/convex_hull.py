@@ -1,5 +1,6 @@
+from typing import List
+from typing import Tuple
 import math
-from typing import List, Tuple
 
 from .mesh import Mesh
 from .point import Point

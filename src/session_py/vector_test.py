@@ -3,11 +3,13 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
+from .tolerance import PI
 
 
 @MINI_TEST("Vector", "Constructor")
 def test_vector_constructor():
-    from session_py import Vector, Point
+    from session_py import Vector
+    from session_py import Point
 
     # Constructor
     v = Vector(1.0, 2.0, 3.0)
@@ -78,8 +80,8 @@ def test_vector_constructor():
 
 @MINI_TEST("Vector", "Transformation")
 def test_vector_transformation():
-    from session_py import Vector, Xform
-    from session_py.tolerance import PI
+    from session_py import Vector
+    from session_py import Xform
 
     v = Vector(1.0, 2.0, 3.0)
     v_xf = Xform.translation(10.0, 20.0, 30.0)

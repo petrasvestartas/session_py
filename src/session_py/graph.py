@@ -1,10 +1,17 @@
+from typing import Iterator
+from typing import Optional
+from typing import Union
+from typing import TYPE_CHECKING
 import uuid
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class Vertex:
     """A graph vertex with a unique identifier and attribute string."""
 
-    def __init__(self, name="my_vertex", attribute=""):
+    def __init__(self, name: str = "my_vertex", attribute: str = ""):
         self._guid = None
         self.name = str(name)
         self.attribute = str(attribute)
@@ -17,7 +24,7 @@ class Vertex:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     def __jsondump__(self):
@@ -40,7 +47,7 @@ class Vertex:
 class Edge:
     """A graph edge connecting two vertices with an attribute string."""
 
-    def __init__(self, v0, v1, attribute=""):
+    def __init__(self, v0: Union[str, int], v1: Union[str, int], attribute: str = ""):
         self._guid = None
         self.name = "my_edge"
         self.v0 = str(v0)
@@ -55,7 +62,7 @@ class Edge:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     def __jsondump__(self):
@@ -78,13 +85,13 @@ class Edge:
         return edge
 
     @property
-    def vertices(self):
+    def vertices(self) -> tuple[str, str]:
         return (self.v0, self.v1)
 
-    def connects(self, vertex_id):
+    def connects(self, vertex_id: Union[str, int]) -> bool:
         return str(vertex_id) in self.vertices
 
-    def other_vertex(self, vertex_id):
+    def other_vertex(self, vertex_id: Union[str, int]) -> str:
         vertex_id = str(vertex_id)
         if vertex_id == self.v0:
             return self.v1
@@ -108,7 +115,7 @@ class Graph:
 
     """
 
-    def __init__(self, name="my_graph"):
+    def __init__(self, name: str = "my_graph"):
         """Initialize a new Graph."""
         self.name = name
         self._guid = None
@@ -124,7 +131,7 @@ class Graph:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     def __str__(self):
@@ -210,22 +217,22 @@ class Graph:
     # Serialization: file_json_dumps, file_json_loads, file_json_dump, file_json_load
     ###########################################################################################
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s):
+    def file_json_loads(cls, s: str) -> "Graph":
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Graph":
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
@@ -234,7 +241,7 @@ class Graph:
     # Serialization: pb_dumps, pb_loads, pb_dump, pb_load
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import graph_pb2
 
         proto = graph_pb2.Graph()
@@ -268,7 +275,7 @@ class Graph:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Graph":
         from .proto import graph_pb2
 
         proto = graph_pb2.Graph()
@@ -299,12 +306,12 @@ class Graph:
 
         return graph
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Graph":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
 
@@ -312,7 +319,7 @@ class Graph:
     # Details: Essential Graph Methods
     ###########################################################################################
 
-    def has_node(self, key):
+    def has_node(self, key: str) -> bool:
         """Check if a node exists in the graph.
 
         Parameters
@@ -337,7 +344,7 @@ class Graph:
         """
         return key in self.vertices
 
-    def has_edge(self, edge):
+    def has_edge(self, edge: Union[tuple, str]) -> bool:
         """Check if an edge exists in the graph.
 
         Parameters
@@ -367,7 +374,7 @@ class Graph:
 
         return u in self.edges and v in self.edges[u]
 
-    def add_node(self, key, attribute=""):
+    def add_node(self, key: str, attribute: str = "") -> str:
         """Add a node to the graph.
 
         Parameters
@@ -402,7 +409,7 @@ class Graph:
             self.vertex_count += 1
             return vertex.name
 
-    def add_edge(self, u, v, attribute=""):
+    def add_edge(self, u: str, v: str, attribute: str = "") -> tuple:
         """Add an edge between u and v.
 
         Parameters
@@ -454,7 +461,7 @@ class Graph:
 
         return (u, v)
 
-    def remove_node(self, key):
+    def remove_node(self, key: str) -> None:
         """Remove a node and all its edges from the graph.
 
         Parameters
@@ -492,7 +499,7 @@ class Graph:
         # Reassign indices to maintain contiguous sequence
         self._reassign_indices()
 
-    def remove_edge(self, edge):
+    def remove_edge(self, edge: tuple) -> None:
         """Remove an edge from the graph.
 
         Parameters
@@ -552,17 +559,17 @@ class Graph:
 
         self.edge_count = len(edges)
 
-    def get_vertices(self):
+    def get_vertices(self) -> list["Vertex"]:
         """Return a list of all vertices in the graph.
 
         Returns
         -------
-        list of :class:`Vertex`
+        list[:class:`Vertex`]
             A list of all vertex objects in the graph.
         """
         return list(self.vertices.values())
 
-    def get_edges(self):
+    def get_edges(self) -> Iterator[tuple[str, str]]:
         """Iterate over all edges in the graph.
 
         Yields
@@ -587,7 +594,7 @@ class Graph:
                     seen.add(edge_tuple)
                     yield edge_tuple
 
-    def neighbors(self, node):
+    def neighbors(self, node: str) -> Iterator[str]:
         """Get all neighbors of a node.
 
         Parameters
@@ -612,10 +619,10 @@ class Graph:
         """
         return iter(self.edges.get(node, {}).keys())
 
-    def get_neighbors(self, node):
+    def get_neighbors(self, node: str) -> list[str]:
         return list(self.neighbors(node))
 
-    def number_of_vertices(self):
+    def number_of_vertices(self) -> int:
         """Get the number of vertices in the graph.
 
         Returns
@@ -633,7 +640,7 @@ class Graph:
         """
         return len(self.vertices)
 
-    def number_of_edges(self):
+    def number_of_edges(self) -> int:
         """Get the number of edges in the graph.
 
         Returns
@@ -651,7 +658,7 @@ class Graph:
         """
         return sum(len(neighbors) for neighbors in self.edges.values()) // 2
 
-    def clear(self):
+    def clear(self) -> None:
         """Remove all vertices and edges from the graph.
 
         Examples
@@ -668,7 +675,7 @@ class Graph:
         self.vertex_count = 0
         self.edge_count = 0
 
-    def node_attribute(self, node, value=None):
+    def node_attribute(self, node: str, value: Optional[str] = None) -> str:
         """Get or set node attribute.
 
         Parameters
@@ -707,7 +714,7 @@ class Graph:
         else:
             return node_obj.attribute
 
-    def edge_attribute(self, u, v, value=None):
+    def edge_attribute(self, u: str, v: str, value: Optional[str] = None) -> str:
         """Get or set edge attribute.
 
         Parameters
@@ -762,7 +769,7 @@ class Graph:
     # Algorithms
     ###########################################################################################
 
-    def bfs(self, start):
+    def bfs(self, start: str) -> list[str]:
         if not self.has_node(start):
             return []
         visited = set()
@@ -778,7 +785,7 @@ class Graph:
                     queue.append(neighbor)
         return result
 
-    def dfs(self, start):
+    def dfs(self, start: str) -> list[str]:
         if not self.has_node(start):
             return []
         visited = set()
@@ -795,7 +802,7 @@ class Graph:
                     stack.append(neighbor)
         return result
 
-    def connected_components(self):
+    def connected_components(self) -> list[list[str]]:
         visited = set()
         components = []
         for start in sorted(self.vertices.keys()):
@@ -806,13 +813,13 @@ class Graph:
             components.append(sorted(comp))
         return components
 
-    def is_connected(self):
+    def is_connected(self) -> bool:
         return len(self.connected_components()) <= 1
 
-    def number_connected_components(self):
+    def number_connected_components(self) -> int:
         return len(self.connected_components())
 
-    def shortest_path(self, u, v):
+    def shortest_path(self, u: str, v: str) -> list[str]:
         if not self.has_node(u) or not self.has_node(v):
             return []
         if u == v:
@@ -834,13 +841,13 @@ class Graph:
                     queue.append(neighbor)
         return []
 
-    def shortest_path_length(self, u, v):
+    def shortest_path_length(self, u: str, v: str) -> int:
         path = self.shortest_path(u, v)
         if not path:
             return -1
         return len(path) - 1
 
-    def has_cycle(self):
+    def has_cycle(self) -> bool:
         visited = set()
         for start in sorted(self.vertices.keys()):
             if start in visited:
@@ -859,7 +866,7 @@ class Graph:
                         return True
         return False
 
-    def cycle_basis(self):
+    def cycle_basis(self) -> list[list[str]]:
         result = []
         disc = {}
         par = {}

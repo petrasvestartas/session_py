@@ -5,6 +5,7 @@
 # Prefer over SpatialRTree when no dynamic insert/delete is needed.
 # Prefer over SpatialKDTree when querying faces/volumes, not bare point clouds.
 from typing import List
+from typing import Optional
 from .aabb import AABB
 
 
@@ -34,7 +35,7 @@ def _nth_element(a: List[int], lo: int, mid: int, hi: int, key) -> None:
 class _Node:
     __slots__ = ("aabb", "right", "object_id")
 
-    def __init__(self, aabb: AABB = None, right: int = -1, object_id: int = -1):
+    def __init__(self, aabb: Optional[AABB] = None, right: int = -1, object_id: int = -1):
         self.aabb = aabb if aabb is not None else AABB(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         self.right = right
         self.object_id = object_id

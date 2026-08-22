@@ -1,3 +1,5 @@
+from typing import Callable
+from typing import List
 # SpatialRTree — R-tree with dynamic insert/delete (Guttman split, fan-out 4–8).
 # Use for: "find all objects overlapping this region" (spatial range queries).
 #   Supports live insertion and deletion; good for mutable object sets.
@@ -14,7 +16,7 @@ class _Rect:
         self.m_min = [0.0, 0.0, 0.0]
         self.m_max = [0.0, 0.0, 0.0]
 
-    def copy(self):
+    def copy(self) -> "_Rect":
         r = _Rect()
         r.m_min = list(self.m_min)
         r.m_max = list(self.m_max)
@@ -27,7 +29,7 @@ class _Branch:
         self.m_child = None
         self.m_data = 0
 
-    def copy(self):
+    def copy(self) -> "_Branch":
         b = _Branch()
         b.m_rect = self.m_rect.copy()
         b.m_child = self.m_child
@@ -43,7 +45,7 @@ class _Node:
         for i in range(MAXNODES + 1):
             self.m_branch[i] = _Branch()
 
-    def is_leaf(self):
+    def is_leaf(self) -> bool:
         return self.m_level == 0
 
 
@@ -305,7 +307,7 @@ class SpatialRTree:
                         return True
             return False
 
-    def insert(self, a_min, a_max, a_data):
+    def insert(self, a_min: List[float], a_max: List[float], a_data: int) -> None:
         branch = _Branch()
         branch.m_rect = self._make_rect(a_min, a_max)
         branch.m_child = None
@@ -313,7 +315,7 @@ class SpatialRTree:
         self._insert_branch_internal(branch, 0)
         self._m_size += 1
 
-    def remove(self, a_min, a_max, a_data):
+    def remove(self, a_min: List[float], a_max: List[float], a_data: int) -> bool:
         rect = self._make_rect(a_min, a_max)
         reinsert_list = []
         if not self._remove_rect_internal(rect, a_data, self._m_root, reinsert_list):
@@ -326,16 +328,16 @@ class SpatialRTree:
         self._m_size -= 1
         return True
 
-    def search(self, a_min, a_max, a_callback):
+    def search(self, a_min: List[float], a_max: List[float], a_callback: Callable) -> int:
         rect = self._make_rect(a_min, a_max)
         count_ref = [0]
         self._search_internal(rect, self._m_root, count_ref, a_callback)
         return count_ref[0]
 
-    def remove_all(self):
+    def remove_all(self) -> None:
         self._m_root = self._alloc_node()
         self._m_root.m_level = 0
         self._m_size = 0
 
-    def count(self):
+    def count(self) -> int:
         return self._m_size

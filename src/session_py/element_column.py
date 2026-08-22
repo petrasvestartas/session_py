@@ -1,10 +1,18 @@
 import uuid
 import copy
 from .element import Element
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .line import Line
+    from .mesh import Mesh
+    from .plane import Plane
+    from .polyline import Polyline
+    from .vector import Vector
 
 
 class ElementColumn(Element):
-    def __init__(self, width=0.4, depth=0.4, height=3.0, name="my_column"):
+    def __init__(self, width: float = 0.4, depth: float = 0.4, height: float = 3.0, name: str = "my_column"):
         super().__init__(geometry=None, name=name)
         self._width = width
         self._depth = depth
@@ -12,41 +20,41 @@ class ElementColumn(Element):
         self._geometry = self.compute_element_geometry()
 
     @property
-    def width(self):
+    def width(self) -> float:
         return self._width
 
     @width.setter
-    def width(self, value):
+    def width(self, value: float) -> None:
         self._width = value
         self._geometry = self.compute_element_geometry()
         self.reset()
 
     @property
-    def depth(self):
+    def depth(self) -> float:
         return self._depth
 
     @depth.setter
-    def depth(self, value):
+    def depth(self, value: float) -> None:
         self._depth = value
         self._geometry = self.compute_element_geometry()
         self.reset()
 
     @property
-    def height(self):
+    def height(self) -> float:
         return self._height
 
     @height.setter
-    def height(self, value):
+    def height(self, value: float) -> None:
         self._height = value
         self._geometry = self.compute_element_geometry()
         self.reset()
 
     @property
-    def center_line(self):
+    def center_line(self) -> "Line":
         from .line import Line
         return Line(0, 0, 0, 0, 0, self._height)
 
-    def compute_element_geometry(self):
+    def compute_element_geometry(self) -> "Mesh":
         from .mesh import Mesh
         from .point import Point
         hx = self._width * 0.5
@@ -71,12 +79,12 @@ class ElementColumn(Element):
         ]
         return Mesh.from_vertices_and_faces(vertices, faces)
 
-    def extend(self, distance):
+    def extend(self, distance: float) -> None:
         self._height += distance * 2
         self._geometry = self.compute_element_geometry()
         self.reset()
 
-    def compute_polylines(self):
+    def compute_polylines(self) -> list["Polyline"]:
         from .polyline import Polyline
         from .point import Point
         hx = self._width * 0.5
@@ -91,7 +99,7 @@ class ElementColumn(Element):
         side3 = Polyline([b[1], b[2], t[2], t[1], Point(b[1][0], b[1][1], b[1][2])])
         return [bottom_pl, top_pl, side0, side1, side2, side3]
 
-    def compute_planes(self):
+    def compute_planes(self) -> list["Plane"]:
         from .plane import Plane
         from .point import Point
         from .vector import Vector
@@ -107,7 +115,7 @@ class ElementColumn(Element):
             Plane.from_point_normal(Point(hx, 0, hz), Vector(1, 0, 0)),
         ]
 
-    def compute_edge_vectors(self):
+    def compute_edge_vectors(self) -> list["Vector"]:
         from .vector import Vector
         return [
             Vector(1, 0, 0), Vector(0, 1, 0), Vector(-1, 0, 0), Vector(0, -1, 0),
@@ -115,7 +123,7 @@ class ElementColumn(Element):
             Vector(0, 0, 1), Vector(0, 0, 1), Vector(0, 0, 1), Vector(0, 0, 1),
         ]
 
-    def compute_axis(self):
+    def compute_axis(self) -> "Line":
         from .line import Line
         return Line(0, 0, 0, 0, 0, self._height)
 
@@ -194,7 +202,7 @@ class ElementColumn(Element):
     # Serialization - Protobuf (reuse Element proto with parametric fields in geometry_data)
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import element_pb2
         proto = element_pb2.Element()
         proto.guid = self.guid
@@ -209,7 +217,7 @@ class ElementColumn(Element):
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "ElementColumn":
         from .proto import element_pb2
         import json
         proto = element_pb2.Element()

@@ -920,7 +920,7 @@ def test_nurbssurface_split_by_plane():
     from session_py import Plane
     from session_py import Point
     from session_py import Vector
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     cyl = Primitives.cylinder_surface(0.0, 0.0, 0.0, 1.0, 4.0)
     plane = Plane.from_point_normal(Point(0.0, 0.0, 2.0), Vector(0.3, 0.0, 1.0))
@@ -947,7 +947,7 @@ def test_nurbssurface_split_by_curves():
     from session_py import Closest
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     wave = Primitives.wave_surface(10.0, 1.0)
     lift_pts = []
@@ -975,7 +975,7 @@ def test_nurbssurface_split_by_curves():
 def test_nurbssurface_split_by_line():
     from session_py import Line
     from session_py import Point
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     wave = Primitives.wave_surface(10.0, 1.0)
     line = Line.from_points(Point(-1.0, 5.0, 0.0), Point(11.0, 5.0, 0.0))
@@ -991,7 +991,7 @@ def test_nurbssurface_split_by_line():
 def test_nurbssurface_split_by_surface():
     from session_py import NurbsSurface
     from session_py import Point
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     cyl = Primitives.cylinder_surface(0.0, 0.0, -2.0, 1.0, 4.0)
     flat = NurbsSurface.create(False, False, 1, 1, 2, 2, [
@@ -1118,7 +1118,8 @@ def test_protobuf_roundtrip():
 
 @MINI_TEST("NurbsSurface", "ClosestPoint")
 def test_nurbssurface_closest_point():
-    from session_py import Primitives, Point
+    from session_py import Primitives
+    from session_py import Point
     # Sphere radius 2 at origin: closest surface point to an outside point is radial.
     sphere = Primitives.sphere_surface(0, 0, 0, 2.0)
     cp = sphere.closest_point(Point(5, 0, 0))

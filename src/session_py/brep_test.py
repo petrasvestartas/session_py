@@ -165,6 +165,43 @@ def test_brep_transformation():
     MINI_CHECK(abs(v[2] - v_orig[2] - 30.0) < 0.01)
 
 
+@MINI_TEST("BRep", "Transform Roundtrip")
+def test_brep_transform_roundtrip():
+    from session_py import BRep
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Xform
+
+    anchor = Xform.rotation_z(90.0, True).transform_point(Point(1.0, 0.0, 0.0))
+
+    MINI_CHECK(abs(anchor[0]) < 1e-9)
+    MINI_CHECK(abs(anchor[1] - 1.0) < 1e-9)
+
+    axis = Vector(0.3, 0.5, 0.81)
+    rot = Xform.rotation(axis, 37.0, True)
+    tr = Xform.translation(10.0, -5.0, 3.0)
+    box = BRep.create_box(2.0, 3.0, 4.0)
+    moved = box.transformed(rot).transformed(tr)
+
+    match = True
+    for i in range(len(box.m_vertices)):
+        expect = tr.transform_point(rot.transform_point(box.m_vertices[i]))
+        if moved.m_vertices[i].distance(expect) > 1e-9:
+            match = False
+
+    MINI_CHECK(match)
+
+    back = moved.transformed(tr.inverse()).transformed(rot.inverse())
+
+    restored = True
+    for i in range(len(box.m_vertices)):
+        if back.m_vertices[i].distance(box.m_vertices[i]) > 1e-9:
+            restored = False
+
+    MINI_CHECK(restored)
+    MINI_CHECK(back.is_solid())
+
+
 @MINI_TEST("BRep", "Json Roundtrip")
 def test_json_roundtrip():
     from session_py import BRep
@@ -440,7 +477,7 @@ def test_brep_from_nurbscurves_holes():
 
 @MINI_TEST("BRep", "Create Block With Hole")
 def test_brep_create_block_with_hole():
-    from session_py.brep import BRep
+    from session_py import BRep
     from session_py import Mesh
 
     bh = BRep.create_block_with_hole(8.0, 6.0, 4.0, 1.5)
@@ -456,7 +493,7 @@ def test_brep_create_block_with_hole():
 
 @MINI_TEST("BRep", "Mesh Orientation")
 def test_brep_mesh_orientation():
-    from session_py.brep import BRep
+    from session_py import BRep
     from session_py import Mesh
 
     # Reversed faces must flip winding; the bug inflated volume() past the solid box.

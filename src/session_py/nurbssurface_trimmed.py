@@ -1,3 +1,8 @@
+from typing import Union
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import TYPE_CHECKING
 import uuid
 import copy
 import json
@@ -8,13 +13,21 @@ from .nurbscurve import NurbsCurve
 from .primitives import Primitives
 from .color import Color
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .plane import Plane
+    from .xform import Xform
+    from .mesh import Mesh
+    from .point import Point
+    from .vector import Vector
+
 
 # ---- Bowyer-Watson Constrained Delaunay Triangulation in 2D UV space ----
 
 class _Vertex2D:
     __slots__ = ('x', 'y')
 
-    def __init__(self, x, y):
+    def __init__(self, x: float, y: float):
         self.x = x
         self.y = y
 
@@ -22,7 +35,7 @@ class _Vertex2D:
 class _Triangle:
     __slots__ = ('v', 'adj', 'constrained', 'alive')
 
-    def __init__(self, v0, v1, v2):
+    def __init__(self, v0: int, v1: int, v2: int):
         self.v = [v0, v1, v2]
         self.adj = [-1, -1, -1]
         self.constrained = [False, False, False]
@@ -30,7 +43,7 @@ class _Triangle:
 
 
 class _Delaunay2D:
-    def __init__(self, xmin, ymin, xmax, ymax):
+    def __init__(self, xmin: float, ymin: float, xmax: float, ymax: float):
         dx = xmax - xmin
         dy = ymax - ymin
         d = dx if dx > dy else dy
@@ -124,7 +137,7 @@ class _Delaunay2D:
                 return cur
         return cur
 
-    def insert(self, x, y):
+    def insert(self, x: float, y: float) -> int:
         start = self._locate(x, y, self.last_found)
         if start >= 0:
             t = self.triangles[start]
@@ -209,7 +222,7 @@ class _Delaunay2D:
         self.last_found = len(self.triangles) - 1
         return vi
 
-    def insert_constraint(self, v0, v1):
+    def insert_constraint(self, v0: int, v1: int) -> None:
         if v0 == v1:
             return
         for ti in range(len(self.triangles)):
@@ -357,7 +370,7 @@ class _Delaunay2D:
                 if (e0 == v0 and e1 == v1) or (e0 == v1 and e1 == v0):
                     self.triangles[ti].constrained[k] = True
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         sv = self.super_v
         for ti in range(len(self.triangles)):
             if not self.triangles[ti].alive:
@@ -373,7 +386,7 @@ class _Delaunay2D:
                 self.last_found = i
                 break
 
-    def get_triangles(self):
+    def get_triangles(self) -> List[Tuple[int, int, int]]:
         result = []
         for t in self.triangles:
             if not t.alive:
@@ -412,28 +425,28 @@ class NurbsSurfaceTrimmed:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @property
-    def surfacecolor(self):
+    def surfacecolor(self) -> "Color":
         if self._surfacecolor is None:
             self._surfacecolor = Color.black()
         return self._surfacecolor
 
     @surfacecolor.setter
-    def surfacecolor(self, value):
+    def surfacecolor(self, value: "Color") -> None:
         self._surfacecolor = value
 
     @staticmethod
-    def create(surface, outer_loop):
+    def create(surface: "NurbsSurface", outer_loop: "NurbsCurve") -> "NurbsSurfaceTrimmed":
         ts = NurbsSurfaceTrimmed()
         ts.m_surface = surface.duplicate()
         ts.m_outer_loop = outer_loop.duplicate()
         return ts
 
     @staticmethod
-    def create_planar(boundary):
+    def create_planar(boundary: "NurbsCurve") -> "NurbsSurfaceTrimmed":
         from .point import Point
         from .vector import Vector
         srf = Primitives.create_planar(boundary)
@@ -473,7 +486,7 @@ class NurbsSurfaceTrimmed:
         return ts
 
     @staticmethod
-    def split_by_uv_curves(srf, pcurves, tolerance=None, use_domain_border=True, n_boundary=0):
+    def split_by_uv_curves(srf: "NurbsSurface", pcurves: List["NurbsCurve"], tolerance: Optional[float] = None, use_domain_border: bool = True, n_boundary: int = 0) -> List["NurbsSurfaceTrimmed"]:
         """Split a surface into trimmed faces by UV pcurves.
 
         Builds a planar arrangement of the UV domain rectangle and the given
@@ -944,25 +957,25 @@ class NurbsSurfaceTrimmed:
             result.append(ts)
         return result
 
-    def surface(self):
+    def surface(self) -> "NurbsSurface":
         return self.m_surface
 
-    def get_outer_loop(self):
+    def get_outer_loop(self) -> "NurbsCurve":
         return self.m_outer_loop
 
-    def set_outer_loop(self, loop):
+    def set_outer_loop(self, loop: "NurbsCurve") -> None:
         self.m_outer_loop = loop
 
-    def is_trimmed(self):
+    def is_trimmed(self) -> bool:
         return self.m_outer_loop.is_valid()
 
-    def is_valid(self):
+    def is_valid(self) -> bool:
         return self.m_surface.is_valid()
 
-    def add_inner_loop(self, loop_2d):
+    def add_inner_loop(self, loop_2d: "NurbsCurve") -> None:
         self.m_inner_loops.append(loop_2d)
 
-    def add_hole(self, curve_3d):
+    def add_hole(self, curve_3d: "NurbsCurve") -> None:
         from .point import Point
         from .nurbscurve import NurbsCurve
         dom = curve_3d.domain()
@@ -982,28 +995,28 @@ class NurbsSurfaceTrimmed:
         if len(uv_pts) >= 3:
             self.m_inner_loops.append(NurbsCurve.create(True, 1, uv_pts))
 
-    def add_holes(self, curves_3d):
+    def add_holes(self, curves_3d: List["NurbsCurve"]) -> None:
         for crv in curves_3d:
             self.add_hole(crv)
 
-    def get_inner_loop(self, index):
+    def get_inner_loop(self, index: int) -> Optional["NurbsCurve"]:
         if 0 <= index < len(self.m_inner_loops):
             return self.m_inner_loops[index]
         return None
 
-    def inner_loop_count(self):
+    def inner_loop_count(self) -> int:
         return len(self.m_inner_loops)
 
-    def clear_inner_loops(self):
+    def clear_inner_loops(self) -> None:
         self.m_inner_loops.clear()
 
-    def point_at(self, u, v):
+    def point_at(self, u: float, v: float) -> "Point":
         return self.m_surface.point_at(u, v)
 
-    def normal_at(self, u, v):
+    def normal_at(self, u: float, v: float) -> "Vector":
         return self.m_surface.normal_at(u, v)
 
-    def mesh(self):
+    def mesh(self) -> "Mesh":
         return self.mesh_q(20.0, 0.005)
 
     # Unified trimmed-surface tessellation (BRepMesh / OpenNURBS model):
@@ -1018,7 +1031,7 @@ class NurbsSurfaceTrimmed:
     #   4. Delete exterior triangles, lift to 3D, set per-vertex analytic normals.
     # Planar surfaces need no interior refinement (deflection is ~0), so step 3 exits immediately
     # and the same code path yields the minimal boundary triangulation.
-    def mesh_q(self, max_angle_deg, chord_factor):
+    def mesh_q(self, max_angle_deg: float, chord_factor: float) -> "Mesh":
         import math
         from .mesh import Mesh
         from .point import Point
@@ -1245,7 +1258,7 @@ class NurbsSurfaceTrimmed:
                 result.vertex[vert_map[vi]].set_normal(nrm[0], nrm[1], nrm[2])
         return result
 
-    def mesh_by_plane(self, q0, normal, max_angle_deg, chord_factor):
+    def mesh_by_plane(self, q0: "Point", normal: "Vector", max_angle_deg: float, chord_factor: float) -> "Mesh":
         # Mesh the surface trimmed by a plane (q0, normal), keeping (S-q0).n <= 0. OCCT path-A:
         # span-adaptive UV grid + marching-squares clip at f(u,v)=(S-q0).n, every boundary
         # crossing Newton-refined onto the plane, coincident-3D vertices welded so periodic
@@ -1391,7 +1404,7 @@ class NurbsSurfaceTrimmed:
             return srf.mesh()
         return result
     @staticmethod
-    def split_by_planes(srf, planes):
+    def split_by_planes(srf: "NurbsSurface", planes: List["Plane"]) -> List["NurbsSurfaceTrimmed"]:
         # Split a surface into every non-empty region carved by `planes` (all 2^K sign
         # combinations). Each region comes back as a first-class multi-plane
         # NurbsSurfaceTrimmed so the viewer can select / hide / transform each piece.
@@ -1420,7 +1433,7 @@ class NurbsSurfaceTrimmed:
         return out
 
 
-    def mesh_by_planes(self, planes, max_angle_deg, chord_factor):
+    def mesh_by_planes(self, planes: List["Plane"], max_angle_deg: float, chord_factor: float) -> "Mesh":
         # Multi-plane SPLIT clip: keep the region inside ALL half-spaces { (S-q).n <= 0 }.
         # Tessellates the surface into a triangle soup (span-adaptive UV grid), then clips that
         # soup sequentially by each plane (Sutherland-Hodgman per triangle, crossings Newton-
@@ -1580,15 +1593,15 @@ class NurbsSurfaceTrimmed:
             return Mesh()
         return result
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         self.m_surface.transform(xform)
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "NurbsSurfaceTrimmed":
         ts = self.duplicate()
         ts.transform(xform)
         return ts
 
-    def duplicate(self):
+    def duplicate(self) -> "NurbsSurfaceTrimmed":
         result = copy.deepcopy(self)
         result.guid = str(uuid.uuid4())
         return result
@@ -1609,7 +1622,7 @@ class NurbsSurfaceTrimmed:
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def to_string(self):
+    def to_string(self) -> str:
         return f"NurbsSurfaceTrimmed(name={self.name}, trimmed={'true' if self.is_trimmed() else 'false'}, holes={self.inner_loop_count()})"
 
     def __str__(self):
@@ -1651,24 +1664,24 @@ class NurbsSurfaceTrimmed:
             ts.m_inner_loops = [NurbsCurve.__jsonload__(l) for l in data['inner_loops']]
         return ts
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurfaceTrimmed":
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "NurbsSurfaceTrimmed":
         return cls.__jsonload__(json.loads(json_string))
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import nurbssurface_trimmed_pb2
         proto = nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed()
         proto.guid = self.guid
@@ -1700,7 +1713,7 @@ class NurbsSurfaceTrimmed:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "NurbsSurfaceTrimmed":
         from .proto import nurbssurface_trimmed_pb2
         proto = nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed()
         proto.ParseFromString(data)
@@ -1736,13 +1749,13 @@ class NurbsSurfaceTrimmed:
 
         return ts
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurfaceTrimmed":
         with open(filepath, 'rb') as f:
             data = f.read()
         return cls.pb_loads(data)

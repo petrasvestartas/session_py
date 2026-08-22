@@ -1,10 +1,17 @@
+from typing import List
+from typing import Optional
+from typing import Union
+from typing import TYPE_CHECKING
 import uuid
 import copy
-from typing import List, Optional
 
 from .color import Color
 from .point import Point
 from .vector import Vector
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .xform import Xform
 
 
 class PointCloud:
@@ -20,7 +27,7 @@ class PointCloud:
 
         # Store as flat arrays
         self.coords: List[float] = []
-        self._colors: List[float] = []
+        self._colors: List[int] = []   # flat 0-255, matching Rust/C++ and the proto's uint32
         self._normals: List[float] = []
 
         if points is not None:
@@ -29,7 +36,8 @@ class PointCloud:
 
         if colors is not None:
             for c in colors:
-                self._colors.extend([c[0], c[1], c[2], c[3]])
+                self._colors.extend([round(c[0] * 255), round(c[1] * 255),
+                                     round(c[2] * 255), round(c[3] * 255)])
 
         if normals is not None:
             for n in normals:
@@ -43,7 +51,7 @@ class PointCloud:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @classmethod
@@ -122,41 +130,45 @@ class PointCloud:
     def get_color(self, index: int) -> Color:
         """Get color at index as Color object."""
         idx = index * 4
-        return Color(self._colors[idx], self._colors[idx + 1],
-                     self._colors[idx + 2], self._colors[idx + 3])
+        return Color(self._colors[idx] / 255.0, self._colors[idx + 1] / 255.0,
+                     self._colors[idx + 2] / 255.0, self._colors[idx + 3] / 255.0)
 
     def set_color(self, index: int, color: Color) -> None:
         """Set color at index from Color object."""
         idx = index * 4
-        self._colors[idx] = color[0]
-        self._colors[idx + 1] = color[1]
-        self._colors[idx + 2] = color[2]
-        self._colors[idx + 3] = color[3]
+        self._colors[idx] = round(color[0] * 255)
+        self._colors[idx + 1] = round(color[1] * 255)
+        self._colors[idx + 2] = round(color[2] * 255)
+        self._colors[idx + 3] = round(color[3] * 255)
 
     def add_color(self, color: Color) -> None:
         """Add a color to the cloud."""
-        self._colors.extend([color[0], color[1], color[2], color[3]])
+        self._colors.extend([round(color[0] * 255), round(color[1] * 255),
+                             round(color[2] * 255), round(color[3] * 255)])
 
     def get_colors(self) -> List[Color]:
         """Returns all colors as Color objects."""
         colors = []
         for i in range(self.color_count()):
             idx = i * 4
-            colors.append(Color(self._colors[idx], self._colors[idx + 1],
-                                self._colors[idx + 2], self._colors[idx + 3]))
+            colors.append(Color(self._colors[idx] / 255.0, self._colors[idx + 1] / 255.0,
+                                self._colors[idx + 2] / 255.0, self._colors[idx + 3] / 255.0))
         return colors
 
     @property
-    def colors(self) -> List[Color]:
-        """Property for backward compatibility."""
-        return self.get_colors()
+    def colors(self) -> List[int]:
+        """The flat colour array itself, [r0, g0, b0, a0, r1, ...] as 0-255 - the same encoding
+        the proto carries, and the same accessor Rust and C++ expose. `get_colors()` is the one
+        that builds Color objects; walking millions of points cannot afford that per point."""
+        return self._colors
 
     @colors.setter
     def colors(self, value: List[Color]) -> None:
         """Set colors from a list of Color objects."""
         self._colors = []
         for c in value:
-            self._colors.extend([c.r, c.g, c.b, c.a])
+            self._colors.extend([round(c.r * 255), round(c.g * 255),
+                                 round(c.b * 255), round(c.a * 255)])
 
     ###########################################################################################
     # Normal Access
@@ -245,7 +257,7 @@ class PointCloud:
     # Transform
     ###########################################################################################
 
-    def transform(self, xform) -> None:
+    def transform(self, xform: "Xform") -> None:
         """Apply a transformation to the point cloud in-place."""
         for i in range(self.point_count()):
             idx = i * 3
@@ -263,7 +275,7 @@ class PointCloud:
             self._normals[idx + 1] = n[1]
             self._normals[idx + 2] = n[2]
 
-    def transformed(self, xform) -> "PointCloud":
+    def transformed(self, xform: "Xform") -> "PointCloud":
         """Return a transformed copy of the point cloud."""
         result = copy.deepcopy(self)
         result.transform(xform)
@@ -344,27 +356,27 @@ class PointCloud:
 
         return pc
 
-    def file_json_dump(self, filepath) -> None:
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath) -> "PointCloud":
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "PointCloud":
         """Read JSON from file."""
         import json
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "PointCloud":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -381,7 +393,7 @@ class PointCloud:
         proto.guid = self.guid
         proto.name = self.name
         proto.coords.extend(self.coords)
-        proto.colors.extend([int(round(v * 255)) for v in self._colors])
+        proto.colors.extend(self._colors)
         proto.normals.extend(self._normals)
         proto.point_size = self.point_size
 
@@ -397,7 +409,7 @@ class PointCloud:
 
         pc = cls.from_coords(
             list(proto.coords),
-            [v / 255.0 for v in proto.colors],
+            list(proto.colors),
             list(proto.normals)
         )
         pc.guid = proto.guid
@@ -406,13 +418,13 @@ class PointCloud:
 
         return pc
 
-    def pb_dump(self, filepath) -> None:
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file."""
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath) -> "PointCloud":
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "PointCloud":
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             data = f.read()

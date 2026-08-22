@@ -1,7 +1,16 @@
+from typing import List
+from typing import Tuple
+from typing import Optional
+from typing import TYPE_CHECKING
+from typing import Union
+from typing import overload
 import numpy as np
 import math
-from typing import List, Tuple, Optional, Union
 import uuid
+
+if TYPE_CHECKING:
+    from .proto import nurbscurve_pb2
+    from pathlib import Path
 
 from .point import Point
 from .vector import Vector
@@ -10,7 +19,8 @@ from .tolerance import Tolerance
 from .xform import Xform
 from .color import Color
 from . import nurbsknot
-from .nurbsknot import CurveNurbsKnotStyle, CurveInterpStyle
+from .nurbsknot import CurveNurbsKnotStyle
+from .nurbsknot import CurveInterpStyle
 
 
 def _evaluate_nurbs_blossom(cvdim, order, cv_stride, CV, nurbsknot, t):
@@ -122,7 +132,7 @@ class NurbsCurve:
             If True, creates a periodic curve; otherwise clamped.
         degree : int
             The degree of the curve.
-        points : list of Point
+        points : list[Point]
             Control points for the curve.
         dimension : int, optional
             Dimension of the curve. Defaults to 3.
@@ -158,8 +168,8 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def create_interpolated(points, parameterization=CurveNurbsKnotStyle.Chord,
-                            end_condition=CurveInterpStyle.Rhino):
+    def create_interpolated(points: List["Point"], parameterization: CurveNurbsKnotStyle = CurveNurbsKnotStyle.Chord,
+                            end_condition: CurveInterpStyle = CurveInterpStyle.Rhino) -> "NurbsCurve":
         # parameterization maps to Rhino's CurveKnotStyle: Uniform/Chord/ChordSquareRoot
         # (centripetal). Rhino's CreateInterpolatedCurve(points, degree) API defaults to Uniform;
         # the InterpCrv command commonly uses Chord. Pass the style explicitly to match Rhino.
@@ -418,7 +428,7 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def create_from_parameters(points, weights, knots, mults, degree, periodic=False):
+    def create_from_parameters(points: List["Point"], weights: List[float], knots: List[float], mults: List[int], degree: int, periodic: bool = False) -> "NurbsCurve":
         """Create a NURBS curve from explicit parameters (OCCT / compas_occt convention:
         distinct knots + per-knot multiplicities). Mirrors OCCNurbsCurve.from_parameters and
         underlies from_points / from_line / from_circle / from_ellipse. The internal (OpenNURBS)
@@ -457,7 +467,7 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def create_fitted(points, num_cvs, degree=3, is_periodic=False):
+    def create_fitted(points: List["Point"], num_cvs: int, degree: int = 3, is_periodic: bool = False) -> "NurbsCurve":
         m = len(points)
         dim = 3
         order = degree + 1
@@ -604,7 +614,7 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def join(curves, tolerance=None):
+    def join(curves: list["NurbsCurve"], tolerance: Optional[float] = None) -> list["NurbsCurve"]:
         """Join curve segments into chains by endpoint matching.
 
         Segments are greedily chained (reversed as needed), made compatible
@@ -613,14 +623,14 @@ class NurbsCurve:
 
         Parameters
         ----------
-        curves : list of NurbsCurve
+        curves : list[NurbsCurve]
             Segments to join. Inputs are not modified.
         tolerance : float, optional
             Endpoint matching distance. Defaults to Tolerance.ZERO_TOLERANCE.
 
         Returns
         -------
-        list of NurbsCurve
+        list[NurbsCurve]
             One curve per chain (singletons returned as duplicates).
         """
         tol = tolerance if tolerance is not None else Tolerance.ZERO_TOLERANCE
@@ -740,10 +750,10 @@ class NurbsCurve:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
-    def refresh_guid(self):
+    def refresh_guid(self) -> None:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
@@ -798,7 +808,7 @@ class NurbsCurve:
     # Initialization & Creation
     ###########################################################################################
 
-    def initialize(self):
+    def initialize(self) -> None:
         """Initialize all fields to zero/empty.
         
         Returns
@@ -874,7 +884,7 @@ class NurbsCurve:
 
         return True
 
-    def destroy(self):
+    def destroy(self) -> None:
         """Deallocate all memory and reset to empty state"""
         self.initialize()
 
@@ -933,7 +943,7 @@ class NurbsCurve:
 
         return True
 
-    def is_linear(self, tolerance: float = None) -> bool:
+    def is_linear(self, tolerance: Optional[float] = None) -> bool:
         """Check if curve is a straight line.
 
         Parameters
@@ -981,7 +991,7 @@ class NurbsCurve:
 
         return bool(np.all(dists_sq <= tolerance * tolerance))
 
-    def is_planar(self, tolerance: float = None) -> bool:
+    def is_planar(self, tolerance: Optional[float] = None) -> bool:
         """Check if curve lies in a plane.
 
         Parameters
@@ -1036,7 +1046,7 @@ class NurbsCurve:
         dists = np.abs(diffs @ n)
         return bool(np.all(dists <= tolerance))
 
-    def is_arc(self, tolerance: float = None) -> bool:
+    def is_arc(self, tolerance: Optional[float] = None) -> bool:
         """Check if curve is an arc.
 
         Parameters
@@ -1105,7 +1115,7 @@ class NurbsCurve:
                 return False
         return True
 
-    def is_in_plane(self, test_plane: Plane, tolerance: float = None) -> bool:
+    def is_in_plane(self, test_plane: Plane, tolerance: Optional[float] = None) -> bool:
         """Check if curve lies in a specific plane.
 
         Parameters
@@ -1201,7 +1211,7 @@ class NurbsCurve:
 
         Returns
         -------
-        tuple of (bool, list of Point, list of float)
+        tuple[bool, list[Point], list[float]]
             (is_polyline, points, parameters) or (False, [], []).
         """
         if not self.is_valid():
@@ -1242,7 +1252,7 @@ class NurbsCurve:
 
         return True
 
-    def is_duplicate(self, other, ignore_parameterization: bool = False, tolerance: float = None) -> bool:
+    def is_duplicate(self, other: "NurbsCurve", ignore_parameterization: bool = False, tolerance: Optional[float] = None) -> bool:
         if tolerance is None:
             tolerance = Tolerance.ZERO_TOLERANCE
         if not self.is_valid() or not other.is_valid():
@@ -1686,7 +1696,7 @@ class NurbsCurve:
         
         Returns
         -------
-        list of float
+        list[float]
             Greville parameters for all control vertices.
         """
         return [self.greville_abcissa(i) for i in range(self.m_cv_count)]
@@ -1763,7 +1773,7 @@ class NurbsCurve:
     # Geometric Queries
     ###########################################################################################
 
-    def get_next_discontinuity(self, continuity_type: int, t0: float, t1: float):
+    def get_next_discontinuity(self, continuity_type: int, t0: float, t1: float) -> Tuple[bool, float]:
         if not self.is_valid():
             return False, 0.0
         d0, d1 = self.domain()
@@ -1894,7 +1904,7 @@ class NurbsCurve:
 
         Returns
         -------
-        tuple of (list of Point, list of float)
+        tuple[list[Point], list[float]]
             Points and parameters.
         """
         if not self.is_valid():
@@ -2195,7 +2205,7 @@ class NurbsCurve:
 
         Returns
         -------
-        tuple of (list of Point, list of float)
+        tuple[list[Point], list[float]]
             Points and parameters spaced by segment_length.
         """
         points = []
@@ -2400,7 +2410,7 @@ class NurbsCurve:
 
         Returns
         -------
-        list of Vector
+        list[Vector]
             [point, 1st_derivative, 2nd_derivative, ...].
         """
         result = []
@@ -2508,7 +2518,13 @@ class NurbsCurve:
         """Closest point on the curve to test_point."""
         return self.point_at(self.closest_parameter(test_point))
 
-    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False):
+    @overload
+    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Tuple[float, float]: ...
+
+    @overload
+    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = True) -> Tuple[Tuple[float, float], float]: ...
+
+    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Union[Tuple[float, float], Tuple[Tuple[float, float], float]]:
         """Parameters (u, v) where this curve is closest to another curve.
 
         Matches OCCT GeomAPI_ExtremaCurveCurve. If return_distance, returns ((u, v), dist).
@@ -2519,7 +2535,13 @@ class NurbsCurve:
             return (u, v), dist
         return (u, v)
 
-    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False):
+    @overload
+    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Tuple['Point', 'Point']: ...
+
+    @overload
+    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = True) -> Tuple[Tuple['Point', 'Point'], float]: ...
+
+    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Union[Tuple['Point', 'Point'], Tuple[Tuple['Point', 'Point'], float]]:
         """Points (pa, pb) where this curve is closest to another curve."""
         from session_py.closest import Closest
         u, v, dist = Closest.curve_curve(self, other)
@@ -3802,32 +3824,32 @@ class NurbsCurve:
         curve.m_cv = np.array(flat_cv, dtype=np.float64)
         return curve
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "NurbsCurve":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsCurve":
         """Read JSON from file."""
         import json
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary bytes."""
         from .proto import nurbscurve_pb2
         proto = nurbscurve_pb2.NurbsCurve()
@@ -3850,7 +3872,7 @@ class NurbsCurve:
             cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
         return proto.SerializeToString()
 
-    def pb_fill(self, proto):
+    def pb_fill(self, proto: "nurbscurve_pb2.NurbsCurve") -> None:
         """Fill an existing NurbsCurve proto message directly (avoids serialize/deserialize cycle)."""
         proto.guid = self.guid
         proto.name = self.name
@@ -3870,7 +3892,7 @@ class NurbsCurve:
             cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "NurbsCurve":
         """Load from protobuf binary bytes."""
         from .proto import nurbscurve_pb2
         proto = nurbscurve_pb2.NurbsCurve()
@@ -3890,13 +3912,13 @@ class NurbsCurve:
         curve.linecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.linecolors]
         return curve
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file."""
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "NurbsCurve":
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
@@ -4150,7 +4172,7 @@ class NurbsCurve:
         return True
 
     def _span_is_linear(self, span_index: int, min_length: float = 0.0,
-                       tolerance: float = None) -> bool:
+                       tolerance: Optional[float] = None) -> bool:
         """Check if span is linear within tolerance.
         
         Parameters
@@ -4249,7 +4271,7 @@ class NurbsCurve:
             
         Returns
         -------
-        tuple of (float, float)
+        tuple[float, float]
             (t_minus, t_plus) tolerance bounds.
         """
         if not self.is_valid():

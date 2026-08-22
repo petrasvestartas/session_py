@@ -129,7 +129,7 @@ def test_objects_component_json_roundtrip():
 @MINI_TEST("Session", "Add Component")
 def test_session_add_component():
     import uuid
-    from session_py.session import Session
+    from session_py import Session
     from session_py.file_encoders import file_register_class
 
     class Box:

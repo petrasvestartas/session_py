@@ -9,7 +9,7 @@ def write_xyz_to_string(cloud: PointCloud) -> str:
     return s
 
 
-def write_xyz(cloud: PointCloud, filepath: str):
+def write_xyz(cloud: PointCloud, filepath: str) -> None:
     with open(filepath, "w") as f:
         f.write(write_xyz_to_string(cloud))
 

@@ -7,7 +7,8 @@ from .tolerance import TOLERANCE
 @MINI_TEST("FileEncoders", "Json Dump Load")
 def test_file_json_dump_load():
     from session_py import Point
-    from session_py.file_encoders import file_json_dump, file_json_load
+    from session_py.file_encoders import file_json_dump
+    from session_py.file_encoders import file_json_load
     from pathlib import Path
     import json
 
@@ -28,7 +29,8 @@ def test_file_json_dump_load():
 @MINI_TEST("FileEncoders", "Json Dumps Loads")
 def test_file_json_dumps_loads():
     from session_py import Vector
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     original = Vector(42.1, 84.2, 126.3)
     original.name = "test_vector"
@@ -85,7 +87,8 @@ def test_file_encode_collection_shared_ptr():
 @MINI_TEST("FileEncoders", "Decode Collection")
 def test_file_decode_collection():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     decoded = file_json_loads(file_json_dumps([
         Point(1, 2, 3),
@@ -100,7 +103,8 @@ def test_file_decode_collection():
 @MINI_TEST("FileEncoders", "Decode Collection Ptr")
 def test_file_decode_collection_ptr():
     from session_py import Vector
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     decoded = file_json_loads(file_json_dumps([
         Vector(1, 0, 0),
@@ -115,7 +119,8 @@ def test_file_decode_collection_ptr():
 @MINI_TEST("FileEncoders", "Nested Collections")
 def test_nested_collections():
     from session_py import Line
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     loaded = file_json_loads(file_json_dumps([
         Line(0, 0, 0, 1, 0, 0),
@@ -130,7 +135,8 @@ def test_nested_collections():
 @MINI_TEST("FileEncoders", "Roundtrip File Io")
 def test_roundtrip_file_io():
     from session_py import Vector
-    from session_py.file_encoders import file_json_dump, file_json_load
+    from session_py.file_encoders import file_json_dump
+    from session_py.file_encoders import file_json_load
     from pathlib import Path
 
     vectors = [
@@ -153,7 +159,8 @@ def test_roundtrip_file_io():
 @MINI_TEST("FileEncoders", "Pretty Vs Compact")
 def test_pretty_vs_compact():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     point = Point(1, 2, 3)
     pretty = file_json_dumps(point, pretty=True)
@@ -195,7 +202,8 @@ def test_decode_primitives():
 def test_decode_list():
     import json
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     loaded_vec = json.loads(json.dumps([1, 2, 3]))
 
@@ -217,7 +225,8 @@ def test_decode_list():
 def test_decode_dict():
     import json
     from session_py import Vector
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     loaded = json.loads(json.dumps({"a": 1, "b": 2}))
 
@@ -244,7 +253,8 @@ def test_list_in_list_in_list():
 @MINI_TEST("FileEncoders", "Dict Of Lists")
 def test_dict_of_lists():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     data = {
         "numbers": [1, 2, 3],
@@ -265,7 +275,8 @@ def test_dict_of_lists():
 @MINI_TEST("FileEncoders", "List Of Dict")
 def test_list_of_dict():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     data = [
         {"name": "point1", "value": 10},
@@ -283,7 +294,8 @@ def test_list_of_dict():
 def test_dict_of_dicts():
     from session_py import Point
     from session_py import Vector
-    from session_py.file_encoders import file_json_dumps, file_json_loads
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
 
     data = {
         "config": {"tolerance": 0.001, "scale": 1000},

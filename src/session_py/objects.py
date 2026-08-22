@@ -1,3 +1,10 @@
+from typing import TYPE_CHECKING
+from typing import Union
+
+if TYPE_CHECKING:
+    from .proto import objects_pb2
+    from pathlib import Path
+
 from .point import Point
 from .line import Line
 from .plane import Plane
@@ -60,7 +67,7 @@ class Objects:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     def __str__(self):
@@ -140,27 +147,27 @@ class Objects:
 
         return obj
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s):
+    def file_json_loads(cls, s: str) -> "Objects":
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Objects":
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import objects_pb2
         proto = objects_pb2.Objects()
         proto.name = self.name
@@ -190,7 +197,7 @@ class Objects:
         return proto.SerializeToString()
 
     @classmethod
-    def from_proto(cls, proto):
+    def from_proto(cls, proto: "objects_pb2.Objects") -> "Objects":
         """Create Objects from proto message directly (no SerializeToString)."""
         objects = cls()
         objects.guid = proto.guid
@@ -220,18 +227,18 @@ class Objects:
         return objects
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Objects":
         from .proto import objects_pb2
         proto = objects_pb2.Objects()
         proto.ParseFromString(data)
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Objects":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
 

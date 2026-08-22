@@ -1,4 +1,3 @@
-from .color import Color
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all

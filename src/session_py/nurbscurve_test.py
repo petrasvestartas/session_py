@@ -1,7 +1,9 @@
 import math
 from pathlib import Path
-from session_py.mini_test import MINI_TEST, MINI_CHECK
-from session_py.tolerance import TOLERANCE
+from .mini_test import MINI_TEST
+from .mini_test import MINI_CHECK
+from .tolerance import TOLERANCE
+from .tolerance import PI
 
 
 @MINI_TEST("NurbsCurve", "Constructor")
@@ -50,7 +52,8 @@ def test_nurbscurve_constructor():
 def test_nurbscurve_create_interpolated():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.nurbsknot import CurveNurbsKnotStyle, CurveInterpStyle
+    from session_py.nurbsknot import CurveNurbsKnotStyle
+    from session_py.nurbsknot import CurveInterpStyle
 
     points = [
         Point(14, 9, 0),
@@ -154,7 +157,6 @@ def test_nurbscurve_create_from_parameters():
 def test_nurbscurve_create_fitted():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.tolerance import PI
 
     # Open: 21 points on sine wave → fit with 8 CVs
     pts = [Point(i * 2.0 * PI / 20.0, 3.0 * math.sin(i * 2.0 * PI / 20.0), 0.0) for i in range(21)]
@@ -182,7 +184,7 @@ def test_nurbscurve_create_fitted():
 def test_nurbscurve_join():
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.primitives import Primitives
+    from session_py import Primitives
 
     arc1 = Primitives.arc(Point(-1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0), Point(1.0, 0.0, 0.0))
     arc2 = Primitives.arc(Point(1.0, 0.0, 0.0), Point(1.5, -1.0, 0.0), Point(1.0, -2.0, 0.0))
@@ -825,8 +827,9 @@ def test_nurbscurve_protobuf_roundtrip():
 
 @MINI_TEST("NurbsCurve", "Curvature")
 def test_nurbscurve_curvature():
-    from session_py import NurbsCurve, Point
-    from session_py.primitives import Primitives
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import Primitives
 
     # A circle of radius R is an exact rational NURBS with constant curvature 1/R.
     r = 2.0
@@ -842,7 +845,8 @@ def test_nurbscurve_curvature():
 
     # Project onto a 3D interpolated curve (curve_closest_point.py). Reference from
     # OCCT GeomAPI_ProjectPointOnCurve (validation/compare_curve_ops.py).
-    from session_py.nurbsknot import CurveNurbsKnotStyle, CurveInterpStyle
+    from session_py.nurbsknot import CurveNurbsKnotStyle
+    from session_py.nurbsknot import CurveInterpStyle
     ipts = [Point(0, 0, 0), Point(3, 0, 2), Point(6, 0, -3), Point(8, 0, 0)]
     ic = NurbsCurve.create_interpolated(ipts, CurveNurbsKnotStyle.Chord, CurveInterpStyle.Occt)
     pc = ic.closest_point(Point(2, -1, 0))
@@ -867,5 +871,5 @@ def test_nurbscurve_curvature():
 
 
 if __name__ == "__main__":
-    from session_py.mini_test import run_all
+    from .mini_test import run_all
     run_all(language="python")

@@ -1,5 +1,13 @@
 """Constrained Delaunay Triangulation via sweep-line."""
+from typing import List
+from typing import Tuple
+from typing import TYPE_CHECKING
 import math
+
+if TYPE_CHECKING:
+    from .polyline import Polyline
+    from .mesh import Mesh
+
 
 _LOOSE = 0
 _ASCEND = 1
@@ -15,7 +23,7 @@ _EC_RIGHT = 2
 class _P64:
     __slots__ = ('x', 'y')
 
-    def __init__(self, x=0, y=0):
+    def __init__(self, x: int = 0, y: int = 0):
         self.x = int(x)
         self.y = int(y)
 
@@ -32,7 +40,7 @@ class _P64:
 class _V2:
     __slots__ = ('pt', 'edges', 'innerLM')
 
-    def __init__(self, pt):
+    def __init__(self, pt: "_P64"):
         self.pt = pt
         self.edges = []
         self.innerLM = False
@@ -52,7 +60,7 @@ class _Edge:
 class _Tri:
     __slots__ = ('edges',)
 
-    def __init__(self, e1, e2, e3):
+    def __init__(self, e1: "_Edge", e2: "_Edge", e3: "_Edge"):
         self.edges = [e1, e2, e3]
 
 
@@ -212,7 +220,7 @@ def _segs_intersect(s1a, s1b, s2a, s2b):
 
 
 class _Delaunay:
-    def __init__(self, use_delaunay=True):
+    def __init__(self, use_delaunay: bool = True):
         self._verts = []
         self._edges = []
         self._tris = []
@@ -623,7 +631,7 @@ class _Delaunay:
             self._add_path(path)
         return len(self._verts) > 2
 
-    def execute(self, paths):
+    def execute(self, paths: List[List["_P64"]]) -> List["_Tri"]:
         if not self._add_paths(paths):
             return []
         if self._lowermost.innerLM:
@@ -934,7 +942,7 @@ def _cdt_triangulate(border_2d, holes_2d=None):
 
 class RemeshCDT:
     @staticmethod
-    def triangulate(polylines):
+    def triangulate(polylines: List["Polyline"]) -> List[Tuple[int, int, int]]:
         """CDT (sweep-line + Delaunay legalization). polylines[0]=border, rest=holes (x,y used; z ignored).
         Closing duplicate vertex (first==last) is stripped.
         Returns list of (i,j,k) index triples into flat array [border..., hole0..., hole1...].
@@ -958,7 +966,7 @@ class RemeshCDT:
         return _cdt_triangulate(bpts, hpts_list)
 
     @staticmethod
-    def from_polylines(polylines, is_2d=False, is_first_boundary=True):
+    def from_polylines(polylines: List["Polyline"], is_2d: bool = False, is_first_boundary: bool = True) -> "Mesh":
         """Polylines → Mesh. polylines[0]=border (or auto-detected), rest=holes.
         is_2d=True skips plane projection. is_first_boundary=False detects border by largest bbox diagonal."""
         return _from_polygon_with_holes(polylines, is_2d=is_2d, is_first_boundary=is_first_boundary)

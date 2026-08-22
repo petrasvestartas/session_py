@@ -1,18 +1,31 @@
-import uuid
 from typing import List
+from typing import Optional
+from typing import Union
+from typing import TYPE_CHECKING
+import uuid
 from .point import Point
 from .vector import Vector
 from .plane import Plane
+
+if TYPE_CHECKING:
+    from .mesh import Mesh
+    from .nurbscurve import NurbsCurve
+    from .nurbssurface import NurbsSurface
+    from pathlib import Path
+    from .pointcloud import PointCloud
+    from .polyline import Polyline
+    from .line import Line
+    from .xform import Xform
 
 
 class OBB:
     def __init__(
         self,
-        center: Point = None,
-        x_axis: Vector = None,
-        y_axis: Vector = None,
-        z_axis: Vector = None,
-        half_size: Vector = None,
+        center: Optional[Point] = None,
+        x_axis: Optional[Vector] = None,
+        y_axis: Optional[Vector] = None,
+        z_axis: Optional[Vector] = None,
+        half_size: Optional[Vector] = None,
     ):
         self.center = center if center is not None else Point(0.0, 0.0, 0.0)
         self.x_axis = x_axis if x_axis is not None else Vector(1.0, 0.0, 0.0)
@@ -29,11 +42,11 @@ class OBB:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @classmethod
-    def from_plane(cls, plane: Plane, dx: float, dy: float, dz: float):
+    def from_plane(cls, plane: Plane, dx: float, dy: float, dz: float) -> "OBB":
         return cls(
             center=plane.origin,
             x_axis=plane.x_axis,
@@ -43,7 +56,7 @@ class OBB:
         )
 
     @classmethod
-    def from_point(cls, point: Point, inflate: float = 0.0):
+    def from_point(cls, point: Point, inflate: float = 0.0) -> "OBB":
         return cls(
             center=point,
             x_axis=Vector(1.0, 0.0, 0.0),
@@ -53,7 +66,7 @@ class OBB:
         )
 
     @classmethod
-    def from_points(cls, points: List[Point], inflate: float = 0.0):
+    def from_points(cls, points: List[Point], inflate: float = 0.0) -> "OBB":
         if not points:
             return cls()
 
@@ -84,12 +97,12 @@ class OBB:
         )
 
     @classmethod
-    def from_line(cls, line, inflate: float = 0.0):
+    def from_line(cls, line: "Line", inflate: float = 0.0) -> "OBB":
         points = [line.start(), line.end()]
         return cls.from_points(points, inflate)
 
     @classmethod
-    def from_polyline(cls, polyline, inflate: float = 0.0, plane=None):
+    def from_polyline(cls, polyline: "Polyline", inflate: float = 0.0, plane: Optional[Plane] = None) -> "OBB":
         """Create bounding box from polyline.
 
         Parameters
@@ -111,7 +124,7 @@ class OBB:
         return cls.from_points(polyline.points, inflate)
 
     @classmethod
-    def from_mesh(cls, mesh, inflate: float = 0.0, plane=None):
+    def from_mesh(cls, mesh: "Mesh", inflate: float = 0.0, plane: Optional[Plane] = None) -> "OBB":
         """Create bounding box from mesh.
 
         Parameters
@@ -134,14 +147,14 @@ class OBB:
         return cls.from_points(vertices, inflate)
 
     @classmethod
-    def from_pointcloud(cls, pointcloud, inflate: float = 0.0, plane=None):
+    def from_pointcloud(cls, pointcloud: "PointCloud", inflate: float = 0.0, plane: Optional[Plane] = None) -> "OBB":
         points = pointcloud.get_points()
         if plane is not None:
             return cls.from_points_with_plane(points, plane, inflate)
         return cls.from_points(points, inflate)
 
     @classmethod
-    def from_nurbssurface(cls, surface, inflate: float = 0.0, plane=None):
+    def from_nurbssurface(cls, surface: "NurbsSurface", inflate: float = 0.0, plane: Optional[Plane] = None) -> "OBB":
         if not surface.is_valid() or surface.cv_count(0) == 0 or surface.cv_count(1) == 0:
             return cls()
         points = []
@@ -153,7 +166,7 @@ class OBB:
         return cls.from_points(points, inflate)
 
     @classmethod
-    def from_nurbscurve(cls, curve, inflate: float = 0.0, tight: bool = False, plane=None):
+    def from_nurbscurve(cls, curve: "NurbsCurve", inflate: float = 0.0, tight: bool = False, plane: Optional[Plane] = None) -> "OBB":
         if not curve.is_valid() or curve.cv_count() == 0:
             return cls()
 
@@ -248,7 +261,7 @@ class OBB:
         return cls.from_points(extrema_points, inflate)
 
     @classmethod
-    def from_points_with_plane(cls, points: List[Point], plane, inflate: float = 0.0):
+    def from_points_with_plane(cls, points: List[Point], plane: Optional[Plane], inflate: float = 0.0) -> "OBB":
         if not points:
             return cls()
 
@@ -283,7 +296,7 @@ class OBB:
 
         return cls(world_center, x_axis, y_axis, z_axis, half_size)
 
-    def aabb(self):
+    def aabb(self) -> "OBB":
         ex, ey, ez = self.half_size[0], self.half_size[1], self.half_size[2]
         hx = abs(self.x_axis[0]) * ex + abs(self.y_axis[0]) * ey + abs(self.z_axis[0]) * ez
         hy = abs(self.x_axis[1]) * ex + abs(self.y_axis[1]) * ey + abs(self.z_axis[1]) * ez
@@ -358,7 +371,7 @@ class OBB:
             self.point_at(self.half_size[0], self.half_size[1], self.half_size[2]),
         ]
 
-    def inflate(self, amount: float):
+    def inflate(self, amount: float) -> None:
         self.half_size = Vector(
             self.half_size[0] + amount,
             self.half_size[1] + amount,
@@ -380,7 +393,7 @@ class OBB:
     def volume(self) -> float:
         return 8.0 * self.half_size[0] * self.half_size[1] * self.half_size[2]
 
-    def closest_point(self, pt) -> Point:
+    def closest_point(self, pt: Point) -> Point:
         dx = pt[0] - self.center[0]
         dy = pt[1] - self.center[1]
         dz = pt[2] - self.center[2]
@@ -397,7 +410,7 @@ class OBB:
             self.center[2] + lx * self.x_axis[2] + ly * self.y_axis[2] + lz * self.z_axis[2],
         )
 
-    def contains(self, pt) -> bool:
+    def contains(self, pt: Point) -> bool:
         dx = pt[0] - self.center[0]
         dy = pt[1] - self.center[1]
         dz = pt[2] - self.center[2]
@@ -415,7 +428,7 @@ class OBB:
     def get_corners(self) -> List[Point]:
         return self.corners()
 
-    def get_edges(self):
+    def get_edges(self) -> list["Line"]:
         from .line import Line
         c = self.corners()
         return [
@@ -433,7 +446,7 @@ class OBB:
             Line.from_points(c[3], c[7]),
         ]
 
-    def union_with(self, other: "OBB"):
+    def union_with(self, other: "OBB") -> None:
         min_x, max_x = -self.half_size[0], self.half_size[0]
         min_y, max_y = -self.half_size[1], self.half_size[1]
         min_z, max_z = -self.half_size[2], self.half_size[2]
@@ -604,14 +617,14 @@ class OBB:
     # Transformation
     ###########################################################################################
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         """Apply a transformation to the bounding box, in place."""
         self.center.transform(xform)
         self.x_axis.transform(xform)
         self.y_axis.transform(xform)
         self.z_axis.transform(xform)
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "OBB":
         """Return a transformed copy of the bounding box."""
         import copy
 
@@ -653,27 +666,27 @@ class OBB:
 
         return bbox
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s):
+    def file_json_loads(cls, s: str) -> "OBB":
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "OBB":
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import boundingbox_pb2
         proto = boundingbox_pb2.BoundingBox()
         proto.center.ParseFromString(self.center.pb_dumps())
@@ -686,7 +699,7 @@ class OBB:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "OBB":
         from .proto import boundingbox_pb2
         proto = boundingbox_pb2.BoundingBox()
         proto.ParseFromString(data)
@@ -700,11 +713,11 @@ class OBB:
         bbox.name = proto.name
         return bbox
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "OBB":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())

@@ -1,6 +1,9 @@
 """Closest point operations for geometry classes."""
 
 from typing import Tuple
+from typing import Optional
+from typing import List
+from typing import TYPE_CHECKING
 import math
 import numpy as np
 
@@ -9,12 +12,19 @@ from session_py.vector import Vector
 from session_py.line import Line
 from session_py.polyline import Polyline
 
+if TYPE_CHECKING:
+    from .mesh import Mesh
+    from .nurbssurface import NurbsSurface
+    from .obb import OBB
+    from .pointcloud import PointCloud
+    from .nurbscurve import NurbsCurve
+
 
 class Closest:
     """Static methods for finding closest points between geometry objects."""
 
     @staticmethod
-    def curve_point(curve, test_point: Point, t0: float = 0.0, t1: float = 0.0) -> Tuple[float, float]:
+    def curve_point(curve: "NurbsCurve", test_point: Point, t0: float = 0.0, t1: float = 0.0) -> Tuple[float, float]:
         """Find closest point on NURBS curve to test point.
 
         Parameters
@@ -30,7 +40,7 @@ class Closest:
 
         Returns
         -------
-        tuple of (float, float)
+        tuple[float, float]
             (parameter, distance) of closest point.
         """
         if not curve.is_valid():
@@ -121,7 +131,7 @@ class Closest:
         return (t, final_dist)
 
     @staticmethod
-    def curve_curve(curve0, curve1) -> Tuple[float, float, float]:
+    def curve_curve(curve0: "NurbsCurve", curve1: "NurbsCurve") -> Tuple[float, float, float]:
         """Closest approach between two NURBS curves (dense grid seed + 2D Newton).
 
         Minimizes f(u,v) = |C0(u) - C1(v)|^2. Returns (u, v, distance).
@@ -192,7 +202,7 @@ class Closest:
 
         Returns
         -------
-        tuple of (Point, float, float)
+        tuple[Point, float, float]
             (closest_point, parameter, distance).
         """
         start = line.start()
@@ -237,7 +247,7 @@ class Closest:
 
         Returns
         -------
-        tuple of (Point, float, float)
+        tuple[Point, float, float]
             (closest_point, parameter, distance).
         """
         points = polyline.get_points()
@@ -274,7 +284,7 @@ class Closest:
         return (best_point, best_param, best_dist)
 
     @staticmethod
-    def surface_point(surface, test_point: Point, u0: float = 0.0, u1: float = 0.0,
+    def surface_point(surface: "NurbsSurface", test_point: Point, u0: float = 0.0, u1: float = 0.0,
                       v0: float = 0.0, v1: float = 0.0) -> Tuple[float, float, float]:
         """Find closest point on NURBS surface to test point.
 
@@ -291,7 +301,7 @@ class Closest:
 
         Returns
         -------
-        tuple of (float, float, float)
+        tuple[float, float, float]
             (u_param, v_param, distance).
         """
         if not surface.is_valid():
@@ -393,7 +403,7 @@ class Closest:
         return (u, v, final_dist)
 
     @staticmethod
-    def surface_curve(surface, curve, t0: float = 0.0, t1: float = 0.0, tolerance=None):
+    def surface_curve(surface: "NurbsSurface", curve: "NurbsCurve", t0: float = 0.0, t1: float = 0.0, tolerance: Optional[float] = None) -> list["NurbsCurve"]:
         """Project a 3D curve onto a surface (curve pullback).
 
         Samples the curve, inverts each sample with warm-started windowed
@@ -415,7 +425,7 @@ class Closest:
 
         Returns
         -------
-        list of NurbsCurve
+        list[NurbsCurve]
             Seam-split UV pcurves.
         """
         from session_py.nurbscurve import NurbsCurve
@@ -823,7 +833,7 @@ class Closest:
         return (dx * dx + dy * dy + dz * dz) ** 0.5
 
     @staticmethod
-    def mesh_point(mesh, test_point):
+    def mesh_point(mesh: "Mesh", test_point: "Point") -> Tuple["Point", int, float]:
         import heapq
 
         if mesh.number_of_faces() == 0:
@@ -873,7 +883,7 @@ class Closest:
         return (best_point, best_face_key, best_dist)
 
     @staticmethod
-    def mesh_point_aabb(mesh, test_point):
+    def mesh_point_aabb(mesh: "Mesh", test_point: "Point") -> Tuple["Point", int, float]:
         if mesh.number_of_faces() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
 
@@ -966,7 +976,7 @@ class Closest:
         return tuple(best)
 
     @staticmethod
-    def pointcloud_point(cloud, test_point):
+    def pointcloud_point(cloud: "PointCloud", test_point: "Point") -> Tuple["Point", int, float]:
         if cloud.point_count() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
 
@@ -985,7 +995,7 @@ class Closest:
         return (best_point, best_index, best_dist)
 
     @staticmethod
-    def pointcloud_point_kdtree(cloud, test_point):
+    def pointcloud_point_kdtree(cloud: "PointCloud", test_point: "Point") -> Tuple["Point", int, float]:
         if cloud.point_count() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
         from session_py import SpatialKDTree
@@ -1055,7 +1065,7 @@ class Closest:
         return (dx*dx + dy*dy + dz*dz) ** 0.5
 
     @staticmethod
-    def lines_closest(lines, threshold=0.0):
+    def lines_closest(lines: List["Line"], threshold: float = 0.0) -> List[Tuple[int, int]]:
         if len(lines) < 2:
             return []
         from session_py import AABB
@@ -1077,7 +1087,7 @@ class Closest:
         return pairs
 
     @staticmethod
-    def polylines_closest(polylines, threshold=0.0):
+    def polylines_closest(polylines: List["Polyline"], threshold: float = 0.0) -> List[Tuple[int, int]]:
         if len(polylines) < 2:
             return []
         from session_py import AABB
@@ -1097,7 +1107,7 @@ class Closest:
         return pairs
 
     @staticmethod
-    def nurbscurves_closest(curves, threshold=0.0):
+    def nurbscurves_closest(curves: List["NurbsCurve"], threshold: float = 0.0) -> List[Tuple[int, int]]:
         if len(curves) < 2:
             return []
         from session_py import AABB
@@ -1120,7 +1130,7 @@ class Closest:
         return pairs
 
     @staticmethod
-    def boxes_closest(boxes, threshold=0.0):
+    def boxes_closest(boxes: List["OBB"], threshold: float = 0.0) -> List[Tuple[int, int]]:
         if len(boxes) < 2:
             return []
         inflated = []

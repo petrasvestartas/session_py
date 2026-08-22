@@ -1,5 +1,5 @@
-import math
 from typing import TYPE_CHECKING
+import math
 
 from .tolerance import PI
 
@@ -7,17 +7,17 @@ if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .mesh import Mesh
 
-def remesh_nurbssurface_grid(surface, max_u: int, max_v: int):
+def remesh_nurbssurface_grid(surface: "NurbsSurface", max_u: int, max_v: int) -> "Mesh":
     return RemeshNurbsSurfaceGrid.from_u_v(surface, max_u, max_v)
 
 
 class RemeshNurbsSurfaceGrid:
     @staticmethod
-    def from_u_v(s, max_u: int, max_v: int):
+    def from_u_v(s: "NurbsSurface", max_u: int, max_v: int) -> "Mesh":
         return RemeshNurbsSurfaceGrid.from_u_v_q(s, max_u, max_v, 20.0, 0.005)
 
     @staticmethod
-    def from_u_v_q(s, max_u: int, max_v: int, max_angle_deg: float, chord_factor: float):
+    def from_u_v_q(s: "NurbsSurface", max_u: int, max_v: int, max_angle_deg: float, chord_factor: float) -> "Mesh":
         from .mesh import Mesh
         MAX_ANGLE = max_angle_deg
         usp = list(s.get_span_vector(0))

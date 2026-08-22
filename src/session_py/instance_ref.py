@@ -1,6 +1,12 @@
+from typing import Union
+from typing import Optional
+from typing import TYPE_CHECKING
 import uuid
 from .color import Color
 from .xform import Xform
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class InstanceRef:
@@ -33,7 +39,7 @@ class InstanceRef:
         Reserved: selection / cull / visibility.
     """
 
-    def __init__(self, definition_guid="", xform=None):
+    def __init__(self, definition_guid: str = "", xform: Optional["Xform"] = None):
         self._guid = None
         self.name = "my_instance_ref"
         self.definition_guid = definition_guid
@@ -48,31 +54,31 @@ class InstanceRef:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @property
-    def xform(self):
+    def xform(self) -> "Xform":
         if getattr(self, '_xform', None) is None:
             self._xform = Xform.identity()
         return self._xform
 
     @xform.setter
-    def xform(self, value):
+    def xform(self, value: "Xform") -> None:
         self._xform = value
 
     @property
-    def color(self):
+    def color(self) -> "Color":
         if self._color is None:
             self._color = Color.white()
         return self._color
 
     @color.setter
-    def color(self, value):
+    def color(self, value: "Color") -> None:
         self._color = value
 
     @classmethod
-    def with_name(cls, name, definition_guid, xform):
+    def with_name(cls, name: str, definition_guid: str, xform: "Xform") -> "InstanceRef":
         """Create an instance reference with a specific name.
 
         Returns
@@ -84,7 +90,7 @@ class InstanceRef:
         ref.name = name
         return ref
 
-    def duplicate(self):
+    def duplicate(self) -> "InstanceRef":
         """Create a deep copy of this instance with a new GUID.
 
         Returns
@@ -97,11 +103,11 @@ class InstanceRef:
         result.guid = str(uuid.uuid4())
         return result
 
-    def transform(self, t):
+    def transform(self, t: "Xform") -> None:
         """Compose an extra transform onto the placement (in-place): xform = t * xform."""
         self.xform = t * self.xform
 
-    def transformed(self, t):
+    def transformed(self, t: "Xform") -> "InstanceRef":
         """Return a copy with an extra transform composed onto the placement.
 
         Returns
@@ -157,27 +163,27 @@ class InstanceRef:
             "xform": self.xform.__jsondump__(),
         }
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "InstanceRef":
         """Read JSON from file."""
         import json
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "InstanceRef":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -202,7 +208,7 @@ class InstanceRef:
     # Protobuf Serialization
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format."""
         from .proto import instance_ref_pb2
 
@@ -220,7 +226,7 @@ class InstanceRef:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "InstanceRef":
         """Create InstanceRef from protobuf binary data."""
         from .proto import instance_ref_pb2
 
@@ -239,14 +245,14 @@ class InstanceRef:
         ref.flags = proto.flags
         return ref
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file."""
         data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "InstanceRef":
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             data = f.read()

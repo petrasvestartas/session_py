@@ -1,5 +1,11 @@
+from typing import Union
+from typing import TYPE_CHECKING
 import uuid
 import copy
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 # Import protobuf at module level for performance
 try:
@@ -49,39 +55,39 @@ class Color:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @property
-    def r(self):
+    def r(self) -> float:
         return self._r
 
     @r.setter
-    def r(self, value):
+    def r(self, value: float) -> None:
         self._r = max(0.0, min(1.0, float(value)))
 
     @property
-    def g(self):
+    def g(self) -> float:
         return self._g
 
     @g.setter
-    def g(self, value):
+    def g(self, value: float) -> None:
         self._g = max(0.0, min(1.0, float(value)))
 
     @property
-    def b(self):
+    def b(self) -> float:
         return self._b
 
     @b.setter
-    def b(self, value):
+    def b(self, value: float) -> None:
         self._b = max(0.0, min(1.0, float(value)))
 
     @property
-    def a(self):
+    def a(self) -> float:
         return self._a
 
     @a.setter
-    def a(self, value):
+    def a(self, value: float) -> None:
         self._a = max(0.0, min(1.0, float(value)))
 
     ###########################################################################################
@@ -162,7 +168,7 @@ class Color:
         return [self[0], self[1], self[2], self[3]]
 
     @classmethod
-    def from_unified_array(cls, arr) -> "Color":
+    def from_unified_array(cls, arr: list[float]) -> "Color":
         """Create color from normalized float values [0-1].
 
         Parameters
@@ -337,7 +343,7 @@ class Color:
         return cls._cache["silver"]
 
     @classmethod
-    def palette(cls):
+    def palette(cls) -> list["Color"]:
         """Return a palette of 12 spectral colors in order."""
         return [cls.red(), cls.orange(), cls.yellow(), cls.lime(), cls.green(), cls.mint(), cls.cyan(), cls.azure(), cls.blue(), cls.violet(), cls.magenta(), cls.pink()]
 
@@ -366,7 +372,7 @@ class Color:
         color.name = name if name is not None else data.get("name", color.name)
         return color
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file.
 
         Parameters
@@ -380,7 +386,7 @@ class Color:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Color":
         """Read JSON from file.
 
         Parameters
@@ -399,13 +405,13 @@ class Color:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Color":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -414,7 +420,7 @@ class Color:
     # Protobuf Serialization
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format.
 
         Returns
@@ -440,7 +446,7 @@ class Color:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Color":
         """Create color from protobuf binary data.
 
         Parameters
@@ -469,7 +475,7 @@ class Color:
         color.name = proto.name
         return color
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -483,7 +489,7 @@ class Color:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Color":
         """Read protobuf from file.
 
         Parameters

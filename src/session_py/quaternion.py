@@ -1,3 +1,6 @@
+from typing import Union
+from typing import Optional
+from typing import TYPE_CHECKING
 import copy
 import uuid
 import math
@@ -5,11 +8,15 @@ from .tolerance import Tolerance
 from .tolerance import PI
 from .vector import Vector
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .plane import Plane
+
 
 class Quaternion:
     """A quaternion for 3D rotations (scalar + vector)."""
 
-    def __init__(self, scalar=1.0, vector=None):
+    def __init__(self, scalar: float = 1.0, vector: Optional["Vector"] = None):
         """Default constructor (identity quaternion)."""
         self.typ = "Quaternion"
         self._guid = None
@@ -25,16 +32,16 @@ class Quaternion:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @staticmethod
-    def identity():
+    def identity() -> "Quaternion":
         """Identity quaternion (scalar=1, vector=0)."""
         return Quaternion(1.0, Vector(0.0, 0.0, 0.0))
 
     @staticmethod
-    def from_components(scalar, vector):
+    def from_components(scalar: float, vector: Vector) -> "Quaternion":
         """Create a quaternion from raw scalar (real) and vector (imaginary) components.
 
         WARNING: The ``vector`` argument is NOT a rotation axis. It is the
@@ -83,7 +90,7 @@ class Quaternion:
         return Quaternion(scalar, vector)
 
     @staticmethod
-    def from_axis_angle(axis, angle):
+    def from_axis_angle(axis: "Vector", angle: float) -> "Quaternion":
         """Build a unit quaternion that rotates by ``angle`` radians around ``axis``.
 
         THE everyday rotation builder. Use this whenever you can describe the
@@ -94,7 +101,7 @@ class Quaternion:
         half = angle * 0.5
         return Quaternion(math.cos(half), ax * math.sin(half))
 
-    def to_axis_angle(self):
+    def to_axis_angle(self) -> tuple[Vector, float]:
         """Extract ``(axis, angle)`` from this quaternion — the inverse of :meth:`from_axis_angle`.
 
         Geometric meaning of a quaternion ``(s, v)``::
@@ -117,7 +124,7 @@ class Quaternion:
 
         Returns
         -------
-        tuple of (Vector, float)
+        tuple[Vector, float]
             ``(unit axis, angle in radians)``.
         """
         qn = self.normalized()
@@ -130,7 +137,7 @@ class Quaternion:
         return (axis, angle)
 
     @staticmethod
-    def from_arc(src, dst):
+    def from_arc(src: "Vector", dst: "Vector") -> "Quaternion":
         """Build the shortest rotation that maps direction ``src`` to direction ``dst``.
 
         Use this for "look at" logic (point a camera at a target), aligning a
@@ -151,7 +158,7 @@ class Quaternion:
         return Quaternion(1.0 + dot_val, cross).normalized()
 
     @staticmethod
-    def from_euler(x, y, z):
+    def from_euler(x: float, y: float, z: float) -> "Quaternion":
         """Build a quaternion from three Euler angles (XYZ convention).
 
         Use only at I/O boundaries: importing rotations stored as pitch/yaw/roll
@@ -169,7 +176,7 @@ class Quaternion:
                     s1 * s2 * c3 + s3 * c1 * c2))
 
     @staticmethod
-    def from_rotation(plane_a, plane_b):
+    def from_rotation(plane_a: "Plane", plane_b: "Plane") -> "Quaternion":
         """Build the quaternion that maps the basis of ``plane_a`` onto the basis of ``plane_b``.
 
         Use this to snap one local frame to another - aligning two CAD parts
@@ -218,7 +225,7 @@ class Quaternion:
         q[k] = s * (m[k][i] + m[i][k])
         return Quaternion(s * (m[k][j] - m[j][k]), Vector(q[0], q[1], q[2]))
 
-    def get_rotation(self):
+    def get_rotation(self) -> "Plane":
         """Apply this rotation to the world XY plane and return the resulting Plane.
 
         Use this to visualize a quaternion as a frame in 3D, or to convert a
@@ -233,13 +240,13 @@ class Quaternion:
         yaxis = Vector(2.0*(b*c - a*d),       a*a - b*b + c*c - d*d, 2.0*(a*b + c*d))
         return Plane(Point(0.0, 0.0, 0.0), xaxis, yaxis)
 
-    def duplicate(self):
+    def duplicate(self) -> "Quaternion":
         """Create a deep copy of this quaternion with a new GUID."""
         result = copy.deepcopy(self)
         result.guid = str(uuid.uuid4())
         return result
 
-    def rotate_vector(self, v):
+    def rotate_vector(self, v: "Vector") -> "Vector":
         """Apply this rotation to a 3D vector and return the rotated vector.
 
         Use this when you have a quaternion orientation and need to know where
@@ -251,15 +258,15 @@ class Quaternion:
         uuv = qv.cross(uv)
         return v + (uv * self.scalar + uuv) * 2.0
 
-    def magnitude(self):
+    def magnitude(self) -> float:
         """Euclidean norm."""
         return math.sqrt(self.magnitude_squared())
 
-    def magnitude_squared(self):
+    def magnitude_squared(self) -> float:
         """Squared magnitude."""
         return self.scalar * self.scalar + self.vector[0] * self.vector[0] + self.vector[1] * self.vector[1] + self.vector[2] * self.vector[2]
 
-    def normalized(self):
+    def normalized(self) -> "Quaternion":
         """Return a unit-length copy of this quaternion (divides by magnitude).
 
         Use periodically after composing many rotations - floating-point drift
@@ -275,7 +282,7 @@ class Quaternion:
             return q
         return Quaternion.identity()
 
-    def conjugate(self):
+    def conjugate(self) -> "Quaternion":
         """Flip the sign of the vector part: ``(s, v)`` -> ``(s, -v)``.
 
         For UNIT quaternions this equals the inverse - the opposite rotation.
@@ -287,7 +294,7 @@ class Quaternion:
         q.name = self.name
         return q
 
-    def invert(self):
+    def invert(self) -> "Quaternion":
         """True multiplicative inverse: conjugate / magnitude_squared.
 
         Works for non-unit quaternions too. Use as the safe inverse when the
@@ -303,7 +310,7 @@ class Quaternion:
         q.name = self.name
         return q
 
-    def dot(self, other):
+    def dot(self, other: "Quaternion") -> float:
         """Algebraic 4D dot product (NOT a geometric operation).
 
         Used inside slerp implementations and as a similarity measure between
@@ -311,7 +318,7 @@ class Quaternion:
         """
         return self.scalar * other.scalar + self.vector.dot(other.vector)
 
-    def slerp(self, other, amount):
+    def slerp(self, other: "Quaternion", amount: float) -> "Quaternion":
         """Spherical Linear intERPolation along the shortest great-circle path on S^3.
 
         Constant angular velocity. Use for high-quality animation between two
@@ -328,7 +335,7 @@ class Quaternion:
         sin_theta = math.sin(theta)
         return (self * scale1 + other * scale2) * (1.0 / sin_theta)
 
-    def nlerp(self, other, amount):
+    def nlerp(self, other: "Quaternion", amount: float) -> "Quaternion":
         """Normalized Linear intERPolation. Cheaper than slerp.
 
         Angular velocity isn't perfectly uniform. Use in real-time loops where
@@ -429,33 +436,33 @@ class Quaternion:
         q.name = name
         return q
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Quaternion":
         """Load from JSON string."""
         import json
         data = json.loads(json_string)
         return cls.__jsonload__(data, guid=data.get("guid"), name=data.get("name"))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Quaternion":
         """Read JSON from file."""
         import json
         with open(filepath, 'r') as f:
             data = json.load(f)
         return cls.__jsonload__(data, guid=data.get("guid"), name=data.get("name"))
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format."""
         from .proto import quaternion_pb2
         proto = quaternion_pb2.Quaternion()
@@ -467,7 +474,7 @@ class Quaternion:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Quaternion":
         """Create Quaternion from protobuf binary data."""
         from .proto import quaternion_pb2
         from .vector import Vector
@@ -477,14 +484,14 @@ class Quaternion:
         q.name = proto.name
         return q
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file."""
         data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Quaternion":
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             data = f.read()

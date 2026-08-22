@@ -1,5 +1,12 @@
+from typing import Any
+from typing import Iterator
+from typing import Optional
+from typing import Union
+from typing import TYPE_CHECKING
 import uuid
-from typing import Any, Optional
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TreeNode:
@@ -31,7 +38,7 @@ class TreeNode:
 
     """
 
-    def __init__(self, name="my_node"):
+    def __init__(self, name: str = "my_node"):
         self.name = name
         self._guid = None
         self.color = None
@@ -46,7 +53,7 @@ class TreeNode:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     def __str__(self):
@@ -95,33 +102,33 @@ class TreeNode:
     ###########################################################################################
 
     @property
-    def is_root(self):
+    def is_root(self) -> bool:
         return self._parent is None
 
     @property
-    def is_leaf(self):
+    def is_leaf(self) -> bool:
         return not self._children
 
     @property
-    def is_branch(self):
+    def is_branch(self) -> bool:
         return not self.is_root and not self.is_leaf
 
     @property
-    def parent(self):
+    def parent(self) -> Optional["TreeNode"]:
         return self._parent
 
     @property
-    def children(self):
+    def children(self) -> list:
         return self._children
 
     @property
-    def tree(self):
+    def tree(self) -> Optional["Tree"]:
         if self.is_root:
             return self._tree
         else:
             return self.parent.tree  # type: ignore
 
-    def add(self, node):
+    def add(self, node: "TreeNode") -> None:
         """Add a child node to this node.
 
         Parameters
@@ -136,7 +143,7 @@ class TreeNode:
             self._children.append(node)
         node._parent = self
 
-    def remove(self, node):
+    def remove(self, node: "TreeNode") -> None:
         """Remove a child node from this node.
 
         Parameters
@@ -149,20 +156,20 @@ class TreeNode:
         node._parent = None
 
     @property
-    def ancestors(self):
+    def ancestors(self) -> Iterator["TreeNode"]:
         this = self
         while this.parent:
             yield this.parent
             this = this.parent
 
     @property
-    def descendants(self):
+    def descendants(self) -> Iterator["TreeNode"]:
         for child in self.children:
             yield child
             for descendant in child.descendants:
                 yield descendant
 
-    def traverse(self, strategy="depthfirst", order="preorder"):
+    def traverse(self, strategy: str = "depthfirst", order: str = "preorder") -> Iterator["TreeNode"]:
         """Traverse the tree from this node.
 
         Parameters
@@ -215,7 +222,7 @@ class Tree:
 
     """
 
-    def __init__(self, name="my_tree"):
+    def __init__(self, name: str = "my_tree"):
         self._guid = None
         self.name = name
         self._root = None
@@ -227,7 +234,7 @@ class Tree:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     def __str__(self):
@@ -263,27 +270,27 @@ class Tree:
             tree.add(root)
         return tree
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s):
+    def file_json_loads(cls, s: str) -> "Tree":
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Tree":
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import tree_pb2
 
         def fill_node(proto_node, node):
@@ -306,7 +313,7 @@ class Tree:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Tree":
         from .proto import tree_pb2
 
         proto = tree_pb2.Tree()
@@ -332,16 +339,16 @@ class Tree:
             root._tree = tree
         return tree
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Tree":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
 
-    def find_node_by_guid(self, guid):
+    def find_node_by_guid(self, guid: str) -> Optional["TreeNode"]:
         for node in self.nodes:
             if node.guid == guid:
                 return node
@@ -352,10 +359,10 @@ class Tree:
     ###########################################################################################
 
     @property
-    def root(self):
+    def root(self) -> Optional["TreeNode"]:
         return self._root
 
-    def add(self, node, parent=None):
+    def add(self, node: "TreeNode", parent: Optional["TreeNode"] = None) -> None:
         """Add a node to the tree.
 
         Parameters
@@ -393,12 +400,12 @@ class Tree:
             parent.add(node)
 
     @property
-    def nodes(self):
+    def nodes(self) -> Iterator["TreeNode"]:
         if self.root:
             for node in self.root.traverse():
                 yield node
 
-    def remove(self, node):
+    def remove(self, node: "TreeNode") -> None:
         """Remove a node from the tree.
 
         Parameters
@@ -414,12 +421,12 @@ class Tree:
             node.parent.remove(node)
 
     @property
-    def leaves(self):
+    def leaves(self) -> Iterator["TreeNode"]:
         for node in self.nodes:
             if node.is_leaf:
                 yield node
 
-    def traverse(self, strategy="depthfirst", order="preorder"):
+    def traverse(self, strategy: str = "depthfirst", order: str = "preorder") -> Iterator["TreeNode"]:
         """
         Traverse the tree from the root node.
 
@@ -446,7 +453,7 @@ class Tree:
             for node in self.root.traverse(strategy=strategy, order=order):
                 yield node
 
-    def get_node_by_name(self, name):
+    def get_node_by_name(self, name: str) -> Optional["TreeNode"]:
         """Get a node by its name.
 
         Parameters
@@ -459,7 +466,7 @@ class Tree:
             if node.name == name:
                 return node
 
-    def get_nodes_by_name(self, name):
+    def get_nodes_by_name(self, name: str) -> list["TreeNode"]:
         """
         Get all nodes by their name.
 
@@ -530,7 +537,7 @@ class Tree:
 
         return [child.guid for child in node.children if isinstance(child, TreeNode)]
 
-    def print_hierarchy(self):
+    def print_hierarchy(self) -> None:
         """Print the spatial hierarchy of the tree."""
 
         def _print(node, prefix="", last=True):

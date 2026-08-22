@@ -1,6 +1,7 @@
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
+from .tolerance import TOLERANCE
 import os
 from pathlib import Path
 
@@ -28,8 +29,10 @@ def test_read_bunny():
 @MINI_TEST("FileObj", "Write Read Roundtrip")
 def test_write_read_roundtrip():
     # build a small mesh (4 verts, 2 faces), write to OBJ, read back, compare counts
-    from session_py import Mesh, Point
-    from session_py.file_obj import read_file_obj, write_file_obj
+    from session_py import Mesh
+    from session_py import Point
+    from session_py.file_obj import read_file_obj
+    from session_py.file_obj import write_file_obj
     original_mesh = Mesh()
     v0 = original_mesh.add_vertex(Point(0.0, 0.0, 0.0))
     v1 = original_mesh.add_vertex(Point(1.0, 0.0, 0.0))
@@ -51,9 +54,10 @@ def test_write_read_roundtrip():
 
 @MINI_TEST("FileObj", "String Roundtrip")
 def test_string_roundtrip():
-    from session_py import Mesh, Point
-    from session_py.file_obj import read_file_obj_from_str, write_file_obj_to_string
-    from session_py.tolerance import TOLERANCE
+    from session_py import Mesh
+    from session_py import Point
+    from session_py.file_obj import read_file_obj_from_str
+    from session_py.file_obj import write_file_obj_to_string
     original_mesh = Mesh()
     v0 = original_mesh.add_vertex(Point(0.0, 0.0, 0.0))
     v1 = original_mesh.add_vertex(Point(1.0, 0.0, 0.0))

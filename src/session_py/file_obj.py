@@ -16,7 +16,7 @@ def write_file_obj_to_string(mesh: Mesh) -> str:
     return s
 
 
-def write_file_obj(mesh: Mesh, filepath: str):
+def write_file_obj(mesh: Mesh, filepath: str) -> None:
     with open(filepath, "w") as f:
         f.write(write_file_obj_to_string(mesh))
 

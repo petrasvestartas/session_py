@@ -1,3 +1,7 @@
+from typing import Union
+from typing import List
+from typing import Optional
+from typing import TYPE_CHECKING
 import uuid
 import copy
 import math
@@ -9,6 +13,15 @@ from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 
 import numpy as _np
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .xform import Xform
+    from .line import Line
+    from .mesh import Mesh
+    from .plane import Plane
+    from .polyline import Polyline
+
 _ZERO_GUID = "00000000-0000-0000-0000-000000000000"
 _BLACK_COLOR = Color.black()
 _NURBSKNOT_01 = _np.array([0., 1.], dtype=_np.float64)
@@ -242,11 +255,11 @@ class BRepTrimType:
     _FROM_STR = {"boundary": 0, "mated": 1, "seam": 2, "singular": 3}
 
     @staticmethod
-    def to_str(v):
+    def to_str(v: int) -> str:
         return BRepTrimType._TO_STR.get(v, "boundary")
 
     @staticmethod
-    def from_str(s):
+    def from_str(s: str) -> int:
         return BRepTrimType._FROM_STR.get(s, 0)
 
 
@@ -255,11 +268,11 @@ class BRepLoopType:
     Inner = 1
 
     @staticmethod
-    def to_str(v):
+    def to_str(v: int) -> str:
         return "inner" if v == 1 else "outer"
 
     @staticmethod
-    def from_str(s):
+    def from_str(s: str) -> int:
         return 1 if s == "inner" else 0
 
 
@@ -324,21 +337,21 @@ class BRep:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
-    def refresh_guid(self):
+    def refresh_guid(self) -> None:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
     @property
-    def surfacecolor(self):
+    def surfacecolor(self) -> "Color":
         if self._surfacecolor is None:
             self._surfacecolor = Color.black()
         return self._surfacecolor
 
     @surfacecolor.setter
-    def surfacecolor(self, value):
+    def surfacecolor(self, value: "Color") -> None:
         self._surfacecolor = value
 
     def __str__(self):
@@ -369,7 +382,7 @@ class BRep:
     def __ne__(self, other):
         return not self.__eq__(other)
 
-    def duplicate(self):
+    def duplicate(self) -> "BRep":
         b = BRep()
         b.guid = str(uuid.uuid4())
         b.name = self.name
@@ -390,16 +403,16 @@ class BRep:
     # Accessors
     ###########################################################################
 
-    def face_count(self):
+    def face_count(self) -> int:
         return len(self.m_faces)
 
-    def edge_count(self):
+    def edge_count(self) -> int:
         return len(self.m_topology_edges)
 
-    def vertex_count(self):
+    def vertex_count(self) -> int:
         return len(self.m_vertices)
 
-    def is_valid(self):
+    def is_valid(self) -> bool:
         if not self.m_faces or not self.m_surfaces or not self.m_vertices:
             return False
         for f in self.m_faces:
@@ -420,7 +433,7 @@ class BRep:
                 return False
         return True
 
-    def is_solid(self):
+    def is_solid(self) -> bool:
         if not self.m_topology_edges:
             return False
         diag = self._brep_bbox_diag()
@@ -446,7 +459,7 @@ class BRep:
             return False
         return True
 
-    def volume(self):
+    def volume(self) -> float:
         """Volume via the divergence theorem: V = (1/3) sum_faces flux_outward. The per-face
         OUTWARD sign is determined GEOMETRICALLY (step off the face along its natural normal and
         test inside/outside), so it is independent of stored orientation flags (which differ
@@ -852,7 +865,7 @@ class BRep:
             total += sign * flux_nat
         return abs(total) / 3.0
 
-    def contains_point(self, p, boundary=None):
+    def contains_point(self, p: "Point", boundary: Optional["Mesh"] = None) -> bool:
         """True if `p` is strictly inside the (closed) solid, by ray-cast parity against
         the tessellated boundary. Robust for interior points; matches OCCT
         BRepClass3d_SolidClassifier for IN/OUT. Pass a precomputed `boundary` mesh to
@@ -874,23 +887,23 @@ class BRep:
     # Building
     ###########################################################################
 
-    def add_surface(self, srf):
+    def add_surface(self, srf: "NurbsSurface") -> int:
         self.m_surfaces.append(srf)
         return len(self.m_surfaces) - 1
 
-    def add_curve_3d(self, crv):
+    def add_curve_3d(self, crv: "NurbsCurve") -> int:
         self.m_curves_3d.append(crv)
         return len(self.m_curves_3d) - 1
 
-    def add_curve_2d(self, crv):
+    def add_curve_2d(self, crv: "NurbsCurve") -> int:
         self.m_curves_2d.append(crv)
         return len(self.m_curves_2d) - 1
 
-    def add_vertex(self, pt):
+    def add_vertex(self, pt: "Point") -> int:
         self.m_vertices.append(pt)
         return len(self.m_vertices) - 1
 
-    def add_edge(self, curve_3d_idx, start_vertex, end_vertex):
+    def add_edge(self, curve_3d_idx: int, start_vertex: int, end_vertex: int) -> int:
         e = BRepEdge()
         e.curve_3d_index = curve_3d_idx
         e.start_vertex = start_vertex
@@ -898,7 +911,7 @@ class BRep:
         self.m_topology_edges.append(e)
         return len(self.m_topology_edges) - 1
 
-    def add_trim(self, curve_2d_idx, edge_idx, loop_idx, reversed, trim_type):
+    def add_trim(self, curve_2d_idx: int, edge_idx: int, loop_idx: int, reversed: bool, trim_type: int) -> int:
         t = BRepTrim()
         t.curve_2d_index = curve_2d_idx
         t.edge_index = edge_idx
@@ -913,7 +926,7 @@ class BRep:
             self.m_topology_edges[edge_idx].trim_indices.append(idx)
         return idx
 
-    def add_loop(self, face_idx, loop_type):
+    def add_loop(self, face_idx: int, loop_type: int) -> int:
         l = BRepLoop()
         l.face_index = face_idx
         l.type = loop_type
@@ -923,7 +936,7 @@ class BRep:
             self.m_faces[face_idx].loop_indices.append(idx)
         return idx
 
-    def add_face(self, surface_idx, reversed):
+    def add_face(self, surface_idx: int, reversed: bool) -> int:
         f = BRepFace()
         f.surface_index = surface_idx
         f.reversed = reversed
@@ -935,7 +948,7 @@ class BRep:
     ###########################################################################
 
     @staticmethod
-    def create_box(sx, sy, sz):
+    def create_box(sx: float, sy: float, sz: float) -> "BRep":
         brep = BRep()
         brep.name = "box"
         hx, hy, hz = sx * 0.5, sy * 0.5, sz * 0.5
@@ -998,7 +1011,7 @@ class BRep:
         return brep
 
     @staticmethod
-    def create_cylinder(radius, height):
+    def create_cylinder(radius: float, height: float) -> "BRep":
         from .primitives import Primitives
         brep = BRep()
         brep.name = "cylinder"
@@ -1069,7 +1082,7 @@ class BRep:
         return brep
 
     @staticmethod
-    def create_sphere(radius):
+    def create_sphere(radius: float) -> "BRep":
         from .primitives import Primitives
         brep = BRep()
         brep.name = "sphere"
@@ -1103,7 +1116,7 @@ class BRep:
         return brep
 
     @staticmethod
-    def create_cone(radius, height):
+    def create_cone(radius: float, height: float) -> "BRep":
         # Side face = cone_surface (u in [0,4] = circle, v in [0,1] = base->apex; v=1 is a SINGULAR
         # apex pole, like a sphere pole) + one planar base cap. Mirrors create_cylinder's base+seam
         # but with a singular apex instead of a top cap.
@@ -1164,7 +1177,7 @@ class BRep:
         return brep
 
     @staticmethod
-    def create_torus(major_radius, minor_radius):
+    def create_torus(major_radius: float, minor_radius: float) -> "BRep":
         # Torus: a single closed face, periodic in BOTH u (major circle) and v (minor circle). No
         # caps, no poles -- two seams: the u-seam (minor circle at u=0) and the v-seam (outer major
         # circle at v=0), meeting at one corner vertex. The loop is the UV rectangle [0,4]x[0,4] = 4
@@ -1216,7 +1229,7 @@ class BRep:
         return brep
 
     @staticmethod
-    def create_block_with_hole(sx, sy, sz, hole_radius):
+    def create_block_with_hole(sx: float, sy: float, sz: float, hole_radius: float) -> "BRep":
         from .primitives import Primitives
         import math as _m
         import numpy as np
@@ -1338,7 +1351,7 @@ class BRep:
         return brep
 
     @staticmethod
-    def from_polylines(polylines):
+    def from_polylines(polylines: List["Polyline"]) -> "BRep":
         from .plane import Plane
         brep = BRep()
         brep.name = "polysurface"
@@ -1424,7 +1437,7 @@ class BRep:
         return brep
 
     @staticmethod
-    def from_nurbscurves(curves, holes=None):
+    def from_nurbscurves(curves: List["NurbsCurve"], holes: Optional[List["NurbsCurve"]] = None) -> "BRep":
         brep = BRep.__new__(BRep)
         brep.guid = _ZERO_GUID; brep.name = "polysurface"; brep.width = 1.0
         brep.surfacecolor = _BLACK_COLOR
@@ -1761,7 +1774,7 @@ class BRep:
                 result.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
         return result
 
-    def split_by_plane(self, plane, tolerance=None):
+    def split_by_plane(self, plane: "Plane", tolerance: Optional[float] = None) -> "BRep":
         """Split this BRep by a plane. Returns a new subdivided BRep."""
         from .intersection import surface_plane_uv
 
@@ -1769,7 +1782,7 @@ class BRep:
             return [pair[1] for pair in surface_plane_uv(srf, plane, tolerance)]
         return self._split(cut_for, tolerance)
 
-    def split_by_surface(self, cutter, tolerance=None):
+    def split_by_surface(self, cutter: "NurbsSurface", tolerance: Optional[float] = None) -> "BRep":
         """Split this BRep by another surface. Returns a new subdivided BRep."""
         from .intersection import surface_surface
         cutter_bb = _aabb_from_surface(cutter)
@@ -1783,7 +1796,7 @@ class BRep:
             return [triple[1] for triple in surface_surface(srf, cutter, tolerance)]
         return self._split(cut_for, tolerance)
 
-    def split_by_curves(self, curves, tolerance=None):
+    def split_by_curves(self, curves: List["NurbsCurve"], tolerance: Optional[float] = None) -> "BRep":
         """Split this BRep by 3D curves pulled onto each face. New BRep."""
         from .closest import Closest
         curve_bbs = [_aabb_from_curve(c) for c in curves]
@@ -1801,7 +1814,7 @@ class BRep:
             return out
         return self._split(cut_for, tolerance)
 
-    def split_by_line(self, line, tolerance=None):
+    def split_by_line(self, line: "Line", tolerance: Optional[float] = None) -> "BRep":
         """Split this BRep by a line pulled onto each face. New BRep."""
         pts = [line.start(), line.end()]
         crv = NurbsCurve.create(False, 1, pts)
@@ -1871,7 +1884,7 @@ class BRep:
                 sub.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
         return sub
 
-    def split_by_plane_pieces(self, plane, tolerance=None):
+    def split_by_plane_pieces(self, plane: "Plane", tolerance: Optional[float] = None) -> List["BRep"]:
         """Split this BRep by a plane and separate the result into the pieces
         on each side of the plane. Returns a list of BReps (one per side)."""
         whole = self.split_by_plane(plane, tolerance)
@@ -1907,7 +1920,7 @@ class BRep:
                 pieces.append(whole._subset(idxs))
         return pieces
 
-    def split_by_brep(self, cutter, tolerance=None):
+    def split_by_brep(self, cutter: "BRep", tolerance: Optional[float] = None) -> "BRep":
         """Split this BRep by every face of another BRep. New BRep.
 
         Each target face is cut by every overlapping cutter face (planar faces
@@ -1934,7 +1947,7 @@ class BRep:
     # Booleans
     ###########################################################################
 
-    def subset(self, face_indices):
+    def subset(self, face_indices: List[int]) -> "BRep":
         """Build a standalone BRep from a subset of this BRep's faces, preserving edge topology."""
         sub = BRep()
         sub.name = self.name
@@ -2007,7 +2020,7 @@ class BRep:
         d = ((xmx-xmn)**2 + (ymx-ymn)**2 + (zmx-zmn)**2) ** 0.5
         return d if d > 0 else 1.0
 
-    def imprint_edges(self, tol=0.0):
+    def imprint_edges(self, tol: float = 0.0) -> "BRep":
         """Split an under-mated edge at interior points coinciding with another edge's endpoint,
         so a long edge spanning shorter coincident edges is broken to match them (T-junctions)."""
         if tol <= 0.0:
@@ -2147,7 +2160,7 @@ class BRep:
             if e.end_vertex != e.start_vertex and 0 <= e.end_vertex < len(self.m_topology_vertices):
                 self.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
 
-    def co_refine_coincident_edges(self, tol=0.0):
+    def co_refine_coincident_edges(self, tol: float = 0.0) -> "BRep":
         """Co-refine the A<->B section: where one operand imprinted the shared curve as a single
         closed circle and the other as 2+ open arcs (periodic-seam straddle) -- or as partially
         overlapping arcs -- split the longer at the shorter's endpoints so they mate 1:1. Strictly
@@ -2394,7 +2407,7 @@ class BRep:
             if e.end_vertex != e.start_vertex and 0 <= e.end_vertex < len(self.m_topology_vertices):
                 self.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
 
-    def sew_coincident_edges(self, tol=0.0):
+    def sew_coincident_edges(self, tol: float = 0.0) -> "BRep":
         """Merge edges whose 3D curves coincide (point-to-segment Hausdorff < tol) into single
         mated edges, so independently-imprinted intersection curves on A and B share one edge."""
         diag = self._brep_bbox_diag()
@@ -2493,7 +2506,7 @@ class BRep:
             if e.end_vertex != e.start_vertex and 0 <= e.end_vertex < len(self.m_topology_vertices):
                 self.m_topology_vertices[e.end_vertex].edge_indices.append(ei)
 
-    def boolean(self, other, op, tolerance=None):
+    def boolean(self, other: "BRep", op: str, tolerance: Optional[float] = None) -> "BRep":
         """Boolean of two solids via imprint -> classify -> select -> sew. op in {'union','difference','intersection'}."""
         from .remesh_cdt import RemeshCDT
         from .polyline import Polyline
@@ -2649,13 +2662,13 @@ class BRep:
         result.sew_coincident_edges()
         return result
 
-    def boolean_union(self, other, tolerance=None):
+    def boolean_union(self, other: "BRep", tolerance: Optional[float] = None) -> "BRep":
         return self.boolean(other, 'union', tolerance)
 
-    def boolean_difference(self, other, tolerance=None):
+    def boolean_difference(self, other: "BRep", tolerance: Optional[float] = None) -> "BRep":
         return self.boolean(other, 'difference', tolerance)
 
-    def boolean_intersection(self, other, tolerance=None):
+    def boolean_intersection(self, other: "BRep", tolerance: Optional[float] = None) -> "BRep":
         return self.boolean(other, 'intersection', tolerance)
 
     def __add__(self, other):
@@ -2671,7 +2684,7 @@ class BRep:
     # Meshing
     ###########################################################################
 
-    def mesh(self):
+    def mesh(self) -> "Mesh":
         from .mesh import Mesh
         from .nurbssurface_trimmed import NurbsSurfaceTrimmed
         nf = len(self.m_faces)
@@ -2891,10 +2904,10 @@ class BRep:
                     poly.reverse()
                 all_polygons.append(poly)
         return Mesh.from_polylines(all_polygons, 1e-6)
-    def face_meshes(self):
+    def face_meshes(self) -> List["Mesh"]:
         return self.face_meshes_q(None)
 
-    def face_meshes_q(self, quality=None):
+    def face_meshes_q(self, quality: Optional[float] = None) -> List["Mesh"]:
         from .mesh import Mesh
         from .nurbssurface_trimmed import NurbsSurfaceTrimmed
         from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
@@ -3116,7 +3129,7 @@ class BRep:
     # Evaluation
     ###########################################################################
 
-    def point_at(self, face_idx, u, v):
+    def point_at(self, face_idx: int, u: float, v: float) -> "Point":
         if face_idx < 0 or face_idx >= len(self.m_faces):
             return Point()
         si = self.m_faces[face_idx].surface_index
@@ -3124,7 +3137,7 @@ class BRep:
             return Point()
         return self.m_surfaces[si].point_at(u, v)
 
-    def normal_at(self, face_idx, u, v):
+    def normal_at(self, face_idx: int, u: float, v: float) -> "Vector":
         if face_idx < 0 or face_idx >= len(self.m_faces):
             return Vector()
         si = self.m_faces[face_idx].surface_index
@@ -3139,7 +3152,7 @@ class BRep:
     # Transformation
     ###########################################################################
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         for srf in self.m_surfaces:
             srf.transform(xform)
         for crv in self.m_curves_3d:
@@ -3151,7 +3164,7 @@ class BRep:
             z = m[2]*pt[0] + m[6]*pt[1] + m[10]*pt[2] + m[14]
             self.m_vertices[i] = Point(x, y, z)
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "BRep":
         b = self.duplicate()
         b.transform(xform)
         return b
@@ -3253,23 +3266,23 @@ class BRep:
                 b.m_faces.append(bf)
         return b
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=4)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "BRep":
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s):
+    def file_json_loads(cls, s: str) -> "BRep":
         import json
         return cls.__jsonload__(json.loads(s))
 
@@ -3277,7 +3290,7 @@ class BRep:
     # Protobuf Serialization
     ###########################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import brep_pb2
         proto = brep_pb2.BRep()
         proto.guid = self.guid
@@ -3332,7 +3345,7 @@ class BRep:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "BRep":
         from .proto import brep_pb2
         proto = brep_pb2.BRep()
         proto.ParseFromString(data)
@@ -3387,11 +3400,11 @@ class BRep:
         b.surfacecolor.name = cp.name
         return b
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "BRep":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())

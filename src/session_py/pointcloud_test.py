@@ -68,7 +68,7 @@ def test_pointcloud_from_coords():
     from session_py import PointCloud
 
     coords = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
-    colors = [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0]
+    colors = [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]
     normals = [0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
     pc = PointCloud.from_coords(coords, colors, normals)
 
@@ -196,9 +196,9 @@ def test_pointcloud_set_color():
     from session_py import Color
 
     pc = PointCloud(colors=[Color(0.0, 0.0, 0.0, 0.0)])
-    pc.set_color(0, Color(1.0, 0.5, 0.25, 1.0))
+    pc.set_color(0, Color(1.0, 0.0, 0.0, 1.0))
 
-    MINI_CHECK(pc.get_color(0)[0] == 1.0 and pc.get_color(0)[1] == 0.5 and pc.get_color(0)[2] == 0.25 and pc.get_color(0)[3] == 1.0)
+    MINI_CHECK(pc.get_color(0)[0] == 1.0 and pc.get_color(0)[1] == 0.0 and pc.get_color(0)[2] == 0.0 and pc.get_color(0)[3] == 1.0)
 
 
 @MINI_TEST("PointCloud", "Add Color")
@@ -207,10 +207,35 @@ def test_pointcloud_add_color():
     from session_py import Color
 
     pc = PointCloud()
-    pc.add_color(Color(0.5, 0.25, 0.125, 1.0))
+    pc.add_color(Color(1.0, 0.0, 0.0, 1.0))
 
     MINI_CHECK(pc.color_count() == 1)
-    MINI_CHECK(pc.get_color(0)[0] == 0.5 and pc.get_color(0)[1] == 0.25 and pc.get_color(0)[2] == 0.125)
+    MINI_CHECK(pc.get_color(0)[0] == 1.0 and pc.get_color(0)[1] == 0.0 and pc.get_color(0)[2] == 0.0)
+
+
+@MINI_TEST("PointCloud", "Coords")
+def test_pointcloud_coords():
+    from session_py import PointCloud
+    from session_py import Point
+
+    pc = PointCloud([Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)])
+    coords = pc.coords
+
+    MINI_CHECK(len(coords) == 6)
+    MINI_CHECK(TOLERANCE.is_close(coords[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(coords[5], 6.0))
+
+
+@MINI_TEST("PointCloud", "Colors")
+def test_pointcloud_colors():
+    from session_py import PointCloud
+    from session_py import Color
+
+    pc = PointCloud(colors=[Color(1.0, 0.0, 0.0, 1.0)])
+    colors = pc.colors
+
+    MINI_CHECK(len(colors) == 4)
+    MINI_CHECK(colors[0] == 255 and colors[1] == 0 and colors[2] == 0 and colors[3] == 255)
 
 
 @MINI_TEST("PointCloud", "Get Colors")

@@ -1,10 +1,25 @@
+from typing import Union
+from typing import Callable
+from typing import Optional
+from typing import TYPE_CHECKING
 import uuid
 import copy
 from .xform import Xform
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .vector import Vector
+    from .brep import BRep
+    from .line import Line
+    from .mesh import Mesh
+    from .obb import OBB
+    from .plane import Plane
+    from .point import Point
+    from .polyline import Polyline
+
 
 class Element:
-    def __init__(self, geometry=None, name="my_element"):
+    def __init__(self, geometry: Optional[Union["Mesh", "BRep"]] = None, name: str = "my_element"):
         self._guid = None
         self.name = name
         self._geometry = geometry
@@ -26,14 +41,14 @@ class Element:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
     @property
-    def geometry(self):
+    def geometry(self) -> Optional[Union["Mesh", "BRep"]]:
         return self._geometry
 
-    def session_geometry(self, xform):
+    def session_geometry(self, xform: Xform) -> Optional[Union["Mesh", "BRep"]]:
         """The element's geometry placed by ``xform``. The placement is supplied by the caller -
         an Element no longer stores one; the Session does. Pass identity for local geometry.
         """
@@ -46,74 +61,74 @@ class Element:
         return geo
 
     @property
-    def aabb(self):
+    def aabb(self) -> "OBB":
         if self._is_dirty or self._aabb is None:
             self._aabb = self.compute_aabb()
         return self._aabb
 
     @property
-    def obb(self):
+    def obb(self) -> "OBB":
         if self._is_dirty or self._obb is None:
             self._obb = self.compute_obb()
         return self._obb
 
     @property
-    def collision_mesh(self):
+    def collision_mesh(self) -> "Mesh":
         if self._is_dirty or self._collision_mesh is None:
             self._collision_mesh = self.compute_collision_mesh()
         return self._collision_mesh
 
     @property
-    def point(self):
+    def point(self) -> "Point":
         if self._is_dirty or self._point is None:
             self._point = self.compute_point()
         return self._point
 
     @property
-    def polylines(self):
+    def polylines(self) -> list["Polyline"]:
         if self._is_dirty or self._polylines is None:
             self._polylines = self.compute_polylines()
         return self._polylines
 
     @property
-    def planes(self):
+    def planes(self) -> list["Plane"]:
         if self._is_dirty or self._planes is None:
             self._planes = self.compute_planes()
         return self._planes
 
     @property
-    def edge_vectors(self):
+    def edge_vectors(self) -> list["Vector"]:
         if self._is_dirty or self._edge_vectors is None:
             self._edge_vectors = self.compute_edge_vectors()
         return self._edge_vectors
 
     @property
-    def axis(self):
+    def axis(self) -> Optional["Line"]:
         if self._is_dirty or self._axis is None:
             self._axis = self.compute_axis()
         return self._axis
 
     @property
-    def is_dirty(self):
+    def is_dirty(self) -> bool:
         return self._is_dirty
     @property
-    def cached_aabb(self):
+    def cached_aabb(self) -> Optional["OBB"]:
         return self._aabb
 
     @property
-    def cached_obb(self):
+    def cached_obb(self) -> Optional["OBB"]:
         return self._obb
 
     @property
-    def cached_collision_mesh(self):
+    def cached_collision_mesh(self) -> Optional["Mesh"]:
         return self._collision_mesh
 
     @property
-    def cached_point(self):
+    def cached_point(self) -> Optional["Point"]:
         return self._point
 
     @property
-    def features_count(self):
+    def features_count(self) -> int:
         return len(self._features)
 
     ###########################################################################################
@@ -139,7 +154,7 @@ class Element:
         result._axis = None
         return result
 
-    def duplicate(self):
+    def duplicate(self) -> "Element":
         result = copy.deepcopy(self)
         result.guid = str(uuid.uuid4())
         return result
@@ -164,28 +179,28 @@ class Element:
     # Mutators
     ###########################################################################################
 
-    def add_feature(self, feature):
+    def add_feature(self, feature: Callable) -> None:
         self._features.append(feature)
         self._is_dirty = True
 
-    def place(self, xform):
+    def place(self, xform: Xform) -> None:
         """Bake a placement into this element's own geometry, invalidating the cached boxes.
         The Session owns the placement, so it hands it in here rather than the Element storing it.
         """
         self._geometry = self.session_geometry(xform)
         self._is_dirty = True
 
-    def set_geometry(self, geometry):
+    def set_geometry(self, geometry: Optional[Union["Mesh", "BRep"]]) -> None:
         self._geometry = geometry
         self._is_dirty = True
 
-    def set_polylines(self, polylines):
+    def set_polylines(self, polylines: list["Polyline"]) -> None:
         self._polylines = polylines
 
-    def set_planes(self, planes):
+    def set_planes(self, planes: list["Plane"]) -> None:
         self._planes = planes
 
-    def reset(self):
+    def reset(self) -> None:
         self._is_dirty = True
         self._aabb = None
         self._obb = None
@@ -200,7 +215,7 @@ class Element:
     # Computation
     ###########################################################################################
 
-    def compute_aabb(self):
+    def compute_aabb(self) -> "OBB":
         from .obb import OBB
         from .point import Point
         geo = self.session_geometry(Xform.identity())
@@ -208,7 +223,7 @@ class Element:
             return OBB.from_point(Point(0, 0, 0), 0.0)
         return self._obb_from_geometry(geo, aabb=True)
 
-    def compute_obb(self):
+    def compute_obb(self) -> "OBB":
         from .obb import OBB
         from .point import Point
         geo = self.session_geometry(Xform.identity())
@@ -216,7 +231,7 @@ class Element:
             return OBB.from_point(Point(0, 0, 0), 0.0)
         return self._obb_from_geometry(geo, aabb=False)
 
-    def compute_collision_mesh(self):
+    def compute_collision_mesh(self) -> "Mesh":
         from .mesh import Mesh
         geo = self.session_geometry(Xform.identity())
         if geo is None:
@@ -225,7 +240,7 @@ class Element:
             return geo
         return Mesh()
 
-    def compute_point(self):
+    def compute_point(self) -> "Point":
         from .point import Point
         from .mesh import Mesh
         from .brep import BRep
@@ -252,19 +267,19 @@ class Element:
             return Point(sx / n, sy / n, sz / n)
         return Point(0, 0, 0)
 
-    def compute_polylines(self):
+    def compute_polylines(self) -> list["Polyline"]:
         return []
 
-    def compute_planes(self):
+    def compute_planes(self) -> list["Plane"]:
         return []
 
-    def compute_edge_vectors(self):
+    def compute_edge_vectors(self) -> list["Vector"]:
         return []
 
-    def compute_axis(self):
+    def compute_axis(self) -> Optional["Line"]:
         return None
 
-    def apply_features(self, geometry):
+    def apply_features(self, geometry: Union["Mesh", "BRep"]) -> Union["Mesh", "BRep"]:
         for feature in self._features:
             geometry = feature(geometry)
         return geometry
@@ -318,22 +333,22 @@ class Element:
         elem.name = name if name is not None else data.get("name", elem.name)
         return elem
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s):
+    def file_json_loads(cls, s: str) -> "Element":
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Element":
         import json
         with open(filepath, 'r') as f:
             return cls.__jsonload__(json.load(f))
@@ -342,7 +357,7 @@ class Element:
     # Serialization - Protobuf
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import element_pb2
         proto = element_pb2.Element()
         proto.guid = self.guid
@@ -355,7 +370,7 @@ class Element:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Element":
         from .proto import element_pb2
         proto = element_pb2.Element()
         proto.ParseFromString(data)
@@ -398,11 +413,11 @@ class Element:
             return None
         return klass.pb_loads(geo_data)
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Element":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())

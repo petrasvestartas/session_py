@@ -1,7 +1,14 @@
+from typing import Optional
+from typing import Union
+from typing import TYPE_CHECKING
 import uuid
 from .color import Color
 from .point import Point
 from .vector import Vector
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .xform import Xform
 
 
 class Line:
@@ -32,9 +39,11 @@ class Line:
         Color of the line.
     width : float
         Width of the line for display.
+    dash : list of float
+        Dash pattern: alternating on/off lengths in mm, repeating. Empty means solid.
     """
 
-    def __init__(self, x0=0.0, y0=0.0, z0=0.0, x1=0.0, y1=0.0, z1=1.0):
+    def __init__(self, x0: float = 0.0, y0: float = 0.0, z0: float = 0.0, x1: float = 0.0, y1: float = 0.0, z1: float = 1.0):
         self._guid = None
         self.name = "my_line"
         self._x0 = x0
@@ -44,6 +53,7 @@ class Line:
         self._y1 = y1
         self._z1 = z1
         self.width = 1.0
+        self.dash = []
         self._linecolor = None
 
     @property
@@ -53,24 +63,24 @@ class Line:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
-    def refresh_guid(self):
+    def refresh_guid(self) -> None:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
     @property
-    def linecolor(self):
+    def linecolor(self) -> "Color":
         if self._linecolor is None:
             self._linecolor = Color.black()
         return self._linecolor
 
     @linecolor.setter
-    def linecolor(self, value):
+    def linecolor(self, value: "Color") -> None:
         self._linecolor = value
 
-    def duplicate(self):
+    def duplicate(self) -> "Line":
         """Create a deep copy of this line with a new GUID.
 
         Returns
@@ -86,7 +96,7 @@ class Line:
         return result
 
     @classmethod
-    def fit_points(cls, points, length=None):
+    def fit_points(cls, points: list[Point], length: Optional[float] = None) -> "Line":
         """Fit a line to a set of points using least squares (PCA).
 
         Uses Principal Component Analysis to find the best-fit line
@@ -94,7 +104,7 @@ class Line:
 
         Parameters
         ----------
-        points : list of Point
+        points : list[Point]
             List of points to fit (minimum 2 points required).
         length : float, optional
             Length of the resulting line. If None, uses the extent
@@ -173,7 +183,7 @@ class Line:
         return cls(x0, y0, z0, x1, y1, z1)
 
     @classmethod
-    def from_points(cls, p1, p2):
+    def from_points(cls, p1: Point, p2: Point) -> "Line":
         """Create a line from two points.
 
         Parameters
@@ -191,7 +201,7 @@ class Line:
         return cls(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2])
 
     @classmethod
-    def from_point_and_vector(cls, point, vector):
+    def from_point_and_vector(cls, point: Point, vector: Vector) -> "Line":
         """Create a line from a point and a vector.
 
         Parameters
@@ -212,7 +222,7 @@ class Line:
         )
 
     @classmethod
-    def from_point_direction_length(cls, point, direction, length):
+    def from_point_direction_length(cls, point: Point, direction: Vector, length: float) -> "Line":
         """Create a line from a point, direction, and length.
 
         Parameters
@@ -236,7 +246,7 @@ class Line:
         )
 
     @classmethod
-    def with_name(cls, name, x0, y0, z0, x1, y1, z1):
+    def with_name(cls, name: str, x0: float, y0: float, z0: float, x1: float, y1: float, z1: float) -> "Line":
         """Create a line with a specific name.
 
         Parameters
@@ -257,7 +267,7 @@ class Line:
         line.name = name
         return line
 
-    def length(self):
+    def length(self) -> float:
         """Calculate the length of the line.
 
         Returns
@@ -270,7 +280,7 @@ class Line:
         dz = self._z1 - self._z0
         return (dx * dx + dy * dy + dz * dz) ** 0.5
 
-    def squared_length(self):
+    def squared_length(self) -> float:
         """Calculate the squared length of the line.
 
         Returns
@@ -283,7 +293,7 @@ class Line:
         dz = self._z1 - self._z0
         return dx * dx + dy * dy + dz * dz
 
-    def to_vector(self):
+    def to_vector(self) -> Vector:
         """Convert line to vector from start to end.
 
         Returns
@@ -293,7 +303,7 @@ class Line:
         """
         return Vector(self._x1 - self._x0, self._y1 - self._y0, self._z1 - self._z0)
 
-    def to_direction(self):
+    def to_direction(self) -> Vector:
         """Convert line to unit direction vector.
 
         Returns
@@ -303,7 +313,7 @@ class Line:
         """
         return self.to_vector().normalized()
 
-    def point_at(self, t):
+    def point_at(self, t: float) -> Point:
         """Get point at parameter t along the line.
 
         Parameters
@@ -323,7 +333,7 @@ class Line:
             s * self._z0 + t * self._z1,
         )
 
-    def subdivide(self, n):
+    def subdivide(self, n: int) -> list[Point]:
         """Subdivide line into n points.
 
         Parameters
@@ -333,7 +343,7 @@ class Line:
 
         Returns
         -------
-        list of Point
+        list[Point]
             List of n points along the line, including start and end.
         """
         if n < 2:
@@ -344,7 +354,7 @@ class Line:
             points.append(self.point_at(t))
         return points
 
-    def subdivide_by_distance(self, distance):
+    def subdivide_by_distance(self, distance: float) -> list[Point]:
         """Subdivide line by approximate distance between points.
 
         Parameters
@@ -354,7 +364,7 @@ class Line:
 
         Returns
         -------
-        list of Point
+        list[Point]
             List of points along the line, including start and end.
         """
         if distance <= 0:
@@ -365,7 +375,7 @@ class Line:
         n = max(2, int(length / distance + 0.5) + 1)
         return self.subdivide(n)
 
-    def start(self):
+    def start(self) -> Point:
         """Get start point.
 
         Returns
@@ -375,7 +385,7 @@ class Line:
         """
         return Point(self._x0, self._y0, self._z0)
 
-    def end(self):
+    def end(self) -> Point:
         """Get end point.
 
         Returns
@@ -385,7 +395,7 @@ class Line:
         """
         return Point(self._x1, self._y1, self._z1)
 
-    def center(self):
+    def center(self) -> Point:
         """Get center point (average of start and end).
 
         Returns
@@ -399,7 +409,7 @@ class Line:
             (self._z0 + self._z1) * 0.5,
         )
 
-    def closest_point(self, point, limited=True):
+    def closest_point(self, point: Point, limited: bool = True) -> tuple:
         """Find the closest point on the line to a given point.
 
         Parameters
@@ -426,7 +436,7 @@ class Line:
         return (t, self.point_at(t))
 
     @staticmethod
-    def get_middle_line(line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point):
+    def get_middle_line(line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point) -> tuple:
         """Calculate middle line between two line segments.
 
         Returns
@@ -562,7 +572,7 @@ class Line:
         """Negate line (flip direction)."""
         return Line(self._x1, self._y1, self._z1, self._x0, self._y0, self._z0)
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         """Apply a transformation to the line coordinates, in place."""
         start = Point(self._x0, self._y0, self._z0)
         end = Point(self._x1, self._y1, self._z1)
@@ -577,7 +587,7 @@ class Line:
         self._y1 = end[1]
         self._z1 = end[2]
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "Line":
         """Return a transformed copy of the line, leaving the original unchanged.
 
         Returns
@@ -591,7 +601,7 @@ class Line:
         result.transform(xform)
         return result
 
-    def overlap(self, other):
+    def overlap(self, other: "Line") -> Optional["Line"]:
         """Return the overlapping segment between this line and ``other``.
 
         Returns
@@ -605,7 +615,7 @@ class Line:
             return None
         return Line.from_points(result[0], result[1])
 
-    def overlap_average(self, other):
+    def overlap_average(self, other: "Line") -> Optional["Line"]:
         """Return the average of the two reciprocal overlaps between this line and ``other``.
 
         Returns
@@ -622,7 +632,7 @@ class Line:
             return None
         return out
 
-    def extend(self, ext_start, ext_end):
+    def extend(self, ext_start: float, ext_end: float) -> None:
         """Extend this line in place by ``ext_start`` at the start end and ``ext_end`` at the end.
 
         Mutates the line in place. Mirrors C++ ``Line::extend``.
@@ -656,6 +666,7 @@ class Line:
         """
         # Alphabetical order to match Rust's serde_json
         return {
+            "dash": list(self.dash),
             "guid": self.guid,
             "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
@@ -669,7 +680,7 @@ class Line:
             "z1": self._z1,
         }
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file.
 
         Parameters
@@ -683,7 +694,7 @@ class Line:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Line":
         """Read JSON from file.
 
         Parameters
@@ -702,13 +713,13 @@ class Line:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Line":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -742,6 +753,8 @@ class Line:
 
         if "width" in data:
             line.width = data["width"]
+        if "dash" in data:
+            line.dash = list(data["dash"])
         if "linecolor" in data:
             line.linecolor = file_decode_node(data["linecolor"])
 
@@ -751,7 +764,7 @@ class Line:
     # Protobuf Serialization
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format.
 
         Returns
@@ -783,8 +796,9 @@ class Line:
         proto.end.name = ""
         proto.end.width = 1.0
 
-        # Set width and linecolor
+        # Set width, dash and linecolor
         proto.width = self.width
+        proto.dash.extend(self.dash)
         proto.linecolor.guid = self.linecolor.guid
         proto.linecolor.name = self.linecolor.name
         proto.linecolor.r = self.linecolor.r
@@ -795,7 +809,7 @@ class Line:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Line":
         """Create Line from protobuf binary data.
 
         Parameters
@@ -824,6 +838,7 @@ class Line:
         # Load width and linecolor
         if proto.width > 0.0:
             line.width = proto.width
+        line.dash = list(proto.dash)
         if proto.HasField('linecolor'):
             line.linecolor = Color(
                 proto.linecolor.r,
@@ -835,7 +850,7 @@ class Line:
 
         return line
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -849,7 +864,7 @@ class Line:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Line":
         """Read protobuf from file.
 
         Parameters

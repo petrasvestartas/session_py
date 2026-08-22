@@ -1,7 +1,17 @@
-# AABB — axis-aligned bounding box primitive (center + half-size).
-# Use for: containment tests, intersection tests, tight bounds of geometry.
 from typing import List
 from typing import NamedTuple
+from typing import TYPE_CHECKING
+# AABB — axis-aligned bounding box primitive (center + half-size).
+# Use for: containment tests, intersection tests, tight bounds of geometry.
+
+if TYPE_CHECKING:
+    from .mesh import Mesh
+    from .nurbscurve import NurbsCurve
+    from .nurbssurface import NurbsSurface
+    from .pointcloud import PointCloud
+    from .polyline import Polyline
+    from .line import Line
+    from .point import Point
 
 
 class AABB(NamedTuple):
@@ -15,7 +25,7 @@ class AABB(NamedTuple):
     hz: float
 
     @classmethod
-    def from_point(cls, point, inflate: float = 0.0) -> "AABB":
+    def from_point(cls, point: "Point", inflate: float = 0.0) -> "AABB":
         return cls(point[0], point[1], point[2], inflate, inflate, inflate)
 
     @classmethod
@@ -38,7 +48,7 @@ class AABB(NamedTuple):
         )
 
     @classmethod
-    def from_coords_stride3(cls, coords, inflate: float = 0.0) -> "AABB":
+    def from_coords_stride3(cls, coords: list[float], inflate: float = 0.0) -> "AABB":
         # Build an AABB directly from a stride-3 coord buffer (e.g. Polyline.coords)
         # without constructing an intermediate list of Points. Used on hot paths
         # like Session.add_polyline where the caller already has raw coords.
@@ -68,24 +78,24 @@ class AABB(NamedTuple):
         )
 
     @classmethod
-    def from_line(cls, line, inflate: float = 0.0) -> "AABB":
+    def from_line(cls, line: "Line", inflate: float = 0.0) -> "AABB":
         return cls.from_points([line.start(), line.end()], inflate)
 
     @classmethod
-    def from_polyline(cls, polyline, inflate: float = 0.0) -> "AABB":
+    def from_polyline(cls, polyline: "Polyline", inflate: float = 0.0) -> "AABB":
         return cls.from_points(polyline.points, inflate)
 
     @classmethod
-    def from_mesh(cls, mesh, inflate: float = 0.0) -> "AABB":
+    def from_mesh(cls, mesh: "Mesh", inflate: float = 0.0) -> "AABB":
         vertices, _ = mesh.to_vertices_and_faces()
         return cls.from_points(vertices, inflate)
 
     @classmethod
-    def from_pointcloud(cls, pointcloud, inflate: float = 0.0) -> "AABB":
+    def from_pointcloud(cls, pointcloud: "PointCloud", inflate: float = 0.0) -> "AABB":
         return cls.from_points(pointcloud.get_points(), inflate)
 
     @classmethod
-    def from_nurbscurve(cls, curve, inflate: float = 0.0, tight: bool = False) -> "AABB":
+    def from_nurbscurve(cls, curve: "NurbsCurve", inflate: float = 0.0, tight: bool = False) -> "AABB":
         from .vector import Vector
         if not curve.is_valid() or curve.cv_count() == 0:
             return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
@@ -145,7 +155,7 @@ class AABB(NamedTuple):
         return cls.from_points(extrema_points, inflate)
 
     @classmethod
-    def from_nurbssurface(cls, surface, inflate: float = 0.0) -> "AABB":
+    def from_nurbssurface(cls, surface: "NurbsSurface", inflate: float = 0.0) -> "AABB":
         if not surface.is_valid() or surface.cv_count(0) == 0 or surface.cv_count(1) == 0:
             return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         points = []
@@ -154,15 +164,15 @@ class AABB(NamedTuple):
                 points.append(surface.get_cv(i, j))
         return cls.from_points(points, inflate)
 
-    def min_point(self):
+    def min_point(self) -> "Point":
         from .point import Point
         return Point(self.cx - self.hx, self.cy - self.hy, self.cz - self.hz)
 
-    def max_point(self):
+    def max_point(self) -> "Point":
         from .point import Point
         return Point(self.cx + self.hx, self.cy + self.hy, self.cz + self.hz)
 
-    def corners(self):
+    def corners(self) -> list["Point"]:
         from .point import Point
         cx, cy, cz, hx, hy, hz = self
         return [
@@ -206,7 +216,7 @@ class AABB(NamedTuple):
             (max_z - min_z) * 0.5,
         )
 
-    def center(self):
+    def center(self) -> "Point":
         from .point import Point
         return Point(self.cx, self.cy, self.cz)
 
@@ -223,19 +233,19 @@ class AABB(NamedTuple):
     def volume(self) -> float:
         return 8.0 * self.hx * self.hy * self.hz
 
-    def closest_point(self, pt):
+    def closest_point(self, pt: "Point") -> "Point":
         from .point import Point
         x = max(self.cx - self.hx, min(self.cx + self.hx, pt[0]))
         y = max(self.cy - self.hy, min(self.cy + self.hy, pt[1]))
         z = max(self.cz - self.hz, min(self.cz + self.hz, pt[2]))
         return Point(x, y, z)
 
-    def contains(self, pt) -> bool:
+    def contains(self, pt: "Point") -> bool:
         return (self.cx - self.hx <= pt[0] <= self.cx + self.hx and
                 self.cy - self.hy <= pt[1] <= self.cy + self.hy and
                 self.cz - self.hz <= pt[2] <= self.cz + self.hz)
 
-    def corner(self, x_max: bool, y_max: bool, z_max: bool):
+    def corner(self, x_max: bool, y_max: bool, z_max: bool) -> "Point":
         from .point import Point
         return Point(
             self.cx + (self.hx if x_max else -self.hx),
@@ -243,10 +253,10 @@ class AABB(NamedTuple):
             self.cz + (self.hz if z_max else -self.hz),
         )
 
-    def get_corners(self):
+    def get_corners(self) -> list["Point"]:
         return self.corners()
 
-    def get_edges(self):
+    def get_edges(self) -> list["Line"]:
         from .line import Line
         c = self.corners()
         return [
@@ -264,7 +274,7 @@ class AABB(NamedTuple):
             Line.from_points(c[3], c[7]),
         ]
 
-    def point_at(self, x: float, y: float, z: float):
+    def point_at(self, x: float, y: float, z: float) -> "Point":
         from .point import Point
         return Point(self.cx + x, self.cy + y, self.cz + z)
 

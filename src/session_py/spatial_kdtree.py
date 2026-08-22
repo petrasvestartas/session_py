@@ -4,8 +4,10 @@
 # Prefer over SpatialAABBTree/SpatialBVH when data is a point cloud, not triangle faces.
 # Prefer over SpatialRTree   when queries are k-NN, not region overlap.
 # Note: static structure; rebuild required after point insertion.
+from typing import List
+from typing import Optional
+from typing import Tuple
 import math
-from typing import List, Optional, Tuple
 
 from .point import Point
 

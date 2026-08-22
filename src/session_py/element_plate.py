@@ -1,6 +1,15 @@
+from typing import Optional
 import uuid
 import copy
 from .element import Element
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .line import Line
+    from .mesh import Mesh
+    from .plane import Plane
+    from .polyline import Polyline
+    from .vector import Vector
 
 
 class ElementPlate(Element):
@@ -14,7 +23,7 @@ class ElementPlate(Element):
                 result.pop()
         return result
 
-    def __init__(self, polygon=None, thickness=0.1, name="my_plate", polygon_top=None):
+    def __init__(self, polygon: Optional["Polyline"] = None, thickness: float = 0.1, name: str = "my_plate", polygon_top: Optional["Polyline"] = None):
         super().__init__(geometry=None, name=name)
         from .point import Point
         if polygon is None:
@@ -52,56 +61,56 @@ class ElementPlate(Element):
         self._geometry = self.compute_element_geometry()
 
     @property
-    def polygon(self):
+    def polygon(self) -> "Polyline":
         return self._polygon
 
     @polygon.setter
-    def polygon(self, value):
+    def polygon(self, value: "Polyline") -> None:
         from .point import Point
         self._polygon = [Point(p[0], p[1], p[2]) for p in value]
         self._geometry = self.compute_element_geometry()
         self.reset()
 
     @property
-    def thickness(self):
+    def thickness(self) -> float:
         return self._thickness
 
     @thickness.setter
-    def thickness(self, value):
+    def thickness(self, value: float) -> None:
         self._thickness = value
         self._geometry = self.compute_element_geometry()
         self.reset()
 
     @property
-    def joint_types(self):
+    def joint_types(self) -> list:
         return self._joint_types
 
     @joint_types.setter
-    def joint_types(self, value):
+    def joint_types(self, value: list) -> None:
         self._joint_types = list(value)
 
     @property
-    def j_mf(self):
+    def j_mf(self) -> list:
         return self._j_mf
 
     @j_mf.setter
-    def j_mf(self, value):
+    def j_mf(self, value: list) -> None:
         self._j_mf = [list(face) for face in value]
 
     @property
-    def key(self):
+    def key(self) -> str:
         return self._key
 
     @key.setter
-    def key(self, value):
+    def key(self, value: str) -> None:
         self._key = value
 
     @property
-    def component_plane(self):
+    def component_plane(self) -> Optional["Plane"]:
         return self._component_plane
 
     @component_plane.setter
-    def component_plane(self, value):
+    def component_plane(self, value: Optional["Plane"]) -> None:
         self._component_plane = value
 
     @staticmethod
@@ -121,10 +130,10 @@ class ElementPlate(Element):
         return Vector(nx / mag, ny / mag, nz / mag)
 
     @property
-    def polygon_top(self):
+    def polygon_top(self) -> "Polyline":
         return self._polygon_top
 
-    def compute_element_geometry(self):
+    def compute_element_geometry(self) -> "Mesh":
         from .mesh import Mesh
         from .point import Point
         n = min(len(self._polygon), len(self._polygon_top))
@@ -142,7 +151,7 @@ class ElementPlate(Element):
             faces.append([a, b, c, d])
         return Mesh.from_vertices_and_faces(vertices, faces)
 
-    def compute_polylines(self):
+    def compute_polylines(self) -> list["Polyline"]:
         from .polyline import Polyline
         from .point import Point
         n = min(len(self._polygon), len(self._polygon_top))
@@ -158,7 +167,7 @@ class ElementPlate(Element):
             result.append(side)
         return result
 
-    def compute_planes(self):
+    def compute_planes(self) -> list["Plane"]:
         from .plane import Plane
         from .point import Point
         from .vector import Vector
@@ -190,7 +199,7 @@ class ElementPlate(Element):
             result.append(Plane.from_point_normal(Point(cx, cy, cz), Vector(snx, sny, snz)))
         return result
 
-    def compute_edge_vectors(self):
+    def compute_edge_vectors(self) -> list["Vector"]:
         from .vector import Vector
         n = len(self._polygon)
         result = []
@@ -206,7 +215,7 @@ class ElementPlate(Element):
                 result.append(Vector(0, 0, 0))
         return result
 
-    def compute_axis(self):
+    def compute_axis(self) -> "Line":
         from .line import Line
         from .point import Point
         normal = self._polygon_normal(self._polygon)
@@ -319,7 +328,7 @@ class ElementPlate(Element):
     # Serialization - Protobuf
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import element_pb2
         proto = element_pb2.Element()
         proto.guid = self.guid
@@ -354,7 +363,7 @@ class ElementPlate(Element):
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "ElementPlate":
         from .proto import element_pb2
         from .point import Point
         import json

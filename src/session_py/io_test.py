@@ -1,6 +1,7 @@
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
+from .tolerance import TOLERANCE
 import os
 from pathlib import Path
 
@@ -11,7 +12,7 @@ def test_read_bunny():
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.xyz"
     if not bunny_path.exists():
         return
-    from session_py.io import read_xyz
+    from session_py import read_xyz
     cloud = read_xyz(str(bunny_path))
 
     MINI_CHECK(cloud.point_count() == 397)
@@ -24,8 +25,10 @@ def test_read_bunny():
 @MINI_TEST("Io", "Write Read Roundtrip")
 def test_write_read_roundtrip():
     # build a small cloud (4 points), write to XYZ, read back, compare counts
-    from session_py import Point, PointCloud
-    from session_py.io import read_xyz, write_xyz
+    from session_py import Point
+    from session_py import PointCloud
+    from session_py import read_xyz
+    from session_py import write_xyz
     original = PointCloud()
     original.add_point(Point(0.0, 0.0, 0.0))
     original.add_point(Point(1.0, 0.0, 0.0))
@@ -43,9 +46,10 @@ def test_write_read_roundtrip():
 
 @MINI_TEST("Io", "String Roundtrip")
 def test_string_roundtrip():
-    from session_py import Point, PointCloud
-    from session_py.io import read_xyz_from_str, write_xyz_to_string
-    from session_py.tolerance import TOLERANCE
+    from session_py import Point
+    from session_py import PointCloud
+    from session_py import read_xyz_from_str
+    from session_py import write_xyz_to_string
     original = PointCloud()
     original.add_point(Point(0.0, 0.0, 0.0))
     original.add_point(Point(1.0, 0.0, 0.0))

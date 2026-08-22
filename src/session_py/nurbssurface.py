@@ -1,7 +1,19 @@
+from typing import List
+from typing import Tuple
+from typing import Optional
+from typing import TYPE_CHECKING
+from typing import Union
 import numpy as np
 import math
-from typing import List, Tuple, Optional, Union
 import uuid
+
+if TYPE_CHECKING:
+    from .proto import nurbssurface_pb2
+    from .brep import BRep
+    from .line import Line
+    from pathlib import Path
+    from .mesh import Mesh
+    from .nurbssurface_trimmed import NurbsSurfaceTrimmed
 
 from .point import Point
 from .vector import Vector
@@ -111,10 +123,10 @@ class NurbsSurface:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
-    def refresh_guid(self):
+    def refresh_guid(self) -> None:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
@@ -122,7 +134,7 @@ class NurbsSurface:
     # INITIALIZATION & CREATION
     ###########################################################################
 
-    def initialize(self):
+    def initialize(self) -> None:
         """Initialize all fields to zero/empty."""
         self._guid = None
         self.name = "my_nurbssurface"
@@ -218,8 +230,8 @@ class NurbsSurface:
         return surf
 
     @staticmethod
-    def create_from_parameters(points, weights, knots_u, knots_v, mults_u, mults_v,
-                               degree_u, degree_v, periodic_u=False, periodic_v=False):
+    def create_from_parameters(points: List[Point], weights: List[float], knots_u: List[float], knots_v: List[float], mults_u: List[int], mults_v: List[int],
+                               degree_u: int, degree_v: int, periodic_u: bool = False, periodic_v: bool = False) -> "NurbsSurface":
         """Create a NURBS surface from explicit parameters (OCCT / compas_occt convention:
         distinct knots + per-knot multiplicities, per direction). Mirrors
         OCCNurbsSurface.from_parameters and underlies from_points / from_meshgrid.
@@ -335,7 +347,7 @@ class NurbsSurface:
         
         return True
     
-    def destroy(self):
+    def destroy(self) -> None:
         """Deallocate all memory and reset to empty state."""
         self.m_nurbsknot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
         self.m_cv = np.array([], dtype=np.float64)
@@ -608,7 +620,7 @@ class NurbsSurface:
         # Use nurbsknot module function
         return nurbsknot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], end)
 
-    def is_duplicate(self, other, ignore_parameterization: bool = False, tolerance: float = None) -> bool:
+    def is_duplicate(self, other: "NurbsSurface", ignore_parameterization: bool = False, tolerance: Optional[float] = None) -> bool:
         if tolerance is None:
             tolerance = Tolerance.ZERO_TOLERANCE
         if not self.is_valid() or not other.is_valid():
@@ -1408,7 +1420,7 @@ class NurbsSurface:
     # EVALUATION
     ###########################################################################
     
-    def closest_parameters(self, test_point: Point):
+    def closest_parameters(self, test_point: Point) -> Tuple[float, float]:
         """Parameters (u, v) of the closest point on the surface to test_point.
 
         Matches OCCT GeomAPI_ProjectPointOnSurface.
@@ -1619,7 +1631,7 @@ class NurbsSurface:
         sv = d[1]  # dS/dv
         return Plane(origin, Vector(su[0], su[1], su[2]), Vector(sv[0], sv[1], sv[2]))
 
-    def intersections_with_line(self, line) -> List[Point]:
+    def intersections_with_line(self, line: "Line") -> List[Point]:
         """Intersection points of an (infinite) line with the surface.
 
         Mirrors OCCNurbsSurface.intersections_with_line (OCCT GeomAPI_IntCS). Solves
@@ -2114,7 +2126,7 @@ class NurbsSurface:
 
         return OBB(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
     
-    def divide_by_count(self, nu: int, nv: int):
+    def divide_by_count(self, nu: int, nv: int) -> Tuple[List[List[Point]], List[List[Tuple[float, float]]]]:
         u0, u1 = self.domain(0)
         v0, v1 = self.domain(1)
 
@@ -2133,7 +2145,7 @@ class NurbsSurface:
 
         return grid, params
 
-    def divide_by_count_points(self, nu: int, nv: int):
+    def divide_by_count_points(self, nu: int, nv: int) -> Tuple[List[List[Point]], List[List["Vector"]], List[List[Tuple[float, float]]]]:
         if not self.is_valid():
             return [], [], []
 
@@ -2159,7 +2171,7 @@ class NurbsSurface:
 
         return grid, grid_vector, params
 
-    def divide_by_count_planes(self, nu: int, nv: int):
+    def divide_by_count_planes(self, nu: int, nv: int) -> Tuple[List[List["Plane"]], List[List[Tuple[float, float]]]]:
         if not self.is_valid():
             return [], []
 
@@ -2276,7 +2288,7 @@ class NurbsSurface:
                 subs[i] = max(subs[i], 2)
         return subs
 
-    def mesh_grid(self):
+    def mesh_grid(self) -> "Mesh":
         if self.m_mesh is not None:
             return self.m_mesh
         if not self.is_valid():
@@ -2286,7 +2298,7 @@ class NurbsSurface:
         self.m_mesh = RemeshNurbsSurfaceGrid.from_u_v(self, 0, 0)
         return self.m_mesh
 
-    def mesh(self):
+    def mesh(self) -> "Mesh":
         if self.m_mesh is not None:
             return self.m_mesh
         import math
@@ -2329,7 +2341,7 @@ class NurbsSurface:
         return self.mesh_grid()
 
     def mesh_adaptive(self, max_angle: float = 20.0, max_edge_length: float = 0.0,
-                      min_edge_length: float = 0.0, max_chord_height: float = 0.0):
+                      min_edge_length: float = 0.0, max_chord_height: float = 0.0) -> "Mesh":
         if self.m_mesh is not None:
             return self.m_mesh
         if not self.is_valid():
@@ -2390,12 +2402,12 @@ class NurbsSurface:
         return result
 
     @staticmethod
-    def create_ruled(curveA, curveB):
+    def create_ruled(curveA: "NurbsCurve", curveB: "NurbsCurve") -> "NurbsSurface":
         from .primitives import Primitives
         return Primitives.create_ruled(curveA, curveB)
 
     @staticmethod
-    def create_loft(input_curves, degree_v=3):
+    def create_loft(input_curves: List["NurbsCurve"], degree_v: int = 3) -> "NurbsSurface":
         from .primitives import Primitives
         return Primitives.create_loft(input_curves, degree_v)
 
@@ -2415,7 +2427,7 @@ class NurbsSurface:
         Primitives._make_curves_compatible(curves)
 
     @staticmethod
-    def create_planar(curves):
+    def create_planar(curves: Union["NurbsCurve", List["NurbsCurve"]]) -> "NurbsSurface":
         from .primitives import Primitives
         if isinstance(curves, list):
             if len(curves) == 1:
@@ -2655,7 +2667,7 @@ class NurbsSurface:
     # GEOMETRIC OPERATIONS (ADDITIONAL)
     ###########################################################################
 
-    def split_by_plane(self, plane, tolerance=None):
+    def split_by_plane(self, plane: "Plane", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by a plane into trimmed faces.
 
         Computes the surface/plane intersection with UV pcurves and splits
@@ -2663,7 +2675,7 @@ class NurbsSurface:
 
         Returns
         -------
-        list of NurbsSurfaceTrimmed
+        list[NurbsSurfaceTrimmed]
         """
         from .intersection import surface_plane_uv
         from .nurbssurface_trimmed import NurbsSurfaceTrimmed
@@ -2673,7 +2685,7 @@ class NurbsSurface:
             pcurves.append(pair[1])
         return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
 
-    def split_by_surface(self, cutter, tolerance=None):
+    def split_by_surface(self, cutter: "NurbsSurface", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by another surface.
 
         Computes the surface/surface intersection and splits the UV domain
@@ -2681,7 +2693,7 @@ class NurbsSurface:
 
         Returns
         -------
-        list of NurbsSurfaceTrimmed
+        list[NurbsSurfaceTrimmed]
         """
         from .intersection import surface_surface
         from .nurbssurface_trimmed import NurbsSurfaceTrimmed
@@ -2691,7 +2703,7 @@ class NurbsSurface:
             pcurves.append(triple[1])
         return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
 
-    def split_by_curves(self, curves, tolerance=None):
+    def split_by_curves(self, curves: List["NurbsCurve"], tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by 3D curves lying on (or near) it.
 
         Each curve is pulled back to UV via closest-point projection; curves
@@ -2699,7 +2711,7 @@ class NurbsSurface:
 
         Returns
         -------
-        list of NurbsSurfaceTrimmed
+        list[NurbsSurfaceTrimmed]
         """
         from .closest import Closest
         from .nurbssurface_trimmed import NurbsSurfaceTrimmed
@@ -2709,7 +2721,7 @@ class NurbsSurface:
                 pcurves.append(pcurve)
         return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
 
-    def split_by_line(self, line, tolerance=None):
+    def split_by_line(self, line: "Line", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by a line pulled onto it (Rhino "pull then split").
 
         The line is converted to a degree-1 curve and projected onto the
@@ -2719,14 +2731,14 @@ class NurbsSurface:
 
         Returns
         -------
-        list of NurbsSurfaceTrimmed
+        list[NurbsSurfaceTrimmed]
         """
         from .nurbscurve import NurbsCurve
         pts = [line.start(), line.end()]
         crv = NurbsCurve.create(False, 1, pts)
         return self.split_by_curves([crv], tolerance)
 
-    def split_by_brep(self, brep, tolerance=None):
+    def split_by_brep(self, brep: "BRep", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by every face of a BRep.
 
         Each cutter face is intersected with this surface (planar faces via the
@@ -2735,7 +2747,7 @@ class NurbsSurface:
 
         Returns
         -------
-        list of NurbsSurfaceTrimmed
+        list[NurbsSurfaceTrimmed]
         """
         from .intersection import cut_curves_on_surface
         from .nurbssurface_trimmed import NurbsSurfaceTrimmed
@@ -2908,7 +2920,7 @@ class NurbsSurface:
 
         return srf
     
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file.
         
         Parameters
@@ -2921,7 +2933,7 @@ class NurbsSurface:
             json.dump(self.__jsondump__(), f, indent=2)
     
     @classmethod
-    def file_json_load(cls, filepath) -> 'NurbsSurface':
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> 'NurbsSurface':
         """Read JSON from file.
         
         Parameters
@@ -2939,13 +2951,13 @@ class NurbsSurface:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "NurbsSurface":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -2954,7 +2966,7 @@ class NurbsSurface:
     # PROTOBUF SERIALIZATION
     ###########################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format.
 
         Returns
@@ -3003,7 +3015,7 @@ class NurbsSurface:
 
         return proto.SerializeToString()
 
-    def pb_fill(self, proto):
+    def pb_fill(self, proto: "nurbssurface_pb2.NurbsSurface") -> None:
         """Fill an existing NurbsSurface proto message directly (avoids serialize/deserialize cycle)."""
         proto.guid = self.guid
         proto.name = self.name
@@ -3032,7 +3044,7 @@ class NurbsSurface:
             proto.cached_mesh.ParseFromString(self.m_mesh.pb_dumps())
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "NurbsSurface":
         """Create NurbsSurface from protobuf binary data.
 
         Parameters
@@ -3090,7 +3102,7 @@ class NurbsSurface:
 
         return surface
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -3103,7 +3115,7 @@ class NurbsSurface:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath) -> 'NurbsSurface':
+    def pb_load(cls, filepath: Union[str, "Path"]) -> 'NurbsSurface':
         """Read protobuf from file.
 
         Parameters

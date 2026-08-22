@@ -11,22 +11,33 @@ from .instance_ref import InstanceRef
 from .polyline import Polyline
 from .xform import Xform
 from .quaternion import Quaternion
-from .tree import Tree, TreeNode
-from .graph import Graph, Vertex, Edge
+from .tree import Tree
+from .tree import TreeNode
+from .graph import Graph
+from .graph import Vertex
+from .graph import Edge
 from .objects import Objects
 from .session import Session
-from .mesh import Mesh, NormalWeighting
+from .mesh import Mesh
+from .mesh import NormalWeighting
 from .aabb import AABB
 from .spatial_aabbtree import SpatialAABBTree
 from .obb import OBB
 from .pointcloud import PointCloud
-from .spatial_bvh import SpatialBVH, SpatialBVHNode
+from .spatial_bvh import SpatialBVH
+from .spatial_bvh import SpatialBVHNode
 from .spatial_rtree import SpatialRTree
-from .tolerance import Tolerance, TOLERANCE
-from .session_config import SessionConfig, SESSION_CONFIG
+from .tolerance import Tolerance
+from .tolerance import TOLERANCE
+from .session_config import SessionConfig
+from .session_config import SESSION_CONFIG
 from . import file_encoders
-from .file_obj import load_file_obj, save_file_obj
-from .io import read_xyz, write_xyz, read_xyz_from_str, write_xyz_to_string
+from .file_obj import load_file_obj
+from .file_obj import save_file_obj
+from .io import read_xyz
+from .io import write_xyz
+from .io import read_xyz_from_str
+from .io import write_xyz_to_string
 from . import intersection
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
@@ -39,7 +50,8 @@ from .element_beam import ElementBeam
 from .element_plate import ElementPlate
 from .closest import Closest
 from .remesh_cdt import RemeshCDT
-from .remesh_nurbssurface_grid import remesh_nurbssurface_grid, RemeshNurbsSurfaceGrid
+from .remesh_nurbssurface_grid import remesh_nurbssurface_grid
+from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
 from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
 from .matrix import Matrix
 from .convex_hull import ConvexHull

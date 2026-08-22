@@ -1,6 +1,15 @@
+from typing import List
+from typing import Optional
+from typing import Tuple
+from typing import TYPE_CHECKING
+from typing import Union
 import uuid
 import copy
-from typing import List, Optional, Tuple, Union
+
+if TYPE_CHECKING:
+    from .proto import polyline_pb2
+    from pathlib import Path
+    from .xform import Xform
 
 from .color import Color
 from .plane import Plane
@@ -25,6 +34,7 @@ class Polyline:
         self._guid = None
         self.name = "my_polyline"
         self.width = 1.0
+        self.dash = []
         self._linecolor = None
 
         # Flat coordinate array [x0, y0, z0, x1, y1, z1, ...]
@@ -43,15 +53,15 @@ class Polyline:
         return self._guid
 
     @guid.setter
-    def guid(self, value: str):
+    def guid(self, value: str) -> None:
         self._guid = value
 
-    def refresh_guid(self):
+    def refresh_guid(self) -> None:
         """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
         self._guid = None
 
     @property
-    def plane(self):
+    def plane(self) -> Optional["Plane"]:
         if self._plane is None:
             n = self.point_count()
             if n >= 3:
@@ -83,17 +93,17 @@ class Polyline:
         return self._plane
 
     @plane.setter
-    def plane(self, value):
+    def plane(self, value: Optional["Plane"]) -> None:
         self._plane = value
 
     @property
-    def linecolor(self):
+    def linecolor(self) -> Color:
         if self._linecolor is None:
             self._linecolor = Color.black()
         return self._linecolor
 
     @linecolor.setter
-    def linecolor(self, value):
+    def linecolor(self, value: Color) -> None:
         self._linecolor = value
 
     @classmethod
@@ -379,7 +389,7 @@ class Polyline:
         """Negate polyline (reverse point order)."""
         return self.reversed()
 
-    def transform(self, xform):
+    def transform(self, xform: "Xform") -> None:
         """Apply a transformation to the polyline, in place."""
         for i in range(self.point_count()):
             idx = i * 3
@@ -389,13 +399,13 @@ class Polyline:
             self.coords[idx + 1] = pt[1]
             self.coords[idx + 2] = pt[2]
 
-    def transformed(self, xform):
+    def transformed(self, xform: "Xform") -> "Polyline":
         """Return a transformed copy of the polyline."""
         result = copy.deepcopy(self)
         result.transform(xform)
         return result
 
-    def translate(self, v):
+    def translate(self, v: Vector) -> None:
         """Translate every point of this polyline by ``v`` (in place).
 
         Mirrors C++ ``Polyline::translate``.
@@ -410,7 +420,7 @@ class Polyline:
             self.coords[idx + 1] += v[1]
             self.coords[idx + 2] += v[2]
 
-    def extend_edge_equally(self, edge_idx, distance):
+    def extend_edge_equally(self, edge_idx: int, distance: float) -> None:
         """Slide both endpoints of edge ``edge_idx`` outward by ``distance``.
 
         Negative ``distance`` slides them inward. For closed polylines the
@@ -745,7 +755,7 @@ class Polyline:
 
         return Point(sum_x / n, sum_y / n, sum_z / n)
 
-    def cut_by_plane(self, plane: "Plane", flip=None) -> "Polyline":
+    def cut_by_plane(self, plane: "Plane", flip: Optional[bool] = None) -> "Polyline":
         """Cut polyline by plane, returning the portion on one side.
 
         By default (``flip=None``) the side containing the arc-length midpoint
@@ -826,7 +836,7 @@ class Polyline:
 
         return Polyline(deduped)
 
-    def point_in_polygon_2d(self, p) -> bool:
+    def point_in_polygon_2d(self, p: Point) -> bool:
         """Winding-number point-in-polygon test. p.x/y tested; polygon vertex z ignored."""
         px, py = p[0], p[1]
         coords = self.points
@@ -1292,6 +1302,7 @@ class Polyline:
         # Alphabetical order to match Rust's serde_json
         return {
             "coords": self.coords,
+            "dash": list(self.dash),
             "guid": self.guid,
             "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
@@ -1335,12 +1346,14 @@ class Polyline:
 
         if "width" in data:
             polyline.width = data["width"]
+        if "dash" in data:
+            polyline.dash = list(data["dash"])
         if "linecolor" in data:
             polyline.linecolor = file_decode_node(data["linecolor"])
 
         return polyline
 
-    def file_json_dump(self, filepath):
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write JSON to file.
 
         Parameters
@@ -1354,7 +1367,7 @@ class Polyline:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath):
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
         """Read JSON from file.
 
         Parameters
@@ -1373,13 +1386,13 @@ class Polyline:
             data = json.load(f)
         return cls.__jsonload__(data)
 
-    def file_json_dumps(self):
+    def file_json_dumps(self) -> str:
         """Convert to JSON string."""
         import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string):
+    def file_json_loads(cls, json_string: str) -> "Polyline":
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -1388,7 +1401,7 @@ class Polyline:
     # Protobuf Serialization
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         """Convert to protobuf binary format.
 
         Returns
@@ -1404,6 +1417,7 @@ class Polyline:
         proto.name = self.name
         proto.coords.extend(self.coords)
         proto.width = self.width
+        proto.dash.extend(self.dash)
 
         # Set linecolor
         proto.linecolor.name = self.linecolor.name
@@ -1414,12 +1428,13 @@ class Polyline:
 
         return proto.SerializeToString()
 
-    def pb_fill(self, proto):
+    def pb_fill(self, proto: "polyline_pb2.Polyline") -> None:
         """Fill an existing Polyline proto message directly (avoids serialize/deserialize cycle)."""
         proto.guid = self.guid
         proto.name = self.name
         proto.coords.extend(self.coords)
         proto.width = self.width
+        proto.dash.extend(self.dash)
         proto.linecolor.name = self.linecolor.name
         proto.linecolor.r = self.linecolor[0]
         proto.linecolor.g = self.linecolor[1]
@@ -1427,7 +1442,7 @@ class Polyline:
         proto.linecolor.a = self.linecolor[3]
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "Polyline":
         """Create Polyline from protobuf binary data.
 
         Parameters
@@ -1450,6 +1465,7 @@ class Polyline:
         polyline.guid = proto.guid
         polyline.name = proto.name
         polyline.width = proto.width
+        polyline.dash = list(proto.dash)
 
         # Load linecolor
         polyline.linecolor = Color(
@@ -1462,7 +1478,7 @@ class Polyline:
 
         return polyline
 
-    def pb_dump(self, filepath):
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -1476,7 +1492,7 @@ class Polyline:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath):
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
         """Read protobuf from file.
 
         Parameters
@@ -1565,7 +1581,7 @@ class Polyline:
             Polyline._simplify_rdp(points, max_idx, end, tolerance, keep)
 
     @staticmethod
-    def simplify_points(points, tolerance):
+    def simplify_points(points: List[Point], tolerance: float) -> List[Point]:
         n = len(points)
         if n < 3:
             return list(points)
@@ -1575,15 +1591,15 @@ class Polyline:
         Polyline._simplify_rdp(points, 0, n - 1, tolerance, keep)
         return [points[i] for i in range(n) if keep[i]]
 
-    def simplify(self, tolerance):
+    def simplify(self, tolerance: float) -> "Polyline":
         pts = Polyline.simplify_points(self.points, tolerance)
         return Polyline(pts)
-    def translated(self, v):
+    def translated(self, v: Vector) -> "Polyline":
         result = copy.deepcopy(self)
         result.translate(v)
         return result
 
-    def remove_consecutive_duplicates(self, tol=Tolerance.APPROXIMATION):
+    def remove_consecutive_duplicates(self, tol: float = Tolerance.APPROXIMATION) -> None:
         pts = self.get_points()
         cleaned = []
         tol_sq = tol * tol
@@ -1601,7 +1617,7 @@ class Polyline:
         self._plane = None
 
     @staticmethod
-    def two_rects_from_frame(p, segment_vector, zaxis, middle, radius, length, flip_male):
+    def two_rects_from_frame(p: Point, segment_vector: Vector, zaxis: Vector, middle: bool, radius: float, length: float, flip_male: int) -> Tuple["Polyline", "Polyline"]:
         y_axis = zaxis.cross(segment_vector)
         x_axis = y_axis.cross(segment_vector)
         x_axis.normalize_self()
@@ -1640,7 +1656,7 @@ class Polyline:
         return rect0, rect1
 
     @staticmethod
-    def boolean_op(a, b, clip_type, plane=None):
+    def boolean_op(a: "Polyline", b: "Polyline", clip_type: int, plane: Optional["Plane"] = None) -> List["Polyline"]:
         from .boolean_polyline import BooleanPolyline
         if plane is None:
             return BooleanPolyline.compute(a, b, clip_type)
@@ -1694,7 +1710,7 @@ class Polyline:
         return results
 
     @staticmethod
-    def polylabel(polylines, precision: float) -> Tuple[Point, "Plane", float]:
+    def polylabel(polylines: List["Polyline"], precision: float) -> Tuple[Point, "Plane", float]:
         # Largest inscribed circle via mapbox polylabel.
         # polylines[0] is the outer boundary; polylines[1..] are holes.
         from .plane import Plane
@@ -1743,7 +1759,7 @@ class Polyline:
     @staticmethod
     def polylabel_circle_division_points(
         division_direction_in_3d: Vector,
-        polylines,
+        polylines: List["Polyline"],
         division: int,
         scale: float,
         precision: float,

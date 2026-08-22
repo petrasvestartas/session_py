@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from typing import Any
+from typing import Callable
+from typing import List
+
 import inspect
 import json
 import sys
 import time
 import traceback
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable, List
 
 
 @dataclass
@@ -52,7 +56,7 @@ class MiniTestAssertionError(AssertionError):
     """Custom assertion error for the mini framework."""
 
 
-def _record_check(passed: bool, label: str | None = None) -> None:
+def _record_check(passed: bool, label: Optional[str | None] = None) -> None:
     """Record metadata for a single ``check_equal`` call.
 
     Parameters
@@ -214,7 +218,7 @@ def _extract_timed_code(source_lines: list[str]) -> str:
     return "".join(body_lines).rstrip("\n")
 
 
-def check_equal(actual: Any, expected: Any, label: str | None = None) -> None:
+def check_equal(actual: Any, expected: Any, label: Optional[str | None] = None) -> None:
     """Assert that two values are equal.
 
     Parameters
@@ -437,7 +441,7 @@ def MINI_TEST(class_name: str, test_name: str) -> Callable[[Callable[[], None]],
     return mini_test(class_name, test_name)
 
 
-def MINI_CHECK(expr: Any, label: str | None = None) -> None:
+def MINI_CHECK(expr: Any, label: Optional[str | None] = None) -> None:
     """Assert that an expression is truthy (C++-style ``MINI_CHECK``).
 
     Parameters

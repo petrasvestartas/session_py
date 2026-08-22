@@ -1,3 +1,7 @@
+from typing import Callable
+from typing import Optional
+from typing import Union
+from typing import TYPE_CHECKING
 import os
 import copy
 import json
@@ -10,6 +14,11 @@ from .plane import Plane
 from .point import Point
 from .vector import Vector
 from .xform import Xform
+
+if TYPE_CHECKING:
+    from .brep import BRep
+    from pathlib import Path
+    from .line import Line
 
 
 DEFAULT_DATA_DIR = r"C:\brg\code_rust\session\session_data\elements"
@@ -28,7 +37,7 @@ class Dataset:
     schoring_body_start_3 = "schoring_body_start_3.json"
 
     @classmethod
-    def select_by_type(cls, type="a", target_length=0, data_dir=None):
+    def select_by_type(cls, type: str = "a", target_length: int = 0, data_dir: Optional[Union[str, "pathlib.Path"]] = None) -> list[str]:
         if type != "a":
             return []
         data_dir = pathlib.Path(data_dir or DEFAULT_DATA_DIR)
@@ -79,11 +88,11 @@ class ElementSchoring(Element):
 
     def __init__(
         self,
-        dataset=None,
-        features=None,
-        name=None,
-        data_dir=None,
-        geometry_as_brep=False,
+        dataset: Optional[list[str]] = None,
+        features: Optional[list[Callable]] = None,
+        name: Optional[str] = None,
+        data_dir: Optional[Union[str, "pathlib.Path"]] = None,
+        geometry_as_brep: bool = False,
     ):
         super().__init__(geometry=None, name=name or "my_schoring")
         if features:
@@ -132,7 +141,7 @@ class ElementSchoring(Element):
         )
 
     @classmethod
-    def clear_cache(cls):
+    def clear_cache(cls) -> None:
         cls._dataset_cache.clear()
         cls._brep_cache.clear()
 
@@ -140,7 +149,7 @@ class ElementSchoring(Element):
     # Element interface
     ###########################################################################################
 
-    def compute_element_geometry(self):
+    def compute_element_geometry(self) -> Optional[Union["Mesh", "BRep"]]:
         return self._geometry
 
     ###########################################################################################
@@ -148,7 +157,7 @@ class ElementSchoring(Element):
     ###########################################################################################
 
     @staticmethod
-    def polylines_to_elements(lines_unordered, data_dir=None):
+    def polylines_to_elements(lines_unordered: list["Line"], data_dir: Optional[Union[str, "pathlib.Path"]] = None) -> list[tuple["ElementSchoring", "Xform"]]:
         """Build a chain of schoring elements (foot, body_start, body_end, head) for each vertical line.
 
         Mirrors the compas_tf SchoringElement.polylines_to_models logic. An Element no longer
@@ -310,7 +319,7 @@ class ElementSchoring(Element):
     # Serialization - Protobuf
     ###########################################################################################
 
-    def pb_dumps(self):
+    def pb_dumps(self) -> bytes:
         from .proto import element_pb2
         proto = element_pb2.Element()
         proto.guid = self.guid
@@ -323,7 +332,7 @@ class ElementSchoring(Element):
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data):
+    def pb_loads(cls, data: bytes) -> "ElementSchoring":
         from .proto import element_pb2
         proto = element_pb2.Element()
         proto.ParseFromString(data)
