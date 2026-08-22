@@ -4303,6 +4303,21 @@ def face_to_face(adjacency: List[int], polylines_list: List[List["Polyline"]], p
             face_normals[k, 0] = n[0]; face_normals[k, 1] = n[1]; face_normals[k, 2] = n[2]
             k += 1
 
+    # Per-face inflated AABBs, packed once - two faces can only yield a NON-EMPTY contact
+    # area if their inflated boxes overlap, so each pair rejects on a broadcast box test
+    # before any plane math or polygon boolean runs. This kills the coplanar-but-distant
+    # pairs (same infinite plane, far apart) that used to reach boolean_op and return empty.
+    # Conservative by the coplanar tolerance, so accepted pairs are unchanged.
+    face_lo = np.empty((total_faces, 3), dtype=np.float64)
+    face_hi = np.empty((total_faces, 3), dtype=np.float64)
+    k = 0
+    for faces in polylines_list:
+        for f in faces:
+            c = np.asarray(f.coords, dtype=np.float64).reshape(-1, 3)
+            face_lo[k] = c.min(axis=0) - coplanar_tolerance
+            face_hi[k] = c.max(axis=0) + coplanar_tolerance
+            k += 1
+
     # Vectorized coplanar test, matching Plane.is_coplanar_from_normals with
     # can_be_flipped=False (only antiparallel normals accepted, i.e. faces
     # touching back-to-back).
@@ -4319,6 +4334,16 @@ def face_to_face(adjacency: List[int], polylines_list: List[List["Polyline"]], p
         ob = face_origins[b0:b1]                # (nb, 3)
         nb_ = face_normals[b0:b1]               # (nb, 3)
 
+        # Box gate first: overlap[i, j] on all three axes, broadcast (na, nb).
+        alo = face_lo[a0:a1]; ahi = face_hi[a0:a1]
+        blo = face_lo[b0:b1]; bhi = face_hi[b0:b1]
+        overlap = np.all(
+            (alo[:, None, :] <= bhi[None, :, :]) & (blo[None, :, :] <= ahi[:, None, :]),
+            axis=2,
+        )
+        if not overlap.any():
+            continue
+
         # Antiparallel check: dot(na, nb) <= -cos_tol  → mask shape (na, nb)
         dots = na_ @ nb_.T                                          # (na, nb)
         antiparallel = dots <= -cos_tol
@@ -4331,7 +4356,7 @@ def face_to_face(adjacency: List[int], polylines_list: List[List["Polyline"]], p
         nb_dot_oa = nb_ @ oa.T                                      # (nb, na) → transpose
         dist0 = np.abs(na_dot_ob - na_dot_oa[:, None])              # (na, nb)
         dist1 = np.abs(nb_dot_oa - nb_dot_ob[:, None]).T            # (na, nb)
-        coplanar_mask = antiparallel & (dist0 < coplanar_tolerance) & (dist1 < coplanar_tolerance)
+        coplanar_mask = overlap & antiparallel & (dist0 < coplanar_tolerance) & (dist1 < coplanar_tolerance)
 
         if not coplanar_mask.any():
             continue
