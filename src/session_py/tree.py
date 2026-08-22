@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Any
 from typing import Iterator
 from typing import Optional
@@ -58,7 +59,7 @@ class TreeNode:
 
     def __str__(self):
         """String representation."""
-        return f"TreeNode({self.name}"
+        return f"TreeNode({self.name}, {self.guid}, {len(self.children)} children)"
 
     def __repr__(self):
         return f"TreeNode({self.name}, {self.guid}, {len(self.children)} children)"
@@ -194,9 +195,9 @@ class TreeNode:
             else:
                 raise ValueError("Unknown traversal order: {}".format(order))
         elif strategy == "breadthfirst":
-            queue = [self]
+            queue = deque([self])
             while queue:
-                node = queue.pop(0)
+                node = queue.popleft()
                 yield node
                 queue.extend(node.children)
         else:
@@ -238,7 +239,7 @@ class Tree:
         self._guid = value
 
     def __str__(self):
-        return "<Tree with {} nodes>".format(len(list(self.nodes)))
+        return "Tree: {}".format(self.name)
 
     def __repr__(self):
         return "<Tree with {} nodes>".format(len(list(self.nodes)))
@@ -512,6 +513,9 @@ class Tree:
         # Remove child from its current parent if it has one
         if child_node.parent:
             child_node.parent.remove(child_node)
+        else:
+            # Child is not currently in any parent, we can't move it
+            return False
 
         # Add to new parent
         parent_node.add(child_node)
@@ -535,7 +539,7 @@ class Tree:
         if not node:
             return []
 
-        return [child.guid for child in node.children if isinstance(child, TreeNode)]
+        return [child.guid for child in node.children]
 
     def print_hierarchy(self) -> None:
         """Print the spatial hierarchy of the tree."""

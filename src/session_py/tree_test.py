@@ -415,8 +415,10 @@ def test_tree_add_child_by_guid():
     t.add(a, root)
     t.add(b, root)
     ok = t.add_child_by_guid(a.guid, b.guid)
+    cycle = t.add_child_by_guid(b.guid, root.guid)
 
     MINI_CHECK(ok)
+    MINI_CHECK(not cycle)
     MINI_CHECK(len(a.children) == 1)
 
 
