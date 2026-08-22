@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List
 from .mesh import Mesh
 from .point import Point

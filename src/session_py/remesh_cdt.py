@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Constrained Delaunay Triangulation via sweep-line."""
 from typing import List
 from typing import Tuple

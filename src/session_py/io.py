@@ -1,3 +1,4 @@
+from __future__ import annotations
 from .point import Point
 from .pointcloud import PointCloud
 

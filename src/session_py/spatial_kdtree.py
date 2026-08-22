@@ -1,3 +1,4 @@
+from __future__ import annotations
 # SpatialKDTree — alternating-axis median split over bare 3D points.
 # Use for: k-nearest-neighbor queries on point clouds (fastest option).
 #   Points only — no volumes, no boxes, no rotation.

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import uuid
 import copy
 from .element import Element

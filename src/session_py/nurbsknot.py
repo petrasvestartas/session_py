@@ -1,3 +1,4 @@
+from __future__ import annotations
 """NurbsKnot vector utility functions for NURBS curves and surfaces.
 
 This module provides standalone functions for working with nurbsknot vectors,

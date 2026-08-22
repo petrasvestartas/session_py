@@ -1,3 +1,4 @@
+from __future__ import annotations
 # SpatialAABBTree — flat contiguous BVH over axis-aligned boxes (longest-axis median split).
 # Use for: closest-point on static mesh faces, ray-mesh intersection.
 #   Build once, query many times. Cache-friendly nodes.

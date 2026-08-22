@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 This module contains all the classes and functions that are exposed to the user.
 """
