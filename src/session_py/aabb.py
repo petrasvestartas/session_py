@@ -29,7 +29,7 @@ class AABB(NamedTuple):
         return cls(point[0], point[1], point[2], inflate, inflate, inflate)
 
     @classmethod
-    def from_points(cls, points: List, inflate: float = 0.0) -> "AABB":
+    def from_points(cls, points: list, inflate: float = 0.0) -> "AABB":
         if not points:
             return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         min_x = min(p[0] for p in points)

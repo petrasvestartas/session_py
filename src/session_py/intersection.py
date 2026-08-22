@@ -30,7 +30,7 @@ def line_line_parameters(
     tolerance: float,
     intersect_segments: bool = True,
     near_parallel_as_closest: bool = False,
-) -> Optional[Tuple[float, float]]:
+) -> tuple[float, float] | None:
     """
     Find parametric values where two lines are closest.
 
@@ -107,7 +107,7 @@ def line_line_parameters(
     return (t0, t1)
 
 
-def line_line(line0: Line, line1: Line, tolerance: float) -> Optional[Point]:
+def line_line(line0: Line, line1: Line, tolerance: float) -> Point | None:
     """
     Find intersection point between two 3D lines.
 
@@ -132,7 +132,7 @@ def line_line(line0: Line, line1: Line, tolerance: float) -> Optional[Point]:
     return Point((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5, (p0[2] + p1[2]) * 0.5)
 
 
-def plane_plane(plane0: "Plane", plane1: "Plane") -> Optional[Line]:
+def plane_plane(plane0: "Plane", plane1: "Plane") -> Line | None:
     from .plane import Plane
 
     d = plane1.z_axis.cross(plane0.z_axis)
@@ -159,7 +159,7 @@ def plane_plane(plane0: "Plane", plane1: "Plane") -> Optional[Line]:
     )
 
 
-def plane_plane_to_line_canonical(plane0: "Plane", plane1: "Plane") -> Optional[Line]:
+def plane_plane_to_line_canonical(plane0: "Plane", plane1: "Plane") -> Line | None:
     # CGAL-canonical anchor (foot-of-perpendicular from world origin) used by
     # wood's cgal::intersection_util::plane_plane. Independent of input-plane
     # origin choice, giving bit-exact match to wood for parallel input planes.
@@ -195,7 +195,7 @@ def plane_value_at(plane: "Plane", point: Point) -> float:
     return plane.a * point[0] + plane.b * point[1] + plane.c * point[2] + plane.d
 
 
-def line_plane(line: Line, plane: "Plane", is_finite: bool = True) -> Optional[Point]:
+def line_plane(line: Line, plane: "Plane", is_finite: bool = True) -> Point | None:
     """
     Find intersection point between a line and a plane.
 
@@ -246,7 +246,7 @@ def line_plane(line: Line, plane: "Plane", is_finite: bool = True) -> Optional[P
     return output if rc else None
 
 
-def plane_plane_plane(plane0: "Plane", plane1: "Plane", plane2: "Plane") -> Optional[Point]:
+def plane_plane_plane(plane0: "Plane", plane1: "Plane", plane2: "Plane") -> Point | None:
     """
     Find intersection point of three planes.
 
@@ -280,7 +280,7 @@ def plane_plane_plane(plane0: "Plane", plane1: "Plane", plane2: "Plane") -> Opti
 
 def ray_box(
     line: Line, box: OBB, t0: float, t1: float
-) -> Optional[List[Point]]:
+) -> list[Point] | None:
     """
     Find intersection points between a line and an axis-aligned bounding box.
 
@@ -350,7 +350,7 @@ def ray_box(
     return [entry, exit_point]
 
 
-def ray_sphere(line: Line, center: Point, radius: float) -> Optional[List[Point]]:
+def ray_sphere(line: Line, center: Point, radius: float) -> list[Point] | None:
     """
     Find intersection points between a line and a sphere.
 
@@ -425,7 +425,7 @@ def ray_sphere(line: Line, center: Point, radius: float) -> Optional[List[Point]
 
 def ray_triangle(
     line: Line, v0: Point, v1: Point, v2: Point, epsilon: float
-) -> Optional[Point]:
+) -> Point | None:
     """
     Find intersection point between a line and a triangle.
 
@@ -497,9 +497,9 @@ def ray_triangle(
     )
 
 
-def _mesh_triangles(mesh: Mesh) -> List[Tuple[Point, Point, Point]]:
+def _mesh_triangles(mesh: Mesh) -> list[tuple[Point, Point, Point]]:
     vertices, faces = mesh.to_vertices_and_faces()
-    tris: List[Tuple[Point, Point, Point]] = []
+    tris: list[tuple[Point, Point, Point]] = []
     for face in faces:
         if len(face) < 3:
             continue
@@ -513,12 +513,12 @@ def _mesh_triangles(mesh: Mesh) -> List[Tuple[Point, Point, Point]]:
 
 def ray_mesh(
     line: Line, mesh: Mesh, epsilon: float = 1e-6, find_all: bool = True
-) -> Optional[List[Point]]:
+) -> list[Point] | None:
     tris = _mesh_triangles(mesh)
     if not tris:
         return None
 
-    hits: List[Tuple[float, Point]] = []
+    hits: list[tuple[float, Point]] = []
     origin = line.start()
     direction = line.to_vector().normalized()
 
@@ -546,13 +546,13 @@ def ray_mesh(
 
 def ray_mesh_bvh(
     line: Line, mesh: Mesh, epsilon: float = 1e-6, find_all: bool = True
-) -> Optional[List[Point]]:
+) -> list[Point] | None:
     tris = _mesh_triangles(mesh)
     if not tris:
         return None
 
     # Build AABBs for triangles
-    tri_boxes: List[OBB] = []
+    tri_boxes: list[OBB] = []
     for v0, v1, v2 in tris:
         tri_boxes.append(OBB.from_points([v0, v1, v2]))
 
@@ -561,12 +561,12 @@ def ray_mesh_bvh(
 
     origin = line.start()
     direction = line.to_vector().normalized()
-    candidate_ids: List[int] = []
+    candidate_ids: list[int] = []
     found = bvh.ray_cast(origin, direction, candidate_ids, True)
     if not found:
         return None
 
-    hits: List[Tuple[float, Point]] = []
+    hits: list[tuple[float, Point]] = []
     for idx in candidate_ids:
         if 0 <= idx < len(tris):
             v0, v1, v2 = tris[idx]
@@ -664,7 +664,7 @@ def _curve_refine_intersection_newton(curve, plane, t, tolerance):
     return t
 
 
-def curve_plane(curve: "NurbsCurve", plane: "Plane", tolerance: Optional[float]=None) -> List[float]:
+def curve_plane(curve: "NurbsCurve", plane: "Plane", tolerance: float | None=None) -> list[float]:
     """Find all intersections between NURBS curve and plane."""
     intersections = []
 
@@ -740,13 +740,13 @@ def curve_plane(curve: "NurbsCurve", plane: "Plane", tolerance: Optional[float]=
     return intersections
 
 
-def curve_plane_points(curve: "NurbsCurve", plane: "Plane", tolerance: Optional[float]=None) -> List[Point]:
+def curve_plane_points(curve: "NurbsCurve", plane: "Plane", tolerance: float | None=None) -> list[Point]:
     """Find all intersection points between NURBS curve and plane."""
     params = curve_plane(curve, plane, tolerance)
     return [curve.point_at(t) for t in params]
 
 
-def curve_plane_bezier_clipping(curve: "NurbsCurve", plane: "Plane", tolerance: Optional[float]=None) -> List[float]:
+def curve_plane_bezier_clipping(curve: "NurbsCurve", plane: "Plane", tolerance: float | None=None) -> list[float]:
     """Curve-plane intersection using Bézier clipping (advanced method)."""
     if tolerance is None:
         tolerance = Tolerance.ZERO_TOLERANCE
@@ -852,7 +852,7 @@ def curve_plane_bezier_clipping(curve: "NurbsCurve", plane: "Plane", tolerance: 
     return results
 
 
-def curve_plane_algebraic(curve: "NurbsCurve", plane: "Plane", tolerance: Optional[float]=None) -> List[float]:
+def curve_plane_algebraic(curve: "NurbsCurve", plane: "Plane", tolerance: float | None=None) -> list[float]:
     """Curve-plane intersection using algebraic/hodograph method."""
     if tolerance is None:
         tolerance = Tolerance.ZERO_TOLERANCE
@@ -929,7 +929,7 @@ def curve_plane_algebraic(curve: "NurbsCurve", plane: "Plane", tolerance: Option
     return sorted(results)
 
 
-def curve_plane_production(curve: "NurbsCurve", plane: "Plane", tolerance: Optional[float]=None) -> List[float]:
+def curve_plane_production(curve: "NurbsCurve", plane: "Plane", tolerance: float | None=None) -> list[float]:
     """Curve-plane intersection using production CAD kernel method."""
     if tolerance is None:
         tolerance = Tolerance.ZERO_TOLERANCE
@@ -1056,7 +1056,7 @@ def curve_plane_production(curve: "NurbsCurve", plane: "Plane", tolerance: Optio
     return sorted(results)
 
 
-def curve_closest_point(curve: "NurbsCurve", test_point: Point, t0: float = 0.0, t1: float = 0.0) -> Tuple[float, float]:
+def curve_closest_point(curve: "NurbsCurve", test_point: Point, t0: float = 0.0, t1: float = 0.0) -> tuple[float, float]:
     """Find closest point on NURBS curve to test point."""
     return Closest.curve_point(curve, test_point, t0, t1)
 
@@ -1619,7 +1619,7 @@ def _surface_plane_fit_3d(all_pts, is_loop, plane, step, uv_to_3d, uv_to_3d_min,
     return crv
 
 
-def surface_plane(surface: "NurbsSurface", plane: "Plane", tolerance: Optional[float]=None) -> List["NurbsCurve"]:
+def surface_plane(surface: "NurbsSurface", plane: "Plane", tolerance: float | None=None) -> list["NurbsCurve"]:
     """Find intersection curves between a NURBS surface and a plane."""
     if not surface.is_valid():
         return []
@@ -1909,7 +1909,7 @@ def _analytic_sphere_pullback(srf, recog, c3d):
     return out
 
 
-def cut_curves_on_surface(target: "NurbsSurface", cutter: "NurbsSurface", tolerance: Optional[float]=None) -> List["NurbsCurve"]:
+def cut_curves_on_surface(target: "NurbsSurface", cutter: "NurbsSurface", tolerance: float | None=None) -> list["NurbsCurve"]:
     """Return the cutter surface's UV pcurves on the target surface.
 
     Fast path: if the cutter is planar, intersect the target with the cutter's
@@ -1959,7 +1959,7 @@ def cut_curves_on_surface(target: "NurbsSurface", cutter: "NurbsSurface", tolera
     return [triple[1] for triple in surface_surface(target, cutter, tolerance)]
 
 
-def surface_plane_uv(surface: "NurbsSurface", plane: "Plane", tolerance: Optional[float]=None) -> List[Tuple["NurbsCurve", "NurbsCurve"]]:
+def surface_plane_uv(surface: "NurbsSurface", plane: "Plane", tolerance: float | None=None) -> list[tuple["NurbsCurve", "NurbsCurve"]]:
     """Find surface/plane intersection curves with their UV pcurves.
 
     Returns a list of (curve_3d, pcurve) pairs. Pcurves are NurbsCurves in
@@ -3117,7 +3117,7 @@ def _analytic_ssi(a, b, tolerance):
     return triples
 
 
-def surface_surface(a: "NurbsSurface", b: "NurbsSurface", tolerance: Optional[float]=None) -> List[Tuple["NurbsCurve", "NurbsCurve", "NurbsCurve"]]:
+def surface_surface(a: "NurbsSurface", b: "NurbsSurface", tolerance: float | None=None) -> list[tuple["NurbsCurve", "NurbsCurve", "NurbsCurve"]]:
     """Find surface/surface intersection curves with UV pcurves on both.
 
     Returns a list of (curve_3d, pcurve_a, pcurve_b) triples. Recognized quadric
@@ -3775,7 +3775,7 @@ def closest_point_on_segment(pt: Point, seg: Line) -> tuple:
     return (Point(start[0] + t*dx, start[1] + t*dy, start[2] + t*dz), t)
 
 
-def plane_plane_plane_check(p0: "Plane", p1: "Plane", p2: "Plane", angle_tol: float = 0.1) -> Optional[Point]:
+def plane_plane_plane_check(p0: "Plane", p1: "Plane", p2: "Plane", angle_tol: float = 0.1) -> Point | None:
     """3-plane intersection with angle-tolerance parallelism guard."""
     if _vectors_nearly_parallel(p0.z_axis, p1.z_axis, angle_tol):
         return None
@@ -3786,7 +3786,7 @@ def plane_plane_plane_check(p0: "Plane", p1: "Plane", p2: "Plane", angle_tol: fl
     return plane_plane_plane(p0, p1, p2)
 
 
-def plane_4planes(main_plane: "Plane", planes: List["Plane"]) -> Optional[object]:
+def plane_4planes(main_plane: "Plane", planes: list["Plane"]) -> object | None:
     """Intersect main plane with 4 ordered boundary planes → closed quad (5 pts)."""
     from .polyline import Polyline
     p0 = plane_plane_plane_check(planes[0], planes[1], main_plane)
@@ -3804,7 +3804,7 @@ def plane_4planes(main_plane: "Plane", planes: List["Plane"]) -> Optional[object
     return Polyline([p0, p1, p2, p3, p0])
 
 
-def plane_4planes_open(main_plane: "Plane", planes: List["Plane"]) -> Optional[object]:
+def plane_4planes_open(main_plane: "Plane", planes: list["Plane"]) -> object | None:
     """Same as plane_4planes but open (4 pts, last != first)."""
     from .polyline import Polyline
     p0 = plane_plane_plane_check(planes[0], planes[1], main_plane)
@@ -3822,7 +3822,7 @@ def plane_4planes_open(main_plane: "Plane", planes: List["Plane"]) -> Optional[o
     return Polyline([p0, p1, p2, p3])
 
 
-def plane_4lines(plane: "Plane", l0: Line, l1: Line, l2: Line, l3: Line) -> Optional[object]:
+def plane_4lines(plane: "Plane", l0: Line, l1: Line, l2: Line, l3: Line) -> object | None:
     """Intersect plane with 4 line segments → closed quad (5 pts)."""
     from .polyline import Polyline
     p0 = line_plane(l0, plane, False)
@@ -3840,7 +3840,7 @@ def plane_4lines(plane: "Plane", l0: Line, l1: Line, l2: Line, l3: Line) -> Opti
     return Polyline([p0, p1, p2, p3, p0])
 
 
-def get_quad_from_line_topbottomplanes(face_plane: "Plane", line: Line, plane0: "Plane", plane1: "Plane") -> Optional[object]:
+def get_quad_from_line_topbottomplanes(face_plane: "Plane", line: Line, plane0: "Plane", plane1: "Plane") -> object | None:
     """Build joint quad from collision face-plane and two bounding planes."""
     from .polyline import Polyline
     from .plane import Plane
@@ -3863,7 +3863,7 @@ def get_quad_from_line_topbottomplanes(face_plane: "Plane", line: Line, plane0: 
     return Polyline([p0, p1, p2, p3, p0])
 
 
-def scale_vector_to_distance_of_2planes(direction: "Vector", p0: "Plane", p1: "Plane") -> Optional[object]:
+def scale_vector_to_distance_of_2planes(direction: "Vector", p0: "Plane", p1: "Plane") -> object | None:
     """Scale direction vector so it spans the distance between two parallel planes."""
     import math
     from .vector import Vector
@@ -3894,7 +3894,7 @@ def scale_vector_to_distance_of_2planes(direction: "Vector", p0: "Plane", p1: "P
     return output
 
 
-def get_orthogonal_vector_between_two_plane_pairs(pp0_0: "Plane", pp1_0: "Plane", pp1_1: "Plane") -> Optional[object]:
+def get_orthogonal_vector_between_two_plane_pairs(pp0_0: "Plane", pp1_0: "Plane", pp1_1: "Plane") -> object | None:
     """Shortest orthogonal vector between two infinite lines defined by plane pairs."""
     from .vector import Vector
     l0 = plane_plane(pp0_0, pp1_0)
@@ -3914,7 +3914,7 @@ def get_orthogonal_vector_between_two_plane_pairs(pp0_0: "Plane", pp1_0: "Plane"
     return Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
 
 
-def line_two_planes(line: Line, p0: "Plane", p1: "Plane") -> Optional[object]:
+def line_two_planes(line: Line, p0: "Plane", p1: "Plane") -> object | None:
     """Clip finite segment endpoints to intersections with two planes; returns new Line or None."""
     new_start = line_plane(line, p0, True)
     new_end = line_plane(line, p1, True)
@@ -3924,7 +3924,7 @@ def line_two_planes(line: Line, p0: "Plane", p1: "Plane") -> Optional[object]:
                 new_end[0], new_end[1], new_end[2])
 
 
-def polyline_plane(poly: "Polyline", plane: "Plane") -> Optional[tuple]:
+def polyline_plane(poly: "Polyline", plane: "Plane") -> tuple | None:
     """Find all perimeter edge-plane intersections; returns (points, edge_indices)."""
     n = poly.point_count()
     if n < 2:
@@ -3946,7 +3946,7 @@ def polyline_plane(poly: "Polyline", plane: "Plane") -> Optional[tuple]:
     return (pts_out, idx_out)
 
 
-def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) -> Optional[object]:
+def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) -> object | None:
     """Intersect polyline perimeter with plane → single segment aligned to edge direction."""
     result = polyline_plane(poly, plane)
     if result is None:
@@ -4001,7 +4001,7 @@ def quad_from_line_top_bottom_planes(face_plane: "Plane", line: Line, plane0: "P
     return Polyline([p0, p1, p2, p3, p0])
 
 
-def orthogonal_vector_between_two_plane_pairs(pp00: "Plane", pp10: "Plane", pp11: "Plane") -> Optional[Vector]:
+def orthogonal_vector_between_two_plane_pairs(pp00: "Plane", pp10: "Plane", pp11: "Plane") -> Vector | None:
     """Vector orthogonal to the (pp00, pp10) intersection line, anchored on (pp00, pp11).
 
     Verbatim port of wood ``cgal_intersection_util.cpp:619-628``::
@@ -4040,7 +4040,7 @@ def orthogonal_vector_between_two_plane_pairs(pp00: "Plane", pp10: "Plane", pp11
     return Vector(p1[0]-px, p1[1]-py, p1[2]-pz)
 
 
-def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane") -> Optional[Tuple["Polyline", Tuple[float, float]]]:
+def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane") -> tuple["Polyline", tuple[float, float]] | None:
     """Clip an open joint outline against a closed plate polygon in 2D.
 
     Port of the wood ``wood_element.cpp:438-651`` helper. Returns the clipped
@@ -4253,7 +4253,7 @@ def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane
     return Polyline(out_pts), (t0, t1)
 
 
-def line_line_3d(cutter: Line, seg: Line) -> Optional[Point]:
+def line_line_3d(cutter: Line, seg: Line) -> Point | None:
     """3D skew-line intersection via infinite line_line_parameters."""
     result = line_line_parameters(cutter, seg, 0.0,
                                   intersect_segments=False,
@@ -4268,7 +4268,7 @@ def line_line_3d(cutter: Line, seg: Line) -> Optional[Point]:
                  s[2] + t0*(e[2]-s[2]))
 
 
-def face_to_face(adjacency: List[int], polylines_list: List[List["Polyline"]], planes_list: List[List["Plane"]], coplanar_tolerance: float = 5.0) -> List[Tuple[int, int, int, int, int, "Polyline"]]:
+def face_to_face(adjacency: list[int], polylines_list: list[list["Polyline"]], planes_list: list[list["Plane"]], coplanar_tolerance: float = 5.0) -> list[tuple[int, int, int, int, int, "Polyline"]]:
     """Face-to-face joint detection between elements.
     Returns list of (a, b, face_a, face_b, type, joint_polyline).
 
@@ -4387,7 +4387,7 @@ def face_to_face(adjacency: List[int], polylines_list: List[List["Polyline"]], p
     return results
 
 
-def polyline_boolean(a: "Polyline", b: "Polyline", clip_type: int) -> List["Polyline"]:
+def polyline_boolean(a: "Polyline", b: "Polyline", clip_type: int) -> list["Polyline"]:
     """Thin wrapper over Polyline.boolean_op mirroring C++ Intersection::polyline_boolean."""
     from .polyline import Polyline
     return Polyline.boolean_op(a, b, clip_type)
@@ -4611,7 +4611,7 @@ def offset_in_3d(polyline: "Polyline", plane: "Plane", offset: float) -> bool:
     return True
 
 
-def adjacency_search(elements: List["Element"], inflate: float = 5.0) -> List[int]:
+def adjacency_search(elements: list["Element"], inflate: float = 5.0) -> list[int]:
     """SpatialBVH/brute-force adjacency search. Returns flat list [a, b, -1, -1, ...]."""
     from .aabb import AABB
     N = len(elements)
@@ -4642,7 +4642,7 @@ def line_line_classified(
     cur_seg_0: int,
     cur_seg_1: int,
     above_closer_to_edge: float,
-) -> Optional[tuple]:
+) -> tuple | None:
     """Port of cgal_box_search.h:252-496. Classifies two finite segments s0/s1
     as end-to-end, side-to-end, or cross based on above_closer_to_edge in [0,1].
     n_segs_*/cur_seg_* give the segment's position within its parent polyline

@@ -53,7 +53,7 @@ class Plane:
         Plane equation coefficient (distance from origin).
     """
 
-    def __init__(self, origin: Optional["Point"] = None, x_axis: Optional["Vector"] = None, y_axis: Optional["Vector"] = None, name: str = "my_plane", width: float = 1.0):
+    def __init__(self, origin: Point | None = None, x_axis: Vector | None = None, y_axis: Vector | None = None, name: str = "my_plane", width: float = 1.0):
         self._guid = None
         self.name = name
         self.width = width
@@ -92,13 +92,13 @@ class Plane:
         self._guid = value
 
     @property
-    def linecolor(self) -> "Color":
+    def linecolor(self) -> Color:
         if self._linecolor is None:
             self._linecolor = Color.blue()
         return self._linecolor
 
     @linecolor.setter
-    def linecolor(self, value: "Color") -> None:
+    def linecolor(self, value: Color) -> None:
         self._linecolor = value
 
     def _update_equation(self):
@@ -113,22 +113,22 @@ class Plane:
         )
 
     @property
-    def origin(self) -> "Point":
+    def origin(self) -> Point:
         """Get the origin point."""
         return self._origin
 
     @property
-    def x_axis(self) -> "Vector":
+    def x_axis(self) -> Vector:
         """Get the X-axis vector."""
         return self._x_axis
 
     @property
-    def y_axis(self) -> "Vector":
+    def y_axis(self) -> Vector:
         """Get the Y-axis vector."""
         return self._y_axis
 
     @property
-    def z_axis(self) -> "Vector":
+    def z_axis(self) -> Vector:
         """Get the Z-axis vector (normal)."""
         return self._z_axis
 
@@ -153,7 +153,7 @@ class Plane:
         return self._d
 
     @staticmethod
-    def from_point_normal(point: Point, normal: Vector, normalize: bool = True) -> "Plane":
+    def from_point_normal(point: Point, normal: Vector, normalize: bool = True) -> Plane:
         """Create a plane from a point and normal vector.
 
         Parameters
@@ -190,7 +190,7 @@ class Plane:
         return plane
 
     @staticmethod
-    def from_points(points: list[Point]) -> "Plane":
+    def from_points(points: list[Point]) -> Plane:
         """Create a plane from three or more points.
 
         Parameters
@@ -227,7 +227,7 @@ class Plane:
         return plane
 
     @staticmethod
-    def from_points_pca(points: list["Point"]) -> "Plane":
+    def from_points_pca(points: list[Point]) -> Plane:
         if len(points) < 3:
             return Plane()
 
@@ -284,7 +284,7 @@ class Plane:
         return plane
 
     @staticmethod
-    def from_two_points(point1: Point, point2: Point) -> "Plane":
+    def from_two_points(point1: Point, point2: Point) -> Plane:
         """Create a plane from two points.
 
         Parameters
@@ -320,7 +320,7 @@ class Plane:
         return plane
 
     @staticmethod
-    def xy_plane() -> "Plane":
+    def xy_plane() -> Plane:
         """Create the XY plane.
 
         Returns
@@ -344,7 +344,7 @@ class Plane:
         return plane
 
     @staticmethod
-    def yz_plane() -> "Plane":
+    def yz_plane() -> Plane:
         """Create the YZ plane.
 
         Returns
@@ -368,7 +368,7 @@ class Plane:
         return plane
 
     @staticmethod
-    def xz_plane() -> "Plane":
+    def xz_plane() -> Plane:
         """Create the XZ plane.
 
         Returns
@@ -392,7 +392,7 @@ class Plane:
         return plane
 
     @staticmethod
-    def invalid() -> "Plane":
+    def invalid() -> Plane:
         p = object.__new__(Plane)
         p.guid = str(uuid.uuid4())
         p.name = "my_plane"
@@ -412,7 +412,7 @@ class Plane:
         return self._x_axis.magnitude() > 1e-14 and self._y_axis.magnitude() > 1e-14 and self._z_axis.magnitude() > 1e-14
 
     @staticmethod
-    def from_frame(origin: "Point", x_axis: "Vector", y_axis: "Vector", z_axis: "Vector") -> "Plane":
+    def from_frame(origin: Point, x_axis: Vector, y_axis: Vector, z_axis: Vector) -> Plane:
         p = object.__new__(Plane)
         p.guid = str(uuid.uuid4())
         p.name = "my_plane"
@@ -432,14 +432,14 @@ class Plane:
     # Operators
     ###########################################################################################
 
-    def transform(self, xform: "Xform") -> None:
+    def transform(self, xform: Xform) -> None:
         """Apply a transformation to the plane, in place."""
         self._origin.transform(xform)
         self._x_axis.transform(xform)
         self._y_axis.transform(xform)
         self._z_axis.transform(xform)
 
-    def transformed(self, xform: "Xform") -> "Plane":
+    def transformed(self, xform: Xform) -> Plane:
         """Return a transformed copy of the plane."""
         import copy
 
@@ -447,7 +447,7 @@ class Plane:
         result.transform(xform)
         return result
 
-    def duplicate(self) -> "Plane":
+    def duplicate(self) -> Plane:
         """Create a deep copy with a new GUID."""
         import copy
 
@@ -601,7 +601,7 @@ class Plane:
         return dot_product > 0.999
 
     @staticmethod
-    def is_same_direction(plane0: "Plane", plane1: "Plane", can_be_flipped: bool = True) -> bool:
+    def is_same_direction(plane0: Plane, plane1: Plane, can_be_flipped: bool = True) -> bool:
         """Check if two planes have the same or flipped normal.
 
         Parameters
@@ -629,7 +629,7 @@ class Plane:
             return parallel == -1
 
     @staticmethod
-    def is_same_position(plane0: "Plane", plane1: "Plane") -> bool:
+    def is_same_position(plane0: Plane, plane1: Plane) -> bool:
         """Check if two planes are in the same position.
 
         Parameters
@@ -662,7 +662,7 @@ class Plane:
         return dist0 < tolerance and dist1 < tolerance
 
     @staticmethod
-    def is_coplanar(plane0: "Plane", plane1: "Plane", can_be_flipped: bool = True) -> bool:
+    def is_coplanar(plane0: Plane, plane1: Plane, can_be_flipped: bool = True) -> bool:
         """Check if two planes are coplanar.
 
         Parameters
@@ -684,7 +684,7 @@ class Plane:
         ) and Plane.is_same_position(plane0, plane1)
 
     @staticmethod
-    def is_coplanar_from_normals(origin0: "Point", normal0: "Vector", origin1: "Point", normal1: "Vector", can_be_flipped: bool = True, tolerance: float = -1.0) -> bool:
+    def is_coplanar_from_normals(origin0: Point, normal0: Vector, origin1: Point, normal1: Vector, can_be_flipped: bool = True, tolerance: float = -1.0) -> bool:
         """Check coplanarity from origin+normal without constructing Plane objects."""
         from .vector import Vector
         n0 = Vector(normal0[0], normal0[1], normal0[2])
@@ -723,7 +723,7 @@ class Plane:
         """
         return (self.a * p[0] + self.b * p[1] + self.c * p[2] + self.d) < 0.0
 
-    def translate_by_normal(self, distance: float) -> "Plane":
+    def translate_by_normal(self, distance: float) -> Plane:
         """Translate (move) a plane along its normal direction by a specified distance.
 
         Parameters
@@ -743,7 +743,7 @@ class Plane:
 
         return Plane(new_origin, self._x_axis, self._y_axis)
 
-    def base1(self) -> "Vector":
+    def base1(self) -> Vector:
         """Canonical in-plane x-axis from the normal (smallest-|coef| pivot rule).
 
         Deterministic frame that depends only on the normal; used for 2D
@@ -765,7 +765,7 @@ class Plane:
         b.normalize_self()
         return b
 
-    def base2(self) -> "Vector":
+    def base2(self) -> Vector:
         """Canonical in-plane y-axis = normal × base1 (right-handed)."""
         b1 = self.base1()
         n = self._z_axis
@@ -777,7 +777,7 @@ class Plane:
         b2.normalize_self()
         return b2
 
-    def to_polylines(self, scale: float = 1.0) -> list["Polyline"]:
+    def to_polylines(self, scale: float = 1.0) -> list[Polyline]:
         from .polyline import Polyline
         s = scale * 0.5
         o = self._origin
@@ -871,7 +871,7 @@ class Plane:
 
         return plane
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write JSON to file.
 
         Parameters
@@ -885,7 +885,7 @@ class Plane:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Plane":
+    def file_json_load(cls, filepath: str | Path) -> Plane:
         """Read JSON from file.
 
         Parameters
@@ -900,7 +900,7 @@ class Plane:
 
         """
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
@@ -910,7 +910,7 @@ class Plane:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "Plane":
+    def file_json_loads(cls, json_string: str) -> Plane:
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -954,7 +954,7 @@ class Plane:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Plane":
+    def pb_loads(cls, data: bytes) -> Plane:
         """Create Plane from protobuf binary data.
 
         Parameters
@@ -994,7 +994,7 @@ class Plane:
 
         return plane
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -1008,7 +1008,7 @@ class Plane:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Plane":
+    def pb_load(cls, filepath: str | Path) -> Plane:
         """Read protobuf from file.
 
         Parameters

@@ -193,7 +193,7 @@ def file_json_load(filepath: str) -> Any:
         Reconstructed data (geometry objects are restored).
 
     """
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         return json.load(f, cls=GeometryFileDecoder)
 
 

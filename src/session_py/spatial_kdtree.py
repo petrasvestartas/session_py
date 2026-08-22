@@ -12,7 +12,7 @@ import math
 from .point import Point
 
 
-def _nth_element(a: List[int], lo: int, mid: int, hi: int, key) -> None:
+def _nth_element(a: list[int], lo: int, mid: int, hi: int, key) -> None:
     """Place the mid-th element in sorted position within a[lo:hi] (quickselect)."""
     while hi - lo > 1:
         pivot = key(a[(lo + hi) // 2])
@@ -35,7 +35,7 @@ def _nth_element(a: List[int], lo: int, mid: int, hi: int, key) -> None:
             return
 
 
-def _heap_push(heap: List, item) -> None:
+def _heap_push(heap: list, item) -> None:
     heap.append(item)
     i = len(heap) - 1
     while i > 0 and heap[(i - 1) // 2][0] < heap[i][0]:
@@ -43,7 +43,7 @@ def _heap_push(heap: List, item) -> None:
         i = (i - 1) // 2
 
 
-def _heap_replace(heap: List, item) -> None:
+def _heap_replace(heap: list, item) -> None:
     heap[0] = item
     i = 0
     while True:
@@ -76,11 +76,11 @@ class SpatialKDTree:
             self.left = left
             self.right = right
 
-    def __init__(self, points: List[Point]):
+    def __init__(self, points: list[Point]):
         self._points = list(points)
         self._root = self._build(list(range(len(points))), 0, len(points), 0) if points else None
 
-    def _build(self, indices: List[int], lo: int, hi: int, depth: int) -> Optional["SpatialKDTree._Node"]:
+    def _build(self, indices: list[int], lo: int, hi: int, depth: int) -> Optional["SpatialKDTree._Node"]:
         if lo >= hi:
             return None
         axis = depth % 3
@@ -100,7 +100,7 @@ class SpatialKDTree:
         dz = a[2] - b[2]
         return dx * dx + dy * dy + dz * dz
 
-    def _nearest_1(self, node: Optional["SpatialKDTree._Node"], query: Point, best: List) -> None:
+    def _nearest_1(self, node: Optional["SpatialKDTree._Node"], query: Point, best: list) -> None:
         if node is None:
             return
         d = self._dist_sq(query, self._points[node.idx])
@@ -113,12 +113,12 @@ class SpatialKDTree:
         if diff * diff < best[1]:
             self._nearest_1(far, query, best)
 
-    def nearest(self, query: Point) -> Tuple[int, float]:
+    def nearest(self, query: Point) -> tuple[int, float]:
         best = [0, float("inf")]
         self._nearest_1(self._root, query, best)
         return best[0], math.sqrt(best[1])
 
-    def _nearest_k(self, node: Optional["SpatialKDTree._Node"], query: Point, k: int, heap: List) -> None:
+    def _nearest_k(self, node: Optional["SpatialKDTree._Node"], query: Point, k: int, heap: list) -> None:
         if node is None:
             return
         d = self._dist_sq(query, self._points[node.idx])
@@ -132,14 +132,14 @@ class SpatialKDTree:
         if len(heap) < k or diff * diff < heap[0][0]:
             self._nearest_k(far, query, k, heap)
 
-    def nearest_k(self, query: Point, k: int) -> List[Tuple[int, float]]:
+    def nearest_k(self, query: Point, k: int) -> list[tuple[int, float]]:
         if k <= 0:
             return []
-        heap: List = []
+        heap: list = []
         self._nearest_k(self._root, query, k, heap)
         return sorted([(idx, math.sqrt(d)) for d, idx in heap], key=lambda x: x[1])
 
-    def _radius(self, node: Optional["SpatialKDTree._Node"], query: Point, radius_sq: float, result: List) -> None:
+    def _radius(self, node: Optional["SpatialKDTree._Node"], query: Point, radius_sq: float, result: list) -> None:
         if node is None:
             return
         d = self._dist_sq(query, self._points[node.idx])
@@ -151,7 +151,7 @@ class SpatialKDTree:
         if diff * diff <= radius_sq:
             self._radius(far, query, radius_sq, result)
 
-    def radius_search(self, query: Point, radius: float) -> List[Tuple[int, float]]:
-        result: List = []
+    def radius_search(self, query: Point, radius: float) -> list[tuple[int, float]]:
+        result: list = []
         self._radius(self._root, query, radius * radius, result)
         return sorted(result, key=lambda x: x[1])

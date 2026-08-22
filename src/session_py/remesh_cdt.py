@@ -631,7 +631,7 @@ class _Delaunay:
             self._add_path(path)
         return len(self._verts) > 2
 
-    def execute(self, paths: List[List["_P64"]]) -> List["_Tri"]:
+    def execute(self, paths: list[list["_P64"]]) -> list["_Tri"]:
         if not self._add_paths(paths):
             return []
         if self._lowermost.innerLM:
@@ -803,7 +803,7 @@ def _from_polygon_with_holes(polylines, is_2d=False, is_first_boundary=True):
                     continue
                 tri_list.append([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
             n_vk = len(border)
-            covered = set(k for tri in tri_list for k in tri)
+            covered = {k for tri in tri_list for k in tri}
             for i in range(n_vk):
                 if vkeys[i] not in covered:
                     tri_list.append([vkeys[(i - 1) % n_vk], vkeys[i], vkeys[(i + 1) % n_vk]])
@@ -849,7 +849,7 @@ def _cdt_triangulate(border_2d, holes_2d=None):
     # at different x positions break event ordering → 0 adjacent triangles for
     # that hole). Fix: shift each conflicting hole vertex by -1 int64 unit in y
     # (≈ 1/scale metres), which is imperceptible in practice.
-    border_ys = set(round(p[1] * scale) for p in border_2d)
+    border_ys = {round(p[1] * scale) for p in border_2d}
     holes_adj = []
     if holes_2d:
         for hole in holes_2d:
@@ -892,7 +892,7 @@ def _cdt_triangulate(border_2d, holes_2d=None):
     #   1. Vertex-set: all 3 vertices belong to the same hole → remove.
     #   2. Centroid outside outer boundary or inside any hole → remove.
     if holes_2d:
-        hole_vsets = [set((p.x, p.y) for p in paths[hi + 1]) for hi in range(len(holes_2d))]
+        hole_vsets = [{(p.x, p.y) for p in paths[hi + 1]} for hi in range(len(holes_2d))]
 
         def _pt_in_poly_int(px, py, poly):
             inside = False
@@ -942,7 +942,7 @@ def _cdt_triangulate(border_2d, holes_2d=None):
 
 class RemeshCDT:
     @staticmethod
-    def triangulate(polylines: List["Polyline"]) -> List[Tuple[int, int, int]]:
+    def triangulate(polylines: list["Polyline"]) -> list[tuple[int, int, int]]:
         """CDT (sweep-line + Delaunay legalization). polylines[0]=border, rest=holes (x,y used; z ignored).
         Closing duplicate vertex (first==last) is stripped.
         Returns list of (i,j,k) index triples into flat array [border..., hole0..., hole1...].
@@ -966,7 +966,7 @@ class RemeshCDT:
         return _cdt_triangulate(bpts, hpts_list)
 
     @staticmethod
-    def from_polylines(polylines: List["Polyline"], is_2d: bool = False, is_first_boundary: bool = True) -> "Mesh":
+    def from_polylines(polylines: list["Polyline"], is_2d: bool = False, is_first_boundary: bool = True) -> "Mesh":
         """Polylines → Mesh. polylines[0]=border (or auto-detected), rest=holes.
         is_2d=True skips plane projection. is_first_boundary=False detects border by largest bbox diagonal."""
         return _from_polygon_with_holes(polylines, is_2d=is_2d, is_first_boundary=is_first_boundary)

@@ -21,7 +21,7 @@ class Xform:
     # Constructors
     ###########################################################################################
 
-    def __init__(self, m: Optional[list[float]] = None):
+    def __init__(self, m: list[float] | None = None):
         self._guid = None
         self.name = "my_xform"
         if m is None:
@@ -862,7 +862,7 @@ class Xform:
 
         """
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data, data.get("guid"), data.get("name"))
 

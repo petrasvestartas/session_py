@@ -122,7 +122,7 @@ class NurbsCurve:
     # Static Factory Methods
     ###########################################################################################
 
-    def create(periodic: bool, degree: int, points: List[Point], 
+    def create(periodic: bool, degree: int, points: list[Point], 
                dimension: int = 3, nurbsknot_delta: float = 1.0) -> 'NurbsCurve':
         """Create NURBS curve from points.
 
@@ -168,7 +168,7 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def create_interpolated(points: List["Point"], parameterization: CurveNurbsKnotStyle = CurveNurbsKnotStyle.Chord,
+    def create_interpolated(points: list["Point"], parameterization: CurveNurbsKnotStyle = CurveNurbsKnotStyle.Chord,
                             end_condition: CurveInterpStyle = CurveInterpStyle.Rhino) -> "NurbsCurve":
         # parameterization maps to Rhino's CurveKnotStyle: Uniform/Chord/ChordSquareRoot
         # (centripetal). Rhino's CreateInterpolatedCurve(points, degree) API defaults to Uniform;
@@ -428,7 +428,7 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def create_from_parameters(points: List["Point"], weights: List[float], knots: List[float], mults: List[int], degree: int, periodic: bool = False) -> "NurbsCurve":
+    def create_from_parameters(points: list["Point"], weights: list[float], knots: list[float], mults: list[int], degree: int, periodic: bool = False) -> "NurbsCurve":
         """Create a NURBS curve from explicit parameters (OCCT / compas_occt convention:
         distinct knots + per-knot multiplicities). Mirrors OCCNurbsCurve.from_parameters and
         underlies from_points / from_line / from_circle / from_ellipse. The internal (OpenNURBS)
@@ -467,7 +467,7 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def create_fitted(points: List["Point"], num_cvs: int, degree: int = 3, is_periodic: bool = False) -> "NurbsCurve":
+    def create_fitted(points: list["Point"], num_cvs: int, degree: int = 3, is_periodic: bool = False) -> "NurbsCurve":
         m = len(points)
         dim = 3
         order = degree + 1
@@ -614,7 +614,7 @@ class NurbsCurve:
         return curve
 
     @staticmethod
-    def join(curves: list["NurbsCurve"], tolerance: Optional[float] = None) -> list["NurbsCurve"]:
+    def join(curves: list["NurbsCurve"], tolerance: float | None = None) -> list["NurbsCurve"]:
         """Join curve segments into chains by endpoint matching.
 
         Segments are greedily chained (reversed as needed), made compatible
@@ -848,7 +848,7 @@ class NurbsCurve:
         return True
 
     def create_clamped_uniform(self, dimension: int, order: int, 
-                              points: List[Point], nurbsknot_delta: float = 1.0) -> bool:
+                              points: list[Point], nurbsknot_delta: float = 1.0) -> bool:
         """Create clamped uniform NURBS curve from control points"""
         if not points or len(points) < order:
             return False
@@ -865,7 +865,7 @@ class NurbsCurve:
         return True
 
     def create_periodic_uniform(self, dimension: int, order: int,
-                               points: List[Point], nurbsknot_delta: float = 1.0) -> bool:
+                               points: list[Point], nurbsknot_delta: float = 1.0) -> bool:
         """Create periodic uniform NURBS curve from control points"""
         point_count = len(points) if points else 0
         if point_count < order:
@@ -943,7 +943,7 @@ class NurbsCurve:
 
         return True
 
-    def is_linear(self, tolerance: Optional[float] = None) -> bool:
+    def is_linear(self, tolerance: float | None = None) -> bool:
         """Check if curve is a straight line.
 
         Parameters
@@ -991,7 +991,7 @@ class NurbsCurve:
 
         return bool(np.all(dists_sq <= tolerance * tolerance))
 
-    def is_planar(self, tolerance: Optional[float] = None) -> bool:
+    def is_planar(self, tolerance: float | None = None) -> bool:
         """Check if curve lies in a plane.
 
         Parameters
@@ -1046,7 +1046,7 @@ class NurbsCurve:
         dists = np.abs(diffs @ n)
         return bool(np.all(dists <= tolerance))
 
-    def is_arc(self, tolerance: Optional[float] = None) -> bool:
+    def is_arc(self, tolerance: float | None = None) -> bool:
         """Check if curve is an arc.
 
         Parameters
@@ -1115,7 +1115,7 @@ class NurbsCurve:
                 return False
         return True
 
-    def is_in_plane(self, test_plane: Plane, tolerance: Optional[float] = None) -> bool:
+    def is_in_plane(self, test_plane: Plane, tolerance: float | None = None) -> bool:
         """Check if curve lies in a specific plane.
 
         Parameters
@@ -1206,7 +1206,7 @@ class NurbsCurve:
 
         return True
 
-    def is_polyline(self) -> Tuple[bool, List[Point], List[float]]:
+    def is_polyline(self) -> tuple[bool, list[Point], list[float]]:
         """Check if curve can be represented as a polyline.
 
         Returns
@@ -1252,7 +1252,7 @@ class NurbsCurve:
 
         return True
 
-    def is_duplicate(self, other: "NurbsCurve", ignore_parameterization: bool = False, tolerance: Optional[float] = None) -> bool:
+    def is_duplicate(self, other: "NurbsCurve", ignore_parameterization: bool = False, tolerance: float | None = None) -> bool:
         if tolerance is None:
             tolerance = Tolerance.ZERO_TOLERANCE
         if not self.is_valid() or not other.is_valid():
@@ -1378,7 +1378,7 @@ class NurbsCurve:
     # Control Vertex Access
     ###########################################################################################
 
-    def get_cv(self, cv_index: int) -> Optional[Point]:
+    def get_cv(self, cv_index: int) -> Point | None:
         """Get control point at index as Point (Euclidean coordinates)"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return None
@@ -1394,7 +1394,7 @@ class NurbsCurve:
             return Point(x / w, y / w, z / w)
         return Point(x, y, z)
 
-    def cv(self, cv_index: int) -> Optional[List[float]]:
+    def cv(self, cv_index: int) -> list[float] | None:
         """Get raw CV data at index (like C++ double* cv(int))"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return None
@@ -1426,7 +1426,7 @@ class NurbsCurve:
         self._invalidate_rmf_cache()
         return True
 
-    def get_cv_4d(self, cv_index: int) -> Optional[Tuple[float, float, float, float]]:
+    def get_cv_4d(self, cv_index: int) -> tuple[float, float, float, float] | None:
         """Get control point as homogeneous coordinates (x, y, z, w)"""
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return None
@@ -1691,7 +1691,7 @@ class NurbsCurve:
 
         return float(g)
 
-    def get_greville_abcissae(self) -> List[float]:
+    def get_greville_abcissae(self) -> list[float]:
         """Get all Greville abcissae.
         
         Returns
@@ -1706,7 +1706,7 @@ class NurbsCurve:
     # Domain & Parameterization
     ###########################################################################################
 
-    def domain(self) -> Tuple[float, float]:
+    def domain(self) -> tuple[float, float]:
         """Get curve domain [start_param, end_param]"""
         if not self.is_valid():
             return (0.0, 0.0)
@@ -1757,7 +1757,7 @@ class NurbsCurve:
         self._invalidate_rmf_cache()
         return True
 
-    def get_span_vector(self) -> List[float]:
+    def get_span_vector(self) -> list[float]:
         """Get span (distinct nurbsknot intervals) values"""
         if not self.is_valid():
             return []
@@ -1773,7 +1773,7 @@ class NurbsCurve:
     # Geometric Queries
     ###########################################################################################
 
-    def get_next_discontinuity(self, continuity_type: int, t0: float, t1: float) -> Tuple[bool, float]:
+    def get_next_discontinuity(self, continuity_type: int, t0: float, t1: float) -> tuple[bool, float]:
         if not self.is_valid():
             return False, 0.0
         d0, d1 = self.domain()
@@ -1890,7 +1890,7 @@ class NurbsCurve:
 
     def to_polyline_adaptive(self, angle_tolerance: float = 0.1, 
                             min_edge_length: float = 0.0,
-                            max_edge_length: float = 0.0) -> Tuple[List[Point], List[float]]:
+                            max_edge_length: float = 0.0) -> tuple[list[Point], list[float]]:
         """Convert curve to polyline with adaptive sampling (curvature-based).
 
         Parameters
@@ -1978,7 +1978,7 @@ class NurbsCurve:
 
         return points, params
 
-    def divide_by_count(self, count: int, include_endpoints: bool = True) -> Tuple[List[Point], List[float]]:
+    def divide_by_count(self, count: int, include_endpoints: bool = True) -> tuple[list[Point], list[float]]:
         """Divide curve into uniform arc-length segments."""
         points = []
         params = []
@@ -2195,7 +2195,7 @@ class NurbsCurve:
 
         return points, params
 
-    def divide_by_length(self, segment_length: float) -> Tuple[List[Point], List[float]]:
+    def divide_by_length(self, segment_length: float) -> tuple[list[Point], list[float]]:
         """Divide curve by arc length using Gauss-Legendre quadrature.
 
         Parameters
@@ -2398,7 +2398,7 @@ class NurbsCurve:
         
         return Point(pt[0], pt[1] if self.m_dim > 1 else 0, pt[2] if self.m_dim > 2 else 0)
 
-    def evaluate(self, t: float, derivative_count: int = 0) -> List[Vector]:
+    def evaluate(self, t: float, derivative_count: int = 0) -> list[Vector]:
         """Evaluate point and derivatives on curve at parameter t.
 
         Parameters
@@ -2519,12 +2519,12 @@ class NurbsCurve:
         return self.point_at(self.closest_parameter(test_point))
 
     @overload
-    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Tuple[float, float]: ...
+    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> tuple[float, float]: ...
 
     @overload
-    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = True) -> Tuple[Tuple[float, float], float]: ...
+    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = True) -> tuple[tuple[float, float], float]: ...
 
-    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Union[Tuple[float, float], Tuple[Tuple[float, float], float]]:
+    def closest_parameters_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> tuple[float, float] | tuple[tuple[float, float], float]:
         """Parameters (u, v) where this curve is closest to another curve.
 
         Matches OCCT GeomAPI_ExtremaCurveCurve. If return_distance, returns ((u, v), dist).
@@ -2536,12 +2536,12 @@ class NurbsCurve:
         return (u, v)
 
     @overload
-    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Tuple['Point', 'Point']: ...
+    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> tuple['Point', 'Point']: ...
 
     @overload
-    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = True) -> Tuple[Tuple['Point', 'Point'], float]: ...
+    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = True) -> tuple[tuple['Point', 'Point'], float]: ...
 
-    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> Union[Tuple['Point', 'Point'], Tuple[Tuple['Point', 'Point'], float]]:
+    def closest_points_curve(self, other: 'NurbsCurve', return_distance: bool = False) -> tuple['Point', 'Point'] | tuple[tuple['Point', 'Point'], float]:
         """Points (pa, pb) where this curve is closest to another curve."""
         from session_py.closest import Closest
         u, v, dist = Closest.curve_curve(self, other)
@@ -2685,7 +2685,7 @@ class NurbsCurve:
 
         self._rmf_cache = {'params': params, 'quaternions': quaternions, 'origins': origins}
 
-    def _frame_to_quaternion(r: Vector, s: Vector, t: Vector) -> List[float]:
+    def _frame_to_quaternion(r: Vector, s: Vector, t: Vector) -> list[float]:
         trace = r.x + s.y + t.z
 
         if trace > 0:
@@ -2701,14 +2701,14 @@ class NurbsCurve:
             big_s = math.sqrt(1.0 + t.z - r.x - s.y) * 2
             return [(r.y - s.x) / big_s, (t.x + r.z) / big_s, (t.y + s.z) / big_s, 0.25 * big_s]
 
-    def _quaternion_to_frame(q: List[float]) -> Tuple[Vector, Vector, Vector]:
+    def _quaternion_to_frame(q: list[float]) -> tuple[Vector, Vector, Vector]:
         w, x, y, z = q
         r = Vector(1 - 2*(y*y + z*z), 2*(x*y + w*z), 2*(x*z - w*y))
         s = Vector(2*(x*y - w*z), 1 - 2*(x*x + z*z), 2*(y*z + w*x))
         t = Vector(2*(x*z + w*y), 2*(y*z - w*x), 1 - 2*(x*x + y*y))
         return (r, s, t)
 
-    def _slerp(q0: List[float], q1: List[float], u: float) -> List[float]:
+    def _slerp(q0: list[float], q1: list[float], u: float) -> list[float]:
         dot = q0[0]*q1[0] + q0[1]*q1[1] + q0[2]*q1[2] + q0[3]*q1[3]
 
         q1_adj = q1
@@ -2846,7 +2846,7 @@ class NurbsCurve:
 
         return Plane.from_frame(origin, ri, s, tangent)
 
-    def get_perpendicular_planes(self, count: int) -> List['Plane']:
+    def get_perpendicular_planes(self, count: int) -> list['Plane']:
         """Get multiple rotation minimizing frames along the curve.
         count = number of subdivisions (returns count+1 frames at arc-length equidistant points)"""
         pts, params = self.divide_by_count(count + 1, True)
@@ -3323,7 +3323,7 @@ class NurbsCurve:
 
         return True
 
-    def split(self, t: float) -> Tuple[Optional['NurbsCurve'], Optional['NurbsCurve']]:
+    def split(self, t: float) -> tuple[Optional['NurbsCurve'], Optional['NurbsCurve']]:
         if not self.is_valid():
             return None, None
 
@@ -3845,7 +3845,7 @@ class NurbsCurve:
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsCurve":
         """Read JSON from file."""
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
@@ -4172,7 +4172,7 @@ class NurbsCurve:
         return True
 
     def _span_is_linear(self, span_index: int, min_length: float = 0.0,
-                       tolerance: Optional[float] = None) -> bool:
+                       tolerance: float | None = None) -> bool:
         """Check if span is linear within tolerance.
         
         Parameters
@@ -4261,7 +4261,7 @@ class NurbsCurve:
         
         return True
 
-    def _get_parameter_tolerance(self, t: float) -> Tuple[float, float]:
+    def _get_parameter_tolerance(self, t: float) -> tuple[float, float]:
         """Get parameter tolerance at point.
         
         Parameters

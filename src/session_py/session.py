@@ -75,10 +75,10 @@ class Session:
         self._guid = None
         self.name = name
         self.objects = Objects()
-        self.lookup: Dict[str, Any] = {}
+        self.lookup: dict[str, Any] = {}
         self.tree = Tree(name=f"{name}_tree")
         self.graph = Graph(name=f"{name}_graph")
-        self.xforms: Dict[str, Xform] = {}
+        self.xforms: dict[str, Xform] = {}
         # SpatialBVH for collision detection (auto-computed world size)
         self.bvh = SpatialBVH()
 
@@ -135,12 +135,12 @@ class Session:
                     acc = xf * acc
         return acc
 
-    def world_xforms(self) -> Dict[str, Xform]:
+    def world_xforms(self) -> dict[str, Xform]:
         """Every object's cumulative placement, computed in ONE downward pass. Use this instead
         of calling `world_xform` per object: that does a whole-tree scan to find each node,
         which is quadratic over a session.
         """
-        out: Dict[str, Xform] = {}
+        out: dict[str, Xform] = {}
 
         def walk(node: TreeNode, parent_xform: Xform) -> None:
             local = self.xforms.get(node.name)
@@ -156,7 +156,7 @@ class Session:
             out.setdefault(guid, xform)
         return out
 
-    def _xforms_ordered(self) -> List[Tuple[str, Xform]]:
+    def _xforms_ordered(self) -> list[tuple[str, Xform]]:
         """The xforms in canonical `order()` sequence, identity entries omitted - the exact
         sequence __jsondump__ and pb_dumps write, so both formats share one order."""
         ordered = []
@@ -197,7 +197,7 @@ class Session:
 
     @classmethod
     def __jsonload__(
-        cls, data: dict, guid: Optional[str] = None, name: Optional[str] = None
+        cls, data: dict, guid: str | None = None, name: str | None = None
     ) -> "Session":
         """Deserialize from polymorphic JSON format."""
         from .file_encoders import file_decode_node
@@ -265,7 +265,7 @@ class Session:
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "Session":
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     def pb_dumps(self) -> bytes:
@@ -347,7 +347,7 @@ class Session:
             self.add(node, parent)
         return node
 
-    def order(self) -> List[str]:
+    def order(self) -> list[str]:
         """Canonical object order: the objects lists walked in one fixed type sequence -
         deterministic across runs AND languages (lookup/map iteration is neither).
         Viewers and reconcile key their rows off this."""
@@ -365,40 +365,40 @@ class Session:
             + [e.guid for e in self.objects.elements]
         )
 
-    def add_point(self, point: Point, parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_point(self, point: Point, parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.points, point, "point", parent)
 
-    def add_line(self, line: "Line", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_line(self, line: "Line", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.lines, line, "line", parent)
 
-    def add_plane(self, plane: "Plane", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_plane(self, plane: "Plane", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.planes, plane, "plane", parent)
 
-    def add_obb(self, bbox: "OBB", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_obb(self, bbox: "OBB", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.bboxes, bbox, "bbox", parent)
 
-    def add_polyline(self, polyline: "Polyline", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_polyline(self, polyline: "Polyline", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.polylines, polyline, "polyline", parent)
 
-    def add_pointcloud(self, pointcloud: "PointCloud", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_pointcloud(self, pointcloud: "PointCloud", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.pointclouds, pointcloud, "pointcloud", parent)
 
-    def add_mesh(self, mesh: "Mesh", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_mesh(self, mesh: "Mesh", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.meshes, mesh, "mesh", parent)
 
-    def add_nurbscurve(self, nurbscurve: "NurbsCurve", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_nurbscurve(self, nurbscurve: "NurbsCurve", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.nurbscurves, nurbscurve, "nurbscurve", parent)
 
-    def add_nurbssurface(self, nurbssurface: "NurbsSurface", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_nurbssurface(self, nurbssurface: "NurbsSurface", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.nurbssurfaces, nurbssurface, "nurbssurface", parent)
 
-    def add_brep(self, brep: "BRep", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_brep(self, brep: "BRep", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.breps, brep, "brep", parent)
 
-    def add_element(self, element: "Element", parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_element(self, element: "Element", parent: TreeNode | None = None) -> TreeNode:
         return self._add_object(self.objects.elements, element, "element", parent)
 
-    def add_component(self, component: Any, parent: Optional[TreeNode] = None) -> TreeNode:
+    def add_component(self, component: Any, parent: TreeNode | None = None) -> TreeNode:
         """Add a custom component (any object with guid, name, __jsondump__, __jsonload__)."""
         return self._add_object(self.objects.components, component, "component", parent)
 
@@ -450,7 +450,7 @@ class Session:
             self.add_edge(elems[a].guid, elems[b].guid,
                 f"{fi},{fj},{type_val},{jpl.guid}")
 
-    def add(self, node: TreeNode, parent: Optional[TreeNode] = None) -> None:
+    def add(self, node: TreeNode, parent: TreeNode | None = None) -> None:
         """Add a TreeNode to the tree hierarchy.
 
         Parameters
@@ -483,7 +483,7 @@ class Session:
     # Details - Lookup
     ###########################################################################################
 
-    def get_object(self, guid: str) -> Optional[Point]:
+    def get_object(self, guid: str) -> Point | None:
         """Get a geometry object by its GUID.
 
         Parameters
@@ -653,7 +653,7 @@ class Session:
             # Fallback
             return OBB.from_point(Point(0, 0, 0), inflate)
 
-    def get_collisions(self) -> List[Tuple[str, str]]:
+    def get_collisions(self) -> list[tuple[str, str]]:
         """Get all collision pairs using SpatialBVH and add them as graph edges.
 
         Automatically:
@@ -696,7 +696,7 @@ class Session:
 
     def ray_cast(
         self, origin: Point, direction: "Vector", tolerance: float = 1e-3
-    ) -> List[RayHit]:
+    ) -> list[RayHit]:
         from .line import Line
         from .vector import Vector
         from .polyline import Polyline
@@ -727,7 +727,7 @@ class Session:
         identity = Xform.identity()
         world = self.world_xforms()
 
-        boxes_with_guids: List[Tuple[OBB, str]] = []
+        boxes_with_guids: list[tuple[OBB, str]] = []
         for guid, geometry in self.lookup.items():
             bbox = self._compute_bounding_box(geometry, world.get(guid, identity))
             boxes_with_guids.append((bbox, guid))
@@ -736,12 +736,12 @@ class Session:
 
         self.bvh.build_with_guids(boxes_with_guids)
 
-        candidates: List[int] = []
+        candidates: list[int] = []
         self.bvh.ray_cast(origin, dir_unit, candidates, True)
 
-        hits_all: List[RayHit] = []
+        hits_all: list[RayHit] = []
 
-        def point_hit(p: Point) -> Tuple[bool, Point, float]:
+        def point_hit(p: Point) -> tuple[bool, Point, float]:
             vx = p[0] - origin[0]
             vy = p[1] - origin[1]
             vz = p[2] - origin[2]
@@ -770,7 +770,7 @@ class Session:
                 continue
             placement = world.get(guid, identity)
 
-            hit_point: Optional[Point] = None
+            hit_point: Point | None = None
 
             if isinstance(geom, OBB):
                 pts = ray_box(ray_line, geom, 0.0, FAR)
@@ -786,7 +786,7 @@ class Session:
                     hit_point = hp
             elif isinstance(geom, Polyline):
                 best_t = float("inf")
-                best_p: Optional[Point] = None
+                best_p: Point | None = None
                 for i in range(len(geom.points) - 1):
                     seg = Line.from_points(geom.points[i], geom.points[i + 1])
                     hp = line_line(ray_line, seg, Tolerance.APPROXIMATION)

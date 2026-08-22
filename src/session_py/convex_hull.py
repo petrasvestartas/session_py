@@ -18,7 +18,7 @@ class ConvexHull:
         return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
     @staticmethod
-    def hull_2d(points: List[Point]) -> List[Point]:
+    def hull_2d(points: list[Point]) -> list[Point]:
         n = len(points)
         if n < 3:
             return list(points)
@@ -40,7 +40,7 @@ class ConvexHull:
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _normal(a: Point, b: Point, c: Point) -> Tuple[float, float, float]:
+    def _normal(a: Point, b: Point, c: Point) -> tuple[float, float, float]:
         ax = b[0] - a[0]
         ay = b[1] - a[1]
         az = b[2] - a[2]
@@ -58,7 +58,7 @@ class ConvexHull:
         return nx * (d[0] - a[0]) + ny * (d[1] - a[1]) + nz * (d[2] - a[2])
 
     @staticmethod
-    def _farthest_point(pts_idx: List[int], points: List[Point], a: Point, b: Point, c: Point) -> int:
+    def _farthest_point(pts_idx: list[int], points: list[Point], a: Point, b: Point, c: Point) -> int:
         best_idx = -1
         best_vol = 0.0
         for i in pts_idx:
@@ -69,7 +69,7 @@ class ConvexHull:
         return best_idx
 
     @staticmethod
-    def _visible_from(pts_idx: List[int], points: List[Point], a: Point, b: Point, c: Point) -> List[int]:
+    def _visible_from(pts_idx: list[int], points: list[Point], a: Point, b: Point, c: Point) -> list[int]:
         result = []
         for i in pts_idx:
             if ConvexHull._signed_volume(a, b, c, points[i]) > 1e-10:
@@ -77,7 +77,7 @@ class ConvexHull:
         return result
 
     @staticmethod
-    def _quickhull_3d_faces(points: List[Point], pts_idx: List[int], a: int, b: int, c: int, faces: List[Tuple[int, int, int]]) -> None:
+    def _quickhull_3d_faces(points: list[Point], pts_idx: list[int], a: int, b: int, c: int, faces: list[tuple[int, int, int]]) -> None:
         pa = points[a]
         pb = points[b]
         pc = points[c]
@@ -97,7 +97,7 @@ class ConvexHull:
         ConvexHull._quickhull_3d_faces(points, v_ca, c, a, apex, faces)
 
     @staticmethod
-    def hull_3d(points: List[Point]) -> Mesh:
+    def hull_3d(points: list[Point]) -> Mesh:
         n = len(points)
         if n < 4:
             mesh = Mesh()
@@ -134,7 +134,7 @@ class ConvexHull:
 
         rest = [i for i in range(n) if i not in (p0, p1, p2, p3)]
 
-        faces: List[Tuple[int, int, int]] = []
+        faces: list[tuple[int, int, int]] = []
         # 4 faces of tetrahedron, outward-facing
         ConvexHull._quickhull_3d_faces(points, rest, p0, p1, p2, faces)
         ConvexHull._quickhull_3d_faces(points, rest, p0, p3, p1, faces)

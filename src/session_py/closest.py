@@ -24,7 +24,7 @@ class Closest:
     """Static methods for finding closest points between geometry objects."""
 
     @staticmethod
-    def curve_point(curve: "NurbsCurve", test_point: Point, t0: float = 0.0, t1: float = 0.0) -> Tuple[float, float]:
+    def curve_point(curve: "NurbsCurve", test_point: Point, t0: float = 0.0, t1: float = 0.0) -> tuple[float, float]:
         """Find closest point on NURBS curve to test point.
 
         Parameters
@@ -131,7 +131,7 @@ class Closest:
         return (t, final_dist)
 
     @staticmethod
-    def curve_curve(curve0: "NurbsCurve", curve1: "NurbsCurve") -> Tuple[float, float, float]:
+    def curve_curve(curve0: "NurbsCurve", curve1: "NurbsCurve") -> tuple[float, float, float]:
         """Closest approach between two NURBS curves (dense grid seed + 2D Newton).
 
         Minimizes f(u,v) = |C0(u) - C1(v)|^2. Returns (u, v, distance).
@@ -190,7 +190,7 @@ class Closest:
         return (u, v, dist)
 
     @staticmethod
-    def line_point(line: Line, test_point: Point) -> Tuple[Point, float, float]:
+    def line_point(line: Line, test_point: Point) -> tuple[Point, float, float]:
         """Find closest point on line to test point.
 
         Parameters
@@ -235,7 +235,7 @@ class Closest:
         return (closest, t, dist)
 
     @staticmethod
-    def polyline_point(polyline: Polyline, test_point: Point) -> Tuple[Point, float, float]:
+    def polyline_point(polyline: Polyline, test_point: Point) -> tuple[Point, float, float]:
         """Find closest point on polyline to test point.
 
         Parameters
@@ -285,7 +285,7 @@ class Closest:
 
     @staticmethod
     def surface_point(surface: "NurbsSurface", test_point: Point, u0: float = 0.0, u1: float = 0.0,
-                      v0: float = 0.0, v1: float = 0.0) -> Tuple[float, float, float]:
+                      v0: float = 0.0, v1: float = 0.0) -> tuple[float, float, float]:
         """Find closest point on NURBS surface to test point.
 
         Parameters
@@ -403,7 +403,7 @@ class Closest:
         return (u, v, final_dist)
 
     @staticmethod
-    def surface_curve(surface: "NurbsSurface", curve: "NurbsCurve", t0: float = 0.0, t1: float = 0.0, tolerance: Optional[float] = None) -> list["NurbsCurve"]:
+    def surface_curve(surface: "NurbsSurface", curve: "NurbsCurve", t0: float = 0.0, t1: float = 0.0, tolerance: float | None = None) -> list["NurbsCurve"]:
         """Project a 3D curve onto a surface (curve pullback).
 
         Samples the curve, inverts each sample with warm-started windowed
@@ -833,7 +833,7 @@ class Closest:
         return (dx * dx + dy * dy + dz * dz) ** 0.5
 
     @staticmethod
-    def mesh_point(mesh: "Mesh", test_point: "Point") -> Tuple["Point", int, float]:
+    def mesh_point(mesh: "Mesh", test_point: "Point") -> tuple["Point", int, float]:
         import heapq
 
         if mesh.number_of_faces() == 0:
@@ -883,7 +883,7 @@ class Closest:
         return (best_point, best_face_key, best_dist)
 
     @staticmethod
-    def mesh_point_aabb(mesh: "Mesh", test_point: "Point") -> Tuple["Point", int, float]:
+    def mesh_point_aabb(mesh: "Mesh", test_point: "Point") -> tuple["Point", int, float]:
         if mesh.number_of_faces() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
 
@@ -976,7 +976,7 @@ class Closest:
         return tuple(best)
 
     @staticmethod
-    def pointcloud_point(cloud: "PointCloud", test_point: "Point") -> Tuple["Point", int, float]:
+    def pointcloud_point(cloud: "PointCloud", test_point: "Point") -> tuple["Point", int, float]:
         if cloud.point_count() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
 
@@ -995,7 +995,7 @@ class Closest:
         return (best_point, best_index, best_dist)
 
     @staticmethod
-    def pointcloud_point_kdtree(cloud: "PointCloud", test_point: "Point") -> Tuple["Point", int, float]:
+    def pointcloud_point_kdtree(cloud: "PointCloud", test_point: "Point") -> tuple["Point", int, float]:
         if cloud.point_count() == 0:
             return (Point(0, 0, 0), 0, float('inf'))
         from session_py import SpatialKDTree
@@ -1065,7 +1065,7 @@ class Closest:
         return (dx*dx + dy*dy + dz*dz) ** 0.5
 
     @staticmethod
-    def lines_closest(lines: List["Line"], threshold: float = 0.0) -> List[Tuple[int, int]]:
+    def lines_closest(lines: list["Line"], threshold: float = 0.0) -> list[tuple[int, int]]:
         if len(lines) < 2:
             return []
         from session_py import AABB
@@ -1087,7 +1087,7 @@ class Closest:
         return pairs
 
     @staticmethod
-    def polylines_closest(polylines: List["Polyline"], threshold: float = 0.0) -> List[Tuple[int, int]]:
+    def polylines_closest(polylines: list["Polyline"], threshold: float = 0.0) -> list[tuple[int, int]]:
         if len(polylines) < 2:
             return []
         from session_py import AABB
@@ -1107,7 +1107,7 @@ class Closest:
         return pairs
 
     @staticmethod
-    def nurbscurves_closest(curves: List["NurbsCurve"], threshold: float = 0.0) -> List[Tuple[int, int]]:
+    def nurbscurves_closest(curves: list["NurbsCurve"], threshold: float = 0.0) -> list[tuple[int, int]]:
         if len(curves) < 2:
             return []
         from session_py import AABB
@@ -1130,7 +1130,7 @@ class Closest:
         return pairs
 
     @staticmethod
-    def boxes_closest(boxes: List["OBB"], threshold: float = 0.0) -> List[Tuple[int, int]]:
+    def boxes_closest(boxes: list["OBB"], threshold: float = 0.0) -> list[tuple[int, int]]:
         if len(boxes) < 2:
             return []
         inflated = []
