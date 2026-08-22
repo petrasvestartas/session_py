@@ -1,5 +1,5 @@
 from typing import Union
-from typing import Callable
+from collections.abc import Callable
 from typing import Optional
 from typing import TYPE_CHECKING
 import uuid
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 class Element:
-    def __init__(self, geometry: Optional[Union["Mesh", "BRep"]] = None, name: str = "my_element"):
+    def __init__(self, geometry: Union["Mesh", "BRep"] | None = None, name: str = "my_element"):
         self._guid = None
         self.name = name
         self._geometry = geometry
@@ -45,10 +45,10 @@ class Element:
         self._guid = value
 
     @property
-    def geometry(self) -> Optional[Union["Mesh", "BRep"]]:
+    def geometry(self) -> Union["Mesh", "BRep"] | None:
         return self._geometry
 
-    def session_geometry(self, xform: Xform) -> Optional[Union["Mesh", "BRep"]]:
+    def session_geometry(self, xform: Xform) -> Union["Mesh", "BRep"] | None:
         """The element's geometry placed by ``xform``. The placement is supplied by the caller -
         an Element no longer stores one; the Session does. Pass identity for local geometry.
         """
@@ -190,7 +190,7 @@ class Element:
         self._geometry = self.session_geometry(xform)
         self._is_dirty = True
 
-    def set_geometry(self, geometry: Optional[Union["Mesh", "BRep"]]) -> None:
+    def set_geometry(self, geometry: Union["Mesh", "BRep"] | None) -> None:
         self._geometry = geometry
         self._is_dirty = True
 
@@ -350,7 +350,7 @@ class Element:
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "Element":
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     ###########################################################################################

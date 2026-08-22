@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 from typing import List
 # SpatialRTree — R-tree with dynamic insert/delete (Guttman split, fan-out 4–8).
 # Use for: "find all objects overlapping this region" (spatial range queries).
@@ -307,7 +307,7 @@ class SpatialRTree:
                         return True
             return False
 
-    def insert(self, a_min: List[float], a_max: List[float], a_data: int) -> None:
+    def insert(self, a_min: list[float], a_max: list[float], a_data: int) -> None:
         branch = _Branch()
         branch.m_rect = self._make_rect(a_min, a_max)
         branch.m_child = None
@@ -315,7 +315,7 @@ class SpatialRTree:
         self._insert_branch_internal(branch, 0)
         self._m_size += 1
 
-    def remove(self, a_min: List[float], a_max: List[float], a_data: int) -> bool:
+    def remove(self, a_min: list[float], a_max: list[float], a_data: int) -> bool:
         rect = self._make_rect(a_min, a_max)
         reinsert_list = []
         if not self._remove_rect_internal(rect, a_data, self._m_root, reinsert_list):
@@ -328,7 +328,7 @@ class SpatialRTree:
         self._m_size -= 1
         return True
 
-    def search(self, a_min: List[float], a_max: List[float], a_callback: Callable) -> int:
+    def search(self, a_min: list[float], a_max: list[float], a_callback: Callable) -> int:
         rect = self._make_rect(a_min, a_max)
         count_ref = [0]
         self._search_internal(rect, self._m_root, count_ref, a_callback)

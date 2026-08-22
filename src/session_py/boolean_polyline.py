@@ -232,7 +232,7 @@ def v_perpendic_dist_sq(pt: BIVec2, l1: BIVec2, l2: BIVec2) -> float:
     e = a * d - c * b
     return (e * e) / (c * c + d * d)
 
-def v_get_seg_isect_pt(a: BIVec2, b: BIVec2, c: BIVec2, d: BIVec2) -> Tuple[bool, BIVec2]:
+def v_get_seg_isect_pt(a: BIVec2, b: BIVec2, c: BIVec2, d: BIVec2) -> tuple[bool, BIVec2]:
     dx1 = float(b.x - a.x)
     dy1 = float(b.y - a.y)
     dx2 = float(d.x - c.x)
@@ -291,7 +291,7 @@ def v_very_small_tri(op: VOutPt) -> bool:
 def v_valid_closed(op: VOutPt) -> bool:
     return op is not None and op.next is not op and op.next is not op.prev and not v_very_small_tri(op)
 
-def pip_i(pt: BIVec2, poly: List[BIVec2]) -> bool:
+def pip_i(pt: BIVec2, poly: list[BIVec2]) -> bool:
     winding = 0
     n = len(poly)
     for i in range(n):
@@ -325,7 +325,7 @@ def pip_vertex(pt: BIVec2, head: VOutPt) -> bool:
 
 # -- Vertex building + local minima detection --
 
-def v_add_path_from_doubles(coords: List[float], n: int, polytype: int, sc: VattiScratch, bool_scale: float) -> Tuple[Optional[VVertex], int, int, int, int]:
+def v_add_path_from_doubles(coords: list[float], n: int, polytype: int, sc: VattiScratch, bool_scale: float) -> tuple[VVertex | None, int, int, int, int]:
     if n < 3:
         return None, 0, 0, 0, 0
     vertices = []
@@ -395,7 +395,7 @@ def v_add_path_from_doubles(coords: List[float], n: int, polytype: int, sc: Vatt
             pv.flags |= VF_LocalMax
     return vertices[0], minX, maxX, minY, maxY
 
-def v_add_path(pts: List[BIVec2], n: int, polytype: int, sc: VattiScratch) -> None:
+def v_add_path(pts: list[BIVec2], n: int, polytype: int, sc: VattiScratch) -> None:
     if n < 3:
         return
     vertices = []
@@ -452,7 +452,7 @@ def v_add_path(pts: List[BIVec2], n: int, polytype: int, sc: VattiScratch) -> No
 
 # -- AEL operations --
 
-def v_get_maxima_pair(e: VActive) -> Optional[VActive]:
+def v_get_maxima_pair(e: VActive) -> VActive | None:
     e2 = e.next_in_ael
     while e2 is not None:
         if e2.vertex_top is e.vertex_top:
@@ -460,7 +460,7 @@ def v_get_maxima_pair(e: VActive) -> Optional[VActive]:
         e2 = e2.next_in_ael
     return None
 
-def v_get_curr_y_maxima(e: VActive) -> Optional[VVertex]:
+def v_get_curr_y_maxima(e: VActive) -> VVertex | None:
     r = e.vertex_top
     if e.wind_dx > 0:
         while r.next.pt.y == r.pt.y:
@@ -470,7 +470,7 @@ def v_get_curr_y_maxima(e: VActive) -> Optional[VVertex]:
             r = r.prev
     return r if v_is_maxima_v(r) else None
 
-def v_get_prev_hot(e: VActive) -> Optional[VActive]:
+def v_get_prev_hot(e: VActive) -> VActive | None:
     p = e.prev_in_ael
     while p is not None and not v_is_hot(p):
         p = p.prev_in_ael
@@ -558,7 +558,7 @@ def v_delete_from_ael(sc: VattiScratch, e: VActive) -> None:
 def v_insert_scanline(sc: VattiScratch, y: int) -> None:
     sc.scanline_list.push(y)
 
-def v_pop_scanline(sc: VattiScratch) -> Tuple[bool, int]:
+def v_pop_scanline(sc: VattiScratch) -> tuple[bool, int]:
     sl = sc.scanline_list
     if sl.empty():
         return False, 0
@@ -568,7 +568,7 @@ def v_pop_scanline(sc: VattiScratch) -> Tuple[bool, int]:
         sl.pop()
     return True, y
 
-def v_pop_locmin(sc: VattiScratch, y: int) -> Tuple[bool, Optional[VLocalMinima]]:
+def v_pop_locmin(sc: VattiScratch, y: int) -> tuple[bool, VLocalMinima | None]:
     if sc.locmin_idx >= len(sc.locmin_list) or sc.locmin_list[sc.locmin_idx].vertex.pt.y != y:
         return False, None
     lm = sc.locmin_list[sc.locmin_idx]
@@ -579,7 +579,7 @@ def v_push_horz(sc: VattiScratch, e: VActive) -> None:
     e.next_in_sel = sc.sel
     sc.sel = e
 
-def v_pop_horz(sc: VattiScratch) -> Tuple[bool, Optional[VActive]]:
+def v_pop_horz(sc: VattiScratch) -> tuple[bool, VActive | None]:
     e = sc.sel
     if e is None:
         return False, None
@@ -726,7 +726,7 @@ def v_join_outrec_paths(e1: VActive, e2: VActive) -> None:
     e2.outrec = None
 
 
-def v_add_local_max_poly(e1: VActive, e2: VActive, pt: BIVec2, sc: VattiScratch) -> Optional[VOutPt]:
+def v_add_local_max_poly(e1: VActive, e2: VActive, pt: BIVec2, sc: VattiScratch) -> VOutPt | None:
     if v_is_joined(e1):
         v_split(e1, pt, sc)
     if v_is_joined(e2):
@@ -903,7 +903,7 @@ def v_update_edge_into_ael(sc: VattiScratch, e: VActive, cliptype: int) -> None:
     v_check_join_left(e, e.bot, sc)
     v_check_join_right(e, e.bot, sc, True)
 
-def v_reset_horz_dir(horz: VActive, max_v: VVertex) -> Tuple[bool, int, int]:
+def v_reset_horz_dir(horz: VActive, max_v: VVertex) -> tuple[bool, int, int]:
     if horz.bot.x == horz.top.x:
         left = horz.curr_x
         right = horz.curr_x
@@ -1114,7 +1114,7 @@ def v_adjust_curr_x_copy_to_sel(sc: VattiScratch, top_y: int) -> None:
             e.curr_x = v_top_x(e, top_y)
         e = e.next_in_ael
 
-def v_extract_from_sel(ae: VActive) -> Optional[VActive]:
+def v_extract_from_sel(ae: VActive) -> VActive | None:
     res = ae.next_in_sel
     if res is not None:
         res.prev_in_sel = ae.prev_in_sel
@@ -1270,7 +1270,7 @@ def v_insert_local_minima_into_ael(sc: VattiScratch, bot_y: int, cliptype: int) 
 
 # -- DoMaxima --
 
-def v_do_maxima(e: VActive, sc: VattiScratch, cliptype: int) -> Optional[VActive]:
+def v_do_maxima(e: VActive, sc: VattiScratch, cliptype: int) -> VActive | None:
     prev_e = e.prev_in_ael
     next_e = e.next_in_ael
     max_pair = v_get_maxima_pair(e)
@@ -1314,7 +1314,7 @@ def v_do_top_of_scanbeam(sc: VattiScratch, y: int, cliptype: int) -> None:
 
 # -- CleanCollinear + FixSelfIntersects --
 
-def v_dispose_outpt(op: VOutPt) -> Optional[VOutPt]:
+def v_dispose_outpt(op: VOutPt) -> VOutPt | None:
     r = op.next
     op.prev.next = op.next
     op.next.prev = op.prev
@@ -1437,7 +1437,7 @@ def v_execute_internal(sc: VattiScratch, cliptype: int) -> bool:
 
 # -- Build output paths --
 
-def v_build_path(op: VOutPt) -> Optional[List[BIVec2]]:
+def v_build_path(op: VOutPt) -> list[BIVec2] | None:
     if op is None or op.next is op or op.next is op.prev:
         return None
     path = []
@@ -1458,7 +1458,7 @@ def v_build_path(op: VOutPt) -> Optional[List[BIVec2]]:
 
 class BooleanPolyline:
     @staticmethod
-    def compute(a: "Polyline", b: "Polyline", clip_type: int) -> List["Polyline"]:
+    def compute(a: "Polyline", b: "Polyline", clip_type: int) -> list["Polyline"]:
         ca = a.coords
         cb = b.coords
         na = len(ca) // 3
@@ -1680,7 +1680,7 @@ class BooleanPolyline:
         return out
 
     @staticmethod
-    def clip_open_against_closed(open_subject: "Polyline", closed_clip: "Polyline") -> List["Polyline"]:
+    def clip_open_against_closed(open_subject: "Polyline", closed_clip: "Polyline") -> list["Polyline"]:
         result = []
         cs = open_subject.coords
         cc = closed_clip.coords
@@ -1783,7 +1783,7 @@ class BooleanPolyline:
         flush()
         return result
     @staticmethod
-    def compute_raw(a_xy: List[float], na: int, b_xy: List[float], nb: int, clip_type: int, out_xy: List[float], max_out: int) -> int:
+    def compute_raw(a_xy: list[float], na: int, b_xy: list[float], nb: int, clip_type: int, out_xy: list[float], max_out: int) -> int:
         # Raw-array version: takes flat 2D coords (x,y pairs, stride=2),
         # writes flat 2D result coords into out_xy. No Polyline construction.
         # Returns number of result points (0 if no intersection).

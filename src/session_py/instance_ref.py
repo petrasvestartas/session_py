@@ -173,7 +173,7 @@ class InstanceRef:
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "InstanceRef":
         """Read JSON from file."""
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 

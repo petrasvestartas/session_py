@@ -9,7 +9,7 @@ from typing import Optional
 from .aabb import AABB
 
 
-def _nth_element(a: List[int], lo: int, mid: int, hi: int, key) -> None:
+def _nth_element(a: list[int], lo: int, mid: int, hi: int, key) -> None:
     """Place the mid-th element in sorted position within a[lo:hi] (quickselect)."""
     while hi - lo > 1:
         pivot = key(a[(lo + hi) // 2])
@@ -35,7 +35,7 @@ def _nth_element(a: List[int], lo: int, mid: int, hi: int, key) -> None:
 class _Node:
     __slots__ = ("aabb", "right", "object_id")
 
-    def __init__(self, aabb: Optional[AABB] = None, right: int = -1, object_id: int = -1):
+    def __init__(self, aabb: AABB | None = None, right: int = -1, object_id: int = -1):
         self.aabb = aabb if aabb is not None else AABB(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         self.right = right
         self.object_id = object_id
@@ -43,7 +43,7 @@ class _Node:
 
 class SpatialAABBTree:
     def __init__(self):
-        self.nodes: List[_Node] = []
+        self.nodes: list[_Node] = []
 
     def empty(self) -> bool:
         return len(self.nodes) == 0
@@ -51,15 +51,15 @@ class SpatialAABBTree:
     def size(self) -> int:
         return len(self.nodes)
 
-    def build(self, aabbs: List[AABB]) -> None:
+    def build(self, aabbs: list[AABB]) -> None:
         self.nodes = []
         if not aabbs:
             return
         ids = list(range(len(aabbs)))
         self._build_node(ids, 0, len(ids), aabbs)
 
-    def query_aabb(self, query: AABB) -> List[int]:
-        hits: List[int] = []
+    def query_aabb(self, query: AABB) -> list[int]:
+        hits: list[int] = []
         if self.empty():
             return hits
         stack = [0]
@@ -75,7 +75,7 @@ class SpatialAABBTree:
                 stack.append(node.right)
         return hits
 
-    def _build_node(self, ids: List[int], lo: int, hi: int, aabbs: List[AABB]) -> None:
+    def _build_node(self, ids: list[int], lo: int, hi: int, aabbs: list[AABB]) -> None:
         idx = len(self.nodes)
         self.nodes.append(_Node())
 

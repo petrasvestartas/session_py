@@ -1,4 +1,4 @@
-from typing import Iterator
+from collections.abc import Iterator
 from typing import Optional
 from typing import Union
 from typing import TYPE_CHECKING
@@ -47,7 +47,7 @@ class Vertex:
 class Edge:
     """A graph edge connecting two vertices with an attribute string."""
 
-    def __init__(self, v0: Union[str, int], v1: Union[str, int], attribute: str = ""):
+    def __init__(self, v0: str | int, v1: str | int, attribute: str = ""):
         self._guid = None
         self.name = "my_edge"
         self.v0 = str(v0)
@@ -88,10 +88,10 @@ class Edge:
     def vertices(self) -> tuple[str, str]:
         return (self.v0, self.v1)
 
-    def connects(self, vertex_id: Union[str, int]) -> bool:
+    def connects(self, vertex_id: str | int) -> bool:
         return str(vertex_id) in self.vertices
 
-    def other_vertex(self, vertex_id: Union[str, int]) -> str:
+    def other_vertex(self, vertex_id: str | int) -> str:
         vertex_id = str(vertex_id)
         if vertex_id == self.v0:
             return self.v1
@@ -234,7 +234,7 @@ class Graph:
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "Graph":
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     ###########################################################################################
@@ -344,7 +344,7 @@ class Graph:
         """
         return key in self.vertices
 
-    def has_edge(self, edge: Union[tuple, str]) -> bool:
+    def has_edge(self, edge: tuple | str) -> bool:
         """Check if an edge exists in the graph.
 
         Parameters
@@ -675,7 +675,7 @@ class Graph:
         self.vertex_count = 0
         self.edge_count = 0
 
-    def node_attribute(self, node: str, value: Optional[str] = None) -> str:
+    def node_attribute(self, node: str, value: str | None = None) -> str:
         """Get or set node attribute.
 
         Parameters
@@ -714,7 +714,7 @@ class Graph:
         else:
             return node_obj.attribute
 
-    def edge_attribute(self, u: str, v: str, value: Optional[str] = None) -> str:
+    def edge_attribute(self, u: str, v: str, value: str | None = None) -> str:
         """Get or set edge attribute.
 
         Parameters

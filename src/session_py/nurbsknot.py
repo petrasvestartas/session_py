@@ -87,7 +87,7 @@ def domain_tolerance(a: float, b: float) -> float:
     return tol
 
 
-def make_clamped_uniform(order: int, cv_count: int, delta: float = 1.0) -> Optional[np.ndarray]:
+def make_clamped_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.ndarray | None:
     """Create a clamped uniform nurbsknot vector.
     
     Parameters
@@ -131,7 +131,7 @@ def make_clamped_uniform(order: int, cv_count: int, delta: float = 1.0) -> Optio
     return nurbsknot
 
 
-def make_periodic_uniform(order: int, cv_count: int, delta: float = 1.0) -> Optional[np.ndarray]:
+def make_periodic_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.ndarray | None:
     """Create a periodic uniform nurbsknot vector.
     
     Parameters
@@ -396,7 +396,7 @@ def is_uniform(order: int, cv_count: int, nurbsknot: np.ndarray) -> bool:
     return True
 
 
-def get_domain(order: int, cv_count: int, nurbsknot: np.ndarray) -> Tuple[float, float]:
+def get_domain(order: int, cv_count: int, nurbsknot: np.ndarray) -> tuple[float, float]:
     """Get the domain of a nurbsknot vector.
     
     Parameters
@@ -809,8 +809,8 @@ def get_greville_abcissae(order: int, cv_count: int, nurbsknot: np.ndarray,
     return g
 
 
-def solve_tridiagonal(dim: int, n: int, lower: List[float], diag: List[float],
-                      upper: List[float], rhs: List[float]) -> Optional[List[float]]:
+def solve_tridiagonal(dim: int, n: int, lower: list[float], diag: list[float],
+                      upper: list[float], rhs: list[float]) -> list[float] | None:
     """Solve tridiagonal linear system using Thomas algorithm.
 
     Parameters
@@ -946,7 +946,7 @@ def build_interp_nurbsknots(params: np.ndarray, degree: int) -> np.ndarray:
     return nurbsknots
 
 
-def eval_basis(order: int, nurbsknot: np.ndarray, span: int, t: float) -> List[float]:
+def eval_basis(order: int, nurbsknot: np.ndarray, span: int, t: float) -> list[float]:
     """Evaluate B-spline basis functions at parameter t (Cox-de Boor).
 
     Parameters
@@ -987,7 +987,7 @@ def eval_basis(order: int, nurbsknot: np.ndarray, span: int, t: float) -> List[f
     return basis
 
 
-def build_fitted_nurbsknots(params: List[float], num_cvs: int, degree: int) -> List[float]:
+def build_fitted_nurbsknots(params: list[float], num_cvs: int, degree: int) -> list[float]:
     m = len(params)
     n_interior = num_cvs - degree - 1
     order = degree + 1
@@ -1009,7 +1009,7 @@ def build_fitted_nurbsknots(params: List[float], num_cvs: int, degree: int) -> L
     return nurbsknots
 
 
-def build_fitted_nurbsknots_adaptive(params: List[float], points: List[float], point_count: int, dim: int, num_cvs: int, degree: int, scale: float = 3.0) -> List[float]:
+def build_fitted_nurbsknots_adaptive(params: list[float], points: list[float], point_count: int, dim: int, num_cvs: int, degree: int, scale: float = 3.0) -> list[float]:
     m = point_count
     if m < 3 or points is None:
         return build_fitted_nurbsknots(params, num_cvs, degree)
@@ -1053,7 +1053,7 @@ def build_fitted_nurbsknots_adaptive(params: List[float], points: List[float], p
     return nurbsknots
 
 
-def build_fitted_nurbsknots_periodic_adaptive(params: List[float], points: List[float], n: int, dim: int, num_cvs: int, degree: int, scale: float = 3.0) -> List[float]:
+def build_fitted_nurbsknots_periodic_adaptive(params: list[float], points: list[float], n: int, dim: int, num_cvs: int, degree: int, scale: float = 3.0) -> list[float]:
     cv_count = num_cvs + degree
     order = degree + 1
     kc = cv_count + order - 2
@@ -1109,7 +1109,7 @@ def build_fitted_nurbsknots_periodic_adaptive(params: List[float], points: List[
     return nurbsknots
 
 
-def solve_banded_spd(dim: int, n: int, half_bw: int, band: List[float], rhs: List[float]) -> bool:
+def solve_banded_spd(dim: int, n: int, half_bw: int, band: list[float], rhs: list[float]) -> bool:
     bw1 = half_bw + 1
 
     for i in range(n):

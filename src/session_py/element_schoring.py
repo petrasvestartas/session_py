@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 from typing import Optional
 from typing import Union
 from typing import TYPE_CHECKING
@@ -37,7 +37,7 @@ class Dataset:
     schoring_body_start_3 = "schoring_body_start_3.json"
 
     @classmethod
-    def select_by_type(cls, type: str = "a", target_length: int = 0, data_dir: Optional[Union[str, "pathlib.Path"]] = None) -> list[str]:
+    def select_by_type(cls, type: str = "a", target_length: int = 0, data_dir: Union[str, "pathlib.Path"] | None = None) -> list[str]:
         if type != "a":
             return []
         data_dir = pathlib.Path(data_dir or DEFAULT_DATA_DIR)
@@ -56,7 +56,7 @@ class Dataset:
 
 
 def _read_extension_length(json_path):
-    with open(json_path, "r") as f:
+    with open(json_path) as f:
         return json.load(f).get("extension_length", 0.0)
 
 
@@ -65,7 +65,7 @@ def _read_dataset(json_path):
 
     Returns (planes, mesh, extension_length).
     """
-    with open(json_path, "r") as f:
+    with open(json_path) as f:
         raw = json.load(f)
     planes = [Plane.__jsonload__(p) for p in raw.get("frames", [])]
     mesh = Mesh.__jsonload__(raw["mesh"]) if raw.get("mesh") else None
@@ -88,10 +88,10 @@ class ElementSchoring(Element):
 
     def __init__(
         self,
-        dataset: Optional[list[str]] = None,
-        features: Optional[list[Callable]] = None,
-        name: Optional[str] = None,
-        data_dir: Optional[Union[str, "pathlib.Path"]] = None,
+        dataset: list[str] | None = None,
+        features: list[Callable] | None = None,
+        name: str | None = None,
+        data_dir: Union[str, "pathlib.Path"] | None = None,
         geometry_as_brep: bool = False,
     ):
         super().__init__(geometry=None, name=name or "my_schoring")
@@ -149,7 +149,7 @@ class ElementSchoring(Element):
     # Element interface
     ###########################################################################################
 
-    def compute_element_geometry(self) -> Optional[Union["Mesh", "BRep"]]:
+    def compute_element_geometry(self) -> Union["Mesh", "BRep"] | None:
         return self._geometry
 
     ###########################################################################################
@@ -157,7 +157,7 @@ class ElementSchoring(Element):
     ###########################################################################################
 
     @staticmethod
-    def polylines_to_elements(lines_unordered: list["Line"], data_dir: Optional[Union[str, "pathlib.Path"]] = None) -> list[tuple["ElementSchoring", "Xform"]]:
+    def polylines_to_elements(lines_unordered: list["Line"], data_dir: Union[str, "pathlib.Path"] | None = None) -> list[tuple["ElementSchoring", "Xform"]]:
         """Build a chain of schoring elements (foot, body_start, body_end, head) for each vertical line.
 
         Mirrors the compas_tf SchoringElement.polylines_to_models logic. An Element no longer

@@ -96,7 +96,7 @@ class Line:
         return result
 
     @classmethod
-    def fit_points(cls, points: list[Point], length: Optional[float] = None) -> "Line":
+    def fit_points(cls, points: list[Point], length: float | None = None) -> "Line":
         """Fit a line to a set of points using least squares (PCA).
 
         Uses Principal Component Analysis to find the best-fit line
@@ -709,7 +709,7 @@ class Line:
 
         """
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 

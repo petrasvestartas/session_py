@@ -1,6 +1,6 @@
-from typing import Iterator
+from collections.abc import Iterator
 from typing import Optional
-from typing import Sequence
+from collections.abc import Sequence
 import math
 from contextlib import contextmanager
 
@@ -60,14 +60,14 @@ class Tolerance:
     def __init__(
         self,
         unit: str = "M",
-        absolute: Optional[float] = None,
-        relative: Optional[float] = None,
-        angular: Optional[float] = None,
-        approximation: Optional[float] = None,
-        precision: Optional[int] = None,
-        lineardeflection: Optional[float] = None,
-        angulardeflection: Optional[float] = None,
-        name: Optional[str]=None,
+        absolute: float | None = None,
+        relative: float | None = None,
+        angular: float | None = None,
+        approximation: float | None = None,
+        precision: int | None = None,
+        lineardeflection: float | None = None,
+        angulardeflection: float | None = None,
+        name: str | None=None,
     ):
         if not self._is_inited:
             self._unit = None
@@ -262,7 +262,7 @@ class Tolerance:
         dz = b.z - a.z
         return (dx * dx + dy * dy + dz * dz) <= self.absolute * self.absolute
 
-    def key(self, xyz: Sequence[float], precision: Optional[int] = None, sanitize: bool = True) -> str:
+    def key(self, xyz: Sequence[float], precision: int | None = None, sanitize: bool = True) -> str:
         """Compute the geometric key of a point."""
         x, y, z = xyz
         if not precision:
@@ -290,7 +290,7 @@ class Tolerance:
 
         return f"{x:.{precision}f},{y:.{precision}f},{z:.{precision}f}"
 
-    def key_xy(self, xy: Sequence[float], precision: Optional[int] = None, sanitize: bool = True) -> str:
+    def key_xy(self, xy: Sequence[float], precision: int | None = None, sanitize: bool = True) -> str:
         """Compute the geometric key of a point in the XY plane."""
         x, y = xy
         if not precision:
@@ -318,7 +318,7 @@ class Tolerance:
 
         return f"{x:.{precision}f},{y:.{precision}f}"
 
-    def format_number(self, number: float, precision: Optional[int] = None) -> str:
+    def format_number(self, number: float, precision: int | None = None) -> str:
         """Format a number as a string."""
         if not precision:
             precision = self.precision
@@ -336,7 +336,7 @@ class Tolerance:
 
         return f"{number:.{precision}f}"
 
-    def precision_from_tolerance(self, tol: Optional[float] = None) -> int:
+    def precision_from_tolerance(self, tol: float | None = None) -> int:
         """Compute the precision from a given tolerance."""
         tol = tol or self.absolute
         if tol < 1:

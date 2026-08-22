@@ -164,7 +164,7 @@ class Objects:
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "Objects":
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     def pb_dumps(self) -> bytes:

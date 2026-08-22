@@ -322,7 +322,7 @@ class Primitives:
             Primitives._capsule_geometry(start, end, radius), Xform.identity())
 
     @staticmethod
-    def edge_pipes(mesh: "Mesh", radius: float) -> List["Mesh"]:
+    def edge_pipes(mesh: "Mesh", radius: float) -> list["Mesh"]:
         from session_py.line import Line
         edges = mesh.edges()
         result = []
@@ -580,7 +580,7 @@ class Primitives:
         return srf
 
     @staticmethod
-    def quad_sphere(cx: float, cy: float, cz: float, radius: float) -> List[NurbsSurface]:
+    def quad_sphere(cx: float, cy: float, cz: float, radius: float) -> list[NurbsSurface]:
         R = radius
         a = R / math.sqrt(3.0)
         e = R * math.sqrt(3.0) / 2.0
@@ -840,7 +840,7 @@ class Primitives:
         return make_bilinear(orig, xax, yax, min_u, max_u, min_v, max_v)
 
     @staticmethod
-    def create_loft(input_curves: List[NurbsCurve], degree_v: int = 3) -> NurbsSurface:
+    def create_loft(input_curves: list[NurbsCurve], degree_v: int = 3) -> NurbsSurface:
         if len(input_curves) < 2:
             return NurbsSurface()
         for c in input_curves:
@@ -1222,7 +1222,7 @@ class Primitives:
         return Primitives.create_loft(positioned_profiles, loft_degree)
 
     @staticmethod
-    def create_sweep2(rail1: NurbsCurve, rail2: NurbsCurve, shapes: List[NurbsCurve]) -> NurbsSurface:
+    def create_sweep2(rail1: NurbsCurve, rail2: NurbsCurve, shapes: list[NurbsCurve]) -> NurbsSurface:
         if not rail1.is_valid() or not rail2.is_valid() or not shapes:
             return NurbsSurface()
         for s in shapes:
@@ -1500,7 +1500,7 @@ class Primitives:
         return surface
 
     @staticmethod
-    def create_interpolated(points: List[Point], parameterization: "nurbsknot.CurveNurbsKnotStyle" = nurbsknot.CurveNurbsKnotStyle.Chord) -> NurbsCurve:
+    def create_interpolated(points: list[Point], parameterization: "nurbsknot.CurveNurbsKnotStyle" = nurbsknot.CurveNurbsKnotStyle.Chord) -> NurbsCurve:
         return NurbsCurve.create_interpolated(points, parameterization)
 
     @staticmethod

@@ -18,18 +18,18 @@ if TYPE_CHECKING:
 class PointCloud:
     """A point cloud with coordinates, normals, and colors stored as flat arrays."""
 
-    def __init__(self, points: Optional[List[Point]] = None,
-                 normals: Optional[List[Vector]] = None,
-                 colors: Optional[List[Color]] = None):
+    def __init__(self, points: list[Point] | None = None,
+                 normals: list[Vector] | None = None,
+                 colors: list[Color] | None = None):
         """Default constructor (empty cloud) or with points, normals, and colors."""
         self._guid = None
         self.name = "my_pointcloud"
         self.point_size = 1.0
 
         # Store as flat arrays
-        self.coords: List[float] = []
-        self._colors: List[int] = []   # flat 0-255, matching Rust/C++ and the proto's uint32
-        self._normals: List[float] = []
+        self.coords: list[float] = []
+        self._colors: list[int] = []   # flat 0-255, matching Rust/C++ and the proto's uint32
+        self._normals: list[float] = []
 
         if points is not None:
             for p in points:
@@ -56,9 +56,9 @@ class PointCloud:
         self._guid = value
 
     @classmethod
-    def from_coords(cls, coords: List[float],
-                    colors: Optional[List[int]] = None,
-                    normals: Optional[List[float]] = None) -> "PointCloud":
+    def from_coords(cls, coords: list[float],
+                    colors: list[int] | None = None,
+                    normals: list[float] | None = None) -> PointCloud:
         """Create from flat arrays of coords, colors, and normals."""
         pc = cls()
         pc.coords = list(coords)
@@ -100,7 +100,7 @@ class PointCloud:
         """Add a point to the cloud."""
         self.coords.extend([point[0], point[1], point[2]])
 
-    def get_points(self) -> List[Point]:
+    def get_points(self) -> list[Point]:
         """Returns all points as Point objects."""
         points = []
         for i in range(self.point_count()):
@@ -109,12 +109,12 @@ class PointCloud:
         return points
 
     @property
-    def points(self) -> List[Point]:
+    def points(self) -> list[Point]:
         """Property for backward compatibility - returns list of Point objects."""
         return self.get_points()
 
     @points.setter
-    def points(self, value: List[Point]) -> None:
+    def points(self, value: list[Point]) -> None:
         """Set points from a list of Point objects."""
         self.coords = []
         for p in value:
@@ -147,7 +147,7 @@ class PointCloud:
         self._colors.extend([round(color[0] * 255), round(color[1] * 255),
                              round(color[2] * 255), round(color[3] * 255)])
 
-    def get_colors(self) -> List[Color]:
+    def get_colors(self) -> list[Color]:
         """Returns all colors as Color objects."""
         colors = []
         for i in range(self.color_count()):
@@ -157,14 +157,14 @@ class PointCloud:
         return colors
 
     @property
-    def colors(self) -> List[int]:
+    def colors(self) -> list[int]:
         """The flat colour array itself, [r0, g0, b0, a0, r1, ...] as 0-255 - the same encoding
         the proto carries, and the same accessor Rust and C++ expose. `get_colors()` is the one
         that builds Color objects; walking millions of points cannot afford that per point."""
         return self._colors
 
     @colors.setter
-    def colors(self, value: List[Color]) -> None:
+    def colors(self, value: list[Color]) -> None:
         """Set colors from a list of Color objects."""
         self._colors = []
         for c in value:
@@ -195,7 +195,7 @@ class PointCloud:
         """Add a normal to the cloud."""
         self._normals.extend([normal[0], normal[1], normal[2]])
 
-    def get_normals(self) -> List[Vector]:
+    def get_normals(self) -> list[Vector]:
         """Returns all normals as Vector objects."""
         normals = []
         for i in range(self.normal_count()):
@@ -204,12 +204,12 @@ class PointCloud:
         return normals
 
     @property
-    def normals(self) -> List[Vector]:
+    def normals(self) -> list[Vector]:
         """Property for backward compatibility."""
         return self.get_normals()
 
     @normals.setter
-    def normals(self, value: List[Vector]) -> None:
+    def normals(self, value: list[Vector]) -> None:
         """Set normals from a list of Vector objects."""
         self._normals = []
         for n in value:
@@ -239,7 +239,7 @@ class PointCloud:
     # Duplicate and Equality
     ###########################################################################################
 
-    def duplicate(self) -> "PointCloud":
+    def duplicate(self) -> PointCloud:
         """Create a deep copy with a new GUID."""
         result = copy.deepcopy(self)
         result.guid = str(uuid.uuid4())
@@ -258,7 +258,7 @@ class PointCloud:
     # Transform
     ###########################################################################################
 
-    def transform(self, xform: "Xform") -> None:
+    def transform(self, xform: Xform) -> None:
         """Apply a transformation to the point cloud in-place."""
         for i in range(self.point_count()):
             idx = i * 3
@@ -276,7 +276,7 @@ class PointCloud:
             self._normals[idx + 1] = n[1]
             self._normals[idx + 2] = n[2]
 
-    def transformed(self, xform: "Xform") -> "PointCloud":
+    def transformed(self, xform: Xform) -> PointCloud:
         """Return a transformed copy of the point cloud."""
         result = copy.deepcopy(self)
         result.transform(xform)
@@ -286,7 +286,7 @@ class PointCloud:
     # No-copy Operators
     ###########################################################################################
 
-    def __iadd__(self, other: Vector) -> "PointCloud":
+    def __iadd__(self, other: Vector) -> PointCloud:
         """Translate point cloud by vector (in-place)."""
         for i in range(self.point_count()):
             idx = i * 3
@@ -295,7 +295,7 @@ class PointCloud:
             self.coords[idx + 2] += other[2]
         return self
 
-    def __isub__(self, other: Vector) -> "PointCloud":
+    def __isub__(self, other: Vector) -> PointCloud:
         """Translate point cloud by negative vector (in-place)."""
         for i in range(self.point_count()):
             idx = i * 3
@@ -308,14 +308,14 @@ class PointCloud:
     # Copy Operators
     ###########################################################################################
 
-    def __add__(self, other: Vector) -> "PointCloud":
+    def __add__(self, other: Vector) -> PointCloud:
         """Translate point cloud by vector (copy)."""
         result = self.duplicate()
         result.guid = self.guid  # Keep same guid for copy operators
         result += other
         return result
 
-    def __sub__(self, other: Vector) -> "PointCloud":
+    def __sub__(self, other: Vector) -> PointCloud:
         """Translate point cloud by negative vector (copy)."""
         result = self.duplicate()
         result.guid = self.guid  # Keep same guid for copy operators
@@ -357,17 +357,17 @@ class PointCloud:
 
         return pc
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write JSON to file."""
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "PointCloud":
+    def file_json_load(cls, filepath: str | Path) -> PointCloud:
         """Read JSON from file."""
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
@@ -377,7 +377,7 @@ class PointCloud:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "PointCloud":
+    def file_json_loads(cls, json_string: str) -> PointCloud:
         """Load from JSON string."""
         import json
         return cls.__jsonload__(json.loads(json_string))
@@ -401,7 +401,7 @@ class PointCloud:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "PointCloud":
+    def pb_loads(cls, data: bytes) -> PointCloud:
         """Create from protobuf binary format."""
         from .proto import pointcloud_pb2
 
@@ -419,13 +419,13 @@ class PointCloud:
 
         return pc
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write protobuf to file."""
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "PointCloud":
+    def pb_load(cls, filepath: str | Path) -> PointCloud:
         """Read protobuf from file."""
         with open(filepath, 'rb') as f:
             data = f.read()

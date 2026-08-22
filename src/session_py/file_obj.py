@@ -22,14 +22,14 @@ def write_file_obj(mesh: Mesh, filepath: str) -> None:
 
 
 def read_file_obj(filepath: str) -> Mesh:
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         content = f.read()
     return read_file_obj_from_str(content)
 
 
 def read_file_obj_from_str(content: str) -> Mesh:
-    verts: List[Point] = []
-    faces: List[List[int]] = []
+    verts: list[Point] = []
+    faces: list[list[int]] = []
 
     for raw in content.splitlines():
         line = raw.strip()
@@ -44,7 +44,7 @@ def read_file_obj_from_str(content: str) -> Mesh:
                 verts.append(Point(x, y, z))
         elif line.startswith("f "):
             parts = line.split()[1:]
-            face: List[int] = []
+            face: list[int] = []
             for tok in parts:
                 first = tok.split("/")[0]
                 if not first:
@@ -59,7 +59,7 @@ def read_file_obj_from_str(content: str) -> Mesh:
                 faces.append(face)
 
     mesh = Mesh()
-    vkeys: List[int] = []
+    vkeys: list[int] = []
     for p in verts:
         vkeys.append(mesh.add_vertex(p))
     for f in faces:
@@ -68,12 +68,12 @@ def read_file_obj_from_str(content: str) -> Mesh:
     return mesh
 
 
-def read_file_obj_polylines(filepath: str) -> List[Polyline]:
-    verts: List[Point] = []
-    polylines: List[Polyline] = []
-    curv_indices: List[int] = []
+def read_file_obj_polylines(filepath: str) -> list[Polyline]:
+    verts: list[Point] = []
+    polylines: list[Polyline] = []
+    curv_indices: list[int] = []
     in_curv = False
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         for raw in f:
             line = raw.strip()
             if not line or line.startswith("#"):

@@ -15,7 +15,7 @@ def write_xyz(cloud: PointCloud, filepath: str) -> None:
 
 
 def read_xyz(filepath: str) -> PointCloud:
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         content = f.read()
     return read_xyz_from_str(content)
 

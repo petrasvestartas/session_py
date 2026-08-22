@@ -48,13 +48,13 @@ class Matrix:
         return m
 
     @staticmethod
-    def from_list(rows: int, cols: int, data: List[float]) -> "Matrix":
+    def from_list(rows: int, cols: int, data: list[float]) -> "Matrix":
         m = Matrix(rows, cols)
         m.data = [float(v) for v in data]
         return m
 
     @staticmethod
-    def from_rows(rows_list: List[List[float]]) -> "Matrix":
+    def from_rows(rows_list: list[list[float]]) -> "Matrix":
         r = len(rows_list)
         c = len(rows_list[0]) if r > 0 else 0
         m = Matrix(r, c)
@@ -64,7 +64,7 @@ class Matrix:
         return m
 
     @staticmethod
-    def from_cols(cols_list: List[List[float]]) -> "Matrix":
+    def from_cols(cols_list: list[list[float]]) -> "Matrix":
         c = len(cols_list)
         r = len(cols_list[0]) if c > 0 else 0
         m = Matrix(r, c)
@@ -222,7 +222,7 @@ class Matrix:
                     u.data[u._idx(i, j)] -= factor * u[k, j]
         return l, u, p, swaps
 
-    def lu_decompose(self) -> Tuple["Matrix", "Matrix", "Matrix"]:
+    def lu_decompose(self) -> tuple["Matrix", "Matrix", "Matrix"]:
         if not self.is_square:
             raise ValueError("LU decomposition requires square matrix")
         l, u, p, _ = self._lu_internal()
@@ -295,7 +295,7 @@ class Matrix:
             result[i, 0] = x[i]
         return result
 
-    def qr_decompose(self) -> Tuple["Matrix", "Matrix"]:
+    def qr_decompose(self) -> tuple["Matrix", "Matrix"]:
         m, n = self._rows, self._cols
         a_cols = [[self[i, j] for i in range(m)] for j in range(n)]
         q_cols = []
@@ -337,7 +337,7 @@ class Matrix:
                     l[i, j] = s / l[j, j]
         return l
 
-    def eigenvalues(self) -> List[float]:
+    def eigenvalues(self) -> list[float]:
         if not self.is_square:
             raise ValueError("Eigenvalues require square matrix")
         n = self._rows
@@ -349,7 +349,7 @@ class Matrix:
                 break
         return [a[i, i] for i in range(n)]
 
-    def _eigen_decompose_symmetric(self) -> List[Tuple[float, List[float]]]:
+    def _eigen_decompose_symmetric(self) -> list[tuple[float, list[float]]]:
         """Returns [(eigenvalue, eigenvector)] for symmetric matrix."""
         n = self._rows
         a = Matrix.from_list(n, n, self.data)
@@ -362,7 +362,7 @@ class Matrix:
                 break
         return [(a[i, i], [v[j, i] for j in range(n)]) for i in range(n)]
 
-    def svd(self) -> Tuple["Matrix", List[float], "Matrix"]:
+    def svd(self) -> tuple["Matrix", list[float], "Matrix"]:
         m, n = self._rows, self._cols
         at = self.transpose()
         ata = at.multiply(self)
@@ -443,7 +443,7 @@ class Matrix:
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "Matrix":
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data, data.get("guid"), data.get("name"))
 

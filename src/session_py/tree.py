@@ -1,6 +1,6 @@
 from collections import deque
 from typing import Any
-from typing import Iterator
+from collections.abc import Iterator
 from typing import Optional
 from typing import Union
 from typing import TYPE_CHECKING
@@ -82,7 +82,7 @@ class TreeNode:
 
     @classmethod
     def __jsonload__(
-        cls, data: dict, guid: Optional[str] = None, name: Optional[str] = None
+        cls, data: dict, guid: str | None = None, name: str | None = None
     ) -> "TreeNode":
         """Deserialize from polymorphic JSON format."""
         from .color import Color
@@ -167,8 +167,7 @@ class TreeNode:
     def descendants(self) -> Iterator["TreeNode"]:
         for child in self.children:
             yield child
-            for descendant in child.descendants:
-                yield descendant
+            yield from child.descendants
 
     def traverse(self, strategy: str = "depthfirst", order: str = "preorder") -> Iterator["TreeNode"]:
         """Traverse the tree from this node.
@@ -193,7 +192,7 @@ class TreeNode:
                         yield node
                 yield self
             else:
-                raise ValueError("Unknown traversal order: {}".format(order))
+                raise ValueError(f"Unknown traversal order: {order}")
         elif strategy == "breadthfirst":
             queue = deque([self])
             while queue:
@@ -201,7 +200,7 @@ class TreeNode:
                 yield node
                 queue.extend(node.children)
         else:
-            raise ValueError("Unknown traversal strategy: {}".format(strategy))
+            raise ValueError(f"Unknown traversal strategy: {strategy}")
 
 
 class Tree:
@@ -239,10 +238,10 @@ class Tree:
         self._guid = value
 
     def __str__(self):
-        return "Tree: {}".format(self.name)
+        return f"Tree: {self.name}"
 
     def __repr__(self):
-        return "<Tree with {} nodes>".format(len(list(self.nodes)))
+        return f"<Tree with {len(list(self.nodes))} nodes>"
 
     ###########################################################################################
     # JSON (polymorphic)
@@ -259,7 +258,7 @@ class Tree:
 
     @classmethod
     def __jsonload__(
-        cls, data: dict, guid: Optional[str] = None, name: Optional[str] = None
+        cls, data: dict, guid: str | None = None, name: str | None = None
     ) -> "Tree":
         """Deserialize from polymorphic JSON format."""
         tree = cls(name=data.get("name", "Tree"))
@@ -288,7 +287,7 @@ class Tree:
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "Tree":
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     def pb_dumps(self) -> bytes:
@@ -403,8 +402,7 @@ class Tree:
     @property
     def nodes(self) -> Iterator["TreeNode"]:
         if self.root:
-            for node in self.root.traverse():
-                yield node
+            yield from self.root.traverse()
 
     def remove(self, node: "TreeNode") -> None:
         """Remove a node from the tree.
@@ -451,8 +449,7 @@ class Tree:
 
         """
         if self.root:
-            for node in self.root.traverse(strategy=strategy, order=order):
-                yield node
+            yield from self.root.traverse(strategy=strategy, order=order)
 
     def get_node_by_name(self, name: str) -> Optional["TreeNode"]:
         """Get a node by its name.
@@ -546,7 +543,7 @@ class Tree:
 
         def _print(node, prefix="", last=True):
             connector = "└── " if last else "├── "
-            print("{}{}{}".format(prefix, connector, node))
+            print(f"{prefix}{connector}{node}")
             prefix += "    " if last else "│   "
             for i, child in enumerate(node.children):
                 _print(child, prefix, i == len(node.children) - 1)

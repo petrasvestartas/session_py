@@ -25,7 +25,7 @@ class Polyline:
     efficient serialization. Provides Point-based API for compatibility.
     """
 
-    def __init__(self, points: Optional[List[Point]] = None):
+    def __init__(self, points: list[Point] | None = None):
         """Creates a new Polyline with default guid and name.
 
         Args:
@@ -38,7 +38,7 @@ class Polyline:
         self._linecolor = None
 
         # Flat coordinate array [x0, y0, z0, x1, y1, z1, ...]
-        self.coords: List[float] = []
+        self.coords: list[float] = []
         if points is not None:
             for p in points:
                 self.coords.extend([p[0], p[1], p[2]])
@@ -107,7 +107,7 @@ class Polyline:
         self._linecolor = value
 
     @classmethod
-    def from_coords(cls, coords: List[float]) -> "Polyline":
+    def from_coords(cls, coords: list[float]) -> "Polyline":
         """Create a Polyline from a flat coordinate array.
 
         Args:
@@ -142,7 +142,7 @@ class Polyline:
             pts.append(pts[0])
         return cls(pts)
 
-    def get_points(self) -> List[Point]:
+    def get_points(self) -> list[Point]:
         """Returns all points as Point objects."""
         points = []
         for i in range(self.point_count()):
@@ -151,12 +151,12 @@ class Polyline:
         return points
 
     @property
-    def points(self) -> List[Point]:
+    def points(self) -> list[Point]:
         """Property for backward compatibility - returns list of Point objects."""
         return self.get_points()
 
     @points.setter
-    def points(self, value: List[Point]) -> None:
+    def points(self, value: list[Point]) -> None:
         """Set points from a list of Point objects."""
         self.coords = []
         for p in value:
@@ -190,7 +190,7 @@ class Polyline:
         n = self.point_count()
         return n - 1 if n > 1 else 0
 
-    def get_lines(self) -> List:
+    def get_lines(self) -> list:
         """Returns all segments as Line objects."""
         from .line import Line
         result = []
@@ -204,7 +204,7 @@ class Polyline:
         return result
 
     @property
-    def lines(self) -> List:
+    def lines(self) -> list:
         """Property returning all segments as Line objects."""
         return self.get_lines()
 
@@ -232,7 +232,7 @@ class Polyline:
             total += dx * dx + dy * dy + dz * dz
         return total
 
-    def get_point(self, index: int) -> Optional[Point]:
+    def get_point(self, index: int) -> Point | None:
         """Returns the point at the given index, or None if out of bounds."""
         if 0 <= index < self.point_count():
             idx = index * 3
@@ -260,7 +260,7 @@ class Polyline:
         if self.point_count() == 3:
             self._recompute_plane()
 
-    def remove_point(self, index: int) -> Optional[Point]:
+    def remove_point(self, index: int) -> Point | None:
         """Removes and returns the point at the specified index."""
         if 0 <= index < self.point_count():
             idx = index * 3
@@ -549,7 +549,7 @@ class Polyline:
         line0_end: Point,
         line1_start: Point,
         line1_end: Point,
-    ) -> Optional[Tuple[Point, Point]]:
+    ) -> tuple[Point, Point] | None:
         """Check if two line segments overlap and return the overlapping segment."""
         t = [0.0, 1.0, 0.0, 0.0]
         t[2] = Polyline.closest_point_to_line(line1_start, line0_start, line0_end)
@@ -574,7 +574,7 @@ class Polyline:
         line0_end: Point,
         line1_start: Point,
         line1_end: Point,
-    ) -> Tuple[Point, Point]:
+    ) -> tuple[Point, Point]:
         """Calculate average of two line segments."""
         output_start = Point(
             (line0_start.x + line1_start.x) * 0.5,
@@ -594,7 +594,7 @@ class Polyline:
         line0_end: Point,
         line1_start: Point,
         line1_end: Point,
-    ) -> Tuple[Point, Point]:
+    ) -> tuple[Point, Point]:
         """Calculate overlap average of two line segments."""
         line_a = Polyline.line_line_overlap(
             line0_start, line0_end, line1_start, line1_end
@@ -644,8 +644,8 @@ class Polyline:
     def line_from_projected_points(
         line_start: Point,
         line_end: Point,
-        points: List[Point],
-    ) -> Optional[Tuple[Point, Point]]:
+        points: list[Point],
+    ) -> tuple[Point, Point] | None:
         """Create line from projected points onto a base line."""
         if not points:
             return None
@@ -663,7 +663,7 @@ class Polyline:
         else:
             return None
 
-    def closest_distance_and_point(self, point: Point) -> Tuple[float, int, Point]:
+    def closest_distance_and_point(self, point: Point) -> tuple[float, int, Point]:
         """Find closest distance and point from a point to this polyline."""
         edge_id = 0
         closest_distance = float("inf")
@@ -755,7 +755,7 @@ class Polyline:
 
         return Point(sum_x / n, sum_y / n, sum_z / n)
 
-    def cut_by_plane(self, plane: "Plane", flip: Optional[bool] = None) -> "Polyline":
+    def cut_by_plane(self, plane: "Plane", flip: bool | None = None) -> "Polyline":
         """Cut polyline by plane, returning the portion on one side.
 
         By default (``flip=None``) the side containing the arc-length midpoint
@@ -857,7 +857,7 @@ class Polyline:
                         winding -= 1
         return winding != 0
 
-    def get_average_plane(self) -> Tuple[Point, Vector, Vector, Vector]:
+    def get_average_plane(self) -> tuple[Point, Vector, Vector, Vector]:
         """Get average plane from polyline points."""
         origin = self.center()
 
@@ -871,7 +871,7 @@ class Polyline:
 
         return origin, x_axis, y_axis, z_axis
 
-    def get_fast_plane(self) -> Tuple[Point, Plane]:
+    def get_fast_plane(self) -> tuple[Point, Plane]:
         """Get fast plane calculation from polyline."""
         origin = self.points[0] if self.points else Point(0.0, 0.0, 0.0)
         average_normal = self._average_normal()
@@ -978,7 +978,7 @@ class Polyline:
 
         return sum_val > 0.0
 
-    def get_convex_corners(self) -> List[bool]:
+    def get_convex_corners(self) -> list[bool]:
         """Get convex/concave corners of polyline."""
         if len(self.points) < 3:
             return []
@@ -1021,7 +1021,7 @@ class Polyline:
     @staticmethod
     def interpolate_points(
         from_pt: Point, to_pt: Point, steps: int, kind: int = 0
-    ) -> List[Point]:
+    ) -> list[Point]:
         """Linear interpolation between two points.
 
         kind: 0=no endpoints, 1=both endpoints, 2=start only
@@ -1157,7 +1157,7 @@ class Polyline:
         offset_dist: float,
         div_dist: float,
         max_pts: int = 100,
-    ) -> List[Point]:
+    ) -> list[Point]:
         """Grid of interior points; offset_dist insets (-) or outsets (+) polygon via miter offset."""
         pts = polygon.get_points()
         if len(pts) < 3:
@@ -1382,7 +1382,7 @@ class Polyline:
 
         """
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 
@@ -1581,7 +1581,7 @@ class Polyline:
             Polyline._simplify_rdp(points, max_idx, end, tolerance, keep)
 
     @staticmethod
-    def simplify_points(points: List[Point], tolerance: float) -> List[Point]:
+    def simplify_points(points: list[Point], tolerance: float) -> list[Point]:
         n = len(points)
         if n < 3:
             return list(points)
@@ -1617,7 +1617,7 @@ class Polyline:
         self._plane = None
 
     @staticmethod
-    def two_rects_from_frame(p: Point, segment_vector: Vector, zaxis: Vector, middle: bool, radius: float, length: float, flip_male: int) -> Tuple["Polyline", "Polyline"]:
+    def two_rects_from_frame(p: Point, segment_vector: Vector, zaxis: Vector, middle: bool, radius: float, length: float, flip_male: int) -> tuple["Polyline", "Polyline"]:
         y_axis = zaxis.cross(segment_vector)
         x_axis = y_axis.cross(segment_vector)
         x_axis.normalize_self()
@@ -1656,7 +1656,7 @@ class Polyline:
         return rect0, rect1
 
     @staticmethod
-    def boolean_op(a: "Polyline", b: "Polyline", clip_type: int, plane: Optional["Plane"] = None) -> List["Polyline"]:
+    def boolean_op(a: "Polyline", b: "Polyline", clip_type: int, plane: Optional["Plane"] = None) -> list["Polyline"]:
         from .boolean_polyline import BooleanPolyline
         if plane is None:
             return BooleanPolyline.compute(a, b, clip_type)
@@ -1710,7 +1710,7 @@ class Polyline:
         return results
 
     @staticmethod
-    def polylabel(polylines: List["Polyline"], precision: float) -> Tuple[Point, "Plane", float]:
+    def polylabel(polylines: list["Polyline"], precision: float) -> tuple[Point, "Plane", float]:
         # Largest inscribed circle via mapbox polylabel.
         # polylines[0] is the outer boundary; polylines[1..] are holes.
         from .plane import Plane
@@ -1759,12 +1759,12 @@ class Polyline:
     @staticmethod
     def polylabel_circle_division_points(
         division_direction_in_3d: Vector,
-        polylines: List["Polyline"],
+        polylines: list["Polyline"],
         division: int,
         scale: float,
         precision: float,
         orient_to_closest_edge: bool,
-    ) -> List[Point]:
+    ) -> list[Point]:
         import math
         center, plane, r = Polyline.polylabel(polylines, precision)
         radius = r * scale

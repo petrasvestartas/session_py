@@ -386,7 +386,7 @@ class _Delaunay2D:
                 self.last_found = i
                 break
 
-    def get_triangles(self) -> List[Tuple[int, int, int]]:
+    def get_triangles(self) -> list[tuple[int, int, int]]:
         result = []
         for t in self.triangles:
             if not t.alive:
@@ -486,7 +486,7 @@ class NurbsSurfaceTrimmed:
         return ts
 
     @staticmethod
-    def split_by_uv_curves(srf: "NurbsSurface", pcurves: List["NurbsCurve"], tolerance: Optional[float] = None, use_domain_border: bool = True, n_boundary: int = 0) -> List["NurbsSurfaceTrimmed"]:
+    def split_by_uv_curves(srf: "NurbsSurface", pcurves: list["NurbsCurve"], tolerance: float | None = None, use_domain_border: bool = True, n_boundary: int = 0) -> list["NurbsSurfaceTrimmed"]:
         """Split a surface into trimmed faces by UV pcurves.
 
         Builds a planar arrangement of the UV domain rectangle and the given
@@ -852,8 +852,8 @@ class NurbsSurfaceTrimmed:
                 if area < best_area and point_in_cycle(sample, fc):
                     # the hole vertex lies ON the cycle of its own disk face;
                     # skip faces sharing vertices with the hole cycle
-                    hole_vids = set(hes[hi][0] for hi in cycle)
-                    face_vids = set(hes[hi][0] for hi in fc)
+                    hole_vids = {hes[hi][0] for hi in cycle}
+                    face_vids = {hes[hi][0] for hi in fc}
                     if hole_vids == face_vids:
                         continue
                     best = fi
@@ -995,7 +995,7 @@ class NurbsSurfaceTrimmed:
         if len(uv_pts) >= 3:
             self.m_inner_loops.append(NurbsCurve.create(True, 1, uv_pts))
 
-    def add_holes(self, curves_3d: List["NurbsCurve"]) -> None:
+    def add_holes(self, curves_3d: list["NurbsCurve"]) -> None:
         for crv in curves_3d:
             self.add_hole(crv)
 
@@ -1404,7 +1404,7 @@ class NurbsSurfaceTrimmed:
             return srf.mesh()
         return result
     @staticmethod
-    def split_by_planes(srf: "NurbsSurface", planes: List["Plane"]) -> List["NurbsSurfaceTrimmed"]:
+    def split_by_planes(srf: "NurbsSurface", planes: list["Plane"]) -> list["NurbsSurfaceTrimmed"]:
         # Split a surface into every non-empty region carved by `planes` (all 2^K sign
         # combinations). Each region comes back as a first-class multi-plane
         # NurbsSurfaceTrimmed so the viewer can select / hide / transform each piece.
@@ -1433,7 +1433,7 @@ class NurbsSurfaceTrimmed:
         return out
 
 
-    def mesh_by_planes(self, planes: List["Plane"], max_angle_deg: float, chord_factor: float) -> "Mesh":
+    def mesh_by_planes(self, planes: list["Plane"], max_angle_deg: float, chord_factor: float) -> "Mesh":
         # Multi-plane SPLIT clip: keep the region inside ALL half-spaces { (S-q).n <= 0 }.
         # Tessellates the surface into a triangle soup (span-adaptive UV grid), then clips that
         # soup sequentially by each plane (Sutherland-Hodgman per triangle, crossings Newton-
@@ -1670,7 +1670,7 @@ class NurbsSurfaceTrimmed:
 
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurfaceTrimmed":
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 

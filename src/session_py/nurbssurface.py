@@ -208,7 +208,7 @@ class NurbsSurface:
     def create(periodic_u: bool, periodic_v: bool,
                degree_u: int, degree_v: int,
                cv_count_u: int, cv_count_v: int,
-               points: List['Point']) -> 'NurbsSurface':
+               points: list['Point']) -> 'NurbsSurface':
         if degree_u < 1 or degree_v < 1:
             raise ValueError(f"NurbsSurface.create: degree must be >= 1, got degree_u={degree_u}, degree_v={degree_v}")
         if cv_count_u < degree_u + 1:
@@ -230,7 +230,7 @@ class NurbsSurface:
         return surf
 
     @staticmethod
-    def create_from_parameters(points: List[Point], weights: List[float], knots_u: List[float], knots_v: List[float], mults_u: List[int], mults_v: List[int],
+    def create_from_parameters(points: list[Point], weights: list[float], knots_u: list[float], knots_v: list[float], mults_u: list[int], mults_v: list[int],
                                degree_u: int, degree_v: int, periodic_u: bool = False, periodic_v: bool = False) -> "NurbsSurface":
         """Create a NURBS surface from explicit parameters (OCCT / compas_occt convention:
         distinct knots + per-knot multiplicities, per direction). Mirrors
@@ -485,7 +485,7 @@ class NurbsSurface:
 
         return True
 
-    def is_planar(self, plane: Optional[Plane] = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
+    def is_planar(self, plane: Plane | None = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
         """Check if surface is planar within tolerance.
 
         Parameters
@@ -620,7 +620,7 @@ class NurbsSurface:
         # Use nurbsknot module function
         return nurbsknot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], end)
 
-    def is_duplicate(self, other: "NurbsSurface", ignore_parameterization: bool = False, tolerance: Optional[float] = None) -> bool:
+    def is_duplicate(self, other: "NurbsSurface", ignore_parameterization: bool = False, tolerance: float | None = None) -> bool:
         if tolerance is None:
             tolerance = Tolerance.ZERO_TOLERANCE
         if not self.is_valid() or not other.is_valid():
@@ -769,7 +769,7 @@ class NurbsSurface:
         """
         return (self.m_order[dir] - 1) if 0 <= dir < 2 else 0
     
-    def cv_count(self, dir: Optional[int] = None) -> int:
+    def cv_count(self, dir: int | None = None) -> int:
         """Get number of control vertices.
         
         Parameters
@@ -786,7 +786,7 @@ class NurbsSurface:
             return self.m_cv_count[0] * self.m_cv_count[1]
         return self.m_cv_count[dir] if 0 <= dir < 2 else 0
     
-    def cv_count_dir(self, dir: Optional[int] = None) -> int:
+    def cv_count_dir(self, dir: int | None = None) -> int:
         """Get number of control vertices (alias for cv_count).
         
         Parameters
@@ -850,7 +850,7 @@ class NurbsSurface:
     # CONTROL VERTEX ACCESS
     ###########################################################################
     
-    def cv(self, i: int, j: int) -> Optional[np.ndarray]:
+    def cv(self, i: int, j: int) -> np.ndarray | None:
         """Get pointer to CV data at indices (i, j).
         
         Parameters
@@ -903,7 +903,7 @@ class NurbsSurface:
                     cv_ptr[1] if self.m_dim > 1 else 0,
                     cv_ptr[2] if self.m_dim > 2 else 0)
     
-    def get_cv_4d(self, i: int, j: int) -> Tuple[bool, float, float, float, float]:
+    def get_cv_4d(self, i: int, j: int) -> tuple[bool, float, float, float, float]:
         """Get control point as homogeneous coordinates (x, y, z, w).
         
         Parameters
@@ -1146,7 +1146,7 @@ class NurbsSurface:
     # DOMAIN & PARAMETERIZATION
     ###########################################################################
     
-    def domain(self, dir: int) -> Tuple[float, float]:
+    def domain(self, dir: int) -> tuple[float, float]:
         """Get surface domain [start_param, end_param] in specified direction.
         
         Parameters
@@ -1420,7 +1420,7 @@ class NurbsSurface:
     # EVALUATION
     ###########################################################################
     
-    def closest_parameters(self, test_point: Point) -> Tuple[float, float]:
+    def closest_parameters(self, test_point: Point) -> tuple[float, float]:
         """Parameters (u, v) of the closest point on the surface to test_point.
 
         Matches OCCT GeomAPI_ProjectPointOnSurface.
@@ -1631,7 +1631,7 @@ class NurbsSurface:
         sv = d[1]  # dS/dv
         return Plane(origin, Vector(su[0], su[1], su[2]), Vector(sv[0], sv[1], sv[2]))
 
-    def intersections_with_line(self, line: "Line") -> List[Point]:
+    def intersections_with_line(self, line: "Line") -> list[Point]:
         """Intersection points of an (infinite) line with the surface.
 
         Mirrors OCCNurbsSurface.intersections_with_line (OCCT GeomAPI_IntCS). Solves
@@ -1736,7 +1736,7 @@ class NurbsSurface:
         
         return normal / mag
     
-    def evaluate(self, u: float, v: float, num_derivs: int = 0) -> List[Vector]:
+    def evaluate(self, u: float, v: float, num_derivs: int = 0) -> list[Vector]:
         if not self.is_valid() or num_derivs < 0:
             return []
         max_derivs = min(num_derivs, 2)
@@ -2126,7 +2126,7 @@ class NurbsSurface:
 
         return OBB(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
     
-    def divide_by_count(self, nu: int, nv: int) -> Tuple[List[List[Point]], List[List[Tuple[float, float]]]]:
+    def divide_by_count(self, nu: int, nv: int) -> tuple[list[list[Point]], list[list[tuple[float, float]]]]:
         u0, u1 = self.domain(0)
         v0, v1 = self.domain(1)
 
@@ -2145,7 +2145,7 @@ class NurbsSurface:
 
         return grid, params
 
-    def divide_by_count_points(self, nu: int, nv: int) -> Tuple[List[List[Point]], List[List["Vector"]], List[List[Tuple[float, float]]]]:
+    def divide_by_count_points(self, nu: int, nv: int) -> tuple[list[list[Point]], list[list["Vector"]], list[list[tuple[float, float]]]]:
         if not self.is_valid():
             return [], [], []
 
@@ -2171,7 +2171,7 @@ class NurbsSurface:
 
         return grid, grid_vector, params
 
-    def divide_by_count_planes(self, nu: int, nv: int) -> Tuple[List[List["Plane"]], List[List[Tuple[float, float]]]]:
+    def divide_by_count_planes(self, nu: int, nv: int) -> tuple[list[list["Plane"]], list[list[tuple[float, float]]]]:
         if not self.is_valid():
             return [], []
 
@@ -2407,7 +2407,7 @@ class NurbsSurface:
         return Primitives.create_ruled(curveA, curveB)
 
     @staticmethod
-    def create_loft(input_curves: List["NurbsCurve"], degree_v: int = 3) -> "NurbsSurface":
+    def create_loft(input_curves: list["NurbsCurve"], degree_v: int = 3) -> "NurbsSurface":
         from .primitives import Primitives
         return Primitives.create_loft(input_curves, degree_v)
 
@@ -2427,7 +2427,7 @@ class NurbsSurface:
         Primitives._make_curves_compatible(curves)
 
     @staticmethod
-    def create_planar(curves: Union["NurbsCurve", List["NurbsCurve"]]) -> "NurbsSurface":
+    def create_planar(curves: Union["NurbsCurve", list["NurbsCurve"]]) -> "NurbsSurface":
         from .primitives import Primitives
         if isinstance(curves, list):
             if len(curves) == 1:
@@ -2569,7 +2569,7 @@ class NurbsSurface:
     # MODIFICATION OPERATIONS (ADDITIONAL)
     ###########################################################################
     
-    def trim(self, dir: int, domain: Tuple[float, float]) -> bool:
+    def trim(self, dir: int, domain: tuple[float, float]) -> bool:
         """Trim surface to sub-domain in specified direction.
 
         Parameters
@@ -2593,7 +2593,7 @@ class NurbsSurface:
             return False
         return self._from_curve_internal(crv, dir)
     
-    def split(self, dir: int, c: float) -> Tuple[Optional['NurbsSurface'], Optional['NurbsSurface']]:
+    def split(self, dir: int, c: float) -> tuple[Optional['NurbsSurface'], Optional['NurbsSurface']]:
         """Split surface at parameter in specified direction.
 
         Parameters
@@ -2667,7 +2667,7 @@ class NurbsSurface:
     # GEOMETRIC OPERATIONS (ADDITIONAL)
     ###########################################################################
 
-    def split_by_plane(self, plane: "Plane", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
+    def split_by_plane(self, plane: "Plane", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by a plane into trimmed faces.
 
         Computes the surface/plane intersection with UV pcurves and splits
@@ -2685,7 +2685,7 @@ class NurbsSurface:
             pcurves.append(pair[1])
         return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
 
-    def split_by_surface(self, cutter: "NurbsSurface", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
+    def split_by_surface(self, cutter: "NurbsSurface", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by another surface.
 
         Computes the surface/surface intersection and splits the UV domain
@@ -2703,7 +2703,7 @@ class NurbsSurface:
             pcurves.append(triple[1])
         return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
 
-    def split_by_curves(self, curves: List["NurbsCurve"], tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
+    def split_by_curves(self, curves: list["NurbsCurve"], tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by 3D curves lying on (or near) it.
 
         Each curve is pulled back to UV via closest-point projection; curves
@@ -2721,7 +2721,7 @@ class NurbsSurface:
                 pcurves.append(pcurve)
         return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
 
-    def split_by_line(self, line: "Line", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
+    def split_by_line(self, line: "Line", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by a line pulled onto it (Rhino "pull then split").
 
         The line is converted to a degree-1 curve and projected onto the
@@ -2738,7 +2738,7 @@ class NurbsSurface:
         crv = NurbsCurve.create(False, 1, pts)
         return self.split_by_curves([crv], tolerance)
 
-    def split_by_brep(self, brep: "BRep", tolerance: Optional[float] = None) -> list["NurbsSurfaceTrimmed"]:
+    def split_by_brep(self, brep: "BRep", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
         """Split this surface by every face of a BRep.
 
         Each cutter face is intersected with this surface (planar faces via the
@@ -2947,7 +2947,7 @@ class NurbsSurface:
             The deserialized NurbsSurface.
         """
         import json
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
 

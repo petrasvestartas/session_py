@@ -15,7 +15,7 @@ from typing import List
 from typing import Tuple
 from typing import Optional
 from typing import Any
-from typing import Callable
+from collections.abc import Callable
 import uuid
 import heapq
 import numpy as np
@@ -51,7 +51,7 @@ class SpatialBVHNode:
         self.left: Optional["SpatialBVHNode"] = None
         self.right: Optional["SpatialBVHNode"] = None
         self.object_id: int = -1
-        self.aabb: Optional[AABB] = None
+        self.aabb: AABB | None = None
 
     def is_leaf(self) -> bool:
         return self.object_id != -1
@@ -128,7 +128,7 @@ def _clz32(x: int) -> int:
     return n
 
 
-def _radix_sort(objects: List[dict]) -> None:
+def _radix_sort(objects: list[dict]) -> None:
     """Radix sort objects by Morton code (in-place, 3 passes of 10 bits)."""
     RADIX = 1024
     PASSES = 3
@@ -301,7 +301,7 @@ def _check_collisions_jit(
 
 def _ray_aabb_intersect(
     origin: Point, direction: Vector, box: AABB
-) -> Tuple[bool, float, float]:
+) -> tuple[bool, float, float]:
     """Check if a ray intersects an AABB."""
     min_x = box.cx - box.hx
     max_x = box.cx + box.hx
@@ -341,14 +341,14 @@ class SpatialBVH:
     def __init__(self, world_size: float = 1000.0):
         self._guid = None
         self.name = "my_bvh"
-        self.root: Optional[SpatialBVHNode] = None
+        self.root: SpatialBVHNode | None = None
         self.world_size = world_size
-        self.object_guids: List[str] = []
+        self.object_guids: list[str] = []
         # Flat arena for fast queries (NumPy arrays)
-        self.arena_left: Optional[np.ndarray] = None  # int32
-        self.arena_right: Optional[np.ndarray] = None  # int32
-        self.arena_object_id: Optional[np.ndarray] = None  # int32
-        self.arena_aabb: Optional[np.ndarray] = (
+        self.arena_left: np.ndarray | None = None  # int32
+        self.arena_right: np.ndarray | None = None  # int32
+        self.arena_object_id: np.ndarray | None = None  # int32
+        self.arena_aabb: np.ndarray | None = (
             None  # float64, shape (n, 6) for cx,cy,cz,hx,hy,hz
         )
         self.arena_root: int = -1
@@ -364,7 +364,7 @@ class SpatialBVH:
         self._guid = value
 
     @staticmethod
-    def compute_world_size(bounding_boxes: List[OBB]) -> float:
+    def compute_world_size(bounding_boxes: list[OBB]) -> float:
         """Compute world size from bounding boxes."""
         if not bounding_boxes:
             return 1000.0
@@ -388,13 +388,13 @@ class SpatialBVH:
         return max(max_extent * 2.2, 10.0)
 
     @classmethod
-    def from_boxes(cls, bounding_boxes: List[OBB], world_size: float) -> "SpatialBVH":
+    def from_boxes(cls, bounding_boxes: list[OBB], world_size: float) -> "SpatialBVH":
         """Create a SpatialBVH from a list of bounding boxes."""
         bvh = cls(world_size)
         bvh.build(bounding_boxes)
         return bvh
 
-    def build_with_guids(self, boxes_with_guids: List[Tuple[OBB, str]]) -> None:
+    def build_with_guids(self, boxes_with_guids: list[tuple[OBB, str]]) -> None:
         """Build SpatialBVH from bounding boxes with GUIDs."""
         if not boxes_with_guids:
             self.object_guids = []
@@ -406,12 +406,12 @@ class SpatialBVH:
         self.world_size = self.compute_world_size(bounding_boxes)
         self.build(bounding_boxes)
 
-    def build_from_boxes(self, boxes: List[OBB], ws: float) -> None:
+    def build_from_boxes(self, boxes: list[OBB], ws: float) -> None:
         """Build from bounding boxes with an explicit world size."""
         self.world_size = ws
         self.build(boxes)
 
-    def build(self, bounding_boxes: List[OBB]) -> None:
+    def build(self, bounding_boxes: list[OBB]) -> None:
         """Build the SpatialBVH tree from bounding boxes using LBVH algorithm."""
         if not bounding_boxes:
             self.root = None
@@ -484,7 +484,7 @@ class SpatialBVH:
                 return _clz32(ci ^ cj)
             return 32 + _clz32(i ^ j)
 
-        def determine_range(i: int) -> Tuple[int, int]:
+        def determine_range(i: int) -> tuple[int, int]:
             """Determine the range of keys covered by internal node i."""
             d = 1 if common_prefix(i, i + 1) - common_prefix(i, i - 1) > 0 else -1
             delta_min = common_prefix(i, i - d)
@@ -602,7 +602,7 @@ class SpatialBVH:
 
         arena_idx = [0]  # Use list to allow mutation in nested function
 
-        def build_arena(node: Optional[SpatialBVHNode]) -> int:
+        def build_arena(node: SpatialBVHNode | None) -> int:
             """Build flat arena from tree, return index."""
             if not node:
                 return -1
@@ -637,7 +637,7 @@ class SpatialBVH:
 
         self.arena_root = build_arena(self.root)
 
-    def build_from_aabbs(self, aabbs: List[AABB], world_size: float) -> None:
+    def build_from_aabbs(self, aabbs: list[AABB], world_size: float) -> None:
         """Build the BVH directly from axis-aligned AABBs, keeping the pointer tree (`root`)."""
         if not aabbs:
             self.build([])
@@ -691,7 +691,7 @@ class SpatialBVH:
                 return _clz32(ci ^ cj)
             return 32 + _clz32(i ^ j)
 
-        def determine_range(i: int) -> Tuple[int, int]:
+        def determine_range(i: int) -> tuple[int, int]:
             d = 1 if common_prefix(i, i + 1) - common_prefix(i, i - 1) > 0 else -1
             delta_min = common_prefix(i, i - d)
 
@@ -898,8 +898,8 @@ class SpatialBVH:
         )
 
     def check_all_collisions(
-        self, bounding_boxes: List[OBB]
-    ) -> Tuple[List[Tuple[int, int]], List[int], int]:
+        self, bounding_boxes: list[OBB]
+    ) -> tuple[list[tuple[int, int]], list[int], int]:
         """Check for all pairwise collisions in the scene using fast NumPy arena."""
         if self.arena_root < 0 or self.arena_aabb is None:
             return [], [], 0
@@ -1004,8 +1004,8 @@ class SpatialBVH:
         return all_collisions, colliding_indices, total_checks
 
     def check_all_collisions_guids(
-        self, bounding_boxes: List[OBB]
-    ) -> List[Tuple[str, str]]:
+        self, bounding_boxes: list[OBB]
+    ) -> list[tuple[str, str]]:
         """Check for all collisions and return GUID pairs."""
         collisions, _, _ = self.check_all_collisions(bounding_boxes)
         guid_collisions = []
@@ -1018,7 +1018,7 @@ class SpatialBVH:
         self,
         origin: Point,
         direction: Vector,
-        candidate_leaf_ids: List[int],
+        candidate_leaf_ids: list[int],
         find_all: bool = False,
     ) -> bool:
         """Cast a ray through the SpatialBVH and return candidate leaf IDs ordered by distance."""
@@ -1079,15 +1079,15 @@ class SpatialBVH:
         return any_found
 
     def find_collisions(
-        self, object_id: int, query_bbox: OBB, bounding_boxes: List[OBB]
-    ) -> Tuple[List[int], int]:
+        self, object_id: int, query_bbox: OBB, bounding_boxes: list[OBB]
+    ) -> tuple[list[int], int]:
         """Collisions of one object against the tree, excluding self; returns (object_ids, check_count)."""
-        collisions: List[int] = []
+        collisions: list[int] = []
         check_count = 0
         if self.arena_root < 0 or self.arena_aabb is None:
             return collisions, check_count
         query = _aabb_from_obb(query_bbox)
-        stack: List[int] = [self.arena_root]
+        stack: list[int] = [self.arena_root]
         while stack:
             idx = stack.pop()
             a = self.arena_aabb[idx]
@@ -1111,9 +1111,9 @@ class SpatialBVH:
                 stack.append(right_idx)
         return collisions, check_count
 
-    def query_aabb(self, query: OBB) -> List[int]:
+    def query_aabb(self, query: OBB) -> list[int]:
         """Return object_ids of all leaves whose AABB overlaps the query box."""
-        hits: List[int] = []
+        hits: list[int] = []
         if self.arena_root < 0 or self.arena_aabb is None:
             return hits
         q = _aabb_from_obb(query)
@@ -1123,7 +1123,7 @@ class SpatialBVH:
         qhx = q.hx
         qhy = q.hy
         qhz = q.hz
-        stack: List[int] = [self.arena_root]
+        stack: list[int] = [self.arena_root]
         while stack:
             idx = stack.pop()
             a = self.arena_aabb[idx]
@@ -1149,8 +1149,8 @@ class SpatialBVH:
         return hits
 
     def nearest_neighbors(
-        self, object_id: int, bounding_boxes: List[OBB], inflate: float = 1.2
-    ) -> List[int]:
+        self, object_id: int, bounding_boxes: list[OBB], inflate: float = 1.2
+    ) -> list[int]:
         """Find leaf object_ids near `object_id`, excluding self.
 
         Inflates the half-extents of the object's AABB by `inflate` and queries.
