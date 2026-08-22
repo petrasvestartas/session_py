@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Generic hot-reload for any Python package without restarting Rhino."""
 from typing import List
 from typing import Optional

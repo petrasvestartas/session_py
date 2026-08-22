@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.9"]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -40,7 +40,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.9"
 
       - name: Set version
         run: echo "VERSION=0.${{ github.run_number }}.0" >> $GITHUB_ENV

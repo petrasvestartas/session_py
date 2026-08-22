@@ -1,3 +1,4 @@
+from __future__ import annotations
 # SpatialBVH — binary tree with OBB leaves, Morton-code (LBVH) construction.
 # Use for: collision detection and closest-point between many dynamic objects.
 #   Handles oriented boxes via their tight world-space AABBs (half-axes projected).

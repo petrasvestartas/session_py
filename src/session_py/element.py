@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Union
 from collections.abc import Callable
 from typing import Optional

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Closest point operations for geometry classes."""
 
 from typing import Tuple

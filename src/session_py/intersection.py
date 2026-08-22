@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Intersection functions for geometric primitives.
 

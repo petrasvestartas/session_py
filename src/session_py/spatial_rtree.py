@@ -1,3 +1,4 @@
+from __future__ import annotations
 from collections.abc import Callable
 from typing import List
 # SpatialRTree — R-tree with dynamic insert/delete (Guttman split, fan-out 4–8).

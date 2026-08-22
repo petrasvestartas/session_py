@@ -9,22 +9,24 @@ description = "A minimal Python geometry library"
 authors = [{name = "Petras Vestartas", email = "petrasvestartas@gmail.com"}]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "numpy>=1.20.0",
-    "protobuf>=7.35.0",
+    "protobuf>=6.33,<7.0",
     # exact pin: CI diffs regenerated *_pb2.py against committed files, and the
     # version banner protoc stamps into them follows this package's version
-    "grpcio-tools==1.82.1",
+    "grpcio-tools==1.80.0",
 ]
 
 [project.optional-dependencies]
