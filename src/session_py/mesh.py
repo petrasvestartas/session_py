@@ -42,6 +42,102 @@ class NormalWeighting(Enum):
     UNIFORM = "uniform"
 
 
+class Attributes:
+    """A vertex's attribute map, paid for ONLY when the vertex has attributes.
+
+    This behaves like the ``dict`` it replaces at every call site - ``get``, ``[]``, ``in``,
+    ``items()``, ``==``, iteration - but the underlying dict is not created until something is
+    stored in it.
+
+    The reason is the shape of real data. A mesh from a PDF sheet or a scan carries positions and
+    nothing else: hundreds of thousands of vertices, ZERO attribute entries, and an empty dict
+    each regardless. Attributes are a NURBS-tessellation and vertex-colour feature (u/v, r/g/b,
+    nx/ny/nz); those meshes are thousands of vertices, not millions, and one dict each is nothing
+    to them. Same type in all three languages - ``Option<Box<BTreeMap>>`` in Rust, a
+    ``unique_ptr<map>`` in C++ - so the three kernels stay the same shape as well as the same API.
+
+    Parameters
+    ----------
+    other : Attributes | dict | None, optional
+        Initial contents. Empty by default, and an empty one holds no dict at all.
+    """
+
+    __slots__ = ("_m",)
+
+    def __init__(self, other: Attributes | dict[str, float] | None = None):
+        self._m: dict[str, float] | None = dict(other) if other else None
+
+    def get(self, key: str, default: float | None = None) -> float | None:
+        return self._m.get(key, default) if self._m is not None else default
+
+    def items(self):
+        return self._m.items() if self._m is not None else {}.items()
+
+    def keys(self):
+        return self._m.keys() if self._m is not None else {}.keys()
+
+    def values(self):
+        return self._m.values() if self._m is not None else {}.values()
+
+    def update(self, other: Attributes | dict[str, float]) -> None:
+        for k, v in (other.items() if hasattr(other, "items") else other):
+            self[k] = v
+
+    def pop(self, key: str, *default: float) -> float:
+        if self._m is None:
+            if default:
+                return default[0]
+            raise KeyError(key)
+        out = self._m.pop(key, *default)
+        # Back to the un-allocated state, so a map that empties out stops costing anything.
+        if not self._m:
+            self._m = None
+        return out
+
+    def clear(self) -> None:
+        self._m = None
+
+    def __getitem__(self, key: str) -> float:
+        if self._m is None:
+            raise KeyError(key)
+        return self._m[key]
+
+    def __setitem__(self, key: str, value: float) -> None:
+        if self._m is None:
+            self._m = {}
+        self._m[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        self.pop(key)
+
+    def __contains__(self, key: str) -> bool:
+        return self._m is not None and key in self._m
+
+    def __iter__(self):
+        return iter(self._m) if self._m is not None else iter(())
+
+    def __len__(self) -> int:
+        return len(self._m) if self._m is not None else 0
+
+    def __bool__(self) -> bool:
+        return bool(self._m)
+
+    def __eq__(self, other: object) -> bool:
+        mine = self._m if self._m is not None else {}
+        if isinstance(other, Attributes):
+            return mine == (other._m if other._m is not None else {})
+        if isinstance(other, dict):
+            return mine == other
+        return NotImplemented
+
+    def __ne__(self, other: object) -> bool:
+        eq = self.__eq__(other)
+        return eq if eq is NotImplemented else not eq
+
+    def __repr__(self) -> str:
+        return repr(self._m if self._m is not None else {})
+
+
 class VertexData:
     """Vertex data containing position and attributes.
 
@@ -58,8 +154,8 @@ class VertexData:
         Y coordinate.
     z : float
         Z coordinate.
-    attributes : dict
-        Custom vertex attributes.
+    attributes : Attributes
+        Custom vertex attributes; holds no dict until one is stored.
     """
 
     def __init__(self, point: Point | None = None):
@@ -68,7 +164,7 @@ class VertexData:
         self.x = point[0]
         self.y = point[1]
         self.z = point[2]
-        self.attributes = {}
+        self.attributes = Attributes()
 
     def __getitem__(self, index):
         """Access coordinate by index (0=x, 1=y, 2=z)."""
@@ -311,7 +407,7 @@ class Mesh:
         m.halfedge = {u: dict(v) for u, v in self.halfedge.items()}
         m.vertex = {k: VertexData(v.position()) for k, v in self.vertex.items()}
         for k, v in self.vertex.items():
-            m.vertex[k].attributes = dict(v.attributes)
+            m.vertex[k].attributes = Attributes(v.attributes)
         m.face = {k: list(v) for k, v in self.face.items()}
         m.facedata = {k: dict(v) for k, v in self.facedata.items()}
         m.edgedata = {k: dict(v) for k, v in self.edgedata.items()}
@@ -1068,30 +1164,26 @@ class Mesh:
                     a = ring[i]; b = ring[(i + 1) % n]
                     hole_edges.add((a, b))
                     hole_edges.add((b, a))
-        for u, nbrs in self.halfedge.items():
-            for v, fkey in nbrs.items():
-                if fkey is None and (u, v) not in hole_edges:
-                    return False
-        return bool(self.halfedge)
+        dfe = self._directed_face_edges()
+        for u, v in dfe:
+            # a face edge whose reverse no face walks is a border - unless a declared hole
+            # ring owns it (hole_edges holds both directions)
+            if (v, u) not in dfe and (v, u) not in hole_edges:
+                return False
+        return bool(self.vertex)
 
     def is_vertex_on_boundary(self, vertex_key: int) -> bool:
         """Check if a vertex is on the boundary."""
-        if vertex_key not in self.halfedge:
-            return False
-
-        for v, face_opt in self.halfedge[vertex_key].items():
-            if face_opt is None:
+        dfe = self._directed_face_edges()
+        for u, v in dfe:
+            if (v, u) not in dfe and (u == vertex_key or v == vertex_key):
                 return True
-
-        for u, neighbors in self.halfedge.items():
-            if vertex_key in neighbors and neighbors[vertex_key] is None:
-                return True
-
         return False
 
     def is_edge_on_boundary(self, u: int, v: int) -> bool:
         """Check if an edge is on the boundary."""
-        return self.halfedge.get(u, {}).get(v) is None or self.halfedge.get(v, {}).get(u) is None
+        dfe = self._directed_face_edges()
+        return not ((u, v) in dfe and (v, u) in dfe)
 
     def is_face_on_boundary(self, face_key: int) -> bool:
         """Check if a face is on the boundary."""
@@ -1120,25 +1212,18 @@ class Mesh:
 
     def number_of_edges(self) -> int:
         """Get the number of edges."""
-        seen = set()
-        for u, neighbors in self.halfedge.items():
-            for v in neighbors:
-                seen.add((min(u, v), max(u, v)))
-        return len(seen)
+        dfe = self._directed_face_edges()
+        return sum(1 for u, v in dfe if u < v or (v, u) not in dfe)
 
     def edges(self) -> list[tuple[int, int]]:
-        seen = set()
-        for u, neighbors in self.halfedge.items():
-            for v in neighbors:
-                seen.add((min(u, v), max(u, v)))
-        return sorted(seen)
+        dfe = self._directed_face_edges()
+        return sorted({(min(u, v), max(u, v)) for u, v in dfe})
 
     def naked_edges(self, boundary: bool = True) -> list[tuple[int, int]]:
-        seen = set()
-        for u, neighbors in self.halfedge.items():
-            for v in neighbors:
-                seen.add((min(u, v), max(u, v)))
-        return [e for e in sorted(seen) if self.is_edge_on_boundary(e[0], e[1]) == boundary]
+        # one directed set for the whole call - never one per edge (that walk is quadratic)
+        dfe = self._directed_face_edges()
+        seen = {(min(u, v), max(u, v)) for u, v in dfe}
+        return sorted(e for e in seen if (not ((e[0], e[1]) in dfe and (e[1], e[0]) in dfe)) == boundary)
 
     def naked_vertices(self, boundary: bool = True) -> list[int]:
         result = []
@@ -1285,14 +1370,15 @@ class Mesh:
             for i in range(n):
                 u = verts[i]
                 v = verts[(i + 1) % n]
-                self.halfedge[u][v] = fkey
-                if u not in self.halfedge[v]:
+                self.halfedge.setdefault(u, {})[v] = fkey
+                if u not in self.halfedge.setdefault(v, {}):
                     self.halfedge[v][u] = None
 
         self.orient_outward()
         return True
 
     def orient_outward(self) -> bool:
+        self.ensure_halfedges()
         if not self.face or self.naked_edges(True):
             return False
         vol = 0.0
@@ -1398,6 +1484,7 @@ class Mesh:
         int
             The vertex key.
         """
+        self.ensure_halfedges()
         if vkey is None:
             vertex_key = self._max_vertex
             self._max_vertex += 1
@@ -1430,6 +1517,7 @@ class Mesh:
         int or None
             The face key, or None if the face is invalid.
         """
+        self.ensure_halfedges()
         if len(vertices) < 3:
             return None
 
@@ -1472,7 +1560,44 @@ class Mesh:
 
         return face_key
 
+    def _directed_face_edges(self) -> set[tuple[int, int]]:
+        """Every (u, v) some face ring walks, as a flat set. The halfedge-free backbone of the
+        pure readers (is_closed, edges, boundaries): one transient allocation per call instead
+        of a persistent nested-map structure per mesh."""
+        s = set()
+        for verts in self.face.values():
+            n = len(verts)
+            for i in range(n):
+                s.add((verts[i], verts[(i + 1) % n]))
+        return s
+
+    def compute_halfedges(self) -> dict[int, dict[int, int | None]]:
+        """Face-derived halfedge connectivity, computed WITHOUT mutating - the writers borrow
+        it when the lazy map was never built, so the wire format never changes."""
+        he = {vkey: {} for vkey in self.vertex}
+        for fkey, verts in self.face.items():
+            n = len(verts)
+            for i in range(n):
+                u = verts[i]
+                v = verts[(i + 1) % n]
+                he.setdefault(u, {})[v] = fkey
+                if u not in he.setdefault(v, {}):
+                    he[v][u] = None
+        return he
+
+    def rebuild_halfedges(self) -> None:
+        self.halfedge = self.compute_halfedges()
+
+    def ensure_halfedges(self) -> None:
+        """Topology is LAZY: a freshly DECODED mesh carries no halfedge map. Every EDIT entry
+        point calls this first; the pure readers are face-based and never build it. Constructed
+        meshes (add_vertex/add_face from empty) maintain the map incrementally exactly as
+        before, so this fires only on decoded-then-edited meshes."""
+        if not self.halfedge and self.face:
+            self.rebuild_halfedges()
+
     def remove_face(self, fkey: int) -> None:
+        self.ensure_halfedges()
         if fkey not in self.face:
             return
         vertices = self.face[fkey]
@@ -1499,6 +1624,7 @@ class Mesh:
         self._triangle_bvh_built = False
 
     def remove_vertex(self, vkey: int) -> None:
+        self.ensure_halfedges()
         if vkey not in self.vertex:
             return
         faces_to_remove = [fk for fk, verts in self.face.items() if vkey in verts]
@@ -1517,6 +1643,7 @@ class Mesh:
         self._triangle_bvh_built = False
 
     def remove_edge(self, u: int, v: int) -> None:
+        self.ensure_halfedges()
         faces_to_remove = set()
         f0 = self.halfedge.get(u, {}).get(v)
         if f0 is not None:
@@ -1539,6 +1666,7 @@ class Mesh:
         self._triangle_bvh_built = False
 
     def flip_face(self, fkey: int) -> None:
+        self.ensure_halfedges()
         if fkey not in self.face:
             return
         fv = self.face[fkey][:]
@@ -1555,8 +1683,8 @@ class Mesh:
             for i in range(n):
                 u = verts[i]
                 v = verts[(i + 1) % n]
-                self.halfedge[u][v] = fkey
-                if u not in self.halfedge[v]:
+                self.halfedge.setdefault(u, {})[v] = fkey
+                if u not in self.halfedge.setdefault(v, {}):
                     self.halfedge[v][u] = None
 
     ###########################################################################################
@@ -1565,32 +1693,50 @@ class Mesh:
 
     def edge_edges(self, u: int, v: int) -> list[tuple[int, int]] | None:
         """Get all edges sharing a vertex with (u,v), excluding (u,v) and (v,u)."""
-        uv = v in self.halfedge.get(u, {})
-        vu = u in self.halfedge.get(v, {})
-        if not uv and not vu:
+        dfe = self._directed_face_edges()
+        if (u, v) not in dfe and (v, u) not in dfe:
             return None
+
+        def ends(x):
+            return sorted({b if a == x else a for a, b in dfe if a == x or b == x})
+
         edges = []
-        for w in self.halfedge.get(u, {}):
+        for w in ends(u):
             if w != v:
                 edges.append((u, w))
-        for w in self.halfedge.get(v, {}):
+        for w in ends(v):
             if w != u:
                 edges.append((v, w))
         return edges
 
+    def edge_face_map(self) -> dict[tuple[int, int], int]:
+        """Every directed face edge -> its face key, in ONE face walk. The bulk form of
+        edge_faces for per-edge loops (a per-call edge_faces is O(E) face-based, so a
+        loop over all edges would be quadratic - build this once instead)."""
+        m = {}
+        for fkey, verts in self.face.items():
+            n = len(verts)
+            for i in range(n):
+                m[(verts[i], verts[(i + 1) % n])] = fkey
+        return m
+
     def edge_faces(self, u: int, v: int) -> list[int] | None:
         """Get the faces adjacent to an edge."""
-        f0 = self.halfedge.get(u, {}).get(v)
-        f1 = self.halfedge.get(v, {}).get(u)
-        if f0 is None and f1 is None:
-            return None
-        return [f for f in (f0, f1) if f is not None]
+        out = []
+        for fkey, verts in self.face.items():
+            n = len(verts)
+            for i in range(n):
+                a = verts[i]
+                b = verts[(i + 1) % n]
+                if (a, b) == (u, v) or (a, b) == (v, u):
+                    if fkey not in out:
+                        out.append(fkey)
+        return out if out else None
 
     def edge_line(self, u: int, v: int) -> Optional["Line"]:
         """Get the edge as a Line."""
-        uv = v in self.halfedge.get(u, {})
-        vu = u in self.halfedge.get(v, {})
-        if not uv and not vu:
+        dfe = self._directed_face_edges()
+        if (u, v) not in dfe and (v, u) not in dfe:
             return None
         from .line import Line
         return Line.from_points(self.vertex_point(u), self.vertex_point(v))
@@ -1608,11 +1754,11 @@ class Mesh:
         fe = self.face_edges(face_key)
         if fe is None:
             return None
+        efm = self.edge_face_map()
         neighbors = []
         for u, v in fe:
-            f = self.halfedge.get(v, {}).get(u)
-            if f is not None:
-                neighbors.append(f)
+            if (v, u) in efm:
+                neighbors.append(efm[(v, u)])
         return neighbors
 
     def face_points(self, face_key: int) -> list[Point] | None:
@@ -1636,15 +1782,18 @@ class Mesh:
 
     def vertex_edges(self, vertex_key: int) -> list[tuple[int, int]] | None:
         """Get edges incident to a vertex as (vertex_key, neighbor) pairs."""
-        if vertex_key not in self.halfedge:
+        if vertex_key not in self.vertex:
             return None
-        return [(vertex_key, u) for u in self.halfedge[vertex_key]]
+        neighbors = sorted(self.vertex_vertices(vertex_key))
+        return [(vertex_key, u) for u in neighbors]
 
     def vertex_faces(self, vertex_key: int) -> list[int] | None:
         """Get the faces incident to a vertex."""
-        if vertex_key not in self.halfedge:
+        if vertex_key not in self.vertex:
             return None
-        return [f for f in self.halfedge[vertex_key].values() if f is not None]
+        efm = self.edge_face_map()
+        neighbors = sorted(self.vertex_vertices(vertex_key))
+        return [efm[(vertex_key, u)] for u in neighbors if (vertex_key, u) in efm]
 
     def vertex_point(self, vertex_key: int) -> Point | None:
         """Get the position of a vertex."""
@@ -1654,16 +1803,17 @@ class Mesh:
 
     def vertex_vertices(self, vertex_key: int) -> list[int] | None:
         """Get the neighboring vertices of a vertex."""
-        if vertex_key not in self.halfedge:
+        if vertex_key not in self.vertex:
             return None
-        return list(self.halfedge[vertex_key].keys())
+        dfe = self._directed_face_edges()
+        return sorted({b if a == vertex_key else a for a, b in dfe if a == vertex_key or b == vertex_key})
 
     def vertex_neighbors(self, vertex_key: int, ordered: bool = False) -> list[int] | None:
         """Alias of vertex_vertices. With ordered=True returns neighbors in face-cycle order
         around the vertex (boundary vertex starts/ends at boundary halfedges)."""
-        if vertex_key not in self.halfedge:
+        nbrs = self.vertex_vertices(vertex_key)
+        if nbrs is None:
             return None
-        nbrs = list(self.halfedge[vertex_key].keys())
         if not ordered or len(nbrs) <= 1:
             return nbrs
         start = nbrs[0]
@@ -2616,9 +2766,10 @@ class Mesh:
             Dictionary with fields in alphabetical order (matching Rust).
 
         """
-        # Halfedge connectivity
+        # Halfedge connectivity (lazy topology: compute transiently if the map was never built)
+        he_src = self.compute_halfedges() if not self.halfedge and self.face else self.halfedge
         halfedge_data = {}
-        for u, neighbors in self.halfedge.items():
+        for u, neighbors in he_src.items():
             halfedge_data[str(u)] = {
                 str(v): face_key for v, face_key in neighbors.items()
             }
@@ -2627,7 +2778,7 @@ class Mesh:
         vertex_data = {}
         for key, vdata in self.vertex.items():
             vertex_data[str(key)] = {
-                "attributes": vdata.attributes,
+                "attributes": dict(vdata.attributes),
                 "x": vdata[0],
                 "y": vdata[1],
                 "z": vdata[2],
@@ -2730,7 +2881,7 @@ class Mesh:
                 vertex_data.y = vdata["y"]
                 vertex_data.z = vdata["z"]
                 if "attributes" in vdata:
-                    vertex_data.attributes = vdata["attributes"]
+                    vertex_data.attributes = Attributes(vdata["attributes"])
                 mesh.vertex[key] = vertex_data
                 if "halfedge" not in data:
                     mesh.halfedge[key] = {}
@@ -2868,7 +3019,10 @@ class Mesh:
                 tri_list.vertices.append(t[2])
 
         # Halfedges
-        for u, neighbors in self.halfedge.items():
+        # lazy topology: if this mesh was decoded and never edited, the map was never built -
+        # compute it transiently so the WIRE stays exactly what it always was
+        he_src = self.compute_halfedges() if not self.halfedge and self.face else self.halfedge
+        for u, neighbors in he_src.items():
             hmap = proto.halfedges[u]
             for v, fkey_opt in neighbors.items():
                 hmap.neighbors[v] = fkey_opt if fkey_opt is not None else 0xFFFFFFFFFFFFFFFF
@@ -2963,7 +3117,8 @@ class Mesh:
             tl = proto.triangulation[fkey]
             for t in tris:
                 tl.vertices.append(t[0]); tl.vertices.append(t[1]); tl.vertices.append(t[2])
-        for u, neighbors in self.halfedge.items():
+        he_src = self.compute_halfedges() if not self.halfedge and self.face else self.halfedge
+        for u, neighbors in he_src.items():
             hmap = proto.halfedges[u]
             for v, fkey_opt in neighbors.items():
                 hmap.neighbors[v] = fkey_opt if fkey_opt is not None else 0xFFFFFFFFFFFFFFFF
@@ -3022,8 +3177,6 @@ class Mesh:
             attrs = dict(vdata.attributes)
             mesh.vertex[vkey] = VertexData(Point(vdata.x, vdata.y, vdata.z))
             mesh.vertex[vkey].attributes = attrs
-            if vkey not in mesh.halfedge:
-                mesh.halfedge[vkey] = {}
 
         # Faces
         for fkey, fdata in proto.faces.items():
@@ -3040,12 +3193,10 @@ class Mesh:
                 tris = [[vlist[i], vlist[i+1], vlist[i+2]] for i in range(0, len(vlist) - 2, 3)]
                 mesh.triangulation[fkey] = tris
 
-        # Halfedges
-        for u, hmap in proto.halfedges.items():
-            neighbors = {}
-            for v, fkey in hmap.neighbors.items():
-                neighbors[v] = None if fkey == 0xFFFFFFFFFFFFFFFF else fkey
-            mesh.halfedge[u] = neighbors
+        # Topology is LAZY: the wire may carry a halfedges map (older writers), but decoding
+        # it was the single biggest load cost for dense scenes - and pure readers never use it.
+        # ensure_halfedges rebuilds from faces the first time an EDIT needs it; the writers
+        # compute it transiently so the wire format is unchanged.
 
         # Edge data
         for edata in proto.edge_data:
@@ -3111,8 +3262,6 @@ class Mesh:
             attrs = dict(vdata.attributes)
             mesh.vertex[vkey] = VertexData(Point(vdata.x, vdata.y, vdata.z))
             mesh.vertex[vkey].attributes = attrs
-            if vkey not in mesh.halfedge:
-                mesh.halfedge[vkey] = {}
 
         for fkey, fdata in proto.faces.items():
             mesh.face[fkey] = list(fdata.vertices)
@@ -3127,11 +3276,7 @@ class Mesh:
                 tris = [[vlist[i], vlist[i+1], vlist[i+2]] for i in range(0, len(vlist) - 2, 3)]
                 mesh.triangulation[fkey] = tris
 
-        for u, hmap in proto.halfedges.items():
-            neighbors = {}
-            for v, fkey in hmap.neighbors.items():
-                neighbors[v] = None if fkey == 0xFFFFFFFFFFFFFFFF else fkey
-            mesh.halfedge[u] = neighbors
+        # Topology is LAZY: see pb_loads - halfedges on the wire are not decoded.
 
         for edata in proto.edge_data:
             key = (edata.vertex1, edata.vertex2)

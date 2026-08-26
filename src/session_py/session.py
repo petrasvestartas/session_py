@@ -141,6 +141,12 @@ class Session:
         of calling `world_xform` per object: that does a whole-tree scan to find each node,
         which is quadratic over a session.
         """
+        # Nothing to compose: with no local transforms every composed frame IS the identity,
+        # and every caller already falls back to identity for a guid the map lacks. Walking
+        # the tree anyway costs one dict insert per NODE, paid again on every rebuild.
+        if not self.xforms:
+            return {}
+
         out: dict[str, Xform] = {}
 
         def walk(node: TreeNode, parent_xform: Xform) -> None:

@@ -57,6 +57,7 @@ from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
 from .matrix import Matrix
 from .convex_hull import ConvexHull
 from .spatial_kdtree import SpatialKDTree
+from .spatial_octree import SpatialOctree
 from .mesh_offset import MeshOffset
 
 __all__ = [
@@ -113,5 +114,6 @@ __all__ = [
     "Matrix",
     "ConvexHull",
     "SpatialKDTree",
+    "SpatialOctree",
     "MeshOffset",
 ]

@@ -73,13 +73,18 @@ def _intersect_planes(planes, fallback: Point) -> Point:
 
 
 def _offset_vertices(mesh: Mesh, planes: dict) -> dict:
+    # one face walk for the whole mesh - per-vertex vertex_faces() is O(F), the loop would be quadratic
+    vertex_face_keys = {}
+    for fk, verts in mesh.face.items():
+        for vk in verts:
+            vertex_face_keys.setdefault(vk, set()).add(fk)
     result = {}
     for vk in mesh.vertices():
         vp = mesh.vertex_point(vk)
         if vp is None:
             continue
-        fkeys = mesh.vertex_faces(vk)
-        if fkeys is None or len(fkeys) == 0:
+        fkeys = sorted(vertex_face_keys.get(vk, ()))
+        if len(fkeys) == 0:
             result[vk] = vp
             continue
         adj = [planes[fk] for fk in fkeys if fk in planes]
