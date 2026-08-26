@@ -308,6 +308,14 @@ def run_all(language: str = "python") -> None:
     test source file into ``session_tests/<subdir>/<test_file>.json``.
     """
 
+    # Every class's serialization round-trip writes its artifact into <repo>/serialization/,
+    # and those artifacts are deliberately UNTRACKED (the phantom-pass guard: a stale committed
+    # .json can make a broken dump look like it passed). Untracked means the directory does not
+    # exist in a fresh clone, so the first class to write - `color`, alphabetically - died with
+    # FileNotFoundError while every class after it passed, because its own failed write had
+    # nothing to do with the directory appearing later. Create it once, here.
+    (Path(__file__).resolve().parents[2] / "serialization").mkdir(parents=True, exist_ok=True)
+
     # Group tests by class
     tests_by_class: dict[str, list[tuple[str, Callable[[], None]]]] = {}
     for class_name, test_name, func in _REGISTERED_TESTS:
