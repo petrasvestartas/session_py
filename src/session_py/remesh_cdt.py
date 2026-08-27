@@ -194,7 +194,7 @@ def _shortest_dist_seg(pt, sp1, sp2):
 
 
 def _segs_intersect(s1a, s1b, s2a, s2b):
-    if s1a == s2a or s1b == s2a or s1b == s2b:
+    if s1a == s2a or s1b == s2a or s1b == s2b or s1a == s2b:
         return _IX_NONE
     dy1 = float(s1b.y - s1a.y)
     dx1 = float(s1b.x - s1a.x)
@@ -902,7 +902,7 @@ def _cdt_triangulate(border_2d, holes_2d=None):
                 xi, yi = poly[i].x, poly[i].y
                 xj, yj = poly[j].x, poly[j].y
                 if (yi > py) != (yj > py):
-                    if px < xj + (py - yj) * (xi - xj) / (yj - yi):
+                    if px < xi + (py - yi) * (xj - xi) / (yj - yi):
                         inside = not inside
                 j = i
             return inside
