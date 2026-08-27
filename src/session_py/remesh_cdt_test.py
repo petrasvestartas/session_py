@@ -376,6 +376,23 @@ def test_remesh_cdt_irregular_tilted_polyline_with_holes():
     MINI_CHECK(m.is_valid())
 
 
+@MINI_TEST("RemeshCDT", "Large coordinates")
+def test_remesh_cdt_large_coordinates():
+    from session_py import RemeshCDT
+    from session_py import Polyline
+    from session_py import Point
+
+    border = Polyline([
+        Point(1e13, 1e13, 0),
+        Point(1e13 + 4, 1e13, 0),
+        Point(1e13 + 4, 1e13 + 4, 0),
+        Point(1e13, 1e13 + 4, 0),
+    ])
+    tris = RemeshCDT.triangulate([border])
+
+    MINI_CHECK(len(tris) == 2)
+
+
 @MINI_TEST("RemeshCDT", "plate_failing 15-vert outer + 4 holes")
 def test_remesh_cdt_plate_failing_15_vert_outer_4_holes():
     from session_py import RemeshCDT
