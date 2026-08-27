@@ -1,7 +1,5 @@
 from __future__ import annotations
 """Constrained Delaunay Triangulation via sweep-line."""
-from typing import List
-from typing import Tuple
 from typing import TYPE_CHECKING
 import math
 
@@ -660,7 +658,7 @@ class _Delaunay:
             self._add_path(path)
         return len(self._verts) > 2
 
-    def execute(self, paths: list[list["_P64"]]) -> list["_Tri"]:
+    def execute(self, paths: list[list["_P64"]]) -> list[list["_P64"]] | None:
         if not self._add_paths(paths):
             return []
         if self._lowermost.innerLM:
@@ -672,7 +670,6 @@ class _Delaunay:
                 elif e.kind == _DESCEND:
                     e.kind = _ASCEND
         self._loc_mins = []
-        self._edges.sort(key=lambda e: e.vL.pt.x)
         self._verts.sort(key=lambda v: (-v.pt.y, v.pt.x))
         self._merge_dup_collinear()
         currY = self._verts[0].pt.y
@@ -999,6 +996,8 @@ class RemeshCDT:
                 if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
                     return pts[:-1]
             return pts
+        if not polylines:
+            return []
         bpts = _strip(polylines[0].get_points())
         hpts_list = [_strip(h.get_points()) for h in polylines[1:]]
         return _cdt_triangulate(bpts, hpts_list)
