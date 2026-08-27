@@ -65,6 +65,10 @@ class _Tri:
         self.edges = [e1, e2, e3]
 
 
+class _DegenBail(Exception):
+    pass
+
+
 def _cps(p1, p2, p3):
     cp = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x)
     return 1 if cp > 0 else (-1 if cp < 0 else 0)
@@ -579,42 +583,66 @@ class _Delaunay:
             v0.innerLM = True
         vPrev = v0
         i = iNext
-        while True:
-            self._loc_mins.append(vPrev)
-            if (not self._lowermost or
-                    vPrev.pt.y > self._lowermost.pt.y or
-                    (vPrev.pt.y == self._lowermost.pt.y and vPrev.pt.x < self._lowermost.pt.x)):
-                self._lowermost = vPrev
-            iNext = _next_idx(i, length)
-            if _cps(vPrev.pt, path[i], path[iNext]) == 0:
-                i = iNext
-                continue
-            while path[i].y <= vPrev.pt.y:
-                v = _V2(path[i])
-                self._verts.append(v)
-                self._create_edge(vPrev, v, _ASCEND)
-                vPrev = v
-                i = iNext
+        # Degeneracy guard: a valid simple path is walked in O(len) advances. A degenerate or
+        # self-intersecting path (e.g. an inexact conic pcurve that collapses to a collinear/looping
+        # run after integer quantization) can spin these sweep loops forever -> bound the total work
+        # and discard the path if the budget is blown, so the CDT can never hang the kernel.
+        steps = 0
+        budget = 16 * length + 256
+
+        def _step():
+            nonlocal steps
+            steps += 1
+            if steps > budget:
+                raise _DegenBail
+
+        try:
+            while True:
+                _step()
+                self._loc_mins.append(vPrev)
+                if (not self._lowermost or
+                        vPrev.pt.y > self._lowermost.pt.y or
+                        (vPrev.pt.y == self._lowermost.pt.y and vPrev.pt.x < self._lowermost.pt.x)):
+                    self._lowermost = vPrev
                 iNext = _next_idx(i, length)
-                while _cps(vPrev.pt, path[i], path[iNext]) == 0:
+                if _cps(vPrev.pt, path[i], path[iNext]) == 0:
+                    i = iNext
+                    continue
+                while path[i].y <= vPrev.pt.y:
+                    _step()
+                    v = _V2(path[i])
+                    self._verts.append(v)
+                    self._create_edge(vPrev, v, _ASCEND)
+                    vPrev = v
                     i = iNext
                     iNext = _next_idx(i, length)
-            vPrevPrev = vPrev
-            while i != i0 and path[i].y >= vPrev.pt.y:
-                v = _V2(path[i])
-                self._verts.append(v)
-                self._create_edge(v, vPrev, _DESCEND)
+                    while _cps(vPrev.pt, path[i], path[iNext]) == 0:
+                        _step()
+                        i = iNext
+                        iNext = _next_idx(i, length)
                 vPrevPrev = vPrev
-                vPrev = v
-                i = iNext
-                iNext = _next_idx(i, length)
-                while _cps(vPrev.pt, path[i], path[iNext]) == 0:
+                while i != i0 and path[i].y >= vPrev.pt.y:
+                    _step()
+                    v = _V2(path[i])
+                    self._verts.append(v)
+                    self._create_edge(v, vPrev, _DESCEND)
+                    vPrevPrev = vPrev
+                    vPrev = v
                     i = iNext
                     iNext = _next_idx(i, length)
-            if i == i0:
-                break
-            if _left_turning(vPrevPrev.pt, vPrev.pt, path[i]):
-                vPrev.innerLM = True
+                    while _cps(vPrev.pt, path[i], path[iNext]) == 0:
+                        _step()
+                        i = iNext
+                        iNext = _next_idx(i, length)
+                if i == i0:
+                    break
+                if _left_turning(vPrevPrev.pt, vPrev.pt, path[i]):
+                    vPrev.innerLM = True
+        except _DegenBail:
+            # Sweep budget blown -> degenerate/self-intersecting path; discard its partial edges.
+            for j in range(vert_cnt, len(self._verts)):
+                self._verts[j].edges = []
+            return
         self._create_edge(v0, vPrev, _DESCEND)
         n_new = len(self._verts) - vert_cnt
         if n_new < 3 or (n_new == 3 and (
@@ -704,8 +732,17 @@ class _Delaunay:
             e = self._horz.pop()
             if not _edge_completed(e) and e.vB is e.vL:
                 self._tri_left(e, e.vB, currY)
+        # Legalize all interior diagonal edges. _force_legal re-pushes up to 4 neighbours per flip, so
+        # on degenerate / near-cocircular integer points the InCircle vs turn signs can disagree and two
+        # edges flip-flop forever. Bound the total flips: a valid triangulation legalizes in O(n) flips,
+        # far under this budget; a degenerate one stops early with a still-valid (non-optimal) mesh.
         if self._use_del:
+            flips = 0
+            flip_budget = 64 * len(self._verts) + 4096
             while self._pending:
+                flips += 1
+                if flips > flip_budget:
+                    break
                 e = self._pending.pop()
                 self._force_legal(e)
         res = []
