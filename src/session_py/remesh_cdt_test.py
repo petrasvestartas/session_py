@@ -376,6 +376,34 @@ def test_remesh_cdt_irregular_tilted_polyline_with_holes():
     MINI_CHECK(m.is_valid())
 
 
+@MINI_TEST("RemeshCDT", "Degenerate hole keeps flat indices")
+def test_remesh_cdt_degenerate_hole_keeps_flat_indices():
+    from session_py import RemeshCDT
+    from session_py import Polyline
+    from session_py import Point
+
+    border = Polyline([
+        Point(0, 0, 0),
+        Point(4, 0, 0),
+        Point(4, 4, 0),
+        Point(0, 4, 0),
+    ])
+    degen = Polyline([
+        Point(1.5, 2, 0),
+        Point(2.5, 2, 0),
+    ])
+    hole = Polyline([
+        Point(1, 1, 0),
+        Point(1, 3, 0),
+        Point(3, 3, 0),
+        Point(3, 1, 0),
+    ])
+    tris = RemeshCDT.triangulate([border, degen, hole])
+    mx = max(max(t) for t in tris)
+
+    MINI_CHECK(len(tris) > 0 and mx == 9)
+
+
 @MINI_TEST("RemeshCDT", "Large coordinates")
 def test_remesh_cdt_large_coordinates():
     from session_py import RemeshCDT
