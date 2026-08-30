@@ -46,7 +46,7 @@ def test_beam_setters():
     MINI_CHECK(b.width == 0.15)
     MINI_CHECK(b.depth == 0.3)
     MINI_CHECK(b.length == 5.0)
-    MINI_CHECK(b.geometry is not None)
+    MINI_CHECK(b.has_geometry)
 
 
 @MINI_TEST("ElementBeam", "Center Line")

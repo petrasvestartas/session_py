@@ -46,7 +46,7 @@ def test_column_setters():
     MINI_CHECK(c.width == 0.5)
     MINI_CHECK(c.depth == 0.6)
     MINI_CHECK(c.height == 4.0)
-    MINI_CHECK(c.geometry is not None)
+    MINI_CHECK(c.has_geometry)
 
 
 @MINI_TEST("ElementColumn", "Center Line")

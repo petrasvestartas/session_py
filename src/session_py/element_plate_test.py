@@ -70,7 +70,7 @@ def test_plate_setters():
 
     MINI_CHECK(p.thickness == 0.3)
     MINI_CHECK(len(p.polygon) == 4)
-    MINI_CHECK(p.geometry is not None)
+    MINI_CHECK(p.has_geometry)
     MINI_CHECK(TOLERANCE.is_close(top_z, -0.3))
     MINI_CHECK(TOLERANCE.is_close(p.polygon_top[1][0], 3.0))
 
