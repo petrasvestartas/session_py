@@ -53,10 +53,12 @@ class Element:
         """The element's geometry placed by ``xform``. The placement is supplied by the caller -
         an Element no longer stores one; the Session does. Pass identity for local geometry.
         """
+        from .mesh import Mesh
         if self._geometry is None:
             return None
         geo = copy.deepcopy(self._geometry)
-        geo = self.apply_features(geo)
+        if isinstance(geo, Mesh):
+            geo = self.apply_features(geo)
         if not xform.is_identity():
             geo.transform(xform)
         return geo
@@ -280,7 +282,7 @@ class Element:
     def compute_axis(self) -> Optional["Line"]:
         return None
 
-    def apply_features(self, geometry: Union["Mesh", "BRep"]) -> Union["Mesh", "BRep"]:
+    def apply_features(self, geometry: "Mesh") -> "Mesh":
         for feature in self._features:
             geometry = feature(geometry)
         return geometry
