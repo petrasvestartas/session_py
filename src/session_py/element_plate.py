@@ -218,18 +218,16 @@ class ElementPlate(Element):
 
     def compute_axis(self) -> "Line":
         from .line import Line
-        from .point import Point
-        normal = self._polygon_normal(self._polygon)
-        n = len(self._polygon)
-        cx = sum(p[0] for p in self._polygon) / n
-        cy = sum(p[1] for p in self._polygon) / n
-        cz = sum(p[2] for p in self._polygon) / n
-        return Line(
-            cx, cy, cz,
-            cx - normal[0] * self._thickness,
-            cy - normal[1] * self._thickness,
-            cz - normal[2] * self._thickness,
-        )
+        # Bottom centroid to top centroid: _polygon_top is a normal offset of _polygon
+        # only for thickness-built plates, never for explicit top/bottom ones.
+        n = min(len(self._polygon), len(self._polygon_top))
+        bcx = sum(p[0] for p in self._polygon[:n]) / n
+        bcy = sum(p[1] for p in self._polygon[:n]) / n
+        bcz = sum(p[2] for p in self._polygon[:n]) / n
+        tcx = sum(p[0] for p in self._polygon_top[:n]) / n
+        tcy = sum(p[1] for p in self._polygon_top[:n]) / n
+        tcz = sum(p[2] for p in self._polygon_top[:n]) / n
+        return Line(bcx, bcy, bcz, tcx, tcy, tcz)
 
     ###########################################################################################
     # Operators
