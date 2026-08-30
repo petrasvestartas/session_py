@@ -69,8 +69,8 @@ class ElementPlate(Element):
     def polygon(self, value: "Polyline") -> None:
         from .point import Point
         self._polygon = [Point(p[0], p[1], p[2]) for p in value]
-        self._geometry = self.compute_element_geometry()
-        self.reset()
+        # _polygon_top is paired index-by-index with _polygon, so it has to follow the new outline.
+        self.thickness = self._thickness
 
     @property
     def thickness(self) -> float:
@@ -78,7 +78,12 @@ class ElementPlate(Element):
 
     @thickness.setter
     def thickness(self, value: float) -> None:
+        from .point import Point
         self._thickness = value
+        normal = self._polygon_normal(self._polygon)
+        self._polygon_top = [Point(
+            p[0]-normal[0]*value, p[1]-normal[1]*value, p[2]-normal[2]*value
+        ) for p in self._polygon]
         self._geometry = self.compute_element_geometry()
         self.reset()
 
@@ -133,6 +138,13 @@ class ElementPlate(Element):
     @property
     def polygon_top(self) -> "Polyline":
         return self._polygon_top
+
+    @polygon_top.setter
+    def polygon_top(self, value: "Polyline") -> None:
+        from .point import Point
+        self._polygon_top = [Point(p[0], p[1], p[2]) for p in value]
+        self._geometry = self.compute_element_geometry()
+        self.reset()
 
     def compute_element_geometry(self) -> "Mesh":
         from .mesh import Mesh
@@ -240,6 +252,7 @@ class ElementPlate(Element):
         result.guid = str(uuid.uuid4())
         result.name = copy.deepcopy(self.name, memo)
         result._polygon = copy.deepcopy(self._polygon, memo)
+        result._polygon_top = copy.deepcopy(self._polygon_top, memo)
         result._thickness = self._thickness
         result._joint_types = list(self._joint_types)
         result._j_mf = copy.deepcopy(self._j_mf, memo)
@@ -308,11 +321,10 @@ class ElementPlate(Element):
         polygon = [Point(p[0], p[1], p[2]) for p in data.get("polygon", [])]
         polygon_top_raw = data.get("polygon_top", [])
         polygon_top = [Point(p[0], p[1], p[2]) for p in polygon_top_raw] if polygon_top_raw else None
-        elem = cls(
-            polygon=polygon if polygon else None,
-            thickness=data.get("thickness", 0.1),
-            polygon_top=polygon_top,
-        )
+        # Stored arrays are already oriented; polygon_top= would re-run the ctor swap heuristic.
+        elem = cls(polygon=polygon if polygon else None, thickness=data.get("thickness", 0.1))
+        if polygon_top:
+            elem.polygon_top = polygon_top
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
         elem._joint_types = data.get("joint_types", [])
@@ -372,11 +384,9 @@ class ElementPlate(Element):
         polygon = [Point(p[0], p[1], p[2]) for p in params["polygon"]]
         polygon_top_raw = params.get("polygon_top", [])
         polygon_top = [Point(p[0], p[1], p[2]) for p in polygon_top_raw] if polygon_top_raw else None
-        elem = cls(
-            polygon=polygon,
-            thickness=params["thickness"],
-            polygon_top=polygon_top,
-        )
+        elem = cls(polygon=polygon, thickness=params["thickness"])
+        if polygon_top:
+            elem.polygon_top = polygon_top
         elem.guid = proto.guid
         elem.name = proto.name
         elem._joint_types = list(proto.joint_types)
