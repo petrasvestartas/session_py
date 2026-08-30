@@ -295,12 +295,17 @@ def test_plate_axis():
     ]
     p = ElementPlate(polygon=polygon, thickness=0.4)
     ax = p.axis
+    top = [Point(0, 0, 1), Point(2, 0, 1), Point(2, 2, 1), Point(0, 2, 1)]
+    p2 = ElementPlate(polygon=polygon, polygon_top=top)
+    ax2 = p2.axis
 
     MINI_CHECK(isinstance(ax, Line))
     MINI_CHECK(TOLERANCE.is_close(ax.start()[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(ax.start()[1], 1.0))
     MINI_CHECK(TOLERANCE.is_close(ax.start()[2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(ax.end()[2], -0.4))
+    MINI_CHECK(TOLERANCE.is_close(ax2.start()[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(ax2.end()[2], 1.0))
 
 
 @MINI_TEST("ElementPlate", "Joint Types")
