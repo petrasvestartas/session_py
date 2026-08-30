@@ -49,6 +49,14 @@ class Element:
     def geometry(self) -> Union["Mesh", "BRep"] | None:
         return self._geometry
 
+    @property
+    def has_geometry(self) -> bool:
+        return self._geometry is not None
+
+    @property
+    def geometry_type_name(self) -> str:
+        return type(self._geometry).__name__ if self._geometry is not None else "None"
+
     def session_geometry(self, xform: Xform) -> Union["Mesh", "BRep"] | None:
         """The element's geometry placed by ``xform``. The placement is supplied by the caller -
         an Element no longer stores one; the Session does. Pass identity for local geometry.
@@ -165,18 +173,16 @@ class Element:
     def __eq__(self, other):
         if not isinstance(other, Element):
             return False
-        return self.name == other.name and type(self._geometry) == type(other._geometry)
+        return self.name == other.name and self.geometry_type_name == other.geometry_type_name
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def __str__(self):
-        geo_type = type(self._geometry).__name__ if self._geometry else "None"
-        return f"Element({self.name}, {geo_type})"
+        return f"Element({self.name}, {self.geometry_type_name})"
 
     def __repr__(self):
-        geo_type = type(self._geometry).__name__ if self._geometry else "None"
-        return f"Element({self.guid}, {self.name}, {geo_type})"
+        return f"Element({self.guid}, {self.name}, {self.geometry_type_name})"
 
     ###########################################################################################
     # Mutators
@@ -224,7 +230,7 @@ class Element:
         geo = self.session_geometry(Xform.identity())
         if geo is None:
             return OBB.from_point(Point(0, 0, 0), 0.0)
-        return self._obb_from_geometry(geo, aabb=True)
+        return self._obb_from_geometry(geo)
 
     def compute_obb(self) -> "OBB":
         from .obb import OBB
@@ -232,7 +238,7 @@ class Element:
         geo = self.session_geometry(Xform.identity())
         if geo is None:
             return OBB.from_point(Point(0, 0, 0), 0.0)
-        return self._obb_from_geometry(geo, aabb=False)
+        return self._obb_from_geometry(geo)
 
     def compute_collision_mesh(self) -> "Mesh":
         from .mesh import Mesh
@@ -288,7 +294,7 @@ class Element:
         return geometry
 
     @staticmethod
-    def _obb_from_geometry(geo, aabb=True):
+    def _obb_from_geometry(geo):
         from .obb import OBB
         from .point import Point
         from .mesh import Mesh
@@ -310,14 +316,10 @@ class Element:
     ###########################################################################################
 
     def __jsondump__(self):
-        geo_data = None
-        geo_type = "None"
-        if self._geometry is not None:
-            geo_type = type(self._geometry).__name__
-            geo_data = self._geometry.__jsondump__()
+        geo_data = self._geometry.__jsondump__() if self._geometry is not None else None
         return {
             "geometry_data": geo_data,
-            "geometry_type": geo_type,
+            "geometry_type": self.geometry_type_name,
             "guid": self.guid,
             "name": self.name,
             "type": "Element",
