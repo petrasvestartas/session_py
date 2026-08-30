@@ -67,6 +67,8 @@ def test_place():
 @MINI_TEST("Element", "Add Feature")
 def test_add_feature():
     from session_py import Mesh
+    from session_py import BRep
+    from session_py import Xform
     from session_py import Element
 
     m = Mesh.from_vertices_and_faces(
@@ -80,8 +82,14 @@ def test_add_feature():
 
     e.add_feature(my_feature)
 
+    # Features are Mesh -> Mesh, so BRep geometry passes through untouched
+    eb = Element(geometry=BRep.create_box(1.0, 1.0, 1.0), name="brep_feature")
+    eb.add_feature(lambda geo: Mesh())
+    sg = eb.session_geometry(Xform.identity())
+
     MINI_CHECK(e.is_dirty)
-    MINI_CHECK(len(e._features) == 1)
+    MINI_CHECK(e.features_count == 1)
+    MINI_CHECK(isinstance(sg, BRep))
 
 
 @MINI_TEST("Element", "AABB")
