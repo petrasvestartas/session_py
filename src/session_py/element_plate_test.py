@@ -36,6 +36,7 @@ def test_plate_constructor():
     MINI_CHECK(pstr == "ElementPlate(plate1, 4 pts, 0.2)")
     MINI_CHECK(prepr == f"ElementPlate({guid}, plate1, 4 pts, 0.2)")
     MINI_CHECK(pcopy == p and pcopy.guid != p.guid)
+    MINI_CHECK(TOLERANCE.is_close(pcopy.polygon_top[0][2], -0.2))
     MINI_CHECK(p == p2)
     MINI_CHECK(p != p3)
 
@@ -59,6 +60,7 @@ def test_plate_setters():
 
     p = ElementPlate()
     p.thickness = 0.3
+    top_z = p.polygon_top[0][2]
     p.polygon = [
         Point(0, 0, 0),
         Point(3, 0, 0),
@@ -69,6 +71,8 @@ def test_plate_setters():
     MINI_CHECK(p.thickness == 0.3)
     MINI_CHECK(len(p.polygon) == 4)
     MINI_CHECK(p.geometry is not None)
+    MINI_CHECK(TOLERANCE.is_close(top_z, -0.3))
+    MINI_CHECK(TOLERANCE.is_close(p.polygon_top[1][0], 3.0))
 
 
 @MINI_TEST("ElementPlate", "Mesh Topology")
@@ -168,6 +172,8 @@ def test_plate_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 0.3))
     MINI_CHECK(len(loaded.polygon) == 4)
     MINI_CHECK(TOLERANCE.is_close(loaded.polygon[1][0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.polygon[0][2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.polygon_top[0][2], -0.3))
 
 
 @MINI_TEST("ElementPlate", "Protobuf Roundtrip")
@@ -187,12 +193,19 @@ def test_plate_protobuf_roundtrip():
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_plate_element.bin"
     p.pb_dump(path)
     loaded = ElementPlate.pb_load(path)
+    top = [Point(0, 0, 1), Point(2, 0, 1), Point(2, 2, 1), Point(0, 2, 1)]
+    p2 = ElementPlate(polygon=polygon, polygon_top=top, name="proto_tb_plate")
+    p2.pb_dump(path)
+    loaded2 = ElementPlate.pb_load(path)
 
     MINI_CHECK(isinstance(loaded, ElementPlate))
     MINI_CHECK(loaded.name == "proto_plate")
     MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 0.3))
     MINI_CHECK(len(loaded.polygon) == 4)
     MINI_CHECK(TOLERANCE.is_close(loaded.polygon[1][0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.polygon[0][2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(loaded.polygon_top[0][2], -0.3))
+    MINI_CHECK(TOLERANCE.is_close(loaded2.polygon_top[0][2], 1.0))
 
 
 @MINI_TEST("ElementPlate", "From Top Bottom")
