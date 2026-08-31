@@ -267,6 +267,7 @@ def test_line_closest_point():
     t1, cp1 = l.closest_point(p1)
     t2, cp2 = l.closest_point(p2)
     t3, cp3 = l.closest_point(p3)
+    t4, cp4 = l.closest_point(p3, False)
 
     MINI_CHECK(cp1[0] == 5.0 and cp1[1] == 0.0 and cp1[2] == 0.0)
     MINI_CHECK(cp2[0] == 0.0 and cp2[1] == 0.0 and cp2[2] == 0.0)
@@ -274,6 +275,7 @@ def test_line_closest_point():
     MINI_CHECK(TOLERANCE.is_close(t1, 0.5))
     MINI_CHECK(TOLERANCE.is_close(t2, 0.0))
     MINI_CHECK(TOLERANCE.is_close(t3, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(t4, 1.5) and cp4[0] == 15.0)
 
 
 @MINI_TEST("Line", "Start End Center")
@@ -303,7 +305,18 @@ def test_line_fit_points():
     ]
     l_fit = Line.fit_points(fit_pts)
 
+    # Spread along Y only: unreachable from a single X seed.
+    fit_y = [
+        Point(0.0, 0.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(0.0, 3.0, 0.0),
+    ]
+    l_fit_y = Line.fit_points(fit_y)
+
     MINI_CHECK(l_fit.length() > 0.0)
+    MINI_CHECK(TOLERANCE.is_close(l_fit_y.length(), 3.0))
+    MINI_CHECK(TOLERANCE.is_close(abs(l_fit_y.to_direction()[1]), 1.0))
 
 
 @MINI_TEST("Line", "Subdivide")
@@ -356,10 +369,19 @@ def test_line_overlap_average():
 def test_line_extend():
     from session_py import Line
     from session_py import Point
+    from session_py import Color
     l = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
+    l.name = "beam"
+    l.width = 3.0
+    l.dash = [2.0, 1.0]
+    l.linecolor = Color(1.0, 0.0, 0.0, 1.0, "red")
+    gid = l.guid
     l.extend(1.0, 2.0)
     MINI_CHECK(TOLERANCE.is_close(l.start()[0], -1.0))
     MINI_CHECK(TOLERANCE.is_close(l.end()[0], 12.0))
+    MINI_CHECK(l.name == "beam" and l.width == 3.0)
+    MINI_CHECK(l.dash == [2.0, 1.0])
+    MINI_CHECK(l.linecolor[0] == 1.0 and l.guid == gid)
 
 
 if __name__ == "__main__":
