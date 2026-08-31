@@ -1,6 +1,4 @@
 from __future__ import annotations
-from typing import Optional
-from typing import Union
 from typing import TYPE_CHECKING
 import uuid
 from .color import Color
@@ -91,9 +89,8 @@ class Line:
 
         """
         import copy
-        import uuid
         result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
+        result.refresh_guid()
         return result
 
     @classmethod
@@ -459,8 +456,20 @@ class Line:
 
     def __getitem__(self, index):
         """Get coordinate by index (0-5)."""
-        coords = [self._x0, self._y0, self._z0, self._x1, self._y1, self._z1]
-        return coords[index]
+        if index == 0:
+            return self._x0
+        elif index == 1:
+            return self._y0
+        elif index == 2:
+            return self._z0
+        elif index == 3:
+            return self._x1
+        elif index == 4:
+            return self._y1
+        elif index == 5:
+            return self._z1
+        else:
+            raise IndexError("Index out of bounds")
 
     def __setitem__(self, index, value):
         """Set coordinate by index (0-5)."""
@@ -602,12 +611,12 @@ class Line:
         result.transform(xform)
         return result
 
-    def overlap(self, other: "Line") -> Optional["Line"]:
+    def overlap(self, other: "Line") -> Line | None:
         """Return the overlapping segment between this line and ``other``.
 
         Returns
         -------
-        Optional[Line]
+        Line | None
             ``None`` if the segments do not overlap (or overlap at a point).
         """
         from .polyline import Polyline
@@ -616,18 +625,16 @@ class Line:
             return None
         return Line.from_points(result[0], result[1])
 
-    def overlap_average(self, other: "Line") -> Optional["Line"]:
+    def overlap_average(self, other: "Line") -> Line | None:
         """Return the average of the two reciprocal overlaps between this line and ``other``.
 
         Returns
         -------
-        Optional[Line]
+        Line | None
             ``None`` if the resulting overlap collapses to a point.
         """
         from .polyline import Polyline
         result = Polyline.line_line_overlap_average(self.start(), self.end(), other.start(), other.end())
-        if result is None:
-            return None
         out = Line.from_points(result[0], result[1])
         if out.squared_length() <= 0.0:
             return None
@@ -638,19 +645,12 @@ class Line:
 
         Mutates the line in place. Mirrors C++ ``Line::extend``.
         """
+        from .polyline import Polyline
         s = self.start()
         e = self.end()
-        v = e - s
-        mag = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]) ** 0.5
-        if mag < 1e-20:
-            return
-        ux = v[0] / mag
-        uy = v[1] / mag
-        uz = v[2] / mag
-        new_s = Point(s[0] - ux * ext_start, s[1] - uy * ext_start, s[2] - uz * ext_start)
-        new_e = Point(e[0] + ux * ext_end,   e[1] + uy * ext_end,   e[2] + uz * ext_end)
-        self._x0 = new_s[0]; self._y0 = new_s[1]; self._z0 = new_s[2]
-        self._x1 = new_e[0]; self._y1 = new_e[1]; self._z1 = new_e[2]
+        Polyline.extend_line_segment(s, e, ext_start, ext_end)
+        self._x0 = s[0]; self._y0 = s[1]; self._z0 = s[2]
+        self._x1 = e[0]; self._y1 = e[1]; self._z1 = e[2]
 
     ###########################################################################################
     # Polymorphic JSON Serialization
@@ -681,7 +681,7 @@ class Line:
             "z1": self._z1,
         }
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write JSON to file.
 
         Parameters
@@ -695,7 +695,7 @@ class Line:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Line":
+    def file_json_load(cls, filepath: str | Path) -> "Line":
         """Read JSON from file.
 
         Parameters
@@ -775,7 +775,6 @@ class Line:
 
         """
         from .proto import line_pb2
-        from .proto import point_pb2
 
         proto = line_pb2.Line()
         proto.guid = self.guid
@@ -851,7 +850,7 @@ class Line:
 
         return line
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -865,7 +864,7 @@ class Line:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Line":
+    def pb_load(cls, filepath: str | Path) -> "Line":
         """Read protobuf from file.
 
         Parameters
@@ -885,7 +884,7 @@ class Line:
 
     def __str__(self):
         """String representation."""
-        return f"Line({self._x0}, {self._y0}, {self._z0}, {self._x1}, {self._y1}, {self._z1})"
+        return f"{self._x0}, {self._y0}, {self._z0}, {self._x1}, {self._y1}, {self._z1}"
 
     def __repr__(self):
         """Detailed representation."""
