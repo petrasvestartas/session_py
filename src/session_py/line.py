@@ -883,7 +883,7 @@ class Line:
 
     def __str__(self):
         """String representation."""
-        return f"Line({self._x0}, {self._y0}, {self._z0}, {self._x1}, {self._y1}, {self._z1})"
+        return f"{self._x0}, {self._y0}, {self._z0}, {self._x1}, {self._y1}, {self._z1}"
 
     def __repr__(self):
         """Detailed representation."""
