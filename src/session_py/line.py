@@ -89,9 +89,8 @@ class Line:
 
         """
         import copy
-        import uuid
         result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
+        result.refresh_guid()
         return result
 
     @classmethod
@@ -636,8 +635,6 @@ class Line:
         """
         from .polyline import Polyline
         result = Polyline.line_line_overlap_average(self.start(), self.end(), other.start(), other.end())
-        if result is None:
-            return None
         out = Line.from_points(result[0], result[1])
         if out.squared_length() <= 0.0:
             return None
@@ -778,7 +775,6 @@ class Line:
 
         """
         from .proto import line_pb2
-        from .proto import point_pb2
 
         proto = line_pb2.Line()
         proto.guid = self.guid
