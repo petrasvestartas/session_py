@@ -457,8 +457,20 @@ class Line:
 
     def __getitem__(self, index):
         """Get coordinate by index (0-5)."""
-        coords = [self._x0, self._y0, self._z0, self._x1, self._y1, self._z1]
-        return coords[index]
+        if index == 0:
+            return self._x0
+        elif index == 1:
+            return self._y0
+        elif index == 2:
+            return self._z0
+        elif index == 3:
+            return self._x1
+        elif index == 4:
+            return self._y1
+        elif index == 5:
+            return self._z1
+        else:
+            raise IndexError("Index out of bounds")
 
     def __setitem__(self, index, value):
         """Set coordinate by index (0-5)."""
