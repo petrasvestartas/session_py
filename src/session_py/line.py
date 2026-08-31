@@ -648,19 +648,12 @@ class Line:
 
         Mutates the line in place. Mirrors C++ ``Line::extend``.
         """
+        from .polyline import Polyline
         s = self.start()
         e = self.end()
-        v = e - s
-        mag = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]) ** 0.5
-        if mag < 1e-20:
-            return
-        ux = v[0] / mag
-        uy = v[1] / mag
-        uz = v[2] / mag
-        new_s = Point(s[0] - ux * ext_start, s[1] - uy * ext_start, s[2] - uz * ext_start)
-        new_e = Point(e[0] + ux * ext_end,   e[1] + uy * ext_end,   e[2] + uz * ext_end)
-        self._x0 = new_s[0]; self._y0 = new_s[1]; self._z0 = new_s[2]
-        self._x1 = new_e[0]; self._y1 = new_e[1]; self._z1 = new_e[2]
+        Polyline.extend_line_segment(s, e, ext_start, ext_end)
+        self._x0 = s[0]; self._y0 = s[1]; self._z0 = s[2]
+        self._x1 = e[0]; self._y1 = e[1]; self._z1 = e[2]
 
     ###########################################################################################
     # Polymorphic JSON Serialization
