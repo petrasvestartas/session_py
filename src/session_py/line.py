@@ -1,6 +1,4 @@
 from __future__ import annotations
-from typing import Optional
-from typing import Union
 from typing import TYPE_CHECKING
 import uuid
 from .color import Color
@@ -602,12 +600,12 @@ class Line:
         result.transform(xform)
         return result
 
-    def overlap(self, other: "Line") -> Optional["Line"]:
+    def overlap(self, other: "Line") -> Line | None:
         """Return the overlapping segment between this line and ``other``.
 
         Returns
         -------
-        Optional[Line]
+        Line | None
             ``None`` if the segments do not overlap (or overlap at a point).
         """
         from .polyline import Polyline
@@ -616,12 +614,12 @@ class Line:
             return None
         return Line.from_points(result[0], result[1])
 
-    def overlap_average(self, other: "Line") -> Optional["Line"]:
+    def overlap_average(self, other: "Line") -> Line | None:
         """Return the average of the two reciprocal overlaps between this line and ``other``.
 
         Returns
         -------
-        Optional[Line]
+        Line | None
             ``None`` if the resulting overlap collapses to a point.
         """
         from .polyline import Polyline
@@ -681,7 +679,7 @@ class Line:
             "z1": self._z1,
         }
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write JSON to file.
 
         Parameters
@@ -695,7 +693,7 @@ class Line:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Line":
+    def file_json_load(cls, filepath: str | Path) -> "Line":
         """Read JSON from file.
 
         Parameters
@@ -851,7 +849,7 @@ class Line:
 
         return line
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write protobuf to file.
 
         Parameters
@@ -865,7 +863,7 @@ class Line:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Line":
+    def pb_load(cls, filepath: str | Path) -> "Line":
         """Read protobuf from file.
 
         Parameters
