@@ -781,31 +781,13 @@ class Line:
         proto.guid = self.guid
         proto.name = self.name
 
-        # Set start point
-        proto.start.x = self._x0
-        proto.start.y = self._y0
-        proto.start.z = self._z0
-        proto.start.guid = ""
-        proto.start.name = ""
-        proto.start.width = 1.0
+        # P6: coords packed, colour packed; the name rides a zero-cost string
+        proto.coords.extend((self._x0, self._y0, self._z0, self._x1, self._y1, self._z1))
 
-        # Set end point
-        proto.end.x = self._x1
-        proto.end.y = self._y1
-        proto.end.z = self._z1
-        proto.end.guid = ""
-        proto.end.name = ""
-        proto.end.width = 1.0
-
-        # Set width, dash and linecolor
         proto.width = self.width
         proto.dash.extend(self.dash)
-        proto.linecolor.guid = self.linecolor.guid
-        proto.linecolor.name = self.linecolor.name
-        proto.linecolor.r = self.linecolor.r
-        proto.linecolor.g = self.linecolor.g
-        proto.linecolor.b = self.linecolor.b
-        proto.linecolor.a = self.linecolor.a
+        proto.linecolor_rgba.extend((self.linecolor.r, self.linecolor.g, self.linecolor.b, self.linecolor.a))
+        proto.linecolor_name = self.linecolor.name
 
         return proto.SerializeToString()
 
@@ -829,10 +811,8 @@ class Line:
         proto = line_pb2.Line()
         proto.ParseFromString(data)
 
-        line = cls(
-            proto.start.x, proto.start.y, proto.start.z,
-            proto.end.x, proto.end.y, proto.end.z
-        )
+        c = proto.coords
+        line = cls(c[0], c[1], c[2], c[3], c[4], c[5]) if len(c) == 6 else cls()
         line.guid = proto.guid
         line.name = proto.name
 
@@ -840,14 +820,9 @@ class Line:
         if proto.width > 0.0:
             line.width = proto.width
         line.dash = list(proto.dash)
-        if proto.HasField('linecolor'):
-            line.linecolor = Color(
-                proto.linecolor.r,
-                proto.linecolor.g,
-                proto.linecolor.b,
-                proto.linecolor.a,
-                proto.linecolor.name,
-            )
+        rgba = proto.linecolor_rgba
+        if len(rgba) == 4:
+            line.linecolor = Color(rgba[0], rgba[1], rgba[2], rgba[3], proto.linecolor_name or "my_color")
 
         return line
 

@@ -5,9 +5,6 @@ import importlib
 
 
 _CLASS_MODULE_MAP = {
-    "ElementColumn": "element_column",
-    "ElementBeam": "element_beam",
-    "ElementPlate": "element_plate",
     "Vertex": "graph",
     "Edge": "graph",
     "TreeNode": "tree",

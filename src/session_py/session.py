@@ -426,37 +426,6 @@ class Session:
                     return child
         raise ValueError(f"Group '{name}' not found")
 
-    def compute_face_to_face(self, inflate: float = 5.0, coplanar_tolerance: float = 50.0) -> None:
-        from .intersection import adjacency_search
-        from .intersection import face_to_face
-        from .polyline import Polyline
-        elems = self.objects.elements
-        N = len(elems)
-        if N == 0:
-            return
-        all_polys = [e.compute_polylines() for e in elems]
-        all_planes = [e.compute_planes() for e in elems]
-        from .aabb import AABB
-        aabbs = []
-        for polys in all_polys:
-            pts = []
-            for pl in polys:
-                pts.extend(pl.get_points())
-            aabbs.append(AABB.from_points(pts, inflate) if pts else AABB.from_point(Point(0,0,0), inflate))
-        adjacency = []
-        for i in range(N):
-            for j in range(i+1, N):
-                if aabbs[i].intersects(aabbs[j]):
-                    adjacency.extend([i, j, -1, -1])
-        joints = face_to_face(adjacency, all_polys, all_planes, coplanar_tolerance)
-        g = self.add_group("Joints")
-        for k, (a, b, fi, fj, type_val, poly) in enumerate(joints):
-            jpl = Polyline(poly.get_points()) if not isinstance(poly, Polyline) else poly
-            jpl.name = f"joint_{k}"
-            self.add_polyline(jpl, g)
-            self.add_edge(elems[a].guid, elems[b].guid,
-                f"{fi},{fj},{type_val},{jpl.guid}")
-
     def add(self, node: TreeNode, parent: TreeNode | None = None) -> None:
         """Add a TreeNode to the tree hierarchy.
 

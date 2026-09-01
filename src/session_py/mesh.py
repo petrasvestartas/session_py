@@ -3019,13 +3019,6 @@ class Mesh:
                 tri_list.vertices.append(t[2])
 
         # Halfedges
-        # lazy topology: if this mesh was decoded and never edited, the map was never built -
-        # compute it transiently so the WIRE stays exactly what it always was
-        he_src = self.compute_halfedges() if not self.halfedge and self.face else self.halfedge
-        for u, neighbors in he_src.items():
-            hmap = proto.halfedges[u]
-            for v, fkey_opt in neighbors.items():
-                hmap.neighbors[v] = fkey_opt if fkey_opt is not None else 0xFFFFFFFFFFFFFFFF
 
         # Edge data
         for (v1, v2), attrs in self.edgedata.items():
@@ -3047,34 +3040,13 @@ class Mesh:
         # Colors
         from .proto import color_pb2
         for c in self._pointcolors:
-            color_proto = color_pb2.Color()
-            color_proto.guid = c.guid
-            color_proto.name = c.name
-            color_proto.r = c[0]
-            color_proto.g = c[1]
-            color_proto.b = c[2]
-            color_proto.a = c[3]
-            proto.pointcolors.append(color_proto)
+            proto.pointcolors_rgba.extend((c[0], c[1], c[2], c[3]))
 
         for c in self._facecolors:
-            color_proto = color_pb2.Color()
-            color_proto.guid = c.guid
-            color_proto.name = c.name
-            color_proto.r = c[0]
-            color_proto.g = c[1]
-            color_proto.b = c[2]
-            color_proto.a = c[3]
-            proto.facecolors.append(color_proto)
+            proto.facecolors_rgba.extend((c[0], c[1], c[2], c[3]))
 
         for c in self._linecolors:
-            color_proto = color_pb2.Color()
-            color_proto.guid = c.guid
-            color_proto.name = c.name
-            color_proto.r = c[0]
-            color_proto.g = c[1]
-            color_proto.b = c[2]
-            color_proto.a = c[3]
-            proto.linecolors.append(color_proto)
+            proto.linecolors_rgba.extend((c[0], c[1], c[2], c[3]))
 
         # Widths
         proto.widths.extend(self._widths)
@@ -3117,11 +3089,6 @@ class Mesh:
             tl = proto.triangulation[fkey]
             for t in tris:
                 tl.vertices.append(t[0]); tl.vertices.append(t[1]); tl.vertices.append(t[2])
-        he_src = self.compute_halfedges() if not self.halfedge and self.face else self.halfedge
-        for u, neighbors in he_src.items():
-            hmap = proto.halfedges[u]
-            for v, fkey_opt in neighbors.items():
-                hmap.neighbors[v] = fkey_opt if fkey_opt is not None else 0xFFFFFFFFFFFFFFFF
         for (v1, v2), attrs in self.edgedata.items():
             ep = mesh_pb2.EdgeData()
             ep.vertex1 = v1; ep.vertex2 = v2
@@ -3135,20 +3102,11 @@ class Mesh:
         for k, v in self.default_edge_attributes.items():
             proto.default_edge_attributes[k] = v
         for c in self._pointcolors:
-            cp = color_pb2.Color()
-            cp.guid = c.guid; cp.name = c.name
-            cp.r = c[0]; cp.g = c[1]; cp.b = c[2]; cp.a = c[3]
-            proto.pointcolors.append(cp)
+            proto.pointcolors_rgba.extend((c[0], c[1], c[2], c[3]))
         for c in self._facecolors:
-            cp = color_pb2.Color()
-            cp.guid = c.guid; cp.name = c.name
-            cp.r = c[0]; cp.g = c[1]; cp.b = c[2]; cp.a = c[3]
-            proto.facecolors.append(cp)
+            proto.facecolors_rgba.extend((c[0], c[1], c[2], c[3]))
         for c in self._linecolors:
-            cp = color_pb2.Color()
-            cp.guid = c.guid; cp.name = c.name
-            cp.r = c[0]; cp.g = c[1]; cp.b = c[2]; cp.a = c[3]
-            proto.linecolors.append(cp)
+            proto.linecolors_rgba.extend((c[0], c[1], c[2], c[3]))
         proto.widths.extend(self._widths)
         proto.objectcolor.guid = self.objectcolor.guid
         proto.objectcolor.name = self.objectcolor.name
@@ -3209,26 +3167,14 @@ class Mesh:
         mesh.default_edge_attributes = dict(proto.default_edge_attributes)
 
         # Colors
-        mesh._pointcolors = []
-        for c in proto.pointcolors:
-            color = Color(c.r, c.g, c.b, c.a)
-            color.guid = c.guid
-            color.name = c.name
-            mesh._pointcolors.append(color)
+        rgba = proto.pointcolors_rgba
+        mesh._pointcolors = [Color(rgba[i], rgba[i+1], rgba[i+2], rgba[i+3]) for i in range(0, len(rgba) - 3, 4)]
 
-        mesh._facecolors = []
-        for c in proto.facecolors:
-            color = Color(c.r, c.g, c.b, c.a)
-            color.guid = c.guid
-            color.name = c.name
-            mesh._facecolors.append(color)
+        rgba = proto.facecolors_rgba
+        mesh._facecolors = [Color(rgba[i], rgba[i+1], rgba[i+2], rgba[i+3]) for i in range(0, len(rgba) - 3, 4)]
 
-        mesh._linecolors = []
-        for c in proto.linecolors:
-            color = Color(c.r, c.g, c.b, c.a)
-            color.guid = c.guid
-            color.name = c.name
-            mesh._linecolors.append(color)
+        rgba = proto.linecolors_rgba
+        mesh._linecolors = [Color(rgba[i], rgba[i+1], rgba[i+2], rgba[i+3]) for i in range(0, len(rgba) - 3, 4)]
 
         # Widths
         mesh._widths = list(proto.widths)
@@ -3286,26 +3232,14 @@ class Mesh:
         mesh.default_face_attributes = dict(proto.default_face_attributes)
         mesh.default_edge_attributes = dict(proto.default_edge_attributes)
 
-        mesh._pointcolors = []
-        for c in proto.pointcolors:
-            color = Color(c.r, c.g, c.b, c.a)
-            color.guid = c.guid
-            color.name = c.name
-            mesh._pointcolors.append(color)
+        rgba = proto.pointcolors_rgba
+        mesh._pointcolors = [Color(rgba[i], rgba[i+1], rgba[i+2], rgba[i+3]) for i in range(0, len(rgba) - 3, 4)]
 
-        mesh._facecolors = []
-        for c in proto.facecolors:
-            color = Color(c.r, c.g, c.b, c.a)
-            color.guid = c.guid
-            color.name = c.name
-            mesh._facecolors.append(color)
+        rgba = proto.facecolors_rgba
+        mesh._facecolors = [Color(rgba[i], rgba[i+1], rgba[i+2], rgba[i+3]) for i in range(0, len(rgba) - 3, 4)]
 
-        mesh._linecolors = []
-        for c in proto.linecolors:
-            color = Color(c.r, c.g, c.b, c.a)
-            color.guid = c.guid
-            color.name = c.name
-            mesh._linecolors.append(color)
+        rgba = proto.linecolors_rgba
+        mesh._linecolors = [Color(rgba[i], rgba[i+1], rgba[i+2], rgba[i+3]) for i in range(0, len(rgba) - 3, 4)]
 
         mesh._widths = list(proto.widths)
 

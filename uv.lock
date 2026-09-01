@@ -1980,10 +1980,9 @@ wheels = [
 
 [[package]]
 name = "session-py"
-version = "0.134.0"
+version = "0.147.0"
 source = { editable = "." }
 dependencies = [
-    { name = "grpcio-tools" },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -2004,6 +2003,7 @@ performance = [
 [package.dev-dependencies]
 dev = [
     { name = "build" },
+    { name = "grpcio-tools" },
     { name = "pre-commit", version = "4.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pre-commit", version = "4.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "ruff" },
@@ -2018,10 +2018,12 @@ docs = [
     { name = "sphinx", version = "9.0.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sphinx-compas-theme" },
 ]
+proto = [
+    { name = "grpcio-tools" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "grpcio-tools", specifier = "==1.80.0" },
     { name = "numba", marker = "extra == 'performance'", specifier = ">=0.56.0" },
     { name = "numpy", specifier = ">=1.20.0" },
     { name = "protobuf", specifier = ">=6.33,<7.0" },
@@ -2033,6 +2035,7 @@ provides-extras = ["dev", "performance"]
 [package.metadata.requires-dev]
 dev = [
     { name = "build" },
+    { name = "grpcio-tools", specifier = "==1.80.0" },
     { name = "pre-commit" },
     { name = "ruff" },
     { name = "sphinx" },
@@ -2042,6 +2045,7 @@ docs = [
     { name = "sphinx" },
     { name = "sphinx-compas-theme" },
 ]
+proto = [{ name = "grpcio-tools", specifier = "==1.80.0" }]
 tests = []
 
 [[package]]

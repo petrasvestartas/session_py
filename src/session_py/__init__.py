@@ -46,9 +46,6 @@ from .primitives import Primitives
 from .nurbssurface_trimmed import NurbsSurfaceTrimmed
 from .brep import BRep
 from .element import Element
-from .element_column import ElementColumn
-from .element_beam import ElementBeam
-from .element_plate import ElementPlate
 from .closest import Closest
 from .remesh_cdt import RemeshCDT
 from .remesh_nurbssurface_grid import remesh_nurbssurface_grid
@@ -103,9 +100,6 @@ __all__ = [
     "NurbsSurfaceTrimmed",
     "BRep",
     "Element",
-    "ElementColumn",
-    "ElementBeam",
-    "ElementPlate",
     "Closest",
     "remesh_nurbssurface_grid",
     "RemeshCDT",

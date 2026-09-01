@@ -176,12 +176,11 @@ def test_session_add_brep():
 @MINI_TEST("Session", "Add Element")
 def test_session_add_element():
     from session_py import Session
-    from session_py import ElementPlate
     from session_py import Point
 
     session = Session()
-    polygon = [Point(0,0,0), Point(2,0,0), Point(2,2,0), Point(0,2,0)]
-    plate = ElementPlate(polygon=polygon, thickness=0.2, name="p1")
+    from session_py import Element
+    plate = Element("p1")
     session.add_element(plate)
 
     MINI_CHECK(len(session.objects.elements) == 1)
@@ -365,7 +364,6 @@ def test_session_get_object():
 def test_session_remove_object():
     from session_py import Session
     from session_py import Point
-    from session_py import ElementPlate
     from pathlib import Path
 
     session = Session()
@@ -373,8 +371,8 @@ def test_session_remove_object():
     session.add_point(point)
     removed = session.remove_object(point.guid)
 
-    polygon = [Point(0.0,0.0,0.0), Point(2.0,0.0,0.0), Point(2.0,2.0,0.0), Point(0.0,2.0,0.0)]
-    plate = ElementPlate(polygon=polygon, thickness=0.2, name="p1")
+    from session_py import Element
+    plate = Element("p1")
     eguid = plate.guid
     session.add_element(plate)
     eremoved = session.remove_object(eguid)
@@ -402,23 +400,6 @@ def test_session_get_geometry():
     geom = session.get_geometry()
 
     MINI_CHECK(len(geom.points) == 1)
-
-
-@MINI_TEST("Session", "Compute Face To Face")
-def test_session_compute_face_to_face():
-    from session_py import Session
-    from session_py import ElementPlate
-    from session_py import Point
-
-    session = Session()
-    p1 = ElementPlate(polygon=[Point(0,0,0), Point(1,0,0), Point(1,1,0), Point(0,1,0)], thickness=0.2, name="p1")
-    p2 = ElementPlate(polygon=[Point(0,0,-0.2), Point(1,0,-0.2), Point(1,1,-0.2), Point(0,1,-0.2)], thickness=0.2, name="p2")
-    session.add_element(p1)
-    session.add_element(p2)
-    session.compute_face_to_face(5.0, 0.001)
-
-    MINI_CHECK(len(session.objects.elements) == 2)
-    MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
 
 
 @MINI_TEST("Session", "Json Roundtrip")

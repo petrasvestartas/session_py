@@ -24,9 +24,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.20.0",
     "protobuf>=6.33,<7.0",
-    # exact pin: CI diffs regenerated *_pb2.py against committed files, and the
-    # version banner protoc stamps into them follows this package's version
-    "grpcio-tools==1.80.0",
 ]
 
 [project.optional-dependencies]
@@ -41,9 +38,19 @@ dev = [
     "ruff",
     "pre-commit",
     "build",
+    { include-group = "proto" },
     { include-group = "tests" },
     { include-group = "docs" },
 ]
+# protoc, for regenerating src/session_py/proto/*_pb2.py. A build-time tool, not
+# something the package imports at runtime — it used to sit in [project]
+# dependencies, which made every install of session_py demand it. grpcio-tools
+# ships no pure-Python wheel, so that made the package uninstallable under
+# Pyodide/micropip and blocked running session_py in the browser at all.
+# Included in `dev`, so `uv sync` still provides it for anyone regenerating.
+# exact pin: CI diffs regenerated *_pb2.py against committed files, and the
+# version banner protoc stamps into them follows this package's version
+proto = ["grpcio-tools==1.80.0"]
 tests = []
 docs = [
     "sphinx",
