@@ -64,7 +64,7 @@ def test_place():
     MINI_CHECK(min_x > 9.0)
 
 
-@MINI_TEST("Element", "Add Feature")
+@MINI_TEST("Element", "Add Geometry Op")
 def test_add_feature():
     from session_py import Mesh
     from session_py import BRep
@@ -80,15 +80,15 @@ def test_add_feature():
     def my_feature(geo):
         return geo
 
-    e.add_feature(my_feature)
+    e.add_geometry_op(my_feature)
 
     # Features are Mesh -> Mesh, so BRep geometry passes through untouched
     eb = Element(geometry=BRep.create_box(1.0, 1.0, 1.0), name="brep_feature")
-    eb.add_feature(lambda geo: Mesh())
+    eb.add_geometry_op(lambda geo: Mesh())
     sg = eb.session_geometry(Xform.identity())
 
     MINI_CHECK(e.is_dirty)
-    MINI_CHECK(e.features_count == 1)
+    MINI_CHECK(e.geometry_ops_count == 1)
     MINI_CHECK(isinstance(sg, BRep))
 
 
@@ -262,6 +262,171 @@ def test_polylines():
     MINI_CHECK(len(e.planes) == 0)
     MINI_CHECK(len(e.edge_vectors) == 0)
     MINI_CHECK(e.axis is None)
+
+
+# ── Element - polymorphic registry ──────────────────────────────────────────────────────
+# Mirrors session_cpp/src/element_test.cpp. The contract a downstream package depends on: a
+# registered type survives a round trip, and an UNregistered one degrades to a base Element
+# with its geometry intact rather than failing the load.
+
+
+def _unit_quad():
+    from session_py import Mesh
+
+    return Mesh.from_vertices_and_faces(
+        [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], [[0, 1, 2, 3]]
+    )
+
+
+def _test_plate_class():
+    """Stand-in for a domain element: carries state the kernel knows nothing about."""
+    from session_py import Element
+
+    class TestPlate(Element):
+        def __init__(self, geometry=None, thickness=0.0, codes=None):
+            super().__init__(geometry=geometry)
+            self.thickness = thickness
+            self.codes = list(codes or [])
+
+        def element_type_name(self):
+            return "TestPlate"
+
+        # Deliberately a trivial hand-rolled encoding: the kernel never parses this, so the
+        # format is the package's own business - which is the property under test.
+        def element_data_dumps(self):
+            return ",".join([str(self.thickness)] + [str(c) for c in self.codes]).encode()
+
+        @staticmethod
+        def factory(data):
+            from session_py.proto import element_pb2
+
+            proto = element_pb2.Element()
+            proto.ParseFromString(data)
+            parts = proto.element_data.decode().split(",")
+
+            plate = TestPlate(thickness=float(parts[0]), codes=[int(c) for c in parts[1:]])
+            base = Element.pb_loads(data)
+            plate._geometry = base.geometry
+            plate.guid = proto.guid
+            plate.name = proto.name
+            return plate
+
+    return TestPlate
+
+
+@MINI_TEST("Element", "RegistryRoundTrip")
+def test_registry_round_trip():
+    from session_py import Element
+    from session_py import Mesh
+
+    TestPlate = _test_plate_class()
+    Element.register_type("TestPlate", TestPlate.factory)
+    MINI_CHECK(Element.is_registered("TestPlate"))
+
+    plate = TestPlate(geometry=_unit_quad(), thickness=12.5, codes=[30, 11, 20])
+    plate.name = "plate_0"
+    loaded = Element.pb_loads_polymorphic(plate.pb_dumps())
+
+    # The derived type came back, not a sliced base.
+    MINI_CHECK(isinstance(loaded, TestPlate))
+    MINI_CHECK(loaded.element_type_name() == "TestPlate")
+
+    # Identity, base state and domain state all survived.
+    MINI_CHECK(loaded.guid == plate.guid)
+    MINI_CHECK(loaded.name == "plate_0")
+    MINI_CHECK(isinstance(loaded.geometry, Mesh))
+    MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 12.5))
+    MINI_CHECK(loaded.codes == [30, 11, 20])
+
+
+@MINI_TEST("Element", "RegistryUnknownTypeDegrades")
+def test_registry_unknown_type_degrades():
+    from session_py import Element
+    from session_py import Mesh
+    from session_py.proto import element_pb2
+
+    # A file written by a package this interpreter does not have. The element must still
+    # load, keeping its geometry - a viewer opens the file, it just does not know what it is.
+    MINI_CHECK(not Element.is_registered("NeverRegistered"))
+
+    proto = element_pb2.Element()
+    proto.ParseFromString(Element(geometry=_unit_quad()).pb_dumps())
+    proto.element_type = "NeverRegistered"
+    proto.element_data = b"whatever this package meant"
+
+    loaded = Element.pb_loads_polymorphic(proto.SerializeToString())
+    MINI_CHECK(loaded is not None)
+    MINI_CHECK(isinstance(loaded.geometry, Mesh))
+
+
+@MINI_TEST("Element", "FeaturesRoundTrip")
+def test_features_round_trip():
+    from session_py import Element
+    from session_py import ElementFeature
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    # insertion_vectors / dimensions / features are the general shape that replaced the
+    # per-domain arrays (joint_types and friends) that used to sit on this message. All three
+    # must survive a round trip or a domain is right back to inventing its own fields.
+    e = Element(geometry=_unit_quad(), name="plate_0")
+    e.insertion_vectors = [Vector(0, 0, 1), Vector(1, 0, 0)]
+    e.dimensions = Vector(120.0, 80.0, 12.5)
+    e.add_feature(
+        ElementFeature(
+            "cut", 2,
+            [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
+            "notch",
+        )
+    )
+
+    loaded = Element.pb_loads(e.pb_dumps())
+
+    MINI_CHECK(len(loaded.insertion_vectors) == 2)
+    MINI_CHECK(loaded.insertion_vectors[0] == Vector(0, 0, 1))
+    MINI_CHECK(loaded.dimensions is not None)
+    # z is the thickness - the whole reason this is a vector rather than one float.
+    MINI_CHECK(TOLERANCE.is_close(loaded.dimensions[2], 12.5))
+    MINI_CHECK(len(loaded.features) == 1)
+    MINI_CHECK(loaded.features[0].feature_type == "cut")
+    MINI_CHECK(loaded.features[0].face_index == 2)
+    MINI_CHECK(loaded.features[0].name == "notch")
+    MINI_CHECK(len(loaded.features[0].outlines) == 1)
+
+
+@MINI_TEST("Element", "DimensionsAreNominalNotMeasured")
+def test_dimensions_are_nominal_not_measured():
+    from session_py import Element
+    from session_py import Vector
+
+    # dimensions is AUTHORED intent; obb MEASURES what exists. They are allowed to disagree,
+    # and this pins that they are genuinely independent - a nominal thickness set before any
+    # geometry is built must not be overwritten by whatever the geometry turns out to be.
+    e = Element(geometry=_unit_quad(), name="plate")
+    MINI_CHECK(e.dimensions is None)  # never authored
+
+    e.dimensions = Vector(120.0, 80.0, 12.5)  # nominal, nothing like the unit quad
+    measured = e.obb
+
+    MINI_CHECK(TOLERANCE.is_close(e.dimensions[0], 120.0))
+    MINI_CHECK(measured.half_size[0] < 1.0)  # the geometry is still a unit quad
+
+
+@MINI_TEST("Element", "RegistryLeavesBaseBytesUnchanged")
+def test_registry_leaves_base_bytes_unchanged():
+    from session_py import Element
+    from session_py.proto import element_pb2
+
+    # proto3 omits empty scalars, so adding element_type/element_data must not have changed
+    # one byte of a plain Element - the cross-language golden files depend on it.
+    e = Element(geometry=_unit_quad())
+    proto = element_pb2.Element()
+    proto.ParseFromString(e.pb_dumps())
+
+    MINI_CHECK(proto.element_type == "")
+    MINI_CHECK(proto.element_data == b"")
+    MINI_CHECK(e.element_type_name() == "")
 
 
 if __name__ == "__main__":

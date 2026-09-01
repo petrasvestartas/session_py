@@ -19,12 +19,56 @@ if TYPE_CHECKING:
     from .polyline import Polyline
 
 
+class ElementFeature:
+    """One modification applied to a host element - a cut, a drill, a joint pocket.
+
+    The serializable half of what :meth:`Element.add_geometry_op` cannot be: that takes a
+    callable, so an operation applied in memory vanishes the moment the Session is written.
+    Domains worked around it by adding flat arrays to Element - a joint type code per face -
+    which is how timber fields ended up in element.proto and had to be reserved out again.
+
+    The kernel does not know how to APPLY one: ``feature_type`` means something only to the
+    package that wrote it. It knows enough to DRAW one, which is what lets a viewer show
+    features from a package it has never heard of.
+    """
+
+    def __init__(self, feature_type: str = "", face_index: int = -1, outlines=None, name: str = ""):
+        self.name = name
+        self.feature_type = feature_type
+        #: Face of the host this applies to; -1 = the whole element.
+        self.face_index = face_index
+        self.outlines = list(outlines or [])
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, ElementFeature):
+            return NotImplemented
+        return (
+            self.name == other.name
+            and self.feature_type == other.feature_type
+            and self.face_index == other.face_index
+            and self.outlines == other.outlines
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"ElementFeature({self.feature_type}, face {self.face_index}, "
+            f"{len(self.outlines)} outline(s))"
+        )
+
+
 class Element:
     def __init__(self, geometry: Union["Mesh", "BRep"] | None = None, name: str = "my_element"):
         self._guid = None
         self.name = name
         self._geometry = geometry
-        self._features = []
+        # Callables, applied lazily when geometry is computed - NOT serializable. Renamed off
+        # "feature" so the serializable `features` below can own that name; two different
+        # things wearing one name is what made a joint type code look like it needed its own
+        # field on Element.
+        self._geometry_ops = []
+        self._features: list[ElementFeature] = []
+        self._insertion_vectors: list = []
+        self._dimensions = None
         self._is_dirty = True
         self._aabb = None
         self._obb = None
@@ -66,7 +110,7 @@ class Element:
             return None
         geo = copy.deepcopy(self._geometry)
         if isinstance(geo, Mesh):
-            geo = self.apply_features(geo)
+            geo = self.apply_geometry_ops(geo)
         if not xform.is_identity():
             geo.transform(xform)
         return geo
@@ -139,6 +183,10 @@ class Element:
         return self._point
 
     @property
+    def geometry_ops_count(self) -> int:
+        return len(self._geometry_ops)
+
+    @property
     def features_count(self) -> int:
         return len(self._features)
 
@@ -153,6 +201,7 @@ class Element:
         result.guid = str(uuid.uuid4())
         result.name = copy.deepcopy(self.name, memo)
         result._geometry = copy.deepcopy(self._geometry, memo)
+        result._geometry_ops = list(self._geometry_ops)
         result._features = list(self._features)
         result._is_dirty = True
         result._aabb = None
@@ -188,9 +237,53 @@ class Element:
     # Mutators
     ###########################################################################################
 
-    def add_feature(self, feature: Callable) -> None:
-        self._features.append(feature)
+    def add_geometry_op(self, op: Callable) -> None:
+        """Add an in-memory mesh operation. Not serialized - see :class:`ElementFeature`."""
+        self._geometry_ops.append(op)
         self._is_dirty = True
+
+    def add_feature(self, feature: "ElementFeature") -> None:
+        """Add a modification carried BY this element, and written with it."""
+        self._features.append(feature)
+
+    @property
+    def features(self) -> list:
+        return self._features
+
+    @features.setter
+    def features(self, features) -> None:
+        self._features = list(features)
+
+    @property
+    def insertion_vectors(self) -> list:
+        """Direction(s) the element is inserted along when the assembly is put together.
+
+        General to any assembly: it is what an assembly sequence is ordered by. Plural because
+        an element with several jointed faces can admit a different direction per face.
+        """
+        return self._insertion_vectors
+
+    @insertion_vectors.setter
+    def insertion_vectors(self, vectors) -> None:
+        self._insertion_vectors = list(vectors)
+
+    @property
+    def dimensions(self):
+        """NOMINAL extents in this element's own frame - authored intent, NOT a measurement.
+
+        Plate: x/y outline extent, z thickness. Beam: x/y cross-section, z length.
+
+        Deliberately distinct from :attr:`obb`, which MEASURES the geometry that exists. The
+        two are allowed to disagree: a thickness drives a loft before there is any geometry to
+        measure, so the nominal value has to exist first and outlive what is built from it.
+        Read ``obb`` for how big it IS, this for how big it was MEANT to be. ``None`` = never
+        authored, which (0, 0, 0) does not mean.
+        """
+        return self._dimensions
+
+    @dimensions.setter
+    def dimensions(self, value) -> None:
+        self._dimensions = value
 
     def place(self, xform: Xform) -> None:
         """Bake a placement into this element's own geometry, invalidating the cached boxes.
@@ -288,9 +381,9 @@ class Element:
     def compute_axis(self) -> Optional["Line"]:
         return None
 
-    def apply_features(self, geometry: "Mesh") -> "Mesh":
-        for feature in self._features:
-            geometry = feature(geometry)
+    def apply_geometry_ops(self, geometry: "Mesh") -> "Mesh":
+        for op in self._geometry_ops:
+            geometry = op(geometry)
         return geometry
 
     @staticmethod
@@ -372,6 +465,22 @@ class Element:
             proto.geometry_data = self._geometry.pb_dumps()
         else:
             proto.geometry_type = "None"
+        # Both empty for a plain Element, and proto3 does not emit empty scalars - so a base
+        # element's bytes are unchanged by the registry, keeping the golden files valid.
+        proto.element_type = self.element_type_name()
+        proto.element_data = self.element_data_dumps()
+
+        for v in self._insertion_vectors:
+            proto.insertion_vectors.add().ParseFromString(v.pb_dumps())
+        if self._dimensions is not None:
+            proto.dimensions.ParseFromString(self._dimensions.pb_dumps())
+        for f in self._features:
+            pf = proto.features.add()
+            pf.name = f.name
+            pf.feature_type = f.feature_type
+            pf.face_index = f.face_index
+            for o in f.outlines:
+                pf.outlines.add().ParseFromString(o.pb_dumps())
         return proto.SerializeToString()
 
     @classmethod
@@ -385,7 +494,96 @@ class Element:
         elem = cls(geometry=geometry)
         elem.guid = proto.guid
         elem.name = proto.name
+
+        from .polyline import Polyline
+        from .vector import Vector
+
+        elem._insertion_vectors = [
+            Vector.pb_loads(v.SerializeToString()) for v in proto.insertion_vectors
+        ]
+        # HasField, not a truthiness check: (0, 0, 0) is a legitimate authored value and must
+        # not be confused with "never authored", which is what None means here.
+        if proto.HasField("dimensions"):
+            elem._dimensions = Vector.pb_loads(proto.dimensions.SerializeToString())
+        elem._features = [
+            ElementFeature(
+                feature_type=f.feature_type,
+                face_index=f.face_index,
+                outlines=[Polyline.pb_loads(o.SerializeToString()) for o in f.outlines],
+                name=f.name,
+            )
+            for f in proto.features
+        ]
         return elem
+
+    # ── Polymorphic elements ────────────────────────────────────────────────────────────
+    # Port of the C++ registry (session_cpp/src/element.cpp). An Element is a geometry
+    # container that knows nothing about domains; a downstream package that needs more
+    # registers a factory under its own type name, and the kernel carries `element_type` and
+    # `element_data` through without interpreting either.
+    #
+    # `pb_loads` returns `cls`, so it cannot produce a subclass it was never told about -
+    # Objects.pb_loads called it and got a base Element back, silently dropping whatever the
+    # package had written. `pb_loads_polymorphic` is the missing half of that round trip.
+
+    #: type name -> factory(data: bytes) -> Element
+    _registry: dict = {}
+
+    def element_type_name(self) -> str:
+        """This element's own type name, written to ``element_type``.
+
+        The base returns ``""`` so nothing is emitted for a plain Element.
+        """
+        return ""
+
+    def element_data_dumps(self) -> bytes:
+        """This element's own state, written to ``element_data``.
+
+        Opaque to the kernel - the format is the registering package's business.
+        """
+        return b""
+
+    @classmethod
+    def register_type(cls, type_name: str, factory) -> None:
+        """Register ``factory`` for ``type_name``; re-registering the same name replaces it.
+
+        ``factory`` takes the full serialized ``session_proto.Element`` bytes - the same
+        bytes ``pb_loads`` takes - so it can read the base fields as well as ``element_data``.
+        """
+        if not type_name or factory is None:
+            return
+        Element._registry[type_name] = factory
+
+    @staticmethod
+    def is_registered(type_name: str) -> bool:
+        return type_name in Element._registry
+
+    @staticmethod
+    def registered_types() -> list:
+        return sorted(Element._registry)
+
+    @classmethod
+    def pb_loads_polymorphic(cls, data: bytes) -> "Element":
+        """Load an element, preserving its derived type when one is registered.
+
+        Falls back to a base Element when ``element_type`` is empty OR names a type nobody
+        registered - an unknown domain type degrades to its geometry rather than failing the
+        whole Session, which is what lets a viewer open a file written by a package it does
+        not have.
+        """
+        from .proto import element_pb2
+        proto = element_pb2.Element()
+        proto.ParseFromString(data)
+
+        factory = Element._registry.get(proto.element_type) if proto.element_type else None
+        if factory is not None:
+            derived = factory(data)
+            if derived is not None:
+                return derived
+            # A factory returning None is a bug in that package, not a corrupt file - fall
+            # through to the base so one bad type cannot take the Session with it.
+
+        return cls.pb_loads(data)
 
     @staticmethod
     def _pb_load_geometry(geo_type, geo_data):

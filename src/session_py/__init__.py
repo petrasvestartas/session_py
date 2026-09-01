@@ -46,6 +46,7 @@ from .primitives import Primitives
 from .nurbssurface_trimmed import NurbsSurfaceTrimmed
 from .brep import BRep
 from .element import Element
+from .element import ElementFeature
 from .closest import Closest
 from .remesh_cdt import RemeshCDT
 from .remesh_nurbssurface_grid import remesh_nurbssurface_grid
@@ -100,6 +101,7 @@ __all__ = [
     "NurbsSurfaceTrimmed",
     "BRep",
     "Element",
+    "ElementFeature",
     "Closest",
     "remesh_nurbssurface_grid",
     "RemeshCDT",

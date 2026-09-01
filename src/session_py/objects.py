@@ -223,8 +223,11 @@ class Objects:
             objects.nurbssurfaces.append(NurbsSurface.pb_loads(ns.SerializeToString()))
         for b in proto.breps:
             objects.breps.append(BRep.pb_loads(b.SerializeToString()))
+        # pb_loads_polymorphic, not pb_loads: the latter returns the class it was called on
+        # and would slice a registered domain element back to its base, silently dropping
+        # everything the package put in `element_data`.
         for e in getattr(proto, 'elements', []):
-            objects.elements.append(Element.pb_loads(e.SerializeToString()))
+            objects.elements.append(Element.pb_loads_polymorphic(e.SerializeToString()))
         return objects
 
     @classmethod
