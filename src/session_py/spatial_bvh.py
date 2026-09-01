@@ -1016,9 +1016,9 @@ class SpatialBVH:
 
         heap = []
 
-        # Test root node
-        root_aabb_data = self.arena_aabb[self.arena_root]
-        root_aabb = AABB(*root_aabb_data)
+        # Test root node. tolist() keeps the slab math on Python floats: numpy scalars cost
+        # about a third more per node and warn on the 0*inf of a degenerate slab.
+        root_aabb = AABB(*self.arena_aabb[self.arena_root].tolist())
         intersects, rtmin, rtmax = _ray_aabb_intersect(origin, direction, root_aabb)
         if not intersects or rtmax < 0.0:
             return False
@@ -1043,8 +1043,7 @@ class SpatialBVH:
             # Internal node - test children
             left_idx = self.arena_left[idx]
             if left_idx >= 0:
-                left_aabb_data = self.arena_aabb[left_idx]
-                left_aabb = AABB(*left_aabb_data)
+                left_aabb = AABB(*self.arena_aabb[left_idx].tolist())
                 intersects, cmin, cmax = _ray_aabb_intersect(
                     origin, direction, left_aabb
                 )
@@ -1053,8 +1052,7 @@ class SpatialBVH:
 
             right_idx = self.arena_right[idx]
             if right_idx >= 0:
-                right_aabb_data = self.arena_aabb[right_idx]
-                right_aabb = AABB(*right_aabb_data)
+                right_aabb = AABB(*self.arena_aabb[right_idx].tolist())
                 intersects, cmin, cmax = _ray_aabb_intersect(
                     origin, direction, right_aabb
                 )
