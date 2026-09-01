@@ -196,6 +196,27 @@ def test_graph_has_edge():
     MINI_CHECK(not g.has_edge(("a", "c")))
 
 
+@MINI_TEST("Graph", "Has Guid")
+def test_graph_has_guid():
+    from session_py.graph import Edge
+    from session_py.graph import Vertex
+
+    # A guid is lazily minted, so ASKING for one creates it. The writers used to ask for every
+    # vertex and edge, which minted 34,592 UUIDs for one drawing sheet and wrote 1.3 MB of them
+    # into a file whose reader discards them. has_guid() answers without minting, so a thing
+    # nobody names never pays for one.
+    v = Vertex("a")
+    e = Edge("a", "b")
+
+    MINI_CHECK(not v.has_guid())  # nobody has asked
+    MINI_CHECK(not e.has_guid())
+
+    minted = v.guid
+    MINI_CHECK(minted != "")
+    MINI_CHECK(v.has_guid())  # asking created it
+    MINI_CHECK(v.guid == minted)  # and it is stable
+
+
 @MINI_TEST("Graph", "Add Node")
 def test_graph_add_node():
     from session_py import Graph
