@@ -12,9 +12,6 @@ partitioning and collision detection. Uses Linear SpatialBVH (LBVH) construction
 algorithm from Karras 2012.
 """
 
-from typing import List
-from typing import Tuple
-from typing import Optional
 from typing import Any
 from collections.abc import Callable
 import uuid
@@ -49,8 +46,8 @@ class SpatialBVHNode:
     __slots__ = ("left", "right", "object_id", "aabb")
 
     def __init__(self):
-        self.left: Optional["SpatialBVHNode"] = None
-        self.right: Optional["SpatialBVHNode"] = None
+        self.left: SpatialBVHNode | None = None
+        self.right: SpatialBVHNode | None = None
         self.object_id: int = -1
         self.aabb: AABB | None = None
 
@@ -389,7 +386,7 @@ class SpatialBVH:
         return max(max_extent * 2.2, 10.0)
 
     @classmethod
-    def from_boxes(cls, bounding_boxes: list[OBB], world_size: float) -> "SpatialBVH":
+    def from_boxes(cls, bounding_boxes: list[OBB], world_size: float) -> SpatialBVH:
         """Create a SpatialBVH from a list of bounding boxes."""
         bvh = cls(world_size)
         bvh.build(bounding_boxes)
