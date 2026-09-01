@@ -543,5 +543,40 @@ def test_bvh_find_collisions():
     MINI_CHECK(checks0 > 0)
 
 
+@MINI_TEST("SpatialBVH", "Ray Cast")
+def test_bvh_ray_cast():
+    from session_py import SpatialBVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    boxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(5.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(0.0, 5.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+    ]
+    bvh = SpatialBVH.from_boxes(boxes, 100.0)
+    # Ray along +x misses the box at y=5 and reports the other two near-to-far
+    hits = []
+    found = bvh.ray_cast(Point(-10.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), hits, True)
+
+    MINI_CHECK(found)
+    MINI_CHECK(len(hits) == 2)
+    MINI_CHECK(hits[0] == 0)
+    MINI_CHECK(hits[1] == 1)
+    # Boxes entirely behind the origin are pruned, not returned
+    behind = []
+    any_hit = bvh.ray_cast(Point(0.0, 0.0, 20.0), Vector(0.0, 0.0, 1.0), behind, True)
+
+    MINI_CHECK(not any_hit)
+    MINI_CHECK(len(behind) == 0)
+
+
 if __name__ == "__main__":
     run_all(language="python")
