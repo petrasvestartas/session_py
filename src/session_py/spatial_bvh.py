@@ -428,8 +428,11 @@ class SpatialBVH:
         # but loses all spatial coherence - measured 480x slower queries for the same boxes
         # moved 5 km out. Bounds normalization makes tree quality translation-invariant;
         # query results are unaffected (they test exact AABBs), world_size stays as metadata.
-        lo = [min(b.center[k] for b in bounding_boxes) for k in range(3)]
-        hi = [max(b.center[k] for b in bounding_boxes) for k in range(3)]
+        xs = [b.center[0] for b in bounding_boxes]
+        ys = [b.center[1] for b in bounding_boxes]
+        zs = [b.center[2] for b in bounding_boxes]
+        lo = [min(xs), min(ys), min(zs)]
+        hi = [max(xs), max(ys), max(zs)]
         # ONE scale for all three axes (the scene's bounding CUBE): per-axis stretch would
         # blow a nearly-flat axis up to the full 1024 cells and scatter xy-neighbours in the
         # sort - measured 4x slower queries on a sheet-like scene. Cubic cells keep the sort
@@ -651,8 +654,11 @@ class SpatialBVH:
         # but loses all spatial coherence - measured 480x slower queries for the same boxes
         # moved 5 km out. Bounds normalization makes tree quality translation-invariant;
         # query results are unaffected (they test exact AABBs), world_size stays as metadata.
-        lo = [min(a.cx for a in aabbs), min(a.cy for a in aabbs), min(a.cz for a in aabbs)]
-        hi = [max(a.cx for a in aabbs), max(a.cy for a in aabbs), max(a.cz for a in aabbs)]
+        xs = [a.cx for a in aabbs]
+        ys = [a.cy for a in aabbs]
+        zs = [a.cz for a in aabbs]
+        lo = [min(xs), min(ys), min(zs)]
+        hi = [max(xs), max(ys), max(zs)]
         # ONE scale for all three axes (the scene's bounding CUBE): per-axis stretch would
         # blow a nearly-flat axis up to the full 1024 cells and scatter xy-neighbours in the
         # sort - measured 4x slower queries on a sheet-like scene. Cubic cells keep the sort
