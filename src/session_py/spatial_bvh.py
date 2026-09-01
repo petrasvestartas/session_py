@@ -640,11 +640,12 @@ class SpatialBVH:
 
     def build_from_aabbs(self, aabbs: list[AABB], world_size: float) -> None:
         """Build the BVH directly from axis-aligned AABBs, keeping the pointer tree (`root`)."""
+        self.world_size = world_size
+
         if not aabbs:
             self.build([])
             return
 
-        self.world_size = world_size
         N = len(aabbs)
 
         # Morton codes normalized over the INPUT's own bounds - not the

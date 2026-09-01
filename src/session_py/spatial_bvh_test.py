@@ -449,6 +449,10 @@ def test_bvh_build_from_aabbs():
     MINI_CHECK(0 in hits)
     MINI_CHECK(1 in hits)
 
+    bvh.build_from_aabbs([], 50.0)
+
+    MINI_CHECK(TOLERANCE.is_close(bvh.world_size, 50.0))
+
 
 @MINI_TEST("SpatialBVH", "Build With Guids")
 def test_bvh_build_with_guids():
