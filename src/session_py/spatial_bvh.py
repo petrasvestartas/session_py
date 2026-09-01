@@ -942,7 +942,7 @@ class SpatialBVH:
                 if i > j:
                     i, j = j, i
                 if 0 <= i < j < len(bounding_boxes):
-                    all_collisions.append((i, j))
+                    all_collisions.append((int(i), int(j)))
                     visited[i], visited[j] = True, True
                 continue
 
