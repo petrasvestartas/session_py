@@ -576,6 +576,17 @@ def test_bvh_ray_cast():
 
     MINI_CHECK(not any_hit)
     MINI_CHECK(len(behind) == 0)
+    # A ray travelling inside the plane of a zero-thickness box still reports it
+    flat = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(0.0, 1.0, 1.0)),
+    ]
+    flat_bvh = SpatialBVH.from_boxes(flat, 100.0)
+    coplanar = []
+
+    MINI_CHECK(flat_bvh.ray_cast(Point(0.0, 0.0, -5.0), Vector(0.0, 0.0, 1.0), coplanar, True))
+    MINI_CHECK(len(coplanar) == 1)
 
 
 @MINI_TEST("SpatialBVH", "Coincident Centers")

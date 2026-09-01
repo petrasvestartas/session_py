@@ -315,10 +315,17 @@ def _ray_aabb_intersect(
     invy = inv(direction[1])
     invz = inv(direction[2])
 
+    # Seed from the unbounded interval so all three slabs fold the same way. A slab with zero
+    # extent, a zero direction component and the origin in its plane yields 0*inf = NaN, and
+    # min/max drop a NaN second argument; seeding tmin/tmax from the x slab let that NaN
+    # through instead and turned a ray travelling inside a flat box into a reported miss.
+    tmin = float("-inf")
+    tmax = float("inf")
+
     tx1 = (min_x - origin[0]) * invx
     tx2 = (max_x - origin[0]) * invx
-    tmin = min(tx1, tx2)
-    tmax = max(tx1, tx2)
+    tmin = max(tmin, min(tx1, tx2))
+    tmax = min(tmax, max(tx1, tx2))
 
     ty1 = (min_y - origin[1]) * invy
     ty2 = (max_y - origin[1]) * invy
