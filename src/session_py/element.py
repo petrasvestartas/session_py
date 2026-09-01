@@ -769,13 +769,41 @@ class Element:
 
         factory = Element._registry.get(proto.element_type) if proto.element_type else None
         if factory is not None:
-            derived = factory(data)
-            if derived is not None:
-                return derived
+            # A THROWING factory is the same failure as one returning None - a bug in that
+            # package - and it must not take the whole Session with it either.
+            try:
+                derived = factory(data)
+                if derived is not None:
+                    return derived
+            except Exception:
+                pass
             # A factory returning None is a bug in that package, not a corrupt file - fall
             # through to the base so one bad type cannot take the Session with it.
 
         return cls.pb_loads(data)
+
+    @classmethod
+    def file_json_loads_polymorphic(cls, s: str) -> "Element":
+        """The same, from JSON - and through the SAME factory, not a second registry.
+
+        A factory takes serialized proto bytes. That is the only contract, and it stays the
+        only contract: this reads the JSON into a base Element, which carries ``element_type``
+        and ``element_data`` through unchanged, and re-encodes THAT for the factory. So a
+        package registers once and both formats reconstruct its type. Without this the JSON
+        path could not rebuild a derived element at all - it kept the payload but always
+        handed back a base.
+        """
+        base = cls.file_json_loads(s)
+        type_name = base.element_type_name()
+        factory = Element._registry.get(type_name) if type_name else None
+        if factory is not None:
+            try:
+                derived = factory(base.pb_dumps())
+                if derived is not None:
+                    return derived
+            except Exception:
+                pass
+        return base
 
     @staticmethod
     def _pb_load_geometry(geo_type, geo_data):

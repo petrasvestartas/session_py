@@ -24,6 +24,17 @@ class Vertex:
             self._guid = str(uuid.uuid4())
         return self._guid
 
+    def has_guid(self) -> bool:
+        """Whether this identity has actually been minted.
+
+        A serializer that reads ``guid`` MINTS one for everything it writes, which defeats the
+        lazy scheme everywhere it is used on a bulk collection: a drawing sheet with 34,592
+        graph vertices generated 34,592 UUIDs at write time and put ~1.3 MB of them in the file
+        for a ``Session.pb_loads`` that discards every one. Ask this first, and write nothing
+        when the answer is no.
+        """
+        return getattr(self, "_guid", None) is not None
+
     @guid.setter
     def guid(self, value: str) -> None:
         self._guid = value
@@ -61,6 +72,17 @@ class Edge:
         if getattr(self, '_guid', None) is None:
             self._guid = str(uuid.uuid4())
         return self._guid
+
+    def has_guid(self) -> bool:
+        """Whether this identity has actually been minted.
+
+        A serializer that reads ``guid`` MINTS one for everything it writes, which defeats the
+        lazy scheme everywhere it is used on a bulk collection: a drawing sheet with 34,592
+        graph vertices generated 34,592 UUIDs at write time and put ~1.3 MB of them in the file
+        for a ``Session.pb_loads`` that discards every one. Ask this first, and write nothing
+        when the answer is no.
+        """
+        return getattr(self, "_guid", None) is not None
 
     @guid.setter
     def guid(self, value: str) -> None:
@@ -130,6 +152,17 @@ class Graph:
         if getattr(self, '_guid', None) is None:
             self._guid = str(uuid.uuid4())
         return self._guid
+
+    def has_guid(self) -> bool:
+        """Whether this identity has actually been minted.
+
+        A serializer that reads ``guid`` MINTS one for everything it writes, which defeats the
+        lazy scheme everywhere it is used on a bulk collection: a drawing sheet with 34,592
+        graph vertices generated 34,592 UUIDs at write time and put ~1.3 MB of them in the file
+        for a ``Session.pb_loads`` that discards every one. Ask this first, and write nothing
+        when the answer is no.
+        """
+        return getattr(self, "_guid", None) is not None
 
     @guid.setter
     def guid(self, value: str) -> None:
@@ -254,7 +287,8 @@ class Graph:
         for name, vertex in self.vertices.items():
             v = proto.vertices[name]
             v.name = vertex.name
-            v.guid = vertex.guid
+            if vertex.has_guid():
+                v.guid = vertex.guid
             v.attribute = vertex.attribute
             v.index = vertex.index
 
@@ -266,7 +300,8 @@ class Graph:
                     continue
                 seen.add(key)
                 e = proto.edges.add()
-                e.guid = edge.guid
+                if edge.has_guid():
+                    e.guid = edge.guid
                 e.name = edge.name
                 e.v0 = edge.v0
                 e.v1 = edge.v1

@@ -433,6 +433,51 @@ def test_registry_leaves_base_bytes_unchanged():
     MINI_CHECK(e.element_type_name() == "")
 
 
+@MINI_TEST("Element", "RegistryJsonRoundTrip")
+def test_registry_json_round_trip():
+    from session_py import Element
+
+    # The JSON path reconstructs the derived type too, through the SAME factory. Before this,
+    # JSON kept the payload but always handed back a base - so a package could round-trip
+    # through .pb and not through .json, for no reason a caller could see.
+    TestPlate = _test_plate_class()
+    Element.register_type("TestPlate", TestPlate.factory)
+
+    plate = TestPlate(geometry=_unit_quad(), thickness=9.5, codes=[7, 8])
+    plate.name = "plate_json"
+    loaded = Element.file_json_loads_polymorphic(plate.file_json_dumps())
+
+    MINI_CHECK(isinstance(loaded, TestPlate))
+    MINI_CHECK(loaded.name == "plate_json")
+    MINI_CHECK(loaded.guid == plate.guid)
+    MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 9.5))
+    MINI_CHECK(loaded.codes == [7, 8])
+
+
+@MINI_TEST("Element", "ThrowingFactoryDegradesToBase")
+def test_throwing_factory_degrades_to_base():
+    from session_py import Element
+    from session_py import Mesh
+    from session_py.proto import element_pb2
+
+    # A factory that raises is a bug in that package, exactly like one returning None, and it
+    # must not take the whole Session down. Without the catch, one malformed element made
+    # every other element in the file unreachable.
+    def explode(data):
+        raise RuntimeError("this package is broken")
+
+    Element.register_type("Exploding", explode)
+
+    proto = element_pb2.Element()
+    proto.ParseFromString(Element(geometry=_unit_quad(), name="victim").pb_dumps())
+    proto.element_type = "Exploding"
+
+    loaded = Element.pb_loads_polymorphic(proto.SerializeToString())
+    MINI_CHECK(loaded is not None)
+    MINI_CHECK(loaded.name == "victim")
+    MINI_CHECK(isinstance(loaded.geometry, Mesh))
+
+
 @MINI_TEST("Element", "UnknownTypeSurvivesResave")
 def test_unknown_type_survives_resave():
     from session_py import Element
