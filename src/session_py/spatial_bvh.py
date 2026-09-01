@@ -911,8 +911,8 @@ class SpatialBVH:
             a_idx, b_idx = stack.pop()
 
             # AABB overlap test
-            aabb1 = self.arena_aabb[a_idx]
-            aabb2 = self.arena_aabb[b_idx]
+            aabb1 = self.arena_aabb[a_idx].tolist()
+            aabb2 = self.arena_aabb[b_idx].tolist()
             min1_x, max1_x = aabb1[0] - aabb1[3], aabb1[0] + aabb1[3]
             min1_y, max1_y = aabb1[1] - aabb1[4], aabb1[1] + aabb1[4]
             min1_z, max1_z = aabb1[2] - aabb1[5], aabb1[2] + aabb1[5]
@@ -1073,8 +1073,8 @@ class SpatialBVH:
         stack: list[int] = [self.arena_root]
         while stack:
             idx = stack.pop()
-            a = self.arena_aabb[idx]
-            if not self._aabb_intersect_internal(query, AABB(a[0], a[1], a[2], a[3], a[4], a[5])):
+            node = AABB(*self.arena_aabb[idx].tolist())
+            if not self._aabb_intersect_internal(query, node):
                 continue
             check_count += 1
             obj_id = int(self.arena_object_id[idx])
@@ -1109,7 +1109,7 @@ class SpatialBVH:
         stack: list[int] = [self.arena_root]
         while stack:
             idx = stack.pop()
-            a = self.arena_aabb[idx]
+            a = self.arena_aabb[idx].tolist()
             if (
                 a[0] - a[3] > qcx + qhx
                 or a[0] + a[3] < qcx - qhx
