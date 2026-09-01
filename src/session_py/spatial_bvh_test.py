@@ -449,6 +449,10 @@ def test_bvh_build_from_aabbs():
     MINI_CHECK(0 in hits)
     MINI_CHECK(1 in hits)
 
+    bvh.build_from_aabbs([], 50.0)
+
+    MINI_CHECK(TOLERANCE.is_close(bvh.world_size, 50.0))
+
 
 @MINI_TEST("SpatialBVH", "Build With Guids")
 def test_bvh_build_with_guids():
@@ -537,6 +541,75 @@ def test_bvh_find_collisions():
     MINI_CHECK(c0 == [1])
     MINI_CHECK(len(c2) == 0)
     MINI_CHECK(checks0 > 0)
+
+
+@MINI_TEST("SpatialBVH", "Ray Cast")
+def test_bvh_ray_cast():
+    from session_py import SpatialBVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    boxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(5.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+        OBB(Point(0.0, 5.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+    ]
+    bvh = SpatialBVH.from_boxes(boxes, 100.0)
+    # Ray along +x misses the box at y=5 and reports the other two near-to-far
+    hits = []
+    found = bvh.ray_cast(Point(-10.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), hits, True)
+
+    MINI_CHECK(found)
+    MINI_CHECK(len(hits) == 2)
+    MINI_CHECK(hits[0] == 0)
+    MINI_CHECK(hits[1] == 1)
+    # Boxes entirely behind the origin are pruned, not returned
+    behind = []
+    any_hit = bvh.ray_cast(Point(0.0, 0.0, 20.0), Vector(0.0, 0.0, 1.0), behind, True)
+
+    MINI_CHECK(not any_hit)
+    MINI_CHECK(len(behind) == 0)
+    # A ray travelling inside the plane of a zero-thickness box still reports it
+    flat = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(0.0, 1.0, 1.0)),
+    ]
+    flat_bvh = SpatialBVH.from_boxes(flat, 100.0)
+    coplanar = []
+
+    MINI_CHECK(flat_bvh.ray_cast(Point(0.0, 0.0, -5.0), Vector(0.0, 0.0, 1.0), coplanar, True))
+    MINI_CHECK(len(coplanar) == 1)
+
+
+@MINI_TEST("SpatialBVH", "Coincident Centers")
+def test_bvh_coincident_centers():
+    from session_py import SpatialBVH
+    from session_py import OBB
+    from session_py import Point
+    from session_py import Vector
+
+    # Identical centers collapse every Morton code to 0; the tree comes from the index tiebreak
+    boxes = [
+        OBB(Point(0.0, 0.0, 0.0),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
+            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0))
+        for _ in range(5)
+    ]
+    bvh = SpatialBVH.from_boxes(boxes, 100.0)
+    pairs, colliding_indices, checks = bvh.check_all_collisions(boxes)
+    hits = bvh.query_aabb(boxes[0])
+
+    MINI_CHECK(len(pairs) == 10)
+    MINI_CHECK(len(colliding_indices) == 5)
+    MINI_CHECK(len(hits) == 5)
 
 
 if __name__ == "__main__":

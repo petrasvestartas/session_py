@@ -12,9 +12,6 @@ partitioning and collision detection. Uses Linear SpatialBVH (LBVH) construction
 algorithm from Karras 2012.
 """
 
-from typing import List
-from typing import Tuple
-from typing import Optional
 from typing import Any
 from collections.abc import Callable
 import uuid
@@ -49,8 +46,8 @@ class SpatialBVHNode:
     __slots__ = ("left", "right", "object_id", "aabb")
 
     def __init__(self):
-        self.left: Optional["SpatialBVHNode"] = None
-        self.right: Optional["SpatialBVHNode"] = None
+        self.left: SpatialBVHNode | None = None
+        self.right: SpatialBVHNode | None = None
         self.object_id: int = -1
         self.aabb: AABB | None = None
 
@@ -318,10 +315,17 @@ def _ray_aabb_intersect(
     invy = inv(direction[1])
     invz = inv(direction[2])
 
+    # Seed from the unbounded interval so all three slabs fold the same way. A slab with zero
+    # extent, a zero direction component and the origin in its plane yields 0*inf = NaN, and
+    # min/max drop a NaN second argument; seeding tmin/tmax from the x slab let that NaN
+    # through instead and turned a ray travelling inside a flat box into a reported miss.
+    tmin = float("-inf")
+    tmax = float("inf")
+
     tx1 = (min_x - origin[0]) * invx
     tx2 = (max_x - origin[0]) * invx
-    tmin = min(tx1, tx2)
-    tmax = max(tx1, tx2)
+    tmin = max(tmin, min(tx1, tx2))
+    tmax = min(tmax, max(tx1, tx2))
 
     ty1 = (min_y - origin[1]) * invy
     ty2 = (max_y - origin[1]) * invy
@@ -389,7 +393,7 @@ class SpatialBVH:
         return max(max_extent * 2.2, 10.0)
 
     @classmethod
-    def from_boxes(cls, bounding_boxes: list[OBB], world_size: float) -> "SpatialBVH":
+    def from_boxes(cls, bounding_boxes: list[OBB], world_size: float) -> SpatialBVH:
         """Create a SpatialBVH from a list of bounding boxes."""
         bvh = cls(world_size)
         bvh.build(bounding_boxes)
@@ -431,8 +435,11 @@ class SpatialBVH:
         # but loses all spatial coherence - measured 480x slower queries for the same boxes
         # moved 5 km out. Bounds normalization makes tree quality translation-invariant;
         # query results are unaffected (they test exact AABBs), world_size stays as metadata.
-        lo = [min(b.center[k] for b in bounding_boxes) for k in range(3)]
-        hi = [max(b.center[k] for b in bounding_boxes) for k in range(3)]
+        xs = [b.center[0] for b in bounding_boxes]
+        ys = [b.center[1] for b in bounding_boxes]
+        zs = [b.center[2] for b in bounding_boxes]
+        lo = [min(xs), min(ys), min(zs)]
+        hi = [max(xs), max(ys), max(zs)]
         # ONE scale for all three axes (the scene's bounding CUBE): per-axis stretch would
         # blow a nearly-flat axis up to the full 1024 cells and scatter xy-neighbours in the
         # sort - measured 4x slower queries on a sheet-like scene. Cubic cells keep the sort
@@ -640,11 +647,12 @@ class SpatialBVH:
 
     def build_from_aabbs(self, aabbs: list[AABB], world_size: float) -> None:
         """Build the BVH directly from axis-aligned AABBs, keeping the pointer tree (`root`)."""
+        self.world_size = world_size
+
         if not aabbs:
             self.build([])
             return
 
-        self.world_size = world_size
         N = len(aabbs)
 
         # Morton codes normalized over the INPUT's own bounds - not the
@@ -653,8 +661,11 @@ class SpatialBVH:
         # but loses all spatial coherence - measured 480x slower queries for the same boxes
         # moved 5 km out. Bounds normalization makes tree quality translation-invariant;
         # query results are unaffected (they test exact AABBs), world_size stays as metadata.
-        lo = [min(a.cx for a in aabbs), min(a.cy for a in aabbs), min(a.cz for a in aabbs)]
-        hi = [max(a.cx for a in aabbs), max(a.cy for a in aabbs), max(a.cz for a in aabbs)]
+        xs = [a.cx for a in aabbs]
+        ys = [a.cy for a in aabbs]
+        zs = [a.cz for a in aabbs]
+        lo = [min(xs), min(ys), min(zs)]
+        hi = [max(xs), max(ys), max(zs)]
         # ONE scale for all three axes (the scene's bounding CUBE): per-axis stretch would
         # blow a nearly-flat axis up to the full 1024 cells and scatter xy-neighbours in the
         # sort - measured 4x slower queries on a sheet-like scene. Cubic cells keep the sort
@@ -870,34 +881,6 @@ class SpatialBVH:
             and max1_z >= min2_z
         )
 
-    def _aabb_intersect_fast(self, idx1: int, idx2: int) -> bool:
-        """Fast AABB intersection check using NumPy arena."""
-        aabb1 = self.arena_aabb[idx1]
-        aabb2 = self.arena_aabb[idx2]
-
-        min1_x = aabb1[0] - aabb1[3]
-        max1_x = aabb1[0] + aabb1[3]
-        min1_y = aabb1[1] - aabb1[4]
-        max1_y = aabb1[1] + aabb1[4]
-        min1_z = aabb1[2] - aabb1[5]
-        max1_z = aabb1[2] + aabb1[5]
-
-        min2_x = aabb2[0] - aabb2[3]
-        max2_x = aabb2[0] + aabb2[3]
-        min2_y = aabb2[1] - aabb2[4]
-        max2_y = aabb2[1] + aabb2[4]
-        min2_z = aabb2[2] - aabb2[5]
-        max2_z = aabb2[2] + aabb2[5]
-
-        return (
-            min1_x <= max2_x
-            and max1_x >= min2_x
-            and min1_y <= max2_y
-            and max1_y >= min2_y
-            and min1_z <= max2_z
-            and max1_z >= min2_z
-        )
-
     def check_all_collisions(
         self, bounding_boxes: list[OBB]
     ) -> tuple[list[tuple[int, int]], list[int], int]:
@@ -928,8 +911,8 @@ class SpatialBVH:
             a_idx, b_idx = stack.pop()
 
             # AABB overlap test
-            aabb1 = self.arena_aabb[a_idx]
-            aabb2 = self.arena_aabb[b_idx]
+            aabb1 = self.arena_aabb[a_idx].tolist()
+            aabb2 = self.arena_aabb[b_idx].tolist()
             min1_x, max1_x = aabb1[0] - aabb1[3], aabb1[0] + aabb1[3]
             min1_y, max1_y = aabb1[1] - aabb1[4], aabb1[1] + aabb1[4]
             min1_z, max1_z = aabb1[2] - aabb1[5], aabb1[2] + aabb1[5]
@@ -959,7 +942,7 @@ class SpatialBVH:
                 if i > j:
                     i, j = j, i
                 if 0 <= i < j < len(bounding_boxes):
-                    all_collisions.append((i, j))
+                    all_collisions.append((int(i), int(j)))
                     visited[i], visited[j] = True, True
                 continue
 
@@ -1022,7 +1005,10 @@ class SpatialBVH:
         candidate_leaf_ids: list[int],
         find_all: bool = False,
     ) -> bool:
-        """Cast a ray through the SpatialBVH and return candidate leaf IDs ordered by distance."""
+        """Cast a ray through the SpatialBVH and return candidate leaf IDs ordered by distance.
+
+        Every candidate is returned; `find_all` is accepted for API parity only.
+        """
         candidate_leaf_ids.clear()
 
         if self.arena_root < 0 or self.arena_aabb is None:
@@ -1030,9 +1016,9 @@ class SpatialBVH:
 
         heap = []
 
-        # Test root node
-        root_aabb_data = self.arena_aabb[self.arena_root]
-        root_aabb = AABB(*root_aabb_data)
+        # Test root node. tolist() keeps the slab math on Python floats: numpy scalars cost
+        # about a third more per node and warn on the 0*inf of a degenerate slab.
+        root_aabb = AABB(*self.arena_aabb[self.arena_root].tolist())
         intersects, rtmin, rtmax = _ray_aabb_intersect(origin, direction, root_aabb)
         if not intersects or rtmax < 0.0:
             return False
@@ -1050,17 +1036,14 @@ class SpatialBVH:
             is_leaf = obj_id >= 0
 
             if is_leaf:
-                candidate_leaf_ids.append(obj_id)
+                candidate_leaf_ids.append(int(obj_id))
                 any_found = True
-                if not find_all and len(candidate_leaf_ids) >= 1:
-                    pass  # Continue for ordering
                 continue
 
             # Internal node - test children
             left_idx = self.arena_left[idx]
             if left_idx >= 0:
-                left_aabb_data = self.arena_aabb[left_idx]
-                left_aabb = AABB(*left_aabb_data)
+                left_aabb = AABB(*self.arena_aabb[left_idx].tolist())
                 intersects, cmin, cmax = _ray_aabb_intersect(
                     origin, direction, left_aabb
                 )
@@ -1069,8 +1052,7 @@ class SpatialBVH:
 
             right_idx = self.arena_right[idx]
             if right_idx >= 0:
-                right_aabb_data = self.arena_aabb[right_idx]
-                right_aabb = AABB(*right_aabb_data)
+                right_aabb = AABB(*self.arena_aabb[right_idx].tolist())
                 intersects, cmin, cmax = _ray_aabb_intersect(
                     origin, direction, right_aabb
                 )
@@ -1091,8 +1073,8 @@ class SpatialBVH:
         stack: list[int] = [self.arena_root]
         while stack:
             idx = stack.pop()
-            a = self.arena_aabb[idx]
-            if not self._aabb_intersect_internal(query, AABB(a[0], a[1], a[2], a[3], a[4], a[5])):
+            node = AABB(*self.arena_aabb[idx].tolist())
+            if not self._aabb_intersect_internal(query, node):
                 continue
             check_count += 1
             obj_id = int(self.arena_object_id[idx])
@@ -1127,7 +1109,7 @@ class SpatialBVH:
         stack: list[int] = [self.arena_root]
         while stack:
             idx = stack.pop()
-            a = self.arena_aabb[idx]
+            a = self.arena_aabb[idx].tolist()
             if (
                 a[0] - a[3] > qcx + qhx
                 or a[0] + a[3] < qcx - qhx
