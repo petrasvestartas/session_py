@@ -23,18 +23,17 @@ _sym_db = _symbol_database.Default()
 
 
 from . import polyline_pb2 as polyline__pb2
-from . import vector_pb2 as vector__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\relement.proto\x12\rsession_proto\x1a\x0epolyline.proto\x1a\x0cvector.proto\"\x81\x01\n\x0e\x45lementFeature\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x66\x65\x61ture_type\x18\x02 \x01(\t\x12\x12\n\nface_index\x18\x03 \x01(\x05\x12)\n\x08outlines\x18\x04 \x03(\x0b\x32\x17.session_proto.Polyline\x12\x0c\n\x04guid\x18\x05 \x01(\t\"\xab\x02\n\x07\x45lement\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x15\n\rgeometry_type\x18\x03 \x01(\t\x12\x15\n\rgeometry_data\x18\x04 \x01(\x0c\x12\x14\n\x0c\x65lement_type\x18\n \x01(\t\x12\x14\n\x0c\x65lement_data\x18\x0b \x01(\x0c\x12\x30\n\x11insertion_vectors\x18\x0c \x03(\x0b\x32\x15.session_proto.Vector\x12)\n\ndimensions\x18\r \x01(\x0b\x32\x15.session_proto.Vector\x12/\n\x08\x66\x65\x61tures\x18\x0e \x03(\x0b\x32\x1d.session_proto.ElementFeatureJ\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x08\x10\tJ\x04\x08\t\x10\nb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\relement.proto\x12\rsession_proto\x1a\x0epolyline.proto\"\x81\x01\n\x0e\x45lementFeature\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x66\x65\x61ture_type\x18\x02 \x01(\t\x12\x12\n\nface_index\x18\x03 \x01(\x05\x12)\n\x08outlines\x18\x04 \x03(\x0b\x32\x17.session_proto.Polyline\x12\x0c\n\x04guid\x18\x05 \x01(\t\"\xfd\x01\n\x07\x45lement\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x15\n\rgeometry_type\x18\x03 \x01(\t\x12\x15\n\rgeometry_data\x18\x04 \x01(\x0c\x12\x14\n\x0c\x65lement_type\x18\n \x01(\t\x12\x14\n\x0c\x65lement_data\x18\x0b \x01(\x0c\x12\x19\n\x11insertion_vectors\x18\x0c \x03(\x01\x12\x12\n\ndimensions\x18\r \x03(\x01\x12/\n\x08\x66\x65\x61tures\x18\x0e \x03(\x0b\x32\x1d.session_proto.ElementFeatureJ\x04\x08\x05\x10\x06J\x04\x08\x06\x10\x07J\x04\x08\x07\x10\x08J\x04\x08\x08\x10\tJ\x04\x08\t\x10\nb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'element_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_ELEMENTFEATURE']._serialized_start=63
-  _globals['_ELEMENTFEATURE']._serialized_end=192
-  _globals['_ELEMENT']._serialized_start=195
-  _globals['_ELEMENT']._serialized_end=494
+  _globals['_ELEMENTFEATURE']._serialized_start=49
+  _globals['_ELEMENTFEATURE']._serialized_end=178
+  _globals['_ELEMENT']._serialized_start=181
+  _globals['_ELEMENT']._serialized_end=434
 # @@protoc_insertion_point(module_scope)

@@ -645,10 +645,13 @@ class Element:
         proto.element_type = self.element_type_name()
         proto.element_data = self.element_data_dumps()
 
+        # Packed triples, not sub-messages. Not for the bytes - a unit axis is 2 B CHEAPER as a
+        # sub-message - but for the shape: no per-entry `name` String allocated on decode, and
+        # no serialize-then-reparse round trip. See element.proto.
         for v in self._insertion_vectors:
-            proto.insertion_vectors.add().ParseFromString(v.pb_dumps())
+            proto.insertion_vectors.extend([v[0], v[1], v[2]])
         if self._dimensions is not None:
-            proto.dimensions.ParseFromString(self._dimensions.pb_dumps())
+            proto.dimensions.extend([self._dimensions[0], self._dimensions[1], self._dimensions[2]])
         for f in self._features:
             pf = proto.features.add()
             pf.guid = f.guid
@@ -679,13 +682,14 @@ class Element:
         from .polyline import Polyline
         from .vector import Vector
 
+        iv = list(proto.insertion_vectors)
         elem._insertion_vectors = [
-            Vector.pb_loads(v.SerializeToString()) for v in proto.insertion_vectors
+            Vector(iv[i], iv[i + 1], iv[i + 2]) for i in range(0, len(iv) - 2, 3)
         ]
-        # HasField, not a truthiness check: (0, 0, 0) is a legitimate authored value and must
-        # not be confused with "never authored", which is what None means here.
-        if proto.HasField("dimensions"):
-            elem._dimensions = Vector.pb_loads(proto.dimensions.SerializeToString())
+        # Length, not a truthiness check: (0, 0, 0) is a legitimate authored value and must not
+        # be confused with "never authored", which is what an EMPTY field means here.
+        if len(proto.dimensions) == 3:
+            elem._dimensions = Vector(proto.dimensions[0], proto.dimensions[1], proto.dimensions[2])
         # Assigned, not minted: a feature off the wire is the SAME feature the package wrote,
         # and anything holding its guid must still find it. Empty means the file predates the
         # field, so the lazy mint is left to whoever asks first.
