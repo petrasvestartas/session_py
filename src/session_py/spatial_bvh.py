@@ -871,34 +871,6 @@ class SpatialBVH:
             and max1_z >= min2_z
         )
 
-    def _aabb_intersect_fast(self, idx1: int, idx2: int) -> bool:
-        """Fast AABB intersection check using NumPy arena."""
-        aabb1 = self.arena_aabb[idx1]
-        aabb2 = self.arena_aabb[idx2]
-
-        min1_x = aabb1[0] - aabb1[3]
-        max1_x = aabb1[0] + aabb1[3]
-        min1_y = aabb1[1] - aabb1[4]
-        max1_y = aabb1[1] + aabb1[4]
-        min1_z = aabb1[2] - aabb1[5]
-        max1_z = aabb1[2] + aabb1[5]
-
-        min2_x = aabb2[0] - aabb2[3]
-        max2_x = aabb2[0] + aabb2[3]
-        min2_y = aabb2[1] - aabb2[4]
-        max2_y = aabb2[1] + aabb2[4]
-        min2_z = aabb2[2] - aabb2[5]
-        max2_z = aabb2[2] + aabb2[5]
-
-        return (
-            min1_x <= max2_x
-            and max1_x >= min2_x
-            and min1_y <= max2_y
-            and max1_y >= min2_y
-            and min1_z <= max2_z
-            and max1_z >= min2_z
-        )
-
     def check_all_collisions(
         self, bounding_boxes: list[OBB]
     ) -> tuple[list[tuple[int, int]], list[int], int]:
@@ -1023,7 +995,10 @@ class SpatialBVH:
         candidate_leaf_ids: list[int],
         find_all: bool = False,
     ) -> bool:
-        """Cast a ray through the SpatialBVH and return candidate leaf IDs ordered by distance."""
+        """Cast a ray through the SpatialBVH and return candidate leaf IDs ordered by distance.
+
+        Every candidate is returned; `find_all` is accepted for API parity only.
+        """
         candidate_leaf_ids.clear()
 
         if self.arena_root < 0 or self.arena_aabb is None:
@@ -1051,10 +1026,8 @@ class SpatialBVH:
             is_leaf = obj_id >= 0
 
             if is_leaf:
-                candidate_leaf_ids.append(obj_id)
+                candidate_leaf_ids.append(int(obj_id))
                 any_found = True
-                if not find_all and len(candidate_leaf_ids) >= 1:
-                    pass  # Continue for ordering
                 continue
 
             # Internal node - test children
