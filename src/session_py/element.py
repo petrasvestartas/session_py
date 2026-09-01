@@ -33,11 +33,30 @@ class ElementFeature:
     """
 
     def __init__(self, feature_type: str = "", face_index: int = -1, outlines=None, name: str = ""):
+        self._guid: str | None = None
         self.name = name
         self.feature_type = feature_type
         #: Face of the host this applies to; -1 = the whole element.
         self.face_index = face_index
         self.outlines = list(outlines or [])
+
+    @property
+    def guid(self) -> str:
+        """Lazily minted, like every other identity in the kernel - a feature nobody names never
+        pays for a guid.
+
+        A feature is addressable in its own right: the package that wrote a joint needs to name
+        it again later, to update it, to report a clash against it, or to let a viewer select one
+        of the forty cuts on a beam. The only other handle is the index in ``features``, and that
+        moves the moment an earlier feature is removed.
+        """
+        if getattr(self, "_guid", None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str) -> None:
+        self._guid = value
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, ElementFeature):
@@ -476,6 +495,7 @@ class Element:
             proto.dimensions.ParseFromString(self._dimensions.pb_dumps())
         for f in self._features:
             pf = proto.features.add()
+            pf.guid = f.guid
             pf.name = f.name
             pf.feature_type = f.feature_type
             pf.face_index = f.face_index
@@ -505,15 +525,20 @@ class Element:
         # not be confused with "never authored", which is what None means here.
         if proto.HasField("dimensions"):
             elem._dimensions = Vector.pb_loads(proto.dimensions.SerializeToString())
-        elem._features = [
-            ElementFeature(
+        # Assigned, not minted: a feature off the wire is the SAME feature the package wrote,
+        # and anything holding its guid must still find it. Empty means the file predates the
+        # field, so the lazy mint is left to whoever asks first.
+        elem._features = []
+        for f in proto.features:
+            feature = ElementFeature(
                 feature_type=f.feature_type,
                 face_index=f.face_index,
                 outlines=[Polyline.pb_loads(o.SerializeToString()) for o in f.outlines],
                 name=f.name,
             )
-            for f in proto.features
-        ]
+            if f.guid:
+                feature.guid = f.guid
+            elem._features.append(feature)
         return elem
 
     # ── Polymorphic elements ────────────────────────────────────────────────────────────

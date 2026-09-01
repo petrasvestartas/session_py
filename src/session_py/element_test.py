@@ -380,6 +380,7 @@ def test_features_round_trip():
             "notch",
         )
     )
+    feature_guid = e.features[0].guid
 
     loaded = Element.pb_loads(e.pb_dumps())
 
@@ -393,6 +394,9 @@ def test_features_round_trip():
     MINI_CHECK(loaded.features[0].face_index == 2)
     MINI_CHECK(loaded.features[0].name == "notch")
     MINI_CHECK(len(loaded.features[0].outlines) == 1)
+    # The guid is the feature's handle: a package that wrote a joint has to find it again, and
+    # the index in `features` moves the moment an earlier feature is removed.
+    MINI_CHECK(loaded.features[0].guid == feature_guid)
 
 
 @MINI_TEST("Element", "DimensionsAreNominalNotMeasured")
