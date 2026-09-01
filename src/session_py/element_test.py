@@ -433,5 +433,145 @@ def test_registry_leaves_base_bytes_unchanged():
     MINI_CHECK(e.element_type_name() == "")
 
 
+@MINI_TEST("Element", "UnknownTypeSurvivesResave")
+def test_unknown_type_survives_resave():
+    from session_py import Element
+    from session_py.proto import element_pb2
+
+    # The whole point of element_type/element_data: a viewer WITHOUT the wood package opens a
+    # wood file, edits something else, and saves. If the kernel does not carry these two
+    # through, that save silently destroys the payload - the geometry still looks right, so
+    # nothing announces the loss. This is the test that would have caught it.
+    proto = element_pb2.Element()
+    proto.ParseFromString(Element(geometry=_unit_quad(), name="plate").pb_dumps())
+    proto.element_type = "wood::Plate"
+    proto.element_data = b"the package's own bytes"
+    original = proto.SerializeToString()
+
+    loaded = Element.pb_loads(original)
+    MINI_CHECK(loaded.element_type_name() == "wood::Plate")
+    MINI_CHECK(loaded.element_data_dumps() == b"the package's own bytes")
+
+    resaved = element_pb2.Element()
+    resaved.ParseFromString(loaded.pb_dumps())
+    MINI_CHECK(resaved.element_type == "wood::Plate")
+    MINI_CHECK(resaved.element_data == b"the package's own bytes")
+
+
+@MINI_TEST("Element", "DuplicateKeepsEveryField")
+def test_duplicate_keeps_every_field():
+    from session_py import Element
+    from session_py import Vector
+    from session_py.element import ElementFeature
+
+    # A copy that drops fields is the same silent data loss as a save that drops them, and a
+    # duplicate is what an assembly does to place the same part twice.
+    e = Element(geometry=_unit_quad(), name="original")
+    e.insertion_vectors = [Vector(0, 0, 1)]
+    e.dimensions = Vector(120.0, 80.0, 12.5)
+    e.add_feature(ElementFeature("cut", 2, [], "notch"))
+
+    copy = e.duplicate()
+
+    MINI_CHECK(copy == e)  # every carried field compares equal
+    MINI_CHECK(copy.guid != e.guid)  # but it is a different object
+    MINI_CHECK(len(copy.insertion_vectors) == 1)
+    MINI_CHECK(copy.dimensions is not None)
+    MINI_CHECK(len(copy.features) == 1)
+
+
+@MINI_TEST("Element", "EqualityComparesCarriedFields")
+def test_equality_compares_carried_fields():
+    from session_py import Element
+    from session_py import Vector
+
+    # Equality that looks at name and geometry only makes every round-trip test above vacuous:
+    # it would pass while the loader dropped all five of the other fields.
+    a = Element(geometry=_unit_quad(), name="same")
+    b = Element(geometry=_unit_quad(), name="same")
+    MINI_CHECK(a == b)
+
+    b.dimensions = Vector(1, 2, 3)
+    MINI_CHECK(a != b)
+
+
+###############################################################################################
+# ElementFeature
+###############################################################################################
+
+@MINI_TEST("ElementFeature", "Constructor")
+def test_element_feature_constructor():
+    from session_py import Point
+    from session_py import Polyline
+    from session_py.element import ElementFeature
+
+    outline = Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])
+    f = ElementFeature("cut", 2, [outline], "notch")
+
+    MINI_CHECK(f.feature_type == "cut")
+    MINI_CHECK(f.face_index == 2)
+    MINI_CHECK(f.name == "notch")
+    MINI_CHECK(len(f.outlines) == 1)
+
+    same = ElementFeature("cut", 2, [outline], "notch")
+    MINI_CHECK(f == same)
+    MINI_CHECK(not (f != same))
+    # Data equality, not identity - the two guids differ and the features are still equal.
+    MINI_CHECK(f.guid != same.guid)
+
+    other = ElementFeature("drill", 2, [outline], "notch")
+    MINI_CHECK(f != other)
+
+    MINI_CHECK(str(f) == "ElementFeature(cut, face 2, 1 outline(s))")
+    MINI_CHECK(repr(f) == str(f))
+
+    empty = ElementFeature()
+    MINI_CHECK(empty.face_index == -1)
+    MINI_CHECK(len(empty.outlines) == 0)
+
+
+@MINI_TEST("ElementFeature", "Json Roundtrip")
+def test_element_feature_json_roundtrip():
+    from session_py import Point
+    from session_py import Polyline
+    from session_py.element import ElementFeature
+
+    f = ElementFeature("cut", 2,
+                       [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
+                       "notch")
+    feature_guid = f.guid
+
+    fname = "serialization/test_element_feature.json"
+    f.file_json_dump(fname)
+    loaded = ElementFeature.file_json_load(fname)
+
+    MINI_CHECK(loaded == f)
+    MINI_CHECK(len(loaded.outlines) == 1)
+    # Read back, not re-minted: whoever holds the guid must still find this feature.
+    MINI_CHECK(loaded.guid == feature_guid)
+
+
+@MINI_TEST("ElementFeature", "Protobuf Roundtrip")
+def test_element_feature_protobuf_roundtrip():
+    from session_py import Point
+    from session_py import Polyline
+    from session_py.element import ElementFeature
+
+    f = ElementFeature("drill", 5,
+                       [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
+                       "hole")
+    feature_guid = f.guid
+
+    path = "serialization/test_element_feature.bin"
+    f.pb_dump(path)
+    loaded = ElementFeature.pb_load(path)
+
+    MINI_CHECK(loaded == f)
+    MINI_CHECK(loaded.feature_type == "drill")
+    MINI_CHECK(loaded.face_index == 5)
+    MINI_CHECK(len(loaded.outlines) == 1)
+    MINI_CHECK(loaded.guid == feature_guid)
+
+
 if __name__ == "__main__":
     run_all(language="python")

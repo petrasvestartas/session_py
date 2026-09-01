@@ -714,6 +714,10 @@ class Point:
         return f"Point({self.name}, {self[0]}, {self[1]}, {self[2]}, {repr(self.pointcolor)}, {self.width})"
 
     def __eq__(self, other):
+        # C++ and Rust take a `Point` and cannot be handed anything else; Python can, and
+        # without this guard `p == None` raised AttributeError instead of answering False.
+        if not isinstance(other, Point):
+            return False
         return (
             self.name == other.name
             and round(self[0], Tolerance.ROUNDING) == round(other[0], Tolerance.ROUNDING)

@@ -392,6 +392,10 @@ class Quaternion:
         return Quaternion(-self.scalar, self.vector * -1.0)
 
     def __eq__(self, other):
+        # C++ and Rust take a `Quaternion` and cannot be handed anything else; Python can, and
+        # without this guard `q == None` raised AttributeError instead of answering False.
+        if not isinstance(other, Quaternion):
+            return False
         return (
             self.name == other.name
             and round(self.scalar, Tolerance.ROUNDING) == round(other.scalar, Tolerance.ROUNDING)

@@ -7,6 +7,20 @@ import uuid
 import copy
 from .xform import Xform
 
+
+def _to_hex(data: bytes) -> str:
+    """``element_data`` is opaque BYTES and JSON has no byte type, so it travels as hex.
+
+    Hex rather than base64 because it is a handful of lines in each of the three languages and
+    needs no dependency in any of them - and this has to encode identically in all three, or the
+    JSON stops being a cross-language format.
+    """
+    return data.hex()
+
+
+def _from_hex(s: str) -> bytes:
+    return bytes.fromhex(s) if s else b""
+
 if TYPE_CHECKING:
     from pathlib import Path
     from .vector import Vector
@@ -68,11 +82,110 @@ class ElementFeature:
             and self.outlines == other.outlines
         )
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         return (
             f"ElementFeature({self.feature_type}, face {self.face_index}, "
             f"{len(self.outlines)} outline(s))"
         )
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    ###########################################################################################
+    # Serialization - JSON
+    ###########################################################################################
+
+    def __jsondump__(self):
+        """A feature serializes on its own, not only as part of its host.
+
+        A package that stores a library of standard cuts, or reports one across a wire, has a
+        single feature in hand and nothing to attach it to - and every other class in the kernel
+        round-trips by itself.
+        """
+        return {
+            "face_index": self.face_index,
+            "feature_type": self.feature_type,
+            "guid": self.guid,
+            "name": self.name,
+            "outlines": [o.__jsondump__() for o in self.outlines],
+            "type": "ElementFeature",
+        }
+
+    @classmethod
+    def __jsonload__(cls, data, guid=None, name=None):
+        from .polyline import Polyline
+        feature = cls(
+            feature_type=data.get("feature_type", ""),
+            face_index=data.get("face_index", -1),
+            outlines=[Polyline.__jsonload__(o) for o in data.get("outlines", [])],
+            name=name if name is not None else data.get("name", ""),
+        )
+        # Assigned, not minted: a feature read back is the SAME feature, so anything holding its
+        # guid still finds it. Absent means the file predates the field - leave the lazy mint.
+        g = guid if guid is not None else data.get("guid", "")
+        if g:
+            feature.guid = g
+        return feature
+
+    def file_json_dumps(self) -> str:
+        import json
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def file_json_loads(cls, s: str) -> "ElementFeature":
+        import json
+        return cls.__jsonload__(json.loads(s))
+
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+        import json
+        with open(filepath, 'w') as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "ElementFeature":
+        import json
+        with open(filepath) as f:
+            return cls.__jsonload__(json.load(f))
+
+    ###########################################################################################
+    # Serialization - Protobuf
+    ###########################################################################################
+
+    def pb_dumps(self) -> bytes:
+        from .proto import element_pb2
+        proto = element_pb2.ElementFeature()
+        proto.guid = self.guid
+        proto.name = self.name
+        proto.feature_type = self.feature_type
+        proto.face_index = self.face_index
+        for o in self.outlines:
+            proto.outlines.add().ParseFromString(o.pb_dumps())
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> "ElementFeature":
+        from .polyline import Polyline
+        from .proto import element_pb2
+        proto = element_pb2.ElementFeature()
+        proto.ParseFromString(data)
+        feature = cls(
+            feature_type=proto.feature_type,
+            face_index=proto.face_index,
+            outlines=[Polyline.pb_loads(o.SerializeToString()) for o in proto.outlines],
+            name=proto.name,
+        )
+        if proto.guid:
+            feature.guid = proto.guid
+        return feature
+
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+        with open(filepath, 'wb') as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "ElementFeature":
+        with open(filepath, 'rb') as f:
+            return cls.pb_loads(f.read())
 
 
 class Element:
@@ -88,6 +201,10 @@ class Element:
         self._features: list[ElementFeature] = []
         self._insertion_vectors: list = []
         self._dimensions = None
+        # The derived type name and payload this element was LOADED with, for an element whose
+        # type nobody registered. Empty on anything authored in memory. See element_type_name.
+        self._element_type = ""
+        self._element_data = b""
         self._is_dirty = True
         self._aabb = None
         self._obb = None
@@ -221,7 +338,16 @@ class Element:
         result.name = copy.deepcopy(self.name, memo)
         result._geometry = copy.deepcopy(self._geometry, memo)
         result._geometry_ops = list(self._geometry_ops)
-        result._features = list(self._features)
+        result._features = copy.deepcopy(self._features, memo)
+        # __new__ runs no __init__, so anything not assigned here does not merely come back
+        # empty - the attribute does not EXIST, and the next read raises AttributeError. These
+        # two were added with the registry and missed, which made `duplicate()` and any
+        # `copy.deepcopy` crash on the following `pb_dumps` or property read. C++ copies all
+        # four in its copy constructor and Rust gets them from `#[derive(Clone)]`.
+        result._insertion_vectors = copy.deepcopy(self._insertion_vectors, memo)
+        result._dimensions = copy.deepcopy(self._dimensions, memo)
+        result._element_type = self._element_type
+        result._element_data = self._element_data
         result._is_dirty = True
         result._aabb = None
         result._obb = None
@@ -241,7 +367,18 @@ class Element:
     def __eq__(self, other):
         if not isinstance(other, Element):
             return False
-        return self.name == other.name and self.geometry_type_name == other.geometry_type_name
+        # Data equality, not identity - the guid is excluded, exactly as in Line. Every field
+        # that survives a round trip is compared, so ``pb_loads(e.pb_dumps()) == e`` is a real
+        # test rather than one that passes on two fields and ignores the other five.
+        return (
+            self.name == other.name
+            and self.geometry_type_name == other.geometry_type_name
+            and self.element_type_name() == other.element_type_name()
+            and self.element_data_dumps() == other.element_data_dumps()
+            and self._insertion_vectors == other._insertion_vectors
+            and self._dimensions == other._dimensions
+            and self._features == other._features
+        )
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -429,10 +566,19 @@ class Element:
 
     def __jsondump__(self):
         geo_data = self._geometry.__jsondump__() if self._geometry is not None else None
+        # Everything the element carries, not just the two fields it had before the registry: a
+        # format that silently drops five of them is not a serialization format, and
+        # ``file_json_dump`` has to round-trip whatever ``pb_dumps`` does, or the two disagree
+        # about what an Element is.
         return {
+            "dimensions": self._dimensions.__jsondump__() if self._dimensions is not None else None,
+            "element_data": _to_hex(self.element_data_dumps()),
+            "element_type": self.element_type_name(),
+            "features": [f.__jsondump__() for f in self._features],
             "geometry_data": geo_data,
             "geometry_type": self.geometry_type_name,
             "guid": self.guid,
+            "insertion_vectors": [v.__jsondump__() for v in self._insertion_vectors],
             "name": self.name,
             "type": "Element",
         }
@@ -448,6 +594,16 @@ class Element:
         elem = cls(geometry=geometry)
         elem.guid = guid if guid is not None else data.get("guid", elem.guid)
         elem.name = name if name is not None else data.get("name", elem.name)
+        from .vector import Vector
+        # None, not absent-or-empty: (0, 0, 0) is a legitimate authored dimension, so the two
+        # cases stay distinguishable here exactly as HasField keeps them apart on the wire.
+        dims = data.get("dimensions")
+        if dims is not None:
+            elem._dimensions = Vector.__jsonload__(dims)
+        elem._element_type = data.get("element_type", "")
+        elem._element_data = _from_hex(data.get("element_data", ""))
+        elem._features = [ElementFeature.__jsonload__(f) for f in data.get("features", [])]
+        elem._insertion_vectors = [Vector.__jsonload__(v) for v in data.get("insertion_vectors", [])]
         return elem
 
     def file_json_dumps(self) -> str:
@@ -514,6 +670,11 @@ class Element:
         elem = cls(geometry=geometry)
         elem.guid = proto.guid
         elem.name = proto.name
+        # Carried, not interpreted. A viewer with no wood package registered loads a wood element
+        # as a base Element; if these two were dropped here, saving it again wrote empty values
+        # and destroyed the payload the file was written with. See ``element_type_name``.
+        elem._element_type = proto.element_type
+        elem._element_data = proto.element_data
 
         from .polyline import Polyline
         from .vector import Vector
@@ -557,16 +718,22 @@ class Element:
     def element_type_name(self) -> str:
         """This element's own type name, written to ``element_type``.
 
-        The base returns ``""`` so nothing is emitted for a plain Element.
+        A plain Element authored in memory returns ``""``, so nothing is emitted for it.
+
+        A base Element that was LOADED from a derived element's bytes returns the type it was
+        carrying. Without that, opening a wood file in a viewer with no wood registered and
+        saving it again wrote ``element_type=""`` and destroyed the payload. A derived class
+        overrides this and never consults the carried value.
         """
-        return ""
+        return self._element_type
 
     def element_data_dumps(self) -> bytes:
         """This element's own state, written to ``element_data``.
 
-        Opaque to the kernel - the format is the registering package's business.
+        Opaque to the kernel - the format is the registering package's business. Carried
+        through for the same reason as ``element_type_name`` above.
         """
-        return b""
+        return self._element_data
 
     @classmethod
     def register_type(cls, type_name: str, factory) -> None:

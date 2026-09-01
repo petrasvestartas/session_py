@@ -143,6 +143,11 @@ class Vector:
         return f"Vector({self.name}, {round(self[0], Tolerance.ROUNDING):.6f}, {round(self[1], Tolerance.ROUNDING):.6f}, {round(self[2], Tolerance.ROUNDING):.6f}, {round(mag, Tolerance.ROUNDING):.6f})"
 
     def __eq__(self, other):
+        # C++ and Rust take a `Vector` and cannot be handed anything else; Python can, and
+        # without this guard `v == None` raised AttributeError instead of answering False -
+        # which is how comparing an unset `Element.dimensions` crashed rather than compared.
+        if not isinstance(other, Vector):
+            return False
         return (
             self.name == other.name
             and round(self[0], 6) == round(other[0], 6)
