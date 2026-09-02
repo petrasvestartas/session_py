@@ -359,8 +359,10 @@ def test_nurbsknot_access():
 
     # Set nurbsknots
     is_set = s.set_nurbsknot(0, 2, 0.5)
+    MINI_CHECK(is_set)
     MINI_CHECK(s.nurbsknot(0, 2) == 0.5)
     is_set = s.set_nurbsknot(0, 2, 0.0)
+    MINI_CHECK(is_set)
 
     # Verify start multiplicity
     mult_u_start = s.nurbsknot_multiplicity(0, 0)
@@ -410,6 +412,8 @@ def test_domain():
 
     MINI_CHECK(TOLERANCE.is_close(domain_u[0], 0))
     MINI_CHECK(TOLERANCE.is_close(domain_u[1], 1))
+    MINI_CHECK(TOLERANCE.is_close(domain_v[0], 0))
+    MINI_CHECK(TOLERANCE.is_close(domain_v[1], 1))
 
     # Set Domain
     is_set_u = s.set_domain(0, -1.1, 2.3)

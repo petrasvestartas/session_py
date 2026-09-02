@@ -413,11 +413,6 @@ class NurbsSurfaceTrimmed:
         self.m_surface = NurbsSurface()
         self.m_outer_loop = NurbsCurve()
         self.m_inner_loops = []
-        # Transient build-time hint (not serialized/compared): the outer/inner loops as their
-        # natural arrangement-run segments, head-to-tail. Populated by split_by_uv_curves so
-        # BRep._split builds per-segment edges that mate with adjacent faces (watertight imprint).
-        self.m_outer_segments = []
-        self.m_inner_segments = []
 
     @property
     def guid(self) -> str:
@@ -487,7 +482,7 @@ class NurbsSurfaceTrimmed:
         return ts
 
     @staticmethod
-    def split_by_uv_curves(srf: "NurbsSurface", pcurves: list["NurbsCurve"], tolerance: float | None = None, use_domain_border: bool = True, n_boundary: int = 0) -> list["NurbsSurfaceTrimmed"]:
+    def split_by_uv_curves(srf: "NurbsSurface", pcurves: list["NurbsCurve"], tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
         """Split a surface into trimmed faces by UV pcurves.
 
         Builds a planar arrangement of the UV domain rectangle and the given
@@ -495,16 +490,9 @@ class NurbsSurfaceTrimmed:
         NurbsSurfaceTrimmed per face. Loops are exact trims of the input
         pcurves joined with straight border segments. Dangling open cutters
         that do not reach the border or another cutter are discarded.
-
-        When ``use_domain_border`` is False, the four domain border sides are
-        not added; the caller must supply closed boundary loops as pcurves
-        (used by BRep splitting to split a face inside its own trim region).
-        ``n_boundary`` then gives the number of leading pcurves that form the
-        region boundary; their vertices anchor the arrangement so the exterior
-        cycle is not mistaken for a hole.
         """
         def _is_boundary(cidx):
-            return cidx < 0 or (not use_domain_border and 0 <= cidx < n_boundary)
+            return cidx < 0
         import math
         from .point import Point
 
@@ -601,10 +589,7 @@ class NurbsSurfaceTrimmed:
                 continue
             # A cutter lying entirely on one border line coincides with the
             # domain edge (e.g. a cut circle on the seam) and splits nothing.
-            # When the caller supplies its own boundary loops (no domain
-            # border), those loops legitimately run along the domain edges.
-            if use_domain_border and (
-               all(abs(p[0] - u0) < snap_uv for p in pts) or
+            if (all(abs(p[0] - u0) < snap_uv for p in pts) or
                all(abs(p[0] - u1) < snap_uv for p in pts) or
                all(abs(p[1] - v0) < snap_uv for p in pts) or
                all(abs(p[1] - v1) < snap_uv for p in pts)):
@@ -612,11 +597,10 @@ class NurbsSurfaceTrimmed:
             polylines.append({'cidx': cidx, 'pts': pts, 'ts': ts})
 
         # Border sides as polylines: cidx -1 bottom, -2 right, -3 top, -4 left
-        if use_domain_border:
-            polylines.append({'cidx': -1, 'pts': [[u0, v0], [u1, v0]], 'ts': [u0, u1]})
-            polylines.append({'cidx': -2, 'pts': [[u1, v0], [u1, v1]], 'ts': [v0, v1]})
-            polylines.append({'cidx': -3, 'pts': [[u1, v1], [u0, v1]], 'ts': [u1, u0]})
-            polylines.append({'cidx': -4, 'pts': [[u0, v1], [u0, v0]], 'ts': [v1, v0]})
+        polylines.append({'cidx': -1, 'pts': [[u0, v0], [u1, v0]], 'ts': [u0, u1]})
+        polylines.append({'cidx': -2, 'pts': [[u1, v0], [u1, v1]], 'ts': [v0, v1]})
+        polylines.append({'cidx': -3, 'pts': [[u1, v1], [u0, v1]], 'ts': [u1, u0]})
+        polylines.append({'cidx': -4, 'pts': [[u0, v1], [u0, v0]], 'ts': [v1, v0]})
 
         # ---- 2. Segment-segment intersections (Newton-refined on real curves) ----
         def seg_seg(p1, p2, p3, p4):
@@ -903,20 +887,20 @@ class NurbsSurfaceTrimmed:
             return pieces
 
         def cycle_to_loop(cycle):
-            # Returns (loop, segments, seg_valid). seg_valid True only when the run pieces join
-            # into one closed loop (and so reconstruct it exactly for per-segment edge imprinting).
+            # Join the run pieces into one closed loop; a polyline loop from the face walk is
+            # the fallback when the pieces do not chain.
             pieces = cycle_to_segments(cycle)
             if not pieces:
-                return NurbsCurve(), [], False
+                return NurbsCurve()
             joined = NurbsCurve.join(pieces, snap_uv * 4.0)
             if len(joined) == 1 and joined[0].is_closed():
-                return joined[0], pieces, True
+                return joined[0]
             loop_pts = []
             for hi in cycle:
                 a = verts[hes[hi][0]]
                 loop_pts.append(Point(a[0], a[1], 0.0))
             loop_pts.append(Point(loop_pts[0][0], loop_pts[0][1], 0.0))
-            return NurbsCurve.create(False, 1, loop_pts), [], False
+            return NurbsCurve.create(False, 1, loop_pts)
 
         def loop_signed_area(loop):
             n = 64
@@ -929,32 +913,20 @@ class NurbsSurfaceTrimmed:
                 prev = p
             return s * 0.5
 
-        def reverse_segments(segs):
-            segs.reverse()
-            for s in segs:
-                s.reverse()
-
         result = []
         for fi, (cycle, area) in enumerate(pos_faces):
-            outer, outer_segs, outer_seg_valid = cycle_to_loop(cycle)
+            outer = cycle_to_loop(cycle)
             if not outer.is_valid():
                 continue
             if loop_signed_area(outer) < 0.0:
                 outer.reverse()
-                if outer_seg_valid:
-                    reverse_segments(outer_segs)
             ts = NurbsSurfaceTrimmed.create(srf, outer)
-            if outer_seg_valid:
-                ts.m_outer_segments = outer_segs
             for hole_cycle in holes_of[fi]:
-                hole, hole_segs, hole_seg_valid = cycle_to_loop(hole_cycle)
+                hole = cycle_to_loop(hole_cycle)
                 if hole.is_valid():
                     if loop_signed_area(hole) > 0.0:
                         hole.reverse()
-                        if hole_seg_valid:
-                            reverse_segments(hole_segs)
                     ts.add_inner_loop(hole)
-                    ts.m_inner_segments.append(hole_segs if hole_seg_valid else [])
             result.append(ts)
         return result
 
