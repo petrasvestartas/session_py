@@ -3084,9 +3084,18 @@ class NurbsSurface:
         if len(proto.nurbsknots_v) == len(surface.m_nurbsknot[1]):
             surface.m_nurbsknot[1] = np.array(list(proto.nurbsknots_v), dtype=np.float64)
 
-        # Load control vertices
-        if len(proto.cvs) == len(surface.m_cv):
-            surface.m_cv = np.array(list(proto.cvs), dtype=np.float64)
+        # Load control vertices - the wire is row-major (see pb_dumps); honor its strides
+        cv_sz = surface.cv_size()
+        stride_u = proto.cv_stride_u if proto.cv_stride_u > 0 else cv_sz * surface.m_cv_count[1]
+        stride_v = proto.cv_stride_v if proto.cv_stride_v > 0 else cv_sz
+        cvs = list(proto.cvs)
+        for i in range(surface.m_cv_count[0]):
+            for j in range(surface.m_cv_count[1]):
+                src = i * stride_u + j * stride_v
+                dst = i * surface.m_cv_stride[0] + j * surface.m_cv_stride[1]
+                for d in range(cv_sz):
+                    if src + d < len(cvs):
+                        surface.m_cv[dst + d] = cvs[src + d]
 
         surface.pointcolors = [Color(c.r, c.g, c.b, c.a) for c in proto.pointcolors]
         surface.facecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.facecolors]
