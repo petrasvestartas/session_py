@@ -45,6 +45,8 @@ from .nurbssurface import NurbsSurface
 from .primitives import Primitives
 from .nurbssurface_trimmed import NurbsSurfaceTrimmed
 from .brep import BRep
+from .brep import BRepOrientation
+from .brep import BRepRef
 from .element import Element
 from .element import ElementFeature
 from .closest import Closest
@@ -100,6 +102,8 @@ __all__ = [
     "Primitives",
     "NurbsSurfaceTrimmed",
     "BRep",
+    "BRepOrientation",
+    "BRepRef",
     "Element",
     "ElementFeature",
     "Closest",

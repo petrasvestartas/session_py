@@ -515,7 +515,7 @@ class Element:
             n = len(verts)
             return Point(sx / n, sy / n, sz / n)
         if isinstance(geo, BRep):
-            pts = geo.m_vertices
+            pts = geo.vertex_points()
             if not pts:
                 return Point(0, 0, 0)
             sx = sum(p[0] for p in pts)
@@ -557,7 +557,7 @@ class Element:
         if isinstance(geo, BRep):
             if not geo.m_vertices:
                 return OBB.from_point(Point(0, 0, 0), inflate)
-            return OBB.from_points(geo.m_vertices, inflate)
+            return OBB.from_points(geo.vertex_points(), inflate)
         return OBB.from_point(Point(0, 0, 0), inflate)
 
     ###########################################################################################

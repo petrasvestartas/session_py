@@ -2767,7 +2767,7 @@ class NurbsSurface:
         Parameters
         ----------
         dir : int
-            Direction (0=iso-u curve where v varies, 1=iso-v curve where u varies).
+            Direction that VARIES along the curve (0 = curve along u at v=c, 1 = curve along v at u=c).
         c : float
             Parameter value.
         
@@ -2806,24 +2806,21 @@ class NurbsSurface:
             
             for k in range(self.m_order[1 - dir]):
                 if dir == 0:
-                    # iso-u: v varies, u is constant at c
-                    cv_ptr = self.cv(span_index + k, i)
-                else:
-                    # iso-v: u varies, v is constant at c
+                    # curve along u (i) at v = c: blend over v
                     cv_ptr = self.cv(i, span_index + k)
+                else:
+                    # curve along v (i) at u = c: blend over u
+                    cv_ptr = self.cv(span_index + k, i)
                 
                 if cv_ptr is not None:
                     cv_sum += basis[k] * cv_ptr
             
-            # Set CV in curve
-            if self.m_is_rat and abs(cv_sum[self.m_dim]) > 1e-14:
-                w = cv_sum[self.m_dim]
-                pt = Point(cv_sum[0]/w,
-                          cv_sum[1]/w if self.m_dim > 1 else 0,
-                          cv_sum[2]/w if self.m_dim > 2 else 0)
-                nurbs_crv.set_cv(i, pt)
-                if nurbs_crv.m_is_rat:
-                    nurbs_crv.set_weight(i, w)
+            # The blend is homogeneous: store it as-is so rational surfaces give exact iso-curves
+            if self.m_is_rat:
+                nurbs_crv.set_cv_4d(i, cv_sum[0],
+                                    cv_sum[1] if self.m_dim > 1 else 0,
+                                    cv_sum[2] if self.m_dim > 2 else 0,
+                                    cv_sum[self.m_dim])
             else:
                 pt = Point(cv_sum[0],
                           cv_sum[1] if self.m_dim > 1 else 0,

@@ -604,7 +604,7 @@ class Session:
                 return OBB.from_point(Point(0, 0, 0), inflate)
             return OBB.from_points(points, inflate)
         elif isinstance(geometry, BRep):
-            points = [tp(p) for p in geometry.m_vertices]
+            points = [tp(v.point) for v in geometry.m_vertices]
             # Sample surface points to cover curved surfaces (e.g. sphere with only pole vertices)
             for srf in geometry.m_surfaces:
                 u0, u1 = srf.domain(0)
