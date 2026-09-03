@@ -102,7 +102,7 @@ def test_point_json_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    p = Point(1.5, 2.5, 3.5)
+    p = Point(1.567, 2.567, 3.567)
     p.name = "test_point"
     p.width = 2.0
     p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
@@ -121,6 +121,7 @@ def test_point_json_roundtrip():
 
     MINI_CHECK(isinstance(loaded, Point))
     MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded.guid == p.guid)
     MINI_CHECK(loaded[0] == p[0])
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])
@@ -137,7 +138,7 @@ def test_point_protobuf_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    p = Point(1.5, 2.5, 3.5)
+    p = Point(1.567, 2.567, 3.567)
     p.name = "test_point"
     p.width = 2.0
     p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
@@ -153,6 +154,7 @@ def test_point_protobuf_roundtrip():
 
     MINI_CHECK(isinstance(loaded, Point))
     MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded.guid == p.guid)
     MINI_CHECK(loaded[0] == p[0])
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])

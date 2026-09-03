@@ -559,7 +559,7 @@ class Point:
         pt.pointcolor = file_decode_node(data.get("pointcolor"))
 
         # Always assign metadata (per project convention)
-        pt.guid = guid if guid is not None else data.get("guid", pt.guid)
+        pt.guid = guid if guid is not None else data.get("guid") or pt.guid
         pt.name = name if name is not None else data.get("name", pt.name)
 
         return pt
