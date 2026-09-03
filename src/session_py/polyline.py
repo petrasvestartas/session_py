@@ -1027,20 +1027,7 @@ class Polyline:
 
         kind: 0=no endpoints, 1=both endpoints, 2=start only
         """
-        result = []
-        for i in range(1, steps + 1):
-            t = float(i) / float(steps + 1)
-            result.append(Point(
-                from_pt[0] + t * (to_pt[0] - from_pt[0]),
-                from_pt[1] + t * (to_pt[1] - from_pt[1]),
-                from_pt[2] + t * (to_pt[2] - from_pt[2]),
-            ))
-        if kind == 1:
-            result.insert(0, Point(from_pt[0], from_pt[1], from_pt[2]))
-            result.append(Point(to_pt[0], to_pt[1], to_pt[2]))
-        elif kind == 2:
-            result.insert(0, Point(from_pt[0], from_pt[1], from_pt[2]))
-        return result
+        return Point.interpolate(from_pt, to_pt, steps, kind)
 
     @staticmethod
     def quick_hull(polygon: "Polyline") -> "Polyline":
