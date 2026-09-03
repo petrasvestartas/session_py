@@ -48,6 +48,7 @@ def test_point_constructor():
     result_div = p / 2.0
     result_add = p + Vector(1.0, 1.0, 1.0)
     diff_point = p - Vector(1.0, 1.0, 1.0)
+    diff_vector = p - pother
 
     # Static sum and sub methods
     p1 = Point(1.0, 2.0, 3.0)
@@ -75,6 +76,8 @@ def test_point_constructor():
     MINI_CHECK(result_div[0] == 5.0 and result_div[1] == 10.0 and result_div[2] == 15.0)
     MINI_CHECK(result_add[0] == 11.0 and result_add[1] == 21.0 and result_add[2] == 31.0)
     MINI_CHECK(diff_point[0] == 9.0 and diff_point[1] == 19.0 and diff_point[2] == 29.0)
+    MINI_CHECK(diff_vector[0] == 9.0 and diff_vector[1] == 18.0 and diff_vector[2] == 27.0)
+    MINI_CHECK(isinstance(diff_point, Point) and isinstance(diff_vector, Vector))
     MINI_CHECK(psum[0] == 5.0 and psum[1] == 7.0 and psum[2] == 9.0)
     MINI_CHECK(pdif[0] == 3.0 and pdif[1] == 3.0 and pdif[2] == 3.0)
 

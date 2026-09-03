@@ -248,6 +248,8 @@ class Point:
         return Point(self[0] + other[0], self[1] + other[1], self[2] + other[2])
 
     def __sub__(self, other):
+        if isinstance(other, Vector):
+            return Point(self[0] - other[0], self[1] - other[1], self[2] - other[2])
         return Vector(self[0] - other[0], self[1] - other[1], self[2] - other[2])
 
     ###########################################################################################
