@@ -401,6 +401,30 @@ class Point:
         return length
 
     @staticmethod
+    def interpolate(from_pt: "Point", to_pt: "Point", steps: int, kind: int = 0) -> list["Point"]:
+        """Linear interpolation between two points.
+
+        kind: 0=no endpoints (default), 1=both endpoints, 2=start only
+        """
+        pts = []
+        if kind == 1 or kind == 2:
+            pts.append(Point(from_pt[0], from_pt[1], from_pt[2]))
+        for i in range(1, steps + 1):
+            pts.append(Point.lerp(from_pt, to_pt, float(i) / float(steps + 1)))
+        if kind == 1:
+            pts.append(Point(to_pt[0], to_pt[1], to_pt[2]))
+        return pts
+
+    @staticmethod
+    def lerp(a: "Point", b: "Point", t: float) -> "Point":
+        """Single point at parameter t in [0, 1]."""
+        return Point(
+            a[0] + t * (b[0] - a[0]),
+            a[1] + t * (b[1] - a[1]),
+            a[2] + t * (b[2] - a[2]),
+        )
+
+    @staticmethod
     def area(points: list["Point"]) -> float:
         """Calculate the area of a 2d polygon.
 

@@ -214,6 +214,36 @@ def test_squared_distance():
     MINI_CHECK(TOLERANCE.is_close(d, 14.0))
 
 
+@MINI_TEST("Point", "Interpolate")
+def test_interpolate():
+    from session_py import Point
+
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(10.0, 0.0, 0.0)
+    pts0 = Point.interpolate(a, b, 3, 0)
+    pts1 = Point.interpolate(a, b, 3, 1)
+    pts2 = Point.interpolate(a, b, 3, 2)
+
+    MINI_CHECK(len(pts0) == 3 and pts0[0][0] == 2.5 and pts0[2][0] == 7.5)
+    MINI_CHECK(len(pts1) == 5 and pts1[0][0] == 0.0 and pts1[4][0] == 10.0)
+    MINI_CHECK(len(pts2) == 4 and pts2[0][0] == 0.0 and pts2[3][0] == 7.5)
+
+
+@MINI_TEST("Point", "Lerp")
+def test_lerp():
+    from session_py import Point
+
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(10.0, 20.0, 30.0)
+    mid = Point.lerp(a, b, 0.5)
+    start = Point.lerp(a, b, 0.0)
+    end = Point.lerp(a, b, 1.0)
+
+    MINI_CHECK(mid[0] == 5.0 and mid[1] == 10.0 and mid[2] == 15.0)
+    MINI_CHECK(start[0] == 0.0 and start[1] == 0.0 and start[2] == 0.0)
+    MINI_CHECK(end[0] == 10.0 and end[1] == 20.0 and end[2] == 30.0)
+
+
 @MINI_TEST("Point", "Area")
 def test_area():
     from session_py import Point
