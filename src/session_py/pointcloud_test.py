@@ -312,6 +312,34 @@ def test_pointcloud_get_normals():
     MINI_CHECK(TOLERANCE.is_close(normals[1][0], 1.0))
 
 
+@MINI_TEST("PointCloud", "Point Ids")
+def test_pointcloud_point_ids():
+    from session_py import PointCloud
+
+    coords = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    pc = PointCloud.from_coords(coords, [], [])
+    before = pc.get_point(5)
+    pc.build_lod(1.0, 2)
+
+    MINI_CHECK(len(pc.point_ids()) == 8)
+    MINI_CHECK(pc.index_of_id(5) >= 0)
+    MINI_CHECK(pc.get_point(pc.index_of_id(5)) == before)
+
+
+@MINI_TEST("PointCloud", "Build Lod")
+def test_pointcloud_build_lod():
+    from session_py import PointCloud
+
+    coords = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    pc = PointCloud.from_coords(coords, [], [])
+    pc.build_lod(1.0, 2)
+
+    MINI_CHECK(pc.has_lod())
+    MINI_CHECK(pc.lod_node_count() == 8)
+    MINI_CHECK(pc.lod_range(0) == (0, 1))
+    MINI_CHECK(len(pc.coords) == 24)
+
+
 @MINI_TEST("PointCloud", "Transform")
 def test_pointcloud_transform():
     from session_py import PointCloud

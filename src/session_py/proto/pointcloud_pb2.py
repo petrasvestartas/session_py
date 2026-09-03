@@ -24,13 +24,13 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10pointcloud.proto\x12\rsession_proto\"s\n\nPointCloud\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0e\n\x06\x63oords\x18\x03 \x03(\x01\x12\x0e\n\x06\x63olors\x18\x04 \x03(\r\x12\x0f\n\x07normals\x18\x05 \x03(\x01\x12\x12\n\npoint_size\x18\x06 \x01(\x01J\x04\x08\x07\x10\x08\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10pointcloud.proto\x12\rsession_proto\"\x8d\x02\n\nPointCloud\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0e\n\x06\x63oords\x18\x03 \x03(\x01\x12\x0e\n\x06\x63olors\x18\x04 \x03(\r\x12\x0f\n\x07normals\x18\x05 \x03(\x01\x12\x12\n\npoint_size\x18\x06 \x01(\x01\x12\x0f\n\x07lod_min\x18\x08 \x03(\x01\x12\x10\n\x08lod_size\x18\t \x03(\x01\x12\x13\n\x0blod_spacing\x18\n \x03(\x01\x12\x11\n\tlod_level\x18\x0b \x03(\x05\x12\x11\n\tlod_first\x18\x0c \x03(\x05\x12\x11\n\tlod_count\x18\r \x03(\x05\x12\x14\n\x0clod_children\x18\x0e \x03(\x05\x12\x11\n\tpoint_ids\x18\x0f \x03(\x07J\x04\x08\x07\x10\x08\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'pointcloud_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_POINTCLOUD']._serialized_start=35
-  _globals['_POINTCLOUD']._serialized_end=150
+  _globals['_POINTCLOUD']._serialized_start=36
+  _globals['_POINTCLOUD']._serialized_end=305
 # @@protoc_insertion_point(module_scope)

@@ -30,6 +30,21 @@ class PointCloud:
         self.coords: list[float] = []
         self._colors: list[int] = []   # flat 0-255, matching Rust/C++ and the proto's uint32
         self._normals: list[float] = []
+        # LOD octree over the points, one flat list per SpatialOctree node field. Built by
+        # build_lod(), which PERMUTES the three lists above into octree order - so a node is one
+        # contiguous (_lod_first, _lod_count) range and the order permutation never has to be
+        # stored. Empty means no octree.
+        self._lod_min: list[float] = []
+        self._lod_size: list[float] = []
+        self._lod_spacing: list[float] = []
+        self._lod_level: list[int] = []
+        self._lod_first: list[int] = []
+        self._lod_count: list[int] = []
+        self._lod_children: list[int] = []
+        # STABLE per-point ids, one per point, parallel to coords. Assigned once by the first
+        # build_lod and permuted with the points ever after, so an index that moves does not take
+        # the point's identity with it. Empty = no tree yet, so the index IS the id.
+        self._point_ids: list[int] = []
 
         if points is not None:
             for p in points:
@@ -216,6 +231,126 @@ class PointCloud:
             self._normals.extend([n[0], n[1], n[2]])
 
     ###########################################################################################
+    # LOD Octree
+    ###########################################################################################
+
+    def build_lod(self, root_spacing: float, leaf_capacity: int) -> None:
+        """Build the LOD octree and REORDER the points into octree order.
+
+        Every point's index changes; a node becomes one contiguous range. Expensive - about
+        10 s on 14 M points - so it is called once by whoever writes the cloud, never per
+        construction.
+        """
+        from .spatial_octree import SpatialOctree
+
+        tree = SpatialOctree.from_coords(self.coords, root_spacing, leaf_capacity)
+        order = tree.order()
+
+        # Identity is minted HERE, before the first permutation, so an id records where a point
+        # began. After this the ids travel with the points and the index is free to move.
+        if not self._point_ids:
+            self._point_ids = list(range(len(self.coords) // 3))
+
+        # Permute the three parallel lists into octree order. This is what lets a node be one
+        # (first, count) range, so `order` itself never has to be stored - 4 bytes a point.
+        coords: list[float] = []
+        colors: list[int] = []
+        normals: list[float] = []
+        ids: list[int] = []
+        has_colors = len(self._colors) == len(order) * 4
+        has_normals = len(self._normals) == len(order) * 3
+        for idx in order:
+            ids.append(self._point_ids[idx])
+            coords.extend(self.coords[idx * 3:idx * 3 + 3])
+            if has_colors:
+                colors.extend(self._colors[idx * 4:idx * 4 + 4])
+            if has_normals:
+                normals.extend(self._normals[idx * 3:idx * 3 + 3])
+        self.coords = coords
+        self._point_ids = ids
+        if has_colors:
+            self._colors = colors
+        if has_normals:
+            self._normals = normals
+
+        self._lod_min = []
+        self._lod_size = []
+        self._lod_spacing = []
+        self._lod_level = []
+        self._lod_first = []
+        self._lod_count = []
+        self._lod_children = []
+        for i in range(tree.node_count()):
+            center, size = tree.node_cube(i)
+            self._lod_min.extend([center[0] - size * 0.5, center[1] - size * 0.5, center[2] - size * 0.5])
+            self._lod_size.append(size)
+            self._lod_spacing.append(tree.node_spacing(i))
+            self._lod_level.append(tree.node_level(i))
+            first, count = tree.node_range(i)
+            self._lod_first.append(first)
+            self._lod_count.append(count)
+            kids = tree.children(i)
+            self._lod_children.extend([kids[k] if k < len(kids) else -1 for k in range(8)])
+
+    def has_lod(self) -> bool:
+        """True when an octree has been built."""
+        return len(self._lod_size) > 0
+
+    def lod_node_count(self) -> int:
+        """Number of octree nodes."""
+        return len(self._lod_size)
+
+    def lod_cube(self, i: int) -> tuple[Point, float]:
+        """Node cube: center and edge length."""
+        half = self._lod_size[i] * 0.5
+        return (Point(self._lod_min[i * 3] + half, self._lod_min[i * 3 + 1] + half,
+                      self._lod_min[i * 3 + 2] + half), self._lod_size[i])
+
+    def lod_spacing(self, i: int) -> float:
+        """Grid-accept spacing of a node."""
+        return self._lod_spacing[i]
+
+    def lod_level(self, i: int) -> int:
+        """Node depth from the root."""
+        return self._lod_level[i]
+
+    def lod_range(self, i: int) -> tuple[int, int]:
+        """Node point range as (first, count) into the reordered lists."""
+        return (self._lod_first[i], self._lod_count[i])
+
+    def lod_children(self, i: int) -> list[int]:
+        """Present child node indices, compacted, -1 padding."""
+        return self._lod_children[i * 8:i * 8 + 8]
+
+    ###########################################################################################
+    # Stable Point Ids
+    ###########################################################################################
+
+    def point_ids(self) -> list[int]:
+        """The stable ids, parallel to the points. Empty until a tree is built."""
+        return self._point_ids
+
+    def point_id(self, index: int) -> int:
+        """The stable id of a point, by its CURRENT index.
+
+        Falls back to the index itself while no tree has been built, which is exactly what the
+        id would have been.
+        """
+        return index if not self._point_ids else self._point_ids[index]
+
+    def index_of_id(self, id: int) -> int:
+        """Where a stable id lives NOW, or -1 if this cloud has no such point.
+
+        Linear: a caller resolving many ids should build its own map.
+        """
+        if not self._point_ids:
+            return id if 0 <= id < len(self.coords) // 3 else -1
+        try:
+            return self._point_ids.index(id)
+        except ValueError:
+            return -1
+
+    ###########################################################################################
     # String Representations
     ###########################################################################################
 
@@ -252,7 +387,10 @@ class PointCloud:
         return (self.name == other.name and
                 self.coords == other.coords and
                 self._colors == other._colors and
-                self._normals == other._normals)
+                self._normals == other._normals and
+                self._lod_first == other._lod_first and
+                self._lod_count == other._lod_count and
+                self._point_ids == other._point_ids)
 
     ###########################################################################################
     # Transform
@@ -333,8 +471,16 @@ class PointCloud:
             "colors": self._colors,
             "coords": self.coords,
             "guid": self.guid,
+            "lod_children": self._lod_children,
+            "lod_count": self._lod_count,
+            "lod_first": self._lod_first,
+            "lod_level": self._lod_level,
+            "lod_min": self._lod_min,
+            "lod_size": self._lod_size,
+            "lod_spacing": self._lod_spacing,
             "name": self.name,
             "normals": self._normals,
+            "point_ids": self._point_ids,
             "point_size": self.point_size,
             "type": f"{self.__class__.__name__}",
         }
@@ -354,6 +500,14 @@ class PointCloud:
 
         if "point_size" in data:
             pc.point_size = data["point_size"]
+        pc._lod_min = data.get("lod_min", [])
+        pc._lod_size = data.get("lod_size", [])
+        pc._lod_spacing = data.get("lod_spacing", [])
+        pc._lod_level = data.get("lod_level", [])
+        pc._lod_first = data.get("lod_first", [])
+        pc._lod_count = data.get("lod_count", [])
+        pc._lod_children = data.get("lod_children", [])
+        pc._point_ids = data.get("point_ids", [])
 
         return pc
 
@@ -397,6 +551,14 @@ class PointCloud:
         proto.colors.extend(self._colors)
         proto.normals.extend(self._normals)
         proto.point_size = self.point_size
+        proto.lod_min.extend(self._lod_min)
+        proto.lod_size.extend(self._lod_size)
+        proto.lod_spacing.extend(self._lod_spacing)
+        proto.lod_level.extend(self._lod_level)
+        proto.lod_first.extend(self._lod_first)
+        proto.lod_count.extend(self._lod_count)
+        proto.lod_children.extend(self._lod_children)
+        proto.point_ids.extend(self._point_ids)
 
         return proto.SerializeToString()
 
@@ -416,6 +578,14 @@ class PointCloud:
         pc.guid = proto.guid
         pc.name = proto.name
         pc.point_size = proto.point_size if proto.point_size > 0 else 1.0
+        pc._lod_min = list(proto.lod_min)
+        pc._lod_size = list(proto.lod_size)
+        pc._lod_spacing = list(proto.lod_spacing)
+        pc._lod_level = list(proto.lod_level)
+        pc._lod_first = list(proto.lod_first)
+        pc._lod_count = list(proto.lod_count)
+        pc._lod_children = list(proto.lod_children)
+        pc._point_ids = list(proto.point_ids)
 
         return pc
 
