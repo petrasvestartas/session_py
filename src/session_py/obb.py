@@ -7,6 +7,7 @@ import uuid
 from .point import Point
 from .vector import Vector
 from .plane import Plane
+from .aabb import AABB
 
 if TYPE_CHECKING:
     from .mesh import Mesh
@@ -300,12 +301,12 @@ class OBB:
 
         return cls(world_center, x_axis, y_axis, z_axis, half_size)
 
-    def aabb(self) -> "OBB":
+    def aabb(self) -> "AABB":
         ex, ey, ez = self.half_size[0], self.half_size[1], self.half_size[2]
         hx = abs(self.x_axis[0]) * ex + abs(self.y_axis[0]) * ey + abs(self.z_axis[0]) * ez
         hy = abs(self.x_axis[1]) * ex + abs(self.y_axis[1]) * ey + abs(self.z_axis[1]) * ez
         hz = abs(self.x_axis[2]) * ex + abs(self.y_axis[2]) * ey + abs(self.z_axis[2]) * ez
-        return OBB(self.center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(hx, hy, hz))
+        return AABB(self.center[0], self.center[1], self.center[2], hx, hy, hz)
 
     def point_at(self, x: float, y: float, z: float) -> Point:
         return Point(
@@ -315,32 +316,10 @@ class OBB:
         )
 
     def min_point(self) -> Point:
-        """Get the minimum corner point of the axis-aligned bounding box.
-
-        Returns
-        -------
-        Point
-            The point with minimum x, y, z coordinates.
-        """
-        return Point(
-            self.center[0] - self.half_size[0],
-            self.center[1] - self.half_size[1],
-            self.center[2] - self.half_size[2],
-        )
+        return self.aabb().min_point()
 
     def max_point(self) -> Point:
-        """Get the maximum corner point of the axis-aligned bounding box.
-
-        Returns
-        -------
-        Point
-            The point with maximum x, y, z coordinates.
-        """
-        return Point(
-            self.center[0] + self.half_size[0],
-            self.center[1] + self.half_size[1],
-            self.center[2] + self.half_size[2],
-        )
+        return self.aabb().max_point()
 
     def corners(self) -> list[Point]:
         """Get all 8 corner points of the bounding box.
@@ -499,14 +478,7 @@ class OBB:
         return dot_rp > (proj1 + proj2)
 
     def collides_with_broad(self, other: "OBB") -> bool:
-        from .aabb import AABB
-        def _world_aabb(o):
-            ex, ey, ez = o.half_size[0], o.half_size[1], o.half_size[2]
-            hx = abs(o.x_axis[0])*ex + abs(o.y_axis[0])*ey + abs(o.z_axis[0])*ez
-            hy = abs(o.x_axis[1])*ex + abs(o.y_axis[1])*ey + abs(o.z_axis[1])*ez
-            hz = abs(o.x_axis[2])*ex + abs(o.y_axis[2])*ey + abs(o.z_axis[2])*ez
-            return AABB(o.center[0], o.center[1], o.center[2], hx, hy, hz)
-        if not _world_aabb(self).intersects(_world_aabb(other)):
+        if not self.aabb().intersects(other.aabb()):
             return False
         return self.collides_with(other)
 
