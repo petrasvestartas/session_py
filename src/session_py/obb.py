@@ -483,55 +483,7 @@ class OBB:
         return self.collides_with(other)
 
     def collides_with(self, other: "OBB") -> bool:
-        center_vec = Vector(self.center[0], self.center[1], self.center[2])
-        other_center_vec = Vector(other.center[0], other.center[1], other.center[2])
-        relative_position = Vector.from_points(center_vec, other_center_vec)
-
-        return not (
-            self._separating_plane_exists(relative_position, self.x_axis, self, other)
-            or self._separating_plane_exists(
-                relative_position, self.y_axis, self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.z_axis, self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, other.x_axis, self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, other.y_axis, self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, other.z_axis, self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.x_axis.cross(other.x_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.x_axis.cross(other.y_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.x_axis.cross(other.z_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.y_axis.cross(other.x_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.y_axis.cross(other.y_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.y_axis.cross(other.z_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.z_axis.cross(other.x_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.z_axis.cross(other.y_axis), self, other
-            )
-            or self._separating_plane_exists(
-                relative_position, self.z_axis.cross(other.z_axis), self, other
-            )
-        )
+        return self.collides_with_rtcd(other)
 
     def collides_with_rtcd(self, other: "OBB") -> bool:
         EPS = 1e-9
