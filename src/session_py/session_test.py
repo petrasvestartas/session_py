@@ -93,6 +93,33 @@ def test_session_add_polyline():
     MINI_CHECK(pl.guid in session.lookup)
 
 
+@MINI_TEST("Session", "Select By Type")
+def test_session_select_by_type():
+    from session_py import Session
+    from session_py import Polyline
+    from session_py import Point
+    from session_py import Mesh
+
+    session = Session()
+    g0 = session.add_group("g0")
+    g1 = session.add_group("g1")
+    g2 = session.add_group("g2")
+
+    session.add_polyline(Polyline([Point(0,0,0), Point(1,0,0)]), g0)
+    session.add_polyline(Polyline([Point(0,1,0), Point(1,1,0)]), g0)
+    session.add_polyline(Polyline([Point(0,2,0), Point(1,2,0)]), g1)
+    session.add_point(Point(9, 9, 9), g2)
+
+    groups = session.select_by_type(Polyline)
+
+    MINI_CHECK(len(groups) == 2)
+    MINI_CHECK(len(groups[0]) == 2)
+    MINI_CHECK(len(groups[1]) == 1)
+    MINI_CHECK(TOLERANCE.is_close(groups[1][0].get_point(0)[1], 2.0))
+
+    MINI_CHECK(len(session.select_by_type(Mesh)) == 0)
+
+
 @MINI_TEST("Session", "Add Pointcloud")
 def test_session_add_pointcloud():
     from session_py import Session
