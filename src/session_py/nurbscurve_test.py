@@ -226,9 +226,9 @@ def test_nurbscurve_attributes():
 
     curve = NurbsCurve.create(False, 2, points)
 
-    #############################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Boolean Queries
-    #############################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     # Whole curve
     is_valid = curve.is_valid()
@@ -281,9 +281,9 @@ def test_nurbscurve_attributes():
     MINI_CHECK(is_duplicate == True)
     MINI_CHECK(is_continuous == True)
 
-    #############################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # NurbsKnot Operations
-    #############################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     # Insert nurbsknot into curve
     # Useful for splitting curves at a parameter
@@ -304,9 +304,9 @@ def test_nurbscurve_attributes():
     MINI_CHECK(TOLERANCE.is_close(greville[2], 2.639616503217201))
     MINI_CHECK(TOLERANCE.is_close(greville[3], 3.519488670956267))
 
-    #############################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
-    #############################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Memory layout 2-2D, 3-3D
     dimension = curve.dimension()
     MINI_CHECK(dimension == 3)
@@ -333,11 +333,11 @@ def test_nurbscurve_attributes():
     # NurbsKnot vector: [0, 0, 0 ↑, 1 ↑, 2 ↑, 3, 3, 3]  (cubic, 5 CVs)
     span_count = curve.span_count()
     MINI_CHECK(span_count == 2)
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Control Vertex Access
     #  m_cv = [x0, y0, z0, (w0), x1, y1, z1, (w1), ...]
     #          └─── CV 0 ───┘    └─── CV 1 ───┘
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     # Get pointer to control vertex
     # Each CV occupies m_cv_stride doubles:
@@ -373,9 +373,9 @@ def test_nurbscurve_attributes():
     curve.set_weight(2, 0.5)
     MINI_CHECK(curve.weight(2) == 0.5)
 
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # NurbsKnot Access
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     # Get nurbsknot value at index
     nurbsknot3 = curve.nurbsknot(3)
@@ -420,9 +420,9 @@ def test_nurbscurve_attributes():
     cx0 = cvs[0]
     MINI_CHECK(cx0 == 0.0)
 
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Domain & Parameterization - HERE
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     # get start and end of the curve interval
     start, end = curve.domain()
@@ -446,9 +446,9 @@ def test_nurbscurve_attributes():
     intervals = curve.get_span_vector()
     MINI_CHECK(TOLERANCE.is_close(intervals[0], 0.0) and TOLERANCE.is_close(intervals[1], 0.5) and TOLERANCE.is_close(intervals[2], 1.0))
 
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Geometric checks
-    #####################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     found, t_out = curve.get_next_discontinuity(2, curve.domain_start(), curve.domain_end())
     MINI_CHECK(found == True and TOLERANCE.is_close(t_out, 0.5))

@@ -103,9 +103,9 @@ class Session:
     def __repr__(self) -> str:
         return f"Session({self.guid}, {self.name}, {self.objects.to_str()}, {self.tree.to_str()}, {self.graph.to_str()})"
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # XFORMS - the one place a transformation is stored
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def set_xform(self, guid: str, xform: Xform) -> None:
         """Set the LOCAL transform of an object, relative to its tree parent."""
@@ -183,9 +183,9 @@ class Session:
         ordered.extend(rest)
         return ordered
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # JSON (polymorphic)
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def __jsondump__(self) -> dict:
         """Serialize to polymorphic JSON format with type field."""
@@ -341,9 +341,9 @@ class Session:
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Details - Add objects
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def _add_object(self, collection, obj, type_prefix, parent=None):
         collection.append(obj)
@@ -455,9 +455,9 @@ class Session:
         """
         self.graph.add_edge(guid1, guid2, attribute)
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Details - Lookup
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def get_object(self, guid: str) -> Point | None:
         """Get a geometry object by its GUID.
@@ -473,6 +473,35 @@ class Session:
             The geometry object if found, None otherwise.
         """
         return self.lookup.get(guid)
+
+    def select_by_type(self, cls: type) -> list[list]:
+        """Select objects of one type, grouped by the top-level nodes of the tree.
+
+        Parameters
+        ----------
+        cls : type
+            The geometry type to select (:class:`Polyline`, :class:`Mesh`, etc.).
+
+        Returns
+        -------
+        list[list]
+            One list per direct child of the root, in tree order, each holding that
+            subtree's objects of type ``cls`` in depth-first order. A child holding no
+            object of type ``cls`` contributes no list, so the result has no empty entries.
+        """
+        groups = []
+        root = self.tree.root
+        if root is None:
+            return groups
+        for group in root.children:
+            items = []
+            for node in group.descendants:
+                obj = self.get_object(node.name)
+                if isinstance(obj, cls):
+                    items.append(obj)
+            if items:
+                groups.append(items)
+        return groups
 
     def remove_object(self, guid: str) -> bool:
         """Remove a geometry object by its GUID.
@@ -515,9 +544,9 @@ class Session:
 
         return True
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # SpatialBVH Collision Detection
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def _compute_bounding_box(geometry, xform: Xform) -> OBB:
@@ -814,9 +843,9 @@ class Session:
         hits.sort(key=lambda h: h.distance)
         return hits
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Details - Tree
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def add_hierarchy(self, parent_guid: str, child_guid: str) -> bool:
         """Add a parent-child relationship in the tree structure.
@@ -850,9 +879,9 @@ class Session:
         """
         return self.tree.get_children_guids(guid)
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Details - Graph
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def add_relationship(
         self, from_guid: str, to_guid: str, relationship_type: str = "default"
@@ -885,9 +914,9 @@ class Session:
         """
         return self.graph.get_neighbors(guid)
 
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
     # Details - Transformed Geometry
-    ###########################################################################################
+    # ═══════════════════════════════════════════════════════════════════════════
 
     def get_geometry(self) -> Objects:
         """All geometry with its hierarchical placement BAKED into the coordinates.
