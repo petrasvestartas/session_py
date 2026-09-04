@@ -133,10 +133,11 @@ def test_polyline_from_sides():
 
 @MINI_TEST("Polyline", "Rectangle")
 def test_polyline_rectangle():
-    from session_py import Plane
+    from session_py import Point
     from session_py import Polyline
+    from session_py import Vector
 
-    r = Polyline.rectangle(Plane.xy_plane(), 2.0, 1.0, True)
+    r = Polyline.rectangle(Point(0, 0, 0), Vector.x_axis(), Vector.y_axis(), 2.0, 1.0, True)
 
     MINI_CHECK(r.point_count() == 5)
     MINI_CHECK(r.is_closed())

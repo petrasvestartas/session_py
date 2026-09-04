@@ -144,8 +144,9 @@ class Polyline:
         return cls(pts)
 
     @classmethod
-    def rectangle(cls, plane: Plane, width: float, height: float, close: bool = True) -> "Polyline":
-        """Create a rectangle with its corner at the plane origin, sides along x_axis and y_axis."""
+    def rectangle(cls, origin: Point, x_axis: Vector, y_axis: Vector, width: float, height: float, close: bool = True) -> "Polyline":
+        """Create a rectangle with its corner at origin, sides along x_axis and y_axis."""
+        plane = Plane(origin, x_axis, y_axis)
         o = plane.origin
         x = plane.x_axis * width
         y = plane.y_axis * height
