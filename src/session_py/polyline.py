@@ -143,6 +143,17 @@ class Polyline:
             pts.append(pts[0])
         return cls(pts)
 
+    @classmethod
+    def rectangle(cls, plane: Plane, width: float, height: float, close: bool = True) -> "Polyline":
+        """Create a rectangle with its corner at the plane origin, sides along x_axis and y_axis."""
+        o = plane.origin
+        x = plane.x_axis * width
+        y = plane.y_axis * height
+        pts = [o, o + x, o + x + y, o + y]
+        if close:
+            pts.append(pts[0])
+        return cls(pts)
+
     def get_points(self) -> list[Point]:
         """Returns all points as Point objects."""
         points = []

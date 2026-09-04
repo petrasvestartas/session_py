@@ -131,6 +131,19 @@ def test_polyline_from_sides():
     MINI_CHECK(sq_closed.is_closed())
 
 
+@MINI_TEST("Polyline", "Rectangle")
+def test_polyline_rectangle():
+    from session_py import Plane
+    from session_py import Polyline
+
+    r = Polyline.rectangle(Plane.xy_plane(), 2.0, 1.0, True)
+
+    MINI_CHECK(r.point_count() == 5)
+    MINI_CHECK(r.is_closed())
+    MINI_CHECK(TOLERANCE.is_close(r.get_point(2)[0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(r.get_point(2)[1], 1.0))
+
+
 @MINI_TEST("Polyline", "Transformation")
 def test_polyline_transformation():
     from session_py import Polyline
