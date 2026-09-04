@@ -58,50 +58,26 @@ class OBB:
         )
 
     @classmethod
-    def from_point(cls, point: Point, inflate: float = 0.0) -> "OBB":
+    def from_aabb(cls, a: AABB) -> "OBB":
         return cls(
-            center=point,
+            center=Point(a.cx, a.cy, a.cz),
             x_axis=Vector(1.0, 0.0, 0.0),
             y_axis=Vector(0.0, 1.0, 0.0),
             z_axis=Vector(0.0, 0.0, 1.0),
-            half_size=Vector(inflate, inflate, inflate),
+            half_size=Vector(a.hx, a.hy, a.hz),
         )
+
+    @classmethod
+    def from_point(cls, point: Point, inflate: float = 0.0) -> "OBB":
+        return cls.from_aabb(AABB.from_point(point, inflate))
 
     @classmethod
     def from_points(cls, points: list[Point], inflate: float = 0.0) -> "OBB":
-        if not points:
-            return cls()
-
-        min_x = min(p[0] for p in points)
-        min_y = min(p[1] for p in points)
-        min_z = min(p[2] for p in points)
-        max_x = max(p[0] for p in points)
-        max_y = max(p[1] for p in points)
-        max_z = max(p[2] for p in points)
-
-        center = Point(
-            (min_x + max_x) * 0.5,
-            (min_y + max_y) * 0.5,
-            (min_z + max_z) * 0.5,
-        )
-        half_size = Vector(
-            (max_x - min_x) * 0.5 + inflate,
-            (max_y - min_y) * 0.5 + inflate,
-            (max_z - min_z) * 0.5 + inflate,
-        )
-
-        return cls(
-            center=center,
-            x_axis=Vector(1.0, 0.0, 0.0),
-            y_axis=Vector(0.0, 1.0, 0.0),
-            z_axis=Vector(0.0, 0.0, 1.0),
-            half_size=half_size,
-        )
+        return cls.from_aabb(AABB.from_points(points, inflate))
 
     @classmethod
     def from_line(cls, line: "Line", inflate: float = 0.0) -> "OBB":
-        points = [line.start(), line.end()]
-        return cls.from_points(points, inflate)
+        return cls.from_aabb(AABB.from_line(line, inflate))
 
     @classmethod
     def from_polyline(cls, polyline: "Polyline", inflate: float = 0.0, plane: Plane | None = None) -> "OBB":
@@ -123,7 +99,7 @@ class OBB:
         """
         if plane is not None:
             return cls.from_points_with_plane(polyline.points, plane, inflate)
-        return cls.from_points(polyline.points, inflate)
+        return cls.from_aabb(AABB.from_polyline(polyline, inflate))
 
     @classmethod
     def from_mesh(cls, mesh: "Mesh", inflate: float = 0.0, plane: Plane | None = None) -> "OBB":
@@ -143,40 +119,40 @@ class OBB:
         OBB
             Axis-aligned or oriented bounding box containing the mesh.
         """
-        vertices, faces = mesh.to_vertices_and_faces()
         if plane is not None:
+            vertices, faces = mesh.to_vertices_and_faces()
             return cls.from_points_with_plane(vertices, plane, inflate)
-        return cls.from_points(vertices, inflate)
+        return cls.from_aabb(AABB.from_mesh(mesh, inflate))
 
     @classmethod
     def from_pointcloud(cls, pointcloud: "PointCloud", inflate: float = 0.0, plane: Plane | None = None) -> "OBB":
-        points = pointcloud.get_points()
         if plane is not None:
-            return cls.from_points_with_plane(points, plane, inflate)
-        return cls.from_points(points, inflate)
+            return cls.from_points_with_plane(pointcloud.get_points(), plane, inflate)
+        return cls.from_aabb(AABB.from_pointcloud(pointcloud, inflate))
 
     @classmethod
     def from_nurbssurface(cls, surface: "NurbsSurface", inflate: float = 0.0, plane: Plane | None = None) -> "OBB":
+        if plane is None:
+            return cls.from_aabb(AABB.from_nurbssurface(surface, inflate))
         if not surface.is_valid() or surface.cv_count(0) == 0 or surface.cv_count(1) == 0:
             return cls()
         points = []
         for i in range(surface.cv_count(0)):
             for j in range(surface.cv_count(1)):
                 points.append(surface.get_cv(i, j))
-        if plane is not None:
-            return cls.from_points_with_plane(points, plane, inflate)
-        return cls.from_points(points, inflate)
+        return cls.from_points_with_plane(points, plane, inflate)
 
     @classmethod
     def from_nurbscurve(cls, curve: "NurbsCurve", inflate: float = 0.0, tight: bool = False, plane: Plane | None = None) -> "OBB":
+        if plane is None:
+            return cls.from_aabb(AABB.from_nurbscurve(curve, inflate, tight))
+
         if not curve.is_valid() or curve.cv_count() == 0:
             return cls()
 
         if not tight:
             points = [curve.get_cv(i) for i in range(curve.cv_count())]
-            if plane is not None:
-                return cls.from_points_with_plane(points, plane, inflate)
-            return cls.from_points(points, inflate)
+            return cls.from_points_with_plane(points, plane, inflate)
 
         t0, t1 = curve.domain()
         extrema_points = [curve.point_at(t0), curve.point_at(t1)]
@@ -186,15 +162,11 @@ class OBB:
             if t > t0 and t < t1:
                 extrema_points.append(curve.point_at(t))
 
-        if plane is not None:
-            axes = [plane.x_axis, plane.y_axis, plane.z_axis]
-        else:
-            axes = [Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1)]
-
+        axes = [plane.x_axis, plane.y_axis, plane.z_axis]
         NUM_SAMPLES = 20
         dt = (t1 - t0) / NUM_SAMPLES
 
-        for axis_idx, axis in enumerate(axes):
+        for axis in axes:
             for i in range(NUM_SAMPLES):
                 t_start = t0 + i * dt
                 t_end = t_start + dt
@@ -204,12 +176,8 @@ class OBB:
                 if len(deriv_start) < 2 or len(deriv_end) < 2:
                     continue
 
-                if plane is not None:
-                    d_start = deriv_start[1].dot(axis)
-                    d_end = deriv_end[1].dot(axis)
-                else:
-                    d_start = deriv_start[1][axis_idx]
-                    d_end = deriv_end[1][axis_idx]
+                d_start = deriv_start[1].dot(axis)
+                d_end = deriv_end[1].dot(axis)
 
                 if d_start * d_end < 0:
                     t_lo, t_hi = t_start, t_end
@@ -220,12 +188,8 @@ class OBB:
                         if len(deriv) < 3:
                             break
 
-                        if plane is not None:
-                            f = deriv[1].dot(axis)
-                            fp = deriv[2].dot(axis)
-                        else:
-                            f = deriv[1][axis_idx]
-                            fp = deriv[2][axis_idx]
+                        f = deriv[1].dot(axis)
+                        fp = deriv[2].dot(axis)
 
                         if abs(f) < 1e-12:
                             break
@@ -245,10 +209,7 @@ class OBB:
 
                         deriv_check = curve.evaluate(t_root, 1)
                         if len(deriv_check) >= 2:
-                            if plane is not None:
-                                f_check = deriv_check[1].dot(axis)
-                            else:
-                                f_check = deriv_check[1][axis_idx]
+                            f_check = deriv_check[1].dot(axis)
                             if f_check * d_start < 0:
                                 t_hi = t_root
                                 d_end = f_check
@@ -258,9 +219,7 @@ class OBB:
 
                     extrema_points.append(curve.point_at(t_root))
 
-        if plane is not None:
-            return cls.from_points_with_plane(extrema_points, plane, inflate)
-        return cls.from_points(extrema_points, inflate)
+        return cls.from_points_with_plane(extrema_points, plane, inflate)
 
     @classmethod
     def from_points_with_plane(cls, points: list[Point], plane: Plane, inflate: float = 0.0) -> "OBB":
