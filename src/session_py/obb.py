@@ -262,7 +262,7 @@ class OBB:
         return cls.from_points(extrema_points, inflate)
 
     @classmethod
-    def from_points_with_plane(cls, points: list[Point], plane: Plane | None, inflate: float = 0.0) -> "OBB":
+    def from_points_with_plane(cls, points: list[Point], plane: Plane, inflate: float = 0.0) -> "OBB":
         if not points:
             return cls()
 
@@ -271,13 +271,17 @@ class OBB:
         x_axis = plane.x_axis
         y_axis = plane.y_axis
         z_axis = plane.z_axis
-        plane_to_xy = Xform.plane_to_xy(origin, x_axis, y_axis, z_axis)
+        # plane_to_xy stores the basis as matrix COLUMNS, so it rotates local->world in
+        # both directions and its forward call yields the inverse frame for every plane
+        # that is not axis-aligned. world_to_frame / frame_to_world are the real pair.
+        world_to_local = Xform.world_to_frame(origin, x_axis, y_axis, z_axis)
+        local_to_world = Xform.frame_to_world(origin, x_axis, y_axis, z_axis)
 
         min_x = min_y = min_z = float('inf')
         max_x = max_y = max_z = float('-inf')
 
         for pt in points:
-            local_pt = Point(pt[0], pt[1], pt[2]).transformed(plane_to_xy)
+            local_pt = pt.transformed(world_to_local)
             min_x = min(min_x, local_pt[0])
             min_y = min(min_y, local_pt[1])
             min_z = min(min_z, local_pt[2])
@@ -292,8 +296,7 @@ class OBB:
             (max_z - min_z) * 0.5 + inflate
         )
 
-        xy_to_plane = Xform.xy_to_plane(origin, x_axis, y_axis, z_axis)
-        world_center = local_center.transformed(xy_to_plane)
+        world_center = local_center.transformed(local_to_world)
 
         return cls(world_center, x_axis, y_axis, z_axis, half_size)
 
