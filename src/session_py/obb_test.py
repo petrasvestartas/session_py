@@ -184,6 +184,7 @@ def test_obb_accessors():
     import math
     from session_py import OBB
     from session_py import Point
+    from session_py import Vector
 
     # axis-aligned OBB: center=(1,2,3), half_size=(1,2,3), dims 2×4×6
     pts = [
@@ -208,6 +209,13 @@ def test_obb_accessors():
     MINI_CHECK(b.corner(True, True, True) == Point(2.0, 4.0, 6.0))
     MINI_CHECK(len(b.get_corners()) == 8)
     MINI_CHECK(len(b.get_edges()) == 12)
+
+    c45 = math.sqrt(2.0) * 0.5
+    rotated = OBB(Point(0.0, 0.0, 0.0), Vector(c45, c45, 0.0), Vector(-c45, c45, 0.0), Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0))
+
+    MINI_CHECK(TOLERANCE.is_close(rotated.min_point()[0], -math.sqrt(2.0)))
+    MINI_CHECK(TOLERANCE.is_close(rotated.max_point()[1], math.sqrt(2.0)))
+
     c = OBB.from_point(Point(5.0, 2.0, 3.0), 1.0)
     b.union_with(c)
 
@@ -221,6 +229,7 @@ def test_obb_from_geometry():
     from session_py import NurbsCurve
     from session_py import NurbsSurface
     from session_py import OBB
+    from session_py import Plane
     from session_py import Point
     from session_py import PointCloud
     from session_py import Polyline
@@ -289,12 +298,25 @@ def test_obb_from_geometry():
 
     MINI_CHECK(bb_ns.is_valid())
 
+    plane = Plane.xy_plane()
+    bb_pl_plane = OBB.from_polyline(Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+        Point(4.0, 4.0, 4.0),
+    ]), 0.0, plane)
+    bb_mesh_plane = OBB.from_mesh(Primitives.cube(2.0), 0.0, plane)
+
+    MINI_CHECK(TOLERANCE.is_close(bb_pl_plane.half_size[0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(bb_mesh_plane.volume(), 8.0))
+
 
 @MINI_TEST("OBB", "From Plane")
 def test_obb_from_plane():
+    import math
     from session_py import OBB
     from session_py import Plane
     from session_py import Point
+    from session_py import Vector
 
     plane = Plane.xy_plane()
     box = OBB.from_plane(plane, 2.0, 3.0, 4.0)
@@ -315,6 +337,20 @@ def test_obb_from_plane():
     MINI_CHECK(TOLERANCE.is_close(bb.half_size[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(bb.half_size[1], 1.5))
     MINI_CHECK(TOLERANCE.is_close(bb.x_axis[0], 1.0))
+
+    c45 = math.sqrt(2.0) * 0.5
+    rotated = Plane(Point(10.0, 0.0, 0.0), Vector(c45, c45, 0.0), Vector(-c45, c45, 0.0))
+    box_pts = []
+    for u in (0.0, 2.0):
+        for v in (0.0, 4.0):
+            for w in (0.0, 6.0):
+                box_pts.append(Point(10.0 + (u - v) * c45, (u + v) * c45, w))
+    rb = OBB.from_points_with_plane(box_pts, rotated, 0.0)
+
+    MINI_CHECK(TOLERANCE.is_close(rb.half_size[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(rb.half_size[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(rb.center[0], 10.0 - c45))
+    MINI_CHECK(TOLERANCE.is_close(rb.center[1], 3.0 * c45))
 
 
 @MINI_TEST("OBB", "Two Rectangles")
