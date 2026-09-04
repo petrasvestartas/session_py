@@ -121,7 +121,7 @@ class OBB:
             Axis-aligned or oriented bounding box containing the polyline.
         """
         if plane is not None:
-            return cls.from_points(polyline.points, plane, inflate)
+            return cls.from_points_with_plane(polyline.points, plane, inflate)
         return cls.from_points(polyline.points, inflate)
 
     @classmethod
@@ -144,7 +144,7 @@ class OBB:
         """
         vertices, faces = mesh.to_vertices_and_faces()
         if plane is not None:
-            return cls.from_points(vertices, plane, inflate)
+            return cls.from_points_with_plane(vertices, plane, inflate)
         return cls.from_points(vertices, inflate)
 
     @classmethod
