@@ -1,7 +1,4 @@
 from __future__ import annotations
-from typing import List
-from typing import Optional
-from typing import Union
 from typing import TYPE_CHECKING
 import uuid
 from .point import Point
@@ -563,13 +560,13 @@ class OBB:
         import json
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         import json
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "OBB":
+    def file_json_load(cls, filepath: str | Path) -> "OBB":
         import json
         with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
@@ -601,11 +598,11 @@ class OBB:
         bbox.name = proto.name
         return bbox
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "OBB":
+    def pb_load(cls, filepath: str | Path) -> "OBB":
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
