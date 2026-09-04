@@ -525,15 +525,16 @@ class OBB:
 
     def __jsondump__(self):
         """Serialize to polymorphic JSON format with type field."""
+        # Alphabetical order to match Rust's serde_json
         return {
-            "type": f"{self.__class__.__name__}",
-            "guid": self.guid,
-            "name": self.name,
             "center": self.center.__jsondump__(),
+            "guid": self.guid,
+            "half_size": self.half_size.__jsondump__(),
+            "name": self.name,
+            "type": f"{self.__class__.__name__}",
             "x_axis": self.x_axis.__jsondump__(),
             "y_axis": self.y_axis.__jsondump__(),
             "z_axis": self.z_axis.__jsondump__(),
-            "half_size": self.half_size.__jsondump__(),
         }
 
     @classmethod
