@@ -137,7 +137,8 @@ def test_polyline_rectangle():
     from session_py import Polyline
     from session_py import Vector
 
-    r = Polyline.rectangle(Point(0, 0, 0), Vector.x_axis(), Vector.y_axis(), 2.0, 1.0, True)
+    o = Point(0, 0, 0)
+    r = Polyline.rectangle(o, Vector.x_axis(), Vector.y_axis(), 2.0, 1.0, True)
 
     MINI_CHECK(r.point_count() == 5)
     MINI_CHECK(r.is_closed())
