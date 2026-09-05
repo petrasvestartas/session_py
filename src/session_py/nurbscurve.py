@@ -2932,16 +2932,17 @@ class NurbsCurve:
         else:
             N0 = ndu[:, :, p]
             w_cv = cv_arr[base + dim]
-            n0w = N0 * w_cv
-            n1w = N1 * w_cv
-            Aw0x = np.sum(n0w * cv_arr[base], axis=1)
-            Aw0y = np.sum(n0w * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
-            Aw0z = np.sum(n0w * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
-            Aw0w = np.sum(n0w, axis=1)
-            Aw1x = np.sum(n1w * cv_arr[base], axis=1)
-            Aw1y = np.sum(n1w * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
-            Aw1z = np.sum(n1w * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
-            Aw1w = np.sum(n1w, axis=1)
+            # Control points are stored in homogeneous form (x*w, y*w, z*w, w), so the
+            # numerator sums N * Pw as stored; weighting it again squares the weight and
+            # shortens the derivative (a radius-2 circle then integrates to 11.55, not 4*pi).
+            Aw0x = np.sum(N0 * cv_arr[base], axis=1)
+            Aw0y = np.sum(N0 * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
+            Aw0z = np.sum(N0 * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
+            Aw0w = np.sum(N0 * w_cv, axis=1)
+            Aw1x = np.sum(N1 * cv_arr[base], axis=1)
+            Aw1y = np.sum(N1 * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
+            Aw1z = np.sum(N1 * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
+            Aw1w = np.sum(N1 * w_cv, axis=1)
             mask = np.abs(Aw0w) > 1e-10
             inv_w = np.where(mask, 1.0 / np.where(mask, Aw0w, 1.0), 0.0)
             C0x = Aw0x * inv_w

@@ -871,6 +871,8 @@ def test_nurbscurve_curvature():
     for i in range(9):
         t = t0 + (t1 - t0) * i / 8.0
         MINI_CHECK(abs(circle.curvature_at(t) - 1.0 / r) < 1e-6)
+    # The exact rational circle integrates to its exact circumference.
+    MINI_CHECK(abs(circle.length() - 2.0 * PI * r) < 1e-9)
 
     # Closest point: an outside point projects radially onto the circle.
     cp = circle.closest_point(Point(5, 0, 0))
