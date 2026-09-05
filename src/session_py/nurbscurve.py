@@ -911,7 +911,11 @@ class NurbsCurve:
         for i in range(len(self.m_nurbsknot) - 1):
             if self.m_nurbsknot[i] > self.m_nurbsknot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
-        
+
+        # Check for sufficient distinct nurbsknots
+        if self.m_nurbsknot[self.m_order - 2] >= self.m_nurbsknot[self.m_cv_count - 1]:
+            return False
+
         return True
 
     def is_rational(self) -> bool:
@@ -1314,6 +1318,10 @@ class NurbsCurve:
             if self.m_nurbsknot[i] > self.m_nurbsknot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
 
+        # Check for sufficient distinct nurbsknots
+        if self.m_nurbsknot[self.m_order - 2] >= self.m_nurbsknot[self.m_cv_count - 1]:
+            return False
+
         return True
 
     def is_clamped(self, end: int = 2) -> bool:
@@ -1360,7 +1368,12 @@ class NurbsCurve:
         return self.m_order + self.m_cv_count - 2
 
     def span_count(self) -> int:
-        return self.m_cv_count - self.m_order + 1
+        count = 0
+        kc = len(self.m_nurbsknot)
+        for i in range(self.m_order - 2, self.m_cv_count - 1):
+            if i >= 0 and i + 1 < kc and self.m_nurbsknot[i] < self.m_nurbsknot[i + 1]:
+                count += 1
+        return count
 
     def get_nurbsknots(self) -> np.ndarray:
         """Get all nurbsknot values"""
@@ -1599,7 +1612,12 @@ class NurbsCurve:
             # Count current multiplicity
             tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
             mult = sum(1 for i in range(full_nurbsknot_count) if abs(U[i] - nurbsknot_value) <= tol)
+            if mult >= nurbsknot_multiplicity:
+                # Already at the requested multiplicity (e.g. splitting a degree-1 polyline
+                # exactly at a vertex nurbsknot) -- nothing to insert, and that is success.
+                return True
             if mult >= p:
+                # Cannot increase multiplicity beyond degree for interior nurbsknots
                 return False
 
             # Find span
@@ -1851,7 +1869,9 @@ class NurbsCurve:
             0.1494513491505806, 0.0666713443086881
         ])
 
-        n_spans = self.span_count()
+        # Count nurbsknot INTERVALS, not span_count(): a repeated interior nurbsknot makes
+        # span_count() smaller than the interval count, and the trailing spans go unintegrated.
+        n_spans = self.m_cv_count - self.m_order + 1
         SUBDIVISIONS = 4
 
         # Collect all GL sample params
@@ -1931,6 +1951,16 @@ class NurbsCurve:
         # Work queue: segments to potentially subdivide (ta, tb)
         work_queue = [(t0, t1)]
 
+        # Closed curves: start == end, so the initial (t0,t1) chord has zero length and the
+        # adaptive loop skips it. Force-subdivide into thirds to bootstrap.
+        if self.point_at(t0).distance(self.point_at(t1)) < 1e-6 and curve_len > max_edge_length:
+            span = (t1 - t0) / 3.0
+            tm1 = t0 + span
+            tm2 = t0 + 2.0 * span
+            samples.append((tm1, self.point_at(tm1)))
+            samples.append((tm2, self.point_at(tm2)))
+            work_queue = [(t0, tm1), (tm1, tm2), (tm2, t1)]
+
         max_iterations = 10000
         iterations = 0
 
@@ -1991,16 +2021,24 @@ class NurbsCurve:
         dom_len = t1 - t0
         h = dom_len * 1e-8
 
+        # A degree-1 curve is the polyline through its CVs: its speed is constant per segment,
+        # so the arc-length division is exact from the cumulative chord lengths. Dividing the
+        # parameter range instead would bunch the points on the short segments.
         if self.m_order == 2 and not self.m_is_rat and self.m_cv_count >= 2:
-            if include_endpoints:
-                ts = np.linspace(t0, t1, count)
-            else:
-                step = dom_len / (count + 1)
-                ts = t0 + step * np.arange(1, count + 1)
-            pts_arr = self._batch_point_at(ts)
-            points = [Point(pts_arr[i, 0], pts_arr[i, 1], pts_arr[i, 2]) for i in range(len(ts))]
-            params = ts.tolist()
-            return points, params
+            flat = np.asarray(self.m_cv, dtype=np.float64)[:self.m_cv_count * self.m_cv_stride]
+            verts = np.zeros((self.m_cv_count, 3))
+            verts[:, :min(self.m_dim, 3)] = flat.reshape(self.m_cv_count, self.m_cv_stride)[:, :min(self.m_dim, 3)]
+            cum = np.concatenate([[0.0], np.cumsum(np.sqrt(np.sum(np.diff(verts, axis=0) ** 2, axis=1)))])
+            total_len = cum[-1]
+            if total_len > 0.0:
+                n_segs = (count - 1) if include_endpoints else (count + 1)
+                first = 0 if include_endpoints else 1
+                s_targets = total_len * np.arange(first, first + count) / n_segs
+                ts = np.interp(s_targets, cum, np.asarray(self.m_nurbsknot[:self.m_cv_count], dtype=np.float64))
+                pts_arr = self._batch_point_at(ts)
+                points = [Point(pts_arr[i, 0], pts_arr[i, 1], pts_arr[i, 2]) for i in range(len(ts))]
+                params = ts.tolist()
+                return points, params
 
         GL_NODES = np.array([-0.9061798459386640, -0.5384693101056831, 0.0, 0.5384693101056831, 0.9061798459386640])
         GL_WEIGHTS = np.array([0.2369268850561891, 0.4786286704993665, 0.5688888888888889, 0.4786286704993665, 0.2369268850561891])
@@ -2925,16 +2963,17 @@ class NurbsCurve:
         else:
             N0 = ndu[:, :, p]
             w_cv = cv_arr[base + dim]
-            n0w = N0 * w_cv
-            n1w = N1 * w_cv
-            Aw0x = np.sum(n0w * cv_arr[base], axis=1)
-            Aw0y = np.sum(n0w * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
-            Aw0z = np.sum(n0w * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
-            Aw0w = np.sum(n0w, axis=1)
-            Aw1x = np.sum(n1w * cv_arr[base], axis=1)
-            Aw1y = np.sum(n1w * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
-            Aw1z = np.sum(n1w * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
-            Aw1w = np.sum(n1w, axis=1)
+            # Control points are stored in homogeneous form (x*w, y*w, z*w, w), so the
+            # numerator sums N * Pw as stored; weighting it again squares the weight and
+            # shortens the derivative (a radius-2 circle then integrates to 11.55, not 4*pi).
+            Aw0x = np.sum(N0 * cv_arr[base], axis=1)
+            Aw0y = np.sum(N0 * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
+            Aw0z = np.sum(N0 * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
+            Aw0w = np.sum(N0 * w_cv, axis=1)
+            Aw1x = np.sum(N1 * cv_arr[base], axis=1)
+            Aw1y = np.sum(N1 * cv_arr[base + 1], axis=1) if dim > 1 else np.zeros(n)
+            Aw1z = np.sum(N1 * cv_arr[base + 2], axis=1) if dim > 2 else np.zeros(n)
+            Aw1w = np.sum(N1 * w_cv, axis=1)
             mask = np.abs(Aw0w) > 1e-10
             inv_w = np.where(mask, 1.0 / np.where(mask, Aw0w, 1.0), 0.0)
             C0x = Aw0x * inv_w
@@ -2945,97 +2984,6 @@ class NurbsCurve:
                 result[:, 1] = (Aw1y - Aw1w * C0y) * inv_w
             if dim > 2:
                 result[:, 2] = (Aw1z - Aw1w * C0z) * inv_w
-        return result
-
-    def _batch_evaluate_deriv1_scalar(self, params: np.ndarray) -> np.ndarray:
-        n = len(params)
-        result = np.empty((n, 3))
-        kn = self.m_nurbsknot
-        cv = self.m_cv
-        order = self.m_order
-        dim = self.m_dim
-        stride = self.m_cv_stride
-        cv_count = self.m_cv_count
-        is_rat = self.m_is_rat
-        p = order - 1
-        find_span_fn = nurbsknot.find_span
-
-        for idx in range(n):
-            t = params[idx]
-            span = find_span_fn(order, cv_count, kn, t)
-            offset = order - 2 + span
-
-            # Build ndu table (Algorithm A2.3 from The NURBS Book)
-            ndu_flat = [0.0] * ((p + 1) * (p + 1))
-            left = [0.0] * (p + 1)
-            right = [0.0] * (p + 1)
-            pp1 = p + 1
-            ndu_flat[0] = 1.0
-            for j in range(1, pp1):
-                left[j] = t - kn[offset + 1 - j]
-                right[j] = kn[offset + j] - t
-                saved = 0.0
-                for r in range(j):
-                    ndu_flat[j * pp1 + r] = right[r + 1] + left[j - r]
-                    denom = ndu_flat[j * pp1 + r]
-                    temp = ndu_flat[r * pp1 + j - 1] / denom if abs(denom) > 1e-14 else 0.0
-                    ndu_flat[r * pp1 + j] = saved + right[r + 1] * temp
-                    saved = left[j - r] * temp
-                ndu_flat[j * pp1 + j] = saved
-
-            # Extract basis functions (k=0) and compute first derivatives (k=1)
-            N0 = [ndu_flat[j * pp1 + p] for j in range(pp1)]
-            N1 = [0.0] * pp1
-            pk = p - 1
-            for r in range(pp1):
-                d = 0.0
-                rk = r - 1
-                if r >= 1:
-                    a0 = 1.0 / ndu_flat[(pk + 1) * pp1 + rk]
-                    d = a0 * ndu_flat[rk * pp1 + pk]
-                if r <= pk:
-                    ak = -1.0 / ndu_flat[(pk + 1) * pp1 + r]
-                    d += ak * ndu_flat[r * pp1 + pk]
-                N1[r] = d * p
-
-            if not is_rat:
-                dx = dy = dz = 0.0
-                for i in range(order):
-                    ci = span + i
-                    if ci >= cv_count:
-                        break
-                    base = ci * stride
-                    ni = N1[i]
-                    dx += ni * cv[base]
-                    dy += ni * cv[base + 1] if dim > 1 else 0
-                    dz += ni * cv[base + 2] if dim > 2 else 0
-                result[idx, 0] = dx
-                result[idx, 1] = dy
-                result[idx, 2] = dz
-            else:
-                Aw0x = Aw0y = Aw0z = Aw0w = 0.0
-                Aw1x = Aw1y = Aw1z = Aw1w = 0.0
-                for i in range(order):
-                    ci = span + i
-                    if ci >= cv_count:
-                        break
-                    base = ci * stride
-                    cx = cv[base]
-                    cy = cv[base + 1] if dim > 1 else 0.0
-                    cz = cv[base + 2] if dim > 2 else 0.0
-                    wi = cv[base + dim]
-                    n0 = N0[i]
-                    n1 = N1[i]
-                    Aw0x += n0 * cx * wi; Aw0y += n0 * cy * wi
-                    Aw0z += n0 * cz * wi; Aw0w += n0 * wi
-                    Aw1x += n1 * cx * wi; Aw1y += n1 * cy * wi
-                    Aw1z += n1 * cz * wi; Aw1w += n1 * wi
-                inv_w = 1.0 / Aw0w if abs(Aw0w) > 1e-10 else 0.0
-                C0x = Aw0x * inv_w; C0y = Aw0y * inv_w; C0z = Aw0z * inv_w
-                result[idx, 0] = (Aw1x - Aw1w * C0x) * inv_w
-                result[idx, 1] = (Aw1y - Aw1w * C0y) * inv_w
-                result[idx, 2] = (Aw1z - Aw1w * C0z) * inv_w
-
         return result
 
     def _batch_point_at(self, params: np.ndarray) -> np.ndarray:
@@ -3243,18 +3191,25 @@ class NurbsCurve:
         trim_start = t0 > d0 + Tolerance.ZERO_TOLERANCE
         trim_end = t1 < d1 - Tolerance.ZERO_TOLERANCE
 
+        # Snap the trim parameters to an existing nurbsknot within the insertion tolerance:
+        # inserting at an already-present value is a no-op, and the strict span search below
+        # would miss a near-hit (a boundary landing on a polyline vertex nurbsknot).
+        stol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
+        for k in self.m_nurbsknot:
+            if trim_start and 0.0 < abs(k - t0) <= stol:
+                t0 = float(k)
+            if trim_end and 0.0 < abs(k - t1) <= stol:
+                t1 = float(k)
+        if t0 >= t1:
+            return False
+
+        # Insert nurbsknots at trim boundaries to multiplicity = degree
         if trim_start:
-            curr_mult = sum(1 for k in self.m_nurbsknot if abs(k - t0) < Tolerance.ZERO_TOLERANCE)
-            needed = p - curr_mult
-            if needed > 0:
-                if not self.insert_nurbsknot(t0, needed):
-                    return False
+            if not self.insert_nurbsknot(t0, p):
+                return False
         if trim_end:
-            curr_mult = sum(1 for k in self.m_nurbsknot if abs(k - t1) < Tolerance.ZERO_TOLERANCE)
-            needed = p - curr_mult
-            if needed > 0:
-                if not self.insert_nurbsknot(t1, needed):
-                    return False
+            if not self.insert_nurbsknot(t1, p):
+                return False
 
         full_nurbsknot_count = self.m_cv_count + self.m_order
         U = [0.0] * full_nurbsknot_count
@@ -3322,6 +3277,7 @@ class NurbsCurve:
         self.m_cv = new_cv
         self.m_nurbsknot = new_nurbsknot
 
+        self._invalidate_rmf_cache()
         return True
 
     def split(self, t: float) -> tuple[Optional['NurbsCurve'], Optional['NurbsCurve']]:
@@ -3430,10 +3386,13 @@ class NurbsCurve:
         new_cv = np.zeros(self.m_cv_count * new_stride)
 
         for i in range(self.m_cv_count):
-            old_idx = i * self.m_cv_stride
+            p = self.get_cv(i)
             new_idx = i * new_stride
-            for j in range(self.m_dim):
-                new_cv[new_idx + j] = self.m_cv[old_idx + j]
+            new_cv[new_idx] = p.x
+            if self.m_dim > 1:
+                new_cv[new_idx + 1] = p.y
+            if self.m_dim > 2:
+                new_cv[new_idx + 2] = p.z
 
         self.m_is_rat = 0
         self.m_cv_stride = new_stride
@@ -3778,11 +3737,14 @@ class NurbsCurve:
         """Return a JSON-serializable dictionary representation (matches C++ format)."""
         control_points = []
         for i in range(self.m_cv_count):
-            p = self.get_cv(i)
-            if p:
-                control_points.append([p[0], p[1], p[2]])
+            if self.m_is_rat:
+                # 4D for rational curves: dropping w loses the weights and the reloaded
+                # curve is invalid (cv array too short for its stride).
+                x, y, z, w = self.get_cv_4d(i)
+                control_points.append([float(x), float(y), float(z), float(w)])
             else:
-                control_points.append([0.0, 0.0, 0.0])
+                p = self.get_cv(i)
+                control_points.append([p[0], p[1], p[2]] if p else [0.0, 0.0, 0.0])
         return {
             "control_points": control_points,
             "cv_count": int(self.m_cv_count),
