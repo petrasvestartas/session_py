@@ -239,6 +239,12 @@ def test_nurbscurve_attributes():
     is_valid = curve.is_valid()
     MINI_CHECK(is_valid == True)
 
+    # Storage must back the CV count: a short array otherwise passes validation and
+    # every point_at reads past the end.
+    truncated = curve.duplicate()
+    truncated.m_cv = truncated.m_cv[:-1]
+    MINI_CHECK(not truncated.is_valid())
+
     # Check whole nurbsknot vector for
     # For correct size: order + cv_count - 2
     # Non-decreasing (can repeat, can't go down)
