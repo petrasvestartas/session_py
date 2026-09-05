@@ -1851,7 +1851,9 @@ class NurbsCurve:
             0.1494513491505806, 0.0666713443086881
         ])
 
-        n_spans = self.span_count()
+        # Count nurbsknot INTERVALS, not span_count(): a repeated interior nurbsknot makes
+        # span_count() smaller than the interval count, and the trailing spans go unintegrated.
+        n_spans = self.m_cv_count - self.m_order + 1
         SUBDIVISIONS = 4
 
         # Collect all GL sample params
