@@ -245,6 +245,13 @@ def test_nurbscurve_attributes():
     truncated.m_cv = truncated.m_cv[:-1]
     MINI_CHECK(not truncated.is_valid())
 
+    # A curve needs a non-empty domain: equal end nurbsknots leave nothing to evaluate.
+    flat = curve.duplicate()
+    for i in range(flat.nurbsknot_count()):
+        flat.set_nurbsknot(i, 1.0)
+    MINI_CHECK(not flat.is_valid())
+    MINI_CHECK(not flat.is_valid_nurbsknot_vector())
+
     # Check whole nurbsknot vector for
     # For correct size: order + cv_count - 2
     # Non-decreasing (can repeat, can't go down)

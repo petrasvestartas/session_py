@@ -911,7 +911,11 @@ class NurbsCurve:
         for i in range(len(self.m_nurbsknot) - 1):
             if self.m_nurbsknot[i] > self.m_nurbsknot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
-        
+
+        # Check for sufficient distinct nurbsknots
+        if self.m_nurbsknot[self.m_order - 2] >= self.m_nurbsknot[self.m_cv_count - 1]:
+            return False
+
         return True
 
     def is_rational(self) -> bool:
@@ -1313,6 +1317,10 @@ class NurbsCurve:
         for i in range(len(self.m_nurbsknot) - 1):
             if self.m_nurbsknot[i] > self.m_nurbsknot[i + 1] + Tolerance.ZERO_TOLERANCE:
                 return False
+
+        # Check for sufficient distinct nurbsknots
+        if self.m_nurbsknot[self.m_order - 2] >= self.m_nurbsknot[self.m_cv_count - 1]:
+            return False
 
         return True
 
