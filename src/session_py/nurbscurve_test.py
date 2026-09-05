@@ -687,6 +687,16 @@ def test_nurbscurve_modifications():
     curve_rational.make_non_rational(True)
     MINI_CHECK(curve_rational.length() == original_length)
 
+    # Uniform non-unit weights are removable without moving the curve: the CVs must be
+    # divided by the weight, not copied in homogeneous form.
+    curve_uniform_w = curve.duplicate()
+    curve_uniform_w.make_rational()
+    for i in range(curve_uniform_w.cv_count()):
+        curve_uniform_w.set_weight(i, 2.0)
+    uniform_w_mid = curve_uniform_w.point_at_middle()
+    MINI_CHECK(curve_uniform_w.make_non_rational(False))
+    MINI_CHECK(TOLERANCE.is_point_close(curve_uniform_w.point_at_middle(), uniform_w_mid))
+
     # Clamp ends - create unclamped curve manually
     points_open = points
     curve_open = NurbsCurve(3, False, 3, 5)  # dim=3, non-rational, order=3 (deg 2), 5 CVs

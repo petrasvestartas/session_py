@@ -3445,10 +3445,13 @@ class NurbsCurve:
         new_cv = np.zeros(self.m_cv_count * new_stride)
 
         for i in range(self.m_cv_count):
-            old_idx = i * self.m_cv_stride
+            p = self.get_cv(i)
             new_idx = i * new_stride
-            for j in range(self.m_dim):
-                new_cv[new_idx + j] = self.m_cv[old_idx + j]
+            new_cv[new_idx] = p.x
+            if self.m_dim > 1:
+                new_cv[new_idx + 1] = p.y
+            if self.m_dim > 2:
+                new_cv[new_idx + 2] = p.z
 
         self.m_is_rat = 0
         self.m_cv_stride = new_stride
