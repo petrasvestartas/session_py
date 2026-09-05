@@ -2008,16 +2008,24 @@ class NurbsCurve:
         dom_len = t1 - t0
         h = dom_len * 1e-8
 
+        # A degree-1 curve is the polyline through its CVs: its speed is constant per segment,
+        # so the arc-length division is exact from the cumulative chord lengths. Dividing the
+        # parameter range instead would bunch the points on the short segments.
         if self.m_order == 2 and not self.m_is_rat and self.m_cv_count >= 2:
-            if include_endpoints:
-                ts = np.linspace(t0, t1, count)
-            else:
-                step = dom_len / (count + 1)
-                ts = t0 + step * np.arange(1, count + 1)
-            pts_arr = self._batch_point_at(ts)
-            points = [Point(pts_arr[i, 0], pts_arr[i, 1], pts_arr[i, 2]) for i in range(len(ts))]
-            params = ts.tolist()
-            return points, params
+            flat = np.asarray(self.m_cv, dtype=np.float64)[:self.m_cv_count * self.m_cv_stride]
+            verts = np.zeros((self.m_cv_count, 3))
+            verts[:, :min(self.m_dim, 3)] = flat.reshape(self.m_cv_count, self.m_cv_stride)[:, :min(self.m_dim, 3)]
+            cum = np.concatenate([[0.0], np.cumsum(np.sqrt(np.sum(np.diff(verts, axis=0) ** 2, axis=1)))])
+            total_len = cum[-1]
+            if total_len > 0.0:
+                n_segs = (count - 1) if include_endpoints else (count + 1)
+                first = 0 if include_endpoints else 1
+                s_targets = total_len * np.arange(first, first + count) / n_segs
+                ts = np.interp(s_targets, cum, np.asarray(self.m_nurbsknot[:self.m_cv_count], dtype=np.float64))
+                pts_arr = self._batch_point_at(ts)
+                points = [Point(pts_arr[i, 0], pts_arr[i, 1], pts_arr[i, 2]) for i in range(len(ts))]
+                params = ts.tolist()
+                return points, params
 
         GL_NODES = np.array([-0.9061798459386640, -0.5384693101056831, 0.0, 0.5384693101056831, 0.9061798459386640])
         GL_WEIGHTS = np.array([0.2369268850561891, 0.4786286704993665, 0.5688888888888889, 0.4786286704993665, 0.2369268850561891])
