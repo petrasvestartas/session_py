@@ -114,6 +114,11 @@ def test_nurbscurve_create_interpolated():
     MINI_CHECK(cp.cv_count() == 13)
     MINI_CHECK(cp.is_closed())
 
+    # A periodic curve wraps the first (order - 1) points, so fewer points than the
+    # order have nothing to wrap and must not be read past the end of the input.
+    too_few = NurbsCurve.create(True, 3, [Point(0, 0, 0), Point(1, 0, 0)])
+    MINI_CHECK(not too_few.is_valid())
+
 
 @MINI_TEST("NurbsCurve", "Create From Parameters")
 def test_nurbscurve_create_from_parameters():
