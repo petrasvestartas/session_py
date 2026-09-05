@@ -1938,6 +1938,16 @@ class NurbsCurve:
         # Work queue: segments to potentially subdivide (ta, tb)
         work_queue = [(t0, t1)]
 
+        # Closed curves: start == end, so the initial (t0,t1) chord has zero length and the
+        # adaptive loop skips it. Force-subdivide into thirds to bootstrap.
+        if self.point_at(t0).distance(self.point_at(t1)) < 1e-6 and curve_len > max_edge_length:
+            span = (t1 - t0) / 3.0
+            tm1 = t0 + span
+            tm2 = t0 + 2.0 * span
+            samples.append((tm1, self.point_at(tm1)))
+            samples.append((tm2, self.point_at(tm2)))
+            work_queue = [(t0, tm1), (tm1, tm2), (tm2, t1)]
+
         max_iterations = 10000
         iterations = 0
 
