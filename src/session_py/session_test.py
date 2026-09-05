@@ -215,6 +215,42 @@ def test_session_add_element():
     MINI_CHECK(session.graph.has_node(plate.guid))
 
 
+@MINI_TEST("Session", "Add Empty Geometry")
+def test_session_add_empty_geometry():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import PointCloud
+    from session_py import Mesh
+    from session_py import NurbsCurve
+    from session_py import NurbsSurface
+    from session_py import BRep
+
+    # Nothing to draw is never added: the caller does not test its geometry first.
+    session = Session()
+    group = session.add_group("empty")
+
+    MINI_CHECK(session.add_point(None, group) is None)
+    MINI_CHECK(session.add_polyline(Polyline([Point(0, 0, 0)]), group) is None)
+    MINI_CHECK(session.add_pointcloud(PointCloud([], [], []), group) is None)
+    MINI_CHECK(session.add_mesh(Mesh(), group) is None)
+    MINI_CHECK(session.add_nurbscurve(NurbsCurve(), group) is None)
+    MINI_CHECK(session.add_nurbssurface(NurbsSurface(), group) is None)
+    MINI_CHECK(session.add_brep(BRep(), group) is None)
+
+    # A mesh with vertices but no faces draws nothing either.
+    vertices_only = Mesh()
+    vertices_only.add_vertex(Point(0, 0, 0), 0)
+    MINI_CHECK(session.add_mesh(vertices_only, group) is None)
+
+    # add(add_XXX(...), group) stays a valid one-liner when the geometry was skipped.
+    session.add(session.add_mesh(Mesh(), group), group)
+
+    MINI_CHECK(len(session.lookup) == 0)
+    MINI_CHECK(len(session.order()) == 0)
+    MINI_CHECK(len(group.children) == 0)
+
+
 @MINI_TEST("Session", "Add Group")
 def test_session_add_group():
     from session_py import Session

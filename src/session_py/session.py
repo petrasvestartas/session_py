@@ -343,6 +343,11 @@ class Session:
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Details - Add objects
+    #
+    # Every add_* below SKIPS an object that is None or carries nothing to draw, and returns
+    # None instead of a node: an empty point cloud, a polyline of fewer than two points, a
+    # mesh without faces. The check lives here so no caller has to write it, and so a scene
+    # never holds an object a viewer cannot render.
     # ═══════════════════════════════════════════════════════════════════════════
 
     def _add_object(self, collection, obj, type_prefix, parent=None):
@@ -372,37 +377,61 @@ class Session:
             + [e.guid for e in self.objects.elements]
         )
 
-    def add_point(self, point: Point, parent: TreeNode | None = None) -> TreeNode:
+    def add_point(self, point: Point, parent: TreeNode | None = None) -> TreeNode | None:
+        if point is None:
+            return None
         return self._add_object(self.objects.points, point, "point", parent)
 
-    def add_line(self, line: "Line", parent: TreeNode | None = None) -> TreeNode:
+    def add_line(self, line: "Line", parent: TreeNode | None = None) -> TreeNode | None:
+        if line is None:
+            return None
         return self._add_object(self.objects.lines, line, "line", parent)
 
-    def add_plane(self, plane: "Plane", parent: TreeNode | None = None) -> TreeNode:
+    def add_plane(self, plane: "Plane", parent: TreeNode | None = None) -> TreeNode | None:
+        if plane is None:
+            return None
         return self._add_object(self.objects.planes, plane, "plane", parent)
 
-    def add_obb(self, bbox: "OBB", parent: TreeNode | None = None) -> TreeNode:
+    def add_obb(self, bbox: "OBB", parent: TreeNode | None = None) -> TreeNode | None:
+        if bbox is None:
+            return None
         return self._add_object(self.objects.bboxes, bbox, "bbox", parent)
 
-    def add_polyline(self, polyline: "Polyline", parent: TreeNode | None = None) -> TreeNode:
+    def add_polyline(self, polyline: "Polyline", parent: TreeNode | None = None) -> TreeNode | None:
+        if polyline is None or polyline.point_count() < 2:
+            return None
         return self._add_object(self.objects.polylines, polyline, "polyline", parent)
 
-    def add_pointcloud(self, pointcloud: "PointCloud", parent: TreeNode | None = None) -> TreeNode:
+    def add_pointcloud(self, pointcloud: "PointCloud", parent: TreeNode | None = None) -> TreeNode | None:
+        if pointcloud is None or pointcloud.is_empty():
+            return None
         return self._add_object(self.objects.pointclouds, pointcloud, "pointcloud", parent)
 
-    def add_mesh(self, mesh: "Mesh", parent: TreeNode | None = None) -> TreeNode:
+    def add_mesh(self, mesh: "Mesh", parent: TreeNode | None = None) -> TreeNode | None:
+        if mesh is None or mesh.is_empty() or mesh.number_of_faces() == 0:
+            return None
         return self._add_object(self.objects.meshes, mesh, "mesh", parent)
 
-    def add_nurbscurve(self, nurbscurve: "NurbsCurve", parent: TreeNode | None = None) -> TreeNode:
+    def add_nurbscurve(self, nurbscurve: "NurbsCurve", parent: TreeNode | None = None) -> TreeNode | None:
+        if nurbscurve is None or nurbscurve.cv_count() < 2:
+            return None
         return self._add_object(self.objects.nurbscurves, nurbscurve, "nurbscurve", parent)
 
-    def add_nurbssurface(self, nurbssurface: "NurbsSurface", parent: TreeNode | None = None) -> TreeNode:
+    def add_nurbssurface(self, nurbssurface: "NurbsSurface", parent: TreeNode | None = None) -> TreeNode | None:
+        if nurbssurface is None or nurbssurface.cv_count() == 0:
+            return None
         return self._add_object(self.objects.nurbssurfaces, nurbssurface, "nurbssurface", parent)
 
-    def add_brep(self, brep: "BRep", parent: TreeNode | None = None) -> TreeNode:
+    def add_brep(self, brep: "BRep", parent: TreeNode | None = None) -> TreeNode | None:
+        if brep is None or (brep.face_count() == 0 and brep.vertex_count() == 0):
+            return None
         return self._add_object(self.objects.breps, brep, "brep", parent)
 
-    def add_element(self, element: "Element", parent: TreeNode | None = None) -> TreeNode:
+    def add_element(self, element: "Element", parent: TreeNode | None = None) -> TreeNode | None:
+        # Kept even with no geometry: an Element is a data record - features, insertion vectors,
+        # element_data a consumer reads back - and dropping one would lose that on a round trip.
+        if element is None:
+            return None
         return self._add_object(self.objects.elements, element, "element", parent)
 
     def add_component(self, component: Any, parent: TreeNode | None = None) -> TreeNode:
@@ -432,10 +461,13 @@ class Session:
         Parameters
         ----------
         node : TreeNode
-            The TreeNode to add.
+            The TreeNode to add. None is ignored, so passing an add_* result straight
+            through works even when that add_* skipped its geometry.
         parent : TreeNode, optional
             Parent TreeNode (defaults to root if not provided).
         """
+        if node is None:
+            return
         if parent is None:
             self.tree.add(node, self.tree.root)
         else:
