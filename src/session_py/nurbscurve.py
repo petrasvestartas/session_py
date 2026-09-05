@@ -3796,11 +3796,14 @@ class NurbsCurve:
         """Return a JSON-serializable dictionary representation (matches C++ format)."""
         control_points = []
         for i in range(self.m_cv_count):
-            p = self.get_cv(i)
-            if p:
-                control_points.append([p[0], p[1], p[2]])
+            if self.m_is_rat:
+                # 4D for rational curves: dropping w loses the weights and the reloaded
+                # curve is invalid (cv array too short for its stride).
+                x, y, z, w = self.get_cv_4d(i)
+                control_points.append([float(x), float(y), float(z), float(w)])
             else:
-                control_points.append([0.0, 0.0, 0.0])
+                p = self.get_cv(i)
+                control_points.append([p[0], p[1], p[2]] if p else [0.0, 0.0, 0.0])
         return {
             "control_points": control_points,
             "cv_count": int(self.m_cv_count),
