@@ -386,6 +386,12 @@ def test_nurbscurve_attributes():
     MINI_CHECK(curve.get_cv(2)[1] == 0.0)
     MINI_CHECK(curve.get_cv(2)[2] == 0.5)
 
+    # A weight has nowhere to live on a non-rational curve, so set_weight converts it
+    weighted = curve.duplicate()
+    weighted.set_weight(1, 0.5)
+    MINI_CHECK(weighted.is_rational())
+    MINI_CHECK(weighted.weight(1) == 0.5)
+
     # Use for rational curvers like circles, ellipses
     curve.set_cv_4d(2, 2.0, 0.0, 0.5, 0.707)
     x, y, z, w = curve.get_cv_4d(2)
