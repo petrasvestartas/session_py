@@ -1368,7 +1368,12 @@ class NurbsCurve:
         return self.m_order + self.m_cv_count - 2
 
     def span_count(self) -> int:
-        return self.m_cv_count - self.m_order + 1
+        count = 0
+        kc = len(self.m_nurbsknot)
+        for i in range(self.m_order - 2, self.m_cv_count - 1):
+            if i >= 0 and i + 1 < kc and self.m_nurbsknot[i] < self.m_nurbsknot[i + 1]:
+                count += 1
+        return count
 
     def get_nurbsknots(self) -> np.ndarray:
         """Get all nurbsknot values"""
