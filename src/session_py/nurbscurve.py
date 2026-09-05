@@ -1599,7 +1599,12 @@ class NurbsCurve:
             # Count current multiplicity
             tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
             mult = sum(1 for i in range(full_nurbsknot_count) if abs(U[i] - nurbsknot_value) <= tol)
+            if mult >= nurbsknot_multiplicity:
+                # Already at the requested multiplicity (e.g. splitting a degree-1 polyline
+                # exactly at a vertex nurbsknot) -- nothing to insert, and that is success.
+                return True
             if mult >= p:
+                # Cannot increase multiplicity beyond degree for interior nurbsknots
                 return False
 
             # Find span
@@ -3245,18 +3250,25 @@ class NurbsCurve:
         trim_start = t0 > d0 + Tolerance.ZERO_TOLERANCE
         trim_end = t1 < d1 - Tolerance.ZERO_TOLERANCE
 
+        # Snap the trim parameters to an existing nurbsknot within the insertion tolerance:
+        # inserting at an already-present value is a no-op, and the strict span search below
+        # would miss a near-hit (a boundary landing on a polyline vertex nurbsknot).
+        stol = (abs(d0) + abs(d1) + abs(d1 - d0)) * math.sqrt(np.finfo(float).eps)
+        for k in self.m_nurbsknot:
+            if trim_start and 0.0 < abs(k - t0) <= stol:
+                t0 = float(k)
+            if trim_end and 0.0 < abs(k - t1) <= stol:
+                t1 = float(k)
+        if t0 >= t1:
+            return False
+
+        # Insert nurbsknots at trim boundaries to multiplicity = degree
         if trim_start:
-            curr_mult = sum(1 for k in self.m_nurbsknot if abs(k - t0) < Tolerance.ZERO_TOLERANCE)
-            needed = p - curr_mult
-            if needed > 0:
-                if not self.insert_nurbsknot(t0, needed):
-                    return False
+            if not self.insert_nurbsknot(t0, p):
+                return False
         if trim_end:
-            curr_mult = sum(1 for k in self.m_nurbsknot if abs(k - t1) < Tolerance.ZERO_TOLERANCE)
-            needed = p - curr_mult
-            if needed > 0:
-                if not self.insert_nurbsknot(t1, needed):
-                    return False
+            if not self.insert_nurbsknot(t1, p):
+                return False
 
         full_nurbsknot_count = self.m_cv_count + self.m_order
         U = [0.0] * full_nurbsknot_count
@@ -3324,6 +3336,7 @@ class NurbsCurve:
         self.m_cv = new_cv
         self.m_nurbsknot = new_nurbsknot
 
+        self._invalidate_rmf_cache()
         return True
 
     def split(self, t: float) -> tuple[Optional['NurbsCurve'], Optional['NurbsCurve']]:

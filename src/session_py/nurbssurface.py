@@ -2561,9 +2561,8 @@ class NurbsSurface:
         crv = self._to_curve_internal(dir)
         if crv is None:
             return False
-        for _ in range(nurbsknot_multiplicity):
-            if not crv.insert_nurbsknot(nurbsknot_value, 1):
-                return False
+        if not crv.insert_nurbsknot(nurbsknot_value, nurbsknot_multiplicity):
+            return False
         return self._from_curve_internal(crv, dir)
     
     # ═══════════════════════════════════════════════════════════════════════════
