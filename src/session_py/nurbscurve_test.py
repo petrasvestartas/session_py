@@ -468,6 +468,8 @@ def test_nurbscurve_attributes():
     # Span of distict nurbsknot intervals
     intervals = curve.get_span_vector()
     MINI_CHECK(TOLERANCE.is_close(intervals[0], 0.0) and TOLERANCE.is_close(intervals[1], 0.5) and TOLERANCE.is_close(intervals[2], 1.0))
+    # An empty curve has no spans to report.
+    MINI_CHECK(len(NurbsCurve().get_span_vector()) == 0)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometric checks
