@@ -877,6 +877,13 @@ def test_nurbscurve_protobuf_roundtrip():
     MINI_CHECK(loaded_proto_string == curve)
     MINI_CHECK(loaded == curve)
 
+    # The presentation fields ride along too: width survives the round trip.
+    styled = curve.duplicate()
+    styled.width = 2.5
+    loaded_styled = NurbsCurve.pb_loads(styled.pb_dumps())
+    MINI_CHECK(loaded_styled.width == 2.5)
+    MINI_CHECK(loaded_styled == styled)
+
 
 @MINI_TEST("NurbsCurve", "Curvature")
 def test_nurbscurve_curvature():
