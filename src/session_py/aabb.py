@@ -51,8 +51,8 @@ class AABB(NamedTuple):
     @classmethod
     def from_coords_stride3(cls, coords: list[float], inflate: float = 0.0) -> "AABB":
         # Build an AABB directly from a stride-3 coord buffer (e.g. Polyline.coords)
-        # without constructing an intermediate list of Points. Used on hot paths
-        # like Session.add_polyline where the caller already has raw coords.
+        # without constructing an intermediate list of Points, for callers that
+        # already hold raw coords. No caller in this repo yet.
         if len(coords) < 3:
             return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         n = len(coords) // 3
