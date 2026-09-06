@@ -1,9 +1,8 @@
-from __future__ import annotations
-from typing import List
-from typing import NamedTuple
-from typing import TYPE_CHECKING
 # AABB — axis-aligned bounding box primitive (center + half-size).
 # Use for: containment tests, intersection tests, tight bounds of geometry.
+from __future__ import annotations
+from typing import NamedTuple
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .mesh import Mesh
