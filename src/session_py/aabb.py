@@ -96,7 +96,6 @@ class AABB(NamedTuple):
 
     @classmethod
     def from_nurbscurve(cls, curve: "NurbsCurve", inflate: float = 0.0, tight: bool = False) -> "AABB":
-        from .vector import Vector
         if not curve.is_valid() or curve.cv_count() == 0:
             return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         if not tight:
