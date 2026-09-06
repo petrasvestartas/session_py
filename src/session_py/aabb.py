@@ -3,6 +3,7 @@
 from __future__ import annotations
 from typing import NamedTuple
 from typing import TYPE_CHECKING
+import math
 
 if TYPE_CHECKING:
     from .mesh import Mesh
@@ -222,7 +223,6 @@ class AABB(NamedTuple):
         return 8.0 * (self.hx * self.hy + self.hy * self.hz + self.hz * self.hx)
 
     def diagonal(self) -> float:
-        import math
         return 2.0 * math.sqrt(self.hx * self.hx + self.hy * self.hy + self.hz * self.hz)
 
     def is_valid(self) -> bool:
