@@ -83,7 +83,7 @@ class AABB(NamedTuple):
 
     @classmethod
     def from_polyline(cls, polyline: "Polyline", inflate: float = 0.0) -> "AABB":
-        return cls.from_points(polyline.points, inflate)
+        return cls.from_points(polyline.get_points(), inflate)
 
     @classmethod
     def from_mesh(cls, mesh: "Mesh", inflate: float = 0.0) -> "AABB":
@@ -116,9 +116,9 @@ class AABB(NamedTuple):
             deriv_end = curve.evaluate(t_end, 1)
             if len(deriv_start) < 2 or len(deriv_end) < 2:
                 continue
-            for axis_idx in range(3):
-                d_start = deriv_start[1][axis_idx]
-                d_end = deriv_end[1][axis_idx]
+            for axis in range(3):
+                d_start = deriv_start[1][axis]
+                d_end = deriv_end[1][axis]
                 if d_start * d_end < 0:
                     t_lo, t_hi = t_start, t_end
                     t_root = (t_lo + t_hi) * 0.5
@@ -126,8 +126,8 @@ class AABB(NamedTuple):
                         deriv = curve.evaluate(t_root, 2)
                         if len(deriv) < 3:
                             break
-                        f = deriv[1][axis_idx]
-                        fp = deriv[2][axis_idx]
+                        f = deriv[1][axis]
+                        fp = deriv[2][axis]
                         if abs(f) < 1e-12:
                             break
                         if abs(fp) > 1e-14:
@@ -144,7 +144,7 @@ class AABB(NamedTuple):
                             t_root = (t_lo + t_hi) * 0.5
                         deriv_check = curve.evaluate(t_root, 1)
                         if len(deriv_check) >= 2:
-                            f_check = deriv_check[1][axis_idx]
+                            f_check = deriv_check[1][axis]
                             if f_check * d_start < 0:
                                 t_hi = t_root
                             else:
