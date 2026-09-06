@@ -148,7 +148,6 @@ class AABB(NamedTuple):
                             f_check = deriv_check[1][axis_idx]
                             if f_check * d_start < 0:
                                 t_hi = t_root
-                                d_end = f_check
                             else:
                                 t_lo = t_root
                                 d_start = f_check
