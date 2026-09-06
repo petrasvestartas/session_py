@@ -4,6 +4,8 @@ from __future__ import annotations
 from typing import NamedTuple
 from typing import TYPE_CHECKING
 import math
+from .line import Line
+from .point import Point
 
 if TYPE_CHECKING:
     from .mesh import Mesh
@@ -11,8 +13,6 @@ if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .pointcloud import PointCloud
     from .polyline import Polyline
-    from .line import Line
-    from .point import Point
 
 
 class AABB(NamedTuple):
@@ -164,15 +164,12 @@ class AABB(NamedTuple):
         return cls.from_points(points, inflate)
 
     def min_point(self) -> "Point":
-        from .point import Point
         return Point(self.cx - self.hx, self.cy - self.hy, self.cz - self.hz)
 
     def max_point(self) -> "Point":
-        from .point import Point
         return Point(self.cx + self.hx, self.cy + self.hy, self.cz + self.hz)
 
     def corners(self) -> list["Point"]:
-        from .point import Point
         cx, cy, cz, hx, hy, hz = self
         return [
             Point(cx + hx, cy + hy, cz - hz),
@@ -216,7 +213,6 @@ class AABB(NamedTuple):
         )
 
     def center(self) -> "Point":
-        from .point import Point
         return Point(self.cx, self.cy, self.cz)
 
     def area(self) -> float:
@@ -232,7 +228,6 @@ class AABB(NamedTuple):
         return 8.0 * self.hx * self.hy * self.hz
 
     def closest_point(self, pt: "Point") -> "Point":
-        from .point import Point
         x = max(self.cx - self.hx, min(self.cx + self.hx, pt[0]))
         y = max(self.cy - self.hy, min(self.cy + self.hy, pt[1]))
         z = max(self.cz - self.hz, min(self.cz + self.hz, pt[2]))
@@ -244,7 +239,6 @@ class AABB(NamedTuple):
                 self.cz - self.hz <= pt[2] <= self.cz + self.hz)
 
     def corner(self, x_max: bool, y_max: bool, z_max: bool) -> "Point":
-        from .point import Point
         return Point(
             self.cx + (self.hx if x_max else -self.hx),
             self.cy + (self.hy if y_max else -self.hy),
@@ -255,7 +249,6 @@ class AABB(NamedTuple):
         return self.corners()
 
     def get_edges(self) -> list["Line"]:
-        from .line import Line
         c = self.corners()
         return [
             Line.from_points(c[0], c[1]),
@@ -273,7 +266,6 @@ class AABB(NamedTuple):
         ]
 
     def point_at(self, x: float, y: float, z: float) -> "Point":
-        from .point import Point
         return Point(self.cx + x, self.cy + y, self.cz + z)
 
     def union_with(self, other: "AABB") -> "AABB":
