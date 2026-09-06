@@ -275,11 +275,11 @@ class AABB(NamedTuple):
         max_x = max(self.cx + self.hx, other.cx + other.hx)
         max_y = max(self.cy + self.hy, other.cy + other.hy)
         max_z = max(self.cz + self.hz, other.cz + other.hz)
-        return self._replace(
-            cx=(min_x + max_x) * 0.5,
-            cy=(min_y + max_y) * 0.5,
-            cz=(min_z + max_z) * 0.5,
-            hx=(max_x - min_x) * 0.5,
-            hy=(max_y - min_y) * 0.5,
-            hz=(max_z - min_z) * 0.5,
+        return AABB(
+            (min_x + max_x) * 0.5,
+            (min_y + max_y) * 0.5,
+            (min_z + max_z) * 0.5,
+            (max_x - min_x) * 0.5,
+            (max_y - min_y) * 0.5,
+            (max_z - min_z) * 0.5,
         )
