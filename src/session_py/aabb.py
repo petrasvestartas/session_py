@@ -269,17 +269,4 @@ class AABB(NamedTuple):
         return Point(self.cx + x, self.cy + y, self.cz + z)
 
     def union_with(self, other: "AABB") -> "AABB":
-        min_x = min(self.cx - self.hx, other.cx - other.hx)
-        min_y = min(self.cy - self.hy, other.cy - other.hy)
-        min_z = min(self.cz - self.hz, other.cz - other.hz)
-        max_x = max(self.cx + self.hx, other.cx + other.hx)
-        max_y = max(self.cy + self.hy, other.cy + other.hy)
-        max_z = max(self.cz + self.hz, other.cz + other.hz)
-        return AABB(
-            (min_x + max_x) * 0.5,
-            (min_y + max_y) * 0.5,
-            (min_z + max_z) * 0.5,
-            (max_x - min_x) * 0.5,
-            (max_y - min_y) * 0.5,
-            (max_z - min_z) * 0.5,
-        )
+        return AABB.merge(self, other)
