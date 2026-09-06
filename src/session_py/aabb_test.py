@@ -118,6 +118,17 @@ def test_aabb_from_geometry():
     MINI_CHECK(a_nc.is_valid())
     MINI_CHECK(a_nc.contains(Point(1.5, 0.0, 0.0)))
 
+    bulge = NurbsCurve.create(False, 2, [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 2.0, 0.0),
+        Point(2.0, 1.0, 0.0),
+    ])
+    a_hull = AABB.from_nurbscurve(bulge, 0.0, False)
+    a_tight = AABB.from_nurbscurve(bulge, 0.0, True)
+
+    MINI_CHECK(TOLERANCE.is_close(a_hull.max_point()[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(a_tight.max_point()[1], 4.0 / 3.0))
+
     surf = NurbsSurface.create(False, False, 1, 1, 2, 2, [
         Point(0.0, 0.0, 0.0),
         Point(2.0, 0.0, 0.0),

@@ -110,14 +110,14 @@ class AABB(NamedTuple):
                 extrema_points.append(curve.point_at(t))
         NUM_SAMPLES = 20
         dt = (t1 - t0) / NUM_SAMPLES
-        for axis_idx in range(3):
-            for i in range(NUM_SAMPLES):
-                t_start = t0 + i * dt
-                t_end = t_start + dt
-                deriv_start = curve.evaluate(t_start, 1)
-                deriv_end = curve.evaluate(t_end, 1)
-                if len(deriv_start) < 2 or len(deriv_end) < 2:
-                    continue
+        for i in range(NUM_SAMPLES):
+            t_start = t0 + i * dt
+            t_end = t_start + dt
+            deriv_start = curve.evaluate(t_start, 1)
+            deriv_end = curve.evaluate(t_end, 1)
+            if len(deriv_start) < 2 or len(deriv_end) < 2:
+                continue
+            for axis_idx in range(3):
                 d_start = deriv_start[1][axis_idx]
                 d_end = deriv_end[1][axis_idx]
                 if d_start * d_end < 0:
