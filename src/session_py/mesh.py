@@ -381,6 +381,9 @@ class Mesh:
         self._triangle_face_subidx_cache = []
         self._vertices_cache = []
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -2985,7 +2988,8 @@ class Mesh:
         from .proto import mesh_pb2
 
         proto = mesh_pb2.Mesh()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
 
         # Vertices
@@ -3067,7 +3071,8 @@ class Mesh:
         """Fill an existing Mesh proto message directly (avoids serialize/deserialize cycle)."""
         from .proto import mesh_pb2
         from .proto import color_pb2
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         for vkey, vdata in self.vertex.items():
             vp = proto.vertices[vkey]
@@ -3127,7 +3132,8 @@ class Mesh:
         proto.ParseFromString(data)
 
         mesh = cls()
-        mesh.guid = proto.guid
+        if proto.guid:
+            mesh.guid = proto.guid
         mesh.name = proto.name
 
         # Vertices
@@ -3201,7 +3207,8 @@ class Mesh:
         from .color import Color
 
         mesh = cls()
-        mesh.guid = proto.guid
+        if proto.guid:
+            mesh.guid = proto.guid
         mesh.name = proto.name
 
         for vkey, vdata in proto.vertices.items():

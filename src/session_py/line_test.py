@@ -183,12 +183,13 @@ def test_line_protobuf_roundtrip():
     #   pb_load(path)   │ file         │ read from file
 
     # Bytes
+    guid = l.guid
     b = l.pb_dumps()
     loaded_s = Line.pb_loads(b)
 
     MINI_CHECK(loaded_s.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
-    MINI_CHECK(loaded_s.guid == l.guid)
+    MINI_CHECK(loaded_s.guid == guid)
 
     # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.bin"

@@ -117,6 +117,9 @@ class NurbsSurface:
             else:
                 self.make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
     
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -2975,7 +2978,8 @@ class NurbsSurface:
         from .proto import nurbssurface_pb2
 
         proto = nurbssurface_pb2.NurbsSurface()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.dimension = self.m_dim
         proto.is_rational = bool(self.m_is_rat)
@@ -3015,7 +3019,8 @@ class NurbsSurface:
 
     def pb_fill(self, proto: "nurbssurface_pb2.NurbsSurface") -> None:
         """Fill an existing NurbsSurface proto message directly (avoids serialize/deserialize cycle)."""
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.dimension = self.m_dim
         proto.is_rational = bool(self.m_is_rat)
@@ -3074,7 +3079,8 @@ class NurbsSurface:
         )
 
         # Load metadata
-        surface.guid = proto.guid
+        if proto.guid:
+            surface.guid = proto.guid
         surface.name = proto.name
         surface.width = proto.width
 

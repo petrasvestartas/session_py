@@ -19,6 +19,9 @@ class Matrix:
         self._cols = cols
         self.data = [0.0] * (rows * cols)
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -465,7 +468,8 @@ class Matrix:
     def pb_dumps(self) -> bytes:
         from .proto import matrix_pb2
         proto = matrix_pb2.Matrix()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.rows = self._rows
         proto.cols = self._cols
@@ -478,7 +482,8 @@ class Matrix:
         proto = matrix_pb2.Matrix()
         proto.ParseFromString(data)
         m = cls.from_list(proto.rows, proto.cols, list(proto.data))
-        m.guid = proto.guid
+        if proto.guid:
+            m.guid = proto.guid
         m.name = proto.name
         return m
 

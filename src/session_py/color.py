@@ -49,6 +49,9 @@ class Color:
         self._b = max(0.0, min(1.0, float(b)))
         self._a = max(0.0, min(1.0, float(a)))
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -438,7 +441,8 @@ class Color:
         if not _HAS_PROTOBUF:
             raise ImportError("protobuf not available")
         proto = color_pb2.Color()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.r = self[0]
         proto.g = self[1]
@@ -472,7 +476,8 @@ class Color:
         proto.ParseFromString(data)
         
         color = cls(proto.r, proto.g, proto.b, proto.a)
-        color.guid = proto.guid
+        if proto.guid:
+            color.guid = proto.guid
         color.name = proto.name
         return color
 

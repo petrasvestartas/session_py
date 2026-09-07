@@ -615,11 +615,12 @@ def test_xform_protobuf_roundtrip():
     xform.name = "test_xform_proto"
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.bin"
+    guid = xform.guid
     xform.pb_dump(fname)
     loaded = Xform.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_xform_proto")
-    MINI_CHECK(loaded.guid == xform.guid)
+    MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded.m[0], 1.0) and TOLERANCE.is_close(loaded.m[1], 0.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.m[2], 0.0) and TOLERANCE.is_close(loaded.m[3], 0.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.m[4], 0.0) and TOLERANCE.is_close(loaded.m[5], 1.0))

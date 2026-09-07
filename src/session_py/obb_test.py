@@ -161,11 +161,12 @@ def test_obb_protobuf_roundtrip():
     bb.name = "test_bbox_proto"
 
     # Bytes
+    guid = bb.guid
     b = bb.pb_dumps()
     loaded_s = OBB.pb_loads(b)
 
     MINI_CHECK(loaded_s.name == "test_bbox_proto")
-    MINI_CHECK(loaded_s.guid == bb.guid)
+    MINI_CHECK(loaded_s.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded_s.center[0], 1.0))
 
     # File

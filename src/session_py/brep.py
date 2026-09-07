@@ -396,6 +396,9 @@ class BRep:
         self.m_shells: list[BRepShell] = []
         self.m_solids: list[BRepSolid] = []
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -1245,7 +1248,8 @@ class BRep:
     def pb_dumps(self) -> bytes:
         from .proto import brep_pb2
         proto = brep_pb2.BRep()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.width = self.width
         for c in self.m_curves_2d:
@@ -1301,7 +1305,8 @@ class BRep:
         proto = brep_pb2.BRep()
         proto.ParseFromString(data)
         b = cls()
-        b.guid = proto.guid
+        if proto.guid:
+            b.guid = proto.guid
         b.name = proto.name
         b.width = proto.width
         b.m_curves_2d = [NurbsCurve.pb_loads(c.SerializeToString()) for c in proto.curves_2d]

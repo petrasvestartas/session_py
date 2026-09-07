@@ -49,6 +49,9 @@ class Point:
         self.width = 1.0
         self._pointcolor = None
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -622,7 +625,8 @@ class Point:
         from .proto import point_pb2
         
         proto = point_pb2.Point()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.x = self[0]
         proto.y = self[1]
@@ -660,7 +664,8 @@ class Point:
         proto.ParseFromString(data)
         
         pt = cls(proto.x, proto.y, proto.z)
-        pt.guid = proto.guid
+        if proto.guid:
+            pt.guid = proto.guid
         pt.name = proto.name
         pt.width = proto.width
         

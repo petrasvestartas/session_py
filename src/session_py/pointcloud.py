@@ -59,6 +59,9 @@ class PointCloud:
             for n in normals:
                 self._normals.extend([n[0], n[1], n[2]])
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         """Lazy GUID accessor."""
@@ -545,7 +548,8 @@ class PointCloud:
         from .proto import pointcloud_pb2
 
         proto = pointcloud_pb2.PointCloud()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.coords.extend(self.coords)
         proto.colors.extend(self._colors)
@@ -575,7 +579,8 @@ class PointCloud:
             list(proto.colors),
             list(proto.normals)
         )
-        pc.guid = proto.guid
+        if proto.guid:
+            pc.guid = proto.guid
         pc.name = proto.name
         pc.point_size = proto.point_size if proto.point_size > 0 else 1.0
         pc._lod_min = list(proto.lod_min)

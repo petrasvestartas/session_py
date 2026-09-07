@@ -47,6 +47,9 @@ class Polyline:
         # Plane computed lazily on first access
         self._plane = None
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -1426,7 +1429,8 @@ class Polyline:
         from .proto import polyline_pb2
 
         proto = polyline_pb2.Polyline()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.coords.extend(self.coords)
         proto.width = self.width
@@ -1443,7 +1447,8 @@ class Polyline:
 
     def pb_fill(self, proto: "polyline_pb2.Polyline") -> None:
         """Fill an existing Polyline proto message directly (avoids serialize/deserialize cycle)."""
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.coords.extend(self.coords)
         proto.width = self.width
@@ -1475,7 +1480,8 @@ class Polyline:
         proto.ParseFromString(data)
 
         polyline = cls.from_coords(list(proto.coords))
-        polyline.guid = proto.guid
+        if proto.guid:
+            polyline.guid = proto.guid
         polyline.name = proto.name
         polyline.width = proto.width
         polyline.dash = list(proto.dash)

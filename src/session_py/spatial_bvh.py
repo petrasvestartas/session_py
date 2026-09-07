@@ -354,6 +354,9 @@ class SpatialBVH:
         )
         self.arena_root: int = -1
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:

@@ -325,6 +325,7 @@ def test_registry_round_trip():
 
     plate = TestPlate(geometry=_unit_quad(), thickness=12.5, codes=[30, 11, 20])
     plate.name = "plate_0"
+    guid = plate.guid
     loaded = Element.pb_loads_polymorphic(plate.pb_dumps())
 
     # The derived type came back, not a sliced base.
@@ -332,7 +333,7 @@ def test_registry_round_trip():
     MINI_CHECK(loaded.element_type_name() == "TestPlate")
 
     # Identity, base state and domain state all survived.
-    MINI_CHECK(loaded.guid == plate.guid)
+    MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(loaded.name == "plate_0")
     MINI_CHECK(isinstance(loaded.geometry, Mesh))
     MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 12.5))
@@ -445,11 +446,12 @@ def test_registry_json_round_trip():
 
     plate = TestPlate(geometry=_unit_quad(), thickness=9.5, codes=[7, 8])
     plate.name = "plate_json"
+    guid = plate.guid
     loaded = Element.file_json_loads_polymorphic(plate.file_json_dumps())
 
     MINI_CHECK(isinstance(loaded, TestPlate))
     MINI_CHECK(loaded.name == "plate_json")
-    MINI_CHECK(loaded.guid == plate.guid)
+    MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 9.5))
     MINI_CHECK(loaded.codes == [7, 8])
 

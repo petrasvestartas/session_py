@@ -25,6 +25,9 @@ class Quaternion:
         self.scalar = scalar
         self.vector = vector if vector is not None else Vector(0.0, 0.0, 0.0)
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         """Lazy GUID accessor."""

@@ -48,6 +48,9 @@ class TreeNode:
         self._children = []
         self._tree = None
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -228,6 +231,9 @@ class Tree:
         self.name = name
         self._root = None
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -307,7 +313,8 @@ class Tree:
                 fill_node(proto_node.children.add(), child)
 
         proto = tree_pb2.Tree()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         if self.root:
             fill_node(proto.root, self.root)
@@ -333,7 +340,8 @@ class Tree:
             return node
 
         tree = cls(name=proto.name)
-        tree.guid = proto.guid
+        if proto.guid:
+            tree.guid = proto.guid
         if proto.HasField('root'):
             root = proto_to_node(proto.root)
             tree._root = root

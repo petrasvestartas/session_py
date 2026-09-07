@@ -87,6 +87,9 @@ class Session:
         root_node = TreeNode(name=self.name)
         self.tree.add(root_node)
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -103,8 +106,6 @@ class Session:
     def __repr__(self) -> str:
         return f"Session({self.guid}, {self.name}, {self.objects.to_str()}, {self.tree.to_str()}, {self.graph.to_str()})"
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # XFORMS - the one place a transformation is stored
     # ═══════════════════════════════════════════════════════════════════════════
 
     def set_xform(self, guid: str, xform: Xform) -> None:
@@ -142,8 +143,6 @@ class Session:
         which is quadratic over a session.
         """
         # Nothing to compose: with no local transforms every composed frame IS the identity,
-        # and every caller already falls back to identity for a guid the map lacks. Walking
-        # the tree anyway costs one dict insert per NODE, paid again on every rebuild.
         if not self.xforms:
             return {}
 
@@ -183,8 +182,6 @@ class Session:
         ordered.extend(rest)
         return ordered
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # JSON (polymorphic)
     # ═══════════════════════════════════════════════════════════════════════════
 
     def __jsondump__(self) -> dict:
@@ -279,7 +276,8 @@ class Session:
         from .proto import session_pb2
         proto = session_pb2.Session()
         proto.name = self.name
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.objects.ParseFromString(self.objects.pb_dumps())
         proto.tree.ParseFromString(self.tree.pb_dumps())
         proto.graph.ParseFromString(self.graph.pb_dumps())
@@ -298,7 +296,8 @@ class Session:
         proto = session_pb2.Session()
         proto.ParseFromString(data)
         session = cls(name=proto.name)
-        session.guid = proto.guid
+        if proto.guid:
+            session.guid = proto.guid
         session.objects = Objects.from_proto(proto.objects)
         session.tree = Tree.pb_loads(proto.tree.SerializeToString())
         session.graph = Graph.pb_loads(proto.graph.SerializeToString())
@@ -341,13 +340,6 @@ class Session:
         with open(filepath, 'rb') as f:
             return cls.pb_loads(f.read())
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Details - Add objects
-    #
-    # Every add_* below SKIPS an object that is None or carries nothing to draw, and returns
-    # None instead of a node: an empty point cloud, a polyline of fewer than two points, a
-    # mesh without faces. The check lives here so no caller has to write it, and so a scene
-    # never holds an object a viewer cannot render.
     # ═══════════════════════════════════════════════════════════════════════════
 
     def _add_object(self, collection, obj, type_prefix, parent=None):
@@ -488,8 +480,6 @@ class Session:
         self.graph.add_edge(guid1, guid2, attribute)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Details - Lookup
-    # ═══════════════════════════════════════════════════════════════════════════
 
     def get_object(self, guid: str) -> Point | None:
         """Get a geometry object by its GUID.
@@ -576,8 +566,6 @@ class Session:
 
         return True
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # SpatialBVH Collision Detection
     # ═══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
@@ -876,8 +864,6 @@ class Session:
         return hits
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Details - Tree
-    # ═══════════════════════════════════════════════════════════════════════════
 
     def add_hierarchy(self, parent_guid: str, child_guid: str) -> bool:
         """Add a parent-child relationship in the tree structure.
@@ -912,8 +898,6 @@ class Session:
         return self.tree.get_children_guids(guid)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Details - Graph
-    # ═══════════════════════════════════════════════════════════════════════════
 
     def add_relationship(
         self, from_guid: str, to_guid: str, relationship_type: str = "default"
@@ -946,8 +930,6 @@ class Session:
         """
         return self.graph.get_neighbors(guid)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Details - Transformed Geometry
     # ═══════════════════════════════════════════════════════════════════════════
 
     def get_geometry(self) -> Objects:

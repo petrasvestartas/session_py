@@ -47,6 +47,9 @@ class Xform:
         else:
             self.m = list(m)
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -894,7 +897,8 @@ class Xform:
         from .proto import xform_pb2
 
         proto = xform_pb2.Xform()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.matrix.extend(self.m)
         return proto.SerializeToString()
@@ -919,7 +923,8 @@ class Xform:
         proto = xform_pb2.Xform()
         proto.ParseFromString(data)
         xform = cls.from_matrix(list(proto.matrix))
-        xform.guid = proto.guid
+        if proto.guid:
+            xform.guid = proto.guid
         xform.name = proto.name
         return xform
 

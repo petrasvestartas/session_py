@@ -50,6 +50,9 @@ class Vector:
         self._magnitude = 0.0
         self._has_magnitude = False
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:

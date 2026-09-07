@@ -414,6 +414,9 @@ class NurbsSurfaceTrimmed:
         self.m_outer_loop = NurbsCurve()
         self.m_inner_loops = []
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -1657,7 +1660,8 @@ class NurbsSurfaceTrimmed:
     def pb_dumps(self) -> bytes:
         from .proto import nurbssurface_trimmed_pb2
         proto = nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.width = self.width
 
@@ -1692,7 +1696,8 @@ class NurbsSurfaceTrimmed:
         proto.ParseFromString(data)
 
         ts = cls()
-        ts.guid = proto.guid
+        if proto.guid:
+            ts.guid = proto.guid
         ts.name = proto.name
         ts.width = proto.width
 

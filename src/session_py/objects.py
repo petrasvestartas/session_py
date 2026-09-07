@@ -61,6 +61,9 @@ class Objects:
         self.elements: list[Element] = []
         self.components: list = []
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -172,7 +175,8 @@ class Objects:
         from .proto import objects_pb2
         proto = objects_pb2.Objects()
         proto.name = self.name
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         for p in self.points:
             proto.points.add().ParseFromString(p.pb_dumps())
         for l in self.lines:
@@ -201,7 +205,8 @@ class Objects:
     def from_proto(cls, proto: "objects_pb2.Objects") -> "Objects":
         """Create Objects from proto message directly (no SerializeToString)."""
         objects = cls()
-        objects.guid = proto.guid
+        if proto.guid:
+            objects.guid = proto.guid
         objects.name = proto.name
         for p in proto.points:
             objects.points.append(Point.pb_loads(p.SerializeToString()))

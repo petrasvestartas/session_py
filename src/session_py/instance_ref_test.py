@@ -102,13 +102,14 @@ def test_instance_ref_protobuf_roundtrip():
     r.flags = 5
 
     # Bytes
+    guid = r.guid
     b = r.pb_dumps()
     loaded_s = InstanceRef.pb_loads(b)
 
     MINI_CHECK(loaded_s.name == "test_ref")
     MINI_CHECK(loaded_s.definition_guid == "def-xyz")
     MINI_CHECK(loaded_s.flags == 5)
-    MINI_CHECK(loaded_s.guid == r.guid)
+    MINI_CHECK(loaded_s.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded_s[14], 3.0))
 
     # File

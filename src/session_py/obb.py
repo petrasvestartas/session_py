@@ -36,6 +36,9 @@ class OBB:
         self._guid = None
         self.name = "my_obb"
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -695,7 +698,8 @@ class OBB:
         proto.y_axis.ParseFromString(self.y_axis.pb_dumps())
         proto.z_axis.ParseFromString(self.z_axis.pb_dumps())
         proto.half_size.ParseFromString(self.half_size.pb_dumps())
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         return proto.SerializeToString()
 
@@ -710,7 +714,8 @@ class OBB:
         z_axis = Vector.pb_loads(proto.z_axis.SerializeToString())
         half_size = Vector.pb_loads(proto.half_size.SerializeToString())
         bbox = cls(center, x_axis, y_axis, z_axis, half_size)
-        bbox.guid = proto.guid
+        if proto.guid:
+            bbox.guid = proto.guid
         bbox.name = proto.name
         return bbox
 

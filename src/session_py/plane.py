@@ -81,6 +81,9 @@ class Plane:
 
         self._update_equation()
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -931,7 +934,8 @@ class Plane:
         from .proto import plane_pb2
 
         proto = plane_pb2.Plane()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.width = self.width
 
@@ -980,7 +984,8 @@ class Plane:
         y_axis = Vector(frame[6], frame[7], frame[8])
 
         plane = cls(origin, x_axis, y_axis, width=proto.width if proto.width > 0 else 1.0)
-        plane.guid = proto.guid
+        if proto.guid:
+            plane.guid = proto.guid
         plane.name = proto.name
 
         # Load linecolor

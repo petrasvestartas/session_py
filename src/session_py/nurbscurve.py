@@ -744,6 +744,9 @@ class NurbsCurve:
 
         self._rmf_cache = None
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -3854,7 +3857,8 @@ class NurbsCurve:
         """Convert to protobuf binary bytes."""
         from .proto import nurbscurve_pb2
         proto = nurbscurve_pb2.NurbsCurve()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.dimension = int(self.m_dim)
         proto.is_rational = bool(self.m_is_rat)
@@ -3875,7 +3879,8 @@ class NurbsCurve:
 
     def pb_fill(self, proto: "nurbscurve_pb2.NurbsCurve") -> None:
         """Fill an existing NurbsCurve proto message directly (avoids serialize/deserialize cycle)."""
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.dimension = int(self.m_dim)
         proto.is_rational = bool(self.m_is_rat)
@@ -3899,7 +3904,8 @@ class NurbsCurve:
         proto = nurbscurve_pb2.NurbsCurve()
         proto.ParseFromString(data)
         curve = cls()
-        curve.guid = proto.guid
+        if proto.guid:
+            curve.guid = proto.guid
         curve.name = proto.name
         curve.m_dim = proto.dimension
         curve.m_is_rat = 1 if proto.is_rational else 0

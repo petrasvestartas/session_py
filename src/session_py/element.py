@@ -54,6 +54,9 @@ class ElementFeature:
         self.face_index = face_index
         self.outlines = list(outlines or [])
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         """Lazily minted, like every other identity in the kernel - a feature nobody names never
@@ -154,7 +157,8 @@ class ElementFeature:
     def pb_dumps(self) -> bytes:
         from .proto import element_pb2
         proto = element_pb2.ElementFeature()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.feature_type = self.feature_type
         proto.face_index = self.face_index
@@ -214,6 +218,9 @@ class Element:
         self._planes = None
         self._edge_vectors = None
         self._axis = None
+
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
 
     @property
     def guid(self) -> str:
@@ -633,7 +640,8 @@ class Element:
     def pb_dumps(self) -> bytes:
         from .proto import element_pb2
         proto = element_pb2.Element()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         if self._geometry is not None:
             proto.geometry_type = type(self._geometry).__name__
@@ -671,7 +679,8 @@ class Element:
         if proto.geometry_type and proto.geometry_type != "None" and proto.geometry_data:
             geometry = cls._pb_load_geometry(proto.geometry_type, proto.geometry_data)
         elem = cls(geometry=geometry)
-        elem.guid = proto.guid
+        if proto.guid:
+            elem.guid = proto.guid
         elem.name = proto.name
         # Carried, not interpreted. A viewer with no wood package registered loads a wood element
         # as a base Element; if these two were dropped here, saving it again wrote empty values

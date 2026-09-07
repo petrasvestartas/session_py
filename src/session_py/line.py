@@ -57,6 +57,9 @@ class Line:
         self.dash = []
         self._linecolor = None
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -778,7 +781,8 @@ class Line:
         from .proto import point_pb2
 
         proto = line_pb2.Line()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
 
         # P6: coords packed, colour packed; the name rides a zero-cost string
@@ -813,7 +817,8 @@ class Line:
 
         c = proto.coords
         line = cls(c[0], c[1], c[2], c[3], c[4], c[5]) if len(c) == 6 else cls()
-        line.guid = proto.guid
+        if proto.guid:
+            line.guid = proto.guid
         line.name = proto.name
 
         # Load width and linecolor

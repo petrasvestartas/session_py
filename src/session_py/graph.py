@@ -18,6 +18,9 @@ class Vertex:
         self.attribute = str(attribute)
         self.index = None
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -66,6 +69,9 @@ class Edge:
         self.v1 = str(v1)
         self.attribute = str(attribute)
         self.index = None
+
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
 
     @property
     def guid(self) -> str:
@@ -146,6 +152,9 @@ class Graph:
         self.edges = {}  # node_name -> {neighbor_name -> Edge object}
         self.vertex_count = 0  # Track next available vertex index
         self.edge_count = 0  # Track next available edge index
+
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
 
     @property
     def guid(self) -> str:
@@ -280,7 +289,8 @@ class Graph:
 
         proto = graph_pb2.Graph()
         proto.name = self.name
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.vertex_count = self.vertex_count
         proto.edge_count = self.edge_count
 
@@ -318,7 +328,8 @@ class Graph:
         proto.ParseFromString(data)
 
         graph = cls(name=proto.name)
-        graph.guid = proto.guid
+        if proto.guid:
+            graph.guid = proto.guid
         graph.vertex_count = proto.vertex_count
         graph.edge_count = proto.edge_count
 

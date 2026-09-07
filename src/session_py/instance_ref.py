@@ -48,6 +48,9 @@ class InstanceRef:
         self._color = None
         self.flags = 0
 
+    def has_guid(self) -> bool:
+        return getattr(self, '_guid', None) is not None
+
     @property
     def guid(self) -> str:
         if getattr(self, '_guid', None) is None:
@@ -214,7 +217,8 @@ class InstanceRef:
         from .proto import instance_ref_pb2
 
         proto = instance_ref_pb2.InstanceRef()
-        proto.guid = self.guid
+        if self.has_guid():
+            proto.guid = self._guid
         proto.name = self.name
         proto.definition_guid = self.definition_guid
         proto.xform.name = self.xform.name
@@ -235,7 +239,8 @@ class InstanceRef:
         proto.ParseFromString(data)
 
         ref = cls(proto.definition_guid)
-        ref.guid = proto.guid
+        if proto.guid:
+            ref.guid = proto.guid
         ref.name = proto.name
         if proto.HasField('xform'):
             ref.xform = Xform()
