@@ -525,7 +525,9 @@ class NurbsSurfaceTrimmed:
             snap_uv = min(range_u, range_v) * 1e-7
 
         # ---- 1. Sample cutters into tagged UV polylines ----
-        samp_tol = max(range_u, range_v) * 1e-3
+        # The split faces carry these polylines as their trim pcurves, so the sampling sag is
+        # a direct geometric error of the result.
+        samp_tol = max(range_u, range_v) * 2e-5
         polylines = []  # dict: cidx, pts (list [u,v]), ts (curve params)
 
         def snap_border(p):
@@ -543,7 +545,7 @@ class NurbsSurfaceTrimmed:
                 continue
             ct0, ct1 = crv.domain()
             entries = []
-            n = max(crv.cv_count() * 4, 16)
+            n = min(max(crv.cv_count() * 4, 16), 2048)
             for i in range(n + 1):
                 t = ct0 + (ct1 - ct0) * i / n
                 p = crv.point_at(t)
@@ -601,6 +603,17 @@ class NurbsSurfaceTrimmed:
         polylines.append({'cidx': -2, 'pts': [[u1, v0], [u1, v1]], 'ts': [v0, v1]})
         polylines.append({'cidx': -3, 'pts': [[u1, v1], [u0, v1]], 'ts': [u1, u0]})
         polylines.append({'cidx': -4, 'pts': [[u0, v1], [u0, v0]], 'ts': [v1, v0]})
+
+        # ---- 1b. Drop degenerate cut polylines ----
+        # A cutter whose whole UV extent is below a few snap widths yields a sliver cell whose
+        # lifted loop corrupts memory downstream. Border sides are always kept.
+        min_ext = max(snap_uv * 8.0, min(range_u, range_v) * 1e-5)
+
+        def poly_extent(pts):
+            return sum(math.hypot(pts[k][0]-pts[k-1][0], pts[k][1]-pts[k-1][1]) for k in range(1, len(pts)))
+
+        polylines = [P for P in polylines
+                     if _is_boundary(P['cidx']) or poly_extent(P['pts']) >= min_ext]
 
         # ---- 2. Segment-segment intersections (Newton-refined on real curves) ----
         def seg_seg(p1, p2, p3, p4):
@@ -866,13 +879,20 @@ class NurbsSurfaceTrimmed:
                 if run['cidx'] >= 0:
                     crv = pcurves[run['cidx']]
                     c0, c1 = crv.domain()
-                    lo = min(run['ta'], run['tb'])
-                    hi_ = max(run['ta'], run['tb'])
+                    # Clamp to the curve domain: a snapped run can carry an endpoint parameter a
+                    # hair outside [c0,c1], and trimming out-of-domain corrupts memory.
+                    lo = max(c0, min(run['ta'], run['tb']))
+                    hi_ = min(c1, max(run['ta'], run['tb']))
                     piece = crv.duplicate()
                     piece_ok = True
                     if hi_ - lo < (c1 - c0) - 1e-12 and hi_ - lo > 1e-14:
                         if not piece.trim(lo, hi_):
                             piece_ok = False
+                    elif hi_ - lo <= 1e-14:
+                        # zero param span: a FULL wrap of a closed pcurve lands ta==tb on the
+                        # period seam -- keep the whole curve; a genuinely degenerate run is
+                        # skipped (its endpoint chord below is zero-length and pushes nothing).
+                        piece_ok = run['va'] == run['vb'] and piece.is_closed()
                     if piece_ok and piece.is_valid():
                         if run['ta'] > run['tb']:
                             piece.reverse()  # orient tail->head
@@ -892,9 +912,21 @@ class NurbsSurfaceTrimmed:
             pieces = cycle_to_segments(cycle)
             if not pieces:
                 return NurbsCurve()
-            joined = NurbsCurve.join(pieces, snap_uv * 4.0)
-            if len(joined) == 1 and joined[0].is_closed():
-                return joined[0]
+            join_tol = snap_uv * 4.0
+            joined = NurbsCurve.join(pieces, join_tol)
+            if len(joined) == 1 and joined[0].is_valid():
+                j = joined[0]
+                # is_closed() demands ZERO_TOLERANCE; a loop reassembled from trimmed pieces
+                # closes within the join tolerance. Weld the last CV onto the first (clamped
+                # ends ARE CVs) rather than fall back to a polyline that discards the exact
+                # curve representation.
+                if not j.is_closed() and j.point_at_start().distance(j.point_at_end()) <= join_tol:
+                    cv0 = j.get_cv_4d(0)
+                    cve = j.get_cv_4d(j.cv_count() - 1)
+                    if cv0 is not None and cve is not None:
+                        j.set_cv_4d(j.cv_count() - 1, cv0[0], cv0[1], cv0[2], cve[3])
+                if j.is_closed():
+                    return j
             loop_pts = []
             for hi in cycle:
                 a = verts[hes[hi][0]]
@@ -956,7 +988,7 @@ class NurbsSurfaceTrimmed:
         sdom_v = self.m_surface.domain(1)
         range_u = sdom_u[1] - sdom_u[0]
         range_v = sdom_v[1] - sdom_v[0]
-        n_samples = max(curve_3d.cv_count() * 4, 32)
+        n_samples = min(max(curve_3d.cv_count() * 4, 32), 2048)
         uv_pts = []
         for i in range(n_samples):
             t = dom[0] + (dom[1] - dom[0]) * i / n_samples
@@ -1037,7 +1069,7 @@ class NurbsSurfaceTrimmed:
             if crv.degree() <= 1 and not crv.is_rational():
                 raw = [(crv.get_cv(i)[0], crv.get_cv(i)[1]) for i in range(crv.cv_count())]
             else:
-                n = max(crv.cv_count() * 4, 16)
+                n = min(max(crv.cv_count() * 4, 16), 2048)
                 sampled, _ = crv.divide_by_count(n)
                 raw = [(p[0], p[1]) for p in sampled]
             while len(raw) > 1:
@@ -1069,7 +1101,13 @@ class NurbsSurfaceTrimmed:
                         cx = pa[0]+t*ex; cy = pa[1]+t*ey; cz = pa[2]+t*ez
                         dev = math.sqrt((pm[0]-cx)**2 + (pm[1]-cy)**2 + (pm[2]-cz)**2)
                     else:
-                        dev = 0.0
+                        # Degenerate 3D chord: the two endpoints coincide in 3D. This is either a
+                        # true singular edge (the whole segment collapses to a point -> pm == pa,
+                        # dev stays ~0, no refinement) or a seam-wrap edge (a single UV segment that
+                        # wraps a periodic surface, e.g. a cylinder/sphere rim u:0->2pi -> pm lies on
+                        # the far side). Measure deviation as the midpoint-to-endpoint 3D distance so
+                        # seam-wrap edges get subdivided into the underlying circle instead of a chord.
+                        dev = math.sqrt((pm[0]-pa[0])**2 + (pm[1]-pa[1])**2 + (pm[2]-pa[2])**2)
                     if dev > deflection and depth < 6:
                         stack.append(((mu, mv), sb, depth+1))
                         stack.append((sa, (mu, mv), depth+1))
