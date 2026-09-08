@@ -6,6 +6,7 @@ This module provides intersection calculations between various geometric objects
 including lines, planes, rays, boxes, spheres, triangles, and meshes.
 """
 
+import sys
 from typing import TYPE_CHECKING
 from .line import Line
 from .point import Point
@@ -70,7 +71,7 @@ def line_line_parameters(
 
     det = AA * BB - AB * AB
 
-    zero_tol = max(AA, BB) * 1e-15
+    zero_tol = max(AA, BB) * sys.float_info.epsilon
     if abs(det) < zero_tol:
         if not near_parallel_as_closest:
             return None
@@ -223,7 +224,7 @@ def line_plane(line: Line, plane: "Plane", is_finite: bool = True) -> Point | No
     else:
         d_inv = 1.0 / d
         fd = abs(d_inv)
-        if fd > 1.0 and (abs(a) >= 1e38 / fd or abs(b) >= 1e38 / fd):
+        if fd > 1.0 and (abs(a) >= sys.float_info.max / fd or abs(b) >= sys.float_info.max / fd):
             t = 0.5
             rc = False
         else:
@@ -299,9 +300,9 @@ def ray_box(
     box_max = box.max_point()
 
     # Calculate inverse direction (avoid division by zero)
-    inv_dir_x = 1.0 / direction[0] if direction[0] != 0.0 else float("inf")
-    inv_dir_y = 1.0 / direction[1] if direction[1] != 0.0 else float("inf")
-    inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else float("inf")
+    inv_dir_x = 1.0 / direction[0] if direction[0] != 0.0 else sys.float_info.max
+    inv_dir_y = 1.0 / direction[1] if direction[1] != 0.0 else sys.float_info.max
+    inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else sys.float_info.max
 
     # Calculate intersections with X slabs
     tx1 = (box_min[0] - origin[0]) * inv_dir_x
