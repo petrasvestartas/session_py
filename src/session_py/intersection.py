@@ -3741,16 +3741,16 @@ def _vectors_nearly_parallel(v0, v1, angle_tol: float = 0.1) -> bool:
     import math
     m0 = math.sqrt(v0[0]*v0[0] + v0[1]*v0[1] + v0[2]*v0[2])
     m1 = math.sqrt(v1[0]*v1[0] + v1[1]*v1[1] + v1[2]*v1[2])
-    if m0 < 1e-10 or m1 < 1e-10:
-        return True
+    if m0 < Tolerance.ZERO_TOLERANCE or m1 < Tolerance.ZERO_TOLERANCE:
+        return False
     cos_angle = abs((v0[0]*v1[0] + v0[1]*v1[1] + v0[2]*v1[2]) / (m0 * m1))
-    return cos_angle > math.cos(angle_tol)
+    return cos_angle >= math.cos(angle_tol)
 
 
 def remap(val: float, from1: float, to1: float, from2: float, to2: float) -> float:
     """Linear remap: map val from [from1,to1] to [from2,to2]."""
     span = to1 - from1
-    if abs(span) < 1e-14:
+    if abs(span) < Tolerance.ZERO_TOLERANCE:
         return from2
     t = (val - from1) / span
     return from2 + t * (to2 - from2)
@@ -3867,7 +3867,7 @@ def scale_vector_to_distance_of_2planes(direction: "Vector", p0: "Plane", p1: "P
     import math
     from .vector import Vector
     mag = math.sqrt(direction[0]**2 + direction[1]**2 + direction[2]**2)
-    if mag < 1e-14:
+    if mag < Tolerance.ZERO_TOLERANCE:
         return None
     ray = Line(0.0, 0.0, 0.0, direction[0], direction[1], direction[2])
     q0 = line_plane(ray, p0, False)
@@ -3878,14 +3878,14 @@ def scale_vector_to_distance_of_2planes(direction: "Vector", p0: "Plane", p1: "P
     # Validity: squared-distance ratio < 10 (mirrors CGAL)
     n1 = p1.z_axis
     n1_mag = math.sqrt(n1[0]**2 + n1[1]**2 + n1[2]**2)
-    if n1_mag < 1e-14:
+    if n1_mag < Tolerance.ZERO_TOLERANCE:
         return None
     o0 = p0.origin
     d = ((o0[0] - p1.origin[0]) * n1[0]
        + (o0[1] - p1.origin[1]) * n1[1]
        + (o0[2] - p1.origin[2]) * n1[2]) / n1_mag
     dist_ortho_sq = d * d
-    if dist_ortho_sq < 1e-28:
+    if dist_ortho_sq < Tolerance.ZERO_TOLERANCE:
         return None
     dist_sq = output[0]**2 + output[1]**2 + output[2]**2
     if dist_sq / dist_ortho_sq >= 10.0:
