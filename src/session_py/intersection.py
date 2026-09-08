@@ -3931,11 +3931,35 @@ def polyline_plane(poly: "Polyline", plane: "Plane") -> tuple | None:
     pts_out = []
     idx_out = []
     for i in range(n - 1):
-        pa = poly.get_point(i)
-        pb = poly.get_point(i + 1)
-        if pa is None or pb is None:
+        a = poly.get_point(i)
+        b = poly.get_point(i + 1)
+        va = plane_value_at(plane, a)
+        vb = plane_value_at(plane, b)
+        a_on = abs(va) < Tolerance.ZERO_TOLERANCE
+        b_on = abs(vb) < Tolerance.ZERO_TOLERANCE
+        # A segment lying IN the plane has no single crossing to report, but a
+        # polyline crossing exactly THROUGH a vertex must report it once: emit
+        # the on-plane vertex as the crossing of the segment it STARTS, so the
+        # segment that ends there stays silent and no duplicate is produced.
+        if a_on and b_on:
             continue
-        seg = Line(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2])
+        if a_on:
+            pts_out.append(a)
+            idx_out.append(i)
+            continue
+        if b_on:
+            # Handled as the next segment's 'a' - except on the final segment
+            # of an OPEN polyline, where 'b' never becomes an 'a'.
+            if i + 2 == n:
+                front = poly.get_point(0)
+                closes = (abs(b[0] - front[0]) < Tolerance.ZERO_TOLERANCE
+                          and abs(b[1] - front[1]) < Tolerance.ZERO_TOLERANCE
+                          and abs(b[2] - front[2]) < Tolerance.ZERO_TOLERANCE)
+                if not closes:
+                    pts_out.append(b)
+                    idx_out.append(i)
+            continue
+        seg = Line(a[0], a[1], a[2], b[0], b[1], b[2])
         pt = line_plane(seg, plane, True)
         if pt is not None:
             pts_out.append(pt)
@@ -3945,7 +3969,7 @@ def polyline_plane(poly: "Polyline", plane: "Plane") -> tuple | None:
     return (pts_out, idx_out)
 
 
-def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) -> object | None:
+def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: Point) -> object | None:
     """Intersect polyline perimeter with plane → single segment aligned to edge direction."""
     result = polyline_plane(poly, plane)
     if result is None:
@@ -3953,7 +3977,22 @@ def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) 
     pts, _ = result
     if len(pts) < 2:
         return None
-    p0, p1 = pts[0], pts[1]
+    # With more than 2 crossings (non-convex contact patch) the first two in
+    # edge order are an arbitrary sub-chord; take the EXTREME pair so the joint
+    # line spans the full patch. For exactly 2 crossings this is unchanged.
+    ia, ib = 0, 1
+    if len(pts) > 2:
+        best = -1.0
+        for i in range(len(pts) - 1):
+            for j in range(i + 1, len(pts)):
+                dx = pts[i][0] - pts[j][0]
+                dy = pts[i][1] - pts[j][1]
+                dz = pts[i][2] - pts[j][2]
+                d = dx*dx + dy*dy + dz*dz
+                if d > best:
+                    best = d
+                    ia, ib = i, j
+    p0, p1 = pts[ia], pts[ib]
     # Align so that p0 is closer to align_start
     d0 = (p0[0]-align_start[0])**2 + (p0[1]-align_start[1])**2 + (p0[2]-align_start[2])**2
     d1 = (p1[0]-align_start[0])**2 + (p1[1]-align_start[1])**2 + (p1[2]-align_start[2])**2
