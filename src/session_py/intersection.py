@@ -6,9 +6,6 @@ This module provides intersection calculations between various geometric objects
 including lines, planes, rays, boxes, spheres, triangles, and meshes.
 """
 
-from typing import Optional
-from typing import Tuple
-from typing import List
 from typing import TYPE_CHECKING
 from .line import Line
 from .point import Point
@@ -3964,7 +3961,7 @@ def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) 
     return Line(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
 
 
-def quad_from_line_top_bottom_planes(face_plane: "Plane", line: Line, plane0: "Plane", plane1: "Plane") -> Optional["Polyline"]:
+def quad_from_line_top_bottom_planes(face_plane: "Plane", line: Line, plane0: "Plane", plane1: "Plane") -> "Polyline" | None:
     """Build a closed quad polyline from a joint line plus two side planes.
 
     End-cap planes are perpendicular to the joint line at each endpoint;
@@ -3977,7 +3974,7 @@ def quad_from_line_top_bottom_planes(face_plane: "Plane", line: Line, plane0: "P
 
     Returns
     -------
-    Optional[:class:`Polyline`]
+    :class:`Polyline` | None
         ``None`` if any of the 3-plane intersections is degenerate.
     """
     from .plane import Plane
@@ -4017,7 +4014,7 @@ def orthogonal_vector_between_two_plane_pairs(pp00: "Plane", pp10: "Plane", pp11
 
     Returns
     -------
-    Optional[:class:`Vector`]
+    :class:`Vector` | None
     """
     l0 = plane_plane(pp00, pp10)
     if l0 is None:
@@ -4056,7 +4053,7 @@ def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane
 
     Returns
     -------
-    Optional[Tuple[:class:`Polyline`, Tuple[float, float]]]
+    tuple[:class:`Polyline`, tuple[float, float]] | None
     """
     from .polyline import Polyline
     import math as _math
@@ -4402,7 +4399,7 @@ def polyline_boolean_2d_in_plane(
     include_triangles: bool = False,
     min_area: float = 0.01,
     collapse_eps: float = 0.0,
-) -> Optional["Polyline"]:
+) -> "Polyline" | None:
     # 2D boolean between two closed planar polylines, projected into the plane's
     # canonical 2D frame (base1/base2). intersection_type: 0=Intersect, 1=Union,
     # 2=Difference, 3=Xor. Returns the result polyline (closed, 3D) on success,
