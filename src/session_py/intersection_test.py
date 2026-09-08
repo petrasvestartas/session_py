@@ -451,6 +451,15 @@ def test_intersection_ray_mesh_first():
     MINI_CHECK(hits is not None)
     MINI_CHECK(len(hits) == 1)
 
+    # find_all=False returns the CLOSEST hit, even when a farther face comes
+    # first in face order.
+    far_mesh = Mesh.from_polylines([polygons[1], polygons[0]])
+    closest = intersection.ray_mesh(line, far_mesh, 1e-6, False)
+
+    MINI_CHECK(closest is not None)
+    MINI_CHECK(len(closest) == 1)
+    MINI_CHECK(abs(closest[0][2]) < 1e-3)
+
 
 @MINI_TEST("Intersection", "Ray Mesh Miss")
 def test_intersection_ray_mesh_miss():
