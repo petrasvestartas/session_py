@@ -484,5 +484,95 @@ def test_nurbssurface_trimmed_protobuf_roundtrip():
     MINI_CHECK(loaded == ts)
 
 
+
+@MINI_TEST("NurbsSurfaceTrimmed", "Mesh Loops")
+def test_nurbssurface_trimmed_mesh_loops():
+    from session_py import NurbsSurface
+    from session_py import NurbsSurfaceTrimmed
+    from session_py import Point
+    from session_py import Primitives
+    from session_py import TrimLoops
+    planar = NurbsSurface.create(False, False, 1, 1, 2, 2, [
+        Point(0.0, 0.0, 0.0), Point(0.0, 4.0, 0.0),
+        Point(4.0, 0.0, 0.0), Point(4.0, 4.0, 0.0),
+    ])
+    for surface in [planar, Primitives.wave_surface(1.0, 0.5)]:
+        ts = NurbsSurfaceTrimmed()
+        ts.m_surface = surface
+        loops = TrimLoops()
+        for low, high in [(0.0, 1.0), (0.25, 0.75)]:
+            uv = []
+            corners = [(low, low), (high, low), (high, high), (low, high)]
+            for side in range(4):
+                a, b = corners[side], corners[(side + 1) % 4]
+                for sample in range(8):
+                    t = sample / 8.0
+                    uv.append(Point(a[0] + t*(b[0]-a[0]), a[1] + t*(b[1]-a[1]), 0.0))
+            xyz = [ts.m_surface.point_at(p[0], p[1]) for p in uv]
+            loops.uv.append(uv)
+            loops.xyz.append(xyz)
+        mesh = ts.mesh_loops(loops, 20.0, 0.005)
+        MINI_CHECK(bool(mesh.face))
+        for li, points in enumerate(loops.xyz):
+            for sample, p in enumerate(points):
+                key = f"boundary/{li}/{sample}"
+                vd = next(vd for vd in mesh.vertex.values() if key in vd.attributes)
+                MINI_CHECK(vd.x == p[0] and vd.y == p[1] and vd.z == p[2])
+        for vertices in mesh.face.values():
+            u = sum(mesh.vertex[key].attributes["u"] for key in vertices) / len(vertices)
+            v = sum(mesh.vertex[key].attributes["v"] for key in vertices) / len(vertices)
+            MINI_CHECK(not (u > 0.25 and u < 0.75 and v > 0.25 and v < 0.75))
+        loops.xyz[0].pop()
+        MINI_CHECK(not ts.mesh_loops(loops, 20.0, 0.005).face)
+
+
+@MINI_TEST("NurbsSurfaceTrimmed", "Crease Loops")
+def test_nurbssurface_trimmed_crease_loops():
+    from session_py import NurbsSurface, NurbsSurfaceTrimmed, TrimLoops, Point
+    ts = NurbsSurfaceTrimmed()
+    ts.m_surface = NurbsSurface.create(False, False, 1, 1, 3, 2, [
+        Point(0, 0, 0), Point(0, 1, 0), Point(1, 0, 0), Point(1, 1, 0), Point(2, 0, 1), Point(2, 1, 1)])
+    loops = TrimLoops()
+    loops.uv = [[Point(u, v, 0) for u, v in corners] for corners in [
+        [(.1, .1), (1.9, .1), (1.9, .9), (.1, .9)],
+        [(.8, .4), (1.2, .4), (1.2, .6), (.8, .6)]]]
+    mesh = ts.mesh_loops(loops, 20.0, .005)
+    MINI_CHECK(len(mesh.vertex) == 16 and len(mesh.face) == 12)
+    flat = tilted = 0
+    for vd in mesh.vertex.values():
+        if vd.attributes["u"] == 1.0:
+            MINI_CHECK(any(key.startswith("boundary_interval/") for key in vd.attributes))
+            MINI_CHECK(vd.z == 0.0)
+            normal = vd.normal()
+            flat += abs(normal[0]) < 1e-12
+            tilted += abs(normal[0] + 2**-.5) < 1e-12
+    MINI_CHECK(flat == 4 and tilted == 4)
+    for face in mesh.face.values():
+        us = [mesh.vertex[key].attributes["u"] for key in face]
+        vs = [mesh.vertex[key].attributes["v"] for key in face]
+        MINI_CHECK(not (min(us) < 1.0 < max(us)))
+        MINI_CHECK(not (.8 < sum(us)/3 < 1.2 and .4 < sum(vs)/3 < .6))
+
+
+@MINI_TEST("NurbsSurfaceTrimmed", "Singular Planar Normal")
+def test_nurbssurface_trimmed_singular_planar_normal():
+    """A collapsed planar corner uses its own fan instead of the singular +Z sentinel."""
+    from session_py import NurbsSurface, NurbsSurfaceTrimmed, Point, TrimLoops
+    trimmed = NurbsSurfaceTrimmed()
+    trimmed.m_surface = NurbsSurface.create(False,False,1,1,2,2,[
+        Point(-1,0,0),Point(0,0,1),Point(1,0,0),Point(0,0,1)])
+    loops = TrimLoops()
+    loops.uv = [[Point(0,0,0),Point(1,0,0),Point(1,1,0),Point(0,1,0)]]
+    mesh = trimmed.mesh_loops(loops,5.0,0.001)
+    MINI_CHECK(bool(mesh.face))
+    apex = False
+    for vertex in mesh.vertex.values():
+        normal = vertex.normal()
+        MINI_CHECK(abs(normal[0]) < 1e-12 and abs(normal[2]) < 1e-12)
+        MINI_CHECK(abs(abs(normal[1])-1.0) < 1e-12)
+        apex = apex or vertex.z == 1.0
+    MINI_CHECK(apex)
+
+
 if __name__ == "__main__":
     run_all("python")

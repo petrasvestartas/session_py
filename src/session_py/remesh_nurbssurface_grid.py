@@ -19,6 +19,12 @@ class RemeshNurbsSurfaceGrid:
 
     @staticmethod
     def from_u_v_q(s: "NurbsSurface", max_u: int, max_v: int, max_angle_deg: float, chord_factor: float) -> "Mesh":
+        """Mesh with angular tolerance in degrees and chord tolerance relative to the bbox.
+
+        Normals are finite unit surface normals aligned with winding. Singular poles use
+        area-weighted adjacent normals in face-key order; zero/non-finite estimates fall
+        back to +Z. No world-unit tolerance gates normal normalization.
+        """
         from .mesh import Mesh
         MAX_ANGLE = max_angle_deg
         usp = list(s.get_span_vector(0))
@@ -354,7 +360,8 @@ class RemeshNurbsSurfaceGrid:
             vnx = [0.0] * (max_vkey + 1)
             vny = [0.0] * (max_vkey + 1)
             vnz = [0.0] * (max_vkey + 1)
-            for fi, vids in result.face.items():
+            for fi in sorted(result.face):
+                vids = result.face[fi]
                 if len(vids) < 3:
                     continue
                 pos0 = result.vertex[vids[0]].position()
@@ -371,10 +378,103 @@ class RemeshNurbsSurfaceGrid:
                     vnz[vi] += fnz
             for vk in result.vertex:
                 ln = math.sqrt(vnx[vk]**2 + vny[vk]**2 + vnz[vk]**2)
-                if ln > 1e-15:
-                    vnx[vk] /= ln
-                    vny[vk] /= ln
-                    vnz[vk] /= ln
-                result.vertex[vk].set_normal(vnx[vk], vny[vk], vnz[vk])
+                fx, fy, fz = 0.0, 0.0, 1.0
+                if math.isfinite(ln) and ln > 0.0:
+                    fx, fy, fz = vnx[vk] / ln, vny[vk] / ln, vnz[vk] / ln
+                nx, ny, nz = fx, fy, fz
+                vd = result.vertex[vk]
+                u, v = vd.attributes.get("u"), vd.attributes.get("v")
+                is_pole = (sing_v0 and vk == south_pole) or (sing_v1 and vk == north_pole)
+                # Surface normals preserve smooth interiors; singular poles use adjacent facets.
+                if not is_pole and u is not None and v is not None:
+                    # Reject normal_at's singular +Z sentinel, including U-collapsed corners.
+                    derivatives = s.evaluate(u, v, 1)
+                    na = [0.0, 0.0, 0.0]
+                    if len(derivatives) >= 3:
+                        normal = derivatives[2].cross(derivatives[1])
+                        na = [normal[0], normal[1], normal[2]]
+                    nl = math.sqrt(na[0]*na[0] + na[1]*na[1] + na[2]*na[2])
+                    if math.isfinite(nl) and nl > 0.0:
+                        nx, ny, nz = na[0] / nl, na[1] / nl, na[2] / nl
+                        if nx * fx + ny * fy + nz * fz < 0.0:
+                            nx, ny, nz = -nx, -ny, -nz
+                vd.set_normal(nx, ny, nz)
 
+        RemeshNurbsSurfaceGrid._split_crease_normals(s, result)
         return result
+
+
+    @staticmethod
+    def _split_crease_normals(s: "NurbsSurface", mesh: "Mesh") -> None:
+        """Split shading vertices at internal C0 knots with different one-sided normals."""
+        import copy
+        import sys
+        candidates = {}
+        for key, vd in mesh.vertex.items():
+            if "u" not in vd.attributes or "v" not in vd.attributes:
+                continue
+            uv = [vd.attributes["u"], vd.attributes["v"]]
+            flags = 0
+            for direction in range(2):
+                start, end = s.domain(direction)
+                value = uv[direction]
+                if value <= start or value >= end:
+                    continue
+                multiplicity = sum(knot == value for knot in s.m_nurbsknot[direction])
+                if multiplicity < s.degree(direction):
+                    continue
+                lo, hi = list(uv), list(uv)
+                lo[direction] = math.nextafter(value, -math.inf)
+                hi[direction] = math.nextafter(value, math.inf)
+                a, b = s.normal_at(*lo), s.normal_at(*hi)
+                aa = a[0]*a[0]+a[1]*a[1]+a[2]*a[2]
+                bb = b[0]*b[0]+b[1]*b[1]+b[2]*b[2]
+                if aa <= 0.0 or bb <= 0.0:
+                    continue
+                dot = (a[0]*b[0]+a[1]*b[1]+a[2]*b[2]) / math.sqrt(aa*bb)
+                if math.isfinite(dot) and dot < 1.0 - 64.0*sys.float_info.epsilon:
+                    flags |= 1 << direction
+            if flags:
+                candidates[key] = flags
+        if not candidates:
+            return
+        copies, used = {}, set()
+        for face_key in sorted(mesh.face):
+            vertices = mesh.face[face_key]
+            center = [sum(mesh.vertex[key].attributes[name] for key in vertices) / len(vertices) for name in ("u", "v")]
+            face_normal = mesh.face_normal(face_key)
+            split = list(vertices)
+            for corner, key in enumerate(vertices):
+                if key not in candidates:
+                    continue
+                flags, side = candidates[key], 0
+                original = copy.deepcopy(mesh.vertex[key])
+                uv = [original.attributes["u"], original.attributes["v"]]
+                for direction in range(2):
+                    if not flags & (1 << direction):
+                        continue
+                    high = center[direction] > uv[direction]
+                    if high:
+                        side |= 1 << direction
+                    uv[direction] = math.nextafter(uv[direction], math.inf if high else -math.inf)
+                identity = (key, side)
+                if identity in copies:
+                    target = copies[identity]
+                else:
+                    if key not in used:
+                        target = key
+                        used.add(key)
+                    else:
+                        target = mesh.add_vertex(original.position())
+                        mesh.vertex[target] = original
+                    copies[identity] = target
+                n = s.normal_at(*uv)
+                length = math.sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2])
+                if math.isfinite(length) and length > 0.0:
+                    sign = 1.0
+                    if face_normal is not None and sum(n[k]*face_normal[k] for k in range(3)) < 0.0:
+                        sign = -1.0
+                    mesh.vertex[target].set_normal(sign*n[0]/length, sign*n[1]/length, sign*n[2]/length)
+                split[corner] = target
+            mesh.face[face_key] = split
+        mesh.rebuild_halfedges()

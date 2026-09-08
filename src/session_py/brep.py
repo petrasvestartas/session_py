@@ -17,6 +17,102 @@ if TYPE_CHECKING:
     from .polyline import Polyline
 
 
+def _boundary_parameter(surface, curve, point):
+    """Locate a point on this lifted pcurve if inversion reaches another branch."""
+    start, end = curve.domain()
+    def distance(t):
+        uv = curve.point_at(t)
+        return surface.point_at(uv[0], uv[1]).distance(point)
+    count = min(max(curve.cv_count() * 4, 32), 4096)
+    step = (end - start) / count
+    best, error = start, distance(start)
+    for index in range(1, count + 1):
+        t = end if index == count else start + index * step
+        candidate = distance(t)
+        if candidate < error:
+            best, error = t, candidate
+    left, right = max(best - step, start), min(best + step, end)
+    ratio = (math.sqrt(5.0) - 1.0) * 0.5
+    a, b = right - ratio * (right - left), left + ratio * (right - left)
+    da, db = distance(a), distance(b)
+    for _ in range(64):
+        if da < db:
+            right, b, db = b, a, da
+            a = right - ratio * (right - left)
+            da = distance(a)
+        else:
+            left, a, da = a, b, db
+            b = left + ratio * (right - left)
+            db = distance(b)
+    if da < error:
+        best, error = a, da
+    if db < error:
+        best = b
+    return best
+
+
+def _boundary_normal(surface: NurbsSurface, curve: NurbsCurve, t: float, toward: float) -> Vector | None:
+    """Unit normal at a boundary, using the one-sided limit at a singular endpoint."""
+    for at in (t, t + (toward - t) * 1e-6):
+        uv = curve.point_at(at)
+        derivatives = surface.evaluate(uv[0], uv[1], 1)
+        if len(derivatives) < 3:
+            continue
+        n = derivatives[1].cross(derivatives[2])
+        scale = max(abs(n[d]) for d in range(3))
+        if not math.isfinite(scale) or scale == 0.0:
+            continue
+        n = n / scale
+        length = n.magnitude()
+        if math.isfinite(length) and length > 0.0:
+            return n / length
+    return None
+
+
+def _refine_surface_boundary(surface: NurbsSurface, curve: NurbsCurve, samples: list[tuple[float, Point, Point]], angle: float, chord: float) -> list[tuple[float, Point, Point]]:
+    """Refine lifted pcurves with face angular/chord checks; retain exact original samples.
+
+    All incident faces share inserted points. Eight split levels and at most 4096
+    added points per edge bound refinement work.
+    """
+    if len(samples) < 2:
+        return samples
+    low, high = [math.inf] * 3, [-math.inf] * 3
+    for u in range(surface.cv_count(0)):
+        for v in range(surface.cv_count(1)):
+            p = surface.get_cv(u, v)
+            for axis in range(3):
+                low[axis] = min(low[axis], p[axis])
+                high[axis] = max(high[axis], p[axis])
+    diagonal = math.sqrt(sum((high[d] - low[d]) ** 2 for d in range(3)))
+    tolerance = diagonal * chord
+    cosine = math.cos(min(max(angle, 0.1), 179.0) * math.pi / 180.0)
+    result, added = [], 0
+    for a, b in zip(samples, samples[1:]):
+        stack = [(a, b, 0)]
+        while stack:
+            a, b, depth = stack.pop()
+            t = (a[0] + b[0]) * 0.5
+            uv = curve.point_at(t)
+            point = surface.point_at(uv[0], uv[1])
+            center = Point(*[(a[2][d] + b[2][d]) * 0.5 for d in range(3)])
+            normals = [_boundary_normal(surface, curve, a[0], b[0]), _boundary_normal(surface, curve, t, a[0]), _boundary_normal(surface, curve, b[0], a[0])]
+            angular = False
+            for i in range(3):
+                for j in range(i + 1, 3):
+                    if normals[i] is not None and normals[j] is not None:
+                        angular |= sum(normals[i][d] * normals[j][d] for d in range(3)) < cosine
+            if (point.distance(center) > tolerance or angular) and depth < 8 and added < 4096:
+                added += 1
+                middle = (t, uv, point)
+                stack.append((middle, b, depth + 1))
+                stack.append((a, middle, depth + 1))
+            else:
+                result.append(a)
+    result.append(samples[-1])
+    return result
+
+
 class BRepOrientation:
     """TopAbs_Orientation: carried by the parent -> child reference, never by the shape."""
     Forward = 0
@@ -973,10 +1069,13 @@ class BRep:
             domain_area = (u1 - u0) * (v1 - v0)
             face_direct[fi] = abs(abs(_polygon_signed_area(outer)) - domain_area) < 1e-3 * domain_area
 
-        # Phase 2: direct faces. Record the 3D boundary discretisation along every edge shared
-        # with a CDT face so both sides tessellate the seam with the same points.
+        # Phase 2: direct faces. The first incident grid supplies the canonical edge polygon.
+        # Mismatching incident grids are rebuilt with these constraints and their interior UV seeds.
+        rebuild_grid = [False] * nf
         fmesh = [Mesh() for _ in range(nf)]
         edge_bnd: dict[int, list[Point]] = {}
+        edge_basis: dict[int, tuple[int, int, list[float]]] = {}
+        edge_samples: dict[int, list[tuple[float, Point]]] = {}
         for fi in range(nf):
             if not face_direct[fi]:
                 continue
@@ -992,9 +1091,7 @@ class BRep:
             vtol = (v1 - v0) * 0.001
             for er in self.wire_edges(face.wires[0]):
                 eidx = er.index
-                if eidx in edge_bnd:
-                    continue
-                shared = any(fr.index != fi and not face_direct[fr.index] for fr in self.edge_faces(eidx))
+                shared = any(fr.index != fi for fr in self.edge_faces(eidx))
                 if not shared:
                     continue
                 ci = self.pcurve_index(eidx, fi, er.orientation)
@@ -1024,60 +1121,146 @@ class BRep:
                     elif at_u1 and abs(iu - u1) < utol * 0.1:
                         pts.append((iv, vd.position()))
                 pts.sort(key=lambda a: a[0])
+                pts = list(dict(pts).items())
                 if len(pts) >= 2:
-                    edge_bnd[eidx] = [p for _, p in pts]
+                    varying = 0 if at_v0 or at_v1 else 1
+                    t0, t1 = c2d.domain()
+                    parameters = [t0 + (t-sp[varying])/(ep[varying]-sp[varying])*(t1-t0) for t,_ in pts]
+                    points = [p for _,p in pts]
+                    if eidx in edge_bnd:
+                        canonical = [tuple(p[d] for d in range(3)) for p in edge_bnd[eidx]]
+                        current = [tuple(p[d] for d in range(3)) for p in points]
+                        rebuild_grid[fi] |= canonical != current and canonical != current[::-1]
+                    else:
+                        edge_bnd[eidx] = points
+                        edge_basis[eidx] = (fi, ci, parameters)
 
-        # Phase 3: CDT faces. Shared edges reuse the direct face's boundary points projected into
-        # this face's planar patch; every other edge samples its own pcurve.
+        # Refine canonical endpoints before constrained interior refinement;
+        # every incident face receives the same refined source polygon.
+        for edge, (face, pcurve, parameters) in sorted(edge_basis.items()):
+            curved_cdt = any((not face_direct[incident.index] or rebuild_grid[incident.index]) and not self.m_surfaces[self.m_faces[incident.index].surface_index].is_planar(tolerance=0.0) for incident in self.edge_faces(edge))
+            if not curved_cdt:
+                continue
+            surface = self.m_surfaces[self.m_faces[face].surface_index]
+            curve = self.m_curves_2d[pcurve]
+            samples = [(t, curve.point_at(t), p) for t,p in zip(parameters, edge_bnd[edge])]
+            samples.sort(key=lambda sample: sample[0])
+            if self.m_edges[edge].start_vertex == self.m_edges[edge].end_vertex:
+                end = curve.domain()[1]
+                if samples and samples[-1][0] < end:
+                    samples.append((end, curve.point_at(end), samples[0][2]))
+            angle, chord = quality if quality is not None else (20.0, 0.005)
+            refined = _refine_surface_boundary(surface, curve, samples, angle, chord)
+            if len(refined) > len(samples):
+                edge_samples[edge] = [(sample[0], sample[1]) for sample in refined]
+                edge_bnd[edge] = [sample[2] for sample in refined]
+                for incident in self.edge_faces(edge):
+                    rebuild_grid[incident.index] = True
+
+        for fi in range(nf):
+            if rebuild_grid[fi]:
+                face_direct[fi] = False
+
+        # Phase 3: CDT faces preserve their supplied boundary-node identities. Shared
+        # XYZ samples are mapped onto the actual pcurve and checked in model space.
+        from .nurbssurface_trimmed import TrimLoops
+        import math
+        import sys
         for fi in range(nf):
             if face_direct[fi]:
                 continue
             face = self.m_faces[fi]
             srf = self.m_surfaces[face.surface_index]
-            p00 = srf.get_cv(0, 0)
-            p10 = srf.get_cv(1, 0)
-            p01 = srf.get_cv(0, 1)
-            eu = [p10[0] - p00[0], p10[1] - p00[1], p10[2] - p00[2]]
-            ev = [p01[0] - p00[0], p01[1] - p00[1], p01[2] - p00[2]]
-            eu2 = eu[0] * eu[0] + eu[1] * eu[1] + eu[2] * eu[2]
-            ev2 = ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2]
-            can_project = srf.degree(0) == 1 and srf.degree(1) == 1 and eu2 > 1e-28 and ev2 > 1e-28
-
+            angle, chord = quality if quality is not None else (20.0, 0.005)
+            loops = TrimLoops()
+            if rebuild_grid[fi]:
+                u0,u1 = srf.domain(0)
+                v0,v1 = srf.domain(1)
+                for vertex in fmesh[fi].vertex.values():
+                    u,v = vertex.attributes.get("u"),vertex.attributes.get("v")
+                    if u is not None and v is not None and u0 < u < u1 and v0 < v < v1:
+                        loops.interior_uv.append(Point(u,v,0.0))
+            uses = []
+            valid = True
+            for wi, wr in enumerate(face.wires):
+                uv, xyz = [], []
+                for er in self.wire_edges(wr):
+                    ei = er.index
+                    edge = self.m_edges[ei]
+                    ci = self.pcurve_index(ei, fi, er.orientation)
+                    if ci < 0:
+                        valid = False
+                        break
+                    crv = self.m_curves_2d[ci]
+                    samples = []
+                    if ei in edge_bnd:
+                        for index, p in enumerate(edge_bnd[ei]):
+                            if ei in edge_samples and edge_basis[ei][:2] == (fi, ci):
+                                t, q = edge_samples[ei][index]
+                            else:
+                                u, v = srf.closest_parameters(p)
+                                t = crv.closest_parameter(Point(u, v, 0.0))
+                                q = crv.point_at(t)
+                            scale = max(abs(p[0]), abs(p[1]), abs(p[2]), 1.0)
+                            tolerance = max(edge.tolerance, face.tolerance, math.sqrt(sys.float_info.epsilon) * scale)
+                            if srf.point_at(q[0], q[1]).distance(p) > tolerance:
+                                t = _boundary_parameter(srf, crv, p)
+                                q = crv.point_at(t)
+                                if srf.point_at(q[0], q[1]).distance(p) > tolerance:
+                                    valid = False
+                                    break
+                            samples.append((t, q, p))
+                        samples.sort(key=lambda sample: sample[0])
+                        samples = [sample for index, sample in enumerate(samples) if index == 0 or sample[0] != samples[index - 1][0]]
+                    else:
+                        count = min(max(crv.cv_count() * 4, math.ceil(360.0 / max(angle, 0.1))), 4096)
+                        if crv.degree() <= 1 and not crv.is_rational() and srf.is_planar(tolerance=0.0):
+                            points = [crv.get_cv(k) for k in range(crv.cv_count())]
+                            parameters = [crv.greville_abcissa(k) for k in range(crv.cv_count())]
+                        else:
+                            points, parameters = crv.divide_by_count(count, True)
+                        for q, t in zip(points, parameters):
+                            p = srf.point_at(q[0], q[1])
+                            samples.append((t, q, p))
+                        samples = _refine_surface_boundary(srf, crv, samples, angle, chord)
+                        edge_bnd[ei] = [sample[2] for sample in samples]
+                    if edge.start_vertex == edge.end_vertex and len(samples) > 1:
+                        first, last = samples[0], samples[-1]
+                        if any(first[2][k] != last[2][k] for k in range(3)):
+                            samples.append((crv.domain()[1], first[1], first[2]))
+                    if er.orientation == BRepOrientation.Reversed:
+                        samples.reverse()
+                    if len(samples) < 2:
+                        valid = False
+                        break
+                    uses.append((ei, wi, len(uv), len(samples)))
+                    for _, q, p in samples[:-1]:
+                        uv.append(q)
+                        xyz.append(p)
+                loops.uv.append(uv)
+                loops.xyz.append(xyz)
+            if not valid:
+                continue
             ts = NurbsSurfaceTrimmed()
             ts.m_surface = srf
-            for wi, wr in enumerate(face.wires):
-                loop_pts = []
-                for er in self.wire_edges(wr):
-                    ci = self.pcurve_index(er.index, fi, er.orientation)
-                    if ci < 0:
-                        continue
-                    crv = self.m_curves_2d[ci]
-                    if can_project and er.index in edge_bnd:
-                        seg = []
-                        for pt in edge_bnd[er.index]:
-                            dx, dy, dz = pt[0] - p00[0], pt[1] - p00[1], pt[2] - p00[2]
-                            seg.append(Point((dx * eu[0] + dy * eu[1] + dz * eu[2]) / eu2,
-                                             (dx * ev[0] + dy * ev[1] + dz * ev[2]) / ev2, 0.0))
-                        d0, d1 = crv.domain()
-                        start = crv.point_at(d1 if er.orientation == BRepOrientation.Reversed else d0)
-                        if seg[0].distance(start) > seg[-1].distance(start):
-                            seg.reverse()
-                    else:
-                        if crv.degree() <= 1 and not crv.is_rational():
-                            seg = [crv.get_cv(k) for k in range(crv.cv_count())]
-                        else:
-                            seg, _ = crv.divide_by_count(max(crv.cv_count() * 4, 16))
-                        if er.orientation == BRepOrientation.Reversed:
-                            seg.reverse()
-                    loop_pts.extend(seg[:-1])
-                if len(loop_pts) < 3:
+            # Map order must not change constrained refinement or boundary visibility.
+            loops.interior_uv.sort(key=lambda point: (point[0], point[1]))
+            fmesh[fi] = ts.mesh_loops(loops, angle, chord)
+            # Each occurrence keeps both ends, including the next edge's starting vertex.
+            for use_id, (edge, li, start, count) in enumerate(uses):
+                length = len(loops.uv[li])
+                if length == 0:
                     continue
-                loop_crv = NurbsCurve.create(True, 1, loop_pts)
-                if wi == 0:
-                    ts.m_outer_loop = loop_crv
-                else:
-                    ts.m_inner_loops.append(loop_crv)
-            fmesh[fi] = ts.mesh()
+                for sample in range(count):
+                    key = f"boundary/{li}/{(start + sample) % length}"
+                    for vd in fmesh[fi].vertex.values():
+                        if key in vd.attributes:
+                            vd.attributes[f"brep_edge/{edge}/{use_id}/{sample}"] = 1.0
+                    if sample + 1 < count:
+                        interval = f"boundary_interval/{li}/{(start + sample) % length}"
+                        for vd in fmesh[fi].vertex.values():
+                            if interval in vd.attributes:
+                                vd.attributes[f"brep_edge_interval/{edge}/{use_id}/{sample}"] = vd.attributes[interval]
 
         # A Reversed face has its outward normal opposite to the surface normal: flip winding
         # and stored normals together so shading agrees with the geometry.

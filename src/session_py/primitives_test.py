@@ -599,8 +599,21 @@ def test_nurbssurface_extrusion():
     MINI_CHECK(s_wavy.is_valid())
     MINI_CHECK(s_wavy.degree(0) == 1 and s_wavy.degree(1) == 1)
     MINI_CHECK(s_wavy.cv_count_dir(0) == 4 and s_wavy.cv_count_dir(1) == 2)
-    MINI_CHECK(m_wavy.number_of_vertices() == 8)
+    # Each planar panel owns its crease normals: eight positions, twelve shading vertices.
+    MINI_CHECK(m_wavy.number_of_vertices() == 12)
     MINI_CHECK(m_wavy.number_of_faces() == 6)
+    for i in range(4):
+        for j in range(2):
+            position = s_wavy.get_cv(i, j)
+            copies = sum(TOLERANCE.is_point_close(vertex.position(), position)
+                         for vertex in m_wavy.vertex.values())
+            MINI_CHECK(copies == (1 if i in (0, 3) else 2))
+    for key, corners in m_wavy.face.items():
+        normal = m_wavy.face_normal(key)
+        for corner in corners:
+            shading = m_wavy.vertex[corner].normal()
+            for axis in range(3):
+                MINI_CHECK(abs(shading[axis] - normal[axis]) < 1e-9)
     MINI_CHECK(TOLERANCE.is_point_close(s_wavy.get_cv(0, 0), Point(40.0, 3.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_wavy.get_cv(0, 1), Point(40.0, 4.0, 5.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_wavy.get_cv(1, 0), Point(45.0, 0.0, 0.0)))

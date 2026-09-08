@@ -709,5 +709,62 @@ def test_brep_volume():
     MINI_CHECK(abs(vsph - (4.0 / 3.0) * PI * 8) / ((4.0 / 3.0) * PI * 8) < 0.05)
 
 
+@MINI_TEST("BRep", "Shared Grid Boundary")
+def test_brep_shared_grid_boundary():
+    from session_py import BRep, NurbsSurface, NurbsCurve, Point
+    from session_py.brep import BRepRef, BRepOrientation
+    from session_py.remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
+    b=BRep();surfaces=[]
+    for face in range(2):
+     pts=[]
+     for i in range(3):
+      for j in range(2):
+       z=0 if i!=1 else (.5 if j==0 or face==0 else 4)
+       pts.append(Point(i*.5,j*(1 if face==0 else -1),z))
+     s=NurbsSurface.create(False,False,2,1,3,2,pts);surfaces.append(s);si=b.add_surface(s)
+     corners=[(0.,0.),(1.,0.),(1.,1.),(0.,1.)]
+     vi=[b.add_vertex(s.point_at(u,v),0) for u,v in corners]
+     edges=[]
+     for side in range(4):
+      a=corners[side];z=corners[(side+1)%4]
+      if side==0 and face==1: ei=0
+      else:
+       d=0 if a[0]!=z[0] else 1
+       c=s.iso_curve(d,a[1-d])
+       if a[d]>z[d]:c.reverse()
+       ci=b.add_curve_3d(c);ei=b.add_edge(ci,vi[side],vi[(side+1)%4])
+      pc=NurbsCurve.create(False,1,[Point(*a,0),Point(*z,0)])
+      pci=b.add_curve_2d(pc);b.add_pcurve(ei,si,pci,-1)
+      edges.append(BRepRef(ei,BRepOrientation.Forward))
+     wi=b.add_wire(edges);b.add_face(si,[BRepRef(wi,BRepOrientation.Forward)],1e-8)
+    original = [RemeshNurbsSurfaceGrid.from_u_v_q(s,0,0,20,.005) for s in surfaces]
+    def boundary(mesh):
+        return sorted((vd.x,vd.y,vd.z) for vd in mesh.vertex.values() if vd.attributes["v"]==0.0)
+    MINI_CHECK(len(boundary(original[0]))==7 and len(boundary(original[1]))==11)
+    meshes = b.face_meshes_q((20,.005))
+    first,second = boundary(meshes[0]),boundary(meshes[1])
+    MINI_CHECK(first==second and len(first)==7)
+    MINI_CHECK(len(meshes[0].face)==len(original[0].face) and bool(meshes[1].face))
+    maximum = 0.0
+    for a,z in zip(first,first[1:]):
+        u=(a[0]+z[0])*.5
+        actual=surfaces[0].point_at(u,0.0)
+        sag=sum((actual[d]-(a[d]+z[d])*.5)**2 for d in range(3))**.5
+        maximum=max(maximum,sag)
+    MINI_CHECK(maximum <= .005 * 1.5)
+    import math
+    import sys
+    original = RemeshNurbsSurfaceGrid.from_u_v_q(surfaces[0], 0, 0, 5.0, .001)
+    meshes = b.face_meshes_q((5.0, .001))
+    first = boundary(meshes[0])
+    MINI_CHECK(first == boundary(meshes[1]) and bool(meshes[0].face) and bool(meshes[1].face))
+    MINI_CHECK(all(point in first for point in boundary(original)))
+    cosine = math.cos(math.radians(5.0))
+    for point, following in zip(first, first[1:]):
+        a = surfaces[0].normal_at(point[0], 0.0)
+        z = surfaces[0].normal_at(following[0], 0.0)
+        MINI_CHECK(a.dot(z) >= cosine - 64.0 * sys.float_info.epsilon)
+
+
 if __name__ == "__main__":
     run_all()

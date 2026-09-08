@@ -51,6 +51,7 @@ from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .primitives import Primitives
 from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+from .nurbssurface_trimmed import TrimLoops
 from .brep import BRep
 from .brep import BRepOrientation
 from .brep import BRepRef
@@ -108,6 +109,7 @@ __all__ = [
     "NurbsSurface",
     "Primitives",
     "NurbsSurfaceTrimmed",
+    "TrimLoops",
     "BRep",
     "BRepOrientation",
     "BRepRef",
