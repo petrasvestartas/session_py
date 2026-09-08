@@ -4160,21 +4160,65 @@ def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane
         t_e = (dx*sy - dy*sx) / denom
         return t_s, t_e
 
+    def collinear_overlap(s0, s1, e0, e1):
+        # A joint edge lying ON a plate edge is a boundary case the winding
+        # number cannot classify: report its parametric overlap so the caller
+        # keeps it instead of dropping the joint's flush side.
+        sx = s1[0]-s0[0]; sy = s1[1]-s0[1]
+        ex = e1[0]-e0[0]; ey = e1[1]-e0[1]
+        sl2 = sx*sx + sy*sy
+        el2 = ex*ex + ey*ey
+        if sl2 < 1e-20 or el2 < 1e-20:
+            return None
+        cross_norm = (sx*ey - sy*ex) / _math.sqrt(sl2 * el2)
+        ANGLE_SIN_EPS = 1e-4  # 0.006 deg - true parallel
+        if abs(cross_norm) > ANGLE_SIN_EPS:
+            return None
+        apx = s0[0]-e0[0]; apy = s0[1]-e0[1]
+        perp = (apx*ey - apy*ex) / _math.sqrt(el2)
+        DIST_EPS = 1e-3  # 0.001 mm - true FP noise
+        if abs(perp) > DIST_EPS:
+            return None
+        ts0 = (apx*ex + apy*ey) / el2
+        bpx = s1[0]-e0[0]; bpy = s1[1]-e0[1]
+        ts1 = (bpx*ex + bpy*ey) / el2
+        ov_min = max(0.0, min(ts0, ts1))
+        ov_max = min(1.0, max(ts0, ts1))
+        if ov_max - ov_min < 1e-9:
+            return None
+        tsr = ts1 - ts0
+        if abs(tsr) < 1e-20:
+            return None
+        t_enter = (ov_min - ts0) / tsr
+        t_exit = (ov_max - ts0) / tsr
+        if t_enter > t_exit:
+            t_enter, t_exit = t_exit, t_enter
+        t_enter = max(0.0, t_enter)
+        t_exit = min(1.0, t_exit)
+        return (t_enter, t_exit) if t_exit - t_enter > 1e-9 else None
+
     EPS = 1e-9
     pieces = []
     for s in range(len(joint2d)-1):
         p0 = joint2d[s]
         p1 = joint2d[s+1]
         ts = [0.0]
+        coll_ranges = []
         for i in range(len(plate2d)):
             a = plate2d[i]
             b = plate2d[(i+1) % len(plate2d)]
             r = seg_seg_2d(p0, p1, a, b)
-            if r is None:
-                continue
-            t_s, t_e = r
-            if EPS < t_s < 1.0 - EPS and -EPS <= t_e <= 1.0 + EPS:
-                ts.append(t_s)
+            if r is not None:
+                t_s, t_e = r
+                if EPS < t_s < 1.0 - EPS and -EPS <= t_e <= 1.0 + EPS:
+                    ts.append(t_s)
+            c = collinear_overlap(p0, p1, a, b)
+            if c is not None:
+                coll_ranges.append(c)
+                if EPS < c[0] < 1.0 - EPS:
+                    ts.append(c[0])
+                if EPS < c[1] < 1.0 - EPS:
+                    ts.append(c[1])
         ts.append(1.0)
         ts.sort()
         # Deduplicate close-to-equal values.
@@ -4184,12 +4228,16 @@ def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane
                 deduped.append(v)
         ts = deduped
 
+        def sub_is_collinear(t_a, t_b):
+            t_mid = 0.5 * (t_a + t_b)
+            return any(r[0] - EPS <= t_mid <= r[1] + EPS for r in coll_ranges)
+
         current = []
         for i in range(len(ts) - 1):
             t_mid = 0.5 * (ts[i] + ts[i+1])
             mx = p0[0] + (p1[0]-p0[0]) * t_mid
             my = p0[1] + (p1[1]-p0[1]) * t_mid
-            if pip(mx, my):
+            if pip(mx, my) or sub_is_collinear(ts[i], ts[i+1]):
                 sub_a = (p0[0] + (p1[0]-p0[0])*ts[i],   p0[1] + (p1[1]-p0[1])*ts[i])
                 sub_b = (p0[0] + (p1[0]-p0[0])*ts[i+1], p0[1] + (p1[1]-p0[1])*ts[i+1])
                 if not current:

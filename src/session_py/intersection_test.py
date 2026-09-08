@@ -1194,6 +1194,21 @@ def test_intersection_closed_and_open_paths_2d():
     MINI_CHECK(TOLERANCE.is_close(t_lo, 1.5))
     MINI_CHECK(TOLERANCE.is_close(t_hi, 3.5))
 
+    # Joint running exactly ALONG the plate's top edge: the winding number puts
+    # that boundary outside, so only the collinear overlap keeps the flush side.
+    flush = Polyline([
+        Point(-2.0, 10.0, 0.0),
+        Point(12.0, 10.0, 0.0),
+    ])
+    flush_result = closed_and_open_paths_2d(plate, flush, pln)
+    MINI_CHECK(flush_result is not None)
+    flush_out, (flush_t0, flush_t1) = flush_result
+    MINI_CHECK(flush_out.point_count() == 2)
+    MINI_CHECK(TOLERANCE.is_close(flush_out.get_point(0)[0], 10.0))
+    MINI_CHECK(TOLERANCE.is_close(flush_out.get_point(1)[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(flush_t0, 2.0))
+    MINI_CHECK(TOLERANCE.is_close(flush_t1, 3.0))
+
 
 @MINI_TEST("Intersection", "Line Line Classified")
 def test_intersection_line_line_classified():
