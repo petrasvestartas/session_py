@@ -749,7 +749,7 @@ class Plane:
 
         new_origin = self._origin + (normal * distance)
 
-        return Plane(new_origin, self._x_axis, self._y_axis)
+        return Plane(new_origin, self._x_axis, self._y_axis, self.name)
 
     def base1(self) -> Vector:
         """Canonical in-plane x-axis from the normal (smallest-|coef| pivot rule).

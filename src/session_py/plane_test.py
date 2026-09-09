@@ -189,6 +189,7 @@ def test_plane_translate_by_normal():
 
     MINI_CHECK(TOLERANCE.is_close(moved.origin[2], 5.0))
     MINI_CHECK(TOLERANCE.is_close(pl.origin[2], 0.0))
+    MINI_CHECK(moved.name == pl.name)
 
 
 @MINI_TEST("Plane", "Base1 Base2")
