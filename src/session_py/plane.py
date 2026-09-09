@@ -440,6 +440,7 @@ class Plane:
         self._x_axis.transform(xform)
         self._y_axis.transform(xform)
         self._z_axis.transform(xform)
+        self._update_equation()
 
     def transformed(self, xform: Xform) -> Plane:
         """Return a transformed copy of the plane."""

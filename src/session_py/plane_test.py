@@ -242,6 +242,7 @@ def test_plane_transformed():
     MINI_CHECK(TOLERANCE.is_close(pl2.origin[1], 2.0))
     MINI_CHECK(TOLERANCE.is_close(pl2.origin[2], 3.0))
     MINI_CHECK(TOLERANCE.is_close(pl.origin[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl2.d, -3.0) and TOLERANCE.is_close(pl.d, 0.0))
 
 
 @MINI_TEST("Plane", "Json Roundtrip")
