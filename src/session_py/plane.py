@@ -863,13 +863,14 @@ class Plane:
         # [ox, oy, oz, xx, xy, xz, yx, yy, yz, zx, zy, zz]
         frame = data["frame"]
 
-        origin = Point(frame[0], frame[1], frame[2])
-        x_axis = Vector(frame[3], frame[4], frame[5])
-        y_axis = Vector(frame[6], frame[7], frame[8])
+        plane = cls()
+        plane._origin = Point(frame[0], frame[1], frame[2])
+        plane._x_axis = Vector(frame[3], frame[4], frame[5])
+        plane._y_axis = Vector(frame[6], frame[7], frame[8])
+        plane._z_axis = Vector(frame[9], frame[10], frame[11])
+        plane._update_equation()
 
-        width = data.get("width", 1.0)
-
-        plane = cls(origin, x_axis, y_axis, width=width)
+        plane.width = data.get("width", 1.0)
         plane.guid = guid if guid is not None else data.get("guid", plane.guid)
         plane.name = name if name is not None else data.get("name", plane.name)
 
@@ -983,12 +984,16 @@ class Plane:
         proto.ParseFromString(data)
 
         # Load frame as flat array of 12 numbers
+        plane = cls()
         frame = list(proto.frame)
-        origin = Point(frame[0], frame[1], frame[2])
-        x_axis = Vector(frame[3], frame[4], frame[5])
-        y_axis = Vector(frame[6], frame[7], frame[8])
+        if len(frame) >= 12:
+            plane._origin = Point(frame[0], frame[1], frame[2])
+            plane._x_axis = Vector(frame[3], frame[4], frame[5])
+            plane._y_axis = Vector(frame[6], frame[7], frame[8])
+            plane._z_axis = Vector(frame[9], frame[10], frame[11])
+            plane._update_equation()
 
-        plane = cls(origin, x_axis, y_axis, width=proto.width if proto.width > 0 else 1.0)
+        plane.width = proto.width if proto.width > 0 else 1.0
         if proto.guid:
             plane.guid = proto.guid
         plane.name = proto.name

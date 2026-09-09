@@ -238,6 +238,8 @@ def test_plane_transformed():
 @MINI_TEST("Plane", "Json Roundtrip")
 def test_plane_json_roundtrip():
     from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
     from pathlib import Path
 
     pl = Plane.xy_plane()
@@ -253,9 +255,12 @@ def test_plane_json_roundtrip():
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.json"
     pl.file_json_dump(fname)
     loaded = Plane.file_json_load(fname)
+    flipped = Plane.from_frame(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), Vector(0.0, 0.0, -1.0))
+    round_tripped = Plane.file_json_loads(flipped.file_json_dumps())
 
     MINI_CHECK(loaded.name == "test_plane")
     MINI_CHECK(TOLERANCE.is_close(loaded.c, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(round_tripped.z_axis[2], -1.0) and TOLERANCE.is_close(round_tripped.c, -1.0))
 
 
 @MINI_TEST("Plane", "Protobuf Roundtrip")
@@ -269,9 +274,15 @@ def test_plane_protobuf_roundtrip():
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.bin"
     pl.pb_dump(fname)
     loaded = Plane.pb_load(fname)
+    wide = Plane.xy_plane()
+    wide.width = 3.0
+    round_tripped = Plane.pb_loads(wide.pb_dumps())
+    empty = Plane.pb_loads(b"")
 
     MINI_CHECK(loaded.name == "test_plane")
     MINI_CHECK(TOLERANCE.is_close(loaded.c, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(round_tripped.width, 3.0))
+    MINI_CHECK(TOLERANCE.is_close(empty.c, 1.0))
 
 
 @MINI_TEST("Plane", "Has On Negative Side")
