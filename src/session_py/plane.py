@@ -825,7 +825,6 @@ class Plane:
         """
         # Alphabetical order to match Rust's serde_json
         return {
-            "linecolor": self.linecolor.__jsondump__(),
             "frame": [
                 self._origin[0], self._origin[1], self._origin[2],
                 self._x_axis[0], self._x_axis[1], self._x_axis[2],
@@ -833,6 +832,7 @@ class Plane:
                 self._z_axis[0], self._z_axis[1], self._z_axis[2],
             ],
             "guid": self.guid,
+            "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
             "type": f"{self.__class__.__name__}",
             "width": self.width,
