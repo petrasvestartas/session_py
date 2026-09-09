@@ -47,7 +47,7 @@ def test_plane_constructor():
     # From three points
     pts = [
         Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
         Point(0.0, 1.0, 0.0),
     ]
     pl_pts = Plane.from_points(pts)
@@ -56,6 +56,9 @@ def test_plane_constructor():
     p1 = Point(0.0, 0.0, 0.0)
     p2 = Point(1.0, 0.0, 0.0)
     pl_2pts = Plane.from_two_points(p1, p2)
+
+    # Non-unit x-axis with a y-axis that is not perpendicular to it
+    pl_skew = Plane(Point(0.0, 0.0, 0.0), Vector(2.0, 0.0, 0.0), Vector(1.0, 1.0, 0.0))
 
     # Standard planes
     xy = Plane.xy_plane()
@@ -82,8 +85,9 @@ def test_plane_constructor():
     MINI_CHECK(plrepr == "Plane(my_plane, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, Color(blue, 0.0, 0.0, 1.0, 1.0))")
     MINI_CHECK(plcopy == pl and plcopy.guid != pl.guid)
     MINI_CHECK(TOLERANCE.is_close(pl_pn.origin[2], 5.0) and TOLERANCE.is_close(pl_pn.z_axis[2], 1.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_pts.c, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_pts.c, 1.0) and TOLERANCE.is_close(pl_pts.x_axis[0], pl_pts.x_axis[1]))
     MINI_CHECK(TOLERANCE.is_close(pl_2pts.x_axis[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_skew.x_axis.dot(pl_skew.y_axis), 0.0) and pl_skew.is_right_hand())
     MINI_CHECK(xy.name == "xy_plane" and yz.name == "yz_plane" and xz.name == "xz_plane")
     MINI_CHECK(TOLERANCE.is_close(pl_iadd.origin[0], 1.0) and TOLERANCE.is_close(pl_iadd.origin[1], 2.0) and TOLERANCE.is_close(pl_iadd.origin[2], 3.0))
     MINI_CHECK(TOLERANCE.is_close(pl_isub.origin[0], -1.0) and TOLERANCE.is_close(pl_isub.origin[2], -3.0))
@@ -129,14 +133,18 @@ def test_plane_rotate():
 @MINI_TEST("Plane", "Is Right Hand")
 def test_plane_is_right_hand():
     from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
 
     xy = Plane.xy_plane()
     yz = Plane.yz_plane()
     xz = Plane.xz_plane()
+    half = Plane.from_frame(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), Vector(0.0, 0.0, 0.5))
 
     MINI_CHECK(xy.is_right_hand())
     MINI_CHECK(yz.is_right_hand())
     MINI_CHECK(xz.is_right_hand())
+    MINI_CHECK(not half.is_right_hand())
 
 
 @MINI_TEST("Plane", "Is Same Direction")
