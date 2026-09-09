@@ -543,7 +543,7 @@ class Plane:
             result.guid = self.guid
             result.name = self.name
             result.width = self.width
-            result._linecolor = None
+            result._linecolor = self._linecolor
             result._origin = self._origin + other
             result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
             result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])
@@ -559,6 +559,7 @@ class Plane:
             result.guid = self.guid
             result.name = self.name
             result.width = self.width
+            result._linecolor = self._linecolor
             result._origin = self._origin - other
             result._x_axis = Vector(self._x_axis[0], self._x_axis[1], self._x_axis[2])
             result._y_axis = Vector(self._y_axis[0], self._y_axis[1], self._y_axis[2])

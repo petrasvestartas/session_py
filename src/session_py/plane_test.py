@@ -10,6 +10,7 @@ def test_plane_constructor():
     from session_py import Plane
     from session_py import Point
     from session_py import Vector
+    from session_py import Color
 
     # Default constructor - XY plane at origin
     pl = Plane()
@@ -68,6 +69,7 @@ def test_plane_constructor():
     pl_isub = Plane.xy_plane()
     pl_isub -= offset
     pl_base = Plane.xy_plane()
+    pl_base.linecolor = Color.red()
     pl_add = pl_base + offset
     pl_sub = pl_base - offset
 
@@ -85,8 +87,8 @@ def test_plane_constructor():
     MINI_CHECK(xy.name == "xy_plane" and yz.name == "yz_plane" and xz.name == "xz_plane")
     MINI_CHECK(TOLERANCE.is_close(pl_iadd.origin[0], 1.0) and TOLERANCE.is_close(pl_iadd.origin[1], 2.0) and TOLERANCE.is_close(pl_iadd.origin[2], 3.0))
     MINI_CHECK(TOLERANCE.is_close(pl_isub.origin[0], -1.0) and TOLERANCE.is_close(pl_isub.origin[2], -3.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_add.origin[2], 3.0))
-    MINI_CHECK(TOLERANCE.is_close(pl_sub.origin[2], -3.0))
+    MINI_CHECK(TOLERANCE.is_close(pl_add.origin[2], 3.0) and pl_add.linecolor == Color.red())
+    MINI_CHECK(TOLERANCE.is_close(pl_sub.origin[2], -3.0) and pl_sub.linecolor == Color.red())
 
 
 @MINI_TEST("Plane", "Is Valid")
