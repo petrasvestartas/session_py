@@ -66,13 +66,13 @@ class Plane:
         if x_axis is None:
             self._x_axis = Vector.x_axis()
         else:
-            self._x_axis = x_axis
+            self._x_axis = Vector(x_axis[0], x_axis[1], x_axis[2])
             self._x_axis.normalize_self()
 
         if y_axis is None:
             self._y_axis = Vector.y_axis()
         else:
-            self._y_axis = y_axis - x_axis * (y_axis.dot(self._x_axis))
+            self._y_axis = y_axis - self._x_axis * (y_axis.dot(self._x_axis))
             self._y_axis.normalize_self()
 
         self._z_axis = self._x_axis.cross(self._y_axis)
