@@ -305,5 +305,18 @@ def test_plane_has_on_negative_side():
     MINI_CHECK(not pl.has_on_negative_side(above))
 
 
+@MINI_TEST("Plane", "Project")
+def test_plane_project():
+    from session_py import Plane
+    from session_py import Point
+
+    pl = Plane.xy_plane()
+    above = Point(1.0, 2.0, 5.0)
+    on_plane = pl.project(above)
+
+    MINI_CHECK(TOLERANCE.is_close(on_plane[0], 1.0) and TOLERANCE.is_close(on_plane[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(on_plane[2], 0.0))
+
+
 if __name__ == "__main__":
     run_all("python")

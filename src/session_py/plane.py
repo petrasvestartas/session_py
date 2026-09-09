@@ -731,6 +731,24 @@ class Plane:
         """
         return (self.a * p[0] + self.b * p[1] + self.c * p[2] + self.d) < 0.0
 
+    def project(self, p: Point) -> Point:
+        """Orthogonal projection of a point onto this plane.
+
+        Mirrors CGAL's ``Plane_3::projection``.
+
+        Parameters
+        ----------
+        p : :class:`Point`
+
+        Returns
+        -------
+        :class:`Point`
+        """
+        n = self._z_axis
+        o = self._origin
+        dist = (p[0] - o[0]) * n[0] + (p[1] - o[1]) * n[1] + (p[2] - o[2]) * n[2]
+        return Point(p[0] - dist * n[0], p[1] - dist * n[1], p[2] - dist * n[2])
+
     def translate_by_normal(self, distance: float) -> Plane:
         """Translate (move) a plane along its normal direction by a specified distance.
 
