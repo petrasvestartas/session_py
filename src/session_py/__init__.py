@@ -25,6 +25,7 @@ from .graph import Graph
 from .graph import Vertex
 from .graph import Edge
 from .objects import Objects
+from .history import History
 from .session import Session
 from .mesh import Mesh
 from .mesh import NormalWeighting
@@ -84,6 +85,7 @@ __all__ = [
     "Vertex",
     "Edge",
     "Objects",
+    "History",
     "Session",
     "Mesh",
     "NormalWeighting",

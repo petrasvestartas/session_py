@@ -669,6 +669,26 @@ class Graph:
     def get_neighbors(self, node: str) -> list[str]:
         return list(self.neighbors(node))
 
+    def edges_of(self, node: str) -> list[tuple[str, str, bool]]:
+        """The edges incident to a node, with what it takes to add each one back.
+
+        Parameters
+        ----------
+        node : str
+            The node identifier.
+
+        Returns
+        -------
+        list[tuple[str, str, bool]]
+            One (other, attribute, forward) per edge; forward is True when ``node`` is the
+            edge's v0, so ``add_edge`` can be replayed with the vertices in their original
+            order. An unknown node has no edges.
+        """
+        out = []
+        for other, edge in self.edges.get(node, {}).items():
+            out.append((other, edge.attribute, edge.v0 == node))
+        return out
+
     def number_of_vertices(self) -> int:
         """Get the number of vertices in the graph.
 

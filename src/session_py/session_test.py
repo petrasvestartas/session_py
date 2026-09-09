@@ -465,6 +465,29 @@ def test_session_get_geometry():
     MINI_CHECK(len(geom.points) == 1)
 
 
+@MINI_TEST("Session", "Get Geometry Is Pure")
+def test_session_get_geometry_is_pure():
+    # get_geometry() returns a flattened SNAPSHOT and must never touch the session's own
+    # geometry, so calling it twice gives the same answer.
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+    session.add_point(point)
+    session.set_xform(guid, Xform.translation(10.0, 0.0, 0.0))
+
+    first = session.get_geometry().points[0]
+    second = session.get_geometry().points[0]
+
+    MINI_CHECK(TOLERANCE.is_close(first[0], 11.0))
+    MINI_CHECK(TOLERANCE.is_close(second[0], 11.0))
+    MINI_CHECK(TOLERANCE.is_close(point[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(session.objects.points[0][0], 1.0))
+
+
 @MINI_TEST("Session", "Json Roundtrip")
 def test_session_json_roundtrip():
     from session_py import Session
@@ -792,6 +815,215 @@ def test_session_component_json_roundtrip():
     MINI_CHECK(len(loaded.objects.components) == 1)
     MINI_CHECK(loaded.objects.components[0].width == 3.0)
     MINI_CHECK(loaded.objects.components[0].guid == guid)
+
+
+@MINI_TEST("Session", "Document Workflow")
+def test_session_document_workflow():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+    from pathlib import Path
+
+    session = Session()
+    a = Point(1.0, 0.0, 0.0)
+    b = Point(2.0, 0.0, 0.0)
+    c = Point(3.0, 0.0, 0.0)
+    a_guid = a.guid
+    b_guid = b.guid
+    c_guid = c.guid
+    session.add_point(a)
+    session.add_point(b)
+    session.add_point(c)
+
+    session.replace(b_guid, Point(20.0, 0.0, 0.0))
+    session.remove_object(c_guid)
+    shift = Xform.translation(0.0, 5.0, 0.0)
+    session.set_xform(a_guid, shift)
+
+    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_document.bin"
+    session.pb_dump(fname)
+    loaded = Session.pb_load(fname)
+
+    MINI_CHECK(len(loaded.lookup) == 2)
+    MINI_CHECK(a_guid in loaded.lookup)
+    MINI_CHECK(b_guid in loaded.lookup)
+    MINI_CHECK(c_guid not in loaded.lookup)
+    MINI_CHECK(TOLERANCE.is_close(loaded.lookup[b_guid][0], 20.0))
+    MINI_CHECK(loaded.xform(a_guid) == shift)
+    MINI_CHECK(loaded.history.depth() == 0)
+
+
+@MINI_TEST("Session", "Undo Remove")
+def test_session_undo_remove():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    group = session.add_group("g")
+    a = Point(1.0, 0.0, 0.0)
+    b = Point(2.0, 0.0, 0.0)
+    c = Point(3.0, 0.0, 0.0)
+    a_guid = a.guid
+    b_guid = b.guid
+    c_guid = c.guid
+    session.add_point(a, group)
+    b_node = session.add_point(b, group)
+    session.add_point(c, b_node)
+    session.add_edge(a_guid, b_guid, "connection")
+    shift = Xform.translation(0.0, 5.0, 0.0)
+    session.set_xform(b_guid, shift)
+
+    session.begin("remove")
+    session.remove_object(b_guid)
+    session.commit()
+    gone = b_guid not in session.lookup and len(group.children) == 1
+    session.undo()
+
+    MINI_CHECK(gone)
+    MINI_CHECK(b_guid in session.lookup)
+    MINI_CHECK(session.objects.points[1].guid == b_guid)
+    MINI_CHECK(group.children[1].name == b_guid)
+    MINI_CHECK(group.children[1].children[0].name == c_guid)
+    MINI_CHECK(session.graph.has_edge((a_guid, b_guid)))
+    MINI_CHECK(session.graph.edge_attribute(a_guid, b_guid) == "connection")
+    MINI_CHECK(session.xform(b_guid) == shift)
+
+    session.redo()
+
+    MINI_CHECK(b_guid not in session.lookup)
+    MINI_CHECK(len(session.objects.points) == 2)
+    MINI_CHECK(len(group.children) == 1)
+    MINI_CHECK(not session.graph.has_edge((a_guid, b_guid)))
+    MINI_CHECK(session.xform(b_guid) == Xform.identity())
+
+
+@MINI_TEST("Session", "Undo Add")
+def test_session_undo_add():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    group = session.add_group("g")
+    session.add_point(Point(0.0, 0.0, 0.0), group)
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+
+    session.begin("add")
+    session.add_point(point, group)
+    session.commit()
+    session.undo()
+    gone = guid not in session.lookup and len(session.objects.points) == 1
+    session.redo()
+
+    MINI_CHECK(gone)
+    MINI_CHECK(guid in session.lookup)
+    MINI_CHECK(session.objects.points[1].guid == guid)
+    MINI_CHECK(group.children[1].name == guid)
+    MINI_CHECK(session.graph.has_node(guid))
+    MINI_CHECK(TOLERANCE.is_close(session.lookup[guid][2], 3.0))
+
+
+@MINI_TEST("Session", "Undo Replace")
+def test_session_undo_replace():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+    session.add_point(point)
+
+    session.begin("replace")
+    session.replace(guid, Point(9.0, 9.0, 9.0))
+    session.commit()
+    replaced = session.lookup[guid][0]
+    session.undo()
+    restored = session.lookup[guid][0]
+    session.redo()
+
+    MINI_CHECK(TOLERANCE.is_close(replaced, 9.0))
+    MINI_CHECK(TOLERANCE.is_close(restored, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(session.lookup[guid][0], 9.0))
+    MINI_CHECK(session.objects.points[0].guid == guid)
+    MINI_CHECK(len(session.objects.points) == 1)
+
+
+@MINI_TEST("Session", "Undo Xform")
+def test_session_undo_xform():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+    session.add_point(point)
+    shift = Xform.translation(5.0, 0.0, 0.0)
+
+    session.begin("move")
+    session.set_xform(guid, shift)
+    session.commit()
+    session.undo()
+    cleared = session.xform(guid) == Xform.identity()
+    session.redo()
+
+    session.begin("reset")
+    session.remove_xform(guid)
+    session.commit()
+    session.undo()
+
+    MINI_CHECK(cleared)
+    MINI_CHECK(session.xform(guid) == shift)
+    MINI_CHECK(len(session.xforms) == 1)
+
+
+@MINI_TEST("Session", "History Purged On Save")
+def test_session_history_purged_on_save():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+
+    session.begin("add")
+    session.add_point(Point(0.0, 0.0, 0.0))
+    session.commit()
+    before_pb = session.history.depth()
+    session.pb_dumps()
+    after_pb = session.history.depth()
+
+    session.begin("add")
+    session.add_point(Point(1.0, 0.0, 0.0))
+    session.commit()
+    before_json = session.history.depth()
+    session.file_json_dumps()
+
+    MINI_CHECK(before_pb == 1)
+    MINI_CHECK(after_pb == 0)
+    MINI_CHECK(before_json == 1)
+    MINI_CHECK(session.history.depth() == 0)
+    MINI_CHECK(not session.undo())
+    MINI_CHECK(len(session.objects.points) == 2)
+
+
+@MINI_TEST("Session", "History Capacity")
+def test_session_history_capacity():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    for i in range(70):
+        session.begin("add")
+        session.add_point(Point(float(i), 0.0, 0.0))
+        session.commit()
+    depth = session.history.depth()
+    while session.undo():
+        pass
+
+    MINI_CHECK(depth == 64)
+    MINI_CHECK(not session.history.can_undo())
+    MINI_CHECK(len(session.objects.points) == 6)
+    MINI_CHECK(TOLERANCE.is_close(session.objects.points[5][0], 5.0))
 
 
 if __name__ == "__main__":

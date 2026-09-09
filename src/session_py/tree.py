@@ -413,7 +413,7 @@ class Tree:
         if self.root:
             yield from self.root.traverse()
 
-    def remove(self, node: "TreeNode") -> None:
+    def remove(self, node: "TreeNode") -> "TreeNode":
         """Remove a node from the tree.
 
         Parameters
@@ -421,12 +421,18 @@ class Tree:
         node : :class:`TreeNode`
             The node to remove.
 
+        Returns
+        -------
+        :class:`TreeNode`
+            The detached node, its subtree intact, so a caller can keep or re-add it.
+
         """
         if node == self.root:
             self._root = None
             node._tree = None
         else:
             node.parent.remove(node)
+        return node
 
     @property
     def leaves(self) -> Iterator["TreeNode"]:

@@ -13,6 +13,12 @@ from .point import Point
 from .tree import Tree
 from .tree import TreeNode
 from .graph import Graph
+from .history import History
+from .history import AddOp
+from .history import RemoveOp
+from .history import ReplaceOp
+from .history import XformOp
+from .history import clone
 from .spatial_bvh import SpatialBVH
 from .obb import OBB
 from .tolerance import Tolerance
@@ -36,6 +42,23 @@ class RayHit(NamedTuple):
     guid: str
     point: Point
     distance: float
+
+
+# The Objects lists in `order()` sequence, each with the prefix of its graph node attribute.
+COLLECTIONS = [
+    ("points", "point"),
+    ("lines", "line"),
+    ("planes", "plane"),
+    ("bboxes", "bbox"),
+    ("polylines", "polyline"),
+    ("pointclouds", "pointcloud"),
+    ("meshes", "mesh"),
+    ("nurbscurves", "nurbscurve"),
+    ("nurbssurfaces", "nurbssurface"),
+    ("breps", "brep"),
+    ("elements", "element"),
+    ("components", "component"),
+]
 
 
 class Session:
@@ -67,6 +90,9 @@ class Session:
         stored: geometry types carry no transformation member. Cumulative placement comes from
         `world_xform`, which multiplies down the tree. Serialized explicitly by
         __jsondump__/pb_dumps in `order()` sequence (a dict has no deterministic order).
+    history : :class:`History`
+        Undo/redo buffer, in memory only. Ops are recorded ONLY while a transaction is open
+        (`begin` ... `commit`), and every save purges it, as Rhino does.
     name : str
         Name of the Session.
 
@@ -80,6 +106,7 @@ class Session:
         self.tree = Tree(name=f"{name}_tree")
         self.graph = Graph(name=f"{name}_graph")
         self.xforms: dict[str, Xform] = {}
+        self.history = History()
         # SpatialBVH for collision detection (auto-computed world size)
         self.bvh = SpatialBVH()
 
@@ -110,6 +137,8 @@ class Session:
 
     def set_xform(self, guid: str, xform: Xform) -> None:
         """Set the LOCAL transform of an object, relative to its tree parent."""
+        if self.history.current is not None:
+            self.history.record(XformOp(guid, self.xforms.get(guid), xform))
         self.xforms[guid] = xform
 
     def xform(self, guid: str) -> Xform:
@@ -118,6 +147,9 @@ class Session:
 
     def remove_xform(self, guid: str) -> bool:
         """Remove an object's local transform, returning whether one was present."""
+        before = self.xforms.get(guid)
+        if before is not None and self.history.current is not None:
+            self.history.record(XformOp(guid, before, None))
         return self.xforms.pop(guid, None) is not None
 
     def world_xform(self, guid: str) -> Xform:
@@ -254,6 +286,7 @@ class Session:
 
     def file_json_dumps(self) -> str:
         import json
+        self.history.clear()
         return json.dumps(self.__jsondump__())
 
     @classmethod
@@ -263,6 +296,7 @@ class Session:
 
     def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         import json
+        self.history.clear()
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
@@ -274,6 +308,7 @@ class Session:
 
     def pb_dumps(self) -> bytes:
         from .proto import session_pb2
+        self.history.clear()
         proto = session_pb2.Session()
         proto.name = self.name
         if self.has_guid():
@@ -332,6 +367,7 @@ class Session:
         return session
 
     def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+        self.history.clear()
         with open(filepath, 'wb') as f:
             f.write(self.pb_dumps())
 
@@ -342,13 +378,23 @@ class Session:
 
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def _add_object(self, collection, obj, type_prefix, parent=None):
-        collection.append(obj)
+    def _add_object(self, collection: str, obj, type_prefix: str, parent=None):
+        items = getattr(self.objects, collection)
+        items.append(obj)
         self.lookup[obj.guid] = obj
-        self.graph.add_node(obj.guid, f"{type_prefix}_{obj.name}")
+        attribute = f"{type_prefix}_{obj.name}"
+        self.graph.add_node(obj.guid, attribute)
         node = TreeNode(name=obj.guid)
+        parent_guid = None
+        index = 0
         if parent is not None:
             self.add(node, parent)
+            parent_guid = parent.name
+            index = len(parent.children) - 1
+        if self.history.current is not None:
+            self.history.record(
+                AddOp(obj.guid, clone(obj), collection, len(items) - 1, None, parent_guid, index, None, attribute, [])
+            )
         return node
 
     def order(self) -> list[str]:
@@ -372,63 +418,63 @@ class Session:
     def add_point(self, point: Point, parent: TreeNode | None = None) -> TreeNode | None:
         if point is None:
             return None
-        return self._add_object(self.objects.points, point, "point", parent)
+        return self._add_object("points", point, "point", parent)
 
     def add_line(self, line: "Line", parent: TreeNode | None = None) -> TreeNode | None:
         if line is None:
             return None
-        return self._add_object(self.objects.lines, line, "line", parent)
+        return self._add_object("lines", line, "line", parent)
 
     def add_plane(self, plane: "Plane", parent: TreeNode | None = None) -> TreeNode | None:
         if plane is None:
             return None
-        return self._add_object(self.objects.planes, plane, "plane", parent)
+        return self._add_object("planes", plane, "plane", parent)
 
     def add_obb(self, bbox: "OBB", parent: TreeNode | None = None) -> TreeNode | None:
         if bbox is None:
             return None
-        return self._add_object(self.objects.bboxes, bbox, "bbox", parent)
+        return self._add_object("bboxes", bbox, "bbox", parent)
 
     def add_polyline(self, polyline: "Polyline", parent: TreeNode | None = None) -> TreeNode | None:
         if polyline is None or polyline.point_count() < 2:
             return None
-        return self._add_object(self.objects.polylines, polyline, "polyline", parent)
+        return self._add_object("polylines", polyline, "polyline", parent)
 
     def add_pointcloud(self, pointcloud: "PointCloud", parent: TreeNode | None = None) -> TreeNode | None:
         if pointcloud is None or pointcloud.is_empty():
             return None
-        return self._add_object(self.objects.pointclouds, pointcloud, "pointcloud", parent)
+        return self._add_object("pointclouds", pointcloud, "pointcloud", parent)
 
     def add_mesh(self, mesh: "Mesh", parent: TreeNode | None = None) -> TreeNode | None:
         if mesh is None or mesh.is_empty() or mesh.number_of_faces() == 0:
             return None
-        return self._add_object(self.objects.meshes, mesh, "mesh", parent)
+        return self._add_object("meshes", mesh, "mesh", parent)
 
     def add_nurbscurve(self, nurbscurve: "NurbsCurve", parent: TreeNode | None = None) -> TreeNode | None:
         if nurbscurve is None or nurbscurve.cv_count() < 2:
             return None
-        return self._add_object(self.objects.nurbscurves, nurbscurve, "nurbscurve", parent)
+        return self._add_object("nurbscurves", nurbscurve, "nurbscurve", parent)
 
     def add_nurbssurface(self, nurbssurface: "NurbsSurface", parent: TreeNode | None = None) -> TreeNode | None:
         if nurbssurface is None or nurbssurface.cv_count() == 0:
             return None
-        return self._add_object(self.objects.nurbssurfaces, nurbssurface, "nurbssurface", parent)
+        return self._add_object("nurbssurfaces", nurbssurface, "nurbssurface", parent)
 
     def add_brep(self, brep: "BRep", parent: TreeNode | None = None) -> TreeNode | None:
         if brep is None or (brep.face_count() == 0 and brep.vertex_count() == 0):
             return None
-        return self._add_object(self.objects.breps, brep, "brep", parent)
+        return self._add_object("breps", brep, "brep", parent)
 
     def add_element(self, element: "Element", parent: TreeNode | None = None) -> TreeNode | None:
         # Kept even with no geometry: an Element is a data record - features, insertion vectors,
         # element_data a consumer reads back - and dropping one would lose that on a round trip.
         if element is None:
             return None
-        return self._add_object(self.objects.elements, element, "element", parent)
+        return self._add_object("elements", element, "element", parent)
 
     def add_component(self, component: Any, parent: TreeNode | None = None) -> TreeNode:
         """Add a custom component (any object with guid, name, __jsondump__, __jsonload__)."""
-        return self._add_object(self.objects.components, component, "component", parent)
+        return self._add_object("components", component, "component", parent)
 
     def add_group(self, name: str) -> TreeNode:
         node = TreeNode(name=name)
@@ -526,45 +572,159 @@ class Session:
         return groups
 
     def remove_object(self, guid: str) -> bool:
-        """Remove a geometry object by its GUID.
+        """Remove an object by its GUID from every live table at once: its typed list,
+        `lookup`, its xform, its tree node (with the subtree) and its graph node with every
+        incident edge. The removal record is the tombstone that undo restores from.
 
-        Args:
-            guid: The UUID of the geometry object to remove.
+        Parameters
+        ----------
+        guid : str
+            The GUID of the object to remove.
 
-        Returns:
+        Returns
+        -------
+        bool
             True if the object was removed, False if not found.
         """
-        geometry = self.lookup.get(guid)
-        if not geometry:
+        op = self._detach(guid)
+        if op is None:
             return False
-
-        # Remove from all object collections
-        self.objects.points = [p for p in self.objects.points if p.guid != guid]
-        self.objects.lines = [l for l in self.objects.lines if l.guid != guid]
-        self.objects.polylines = [p for p in self.objects.polylines if p.guid != guid]
-        self.objects.planes = [p for p in self.objects.planes if p.guid != guid]
-        self.objects.bboxes = [b for b in self.objects.bboxes if b.guid != guid]
-        self.objects.meshes = [m for m in self.objects.meshes if m.guid != guid]
-        self.objects.pointclouds = [p for p in self.objects.pointclouds if p.guid != guid]
-        self.objects.nurbscurves = [c for c in self.objects.nurbscurves if c.guid != guid]
-        self.objects.nurbssurfaces = [s for s in self.objects.nurbssurfaces if s.guid != guid]
-        self.objects.breps = [b for b in self.objects.breps if b.guid != guid]
-        self.objects.elements = [e for e in self.objects.elements if e.guid != guid]
-
-        # Remove from lookup table
-        del self.lookup[guid]
-        self.xforms.pop(guid, None)
-
-        # Remove from tree - find node by guid first
-        node = self.tree.find_node_by_guid(guid)
-        if node is not None:
-            self.tree.remove(node)
-
-        # Remove from graph using string GUID
-        if self.graph.has_node(str(guid)):
-            self.graph.remove_node(str(guid))
-
+        self.history.record(op)
         return True
+
+    def replace(self, guid: str, obj: Any) -> bool:
+        """Swap the object stored under ``guid`` for ``obj``, which takes over that guid, in
+        its typed list and `lookup`, and refresh its graph node attribute.
+
+        This is the recorded edit: undo restores the previous object, redo the new one, as
+        absolute snapshots. Mutating an object in place through `lookup` stays possible and
+        is NOT recorded - history only sees what goes through `replace`.
+
+        Parameters
+        ----------
+        guid : str
+            The GUID of the object to replace.
+        obj : Any
+            The replacement; its guid is set to ``guid``.
+
+        Returns
+        -------
+        bool
+            True if the object was replaced, False if not found.
+        """
+        before = self.lookup.get(guid)
+        if before is None:
+            return False
+        obj.guid = guid
+        if self.history.current is not None:
+            self.history.record(ReplaceOp(guid, clone(before), clone(obj)))
+        self._swap(guid, obj)
+        return True
+
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def begin(self, label: str) -> None:
+        """Open a history transaction: every add, remove, replace and xform change until
+        `commit` becomes one undo step."""
+        self.history.begin(label)
+
+    def commit(self) -> None:
+        self.history.commit()
+
+    def undo(self) -> bool:
+        return self.history.undo(self)
+
+    def redo(self) -> bool:
+        return self.history.redo(self)
+
+    def _locate(self, guid: str) -> tuple[str, int]:
+        """Which Objects list holds a guid, and where; ("", -1) when none does."""
+        for collection, _ in COLLECTIONS:
+            items = getattr(self.objects, collection)
+            for i in range(len(items)):
+                if items[i].guid == guid:
+                    return collection, i
+        return "", -1
+
+    def _detach(self, guid: str) -> RemoveOp | None:
+        """Take an object out of every live table, unrecorded, returning its tombstone."""
+        obj = self.lookup.get(guid)
+        if obj is None:
+            return None
+        collection, obj_index = self._locate(guid)
+        if obj_index >= 0:
+            getattr(self.objects, collection).pop(obj_index)
+        del self.lookup[guid]
+        xform = self.xforms.pop(guid, None)
+
+        parent_guid = None
+        index = 0
+        node = self.tree.get_node_by_name(guid)
+        if node is not None:
+            if node.parent is not None:
+                parent_guid = node.parent.name
+                index = node.parent.children.index(node)
+            node = self.tree.remove(node)
+
+        attribute = ""
+        edges = []
+        if self.graph.has_node(guid):
+            attribute = self.graph.node_attribute(guid)
+            edges = self.graph.edges_of(guid)
+            self.graph.remove_node(guid)
+
+        return RemoveOp(guid, clone(obj), collection, obj_index, xform, parent_guid, index, node, attribute, edges)
+
+    def _attach(self, op) -> None:
+        """Put an object back from its tombstone, unrecorded: typed list at its old index,
+        `lookup`, xform, tree node under the same parent at the same index with its subtree,
+        graph node and every incident edge whose other end is still present."""
+        items = getattr(self.objects, op.collection)
+        obj = clone(op.obj)
+        items.insert(min(op.obj_index, len(items)), obj)
+        self.lookup[op.guid] = obj
+        if op.xform is not None:
+            self.xforms[op.guid] = op.xform
+
+        node = op.node
+        if node is None:
+            node = TreeNode(name=op.guid)
+        if op.parent_guid is not None:
+            parent = self.tree.get_node_by_name(op.parent_guid)
+            if parent is not None:
+                self.tree.add(node, parent)
+                parent.children.remove(node)
+                parent.children.insert(min(op.index, len(parent.children)), node)
+
+        self.graph.add_node(op.guid, op.attribute)
+        for other, attribute, forward in op.edges:
+            if not self.graph.has_node(other):
+                continue
+            if forward:
+                self.graph.add_edge(op.guid, other, attribute)
+            else:
+                self.graph.add_edge(other, op.guid, attribute)
+
+    def _swap(self, guid: str, obj: Any) -> None:
+        """Store ``obj`` under ``guid`` in its typed list and `lookup`, unrecorded."""
+        collection, obj_index = self._locate(guid)
+        if obj_index < 0:
+            return
+        getattr(self.objects, collection)[obj_index] = obj
+        self.lookup[guid] = obj
+        attribute = ""
+        for name, prefix in COLLECTIONS:
+            if name == collection:
+                attribute = f"{prefix}_{obj.name}"
+        if self.graph.has_node(guid):
+            self.graph.node_attribute(guid, attribute)
+
+    def _place(self, guid: str, xform: Xform | None) -> None:
+        """Set or drop (None) the local transform under ``guid``, unrecorded."""
+        if xform is None:
+            self.xforms.pop(guid, None)
+        else:
+            self.xforms[guid] = xform
 
     # ═══════════════════════════════════════════════════════════════════════════
 
