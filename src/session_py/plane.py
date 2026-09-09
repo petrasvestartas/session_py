@@ -173,7 +173,7 @@ class Plane:
             The constructed plane.
         """
         plane = Plane.__new__(Plane)
-        plane.guid = str(uuid.uuid4())
+        plane._guid = None
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
@@ -209,7 +209,7 @@ class Plane:
             return Plane()
 
         plane = Plane.__new__(Plane)
-        plane.guid = str(uuid.uuid4())
+        plane._guid = None
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
@@ -274,7 +274,7 @@ class Plane:
         x_axis.normalize_self()
 
         plane = Plane.__new__(Plane)
-        plane.guid = str(uuid.uuid4())
+        plane._guid = None
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
@@ -302,7 +302,7 @@ class Plane:
             The constructed plane.
         """
         plane = Plane.__new__(Plane)
-        plane.guid = str(uuid.uuid4())
+        plane._guid = None
         plane.name = "my_plane"
         plane.width = 1.0
         plane._linecolor = None
@@ -331,7 +331,7 @@ class Plane:
             XY plane at origin.
         """
         plane = Plane.__new__(Plane)
-        plane.guid = str(uuid.uuid4())
+        plane._guid = None
         plane.name = "xy_plane"
         plane.width = 1.0
         plane._linecolor = None
@@ -355,7 +355,7 @@ class Plane:
             YZ plane at origin.
         """
         plane = Plane.__new__(Plane)
-        plane.guid = str(uuid.uuid4())
+        plane._guid = None
         plane.name = "yz_plane"
         plane.width = 1.0
         plane._linecolor = None
@@ -379,7 +379,7 @@ class Plane:
             XZ plane at origin.
         """
         plane = Plane.__new__(Plane)
-        plane.guid = str(uuid.uuid4())
+        plane._guid = None
         plane.name = "xz_plane"
         plane.width = 1.0
         plane._linecolor = None
@@ -396,7 +396,7 @@ class Plane:
     @staticmethod
     def invalid() -> Plane:
         p = object.__new__(Plane)
-        p.guid = str(uuid.uuid4())
+        p._guid = None
         p.name = "my_plane"
         p.width = 1.0
         p._linecolor = None
@@ -416,7 +416,7 @@ class Plane:
     @staticmethod
     def from_frame(origin: Point, x_axis: Vector, y_axis: Vector, z_axis: Vector) -> Plane:
         p = object.__new__(Plane)
-        p.guid = str(uuid.uuid4())
+        p._guid = None
         p.name = "my_plane"
         p.width = 1.0
         p._linecolor = None
@@ -454,7 +454,7 @@ class Plane:
         import copy
 
         result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
+        result._guid = None
         return result
 
     @property
@@ -540,7 +540,7 @@ class Plane:
         """Translate plane by vector (copy)."""
         if isinstance(other, Vector):
             result = Plane.__new__(Plane)
-            result.guid = self.guid
+            result._guid = self._guid
             result.name = self.name
             result.width = self.width
             result._linecolor = self._linecolor
@@ -556,7 +556,7 @@ class Plane:
         """Translate plane by negative vector (copy)."""
         if isinstance(other, Vector):
             result = Plane.__new__(Plane)
-            result.guid = self.guid
+            result._guid = self._guid
             result.name = self.name
             result.width = self.width
             result._linecolor = self._linecolor

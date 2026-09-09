@@ -88,6 +88,7 @@ def test_plane_constructor():
     MINI_CHECK(TOLERANCE.is_close(pl_pts.c, 1.0) and TOLERANCE.is_close(pl_pts.x_axis[0], pl_pts.x_axis[1]))
     MINI_CHECK(TOLERANCE.is_close(pl_2pts.x_axis[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pl_skew.x_axis.dot(pl_skew.y_axis), 0.0) and pl_skew.is_right_hand())
+    MINI_CHECK(not xy.has_guid())
     MINI_CHECK(xy.name == "xy_plane" and yz.name == "yz_plane" and xz.name == "xz_plane")
     MINI_CHECK(TOLERANCE.is_close(pl_iadd.origin[0], 1.0) and TOLERANCE.is_close(pl_iadd.origin[1], 2.0) and TOLERANCE.is_close(pl_iadd.origin[2], 3.0))
     MINI_CHECK(TOLERANCE.is_close(pl_isub.origin[0], -1.0) and TOLERANCE.is_close(pl_isub.origin[2], -3.0))
