@@ -7,10 +7,10 @@ from .tolerance import PI
 
 @MINI_TEST("Plane", "Constructor")
 def test_plane_constructor():
+    from session_py import Color
     from session_py import Plane
     from session_py import Point
     from session_py import Vector
-    from session_py import Color
 
     # Default constructor - XY plane at origin
     pl = Plane()
