@@ -1,6 +1,4 @@
 from __future__ import annotations
-from typing import Union
-from typing import Optional
 from typing import TYPE_CHECKING
 import uuid
 import math
@@ -8,6 +6,7 @@ from .color import Color
 from .point import Point
 from .vector import Vector
 from .tolerance import Tolerance
+from .tolerance import TOLERANCE
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -689,7 +688,6 @@ class Plane:
     @staticmethod
     def is_coplanar_from_normals(origin0: Point, normal0: Vector, origin1: Point, normal1: Vector, can_be_flipped: bool = True, tolerance: float = -1.0) -> bool:
         """Check coplanarity from origin+normal without constructing Plane objects."""
-        from .vector import Vector
         n0 = Vector(normal0[0], normal0[1], normal0[2])
         n1 = Vector(normal1[0], normal1[1], normal1[2])
         parallel = n0.is_parallel_to(n1)
@@ -703,7 +701,6 @@ class Plane:
         d0 = -(a0 * origin0[0] + b0 * origin0[1] + c0 * origin0[2])
         a1, b1, c1 = n1[0], n1[1], n1[2]
         d1 = -(a1 * origin1[0] + b1 * origin1[1] + c1 * origin1[2])
-        from .tolerance import TOLERANCE
         tol = TOLERANCE.approximation if tolerance < 0 else tolerance
         dist0 = abs(a0 * origin1[0] + b0 * origin1[1] + c0 * origin1[2] + d0)
         dist1 = abs(a1 * origin0[0] + b1 * origin0[1] + c1 * origin0[2] + d1)
