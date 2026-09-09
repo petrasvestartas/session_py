@@ -476,7 +476,14 @@ class Plane:
 
     def repr(self) -> str:
         """Return full string representation."""
-        return f"Plane({self.name}, {self._origin[0]}, {self._origin[1]}, {self._origin[2]}, {self._z_axis[0]}, {self._z_axis[1]}, {self._z_axis[2]}, {repr(self.linecolor)})"
+        prec = Tolerance.ROUNDING
+        ox = TOLERANCE.format_number(self._origin[0], prec)
+        oy = TOLERANCE.format_number(self._origin[1], prec)
+        oz = TOLERANCE.format_number(self._origin[2], prec)
+        zx = TOLERANCE.format_number(self._z_axis[0], prec)
+        zy = TOLERANCE.format_number(self._z_axis[1], prec)
+        zz = TOLERANCE.format_number(self._z_axis[2], prec)
+        return f"Plane({self.name}, {ox}, {oy}, {oz}, {zx}, {zy}, {zz}, {repr(self.linecolor)})"
 
     def __str__(self):
         return self.str
