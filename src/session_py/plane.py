@@ -871,7 +871,7 @@ class Plane:
         plane._update_equation()
 
         plane.width = data.get("width", 1.0)
-        plane.guid = guid if guid is not None else data.get("guid", plane.guid)
+        plane._guid = guid if guid is not None else data.get("guid")
         plane.name = name if name is not None else data.get("name", plane.name)
 
         # Load linecolor
