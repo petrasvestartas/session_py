@@ -29,7 +29,7 @@ class Color:
     a : float, optional
         Alpha component (0.0-1.0). Defaults to 1.0.
     name : str, optional
-        Name of the color. Defaults to "white".
+        Name of the color. Defaults to "my_color".
 
     Attributes
     ----------
@@ -39,7 +39,7 @@ class Color:
         The unique identifier of the color.
     """
 
-    def __init__(self, r: float, g: float, b: float, a: float, name: str = "my_color"):
+    def __init__(self, r: float = 1.0, g: float = 1.0, b: float = 1.0, a: float = 1.0, name: str = "my_color"):
         self._guid = None
         self.name = name
         self._r = max(0.0, min(1.0, float(r)))
