@@ -273,6 +273,15 @@ def test_intersection_ray_box():
     MINI_CHECK(abs(points[0][0] - (-1.0)) < 1e-4)
     MINI_CHECK(abs(points[1][0] - 1.0) < 1e-4)
 
+    # Ray grazing the min-y and min-z faces: a zero direction component must
+    # give 0 * DBL_MAX == 0, not a NaN that drops the slab constraint.
+    graze = Line(0.0, -1.0, -1.0, 1.0, -1.0, -1.0)
+    gpts = intersection.ray_box(graze, box, -10.0, 10.0)
+    MINI_CHECK(gpts is not None)
+    MINI_CHECK(len(gpts) == 2)
+    MINI_CHECK(abs(gpts[0][0]) < 1e-4)
+    MINI_CHECK(abs(gpts[1][0] - 1.0) < 1e-4)
+
 
 @MINI_TEST("Intersection", "Ray Box Miss")
 def test_intersection_ray_box_miss():
@@ -441,6 +450,15 @@ def test_intersection_ray_mesh_first():
 
     MINI_CHECK(hits is not None)
     MINI_CHECK(len(hits) == 1)
+
+    # find_all=False returns the CLOSEST hit, even when a farther face comes
+    # first in face order.
+    far_mesh = Mesh.from_polylines([polygons[1], polygons[0]])
+    closest = intersection.ray_mesh(line, far_mesh, 1e-6, False)
+
+    MINI_CHECK(closest is not None)
+    MINI_CHECK(len(closest) == 1)
+    MINI_CHECK(abs(closest[0][2]) < 1e-3)
 
 
 @MINI_TEST("Intersection", "Ray Mesh Miss")
@@ -1045,6 +1063,16 @@ def test_intersection_polyline_plane():
     for p in pts:
         MINI_CHECK(abs(p[0]) < 1e-9)
 
+    # Plane through two opposite vertices: each vertex is reported once.
+    diag = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, -1.0, 0.0))
+    dresult = intersection.polyline_plane(poly, diag)
+    MINI_CHECK(dresult is not None)
+    dpts, dids = dresult
+    MINI_CHECK(len(dpts) == 2)
+    MINI_CHECK(dids[0] == 0 and dids[1] == 2)
+    MINI_CHECK(TOLERANCE.is_close(dpts[0][0], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(dpts[1][0], 1.0))
+
 
 @MINI_TEST("Intersection", "Line Line 3D")
 def test_intersection_line_line_3d():
@@ -1088,6 +1116,17 @@ def test_intersection_polyline_plane_to_line():
     MINI_CHECK(out is not None)
     MINI_CHECK(TOLERANCE.is_close(out.start()[0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(out.end()[0], 4.0))
+
+    # Four crossings (non-convex comb): the line spans the EXTREME pair.
+    comb = Polyline([
+        Point(0.0, 0.0, 0.0), Point(4.0, 0.0, 0.0), Point(4.0, 3.0, 0.0),
+        Point(3.0, 3.0, 0.0), Point(3.0, 1.0, 0.0), Point(1.0, 1.0, 0.0),
+        Point(1.0, 3.0, 0.0), Point(0.0, 3.0, 0.0), Point(0.0, 0.0, 0.0),
+    ])
+    wide = polyline_plane_to_line(comb, pln, Point(0.0, 0.0, 0.0))
+    MINI_CHECK(wide is not None)
+    MINI_CHECK(TOLERANCE.is_close(wide.start()[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(wide.end()[0], 4.0))
 
 
 @MINI_TEST("Intersection", "Quad From Line Top Bottom Planes")
@@ -1154,6 +1193,64 @@ def test_intersection_closed_and_open_paths_2d():
     t_hi = max(t0, t1)
     MINI_CHECK(TOLERANCE.is_close(t_lo, 1.5))
     MINI_CHECK(TOLERANCE.is_close(t_hi, 3.5))
+
+    # Joint running exactly ALONG the plate's top edge: the winding number puts
+    # that boundary outside, so only the collinear overlap keeps the flush side.
+    flush = Polyline([
+        Point(-2.0, 10.0, 0.0),
+        Point(12.0, 10.0, 0.0),
+    ])
+    flush_result = closed_and_open_paths_2d(plate, flush, pln)
+    MINI_CHECK(flush_result is not None)
+    flush_out, (flush_t0, flush_t1) = flush_result
+    MINI_CHECK(flush_out.point_count() == 2)
+    MINI_CHECK(TOLERANCE.is_close(flush_out.get_point(0)[0], 10.0))
+    MINI_CHECK(TOLERANCE.is_close(flush_out.get_point(1)[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(flush_t0, 2.0))
+    MINI_CHECK(TOLERANCE.is_close(flush_t1, 3.0))
+
+
+@MINI_TEST("Intersection", "Line Line Classified")
+def test_intersection_line_line_classified():
+    from session_py import Line
+    from session_py.intersection import line_line_classified
+
+    # Crossing perpendicular segments meeting at their midpoints.
+    s0 = Line(-1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    s1 = Line(0.0, -1.0, 0.0, 0.0, 1.0, 0.0)
+    result = line_line_classified(s0, s1, 1, 1, 0, 0, 0.5)
+
+    MINI_CHECK(result is not None)
+    p0, p1, v0, v1, normal, type0, type1, is_parallel = result
+    MINI_CHECK(not is_parallel)
+    MINI_CHECK(abs(p0[0]) < 1e-6)
+    MINI_CHECK(abs(p0[1]) < 1e-6)
+    MINI_CHECK(abs(p1[0]) < 1e-6)
+    MINI_CHECK(abs(p1[1]) < 1e-6)
+    MINI_CHECK(abs(abs(normal[2]) - 1.0) < 1e-6)
+
+    # Shared-endpoint case: both segments start at the same point.
+    e0 = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    e1 = Line(0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+    result2 = line_line_classified(e0, e1, 1, 1, 0, 0, 0.5)
+
+    MINI_CHECK(result2 is not None)
+    p0, p1, v0, v1, normal, type0, type1, is_parallel = result2
+    MINI_CHECK(not type0)
+    MINI_CHECK(not type1)
+    MINI_CHECK(abs(p0[0]) < 1e-6)
+    MINI_CHECK(abs(p0[1]) < 1e-6)
+
+    # Parallel offset segments.
+    q0 = Line(0.0, 0.0, 0.0, 2.0, 0.0, 0.0)
+    q1 = Line(0.0, 1.0, 0.0, 2.0, 1.0, 0.0)
+    result3 = line_line_classified(q0, q1, 1, 1, 0, 0, 0.5)
+
+    MINI_CHECK(result3 is not None)
+    p0, p1, v0, v1, normal, type0, type1, is_parallel = result3
+    MINI_CHECK(is_parallel)
+    MINI_CHECK(not type0)
+    MINI_CHECK(not type1)
 
 
 if __name__ == "__main__":
