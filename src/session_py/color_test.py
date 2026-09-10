@@ -44,6 +44,7 @@ def test_color_constructor():
     MINI_CHECK(ccopy.guid != red.guid)
     MINI_CHECK(red != Color(1.0, 0.0, 0.0, 0.5, "red"))
     MINI_CHECK(cclamp[0] == 1.0 and cclamp[1] == 0.0 and cclamp[2] == 0.5 and cclamp[3] == 1.0)
+    MINI_CHECK(str(Color(1.0, 0.5, 0.25, 1.0)) == "1.0, 0.5, 0.2, 1.0")
 
 
 @MINI_TEST("Color", "Json Roundtrip")
