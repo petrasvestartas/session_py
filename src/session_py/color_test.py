@@ -31,19 +31,19 @@ def test_color_constructor():
     ccopy = red.duplicate()
     cother = Color(1.0, 0.0, 0.0, 1.0, "red")
 
+    # Out-of-range values clamp to [0, 1]
+    cclamp = Color(2.0, -1.0, 0.5, 5.0)
+
     MINI_CHECK(red.name == "red")
     MINI_CHECK(red.guid != "")
-    MINI_CHECK(red[0] == 1.0)
-    MINI_CHECK(red[1] == 0.0)
-    MINI_CHECK(red[2] == 0.0)
-    MINI_CHECK(red[3] == 1.0)
-    MINI_CHECK(red.guid)
-
+    MINI_CHECK(red[0] == 1.0 and red[1] == 0.0 and red[2] == 0.0 and red[3] == 1.0)
     MINI_CHECK(r == 1.0 and g == 0.0 and b == 0.0 and a == 1.0)
     MINI_CHECK(cstr == "1.0, 0.0, 0.0, 1.0")
     MINI_CHECK(crepr == "Color(red, 1.0, 0.0, 0.0, 1.0)")
     MINI_CHECK(ccopy == cother)
     MINI_CHECK(ccopy.guid != red.guid)
+    MINI_CHECK(red != Color(1.0, 0.0, 0.0, 0.5, "red"))
+    MINI_CHECK(cclamp[0] == 1.0 and cclamp[1] == 0.0 and cclamp[2] == 0.5 and cclamp[3] == 1.0)
 
 
 @MINI_TEST("Color", "Json Roundtrip")
@@ -109,10 +109,11 @@ def test_color_conversion():
     MINI_CHECK(TOLERANCE.is_close(flts[3], 1.0))
     MINI_CHECK(ints == color)
 
+
 @MINI_TEST("Color", "Presets")
 def test_color_presets():
     from session_py import Color
-    
+
     white = Color.white()
     black = Color.black()
     grey = Color.grey()
@@ -158,6 +159,22 @@ def test_color_presets():
     MINI_CHECK(navy == Color(0.0, 0.0, 0.5, 1.0, "navy"))
     MINI_CHECK(purple == Color(0.5, 0.0, 0.5, 1.0, "purple"))
     MINI_CHECK(silver == Color(0.75, 0.75, 0.75, 1.0, "silver"))
+
+
+@MINI_TEST("Color", "Palette")
+def test_color_palette():
+    from session_py import Color
+
+    palette = Color.palette()
+
+    # Every call builds fresh colors, so mutating one leaves the presets alone
+    palette[0].name = "mutated"
+
+    MINI_CHECK(len(palette) == 12)
+    MINI_CHECK(palette[0] == Color(1.0, 0.0, 0.0, 1.0, "mutated"))
+    MINI_CHECK(palette[11] == Color(1.0, 0.0, 0.5, 1.0, "pink"))
+    MINI_CHECK(Color.palette()[0] == Color(1.0, 0.0, 0.0, 1.0, "red"))
+    MINI_CHECK(Color.red().name == "red")
 
 
 if __name__ == "__main__":
