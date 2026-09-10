@@ -72,6 +72,12 @@ def test_color_json_roundtrip():
     MINI_CHECK(loaded[2] == 0.25)
     MINI_CHECK(loaded[3] == 1.0)
 
+    # Alpha, name and guid are optional
+    partial = Color.file_json_loads('{"b": 0.0, "g": 0.0, "r": 1.0}')
+
+    MINI_CHECK(partial.name == "my_color")
+    MINI_CHECK(partial[0] == 1.0 and partial[3] == 1.0)
+
 
 @MINI_TEST("Color", "Protobuf Roundtrip")
 def test_color_protobuf_roundtrip():
