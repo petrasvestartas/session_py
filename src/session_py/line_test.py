@@ -146,6 +146,7 @@ def test_line_json_roundtrip():
     loaded_j = Line.__jsonload__(d)
 
     MINI_CHECK(loaded_j.name == "test_line")
+    MINI_CHECK(TOLERANCE.is_close(loaded_j[0], 42.1))
 
     # String
     s = l.file_json_dumps()
@@ -368,10 +369,19 @@ def test_line_overlap_average():
 def test_line_extend():
     from session_py import Line
     from session_py import Point
+    from session_py import Color
     l = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
+    l.name = "beam"
+    l.width = 3.0
+    l.dash = [2.0, 1.0]
+    l.linecolor = Color(1.0, 0.0, 0.0, 1.0, "red")
+    gid = l.guid
     l.extend(1.0, 2.0)
     MINI_CHECK(TOLERANCE.is_close(l.start()[0], -1.0))
     MINI_CHECK(TOLERANCE.is_close(l.end()[0], 12.0))
+    MINI_CHECK(l.name == "beam" and l.width == 3.0)
+    MINI_CHECK(l.dash == [2.0, 1.0])
+    MINI_CHECK(l.linecolor[0] == 1.0 and l.guid == gid)
 
 
 if __name__ == "__main__":
