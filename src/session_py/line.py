@@ -761,7 +761,9 @@ class Line:
         line = cls(
             data["x0"], data["y0"], data["z0"], data["x1"], data["y1"], data["z1"]
         )
-        line.guid = guid if guid is not None else data.get("guid", line.guid)
+        guid = guid if guid is not None else data.get("guid")
+        if guid is not None:
+            line.guid = guid
         line.name = name if name is not None else data.get("name", line.name)
 
         if "width" in data:
