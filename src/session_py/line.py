@@ -147,18 +147,29 @@ class Line:
             cxz += dx * dz
             cyz += dy * dz
 
-        # Use numpy for eigenvalue decomposition
-        import numpy as np
-        cov = np.array([
-            [cxx, cxy, cxz],
-            [cxy, cyy, cyz],
-            [cxz, cyz, czz]
-        ])
-        eigenvalues, eigenvectors = np.linalg.eigh(cov)
-
-        # Eigenvector with largest eigenvalue is the line direction
-        idx = np.argmax(eigenvalues)
-        direction = eigenvectors[:, idx]
+        # Power iteration seeded from every axis: a seed orthogonal to the dominant
+        # eigenvector never reaches it, so keep the largest Rayleigh quotient.
+        vx, vy, vz, best = 1.0, 0.0, 0.0, -1.0
+        for seed in range(3):
+            sx = 1.0 if seed == 0 else 0.0
+            sy = 1.0 if seed == 1 else 0.0
+            sz = 1.0 if seed == 2 else 0.0
+            for _ in range(100):
+                nx = cxx * sx + cxy * sy + cxz * sz
+                ny = cxy * sx + cyy * sy + cyz * sz
+                nz = cxz * sx + cyz * sy + czz * sz
+                mag = (nx * nx + ny * ny + nz * nz) ** 0.5
+                if mag < 1e-15:
+                    break
+                sx = nx / mag
+                sy = ny / mag
+                sz = nz / mag
+            eig = (sx * (cxx * sx + cxy * sy + cxz * sz)
+                   + sy * (cxy * sx + cyy * sy + cyz * sz)
+                   + sz * (cxz * sx + cyz * sy + czz * sz))
+            if eig > best:
+                best = eig
+                vx, vy, vz = sx, sy, sz
 
         # Determine line extent from projected points
         if length is None:
@@ -167,7 +178,7 @@ class Line:
                 dx = p[0] - cx
                 dy = p[1] - cy
                 dz = p[2] - cz
-                t = dx * direction[0] + dy * direction[1] + dz * direction[2]
+                t = dx * vx + dy * vy + dz * vz
                 t_min = min(t_min, t)
                 t_max = max(t_max, t)
             half_len = max(abs(t_min), abs(t_max))
@@ -177,12 +188,12 @@ class Line:
             half_len = length / 2.0
 
         # Create line from centroid +/- direction * half_len
-        x0 = cx - direction[0] * half_len
-        y0 = cy - direction[1] * half_len
-        z0 = cz - direction[2] * half_len
-        x1 = cx + direction[0] * half_len
-        y1 = cy + direction[1] * half_len
-        z1 = cz + direction[2] * half_len
+        x0 = cx - vx * half_len
+        y0 = cy - vy * half_len
+        z0 = cz - vz * half_len
+        x1 = cx + vx * half_len
+        y1 = cy + vy * half_len
+        z1 = cz + vz * half_len
 
         return cls(x0, y0, z0, x1, y1, z1)
 

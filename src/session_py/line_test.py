@@ -304,7 +304,18 @@ def test_line_fit_points():
     ]
     l_fit = Line.fit_points(fit_pts)
 
+    # Spread along Y only: unreachable from a single X seed.
+    fit_y = [
+        Point(0.0, 0.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(0.0, 3.0, 0.0),
+    ]
+    l_fit_y = Line.fit_points(fit_y)
+
     MINI_CHECK(l_fit.length() > 0.0)
+    MINI_CHECK(TOLERANCE.is_close(l_fit_y.length(), 3.0))
+    MINI_CHECK(TOLERANCE.is_close(abs(l_fit_y.to_direction()[1]), 1.0))
 
 
 @MINI_TEST("Line", "Subdivide")
