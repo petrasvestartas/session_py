@@ -610,9 +610,7 @@ class Line:
         Line
             A new transformed line.
         """
-        import copy
-
-        result = copy.deepcopy(self)
+        result = self.duplicate()
         result.transform(xform)
         return result
 
