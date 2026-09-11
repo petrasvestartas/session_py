@@ -147,42 +147,54 @@ class Line:
             cxz += dx * dz
             cyz += dy * dz
 
-        # Use numpy for eigenvalue decomposition
-        import numpy as np
-        cov = np.array([
-            [cxx, cxy, cxz],
-            [cxy, cyy, cyz],
-            [cxz, cyz, czz]
-        ])
-        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        # Power iteration seeded from every axis: a seed orthogonal to the dominant
+        # eigenvector never reaches it, so keep the largest Rayleigh quotient.
+        vx, vy, vz, best = 1.0, 0.0, 0.0, -1.0
+        for seed in range(3):
+            sx = 1.0 if seed == 0 else 0.0
+            sy = 1.0 if seed == 1 else 0.0
+            sz = 1.0 if seed == 2 else 0.0
+            for _ in range(100):
+                nx = cxx * sx + cxy * sy + cxz * sz
+                ny = cxy * sx + cyy * sy + cyz * sz
+                nz = cxz * sx + cyz * sy + czz * sz
+                mag = (nx * nx + ny * ny + nz * nz) ** 0.5
+                if mag < 1e-15:
+                    break
+                sx = nx / mag
+                sy = ny / mag
+                sz = nz / mag
+            eig = (sx * (cxx * sx + cxy * sy + cxz * sz)
+                   + sy * (cxy * sx + cyy * sy + cyz * sz)
+                   + sz * (cxz * sx + cyz * sy + czz * sz))
+            if eig > best:
+                best = eig
+                vx, vy, vz = sx, sy, sz
 
-        # Eigenvector with largest eigenvalue is the line direction
-        idx = np.argmax(eigenvalues)
-        direction = eigenvectors[:, idx]
-
-        # Determine line extent from projected points
+        # Span the projected extent. The centroid is not its midpoint, so mirroring the longer
+        # half returned a line longer than the points it was fitted to.
         if length is None:
             t_min = t_max = 0.0
             for p in points:
                 dx = p[0] - cx
                 dy = p[1] - cy
                 dz = p[2] - cz
-                t = dx * direction[0] + dy * direction[1] + dz * direction[2]
+                t = dx * vx + dy * vy + dz * vz
                 t_min = min(t_min, t)
                 t_max = max(t_max, t)
-            half_len = max(abs(t_min), abs(t_max))
-            if half_len < 1e-10:
-                half_len = 0.5  # Default if all points are coincident
+            if t_max - t_min < 1e-10:
+                t_min, t_max = -0.5, 0.5  # Default if all points are coincident
         else:
-            half_len = length / 2.0
+            t_min = -length / 2.0
+            t_max = length / 2.0
 
-        # Create line from centroid +/- direction * half_len
-        x0 = cx - direction[0] * half_len
-        y0 = cy - direction[1] * half_len
-        z0 = cz - direction[2] * half_len
-        x1 = cx + direction[0] * half_len
-        y1 = cy + direction[1] * half_len
-        z1 = cz + direction[2] * half_len
+        # Create line from centroid + direction * t
+        x0 = cx + vx * t_min
+        y0 = cy + vy * t_min
+        z0 = cz + vz * t_min
+        x1 = cx + vx * t_max
+        y1 = cy + vy * t_max
+        z1 = cz + vz * t_max
 
         return cls(x0, y0, z0, x1, y1, z1)
 
@@ -279,10 +291,7 @@ class Line:
         float
             Length of the line.
         """
-        dx = self._x1 - self._x0
-        dy = self._y1 - self._y0
-        dz = self._z1 - self._z0
-        return (dx * dx + dy * dy + dz * dz) ** 0.5
+        return self.squared_length() ** 0.5
 
     def squared_length(self) -> float:
         """Calculate the squared length of the line.
@@ -599,9 +608,7 @@ class Line:
         Line
             A new transformed line.
         """
-        import copy
-
-        result = copy.deepcopy(self)
+        result = self.duplicate()
         result.transform(xform)
         return result
 
@@ -752,7 +759,9 @@ class Line:
         line = cls(
             data["x0"], data["y0"], data["z0"], data["x1"], data["y1"], data["z1"]
         )
-        line.guid = guid if guid is not None else data.get("guid", line.guid)
+        guid = guid if guid is not None else data.get("guid")
+        if guid is not None:
+            line.guid = guid
         line.name = name if name is not None else data.get("name", line.name)
 
         if "width" in data:
