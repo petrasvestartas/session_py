@@ -290,10 +290,7 @@ class Line:
         float
             Length of the line.
         """
-        dx = self._x1 - self._x0
-        dy = self._y1 - self._y0
-        dz = self._z1 - self._z0
-        return (dx * dx + dy * dy + dz * dz) ** 0.5
+        return self.squared_length() ** 0.5
 
     def squared_length(self) -> float:
         """Calculate the squared length of the line.
