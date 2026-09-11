@@ -171,7 +171,8 @@ class Line:
                 best = eig
                 vx, vy, vz = sx, sy, sz
 
-        # Determine line extent from projected points
+        # Span the projected extent. The centroid is not its midpoint, so mirroring the longer
+        # half returned a line longer than the points it was fitted to.
         if length is None:
             t_min = t_max = 0.0
             for p in points:
@@ -181,19 +182,19 @@ class Line:
                 t = dx * vx + dy * vy + dz * vz
                 t_min = min(t_min, t)
                 t_max = max(t_max, t)
-            half_len = max(abs(t_min), abs(t_max))
-            if half_len < 1e-10:
-                half_len = 0.5  # Default if all points are coincident
+            if t_max - t_min < 1e-10:
+                t_min, t_max = -0.5, 0.5  # Default if all points are coincident
         else:
-            half_len = length / 2.0
+            t_min = -length / 2.0
+            t_max = length / 2.0
 
-        # Create line from centroid +/- direction * half_len
-        x0 = cx - vx * half_len
-        y0 = cy - vy * half_len
-        z0 = cz - vz * half_len
-        x1 = cx + vx * half_len
-        y1 = cy + vy * half_len
-        z1 = cz + vz * half_len
+        # Create line from centroid + direction * t
+        x0 = cx + vx * t_min
+        y0 = cy + vy * t_min
+        z0 = cz + vz * t_min
+        x1 = cx + vx * t_max
+        y1 = cy + vy * t_max
+        z1 = cz + vz * t_max
 
         return cls(x0, y0, z0, x1, y1, z1)
 
