@@ -48,6 +48,7 @@ def test_point_constructor():
     result_div = p / 2.0
     result_add = p + Vector(1.0, 1.0, 1.0)
     diff_point = p - Vector(1.0, 1.0, 1.0)
+    diff_vector = p - pother
 
     # Static sum and sub methods
     p1 = Point(1.0, 2.0, 3.0)
@@ -75,6 +76,8 @@ def test_point_constructor():
     MINI_CHECK(result_div[0] == 5.0 and result_div[1] == 10.0 and result_div[2] == 15.0)
     MINI_CHECK(result_add[0] == 11.0 and result_add[1] == 21.0 and result_add[2] == 31.0)
     MINI_CHECK(diff_point[0] == 9.0 and diff_point[1] == 19.0 and diff_point[2] == 29.0)
+    MINI_CHECK(diff_vector[0] == 9.0 and diff_vector[1] == 18.0 and diff_vector[2] == 27.0)
+    MINI_CHECK(isinstance(diff_point, Point) and isinstance(diff_vector, Vector))
     MINI_CHECK(psum[0] == 5.0 and psum[1] == 7.0 and psum[2] == 9.0)
     MINI_CHECK(pdif[0] == 3.0 and pdif[1] == 3.0 and pdif[2] == 3.0)
 
@@ -99,7 +102,7 @@ def test_point_json_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    p = Point(1.5, 2.5, 3.5)
+    p = Point(1.567, 2.567, 3.567)
     p.name = "test_point"
     p.width = 2.0
     p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
@@ -118,6 +121,7 @@ def test_point_json_roundtrip():
 
     MINI_CHECK(isinstance(loaded, Point))
     MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded.guid == p.guid)
     MINI_CHECK(loaded[0] == p[0])
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])
@@ -134,7 +138,7 @@ def test_point_protobuf_roundtrip():
     from session_py import Color
     from pathlib import Path
 
-    p = Point(1.5, 2.5, 3.5)
+    p = Point(1.567, 2.567, 3.567)
     p.name = "test_point"
     p.width = 2.0
     p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
@@ -150,6 +154,7 @@ def test_point_protobuf_roundtrip():
 
     MINI_CHECK(isinstance(loaded, Point))
     MINI_CHECK(loaded.name == p.name)
+    MINI_CHECK(loaded.guid == p.guid)
     MINI_CHECK(loaded[0] == p[0])
     MINI_CHECK(loaded[1] == p[1])
     MINI_CHECK(loaded[2] == p[2])
@@ -207,6 +212,36 @@ def test_squared_distance():
     d = Point.squared_distance(p0, p1)
 
     MINI_CHECK(TOLERANCE.is_close(d, 14.0))
+
+
+@MINI_TEST("Point", "Interpolate")
+def test_interpolate():
+    from session_py import Point
+
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(10.0, 0.0, 0.0)
+    pts0 = Point.interpolate(a, b, 3, 0)
+    pts1 = Point.interpolate(a, b, 3, 1)
+    pts2 = Point.interpolate(a, b, 3, 2)
+
+    MINI_CHECK(len(pts0) == 3 and pts0[0][0] == 2.5 and pts0[2][0] == 7.5)
+    MINI_CHECK(len(pts1) == 5 and pts1[0][0] == 0.0 and pts1[4][0] == 10.0)
+    MINI_CHECK(len(pts2) == 4 and pts2[0][0] == 0.0 and pts2[3][0] == 7.5)
+
+
+@MINI_TEST("Point", "Lerp")
+def test_lerp():
+    from session_py import Point
+
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(10.0, 20.0, 30.0)
+    mid = Point.lerp(a, b, 0.5)
+    start = Point.lerp(a, b, 0.0)
+    end = Point.lerp(a, b, 1.0)
+
+    MINI_CHECK(mid[0] == 5.0 and mid[1] == 10.0 and mid[2] == 15.0)
+    MINI_CHECK(start[0] == 0.0 and start[1] == 0.0 and start[2] == 0.0)
+    MINI_CHECK(end[0] == 10.0 and end[1] == 20.0 and end[2] == 30.0)
 
 
 @MINI_TEST("Point", "Area")
