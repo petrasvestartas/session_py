@@ -444,6 +444,9 @@ def test_nurbssurface_trimmed_json_roundtrip():
     MINI_CHECK(loaded_json == ts)
     MINI_CHECK(loaded_json_string == ts)
     MINI_CHECK(loaded_from_file == ts)
+    MINI_CHECK(loaded_json.is_trimmed())
+    MINI_CHECK(loaded_json_string.is_trimmed())
+    MINI_CHECK(loaded_from_file.is_trimmed())
 
 
 @MINI_TEST("NurbsSurfaceTrimmed", "Protobuf Roundtrip")
@@ -482,6 +485,8 @@ def test_nurbssurface_trimmed_protobuf_roundtrip():
 
     MINI_CHECK(loaded_proto_string == ts)
     MINI_CHECK(loaded == ts)
+    MINI_CHECK(loaded_proto_string.is_trimmed())
+    MINI_CHECK(loaded.is_trimmed())
 
 
 

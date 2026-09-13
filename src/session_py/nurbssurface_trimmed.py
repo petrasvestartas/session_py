@@ -1,8 +1,4 @@
 from __future__ import annotations
-from typing import Union
-from typing import List
-from typing import Optional
-from typing import Tuple
 from typing import TYPE_CHECKING
 import uuid
 import copy
@@ -16,7 +12,6 @@ from .color import Color
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from .plane import Plane
     from .xform import Xform
     from .mesh import Mesh
     from .point import Point
@@ -158,6 +153,7 @@ class _Delaunay2D:
         while bfs_front < len(bad):
             ti = bad[bfs_front]; bfs_front += 1
             if not self.triangles[ti].alive:
+                bad[bfs_front - 1] = -1
                 continue
             v0, v1, v2 = self.triangles[ti].v
             ax = self.vertices[v0].x; ay = self.vertices[v0].y
@@ -175,22 +171,9 @@ class _Delaunay2D:
                     nb = self.triangles[ti].adj[k]
                     if nb >= 0 and nb not in visited:
                         visited.add(nb); bad.append(nb)
-        kept = []
-        for ti in bad:
-            if not self.triangles[ti].alive:
-                continue
-            v0, v1, v2 = self.triangles[ti].v
-            ax = self.vertices[v0].x; ay = self.vertices[v0].y
-            bx = self.vertices[v1].x; by = self.vertices[v1].y
-            cx = self.vertices[v2].x; cy = self.vertices[v2].y
-            o = self._orient2d(ax, ay, bx, by, cx, cy)
-            if o > 0:
-                ic = self._in_circumcircle(ax, ay, bx, by, cx, cy, x, y)
             else:
-                ic = self._in_circumcircle(ax, ay, cx, cy, bx, by, x, y)
-            if ic > 0:
-                kept.append(ti)
-        bad = kept
+                bad[bfs_front - 1] = -1
+        bad = [ti for ti in bad if ti >= 0]
         if not bad:
             self.vertices.pop()
             return -1
@@ -541,7 +524,9 @@ class NurbsSurfaceTrimmed:
             snap_uv = min(range_u, range_v) * 1e-7
 
         # ---- 1. Sample cutters into tagged UV polylines ----
-        samp_tol = max(range_u, range_v) * 1e-3
+        # The split faces carry these polylines as their trim pcurves, so the sampling sag is
+        # a direct geometric error of the result.
+        samp_tol = max(range_u, range_v) * 2e-5
         polylines = []  # dict: cidx, pts (list [u,v]), ts (curve params)
 
         def snap_border(p):
@@ -559,7 +544,7 @@ class NurbsSurfaceTrimmed:
                 continue
             ct0, ct1 = crv.domain()
             entries = []
-            n = max(crv.cv_count() * 4, 16)
+            n = min(max(crv.cv_count() * 4, 16), 2048)
             for i in range(n + 1):
                 t = ct0 + (ct1 - ct0) * i / n
                 p = crv.point_at(t)
@@ -617,6 +602,17 @@ class NurbsSurfaceTrimmed:
         polylines.append({'cidx': -2, 'pts': [[u1, v0], [u1, v1]], 'ts': [v0, v1]})
         polylines.append({'cidx': -3, 'pts': [[u1, v1], [u0, v1]], 'ts': [u1, u0]})
         polylines.append({'cidx': -4, 'pts': [[u0, v1], [u0, v0]], 'ts': [v1, v0]})
+
+        # ---- 1b. Drop degenerate cut polylines ----
+        # A cutter whose whole UV extent is below a few snap widths yields a sliver cell whose
+        # lifted loop corrupts memory downstream. Border sides are always kept.
+        min_ext = max(snap_uv * 8.0, min(range_u, range_v) * 1e-5)
+
+        def poly_extent(pts):
+            return sum(math.hypot(pts[k][0]-pts[k-1][0], pts[k][1]-pts[k-1][1]) for k in range(1, len(pts)))
+
+        polylines = [P for P in polylines
+                     if _is_boundary(P['cidx']) or poly_extent(P['pts']) >= min_ext]
 
         # ---- 2. Segment-segment intersections (Newton-refined on real curves) ----
         def seg_seg(p1, p2, p3, p4):
@@ -779,20 +775,12 @@ class NurbsSurfaceTrimmed:
         for vid in out_map:
             out_map[vid].sort(key=lambda hi: math.atan2(verts[hes[hi][1]][1] - verts[vid][1], verts[hes[hi][1]][0] - verts[vid][0]))
 
-        twin = {}
-        for hi in range(0, len(hes), 2):
-            twin[hi] = hi + 1
-            twin[hi + 1] = hi
-
-        next_he = {}
-        for vid, outs in out_map.items():
-            for hi in outs:
-                tw = twin[hi]
-                # at vertex vid, incoming tw arrives; next outgoing is the one
+        next_he = [-1] * len(hes)
+        for outs in out_map.values():
+            for pos, hi in enumerate(outs):
+                # at that vertex, incoming hi^1 arrives; next outgoing is the one
                 # clockwise from the reversed incoming (leftmost turn)
-                pos = outs.index(hi)
-                nxt = outs[(pos - 1) % len(outs)]
-                next_he[tw] = nxt
+                next_he[hi ^ 1] = outs[(pos - 1) % len(outs)]
 
         visited = [False] * len(hes)
         faces = []  # list of list of he indices
@@ -801,7 +789,7 @@ class NurbsSurfaceTrimmed:
                 continue
             cycle = []
             cur = hi
-            while not visited[cur]:
+            while cur >= 0 and not visited[cur]:  # cur>=0 guards an unlinked half-edge
                 visited[cur] = True
                 cycle.append(cur)
                 cur = next_he[cur]
@@ -824,7 +812,6 @@ class NurbsSurfaceTrimmed:
 
         def point_in_cycle(p, cycle):
             inside = False
-            n = len(cycle)
             for hi in cycle:
                 a = verts[hes[hi][0]]
                 b = verts[hes[hi][1]]
@@ -882,13 +869,20 @@ class NurbsSurfaceTrimmed:
                 if run['cidx'] >= 0:
                     crv = pcurves[run['cidx']]
                     c0, c1 = crv.domain()
-                    lo = min(run['ta'], run['tb'])
-                    hi_ = max(run['ta'], run['tb'])
+                    # Clamp to the curve domain: a snapped run can carry an endpoint parameter a
+                    # hair outside [c0,c1], and trimming out-of-domain corrupts memory.
+                    lo = max(c0, min(run['ta'], run['tb']))
+                    hi_ = min(c1, max(run['ta'], run['tb']))
                     piece = crv.duplicate()
                     piece_ok = True
                     if hi_ - lo < (c1 - c0) - 1e-12 and hi_ - lo > 1e-14:
                         if not piece.trim(lo, hi_):
                             piece_ok = False
+                    elif hi_ - lo <= 1e-14:
+                        # zero param span: a FULL wrap of a closed pcurve lands ta==tb on the
+                        # period seam -- keep the whole curve; a genuinely degenerate run is
+                        # skipped (its endpoint chord below is zero-length and pushes nothing).
+                        piece_ok = run['va'] == run['vb'] and piece.is_closed()
                     if piece_ok and piece.is_valid():
                         if run['ta'] > run['tb']:
                             piece.reverse()  # orient tail->head
@@ -908,9 +902,21 @@ class NurbsSurfaceTrimmed:
             pieces = cycle_to_segments(cycle)
             if not pieces:
                 return NurbsCurve()
-            joined = NurbsCurve.join(pieces, snap_uv * 4.0)
-            if len(joined) == 1 and joined[0].is_closed():
-                return joined[0]
+            join_tol = snap_uv * 4.0
+            joined = NurbsCurve.join(pieces, join_tol)
+            if len(joined) == 1 and joined[0].is_valid():
+                j = joined[0]
+                # is_closed() demands ZERO_TOLERANCE; a loop reassembled from trimmed pieces
+                # closes within the join tolerance. Weld the last CV onto the first (clamped
+                # ends ARE CVs) rather than fall back to a polyline that discards the exact
+                # curve representation.
+                if not j.is_closed() and j.point_at_start().distance(j.point_at_end()) <= join_tol:
+                    cv0 = j.get_cv_4d(0)
+                    cve = j.get_cv_4d(j.cv_count() - 1)
+                    if cv0 is not None and cve is not None:
+                        j.set_cv_4d(j.cv_count() - 1, cv0[0], cv0[1], cv0[2], cve[3])
+                if j.is_closed():
+                    return j
             loop_pts = []
             for hi in cycle:
                 a = verts[hes[hi][0]]
@@ -972,7 +978,7 @@ class NurbsSurfaceTrimmed:
         sdom_v = self.m_surface.domain(1)
         range_u = sdom_u[1] - sdom_u[0]
         range_v = sdom_v[1] - sdom_v[0]
-        n_samples = max(curve_3d.cv_count() * 4, 32)
+        n_samples = min(max(curve_3d.cv_count() * 4, 32), 2048)
         uv_pts = []
         for i in range(n_samples):
             t = dom[0] + (dom[1] - dom[0]) * i / n_samples
@@ -988,7 +994,7 @@ class NurbsSurfaceTrimmed:
         for crv in curves_3d:
             self.add_hole(crv)
 
-    def get_inner_loop(self, index: int) -> Optional["NurbsCurve"]:
+    def get_inner_loop(self, index: int) -> "NurbsCurve" | None:
         if 0 <= index < len(self.m_inner_loops):
             return self.m_inner_loops[index]
         return None
@@ -1054,7 +1060,7 @@ class NurbsSurfaceTrimmed:
             if crv.degree() <= 1 and not crv.is_rational():
                 raw = [(crv.get_cv(i)[0], crv.get_cv(i)[1]) for i in range(crv.cv_count())]
             else:
-                n = max(crv.cv_count() * 4, 16)
+                n = min(max(crv.cv_count() * 4, 16), 2048)
                 sampled, _ = crv.divide_by_count(n)
                 raw = [(p[0], p[1]) for p in sampled]
             while len(raw) > 1:
@@ -1086,7 +1092,13 @@ class NurbsSurfaceTrimmed:
                         cx = pa[0]+t*ex; cy = pa[1]+t*ey; cz = pa[2]+t*ez
                         dev = math.sqrt((pm[0]-cx)**2 + (pm[1]-cy)**2 + (pm[2]-cz)**2)
                     else:
-                        dev = 0.0
+                        # Degenerate 3D chord: the two endpoints coincide in 3D. This is either a
+                        # true singular edge (the whole segment collapses to a point -> pm == pa,
+                        # dev stays ~0, no refinement) or a seam-wrap edge (a single UV segment that
+                        # wraps a periodic surface, e.g. a cylinder/sphere rim u:0->2pi -> pm lies on
+                        # the far side). Measure deviation as the midpoint-to-endpoint 3D distance so
+                        # seam-wrap edges get subdivided into the underlying circle instead of a chord.
+                        dev = math.sqrt((pm[0]-pa[0])**2 + (pm[1]-pa[1])**2 + (pm[2]-pa[2])**2)
                     if dev > deflection and depth < 6:
                         stack.append(((mu, mv), sb, depth+1))
                         stack.append((sa, (mu, mv), depth+1))
@@ -1171,6 +1183,9 @@ class NurbsSurfaceTrimmed:
             return inside
 
         def inside_trim(u, v):
+            # outer-bbox reject first: refinement probes most triangles outside the trim region
+            if u < bb_umin or u > bb_umax or v < bb_vmin or v > bb_vmax:
+                return False
             if not point_in_polygon(u, v, outer_uv):
                 return False
             for h in hole_uvs:
@@ -1421,7 +1436,6 @@ class NurbsSurfaceTrimmed:
         # crossing Newton-refined onto the plane, coincident-3D vertices welded so periodic
         # seams (cylinder/torus/sphere) close watertight.
         import math
-        from collections import defaultdict
         from .mesh import Mesh
         srf = self.m_surface
         nx, ny, nz = normal[0], normal[1], normal[2]
@@ -1465,7 +1479,9 @@ class NurbsSurfaceTrimmed:
                 p = srf.get_cv(i, j)
                 for k in range(3):
                     bmin[k] = min(bmin[k], p[k]); bmax[k] = max(bmax[k], p[k])
-        diag = math.sqrt(sum((bmax[k]-bmin[k])**2 for k in range(3))) or 1.0
+        diag = math.sqrt(sum((bmax[k]-bmin[k])**2 for k in range(3)))
+        if diag < 1e-12:
+            diag = 1.0
         ctol = diag * chord_factor
 
         def span_subs(dr, sp, osp, deg):
@@ -1514,7 +1530,7 @@ class NurbsSurfaceTrimmed:
         F = [[field(us[i], vs[j]) for j in range(nv)] for i in range(nu)]
         result = Mesh()
         wt = diag * 1e-5; cell = wt or 1.0
-        cmap = defaultdict(list)
+        cmap = {}
 
         def weld(u, v):
             P = srf.point_at(u, v)
@@ -1523,13 +1539,13 @@ class NurbsSurfaceTrimmed:
             for di in (-1, 0, 1):
                 for dj in (-1, 0, 1):
                     for dk in (-1, 0, 1):
-                        for (px, py, pz, vk) in cmap[(ci+di, cj+dj, ck+dk)]:
+                        for (px, py, pz, vk) in cmap.get((ci+di, cj+dj, ck+dk), ()):
                             if (px-x)**2 + (py-y)**2 + (pz-z)**2 <= wt*wt:
                                 return vk
             vk = result.add_vertex(P)
             nm = srf.normal_at(u, v)
             result.vertex[vk].set_normal(nm[0], nm[1], nm[2])
-            cmap[(ci, cj, ck)].append((x, y, z, vk))
+            cmap.setdefault((ci, cj, ck), []).append((x, y, z, vk))
             return vk
 
         def cross(ua, va, ub, vb):
@@ -1561,7 +1577,7 @@ class NurbsSurfaceTrimmed:
             return srf.mesh()
         return result
     @staticmethod
-    def split_by_planes(srf: "NurbsSurface", planes: list["Plane"]) -> list["NurbsSurfaceTrimmed"]:
+    def split_by_planes(srf: "NurbsSurface", planes: list[tuple["Point", "Vector"]]) -> list["NurbsSurfaceTrimmed"]:
         # Split a surface into every non-empty region carved by `planes` (all 2^K sign
         # combinations). Each region comes back as a first-class multi-plane
         # NurbsSurfaceTrimmed so the viewer can select / hide / transform each piece.
@@ -1590,14 +1606,13 @@ class NurbsSurfaceTrimmed:
         return out
 
 
-    def mesh_by_planes(self, planes: list["Plane"], max_angle_deg: float, chord_factor: float) -> "Mesh":
+    def mesh_by_planes(self, planes: list[tuple["Point", "Vector"]], max_angle_deg: float, chord_factor: float) -> "Mesh":
         # Multi-plane SPLIT clip: keep the region inside ALL half-spaces { (S-q).n <= 0 }.
         # Tessellates the surface into a triangle soup (span-adaptive UV grid), then clips that
         # soup sequentially by each plane (Sutherland-Hodgman per triangle, crossings Newton-
         # refined onto the crossing plane), so K planes carve a clean region without per-cell CSG.
         # Coincident 3D verts are welded. planes is a list of (Point, Vector) tuples.
         import math
-        from collections import defaultdict
         from .mesh import Mesh
         srf = self.m_surface
         pl = []
@@ -1646,7 +1661,9 @@ class NurbsSurfaceTrimmed:
                 p = srf.get_cv(i, j)
                 for k in range(3):
                     bmin[k] = min(bmin[k], p[k]); bmax[k] = max(bmax[k], p[k])
-        diag = math.sqrt(sum((bmax[k]-bmin[k])**2 for k in range(3))) or 1.0
+        diag = math.sqrt(sum((bmax[k]-bmin[k])**2 for k in range(3)))
+        if diag < 1e-12:
+            diag = 1.0
         ctol = diag * chord_factor
 
         def span_subs(dr, sp, osp, deg):
@@ -1721,7 +1738,7 @@ class NurbsSurfaceTrimmed:
             return Mesh()
         result = Mesh()
         wt = diag * 1e-5; cell = wt or 1.0
-        cmap = defaultdict(list)
+        cmap = {}
 
         def weld(u, v):
             P = srf.point_at(u, v)
@@ -1730,13 +1747,13 @@ class NurbsSurfaceTrimmed:
             for di in (-1, 0, 1):
                 for dj in (-1, 0, 1):
                     for dk in (-1, 0, 1):
-                        for (px, py, pz, vk) in cmap[(ci+di, cj+dj, ck+dk)]:
+                        for (px, py, pz, vk) in cmap.get((ci+di, cj+dj, ck+dk), ()):
                             if (px-x)**2 + (py-y)**2 + (pz-z)**2 <= wt*wt:
                                 return vk
             vk = result.add_vertex(P)
             nm = srf.normal_at(u, v)
             result.vertex[vk].set_normal(nm[0], nm[1], nm[2])
-            cmap[(ci, cj, ck)].append((x, y, z, vk))
+            cmap.setdefault((ci, cj, ck), []).append((x, y, z, vk))
             return vk
 
         for t in tris:
@@ -1821,12 +1838,12 @@ class NurbsSurfaceTrimmed:
             ts.m_inner_loops = [NurbsCurve.__jsonload__(l) for l in data['inner_loops']]
         return ts
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         with open(filepath, 'w') as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurfaceTrimmed":
+    def file_json_load(cls, filepath: str | Path) -> "NurbsSurfaceTrimmed":
         with open(filepath) as f:
             data = json.load(f)
         return cls.__jsonload__(data)
@@ -1908,13 +1925,13 @@ class NurbsSurfaceTrimmed:
 
         return ts
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         data = self.pb_dumps()
         with open(filepath, 'wb') as f:
             f.write(data)
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurfaceTrimmed":
+    def pb_load(cls, filepath: str | Path) -> "NurbsSurfaceTrimmed":
         with open(filepath, 'rb') as f:
             data = f.read()
         return cls.pb_loads(data)
