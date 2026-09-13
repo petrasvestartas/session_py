@@ -108,6 +108,11 @@ def test_split_brep_face_by_curves():
     MINI_CHECK(split.face_count() == 7)
     MINI_CHECK(split.is_valid() and split.is_solid())
     MINI_CHECK(box.face_count() == 6)
+    meshes = split.face_meshes_q((20.0, 0.005))
+    MINI_CHECK(abs(meshes[0].area() - 50.0) < 1e-6)
+    MINI_CHECK(abs(meshes[6].area() - 50.0) < 1e-6)
+    neighbor_area = sum(meshes[i].area() for i in range(1, 6))
+    MINI_CHECK(abs(neighbor_area - 500.0) < 1e-6)
     closed = NurbsCurve.create(
         False,
         3,

@@ -1068,6 +1068,19 @@ class BRep:
             v0, v1 = srf.domain(1)
             domain_area = (u1 - u0) * (v1 - v0)
             face_direct[fi] = abs(abs(_polygon_signed_area(outer)) - domain_area) < 1e-3 * domain_area
+            # Topological edge ends must be domain corners; internal polyline controls are not new vertices.
+            mesh_brep = self
+            for er in mesh_brep.wire_edges(face.wires[0]):
+                ci = mesh_brep.pcurve_index(er.index, fi, er.orientation)
+                if ci < 0:
+                    continue
+                curve = mesh_brep.m_curves_2d[ci]
+                for k in (0, max(0, curve.cv_count() - 1)):
+                    p = curve.get_cv(k)
+                    corner_u = min(abs(p[0] - u0), abs(p[0] - u1)) <= (u1 - u0) * 1e-9
+                    corner_v = min(abs(p[1] - v0), abs(p[1] - v1)) <= (v1 - v0) * 1e-9
+                    if not corner_u or not corner_v:
+                        face_direct[fi] = False
 
         # Phase 2: direct faces. The first incident grid supplies the canonical edge polygon.
         # Mismatching incident grids are rebuilt with these constraints and their interior UV seeds.
