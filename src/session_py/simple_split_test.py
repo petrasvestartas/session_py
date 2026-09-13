@@ -1,0 +1,267 @@
+from session_py.mini_test import MINI_TEST, MINI_CHECK, run_all
+import math
+
+
+@MINI_TEST("SimpleSplit", "Split Curve By Curves")
+def test_split_curve_by_curves():
+    from session_py import NurbsCurve, Point, Primitives
+    from session_py.simple_split import split_curve_by_curves
+
+    curve = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(-2, 0, 0),
+            Point(2, 0, 0),
+        ],
+    )
+    cutter = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(0, -2, 0),
+            Point(0, 2, 0),
+        ],
+    )
+    pieces = split_curve_by_curves(curve, [cutter], 1e-6)
+    MINI_CHECK(len(pieces) == 2)
+    MINI_CHECK(pieces[0].point_at_start().distance(Point(-2, 0, 0)) < 1e-6)
+    MINI_CHECK(pieces[0].point_at_end().distance(Point(0, 0, 0)) < 1e-6)
+    MINI_CHECK(pieces[1].point_at_end().distance(Point(2, 0, 0)) < 1e-6)
+    MINI_CHECK(curve.point_at_end().distance(Point(2, 0, 0)) < 1e-6)
+    skew = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(0, -2, 1),
+            Point(0, 2, 1),
+        ],
+    )
+    MINI_CHECK(len(split_curve_by_curves(curve, [skew], 1e-6)) == 1)
+    crossing = NurbsCurve.create(
+        False, 1, [Point(-2, -2, 0), Point(2, 2, 0), Point(-2, 2, 0), Point(2, -2, 0)]
+    )
+    short_cut = NurbsCurve.create(False, 1, [Point(0, -0.2, 0), Point(0, 0.2, 0)])
+    MINI_CHECK(len(split_curve_by_curves(crossing, [short_cut], 1e-6)) == 3)
+    circle = Primitives.circle(0, 0, 0, 1)
+    chord = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(-2, 0.5, 0),
+            Point(2, 0.5, 0),
+        ],
+    )
+    arcs = split_curve_by_curves(circle, [chord], 1e-6)
+    MINI_CHECK(len(arcs) == 2)
+    MINI_CHECK(arcs[0].is_rational() and arcs[1].is_rational())
+    tangent = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(-2, 1, 0),
+            Point(2, 1, 0),
+        ],
+    )
+    MINI_CHECK(len(split_curve_by_curves(circle, [tangent], 1e-6)) == 1)
+    rejected = False
+    try:
+        split_curve_by_curves(curve, [curve], 1e-6)
+    except ValueError:
+        rejected = True
+    MINI_CHECK(rejected)
+    rejected = False
+    try:
+        split_curve_by_curves(curve, [cutter], math.nan)
+    except ValueError:
+        rejected = True
+    MINI_CHECK(rejected)
+
+
+@MINI_TEST("SimpleSplit", "Split BRep Face By Curves")
+def test_split_brep_face_by_curves():
+    from session_py import BRep, NurbsCurve, Point, Primitives
+    from session_py.simple_split import split_brep_face_by_curves
+
+    box = BRep.create_box(10, 10, 10)
+    surface = box.m_surfaces[0]
+    a = surface.get_cv(0, 0)
+    u = surface.get_cv(1, 0)
+    v = surface.get_cv(0, 1)
+
+    def mapped(x, y):
+        return Point(
+            a[0] + x * (u[0] - a[0]) + y * (v[0] - a[0]),
+            a[1] + x * (u[1] - a[1]) + y * (v[1] - a[1]),
+            a[2] + x * (u[2] - a[2]) + y * (v[2] - a[2]),
+        )
+
+    cutter = NurbsCurve.create(
+        False,
+        1,
+        [
+            mapped(0.5, -1),
+            mapped(0.5, 2),
+        ],
+    )
+    split = split_brep_face_by_curves(box, 0, [cutter], 1e-6)
+    MINI_CHECK(split.face_count() == 7)
+    MINI_CHECK(split.is_valid() and split.is_solid())
+    MINI_CHECK(box.face_count() == 6)
+    closed = NurbsCurve.create(
+        False,
+        3,
+        [mapped(0.2, 0.3), mapped(0.8, 0.3), mapped(0.5, 0.9), mapped(0.2, 0.3)],
+    )
+    island = split_brep_face_by_curves(box, 0, [closed], 1e-6)
+    MINI_CHECK(island.face_count() == 7 and island.is_solid())
+
+    crossing = NurbsCurve.create(
+        False,
+        1,
+        [
+            mapped(-1, 0.5),
+            mapped(2, 0.5),
+        ],
+    )
+    quarters = split_brep_face_by_curves(box, 0, [cutter, crossing], 1e-6)
+    MINI_CHECK(quarters.face_count() == 9 and quarters.is_solid())
+    repeated = split_brep_face_by_curves(split, 0, [crossing], 1e-6)
+    MINI_CHECK(repeated.face_count() == 8 and repeated.is_solid())
+    loop = NurbsCurve.create(
+        False,
+        1,
+        [
+            mapped(0.2, 0.2),
+            mapped(0.8, 0.2),
+            mapped(0.8, 0.8),
+            mapped(0.2, 0.8),
+            mapped(0.2, 0.2),
+        ],
+    )
+    regions = split_brep_face_by_curves(box, 0, [loop], 1e-6)
+    MINI_CHECK(regions.face_count() == 7 and regions.is_solid())
+    restored = BRep.file_json_loads(quarters.file_json_dumps())
+    MINI_CHECK(restored.face_count() == 9 and restored.is_solid())
+    protobuf = BRep.pb_loads(quarters.pb_dumps())
+    MINI_CHECK(protobuf.face_count() == 9 and protobuf.is_solid())
+    outer = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(0, 0, 0),
+            Point(10, 0, 0),
+            Point(10, 10, 0),
+            Point(0, 10, 0),
+            Point(0, 0, 0),
+        ],
+    )
+    inner = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(3, 3, 0),
+            Point(7, 3, 0),
+            Point(7, 7, 0),
+            Point(3, 7, 0),
+            Point(3, 3, 0),
+        ],
+    )
+    ring = BRep.from_nurbscurves([outer], [[inner]])
+    through = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(5, -1, 0),
+            Point(5, 11, 0),
+        ],
+    )
+    divided = split_brep_face_by_curves(ring, 0, [through], 1e-6)
+    MINI_CHECK(divided.face_count() == 2)
+    outside = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(1, -1, 0),
+            Point(1, 11, 0),
+        ],
+    )
+    preserved = split_brep_face_by_curves(ring, 0, [outside], 1e-6)
+    holes = 0
+    for face in preserved.m_faces:
+        holes += len(face.wires) - 1
+    MINI_CHECK(preserved.face_count() == 2 and holes == 1)
+    disk = BRep.from_nurbscurves([Primitives.circle(0, 0, 0, 5)])
+    chord = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(-6, 1.2, 0),
+            Point(6, 1.2, 0),
+        ],
+    )
+    halves = split_brep_face_by_curves(disk, 0, [chord], 1e-6)
+    MINI_CHECK(halves.face_count() == 2)
+    MINI_CHECK(disk.face_count() == 1)
+    cylinder = BRep.create_cylinder(5, 10)
+    body = cylinder.m_surfaces[cylinder.m_faces[0].surface_index]
+    domain = body.domain(0)
+    generator = body.iso_curve(1, (domain[0] + domain[1]) * 0.5)
+    seamed = split_brep_face_by_curves(cylinder, 0, [generator], 1e-6)
+    MINI_CHECK(seamed.face_count() == 4 and seamed.is_solid())
+    MINI_CHECK(cylinder.face_count() == 3)
+
+
+@MINI_TEST("SimpleSplit", "Split Surface By Curves")
+def test_split_surface_by_curves():
+    from session_py import BRep, NurbsCurve, Point
+    from session_py.simple_split import split_surface_by_curves
+
+    surface = BRep.create_box(10, 10, 10).m_surfaces[0]
+    a = surface.get_cv(0, 0)
+    u = surface.get_cv(1, 0)
+    v = surface.get_cv(0, 1)
+
+    def mapped(x, y):
+        return Point(
+            a[0] + x * (u[0] - a[0]) + y * (v[0] - a[0]),
+            a[1] + x * (u[1] - a[1]) + y * (v[1] - a[1]),
+            a[2] + x * (u[2] - a[2]) + y * (v[2] - a[2]),
+        )
+
+    cutter = NurbsCurve.create(
+        False,
+        1,
+        [
+            mapped(0.5, -1),
+            mapped(0.5, 2),
+        ],
+    )
+    split = split_surface_by_curves(surface, [cutter], 1e-6)
+    MINI_CHECK(split.face_count() == 2)
+    MINI_CHECK(split.is_valid() and not split.is_solid())
+    outside = NurbsCurve.create(
+        False,
+        1,
+        [
+            mapped(2, -1),
+            mapped(2, 2),
+        ],
+    )
+    untouched = split_surface_by_curves(surface, [outside], 1e-6)
+    MINI_CHECK(untouched.face_count() == 1)
+    MINI_CHECK(surface.is_valid())
+    import copy
+
+    invalid = copy.deepcopy(surface)
+    invalid.set_cv(0, 0, Point(math.nan, 0, 0))
+    rejected = False
+    try:
+        split_surface_by_curves(invalid, [outside], 1e-6)
+    except ValueError:
+        rejected = True
+    MINI_CHECK(rejected)
+
+
+if __name__ == "__main__":
+    run_all()
