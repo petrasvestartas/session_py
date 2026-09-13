@@ -263,5 +263,50 @@ def test_split_surface_by_curves():
     MINI_CHECK(rejected)
 
 
+@MINI_TEST("SimpleSplit", "Split Line By Curves")
+def test_split_line_by_curves():
+    from session_py import Line, Point, NurbsCurve
+    from session_py.simple_split import split_line_by_curves
+
+    line = Line.from_points(Point(-2, 0, 0), Point(2, 0, 0))
+    line.name = "retained"
+    line.width = 3.0
+    line.dash = [1.0, 2.0]
+    cutter = NurbsCurve.create(False, 1, [Point(0, -2, 0), Point(0, 2, 0)])
+    pieces = split_line_by_curves(line, [cutter], 1e-6)
+    MINI_CHECK(len(pieces) == 2)
+    MINI_CHECK(pieces[0].point_at(1).distance(Point(0, 0, 0)) < 1e-6)
+    MINI_CHECK(pieces[1].point_at(0).distance(Point(0, 0, 0)) < 1e-6)
+    MINI_CHECK(
+        pieces[0].name == line.name
+        and pieces[0].width == line.width
+        and pieces[0].dash == line.dash
+    )
+    MINI_CHECK(line.length() == 4.0)
+
+
+@MINI_TEST("SimpleSplit", "Split Polyline By Curves")
+def test_split_polyline_by_curves():
+    from session_py import Polyline, Point, NurbsCurve
+    from session_py.simple_split import split_polyline_by_curves
+
+    polyline = Polyline([Point(-2, 0, 0), Point(2, 0, 0), Point(2, 3, 0)])
+    polyline.name = "retained"
+    polyline.width = 3.0
+    polyline.dash = [1.0, 2.0]
+    cutter = NurbsCurve.create(False, 1, [Point(0, -2, 0), Point(0, 2, 0)])
+    pieces = split_polyline_by_curves(polyline, [cutter], 1e-6)
+    MINI_CHECK(len(pieces) == 2)
+    MINI_CHECK(pieces[0].point_count() == 2 and pieces[1].point_count() == 3)
+    MINI_CHECK(pieces[1].get_point(1).distance(Point(2, 0, 0)) < 1e-6)
+    MINI_CHECK(pieces[1].get_point(2).distance(Point(2, 3, 0)) < 1e-6)
+    MINI_CHECK(
+        pieces[0].name == polyline.name
+        and pieces[0].width == polyline.width
+        and pieces[0].dash == polyline.dash
+    )
+    MINI_CHECK(polyline.point_count() == 3)
+
+
 if __name__ == "__main__":
     run_all()

@@ -9,6 +9,8 @@ from .closest import Closest
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .point import Point
+from .line import Line
+from .polyline import Polyline
 from .tolerance import Tolerance
 
 _EPS = Tolerance.ZERO_TOLERANCE
@@ -873,3 +875,67 @@ def split_surface_by_curves(
         edges.append(BRepRef(edge, _FORWARD))
     result.add_face(si, [BRepRef(result.add_wire(edges), _FORWARD)])
     return split_brep_face_by_curves(result, 0, cutters, tolerance)
+
+
+def split_line_by_curves(
+    line: Line, cutters: list[NurbsCurve], tolerance: float
+) -> list[Line]:
+    """Split a line at isolated 3D intersections, retaining line types and display attributes.
+
+    Parameters
+    ----------
+    line : Line
+        Source segment; never modified.
+    cutters : list[NurbsCurve]
+        Finite 3D cutters, without projection.
+    tolerance : float
+        Positive finite distance tolerance in model units.
+
+    Returns
+    -------
+    list[Line]
+        Ordered line pieces with copied display attributes.
+    """
+    curve = NurbsCurve.create(False, 1, [line.point_at(0), line.point_at(1)])
+    result = []
+    for piece in split_curve_by_curves(curve, cutters, tolerance):
+        next = Line.from_points(piece.point_at_start(), piece.point_at_end())
+        next.name, next.width = line.name, line.width
+        next.dash, next.linecolor = (
+            copy.deepcopy(line.dash),
+            copy.deepcopy(line.linecolor),
+        )
+        result.append(next)
+    return result
+
+
+def split_polyline_by_curves(
+    polyline: Polyline, cutters: list[NurbsCurve], tolerance: float
+) -> list[Polyline]:
+    """Split a polyline, retaining each original corner, piece order and display attributes.
+
+    Parameters
+    ----------
+    polyline : Polyline
+        Source polyline; never modified.
+    cutters : list[NurbsCurve]
+        Finite 3D cutters, without projection.
+    tolerance : float
+        Positive finite distance tolerance in model units.
+
+    Returns
+    -------
+    list[Polyline]
+        Ordered polyline pieces with copied display attributes.
+    """
+    curve = NurbsCurve.create(False, 1, polyline.get_points())
+    result = []
+    for piece in split_curve_by_curves(curve, cutters, tolerance):
+        next = Polyline([piece.point_at(t) for t in piece.get_span_vector()])
+        next.name, next.width = polyline.name, polyline.width
+        next.dash, next.linecolor = (
+            copy.deepcopy(polyline.dash),
+            copy.deepcopy(polyline.linecolor),
+        )
+        result.append(next)
+    return result
