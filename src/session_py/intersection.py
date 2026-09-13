@@ -6,9 +6,7 @@ This module provides intersection calculations between various geometric objects
 including lines, planes, rays, boxes, spheres, triangles, and meshes.
 """
 
-from typing import Optional
-from typing import Tuple
-from typing import List
+import sys
 from typing import TYPE_CHECKING
 from .line import Line
 from .point import Point
@@ -73,7 +71,7 @@ def line_line_parameters(
 
     det = AA * BB - AB * AB
 
-    zero_tol = max(AA, BB) * 1e-15
+    zero_tol = max(AA, BB) * sys.float_info.epsilon
     if abs(det) < zero_tol:
         if not near_parallel_as_closest:
             return None
@@ -226,7 +224,7 @@ def line_plane(line: Line, plane: "Plane", is_finite: bool = True) -> Point | No
     else:
         d_inv = 1.0 / d
         fd = abs(d_inv)
-        if fd > 1.0 and (abs(a) >= 1e38 / fd or abs(b) >= 1e38 / fd):
+        if fd > 1.0 and (abs(a) >= sys.float_info.max / fd or abs(b) >= sys.float_info.max / fd):
             t = 0.5
             rc = False
         else:
@@ -302,9 +300,9 @@ def ray_box(
     box_max = box.max_point()
 
     # Calculate inverse direction (avoid division by zero)
-    inv_dir_x = 1.0 / direction[0] if direction[0] != 0.0 else float("inf")
-    inv_dir_y = 1.0 / direction[1] if direction[1] != 0.0 else float("inf")
-    inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else float("inf")
+    inv_dir_x = 1.0 / direction[0] if direction[0] != 0.0 else sys.float_info.max
+    inv_dir_y = 1.0 / direction[1] if direction[1] != 0.0 else sys.float_info.max
+    inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else sys.float_info.max
 
     # Calculate intersections with X slabs
     tx1 = (box_min[0] - origin[0]) * inv_dir_x
@@ -3743,16 +3741,16 @@ def _vectors_nearly_parallel(v0, v1, angle_tol: float = 0.1) -> bool:
     import math
     m0 = math.sqrt(v0[0]*v0[0] + v0[1]*v0[1] + v0[2]*v0[2])
     m1 = math.sqrt(v1[0]*v1[0] + v1[1]*v1[1] + v1[2]*v1[2])
-    if m0 < 1e-10 or m1 < 1e-10:
-        return True
+    if m0 < Tolerance.ZERO_TOLERANCE or m1 < Tolerance.ZERO_TOLERANCE:
+        return False
     cos_angle = abs((v0[0]*v1[0] + v0[1]*v1[1] + v0[2]*v1[2]) / (m0 * m1))
-    return cos_angle > math.cos(angle_tol)
+    return cos_angle >= math.cos(angle_tol)
 
 
 def remap(val: float, from1: float, to1: float, from2: float, to2: float) -> float:
     """Linear remap: map val from [from1,to1] to [from2,to2]."""
     span = to1 - from1
-    if abs(span) < 1e-14:
+    if abs(span) < Tolerance.ZERO_TOLERANCE:
         return from2
     t = (val - from1) / span
     return from2 + t * (to2 - from2)
@@ -3869,7 +3867,7 @@ def scale_vector_to_distance_of_2planes(direction: "Vector", p0: "Plane", p1: "P
     import math
     from .vector import Vector
     mag = math.sqrt(direction[0]**2 + direction[1]**2 + direction[2]**2)
-    if mag < 1e-14:
+    if mag < Tolerance.ZERO_TOLERANCE:
         return None
     ray = Line(0.0, 0.0, 0.0, direction[0], direction[1], direction[2])
     q0 = line_plane(ray, p0, False)
@@ -3880,14 +3878,14 @@ def scale_vector_to_distance_of_2planes(direction: "Vector", p0: "Plane", p1: "P
     # Validity: squared-distance ratio < 10 (mirrors CGAL)
     n1 = p1.z_axis
     n1_mag = math.sqrt(n1[0]**2 + n1[1]**2 + n1[2]**2)
-    if n1_mag < 1e-14:
+    if n1_mag < Tolerance.ZERO_TOLERANCE:
         return None
     o0 = p0.origin
     d = ((o0[0] - p1.origin[0]) * n1[0]
        + (o0[1] - p1.origin[1]) * n1[1]
        + (o0[2] - p1.origin[2]) * n1[2]) / n1_mag
     dist_ortho_sq = d * d
-    if dist_ortho_sq < 1e-28:
+    if dist_ortho_sq < Tolerance.ZERO_TOLERANCE:
         return None
     dist_sq = output[0]**2 + output[1]**2 + output[2]**2
     if dist_sq / dist_ortho_sq >= 10.0:
@@ -3933,11 +3931,35 @@ def polyline_plane(poly: "Polyline", plane: "Plane") -> tuple | None:
     pts_out = []
     idx_out = []
     for i in range(n - 1):
-        pa = poly.get_point(i)
-        pb = poly.get_point(i + 1)
-        if pa is None or pb is None:
+        a = poly.get_point(i)
+        b = poly.get_point(i + 1)
+        va = plane_value_at(plane, a)
+        vb = plane_value_at(plane, b)
+        a_on = abs(va) < Tolerance.ZERO_TOLERANCE
+        b_on = abs(vb) < Tolerance.ZERO_TOLERANCE
+        # A segment lying IN the plane has no single crossing to report, but a
+        # polyline crossing exactly THROUGH a vertex must report it once: emit
+        # the on-plane vertex as the crossing of the segment it STARTS, so the
+        # segment that ends there stays silent and no duplicate is produced.
+        if a_on and b_on:
             continue
-        seg = Line(pa[0], pa[1], pa[2], pb[0], pb[1], pb[2])
+        if a_on:
+            pts_out.append(a)
+            idx_out.append(i)
+            continue
+        if b_on:
+            # Handled as the next segment's 'a' - except on the final segment
+            # of an OPEN polyline, where 'b' never becomes an 'a'.
+            if i + 2 == n:
+                front = poly.get_point(0)
+                closes = (abs(b[0] - front[0]) < Tolerance.ZERO_TOLERANCE
+                          and abs(b[1] - front[1]) < Tolerance.ZERO_TOLERANCE
+                          and abs(b[2] - front[2]) < Tolerance.ZERO_TOLERANCE)
+                if not closes:
+                    pts_out.append(b)
+                    idx_out.append(i)
+            continue
+        seg = Line(a[0], a[1], a[2], b[0], b[1], b[2])
         pt = line_plane(seg, plane, True)
         if pt is not None:
             pts_out.append(pt)
@@ -3947,7 +3969,7 @@ def polyline_plane(poly: "Polyline", plane: "Plane") -> tuple | None:
     return (pts_out, idx_out)
 
 
-def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) -> object | None:
+def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: Point) -> object | None:
     """Intersect polyline perimeter with plane → single segment aligned to edge direction."""
     result = polyline_plane(poly, plane)
     if result is None:
@@ -3955,7 +3977,22 @@ def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) 
     pts, _ = result
     if len(pts) < 2:
         return None
-    p0, p1 = pts[0], pts[1]
+    # With more than 2 crossings (non-convex contact patch) the first two in
+    # edge order are an arbitrary sub-chord; take the EXTREME pair so the joint
+    # line spans the full patch. For exactly 2 crossings this is unchanged.
+    ia, ib = 0, 1
+    if len(pts) > 2:
+        best = -1.0
+        for i in range(len(pts) - 1):
+            for j in range(i + 1, len(pts)):
+                dx = pts[i][0] - pts[j][0]
+                dy = pts[i][1] - pts[j][1]
+                dz = pts[i][2] - pts[j][2]
+                d = dx*dx + dy*dy + dz*dz
+                if d > best:
+                    best = d
+                    ia, ib = i, j
+    p0, p1 = pts[ia], pts[ib]
     # Align so that p0 is closer to align_start
     d0 = (p0[0]-align_start[0])**2 + (p0[1]-align_start[1])**2 + (p0[2]-align_start[2])**2
     d1 = (p1[0]-align_start[0])**2 + (p1[1]-align_start[1])**2 + (p1[2]-align_start[2])**2
@@ -3964,7 +4001,7 @@ def polyline_plane_to_line(poly: "Polyline", plane: "Plane", align_start: bool) 
     return Line(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
 
 
-def quad_from_line_top_bottom_planes(face_plane: "Plane", line: Line, plane0: "Plane", plane1: "Plane") -> Optional["Polyline"]:
+def quad_from_line_top_bottom_planes(face_plane: "Plane", line: Line, plane0: "Plane", plane1: "Plane") -> "Polyline" | None:
     """Build a closed quad polyline from a joint line plus two side planes.
 
     End-cap planes are perpendicular to the joint line at each endpoint;
@@ -3977,7 +4014,7 @@ def quad_from_line_top_bottom_planes(face_plane: "Plane", line: Line, plane0: "P
 
     Returns
     -------
-    Optional[:class:`Polyline`]
+    :class:`Polyline` | None
         ``None`` if any of the 3-plane intersections is degenerate.
     """
     from .plane import Plane
@@ -4017,7 +4054,7 @@ def orthogonal_vector_between_two_plane_pairs(pp00: "Plane", pp10: "Plane", pp11
 
     Returns
     -------
-    Optional[:class:`Vector`]
+    :class:`Vector` | None
     """
     l0 = plane_plane(pp00, pp10)
     if l0 is None:
@@ -4056,7 +4093,7 @@ def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane
 
     Returns
     -------
-    Optional[Tuple[:class:`Polyline`, Tuple[float, float]]]
+    tuple[:class:`Polyline`, tuple[float, float]] | None
     """
     from .polyline import Polyline
     import math as _math
@@ -4123,21 +4160,65 @@ def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane
         t_e = (dx*sy - dy*sx) / denom
         return t_s, t_e
 
+    def collinear_overlap(s0, s1, e0, e1):
+        # A joint edge lying ON a plate edge is a boundary case the winding
+        # number cannot classify: report its parametric overlap so the caller
+        # keeps it instead of dropping the joint's flush side.
+        sx = s1[0]-s0[0]; sy = s1[1]-s0[1]
+        ex = e1[0]-e0[0]; ey = e1[1]-e0[1]
+        sl2 = sx*sx + sy*sy
+        el2 = ex*ex + ey*ey
+        if sl2 < 1e-20 or el2 < 1e-20:
+            return None
+        cross_norm = (sx*ey - sy*ex) / _math.sqrt(sl2 * el2)
+        ANGLE_SIN_EPS = 1e-4  # 0.006 deg - true parallel
+        if abs(cross_norm) > ANGLE_SIN_EPS:
+            return None
+        apx = s0[0]-e0[0]; apy = s0[1]-e0[1]
+        perp = (apx*ey - apy*ex) / _math.sqrt(el2)
+        DIST_EPS = 1e-3  # 0.001 mm - true FP noise
+        if abs(perp) > DIST_EPS:
+            return None
+        ts0 = (apx*ex + apy*ey) / el2
+        bpx = s1[0]-e0[0]; bpy = s1[1]-e0[1]
+        ts1 = (bpx*ex + bpy*ey) / el2
+        ov_min = max(0.0, min(ts0, ts1))
+        ov_max = min(1.0, max(ts0, ts1))
+        if ov_max - ov_min < 1e-9:
+            return None
+        tsr = ts1 - ts0
+        if abs(tsr) < 1e-20:
+            return None
+        t_enter = (ov_min - ts0) / tsr
+        t_exit = (ov_max - ts0) / tsr
+        if t_enter > t_exit:
+            t_enter, t_exit = t_exit, t_enter
+        t_enter = max(0.0, t_enter)
+        t_exit = min(1.0, t_exit)
+        return (t_enter, t_exit) if t_exit - t_enter > 1e-9 else None
+
     EPS = 1e-9
     pieces = []
     for s in range(len(joint2d)-1):
         p0 = joint2d[s]
         p1 = joint2d[s+1]
         ts = [0.0]
+        coll_ranges = []
         for i in range(len(plate2d)):
             a = plate2d[i]
             b = plate2d[(i+1) % len(plate2d)]
             r = seg_seg_2d(p0, p1, a, b)
-            if r is None:
-                continue
-            t_s, t_e = r
-            if EPS < t_s < 1.0 - EPS and -EPS <= t_e <= 1.0 + EPS:
-                ts.append(t_s)
+            if r is not None:
+                t_s, t_e = r
+                if EPS < t_s < 1.0 - EPS and -EPS <= t_e <= 1.0 + EPS:
+                    ts.append(t_s)
+            c = collinear_overlap(p0, p1, a, b)
+            if c is not None:
+                coll_ranges.append(c)
+                if EPS < c[0] < 1.0 - EPS:
+                    ts.append(c[0])
+                if EPS < c[1] < 1.0 - EPS:
+                    ts.append(c[1])
         ts.append(1.0)
         ts.sort()
         # Deduplicate close-to-equal values.
@@ -4147,12 +4228,16 @@ def closed_and_open_paths_2d(plate: "Polyline", joint: "Polyline", plane: "Plane
                 deduped.append(v)
         ts = deduped
 
+        def sub_is_collinear(t_a, t_b):
+            t_mid = 0.5 * (t_a + t_b)
+            return any(r[0] - EPS <= t_mid <= r[1] + EPS for r in coll_ranges)
+
         current = []
         for i in range(len(ts) - 1):
             t_mid = 0.5 * (ts[i] + ts[i+1])
             mx = p0[0] + (p1[0]-p0[0]) * t_mid
             my = p0[1] + (p1[1]-p0[1]) * t_mid
-            if pip(mx, my):
+            if pip(mx, my) or sub_is_collinear(ts[i], ts[i+1]):
                 sub_a = (p0[0] + (p1[0]-p0[0])*ts[i],   p0[1] + (p1[1]-p0[1])*ts[i])
                 sub_b = (p0[0] + (p1[0]-p0[0])*ts[i+1], p0[1] + (p1[1]-p0[1])*ts[i+1])
                 if not current:
@@ -4402,7 +4487,7 @@ def polyline_boolean_2d_in_plane(
     include_triangles: bool = False,
     min_area: float = 0.01,
     collapse_eps: float = 0.0,
-) -> Optional["Polyline"]:
+) -> "Polyline" | None:
     # 2D boolean between two closed planar polylines, projected into the plane's
     # canonical 2D frame (base1/base2). intersection_type: 0=Intersect, 1=Union,
     # 2=Difference, 3=Xor. Returns the result polyline (closed, 3D) on success,
