@@ -419,12 +419,12 @@ def test_nurbssurface_planar():
     # x86 by ~1 ulp; downstream the algorithm amplifies this past the
     # default 1e-9 tolerance. Loosen for this one test (still well below
     # the model unit scale).
-    _saved_abs = TOLERANCE.absolute
-    TOLERANCE.absolute = 1e-6
+    _saved_abs = TOLERANCE.absolute()
+    TOLERANCE.set_absolute(1e-6)
     try:
         _test_nurbssurface_planar_body()
     finally:
-        TOLERANCE.absolute = _saved_abs
+        TOLERANCE.set_absolute(_saved_abs)
 
 
 def _test_nurbssurface_planar_body():
@@ -872,7 +872,7 @@ def test_nurbssurface_sweep():
     MINI_CHECK(s_sweep1.cv_count_dir(1) == 6)
     MINI_CHECK(m_sweep1.number_of_vertices() > 0)
     MINI_CHECK(m_sweep1.number_of_faces() > 0)
-    TOLERANCE.absolute = 1e-6
+    TOLERANCE.set_absolute(1e-6)
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 0), Point(0.888888888888889, 0.000000000000000, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 1), Point(0.888650781842197, 1.196033690639573, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 2), Point(1.023137542521078, 2.984678629452259, 0.000000000000000)))
