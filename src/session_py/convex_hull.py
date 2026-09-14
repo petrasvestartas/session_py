@@ -154,6 +154,10 @@ class ConvexHull:
             if volume > best_volume:
                 best_volume = volume
                 p3 = i
+        if p2 < 0 or p3 < 0 or best_distance <= 1e-20 or best_volume <= 1e-20:
+            for point in points:
+                mesh.add_vertex(point)
+            return mesh
         if _signed_volume(points[p0], points[p1], points[p2], points[p3]) > 0.0:
             p1, p2 = p2, p1
         rest = []
