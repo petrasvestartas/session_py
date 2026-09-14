@@ -122,6 +122,9 @@ def test_quaternion_from_axis_angle():
     MINI_CHECK(TOLERANCE.is_close(q.scalar, math.cos(PI / 4.0)))
     MINI_CHECK(TOLERANCE.is_close(q.vector[2], math.sin(PI / 4.0)))
 
+    zero_axis = Quaternion.from_axis_angle(Vector(0.0, 0.0, 0.0), PI / 2.0)
+    MINI_CHECK(zero_axis == Quaternion.identity())
+
 
 @MINI_TEST("Quaternion", "From Arc")
 def test_quaternion_from_arc():
@@ -292,6 +295,11 @@ def test_quaternion_slerp():
     half = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), 0.0005)
 
     MINI_CHECK(TOLERANCE.is_close(mid2.scalar, half.scalar))
+
+    antipodal = -Quaternion.identity()
+    same_rotation = q1.slerp(antipodal, 0.5)
+    MINI_CHECK(TOLERANCE.is_close(same_rotation.scalar, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(same_rotation.vector.magnitude(), 0.0))
 
 
 @MINI_TEST("Quaternion", "Nlerp")

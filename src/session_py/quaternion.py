@@ -68,6 +68,8 @@ class Quaternion:
     @staticmethod
     def from_axis_angle(axis: Vector, angle: float) -> "Quaternion":
         """Unit quaternion rotating by angle radians around axis"""
+        if axis.magnitude() < 1e-10:
+            return Quaternion.identity()
         ax = axis.normalized()
         half = angle * 0.5
         return Quaternion(math.cos(half), ax * math.sin(half))
@@ -277,13 +279,17 @@ class Quaternion:
 
     def slerp(self, other: "Quaternion", amount: float) -> "Quaternion":
         """Spherical interpolation at constant angular velocity"""
-        dot_val = self.dot(other)
+        target = other
+        dot_val = self.dot(target)
+        if dot_val < 0.0:
+            target = -target
+            dot_val = -dot_val
         if dot_val > 0.9995:
-            return (self + (other - self) * amount).normalized()
+            return (self + (target - self) * amount).normalized()
         theta = math.acos(max(-1.0, min(1.0, dot_val)))
         scale1 = math.sin(theta * (1.0 - amount))
         scale2 = math.sin(theta * amount)
-        return (self * scale1 + other * scale2) * (1.0 / math.sin(theta))
+        return (self * scale1 + target * scale2) * (1.0 / math.sin(theta))
 
     def nlerp(self, other: "Quaternion", amount: float) -> "Quaternion":
         """Normalized linear interpolation, cheaper than slerp"""
