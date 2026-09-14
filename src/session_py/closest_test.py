@@ -309,6 +309,7 @@ def test_closest_boxes_closest():
     MINI_CHECK(len(pairs) == 1)
     MINI_CHECK(pairs[0][0] == 0)
     MINI_CHECK(pairs[0][1] == 1)
+    MINI_CHECK(not Closest.boxes_closest(boxes, -0.01))
 
 
 if __name__ == "__main__":

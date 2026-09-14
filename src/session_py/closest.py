@@ -1063,7 +1063,7 @@ class Closest:
     ) -> list[tuple[int, int]]:
         """Index pairs of lines whose endpoints come within threshold of each other"""
         pairs = []
-        if len(lines) < 2:
+        if threshold < 0.0 or len(lines) < 2:
             return pairs
         aabbs = []
         for ln in lines:
@@ -1088,7 +1088,7 @@ class Closest:
     ) -> list[tuple[int, int]]:
         """Index pairs of polylines whose vertices come within threshold of each other"""
         pairs = []
-        if len(polylines) < 2:
+        if threshold < 0.0 or len(polylines) < 2:
             return pairs
         aabbs = []
         for pl in polylines:
@@ -1114,7 +1114,7 @@ class Closest:
     ) -> list[tuple[int, int]]:
         """Index pairs of curves whose endpoints come within threshold of each other"""
         pairs = []
-        if len(curves) < 2:
+        if threshold < 0.0 or len(curves) < 2:
             return pairs
         aabbs = []
         for crv in curves:
@@ -1140,7 +1140,7 @@ class Closest:
     ) -> list[tuple[int, int]]:
         """Index pairs of boxes within threshold of each other"""
         pairs = []
-        if len(boxes) < 2:
+        if threshold < 0.0 or len(boxes) < 2:
             return pairs
         inflated = []
         for b in boxes:
