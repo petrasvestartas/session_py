@@ -78,6 +78,7 @@ def test_treenode_add():
     parent = TreeNode("parent")
     child = TreeNode("child")
     parent.add(child)
+    parent.add(parent)
 
     MINI_CHECK(len(parent.children) == 1)
     MINI_CHECK(child.parent is parent)
@@ -395,7 +396,7 @@ def test_tree_add_child_by_guid():
     t.add(a, root)
     t.add(b, root)
     ok = t.add_child_by_guid(a.guid, b.guid)
-    cycle = t.add_child_by_guid(b.guid, root.guid)
+    cycle = t.add_child_by_guid(b.guid, a.guid)
 
     MINI_CHECK(ok)
     MINI_CHECK(not cycle)

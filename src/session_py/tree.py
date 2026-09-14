@@ -47,6 +47,13 @@ class TreeNode:
         """Add a child node to this node"""
         if child is None:
             return
+        if child is self:
+            return
+        ancestor = self
+        while ancestor is not None:
+            if ancestor is child:
+                return
+            ancestor = ancestor.parent
         child._parent = self
         self._children.append(child)
 
@@ -267,6 +274,13 @@ class Tree:
         child = self.find_node_by_guid(child_guid)
         if parent is None or child is None:
             return False
+        if parent is child:
+            return False
+        ancestor = parent
+        while ancestor is not None:
+            if ancestor is child:
+                return False
+            ancestor = ancestor.parent
         current = child.parent
         if current is None:
             return False
