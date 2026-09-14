@@ -154,6 +154,7 @@ def test_xform_rotation_axis():
     MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(5), Point(t+k, t, t-k)))
     MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(6), Point(1, 1, 1)))
     MINI_CHECK(TOLERANCE.is_point_close(result.vertex_point(7), Point(t, t-k, t+k)))
+    MINI_CHECK(Xform.rotation(Vector.zero(), PI / 3.0).is_identity())
 
 
 @MINI_TEST("Xform", "Rotation Around Line")

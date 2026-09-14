@@ -146,6 +146,8 @@ class Xform:
     def rotation(axis: "Vector", angle: float, degrees: bool = False) -> "Xform":
         if degrees:
             angle = angle * TO_RADIANS
+        if axis.is_zero():
+            return Xform.identity()
         xform = Xform()
         unit = axis.normalized()
         cos_angle = math.cos(angle)
