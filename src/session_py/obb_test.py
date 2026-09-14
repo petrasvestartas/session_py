@@ -41,6 +41,15 @@ def test_obb_constructor():
     MINI_CHECK(TOLERANCE.is_close(box.half_size[1], 2.0))
     MINI_CHECK(TOLERANCE.is_close(box.half_size[2], 3.0))
 
+    # operators
+    same = box.duplicate()
+
+    MINI_CHECK(box == same)
+    MINI_CHECK(box != bb1)
+    MINI_CHECK(box.guid != same.guid)
+    MINI_CHECK(str(box) == "0.000000, 0.000000, 0.000000\n1.000000, 0.000000, 0.000000\n0.000000, 1.000000, 0.000000\n0.000000, 0.000000, 1.000000\n1.000000, 2.000000, 3.000000")
+    MINI_CHECK(repr(box) == "OBB(my_obb, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 2.000000, 3.000000)")
+
     # aabb
     bb_aabb = bb2.aabb()
 
@@ -71,7 +80,7 @@ def test_obb_constructor():
     MINI_CHECK(TOLERANCE.is_close(bb3.max_point()[0], 3.0))
 
     # guid and name
-    MINI_CHECK(bb1.guid)
+    MINI_CHECK(bb1.guid != "")
     bb1.name = "test_bbox"
 
     MINI_CHECK(bb1.name == "test_bbox")
@@ -175,7 +184,7 @@ def test_obb_protobuf_roundtrip():
     loaded = OBB.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_bbox_proto")
-    MINI_CHECK(loaded.guid == bb.guid)
+    MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded.center[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.half_size[0], 5.0))
 
@@ -311,7 +320,7 @@ def test_obb_from_plane():
         Point(2.0, 3.0, 0.0),
         Point(0.0, 3.0, 0.0),
     ]
-    bb = OBB.from_points_with_plane(pts, plane, 0.0)
+    bb = OBB.from_points(pts, 0.0, plane)
 
     MINI_CHECK(TOLERANCE.is_close(bb.half_size[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(bb.half_size[1], 1.5))

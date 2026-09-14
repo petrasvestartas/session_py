@@ -4,38 +4,38 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Element
+# ═══════════════════════════════════════════════════════════════════════════
+
+
 @MINI_TEST("Element", "Constructor")
 def test_element_constructor():
     from session_py import Mesh
     from session_py import BRep
     from session_py import Element
 
-    # Constructor
     m = Mesh.from_vertices_and_faces(
         [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m, name="test_element")
+    e = Element(m, "test_element")
 
-    # Getters
     geo = e.geometry
     name = e.name
     guid = e.guid
     dirty = e.is_dirty
 
-    # String
     estr = str(e)
     erepr = repr(e)
 
-    # Copy
     ecopy = e.duplicate()
 
-    # Equality
-    e2 = Element(geometry=Mesh(), name="test_element")
-    e3 = Element(geometry=BRep(), name="other")
+    e2 = Element(Mesh(), "test_element")
+    e3 = Element(BRep(), "other")
 
     MINI_CHECK(name == "test_element")
-    MINI_CHECK(guid is not None and len(guid) > 0)
+    MINI_CHECK(len(guid) > 0)
     MINI_CHECK(dirty)
     MINI_CHECK(isinstance(geo, Mesh))
     MINI_CHECK(estr == "Element(test_element, Mesh)")
@@ -55,17 +55,19 @@ def test_place():
         [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m)
     xf = Xform.translation(10.0, 20.0, 30.0)
     e.place(xf)
 
     MINI_CHECK(e.is_dirty)
-    min_x = min(v.x for v in e.geometry.vertex.values())
+    min_x = float("inf")
+    for v in e.geometry.vertex.values():
+        min_x = min(min_x, v.x)
     MINI_CHECK(min_x > 9.0)
 
 
 @MINI_TEST("Element", "Add Geometry Op")
-def test_add_feature():
+def test_add_geometry_op():
     from session_py import Mesh
     from session_py import BRep
     from session_py import Xform
@@ -75,15 +77,14 @@ def test_add_feature():
         [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m)
 
     def my_feature(geo):
         return geo
 
     e.add_geometry_op(my_feature)
 
-    # Features are Mesh -> Mesh, so BRep geometry passes through untouched
-    eb = Element(geometry=BRep.create_box(1.0, 1.0, 1.0), name="brep_feature")
+    eb = Element(BRep.create_box(1.0, 1.0, 1.0), "brep_feature")
     eb.add_geometry_op(lambda geo: Mesh())
     sg = eb.session_geometry(Xform.identity())
 
@@ -101,10 +102,9 @@ def test_aabb():
         [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m)
     aabb = e.aabb
 
-    MINI_CHECK(aabb is not None)
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[0], 0.5))
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[1], 0.5))
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[2], 0.0))
@@ -119,10 +119,9 @@ def test_obb():
         [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m)
     obb = e.obb
 
-    MINI_CHECK(obb is not None)
     MINI_CHECK(TOLERANCE.is_close(obb.half_size[0], 0.5))
     MINI_CHECK(TOLERANCE.is_close(obb.half_size[1], 0.5))
 
@@ -137,15 +136,15 @@ def test_session_geometry():
         [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m)
     e_xf = Xform.translation(10.0, 0.0, 0.0)
     sg = e.session_geometry(e_xf)
 
     MINI_CHECK(isinstance(sg, Mesh))
-    verts = list(sg.vertex.values())
-    MINI_CHECK(TOLERANCE.is_close(verts[0].x, 10.0))
-    MINI_CHECK(TOLERANCE.is_close(verts[1].x, 11.0))
-    MINI_CHECK(e.geometry is not sg)
+    mesh = sg
+    MINI_CHECK(TOLERANCE.is_close(mesh.vertex[0].x, 10.0))
+    MINI_CHECK(TOLERANCE.is_close(mesh.vertex[1].x, 11.0))
+    MINI_CHECK(e.geometry is not mesh)
 
 
 @MINI_TEST("Element", "Reset")
@@ -157,16 +156,16 @@ def test_reset():
         [[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m)
     _ = e.aabb
-    _ = e.point
+    _2 = e.point
     e.reset()
 
     MINI_CHECK(e.is_dirty)
-    MINI_CHECK(e._aabb is None)
-    MINI_CHECK(e._obb is None)
-    MINI_CHECK(e._collision_mesh is None)
-    MINI_CHECK(e._point is None)
+    MINI_CHECK(e.cached_aabb is None)
+    MINI_CHECK(e.cached_obb is None)
+    MINI_CHECK(e.cached_collision_mesh is None)
+    MINI_CHECK(e.cached_point is None)
 
 
 @MINI_TEST("Element", "Compute Point")
@@ -178,7 +177,7 @@ def test_compute_point():
         [[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m)
     pt = e.point
 
     MINI_CHECK(TOLERANCE.is_close(pt[0], 1.0))
@@ -192,11 +191,10 @@ def test_brep_aabb():
     from session_py import Element
 
     b = BRep.create_box(2.0, 3.0, 4.0)
-    e = Element(geometry=b, name="brep_element")
+    e = Element(b, "brep_element")
     aabb = e.aabb
     pt = e.point
 
-    MINI_CHECK(aabb is not None)
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[1], 1.5))
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[2], 2.0))
@@ -215,13 +213,12 @@ def test_json_roundtrip():
         [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m, name="json_test")
+    e = Element(m, "json_test")
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_element.json"
     e.file_json_dump(fname)
     loaded = Element.file_json_load(fname)
 
-    MINI_CHECK(isinstance(loaded, Element))
     MINI_CHECK(loaded.name == "json_test")
     MINI_CHECK(isinstance(loaded.geometry, Mesh))
     MINI_CHECK(len(loaded.geometry.vertex) == 4)
@@ -234,48 +231,58 @@ def test_protobuf_roundtrip():
     from pathlib import Path
 
     b = BRep.create_box(2.0, 3.0, 4.0)
-    e = Element(geometry=b, name="proto_test")
+    e = Element(b, "proto_test")
 
     path = Path(__file__).resolve().parents[2] / "serialization" / "test_element.bin"
     e.pb_dump(path)
     loaded = Element.pb_load(path)
 
-    MINI_CHECK(isinstance(loaded, Element))
     MINI_CHECK(loaded.name == "proto_test")
     MINI_CHECK(isinstance(loaded.geometry, BRep))
     MINI_CHECK(loaded.geometry.face_count() == 6)
     MINI_CHECK(loaded.geometry.vertex_count() == 8)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Element - Polylines
+# ═══════════════════════════════════════════════════════════════════════════
+
+
 @MINI_TEST("Element", "Polylines")
 def test_polylines():
     from session_py import Mesh
     from session_py import Element
+    from session_py import Point
 
     m = Mesh.from_vertices_and_faces(
-        [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
+        [Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)],
         [[0, 1, 2, 3]],
     )
-    e = Element(geometry=m)
+    e = Element(m, "test_element")
 
-    MINI_CHECK(len(e.polylines) == 0)
-    MINI_CHECK(len(e.planes) == 0)
+    MINI_CHECK(len(e.polylines) == 1)
+    MINI_CHECK(e.polylines[0].point_count() == 5)
+    MINI_CHECK(e.polylines[0].get_point(0) == Point(0, 0, 0))
+    MINI_CHECK(e.polylines[0].get_point(4) == Point(0, 0, 0))
+    MINI_CHECK(len(e.planes) == 1)
+    MINI_CHECK(e.planes[0].origin == Point(0.5, 0.5, 0.0))
+    normal = e.planes[0].z_axis
+    MINI_CHECK(abs(normal[0]) < 1e-12 and abs(normal[1]) < 1e-12 and normal[2] > 0.0)
     MINI_CHECK(len(e.edge_vectors) == 0)
     MINI_CHECK(e.axis is None)
 
 
-# ── Element - polymorphic registry ──────────────────────────────────────────────────────
-# Mirrors session_cpp/src/element_test.cpp. The contract a downstream package depends on: a
-# registered type survives a round trip, and an UNregistered one degrades to a base Element
-# with its geometry intact rather than failing the load.
+@MINI_TEST("Element", "Polylines Empty Without Mesh")
+def test_polylines_empty_without_mesh():
+    from session_py import Element
+
+    MINI_CHECK(len(Element(name="no_geometry").polylines) == 0)
+    MINI_CHECK(len(Element(name="no_geometry").planes) == 0)
 
 
-def _unit_quad():
-    from session_py import Mesh
-
-    return Mesh.from_vertices_and_faces(
-        [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], [[0, 1, 2, 3]]
-    )
+# ═══════════════════════════════════════════════════════════════════════════
+# Element - Polymorphic registry
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 def _test_plate_class():
@@ -283,84 +290,98 @@ def _test_plate_class():
     from session_py import Element
 
     class TestPlate(Element):
-        def __init__(self, geometry=None, thickness=0.0, codes=None):
-            super().__init__(geometry=geometry)
+        def __init__(self, geometry=None, name="my_element", thickness=0.0, codes=None):
+            super().__init__(geometry, name)
             self.thickness = thickness
             self.codes = list(codes or [])
 
         def element_type_name(self):
             return "TestPlate"
 
-        # Deliberately a trivial hand-rolled encoding: the kernel never parses this, so the
-        # format is the package's own business - which is the property under test.
         def element_data_dumps(self):
-            return ",".join([str(self.thickness)] + [str(c) for c in self.codes]).encode()
+            out = str(self.thickness)
+            for c in self.codes:
+                out += "," + str(c)
+            return out.encode()
 
         @staticmethod
-        def factory(data):
-            from session_py.proto import element_pb2
+        def register_with_kernel():
+            def factory(data):
+                from session_py.proto import element_pb2
 
-            proto = element_pb2.Element()
-            proto.ParseFromString(data)
-            parts = proto.element_data.decode().split(",")
+                base = Element.pb_loads(data)
+                proto = element_pb2.Element()
+                proto.ParseFromString(data)
 
-            plate = TestPlate(thickness=float(parts[0]), codes=[int(c) for c in parts[1:]])
-            base = Element.pb_loads(data)
-            plate._geometry = base.geometry
-            plate.guid = proto.guid
-            plate.name = proto.name
-            return plate
+                plate = TestPlate(base.geometry, base.name)
+                plate.guid = proto.guid
+
+                parts = proto.element_data.decode().split(",")
+                plate.thickness = float(parts[0])
+                for c in parts[1:]:
+                    plate.codes.append(int(c))
+                return plate
+
+            Element.register_type("TestPlate", factory)
 
     return TestPlate
 
 
-@MINI_TEST("Element", "RegistryRoundTrip")
+def _unit_quad():
+    from session_py import Mesh
+
+    return Mesh.from_vertices_and_faces(
+        [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]],
+        [[0, 1, 2, 3]],
+    )
+
+
+@MINI_TEST("Element", "Registry Round Trip")
 def test_registry_round_trip():
     from session_py import Element
     from session_py import Mesh
 
     TestPlate = _test_plate_class()
-    Element.register_type("TestPlate", TestPlate.factory)
+    TestPlate.register_with_kernel()
     MINI_CHECK(Element.is_registered("TestPlate"))
 
-    plate = TestPlate(geometry=_unit_quad(), thickness=12.5, codes=[30, 11, 20])
-    plate.name = "plate_0"
+    plate = TestPlate(_unit_quad(), "plate_0", 12.5, [30, 11, 20])
     guid = plate.guid
     loaded = Element.pb_loads_polymorphic(plate.pb_dumps())
 
-    # The derived type came back, not a sliced base.
     MINI_CHECK(isinstance(loaded, TestPlate))
     MINI_CHECK(loaded.element_type_name() == "TestPlate")
 
-    # Identity, base state and domain state all survived.
     MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(loaded.name == "plate_0")
     MINI_CHECK(isinstance(loaded.geometry, Mesh))
-    MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 12.5))
-    MINI_CHECK(loaded.codes == [30, 11, 20])
+    MINI_CHECK(abs(loaded.thickness - 12.5) < 1e-9)
+    MINI_CHECK(len(loaded.codes) == 3)
+    MINI_CHECK(
+        loaded.codes[0] == 30 and loaded.codes[1] == 11 and loaded.codes[2] == 20
+    )
 
 
-@MINI_TEST("Element", "RegistryUnknownTypeDegrades")
+@MINI_TEST("Element", "Registry Unknown Type Degrades")
 def test_registry_unknown_type_degrades():
     from session_py import Element
     from session_py import Mesh
     from session_py.proto import element_pb2
 
-    # A file written by a package this interpreter does not have. The element must still
-    # load, keeping its geometry - a viewer opens the file, it just does not know what it is.
     MINI_CHECK(not Element.is_registered("NeverRegistered"))
 
     proto = element_pb2.Element()
-    proto.ParseFromString(Element(geometry=_unit_quad()).pb_dumps())
+    proto.ParseFromString(Element(_unit_quad(), "mystery").pb_dumps())
     proto.element_type = "NeverRegistered"
     proto.element_data = b"whatever this package meant"
 
     loaded = Element.pb_loads_polymorphic(proto.SerializeToString())
     MINI_CHECK(loaded is not None)
+    MINI_CHECK(loaded.name == "mystery")
     MINI_CHECK(isinstance(loaded.geometry, Mesh))
 
 
-@MINI_TEST("Element", "FeaturesRoundTrip")
+@MINI_TEST("Element", "Features Round Trip")
 def test_features_round_trip():
     from session_py import Element
     from session_py import ElementFeature
@@ -368,16 +389,18 @@ def test_features_round_trip():
     from session_py import Polyline
     from session_py import Vector
 
-    # insertion_vectors / dimensions / features are the general shape that replaced the
-    # per-domain arrays (joint_types and friends) that used to sit on this message. All three
-    # must survive a round trip or a domain is right back to inventing its own fields.
-    e = Element(geometry=_unit_quad(), name="plate_0")
+    e = Element(_unit_quad(), "plate_0")
     e.insertion_vectors = [Vector(0, 0, 1), Vector(1, 0, 0)]
     e.dimensions = Vector(120.0, 80.0, 12.5)
     e.add_feature(
         ElementFeature(
-            "cut", 2,
-            [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
+            "cut",
+            2,
+            [
+                Polyline(
+                    [Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)]
+                )
+            ],
             "notch",
         )
     )
@@ -388,44 +411,36 @@ def test_features_round_trip():
     MINI_CHECK(len(loaded.insertion_vectors) == 2)
     MINI_CHECK(loaded.insertion_vectors[0] == Vector(0, 0, 1))
     MINI_CHECK(loaded.dimensions is not None)
-    # z is the thickness - the whole reason this is a vector rather than one float.
-    MINI_CHECK(TOLERANCE.is_close(loaded.dimensions[2], 12.5))
+    MINI_CHECK(abs(loaded.dimensions[2] - 12.5) < 1e-9)
     MINI_CHECK(len(loaded.features) == 1)
     MINI_CHECK(loaded.features[0].feature_type == "cut")
     MINI_CHECK(loaded.features[0].face_index == 2)
     MINI_CHECK(loaded.features[0].name == "notch")
     MINI_CHECK(len(loaded.features[0].outlines) == 1)
-    # The guid is the feature's handle: a package that wrote a joint has to find it again, and
-    # the index in `features` moves the moment an earlier feature is removed.
     MINI_CHECK(loaded.features[0].guid == feature_guid)
 
 
-@MINI_TEST("Element", "DimensionsAreNominalNotMeasured")
+@MINI_TEST("Element", "Dimensions Are Nominal Not Measured")
 def test_dimensions_are_nominal_not_measured():
     from session_py import Element
     from session_py import Vector
 
-    # dimensions is AUTHORED intent; obb MEASURES what exists. They are allowed to disagree,
-    # and this pins that they are genuinely independent - a nominal thickness set before any
-    # geometry is built must not be overwritten by whatever the geometry turns out to be.
-    e = Element(geometry=_unit_quad(), name="plate")
-    MINI_CHECK(e.dimensions is None)  # never authored
+    e = Element(_unit_quad(), "plate")
+    MINI_CHECK(e.dimensions is None)
 
-    e.dimensions = Vector(120.0, 80.0, 12.5)  # nominal, nothing like the unit quad
+    e.dimensions = Vector(120.0, 80.0, 12.5)
     measured = e.obb
 
-    MINI_CHECK(TOLERANCE.is_close(e.dimensions[0], 120.0))
-    MINI_CHECK(measured.half_size[0] < 1.0)  # the geometry is still a unit quad
+    MINI_CHECK(abs(e.dimensions[0] - 120.0) < 1e-9)
+    MINI_CHECK(measured.half_size[0] < 1.0)
 
 
-@MINI_TEST("Element", "RegistryLeavesBaseBytesUnchanged")
+@MINI_TEST("Element", "Registry Leaves Base Bytes Unchanged")
 def test_registry_leaves_base_bytes_unchanged():
     from session_py import Element
     from session_py.proto import element_pb2
 
-    # proto3 omits empty scalars, so adding element_type/element_data must not have changed
-    # one byte of a plain Element - the cross-language golden files depend on it.
-    e = Element(geometry=_unit_quad())
+    e = Element(_unit_quad(), "plain")
     proto = element_pb2.Element()
     proto.ParseFromString(e.pb_dumps())
 
@@ -434,44 +449,37 @@ def test_registry_leaves_base_bytes_unchanged():
     MINI_CHECK(e.element_type_name() == "")
 
 
-@MINI_TEST("Element", "RegistryJsonRoundTrip")
+@MINI_TEST("Element", "Registry Json Round Trip")
 def test_registry_json_round_trip():
     from session_py import Element
 
-    # The JSON path reconstructs the derived type too, through the SAME factory. Before this,
-    # JSON kept the payload but always handed back a base - so a package could round-trip
-    # through .pb and not through .json, for no reason a caller could see.
     TestPlate = _test_plate_class()
-    Element.register_type("TestPlate", TestPlate.factory)
+    TestPlate.register_with_kernel()
 
-    plate = TestPlate(geometry=_unit_quad(), thickness=9.5, codes=[7, 8])
-    plate.name = "plate_json"
-    guid = plate.guid
+    plate = TestPlate(_unit_quad(), "plate_json", 9.5, [7, 8])
     loaded = Element.file_json_loads_polymorphic(plate.file_json_dumps())
 
     MINI_CHECK(isinstance(loaded, TestPlate))
     MINI_CHECK(loaded.name == "plate_json")
-    MINI_CHECK(loaded.guid == guid)
-    MINI_CHECK(TOLERANCE.is_close(loaded.thickness, 9.5))
-    MINI_CHECK(loaded.codes == [7, 8])
+    MINI_CHECK(loaded.guid == plate.guid)
+    MINI_CHECK(abs(loaded.thickness - 9.5) < 1e-9)
+    MINI_CHECK(len(loaded.codes) == 2)
+    MINI_CHECK(loaded.codes[0] == 7 and loaded.codes[1] == 8)
 
 
-@MINI_TEST("Element", "ThrowingFactoryDegradesToBase")
+@MINI_TEST("Element", "Throwing Factory Degrades To Base")
 def test_throwing_factory_degrades_to_base():
     from session_py import Element
     from session_py import Mesh
     from session_py.proto import element_pb2
 
-    # A factory that raises is a bug in that package, exactly like one returning None, and it
-    # must not take the whole Session down. Without the catch, one malformed element made
-    # every other element in the file unreachable.
     def explode(data):
         raise RuntimeError("this package is broken")
 
     Element.register_type("Exploding", explode)
 
     proto = element_pb2.Element()
-    proto.ParseFromString(Element(geometry=_unit_quad(), name="victim").pb_dumps())
+    proto.ParseFromString(Element(_unit_quad(), "victim").pb_dumps())
     proto.element_type = "Exploding"
 
     loaded = Element.pb_loads_polymorphic(proto.SerializeToString())
@@ -480,17 +488,13 @@ def test_throwing_factory_degrades_to_base():
     MINI_CHECK(isinstance(loaded.geometry, Mesh))
 
 
-@MINI_TEST("Element", "UnknownTypeSurvivesResave")
+@MINI_TEST("Element", "Unknown Type Survives Resave")
 def test_unknown_type_survives_resave():
     from session_py import Element
     from session_py.proto import element_pb2
 
-    # The whole point of element_type/element_data: a viewer WITHOUT the wood package opens a
-    # wood file, edits something else, and saves. If the kernel does not carry these two
-    # through, that save silently destroys the payload - the geometry still looks right, so
-    # nothing announces the loss. This is the test that would have caught it.
     proto = element_pb2.Element()
-    proto.ParseFromString(Element(geometry=_unit_quad(), name="plate").pb_dumps())
+    proto.ParseFromString(Element(_unit_quad(), "plate").pb_dumps())
     proto.element_type = "wood::Plate"
     proto.element_data = b"the package's own bytes"
     original = proto.SerializeToString()
@@ -505,37 +509,33 @@ def test_unknown_type_survives_resave():
     MINI_CHECK(resaved.element_data == b"the package's own bytes")
 
 
-@MINI_TEST("Element", "DuplicateKeepsEveryField")
+@MINI_TEST("Element", "Duplicate Keeps Every Field")
 def test_duplicate_keeps_every_field():
     from session_py import Element
+    from session_py import ElementFeature
     from session_py import Vector
-    from session_py.element import ElementFeature
 
-    # A copy that drops fields is the same silent data loss as a save that drops them, and a
-    # duplicate is what an assembly does to place the same part twice.
-    e = Element(geometry=_unit_quad(), name="original")
+    e = Element(_unit_quad(), "original")
     e.insertion_vectors = [Vector(0, 0, 1)]
     e.dimensions = Vector(120.0, 80.0, 12.5)
     e.add_feature(ElementFeature("cut", 2, [], "notch"))
 
     copy = e.duplicate()
 
-    MINI_CHECK(copy == e)  # every carried field compares equal
-    MINI_CHECK(copy.guid != e.guid)  # but it is a different object
+    MINI_CHECK(copy == e)
+    MINI_CHECK(copy.guid != e.guid)
     MINI_CHECK(len(copy.insertion_vectors) == 1)
     MINI_CHECK(copy.dimensions is not None)
     MINI_CHECK(len(copy.features) == 1)
 
 
-@MINI_TEST("Element", "EqualityComparesCarriedFields")
+@MINI_TEST("Element", "Equality Compares Carried Fields")
 def test_equality_compares_carried_fields():
     from session_py import Element
     from session_py import Vector
 
-    # Equality that looks at name and geometry only makes every round-trip test above vacuous:
-    # it would pass while the loader dropped all five of the other fields.
-    a = Element(geometry=_unit_quad(), name="same")
-    b = Element(geometry=_unit_quad(), name="same")
+    a = Element(_unit_quad(), "same")
+    b = Element(_unit_quad(), "same")
     MINI_CHECK(a == b)
 
     b.dimensions = Vector(1, 2, 3)
@@ -546,13 +546,19 @@ def test_equality_compares_carried_fields():
 # ElementFeature
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @MINI_TEST("ElementFeature", "Constructor")
 def test_element_feature_constructor():
+    from session_py import ElementFeature
     from session_py import Point
     from session_py import Polyline
-    from session_py.element import ElementFeature
 
-    outline = Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])
+    outline = Polyline([
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 0, 0),
+    ])
     f = ElementFeature("cut", 2, [outline], "notch")
 
     MINI_CHECK(f.feature_type == "cut")
@@ -563,7 +569,6 @@ def test_element_feature_constructor():
     same = ElementFeature("cut", 2, [outline], "notch")
     MINI_CHECK(f == same)
     MINI_CHECK(not (f != same))
-    # Data equality, not identity - the two guids differ and the features are still equal.
     MINI_CHECK(f.guid != same.guid)
 
     other = ElementFeature("drill", 2, [outline], "notch")
@@ -579,37 +584,52 @@ def test_element_feature_constructor():
 
 @MINI_TEST("ElementFeature", "Json Roundtrip")
 def test_element_feature_json_roundtrip():
+    from session_py import ElementFeature
     from session_py import Point
     from session_py import Polyline
-    from session_py.element import ElementFeature
+    from pathlib import Path
 
-    f = ElementFeature("cut", 2,
-                       [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
-                       "notch")
+    f = ElementFeature(
+        "cut",
+        2,
+        [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
+        "notch",
+    )
     feature_guid = f.guid
 
-    fname = "serialization/test_element_feature.json"
+    fname = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_element_feature.json"
+    )
     f.file_json_dump(fname)
     loaded = ElementFeature.file_json_load(fname)
 
     MINI_CHECK(loaded == f)
     MINI_CHECK(len(loaded.outlines) == 1)
-    # Read back, not re-minted: whoever holds the guid must still find this feature.
     MINI_CHECK(loaded.guid == feature_guid)
 
 
 @MINI_TEST("ElementFeature", "Protobuf Roundtrip")
 def test_element_feature_protobuf_roundtrip():
+    from session_py import ElementFeature
     from session_py import Point
     from session_py import Polyline
-    from session_py.element import ElementFeature
+    from pathlib import Path
 
-    f = ElementFeature("drill", 5,
-                       [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
-                       "hole")
+    f = ElementFeature(
+        "drill",
+        5,
+        [Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 0, 0)])],
+        "hole",
+    )
     feature_guid = f.guid
 
-    path = "serialization/test_element_feature.bin"
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_element_feature.bin"
+    )
     f.pb_dump(path)
     loaded = ElementFeature.pb_load(path)
 

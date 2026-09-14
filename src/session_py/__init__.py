@@ -34,15 +34,18 @@ from .spatial_aabbtree import SpatialAABBTree
 from .obb import OBB
 from .pointcloud import PointCloud
 from .spatial_bvh import SpatialBVH
-from .spatial_bvh import SpatialBVHNode
 from .spatial_rtree import SpatialRTree
 from .tolerance import Tolerance
 from .tolerance import TOLERANCE
 from .session_config import SessionConfig
 from .session_config import SESSION_CONFIG
 from . import file_encoders
-from .file_obj import load_file_obj
-from .file_obj import save_file_obj
+from .file_obj import read_file_obj
+from .file_obj import write_file_obj
+from .file_obj import read_file_obj_from_str
+from .file_obj import write_file_obj_to_string
+from .file_obj import read_file_obj_polylines
+from . import file_step
 from .io import read_xyz
 from .io import write_xyz
 from .io import read_xyz_from_str
@@ -59,8 +62,8 @@ from .brep import BRepRef
 from .element import Element
 from .element import ElementFeature
 from .closest import Closest
+from .boolean_polyline import BooleanPolyline
 from .remesh_cdt import RemeshCDT
-from .remesh_nurbssurface_grid import remesh_nurbssurface_grid
 from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
 from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
 from .matrix import Matrix
@@ -93,15 +96,18 @@ __all__ = [
     "PointCloud",
     "SpatialAABBTree",
     "SpatialBVH",
-    "SpatialBVHNode",
     "SpatialRTree",
     "Tolerance",
     "TOLERANCE",
     "SessionConfig",
     "SESSION_CONFIG",
     "file_encoders",
-    "load_file_obj",
-    "save_file_obj",
+    "read_file_obj",
+    "write_file_obj",
+    "read_file_obj_from_str",
+    "write_file_obj_to_string",
+    "read_file_obj_polylines",
+    "file_step",
     "read_xyz",
     "write_xyz",
     "read_xyz_from_str",
@@ -118,7 +124,7 @@ __all__ = [
     "Element",
     "ElementFeature",
     "Closest",
-    "remesh_nurbssurface_grid",
+    "BooleanPolyline",
     "RemeshCDT",
     "RemeshNurbsSurfaceGrid",
     "RemeshNurbsSurfaceAdaptive",

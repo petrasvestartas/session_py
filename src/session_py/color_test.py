@@ -8,111 +8,113 @@ from .tolerance import TOLERANCE
 def test_color_constructor():
     from session_py import Color
 
-    # Constructor
-    red = Color(1.0, 0.0, 0.0, 1.0, "red")
+    cdefault = Color()
+    clamped = Color(-1.0, 2.0, 0.5, 3.0)
+    c = Color(1.0, 0.0, 0.0, 1.0, "red")
+    fresh = not c.has_guid()
 
-    # Setters
-    red[0] = 1.0
-    red[1] = 0.0
-    red[2] = 0.0
-    red[3] = 1.0
+    c[0] = 1.0
+    c[1] = 0.0
+    c[2] = 0.0
+    c[3] = 1.0
 
-    # Getters
-    r = red[0]
-    g = red[1]
-    b = red[2]
-    a = red[3]
+    r = c[0]
+    g = c[1]
+    b = c[2]
+    a = c[3]
 
-    # Minimal and Full String Representation
-    cstr = str(red)
-    crepr = repr(red)
+    cstr = str(c)
+    crepr = repr(c)
 
-    # Copy (duplicates everything except guid)
-    ccopy = red.duplicate()
+    ccopy = c.duplicate()
     cother = Color(1.0, 0.0, 0.0, 1.0, "red")
 
-    MINI_CHECK(red.name == "red")
-    MINI_CHECK(red.guid != "")
-    MINI_CHECK(red[0] == 1.0)
-    MINI_CHECK(red[1] == 0.0)
-    MINI_CHECK(red[2] == 0.0)
-    MINI_CHECK(red[3] == 1.0)
-    MINI_CHECK(red.guid)
-
+    MINI_CHECK(cdefault == Color())
+    MINI_CHECK(clamped == Color(0.0, 1.0, 0.5, 1.0))
+    MINI_CHECK(fresh)
+    MINI_CHECK(c.name == "red")
+    MINI_CHECK(c.guid != "")
+    MINI_CHECK(c[0] == 1.0 and c[1] == 0.0 and c[2] == 0.0 and c[3] == 1.0)
     MINI_CHECK(r == 1.0 and g == 0.0 and b == 0.0 and a == 1.0)
     MINI_CHECK(cstr == "1.0, 0.0, 0.0, 1.0")
     MINI_CHECK(crepr == "Color(red, 1.0, 0.0, 0.0, 1.0)")
     MINI_CHECK(ccopy == cother)
-    MINI_CHECK(ccopy.guid != red.guid)
+    MINI_CHECK(c != Color.blue())
+    MINI_CHECK(ccopy.guid != c.guid)
 
 
 @MINI_TEST("Color", "Json Roundtrip")
 def test_color_json_roundtrip():
-    from session_py import Color
     from pathlib import Path
+    from session_py import Color
 
     c = Color(1.0, 0.5, 0.25, 1.0, "test_color")
 
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   file_json_dumps()    │ str          │ to JSON string
-    #   file_json_loads(s)   │ str          │ from JSON string
-    #   file_json_dump(path) │ file         │ write to file
-    #   file_json_load(path) │ file         │ read from file
-
-    # file_json_dump(fname) / file_json_load(fname) - file-based serialization
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_color.json"
-    c.file_json_dump(fname)
-    loaded = Color.file_json_load(fname)
+    guid = c.guid
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_color.json"
+    c.file_json_dump(filename)
+    loaded = Color.file_json_load(filename)
+    parsed = Color.file_json_loads(c.file_json_dumps())
 
     MINI_CHECK(loaded.name == "test_color")
     MINI_CHECK(loaded[0] == 1.0)
     MINI_CHECK(loaded[1] == 0.5)
     MINI_CHECK(loaded[2] == 0.25)
     MINI_CHECK(loaded[3] == 1.0)
+    MINI_CHECK(parsed == c)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(parsed.guid == guid)
 
 
 @MINI_TEST("Color", "Protobuf Roundtrip")
 def test_color_protobuf_roundtrip():
-    from session_py import Color
     from pathlib import Path
+    from session_py import Color
 
-    color = Color(1.0, 0.5, 0.25, 1.0, "test_color")
+    fresh = Color()
+    fresh_proto = fresh.to_proto()
+    c = Color(1.0, 0.5, 0.25, 1.0, "test_color")
 
-    #   pb_dumps()      │ bytes        │ to protobuf bytes
-    #   pb_loads(b)     │ bytes        │ from protobuf bytes
-    #   pb_dump(path)   │ file         │ write to file
-    #   pb_load(path)   │ file         │ read from file
+    guid = c.guid
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_color.bin"
+    c.pb_dump(filename)
+    loaded = Color.pb_load(filename)
+    parsed = Color.pb_loads(c.pb_dumps())
+    converted = Color.from_proto(c.to_proto())
 
-    path = Path(__file__).resolve().parents[2] / "serialization" / "test_color.bin"
-    color.pb_dump(path)
-    loaded = Color.pb_load(path)
-
+    MINI_CHECK(not fresh.has_guid())
+    MINI_CHECK(fresh_proto.guid == "")
     MINI_CHECK(loaded.name == "test_color")
     MINI_CHECK(loaded[0] == 1.0)
     MINI_CHECK(loaded[1] == 0.5)
     MINI_CHECK(loaded[2] == 0.25)
     MINI_CHECK(loaded[3] == 1.0)
+    MINI_CHECK(parsed == c)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(parsed.guid == guid)
+    MINI_CHECK(converted == c)
+    MINI_CHECK(converted.guid == guid)
 
 
 @MINI_TEST("Color", "Conversion")
 def test_color_conversion():
     from session_py import Color
 
-    color = Color(1.0, 0.5, 0.25, 1.0)
-    flts = color.to_unified_array()
-    ints = Color.from_unified_array(flts)
+    c = Color(1.0, 0.5, 0.25, 1.0)
+    flts = c.to_unified_array()
+    back = Color.from_unified_array(flts)
 
     MINI_CHECK(TOLERANCE.is_close(flts[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(flts[1], 0.5))
     MINI_CHECK(TOLERANCE.is_close(flts[2], 0.25))
     MINI_CHECK(TOLERANCE.is_close(flts[3], 1.0))
-    MINI_CHECK(ints == color)
+    MINI_CHECK(back == c)
+
 
 @MINI_TEST("Color", "Presets")
 def test_color_presets():
     from session_py import Color
-    
+
     white = Color.white()
     black = Color.black()
     grey = Color.grey()
@@ -135,6 +137,7 @@ def test_color_presets():
     navy = Color.navy()
     purple = Color.purple()
     silver = Color.silver()
+    palette = Color.palette()
 
     MINI_CHECK(white == Color(1.0, 1.0, 1.0, 1.0, "white"))
     MINI_CHECK(black == Color(0.0, 0.0, 0.0, 1.0, "black"))
@@ -158,6 +161,57 @@ def test_color_presets():
     MINI_CHECK(navy == Color(0.0, 0.0, 0.5, 1.0, "navy"))
     MINI_CHECK(purple == Color(0.5, 0.0, 0.5, 1.0, "purple"))
     MINI_CHECK(silver == Color(0.75, 0.75, 0.75, 1.0, "silver"))
+    MINI_CHECK(
+        palette
+        == [
+            red,
+            orange,
+            yellow,
+            lime,
+            green,
+            mint,
+            cyan,
+            azure,
+            blue,
+            violet,
+            magenta,
+            pink,
+        ]
+    )
+
+
+@MINI_TEST("Color", "Serialization Errors")
+def test_color_serialization_errors():
+    from google.protobuf.message import DecodeError
+    from session_py import Color
+
+    color = Color()
+    malformed_json = False
+    malformed_pb = False
+    json_write_failed = False
+    pb_write_failed = False
+
+    try:
+        Color.file_json_loads("{}")
+    except KeyError:
+        malformed_json = True
+    try:
+        Color.pb_loads(b"\xff")
+    except DecodeError:
+        malformed_pb = True
+    try:
+        color.file_json_dump("")
+    except OSError:
+        json_write_failed = True
+    try:
+        color.pb_dump("")
+    except OSError:
+        pb_write_failed = True
+
+    MINI_CHECK(malformed_json)
+    MINI_CHECK(malformed_pb)
+    MINI_CHECK(json_write_failed)
+    MINI_CHECK(pb_write_failed)
 
 
 if __name__ == "__main__":

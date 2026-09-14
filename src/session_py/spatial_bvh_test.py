@@ -11,7 +11,6 @@ def test_bvh_constructor():
     from session_py import Point
     from session_py import Vector
 
-    # SpatialBVH: Morton-ordered static hierarchy — O(log n) nearest-neighbour for OBBs
     boxes = [
         OBB(Point(0, 0, 0),  Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
         OBB(Point(2, 0, 0),  Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), Vector(1, 1, 1)),
@@ -71,21 +70,21 @@ def test_bvh_morton_code_spatial_locality():
 
 @MINI_TEST("SpatialBVH", "Node Creation")
 def test_bvh_node_creation():
-    from session_py import SpatialBVHNode
+    from session_py.spatial_bvh import Node
 
-    node = SpatialBVHNode()
+    node = Node()
 
-    MINI_CHECK(node.left is None)
-    MINI_CHECK(node.right is None)
+    MINI_CHECK(node.left == -1)
+    MINI_CHECK(node.right == -1)
     MINI_CHECK(node.object_id == -1)
     MINI_CHECK(not node.is_leaf())
 
 
 @MINI_TEST("SpatialBVH", "Node Leaf")
 def test_bvh_node_leaf():
-    from session_py import SpatialBVHNode
+    from session_py.spatial_bvh import Node
 
-    node = SpatialBVHNode()
+    node = Node()
 
     MINI_CHECK(not node.is_leaf())
     node.object_id = 5
@@ -100,7 +99,7 @@ def test_bvh_creation():
 
     MINI_CHECK(bool(bvh.guid))
     MINI_CHECK(bvh.name == "my_bvh")
-    MINI_CHECK(bvh.root is None)
+    MINI_CHECK(bvh.empty())
     MINI_CHECK(TOLERANCE.is_close(bvh.world_size, 100.0))
 
 
@@ -111,7 +110,7 @@ def test_bvh_build_empty():
     boxes = []
     bvh = SpatialBVH.from_boxes(boxes, 100.0)
 
-    MINI_CHECK(bvh.arena_root == -1)
+    MINI_CHECK(bvh.empty())
 
 
 @MINI_TEST("SpatialBVH", "Build Single")
@@ -125,8 +124,9 @@ def test_bvh_build_single():
     boxes = [bbox]
     bvh = SpatialBVH.from_boxes(boxes, 100.0)
 
-    MINI_CHECK(bvh.arena_root >= 0)
-    MINI_CHECK(bvh.arena_object_id[bvh.arena_root] == 0)
+    MINI_CHECK(bvh.size() == 1)
+    MINI_CHECK(bvh.nodes[0].is_leaf())
+    MINI_CHECK(bvh.nodes[0].object_id == 0)
 
 
 @MINI_TEST("SpatialBVH", "Build Multiple")
@@ -143,10 +143,10 @@ def test_bvh_build_multiple():
     ]
     bvh = SpatialBVH.from_boxes(bboxes, 100.0)
 
-    MINI_CHECK(bvh.arena_root >= 0)
-    MINI_CHECK(bvh.arena_object_id[bvh.arena_root] == -1)
-    MINI_CHECK(bvh.arena_left[bvh.arena_root] >= 0)
-    MINI_CHECK(bvh.arena_right[bvh.arena_root] >= 0)
+    MINI_CHECK(bvh.size() == 5)
+    MINI_CHECK(not bvh.nodes[0].is_leaf())
+    MINI_CHECK(bvh.nodes[0].left != -1)
+    MINI_CHECK(bvh.nodes[0].right != -1)
 
 
 @MINI_TEST("SpatialBVH", "Aabb Intersect")
@@ -184,6 +184,8 @@ def test_bvh_check_all_collisions():
     MINI_CHECK(collisions[0][0] == 0)
     MINI_CHECK(collisions[0][1] == 1)
     MINI_CHECK(len(colliding_indices) == 2)
+    MINI_CHECK(colliding_indices[0] == 0)
+    MINI_CHECK(colliding_indices[1] == 1)
     MINI_CHECK(checks > 0)
 
 
@@ -354,8 +356,10 @@ def test_bvh_fixed_100_boxes():
     MINI_CHECK(len(pairs) == 13)
     MINI_CHECK((4, 74) in pairs)
     for i, j in pairs:
-        MINI_CHECK(0 <= i < 100)
-        MINI_CHECK(0 <= j < 100)
+        MINI_CHECK(i >= 0)
+        MINI_CHECK(i < 100)
+        MINI_CHECK(j >= 0)
+        MINI_CHECK(j < 100)
         MINI_CHECK(i < j)
 
 
@@ -371,14 +375,12 @@ def test_bvh_query_aabb():
             Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
             Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
         OBB(Point(5.0, 0.0, 0.0),
-            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
-            Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
+            Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
         OBB(Point(0.0, 5.0, 0.0),
             Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
             Vector(0.0, 0.0, 1.0), Vector(1.0, 1.0, 1.0)),
     ]
     bvh = SpatialBVH.from_boxes(bboxes, 100.0)
-    # Query near origin — should hit box 0 only
     query = OBB(
         Point(0.0, 0.0, 0.0),
         Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),
@@ -389,7 +391,6 @@ def test_bvh_query_aabb():
     MINI_CHECK(0 in hits)
     MINI_CHECK(1 not in hits)
     MINI_CHECK(2 not in hits)
-    # Query covering all three boxes
     query_all = OBB(
         Point(2.5, 2.5, 0.0),
         Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0),

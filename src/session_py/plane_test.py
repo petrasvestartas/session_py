@@ -11,39 +11,31 @@ def test_plane_constructor():
     from session_py import Point
     from session_py import Vector
 
-    # Default constructor - XY plane at origin
     pl = Plane()
 
-    # Origin and axes
     origin = pl.origin
     x_axis = pl.x_axis
     y_axis = pl.y_axis
     z_axis = pl.z_axis
 
-    # Plane equation coefficients (ax + by + cz + d = 0)
     a = pl.a
     b = pl.b
     c = pl.c
     d = pl.d
 
-    # Index access for axes
     ax0 = pl[0]
     ax1 = pl[1]
     ax2 = pl[2]
 
-    # Minimal and Full String Representation
     plstr = str(pl)
     plrepr = repr(pl)
 
-    # Copy (duplicates everything except guid)
     plcopy = pl.duplicate()
 
-    # From point and normal
     p = Point(0.0, 0.0, 5.0)
     n = Vector(0.0, 0.0, 1.0)
     pl_pn = Plane.from_point_normal(p, n)
 
-    # From three points
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -51,17 +43,14 @@ def test_plane_constructor():
     ]
     pl_pts = Plane.from_points(pts)
 
-    # From two points
     p1 = Point(0.0, 0.0, 0.0)
     p2 = Point(1.0, 0.0, 0.0)
     pl_2pts = Plane.from_two_points(p1, p2)
 
-    # Standard planes
     xy = Plane.xy_plane()
     yz = Plane.yz_plane()
     xz = Plane.xz_plane()
 
-    # Translation operators
     offset = Vector(1.0, 2.0, 3.0)
     pl_iadd = Plane.xy_plane()
     pl_iadd += offset
@@ -77,7 +66,7 @@ def test_plane_constructor():
     MINI_CHECK(TOLERANCE.is_close(a, 0.0) and TOLERANCE.is_close(b, 0.0) and TOLERANCE.is_close(c, 1.0) and TOLERANCE.is_close(d, 0.0))
     MINI_CHECK(TOLERANCE.is_close(ax0[0], 1.0) and TOLERANCE.is_close(ax1[1], 1.0) and TOLERANCE.is_close(ax2[2], 1.0))
     MINI_CHECK(plstr == "0.000000, 0.000000, 0.000000\n1.000000, 0.000000, 0.000000\n0.000000, 1.000000, 0.000000\n0.000000, 0.000000, 1.000000")
-    MINI_CHECK(plrepr == "Plane(my_plane, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, Color(blue, 0.0, 0.0, 1.0, 1.0))")
+    MINI_CHECK(plrepr == "Plane(my_plane, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, Color(blue, 0.0, 0.0, 1.0, 1.0))")
     MINI_CHECK(plcopy == pl and plcopy.guid != pl.guid)
     MINI_CHECK(TOLERANCE.is_close(pl_pn.origin[2], 5.0) and TOLERANCE.is_close(pl_pn.z_axis[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pl_pts.c, 1.0))
@@ -240,13 +229,6 @@ def test_plane_json_roundtrip():
     pl = Plane.xy_plane()
     pl.name = "test_plane"
 
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   file_json_dumps()    │ str          │ to JSON string
-    #   file_json_loads(s)   │ str          │ from JSON string
-    #   file_json_dump(path) │ file         │ write to file
-    #   file_json_load(path) │ file         │ read from file
-
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.json"
     pl.file_json_dump(fname)
     loaded = Plane.file_json_load(fname)
@@ -275,9 +257,11 @@ def test_plane_protobuf_roundtrip():
 def test_plane_has_on_negative_side():
     from session_py import Plane
     from session_py import Point
+
     pl = Plane.xy_plane()
     above = Point(0.0, 0.0, 1.0)
     below = Point(0.0, 0.0, -1.0)
+
     MINI_CHECK(pl.has_on_negative_side(below))
     MINI_CHECK(not pl.has_on_negative_side(above))
 

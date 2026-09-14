@@ -8,27 +8,29 @@ from pathlib import Path
 
 @MINI_TEST("Io", "Read Bunny")
 def test_read_bunny():
-    # load Stanford Bunny (real-world XYZ point cloud: 397 points)
+    from session_py import read_xyz
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.xyz"
     if not bunny_path.exists():
         return
-    from session_py import read_xyz
     cloud = read_xyz(str(bunny_path))
 
     MINI_CHECK(cloud.point_count() == 397)
     points = cloud.get_points()
     MINI_CHECK(len(points) == 397)
-    has_non_zero = any(p[0] != 0.0 or p[1] != 0.0 or p[2] != 0.0 for p in points)
+    has_non_zero = False
+    for p in points:
+        if p[0] != 0.0 or p[1] != 0.0 or p[2] != 0.0:
+            has_non_zero = True
     MINI_CHECK(has_non_zero)
 
 
 @MINI_TEST("Io", "Write Read Roundtrip")
 def test_write_read_roundtrip():
-    # build a small cloud (4 points), write to XYZ, read back, compare counts
     from session_py import Point
     from session_py import PointCloud
     from session_py import read_xyz
     from session_py import write_xyz
+    os.makedirs(Path(__file__).resolve().parents[2] / "serialization", exist_ok=True)
     original = PointCloud()
     original.add_point(Point(0.0, 0.0, 0.0))
     original.add_point(Point(1.0, 0.0, 0.0))

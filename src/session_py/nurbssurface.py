@@ -1,34 +1,53 @@
 from __future__ import annotations
-from typing import List
-from typing import Tuple
-from typing import Optional
 from typing import TYPE_CHECKING
 from typing import Union
-import numpy as np
-import math
+import copy
+import json
 import uuid
-
-if TYPE_CHECKING:
-    from .proto import nurbssurface_pb2
-    from .brep import BRep
-    from .line import Line
-    from pathlib import Path
-    from .mesh import Mesh
-    from .nurbssurface_trimmed import NurbsSurfaceTrimmed
-
-from .point import Point
-from .vector import Vector
-from .plane import Plane
-from .tolerance import Tolerance
-from .tolerance import PI
-from .obb import OBB
-from .xform import Xform
+import numpy as np
 from .color import Color
+from .mesh import Mesh
 from .nurbscurve import NurbsCurve
+from .plane import Plane
+from .point import Point
+from .tolerance import Tolerance
+from .vector import Vector
+from .xform import Xform
 from . import nurbsknot
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .brep import BRep
+    from .line import Line
+    from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+    from .proto import nurbssurface_pb2
 
-def _surface_aabb(srf, n=6):
+
+# ═══════════════════════════════════════════════════════════════════════════
+# File helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _expand_nurbsknots(knots: list[float], mults: list[int]) -> list[float]:
+    """Repeat each distinct knot by its multiplicity"""
+    full = []
+    for i in range(len(knots)):
+        for m in range(mults[i]):
+            full.append(float(knots[i]))
+    return full
+
+
+def _binomial(n: int, k: int) -> float:
+    """C(n, k)"""
+    r = 1.0
+    for i in range(k):
+        r = r * (n - i) / (i + 1)
+    return r
+
+
+def _surface_aabb(srf: "NurbsSurface") -> tuple[list[float], list[float]]:
+    """Bounding box of a 7 x 7 sample of the surface"""
+    n = 6
     u0, u1 = srf.domain(0)
     v0, v1 = srf.domain(1)
     lo = [1e30, 1e30, 1e30]
@@ -37,12 +56,15 @@ def _surface_aabb(srf, n=6):
         for j in range(n + 1):
             p = srf.point_at(u0 + (u1 - u0) * i / n, v0 + (v1 - v0) * j / n)
             for k in range(3):
-                if p[k] < lo[k]: lo[k] = p[k]
-                if p[k] > hi[k]: hi[k] = p[k]
+                lo[k] = min(lo[k], p[k])
+                hi[k] = max(hi[k], p[k])
     return lo, hi
 
 
-def _aabb_overlap_pad(a, b):
+def _aabb_overlap_pad(
+    a: tuple[list[float], list[float]], b: tuple[list[float], list[float]]
+) -> bool:
+    """Boxes overlap once a is padded by a thousandth of its longest side"""
     m = max(a[1][0] - a[0][0], a[1][1] - a[0][1], a[1][2] - a[0][2]) * 1e-3
     for k in range(3):
         if a[0][k] - m > b[1][k] or b[0][k] - m > a[1][k]:
@@ -50,79 +72,76 @@ def _aabb_overlap_pad(a, b):
     return True
 
 
+def _colors_to_json(colors: list[Color]) -> list[float]:
+    arr = []
+    for c in colors:
+        arr.extend([c.r, c.g, c.b, c.a])
+    return arr
+
+
+def _colors_from_json(data: dict, key: str) -> list[Color]:
+    colors = []
+    arr = data.get(key, [])
+    for i in range(0, len(arr) - 3, 4):
+        colors.append(Color(arr[i], arr[i + 1], arr[i + 2], arr[i + 3]))
+    return colors
+
+
+def _colors_to_proto(colors: list[Color], field) -> None:
+    for c in colors:
+        cp = field.add()
+        cp.r = c.r
+        cp.g = c.g
+        cp.b = c.b
+        cp.a = c.a
+
+
+def _colors_from_proto(field) -> list[Color]:
+    colors = []
+    for c in field:
+        colors.append(Color(c.r, c.g, c.b, c.a))
+    return colors
+
+
 class NurbsSurface:
-    """A Non-Uniform Rational B-Spline (NURBS) surface.
-    
-    A NURBS surface is defined by:
-    - 2D array of control points (CVs)
-    - Two nurbsknot vectors (one for each parameter direction)
-    - Degrees in both directions (order = degree + 1)
-    - Optional weights for rational surfaces
-    
-    Based on OpenNURBS implementation, adapted for session_py data types.
-    
-    Parameters
-    ----------
-    dimension : int, optional
-        The dimension of the surface (typically 3 for 3D). Defaults to 3.
-    is_rational : bool, optional
-        Whether the surface is rational (has weights). Defaults to False.
-    order0 : int, optional
-        The order in u direction (degree + 1). Defaults to 4 (cubic).
-    order1 : int, optional
-        The order in v direction (degree + 1). Defaults to 4 (cubic).
-    cv_count0 : int, optional
-        Number of control vertices in u direction. Defaults to 0.
-    cv_count1 : int, optional
-        Number of control vertices in v direction. Defaults to 0.
-    """
-    
-    def __init__(self, dimension: int = 3, is_rational: bool = False,
-                 order0: int = 4, order1: int = 4,
-                 cv_count0: int = 0, cv_count1: int = 0,
-                 is_periodic_u: bool = False, is_periodic_v: bool = False,
-                 nurbsknot_delta_u: float = 1.0, nurbsknot_delta_v: float = 1.0):
-        """Initialize a NURBS surface."""
+    """A NURBS surface: OpenNURBS layout, nurbsknot count = order + cv_count - 2 per direction, homogeneous row-major CVs when rational"""
+
+    def __init__(
+        self,
+        dimension: int = 0,
+        is_rational: bool = False,
+        order0: int = 0,
+        order1: int = 0,
+        cv_count0: int = 0,
+        cv_count1: int = 0,
+    ):
         self._guid = None
         self.name = "my_nurbssurface"
         self.width = 1.0
-        self.pointcolors = []
-        self.facecolors = []
-        self.linecolors = []
+        self.pointcolors: list[Color] = []
+        self.facecolors: list[Color] = []
+        self.linecolors: list[Color] = []
+        self.m_mesh: Mesh | None = None
+        self.initialize()
+        self.create_raw(dimension, is_rational, order0, order1, cv_count0, cv_count1)
 
-        # Core NURBS data
-        self.m_dim = 0
-        self.m_is_rat = 0
-        self.m_order = [0, 0]
-        self.m_cv_count = [0, 0]
-        self.m_cv_stride = [0, 0]
+    def __deepcopy__(self, memo):
+        """Copy (new guid, same data)"""
+        result = NurbsSurface()
+        result._deep_copy_from(self)
+        memo[id(self)] = result
+        return result
 
-        # Data arrays
-        self.m_nurbsknot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
-        self.m_cv = np.array([], dtype=np.float64)
-        self.m_mesh = None
+    def duplicate(self) -> "NurbsSurface":
+        """Copy (new guid, same data)"""
+        return copy.deepcopy(self)
 
-        # Create if parameters provided
-        if cv_count0 > 0 and cv_count1 > 0:
-            self._create_impl(dimension, is_rational, order0, order1, cv_count0, cv_count1)
-
-            # Initialize nurbsknot vectors
-            if is_periodic_u:
-                self.make_periodic_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
-            else:
-                self.make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
-
-            if is_periodic_v:
-                self.make_periodic_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
-            else:
-                self.make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
-    
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
 
@@ -131,869 +150,467 @@ class NurbsSurface:
         self._guid = value
 
     def refresh_guid(self) -> None:
-        """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
+        """Clear the guid so a fresh one mints lazily on next read"""
         self._guid = None
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # INITIALIZATION & CREATION
+    # Static constructors
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def create(
+        periodic_u: bool,
+        periodic_v: bool,
+        degree_u: int,
+        degree_v: int,
+        cv_count_u: int,
+        cv_count_v: int,
+        points: list[Point],
+    ) -> "NurbsSurface":
+        """Clamped or periodic uniform surface through cv_count_u x cv_count_v points in row-major order (u slowest)"""
+        if degree_u < 1 or degree_v < 1:
+            raise ValueError(
+                f"NurbsSurface::create: degree must be >= 1, got degree_u={degree_u}, degree_v={degree_v}"
+            )
+        if cv_count_u < degree_u + 1:
+            raise ValueError(
+                f"NurbsSurface::create: cv_count_u ({cv_count_u}) must be >= degree_u+1 ({degree_u + 1})"
+            )
+        if cv_count_v < degree_v + 1:
+            raise ValueError(
+                f"NurbsSurface::create: cv_count_v ({cv_count_v}) must be >= degree_v+1 ({degree_v + 1})"
+            )
+        expected = cv_count_u * cv_count_v
+        if len(points) != expected:
+            raise ValueError(
+                f"NurbsSurface::create: expected {expected} points ({cv_count_u}x{cv_count_v}), got {len(points)}"
+            )
+        surface = NurbsSurface()
+        surface.create_raw(
+            3,
+            False,
+            degree_u + 1,
+            degree_v + 1,
+            cv_count_u,
+            cv_count_v,
+            periodic_u,
+            periodic_v,
+            1.0,
+            1.0,
+        )
+        for i in range(cv_count_u):
+            for j in range(cv_count_v):
+                surface.set_cv(i, j, points[i * cv_count_v + j])
+        return surface
+
+    @staticmethod
+    def create_from_parameters(
+        points: list[list[Point]],
+        weights: list[list[float]],
+        knots_u: list[float],
+        knots_v: list[float],
+        mults_u: list[int],
+        mults_v: list[int],
+        degree_u: int,
+        degree_v: int,
+        periodic_u: bool = False,
+        periodic_v: bool = False,
+    ) -> "NurbsSurface":
+        """OCCT convention: points[iv][iu], weights[iv][iu], distinct knots with multiplicities per direction"""
+        nv = len(points)
+        nu = len(points[0]) if nv > 0 else 0
+        order_u = degree_u + 1
+        order_v = degree_v + 1
+        if nu < order_u or nv < order_v or periodic_u or periodic_v:
+            return NurbsSurface()
+        if len(knots_u) != len(mults_u) or len(knots_v) != len(mults_v):
+            return NurbsSurface()
+        rational = False
+        for row in weights:
+            for w in row:
+                if abs(w - 1.0) > Tolerance.ZERO_TOLERANCE:
+                    rational = True
+        full_u = _expand_nurbsknots(knots_u, mults_u)
+        full_v = _expand_nurbsknots(knots_v, mults_v)
+        kc_u = order_u + nu - 2
+        kc_v = order_v + nv - 2
+        if len(full_u) != kc_u + 2 or len(full_v) != kc_v + 2:
+            return NurbsSurface()
+        surface = NurbsSurface()
+        if not surface.create_raw(3, rational, order_u, order_v, nu, nv):
+            return NurbsSurface()
+        for i in range(kc_u):
+            surface.set_nurbsknot(0, i, full_u[i + 1])
+        for i in range(kc_v):
+            surface.set_nurbsknot(1, i, full_v[i + 1])
+        for i in range(nu):
+            for j in range(nv):
+                p = points[j][i]
+                if rational:
+                    w = weights[j][i]
+                    surface.set_cv_4d(i, j, p[0] * w, p[1] * w, p[2] * w, w)
+                else:
+                    surface.set_cv(i, j, p)
+        return surface
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Operators
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __eq__(self, other) -> bool:
+        """Same name, width, colors, layout, nurbsknots and CVs; guid ignored"""
+        if not isinstance(other, NurbsSurface):
+            return False
+        if self.name != other.name or self.width != other.width:
+            return False
+        if (
+            self.pointcolors != other.pointcolors
+            or self.facecolors != other.facecolors
+            or self.linecolors != other.linecolors
+        ):
+            return False
+        if self.m_dim != other.m_dim or self.m_is_rat != other.m_is_rat:
+            return False
+        if (
+            self.m_order != other.m_order
+            or self.m_cv_count != other.m_cv_count
+            or self.m_cv_stride != other.m_cv_stride
+        ):
+            return False
+        if not np.array_equal(
+            self.m_nurbsknot[0], other.m_nurbsknot[0]
+        ) or not np.array_equal(self.m_nurbsknot[1], other.m_nurbsknot[1]):
+            return False
+        return np.array_equal(self.m_cv, other.m_cv)
+
+    def __ne__(self, other) -> bool:
+        return not self.__eq__(other)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Initialization
     # ═══════════════════════════════════════════════════════════════════════════
 
     def initialize(self) -> None:
-        """Initialize all fields to zero/empty."""
+        """Reset every field to the empty invalid surface"""
         self._guid = None
         self.name = "my_nurbssurface"
         self.width = 1.0
         self.pointcolors = []
         self.facecolors = []
         self.linecolors = []
-
         self.m_dim = 0
         self.m_is_rat = 0
         self.m_order = [0, 0]
         self.m_cv_count = [0, 0]
         self.m_cv_stride = [0, 0]
+        self.m_nurbsknot = [
+            np.zeros(0, dtype=np.float64),
+            np.zeros(0, dtype=np.float64),
+        ]
+        self.m_cv = np.zeros(0, dtype=np.float64)
 
-        self.m_nurbsknot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
-        self.m_cv = np.array([], dtype=np.float64)
-    
-    @staticmethod
-    def create_raw(dimension: int, is_rational: bool,
-               order0: int, order1: int,
-               cv_count0: int, cv_count1: int,
-               is_periodic_u: bool = False, is_periodic_v: bool = False,
-               nurbsknot_delta_u: float = 1.0, nurbsknot_delta_v: float = 1.0) -> 'NurbsSurface':
-        """Create NURBS surface with specified parameters (static factory method).
-
-        Parameters
-        ----------
-        dimension : int
-            Dimension of the surface (typically 3).
-        is_rational : bool
-            Whether the surface should be rational.
-        order0 : int
-            Order in u direction (degree + 1).
-        order1 : int
-            Order in v direction (degree + 1).
-        cv_count0 : int
-            Number of control vertices in u direction.
-        cv_count1 : int
-            Number of control vertices in v direction.
-        is_periodic_u : bool, optional
-            If True, creates periodic uniform nurbsknot vector in u direction. Defaults to False.
-        is_periodic_v : bool, optional
-            If True, creates periodic uniform nurbsknot vector in v direction. Defaults to False.
-        nurbsknot_delta_u : float, optional
-            NurbsKnot spacing in u direction. Defaults to 1.0.
-        nurbsknot_delta_v : float, optional
-            NurbsKnot spacing in v direction. Defaults to 1.0.
-
-        Returns
-        -------
-        NurbsSurface or None
-            The created surface, or None if parameters are invalid.
-        """
-        surf = NurbsSurface()
-        if surf._create_impl(dimension, is_rational, order0, order1, cv_count0, cv_count1):
-            # Initialize nurbsknot vectors
-            if is_periodic_u:
-                surf.make_periodic_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
-            else:
-                surf.make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
-
-            if is_periodic_v:
-                surf.make_periodic_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
-            else:
-                surf.make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
-
-            return surf
-        return None
-
-    @staticmethod
-    def create(periodic_u: bool, periodic_v: bool,
-               degree_u: int, degree_v: int,
-               cv_count_u: int, cv_count_v: int,
-               points: list['Point']) -> 'NurbsSurface':
-        if degree_u < 1 or degree_v < 1:
-            raise ValueError(f"NurbsSurface.create: degree must be >= 1, got degree_u={degree_u}, degree_v={degree_v}")
-        if cv_count_u < degree_u + 1:
-            raise ValueError(f"NurbsSurface.create: cv_count_u ({cv_count_u}) must be >= degree_u+1 ({degree_u + 1})")
-        if cv_count_v < degree_v + 1:
-            raise ValueError(f"NurbsSurface.create: cv_count_v ({cv_count_v}) must be >= degree_v+1 ({degree_v + 1})")
-        expected = cv_count_u * cv_count_v
-        if len(points) != expected:
-            raise ValueError(f"NurbsSurface.create: expected {expected} points ({cv_count_u}x{cv_count_v}), got {len(points)}")
-        order0 = degree_u + 1
-        order1 = degree_v + 1
-        surf = NurbsSurface.create_raw(3, False, order0, order1, cv_count_u, cv_count_v,
-                                       periodic_u, periodic_v, 1.0, 1.0)
-        if surf is None:
-            return NurbsSurface()
-        for i in range(cv_count_u):
-            for j in range(cv_count_v):
-                surf.set_cv(i, j, points[i * cv_count_v + j])
-        return surf
-
-    @staticmethod
-    def create_from_parameters(points: list[Point], weights: list[float], knots_u: list[float], knots_v: list[float], mults_u: list[int], mults_v: list[int],
-                               degree_u: int, degree_v: int, periodic_u: bool = False, periodic_v: bool = False) -> "NurbsSurface":
-        """Create a NURBS surface from explicit parameters (OCCT / compas_occt convention:
-        distinct knots + per-knot multiplicities, per direction). Mirrors
-        OCCNurbsSurface.from_parameters and underlies from_points / from_meshgrid.
-
-        `points` and `weights` follow the compas grid convention: a list of v-rows, each
-        with u columns, i.e. points[iv][iu]. The internal (OpenNURBS) knot vectors are the
-        expanded full knot vectors with first and last entries dropped; the domains become
-        [knots_u[0], knots_u[-1]] x [knots_v[0], knots_v[-1]].
-        """
-        nv = len(points)
-        nu = len(points[0]) if nv else 0
-        order_u = degree_u + 1
-        order_v = degree_v + 1
-        if nu < order_u or nv < order_v:
-            return NurbsSurface()
-        if periodic_u or periodic_v:
-            return NurbsSurface()  # periodic from_parameters not yet supported
-        if len(knots_u) != len(mults_u) or len(knots_v) != len(mults_v):
-            return NurbsSurface()
-
-        rational = any(abs(w - 1.0) > Tolerance.ZERO_TOLERANCE for row in weights for w in row)
-
-        def expand(knots, mults):
-            full = []
-            for v, m in zip(knots, mults):
-                full.extend([float(v)] * int(m))
-            return full
-
-        full_u = expand(knots_u, mults_u)   # len nu + order_u
-        full_v = expand(knots_v, mults_v)   # len nv + order_v
-        kc_u = order_u + nu - 2
-        kc_v = order_v + nv - 2
-        if len(full_u) != kc_u + 2 or len(full_v) != kc_v + 2:
-            return NurbsSurface()
-
-        surf = NurbsSurface.create_raw(3, rational, order_u, order_v, nu, nv)
-        if surf is None:
-            return NurbsSurface()
-        surf.m_nurbsknot[0] = np.array(full_u[1:kc_u + 1], dtype=np.float64)
-        surf.m_nurbsknot[1] = np.array(full_v[1:kc_v + 1], dtype=np.float64)
-
-        # i in u (0..nu-1), j in v (0..nv-1); compas grid is points[v][u].
-        for i in range(nu):
-            for j in range(nv):
-                p = points[j][i]
-                if rational:
-                    w = weights[j][i]
-                    surf.set_cv_4d(i, j, p[0] * w, p[1] * w, p[2] * w, w)
-                else:
-                    surf.set_cv(i, j, Point(p[0], p[1], p[2]))
-        return surf
-
-    def _create_impl(self, dimension: int, is_rational: bool,
-               order0: int, order1: int,
-               cv_count0: int, cv_count1: int) -> bool:
-        """Create NURBS surface with specified parameters.
-        
-        Parameters
-        ----------
-        dimension : int
-            Dimension of the surface (typically 3).
-        is_rational : bool
-            Whether the surface should be rational.
-        order0 : int
-            Order in u direction (degree + 1).
-        order1 : int
-            Order in v direction (degree + 1).
-        cv_count0 : int
-            Number of control vertices in u direction.
-        cv_count1 : int
-            Number of control vertices in v direction.
-        
-        Returns
-        -------
-        bool
-            True if creation successful, False otherwise.
-        """
-        if dimension < 1 or order0 < 2 or order1 < 2:
+    def create_raw(
+        self,
+        dimension: int,
+        is_rational: bool,
+        order0: int,
+        order1: int,
+        cv_count0: int,
+        cv_count1: int,
+        is_periodic_u: bool = False,
+        is_periodic_v: bool = False,
+        nurbsknot_delta_u: float = 1.0,
+        nurbsknot_delta_v: float = 1.0,
+    ) -> bool:
+        """Allocate nurbsknots (clamped or periodic uniform) and zeroed CVs; False when order < 2 or cv_count < order"""
+        if (
+            dimension < 1
+            or order0 < 2
+            or order1 < 2
+            or cv_count0 < order0
+            or cv_count1 < order1
+        ):
             return False
-        if cv_count0 < order0 or cv_count1 < order1:
-            return False
-        
         self.destroy()
-        
         self.m_dim = dimension
         self.m_is_rat = 1 if is_rational else 0
         self.m_order = [order0, order1]
         self.m_cv_count = [cv_count0, cv_count1]
-        
-        # OpenNURBS stride pattern: [1] is CV size, [0] is row stride
-        cv_size_val = (dimension + 1) if is_rational else dimension
-        self.m_cv_stride[1] = cv_size_val
-        self.m_cv_stride[0] = cv_size_val * cv_count1
-        
-        # Allocate nurbsknot vectors
-        # OpenNURBS formula: nurbsknot_count = order + cv_count - 2
-        nurbsknot_count0 = order0 + cv_count0 - 2
-        nurbsknot_count1 = order1 + cv_count1 - 2
-        
-        self.m_nurbsknot[0] = np.zeros(nurbsknot_count0, dtype=np.float64)
-        self.m_nurbsknot[1] = np.zeros(nurbsknot_count1, dtype=np.float64)
-
-        # Allocate CV array
-        total_cvs = cv_count0 * cv_count1
-        cv_array_size = total_cvs * cv_size_val
-        self.m_cv = np.zeros(cv_array_size, dtype=np.float64)
-
-        # Initialize weights to 1 if rational
-        if is_rational:
-            for i in range(cv_count0):
-                for j in range(cv_count1):
-                    self.set_weight(i, j, 1.0)
-        
+        self.m_cv_stride = [self.cv_size() * cv_count1, self.cv_size()]
+        self.m_nurbsknot = [
+            np.zeros(order0 + cv_count0 - 2, dtype=np.float64),
+            np.zeros(order1 + cv_count1 - 2, dtype=np.float64),
+        ]
+        self.m_cv = np.zeros(cv_count0 * cv_count1 * self.cv_size(), dtype=np.float64)
+        self._zero_cvs()
+        if is_periodic_u:
+            self._make_periodic_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
+        else:
+            self._make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
+        if is_periodic_v:
+            self._make_periodic_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
+        else:
+            self._make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
         return True
-    
+
+    def create_clamped_uniform(
+        self,
+        dimension: int,
+        order0: int,
+        order1: int,
+        cv_count0: int,
+        cv_count1: int,
+        nurbsknot_delta0: float = 1.0,
+        nurbsknot_delta1: float = 1.0,
+    ) -> bool:
+        """Non-rational surface with clamped uniform nurbsknots of the given spacing"""
+        return self.create_raw(
+            dimension,
+            False,
+            order0,
+            order1,
+            cv_count0,
+            cv_count1,
+            False,
+            False,
+            nurbsknot_delta0,
+            nurbsknot_delta1,
+        )
+
     def destroy(self) -> None:
-        """Deallocate all memory and reset to empty state."""
-        self.m_nurbsknot = [np.array([], dtype=np.float64), np.array([], dtype=np.float64)]
-        self.m_cv = np.array([], dtype=np.float64)
+        """Clear all data; is_valid() is False afterwards"""
         self.initialize()
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # BOOLEAN QUERIES
+    # Boolean queries
     # ═══════════════════════════════════════════════════════════════════════════
 
     def is_valid(self) -> bool:
-        """Check if NURBS surface is valid.
-
-        Returns
-        -------
-        bool
-            True if surface is valid, False otherwise.
-        """
-        if self.m_dim < 1:
+        """Orders >= 2, cv_count >= order, nurbsknot vectors of the right length and non-decreasing, CV array large enough"""
+        if self.m_dim < 1 or self.m_order[0] < 2 or self.m_order[1] < 2:
             return False
-
-        # Check both directions
-        for dir in range(2):
-            if self.m_order[dir] < 2:
-                return False
-            if self.m_cv_count[dir] < self.m_order[dir]:
-                return False
-
-            # OpenNURBS formula: nurbsknot_count = order + cv_count - 2
-            nurbsknot_count = self.m_order[dir] + self.m_cv_count[dir] - 2
-            if len(self.m_nurbsknot[dir]) != nurbsknot_count:
-                return False
-
-            if not self.is_valid_nurbsknot_vector(dir):
-                return False
-
-            # Check stride is valid (OpenNURBS check)
-            cv_size_val = (self.m_dim + 1) if self.m_is_rat else self.m_dim
-            if self.m_cv_stride[dir] < cv_size_val:
-                return False
-
-        # Check CV array size
-        cv_size_val = (self.m_dim + 1) if self.m_is_rat else self.m_dim
-        expected_cv_size = self.m_cv_count[0] * self.m_cv_count[1] * cv_size_val
-        if len(self.m_cv) < expected_cv_size:
+        if self.m_cv_count[0] < self.m_order[0] or self.m_cv_count[1] < self.m_order[1]:
             return False
-
-        return True
-
-    def is_rational(self) -> bool:
-        """Check if surface is rational."""
-        return self.m_is_rat != 0
-
-    def is_closed(self, dir: int) -> bool:
-        """Check if surface is closed in specified direction.
-
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-
-        Returns
-        -------
-        bool
-            True if closed, False otherwise.
-        """
-        if dir < 0 or dir >= 2 or not self.is_valid():
+        if not self.is_valid_nurbsknot_vector(0) or not self.is_valid_nurbsknot_vector(
+            1
+        ):
             return False
-
-        # Check if first and last rows/columns are coincident
-        if dir == 0:
-            # Check u direction - compare first and last u CVs
-            for j in range(self.m_cv_count[1]):
-                pt0 = self.get_cv(0, j)
-                pt1 = self.get_cv(self.m_cv_count[0] - 1, j)
-                if pt0.distance(pt1) > 1e-12:
-                    return False
-        else:
-            # Check v direction - compare first and last v CVs
-            for i in range(self.m_cv_count[0]):
-                pt0 = self.get_cv(i, 0)
-                pt1 = self.get_cv(i, self.m_cv_count[1] - 1)
-                if pt0.distance(pt1) > 1e-12:
-                    return False
-
-        return True
-
-    def is_periodic(self, dir: int) -> bool:
-        """Check if surface is periodic in specified direction.
-
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-
-        Returns
-        -------
-        bool
-            True if periodic, False otherwise.
-        """
-        if dir < 0 or dir >= 2 or not self.is_valid():
-            return False
-
-        # Check nurbsknot vector periodicity
-        degree = self.degree(dir)
-        kc = self.nurbsknot_count(dir)
-
-        if kc != self.m_order[dir] + self.m_cv_count[dir] - 2:
-            return False
-
-        # Check uniform spacing
-        delta = self.m_nurbsknot[dir][self.m_cv_count[dir] - 1] - self.m_nurbsknot[dir][degree]
-        if delta <= 0:
-            return False
-
-        for i in range(self.m_cv_count[dir] - 1):
-            expected = self.m_nurbsknot[dir][i + degree] + delta
-            if abs(self.m_nurbsknot[dir][i + self.m_order[dir] - 1] - expected) > 1e-10:
-                return False
-
-        # Check CV periodicity
-        i0 = self.m_order[dir] - 2
-        i1 = self.m_cv_count[dir] - 1
-
-        for k in range(self.m_cv_count[1 - dir]):
-            for check_i in range(i0 + 1):
-                if dir == 0:
-                    pt0 = self.get_cv(check_i, k)
-                    pt1 = self.get_cv(i1 - (i0 - check_i), k)
-                else:
-                    pt0 = self.get_cv(k, check_i)
-                    pt1 = self.get_cv(k, i1 - (i0 - check_i))
-
-                if pt0.distance(pt1) > 1e-12:
-                    return False
-
-        return True
-
-    def is_planar(self, plane: Plane | None = None, tolerance: float = Tolerance.ZERO_TOLERANCE) -> bool:
-        """Check if surface is planar within tolerance.
-
-        Parameters
-        ----------
-        plane : Plane, optional
-            If provided, will be set to the best-fit plane.
-        tolerance : float, optional
-            Tolerance for planarity check.
-
-        Returns
-        -------
-        bool
-            True if surface is planar, False otherwise.
-        """
-        if self.m_cv_count[0] < 2 or self.m_cv_count[1] < 2:
-            return False
-
-        p0 = self.get_cv(0, 0)
-        normal = Vector(0, 0, 0)
-        n_len = 0.0
-        found = False
-        for i in range(self.m_cv_count[0]):
-            if found:
-                break
-            for j in range(self.m_cv_count[1]):
-                if found:
-                    break
-                for ii in range(i, self.m_cv_count[0]):
-                    if found:
-                        break
-                    jj_start = j + 1 if ii == i else 0
-                    for jj in range(jj_start, self.m_cv_count[1]):
-                        pa = self.get_cv(i, j)
-                        pb = self.get_cv(ii, jj)
-                        va = Vector(pa.x - p0.x, pa.y - p0.y, pa.z - p0.z)
-                        vb = Vector(pb.x - p0.x, pb.y - p0.y, pb.z - p0.z)
-                        normal = va.cross(vb)
-                        n_len = normal.magnitude()
-                        if n_len >= 1e-14:
-                            found = True
-                            break
-        if n_len < 1e-14:
-            return True
-
-        normal = normal / n_len
-        test_plane = Plane(p0, normal)
-
-        # Check all CVs against plane
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                pt = self.get_cv(i, j)
-                # Compute distance: |dot(pt - p0, normal)|
-                v = Vector(pt.x - p0.x, pt.y - p0.y, pt.z - p0.z)
-                dist = abs(v.dot(normal))
-                if dist > tolerance:
-                    return False
-
-        if plane is not None:
-            plane.origin = test_plane.origin
-            plane.normal = test_plane.normal
-
-        return True
-
-    def is_singular(self, side: int) -> bool:
-        """Check if surface side is singular (collapsed to a point).
-
-        Parameters
-        ----------
-        side : int
-            Side (0=south, 1=east, 2=north, 3=west).
-
-        Returns
-        -------
-        bool
-            True if singular, False otherwise.
-        """
-        if not self.is_valid():
-            return False
-
-        points = []
-
-        if side == 0:  # south (v=0)
-            if not self.is_clamped(1, 0):
-                return False
-            points = [self.get_cv(i, 0) for i in range(self.m_cv_count[0])]
-        elif side == 1:  # east (u=max)
-            if not self.is_clamped(0, 1):
-                return False
-            points = [self.get_cv(self.m_cv_count[0] - 1, j) for j in range(self.m_cv_count[1])]
-        elif side == 2:  # north (v=max)
-            if not self.is_clamped(1, 1):
-                return False
-            points = [self.get_cv(i, self.m_cv_count[1] - 1) for i in range(self.m_cv_count[0])]
-        elif side == 3:  # west (u=0)
-            if not self.is_clamped(0, 0):
-                return False
-            points = [self.get_cv(0, j) for j in range(self.m_cv_count[1])]
-        else:
-            return False
-
-        # Check if all points are coincident
-        if len(points) < 2:
-            return False
-
-        p0 = points[0]
-        for pt in points[1:]:
-            if p0.distance(pt) > 1e-12:
-                return False
-
-        return True
-
-    def is_clamped(self, dir: int, end: int = 2) -> bool:
-        """Check if surface is clamped in specified direction.
-
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        end : int, optional
-            Which end to check (0=start, 1=end, 2=both). Defaults to 2.
-
-        Returns
-        -------
-        bool
-            True if clamped, False otherwise.
-        """
-        if dir < 0 or dir >= 2:
-            return False
-        if len(self.m_nurbsknot[dir]) == 0:
-            return False
-
-        # Use nurbsknot module function
-        return nurbsknot.is_clamped(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], end)
-
-    def is_duplicate(self, other: "NurbsSurface", ignore_parameterization: bool = False, tolerance: float | None = None) -> bool:
-        if tolerance is None:
-            tolerance = Tolerance.ZERO_TOLERANCE
-        if not self.is_valid() or not other.is_valid():
-            return False
-        if self.m_dim != other.m_dim:
-            return False
-        if self.m_is_rat != other.m_is_rat:
-            return False
-        if self.m_order[0] != other.m_order[0] or self.m_order[1] != other.m_order[1]:
-            return False
-        if self.m_cv_count[0] != other.m_cv_count[0] or self.m_cv_count[1] != other.m_cv_count[1]:
-            return False
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                p1 = self.get_cv(i, j)
-                p2 = other.get_cv(i, j)
-                if p1.distance(p2) > tolerance:
-                    return False
-                if self.m_is_rat:
-                    if abs(self.weight(i, j) - other.weight(i, j)) > tolerance:
-                        return False
-        if not ignore_parameterization:
-            for dir in range(2):
-                for i in range(self.nurbsknot_count(dir)):
-                    if abs(self.nurbsknot(dir, i) - other.nurbsknot(dir, i)) > tolerance:
-                        return False
-        return True
+        return len(self.m_cv) >= self.cv_count() * self.cv_size()
 
     def is_valid_nurbsknot_vector(self, dir: int) -> bool:
-        """Check if nurbsknot vector is valid in specified direction.
-
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-
-        Returns
-        -------
-        bool
-            True if nurbsknot vector is valid (non-decreasing).
-        """
-        if dir < 0 or dir >= 2:
+        """Nurbsknot vector in dir has the right length and is non-decreasing"""
+        if dir < 0 or dir > 1:
             return False
         kc = self.nurbsknot_count(dir)
         if len(self.m_nurbsknot[dir]) != kc:
             return False
-
         for i in range(1, kc):
-            if self.m_nurbsknot[dir][i] < self.m_nurbsknot[dir][i-1]:
+            if self.m_nurbsknot[dir][i] < self.m_nurbsknot[dir][i - 1]:
                 return False
         return True
 
-    def __eq__(self, other) -> bool:
-        """Check equality with another NurbsSurface (compares all attributes except guid)."""
-        if not isinstance(other, NurbsSurface):
-            return False
+    def is_rational(self) -> bool:
+        return self.m_is_rat != 0
 
-        # Compare metadata (excluding guid)
-        if self.name != other.name:
+    def is_closed(self, dir: int) -> bool:
+        """First and last CV rows across dir coincide when clamped, else periodic"""
+        if dir < 0 or dir > 1 or not self.is_valid():
             return False
-        if self.width != other.width:
-            return False
-        if self.pointcolors != other.pointcolors:
-            return False
-        if self.facecolors != other.facecolors:
-            return False
-        if self.linecolors != other.linecolors:
-            return False
-
-        # Compare NURBS structure
-        if self.m_dim != other.m_dim:
-            return False
-        if self.m_is_rat != other.m_is_rat:
-            return False
-        if self.m_order != other.m_order:
-            return False
-        if self.m_cv_count != other.m_cv_count:
-            return False
-        if self.m_cv_stride != other.m_cv_stride:
-            return False
-
-        # Compare nurbsknot vectors
-        for i in range(2):
-            if not np.array_equal(self.m_nurbsknot[i], other.m_nurbsknot[i]):
+        if not self.is_clamped(dir, 2):
+            return self.is_periodic(dir)
+        last = self.m_cv_count[dir] - 1
+        for k in range(self.m_cv_count[1 - dir]):
+            a = self.get_cv(k, 0) if dir else self.get_cv(0, k)
+            b = self.get_cv(k, last) if dir else self.get_cv(last, k)
+            if a.distance(b) > Tolerance.ZERO_TOLERANCE:
                 return False
-
-        # Compare control vertices
-        if not np.array_equal(self.m_cv, other.m_cv):
-            return False
-
         return True
 
-    def __ne__(self, other) -> bool:
-        """Check inequality with another NurbsSurface."""
-        return not self.__eq__(other)
+    def is_periodic(self, dir: int) -> bool:
+        """Uniform nurbsknot spacing in dir and the first degree CV rows repeat the last"""
+        if dir < 0 or dir > 1 or not self.is_valid():
+            return False
+        if not nurbsknot.is_periodic(
+            self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir]
+        ):
+            return False
+        deg = self.degree(dir)
+        n = self.m_cv_count[dir]
+        for k in range(self.m_cv_count[1 - dir]):
+            for i in range(deg):
+                a = self.get_cv(k, i) if dir else self.get_cv(i, k)
+                b = self.get_cv(k, n - deg + i) if dir else self.get_cv(n - deg + i, k)
+                if a.distance(b) > Tolerance.ZERO_TOLERANCE:
+                    return False
+        return True
 
-    def duplicate(self) -> 'NurbsSurface':
-        """Create a deep copy of this surface with a new GUID.
+    def is_planar(
+        self, plane: Plane | None = None, tolerance: float = Tolerance.ZERO_TOLERANCE
+    ) -> bool:
+        """Every CV within tolerance of one plane, written to plane when given"""
+        if not self.is_valid():
+            return False
+        p0 = self.get_cv(0, 0)
+        va = Vector(0, 0, 0)
+        normal = Vector(0, 0, 0)
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                p = self.get_cv(i, j)
+                v = Vector(p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
+                if va.magnitude() < 1e-14:
+                    va = v
+                elif normal.magnitude() < 1e-14:
+                    normal = va.cross(v)
+        if normal.magnitude() < 1e-14:
+            return True
+        normal = normal / normal.magnitude()
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                p = self.get_cv(i, j)
+                v = Vector(p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
+                if abs(v.dot(normal)) > tolerance:
+                    return False
+        if plane is not None:
+            NurbsSurface._assign_plane(plane, Plane.from_point_normal(p0, normal))
+        return True
 
-        Returns
-        -------
-        NurbsSurface
-            A new surface that is a copy of this one with a different GUID.
-        """
-        import copy
-        import uuid
-        result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
-        return result
-    
+    def is_singular(self, side: int) -> bool:
+        """Clamped side collapsed to one point; side: 0 south (v0), 1 east (u1), 2 north (v1), 3 west (u0)"""
+        if side < 0 or side > 3 or not self.is_valid():
+            return False
+        fix = 1 if side % 2 == 0 else 0
+        end = 0 if side == 0 or side == 3 else 1
+        if not self.is_clamped(fix, end):
+            return False
+        at = self.m_cv_count[fix] - 1 if end else 0
+        first = self.get_cv(0, at) if fix else self.get_cv(at, 0)
+        for k in range(1, self.m_cv_count[1 - fix]):
+            p = self.get_cv(k, at) if fix else self.get_cv(at, k)
+            if p.distance(first) > Tolerance.ZERO_TOLERANCE:
+                return False
+        return True
+
+    def is_clamped(self, dir: int, end: int = 2) -> bool:
+        """Full end multiplicity in dir; end: 0 start, 1 end, 2 both"""
+        if dir < 0 or dir > 1:
+            return False
+        return nurbsknot.is_clamped(
+            self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], end
+        )
+
+    def is_duplicate(
+        self,
+        other: "NurbsSurface",
+        ignore_parameterization: bool,
+        tolerance: float = Tolerance.ZERO_TOLERANCE,
+    ) -> bool:
+        """Same layout, CVs and weights within tolerance; nurbsknots too unless ignore_parameterization"""
+        if not self.is_valid() or not other.is_valid():
+            return False
+        if self.m_dim != other.m_dim or self.m_is_rat != other.m_is_rat:
+            return False
+        if self.m_order != other.m_order or self.m_cv_count != other.m_cv_count:
+            return False
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                if self.get_cv(i, j).distance(other.get_cv(i, j)) > tolerance:
+                    return False
+                if abs(self.weight(i, j) - other.weight(i, j)) > tolerance:
+                    return False
+        if ignore_parameterization:
+            return True
+        for dir in range(2):
+            for i in range(self.nurbsknot_count(dir)):
+                if abs(self.nurbsknot(dir, i) - other.nurbsknot(dir, i)) > tolerance:
+                    return False
+        return True
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # ACCESSORS
+    # Attributes
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def dimension(self) -> int:
-        """Get dimension of the surface."""
         return self.m_dim
 
     def order(self, dir: int) -> int:
-        """Get order (degree + 1) in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        int
-            Order in specified direction, or 0 if invalid direction.
-        """
-        return self.m_order[dir] if 0 <= dir < 2 else 0
-    
+        return self.m_order[dir] if dir == 0 or dir == 1 else 0
+
     def degree(self, dir: int) -> int:
-        """Get degree (order - 1) in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        int
-            Degree in specified direction, or 0 if invalid direction.
-        """
-        return (self.m_order[dir] - 1) if 0 <= dir < 2 else 0
-    
+        return self.m_order[dir] - 1 if dir == 0 or dir == 1 else 0
+
     def cv_count(self, dir: int | None = None) -> int:
-        """Get number of control vertices.
-        
-        Parameters
-        ----------
-        dir : int, optional
-            Direction (0 for u, 1 for v). If None, returns total count.
-        
-        Returns
-        -------
-        int
-            Number of control vertices.
-        """
+        """CVs in dir, or cv_count(0) * cv_count(1) without a direction"""
         if dir is None:
             return self.m_cv_count[0] * self.m_cv_count[1]
-        return self.m_cv_count[dir] if 0 <= dir < 2 else 0
-    
-    def cv_count_dir(self, dir: int | None = None) -> int:
-        """Get number of control vertices (alias for cv_count).
-        
-        Parameters
-        ----------
-        dir : int, optional
-            Direction (0 for u, 1 for v). If None, returns total count.
-        
-        Returns
-        -------
-        int
-            Number of control vertices.
-        """
-        return self.cv_count(dir)
-    
+        return self.m_cv_count[dir] if dir == 0 or dir == 1 else 0
+
     def cv_size(self) -> int:
-        """Get size of each control vertex.
-        
-        Returns
-        -------
-        int
-            Dimension + 1 if rational, else dimension.
-        """
-        return (self.m_dim + 1) if self.m_is_rat else self.m_dim
-    
+        """Doubles per CV: dim + 1 when rational"""
+        return self.m_dim + 1 if self.m_is_rat else self.m_dim
+
     def nurbsknot_count(self, dir: int) -> int:
-        """Get nurbsknot count in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        int
-            Number of nurbsknots in specified direction.
-        """
-        if dir < 0 or dir >= 2:
-            return 0
-        # OpenNURBS formula: nurbsknot_count = order + cv_count - 2
-        return self.m_order[dir] + self.m_cv_count[dir] - 2
-    
+        """order + cv_count - 2"""
+        return (
+            self.m_order[dir] + self.m_cv_count[dir] - 2 if dir == 0 or dir == 1 else 0
+        )
+
     def span_count(self, dir: int) -> int:
-        """Get number of spans in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        int
-            Number of spans in specified direction.
-        """
-        if dir < 0 or dir >= 2:
-            return 0
-        return self.m_cv_count[dir] - self.m_order[dir] + 1
+        """cv_count - order + 1"""
+        return (
+            self.m_cv_count[dir] - self.m_order[dir] + 1 if dir == 0 or dir == 1 else 0
+        )
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # CONTROL VERTEX ACCESS
+    # Control vertex access
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def cv(self, i: int, j: int) -> np.ndarray | None:
-        """Get pointer to CV data at indices (i, j).
-        
-        Parameters
-        ----------
-        i : int
-            Index in u direction.
-        j : int
-            Index in v direction.
-        
-        Returns
-        -------
-        np.ndarray or None
-            View of CV data, or None if indices invalid.
-        """
+        """View of CV[i][j], cv_size() doubles (x*w, y*w, z*w, w when rational), None when out of range"""
         if i < 0 or i >= self.m_cv_count[0] or j < 0 or j >= self.m_cv_count[1]:
             return None
-        # OpenNURBS pattern: CV(i,j) = m_cv[i*m_cv_stride[0] + j*m_cv_stride[1]]
-        index = i * self.m_cv_stride[0] + j * self.m_cv_stride[1]
-        cv_size_val = self.cv_size()
-        return self.m_cv[index:index + cv_size_val]
-    
+        idx = i * self.m_cv_stride[0] + j * self.m_cv_stride[1]
+        return self.m_cv[idx : idx + self.cv_size()]
+
     def get_cv(self, i: int, j: int) -> Point:
-        """Get control point as Point.
-        
-        Parameters
-        ----------
-        i : int
-            Index in u direction.
-        j : int
-            Index in v direction.
-        
-        Returns
-        -------
-        Point
-            Control point at (i, j).
-        """
+        """Euclidean CV (divided by weight when rational), origin when out of range"""
         cv_ptr = self.cv(i, j)
         if cv_ptr is None:
             return Point(0, 0, 0)
-        
-        if self.m_is_rat:
-            w = cv_ptr[self.m_dim]
-            if abs(w) < 1e-14:
-                return Point(0, 0, 0)
-            return Point(cv_ptr[0]/w,
-                        cv_ptr[1]/w if self.m_dim > 1 else 0,
-                        cv_ptr[2]/w if self.m_dim > 2 else 0)
-        
-        return Point(cv_ptr[0],
-                    cv_ptr[1] if self.m_dim > 1 else 0,
-                    cv_ptr[2] if self.m_dim > 2 else 0)
-    
+        return self._dehomogenize(cv_ptr)
+
     def get_cv_4d(self, i: int, j: int) -> tuple[bool, float, float, float, float]:
-        """Get control point as homogeneous coordinates (x, y, z, w).
-        
-        Parameters
-        ----------
-        i : int
-            Index in u direction.
-        j : int
-            Index in v direction.
-        
-        Returns
-        -------
-        tuple
-            (success, x, y, z, w)
-        """
+        """Homogeneous CV (ok, x, y, z, w), w = 1 when non-rational"""
         cv_ptr = self.cv(i, j)
         if cv_ptr is None:
             return (False, 0.0, 0.0, 0.0, 1.0)
-        
-        x = cv_ptr[0]
-        y = cv_ptr[1] if self.m_dim > 1 else 0.0
-        z = cv_ptr[2] if self.m_dim > 2 else 0.0
-        w = cv_ptr[self.m_dim] if self.m_is_rat else 1.0
-        
+        x = float(cv_ptr[0])
+        y = float(cv_ptr[1]) if self.m_dim > 1 else 0.0
+        z = float(cv_ptr[2]) if self.m_dim > 2 else 0.0
+        w = float(cv_ptr[self.m_dim]) if self.m_is_rat else 1.0
         return (True, x, y, z, w)
-    
+
     def set_cv(self, i: int, j: int, point: Point) -> bool:
-        """Set control point from Point.
-        
-        Parameters
-        ----------
-        i : int
-            Index in u direction.
-        j : int
-            Index in v direction.
-        point : Point
-            Point to set.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
+        """Set the Euclidean CV, keeping its weight"""
         cv_ptr = self.cv(i, j)
         if cv_ptr is None:
             return False
-
-        if self.m_is_rat:
-            # For rational surfaces, store homogeneous coordinates (x*w, y*w, z*w, w)
-            w = cv_ptr[self.m_dim]  # Get current weight
-            if abs(w) < 1e-14:
-                w = 1.0
-            cv_ptr[0] = point.x * w
-            if self.m_dim > 1:
-                cv_ptr[1] = point.y * w
-            if self.m_dim > 2:
-                cv_ptr[2] = point.z * w
-        else:
-            cv_ptr[0] = point.x
-            if self.m_dim > 1:
-                cv_ptr[1] = point.y
-            if self.m_dim > 2:
-                cv_ptr[2] = point.z
-
+        w = (
+            cv_ptr[self.m_dim]
+            if self.m_is_rat and abs(cv_ptr[self.m_dim]) > 1e-14
+            else 1.0
+        )
+        cv_ptr[0] = point[0] * w
+        if self.m_dim > 1:
+            cv_ptr[1] = point[1] * w
+        if self.m_dim > 2:
+            cv_ptr[2] = point[2] * w
         return True
-    
+
     def set_cv_4d(self, i: int, j: int, x: float, y: float, z: float, w: float) -> bool:
-        """Set control point from homogeneous coordinates.
-        
-        Parameters
-        ----------
-        i : int
-            Index in u direction.
-        j : int
-            Index in v direction.
-        x, y, z, w : float
-            Homogeneous coordinates.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
+        """Set the homogeneous CV; w ignored when non-rational"""
         cv_ptr = self.cv(i, j)
         if cv_ptr is None:
             return False
-        
         cv_ptr[0] = x
         if self.m_dim > 1:
             cv_ptr[1] = y
@@ -1001,384 +618,873 @@ class NurbsSurface:
             cv_ptr[2] = z
         if self.m_is_rat:
             cv_ptr[self.m_dim] = w
-        
         return True
-    
+
     def weight(self, i: int, j: int) -> float:
-        """Get weight at control vertex index.
-        
-        Parameters
-        ----------
-        i : int
-            Index in u direction.
-        j : int
-            Index in v direction.
-        
-        Returns
-        -------
-        float
-            Weight value (1.0 if non-rational).
-        """
-        if not self.m_is_rat:
-            return 1.0
         cv_ptr = self.cv(i, j)
-        return cv_ptr[self.m_dim] if cv_ptr is not None else 1.0
-    
+        return (
+            float(cv_ptr[self.m_dim]) if self.m_is_rat and cv_ptr is not None else 1.0
+        )
+
     def set_weight(self, i: int, j: int, w: float) -> bool:
-        """Set weight at control vertex index.
-        
-        Parameters
-        ----------
-        i : int
-            Index in u direction.
-        j : int
-            Index in v direction.
-        w : float
-            Weight value.
-        
-        Returns
-        -------
-        bool
-            True if successful, False if non-rational or invalid indices.
-        """
-        if not self.m_is_rat:
-            return False
+        """Rescale the homogeneous CV to the new weight so the Euclidean point stays; False when non-rational"""
         cv_ptr = self.cv(i, j)
-        if cv_ptr is None:
+        if not self.m_is_rat or cv_ptr is None:
             return False
-
-        # Rescale homogeneous coordinates when changing weight
-        old_w = cv_ptr[self.m_dim]
-        if abs(old_w) < 1e-14:
-            old_w = 1.0
-        if abs(w) < 1e-14:
-            w = 1.0
-
-        scale = w / old_w
-        cv_ptr[0] *= scale
-        if self.m_dim > 1:
-            cv_ptr[1] *= scale
-        if self.m_dim > 2:
-            cv_ptr[2] *= scale
-        cv_ptr[self.m_dim] = w
+        old_w = cv_ptr[self.m_dim] if abs(cv_ptr[self.m_dim]) > 1e-14 else 1.0
+        new_w = w if abs(w) > 1e-14 else 1.0
+        scale = new_w / old_w
+        for d in range(self.m_dim):
+            cv_ptr[d] *= scale
+        cv_ptr[self.m_dim] = new_w
         return True
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # NURBSKNOT ACCESS
+    # NurbsKnot access
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def nurbsknot(self, dir: int, nurbsknot_index: int) -> float:
-        """Get nurbsknot value at index in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        nurbsknot_index : int
-            Index in nurbsknot vector.
-        
-        Returns
-        -------
-        float
-            NurbsKnot value, or 0.0 if invalid.
-        """
-        if dir < 0 or dir >= 2 or nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot[dir]):
+        if (
+            dir < 0
+            or dir > 1
+            or nurbsknot_index < 0
+            or nurbsknot_index >= len(self.m_nurbsknot[dir])
+        ):
             return 0.0
-        return self.m_nurbsknot[dir][nurbsknot_index]
-    
-    def set_nurbsknot(self, dir: int, nurbsknot_index: int, nurbsknot_value: float) -> bool:
-        """Set nurbsknot value at index in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        nurbsknot_index : int
-            Index in nurbsknot vector.
-        nurbsknot_value : float
-            NurbsKnot value to set.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if dir < 0 or dir >= 2 or nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot[dir]):
+        return float(self.m_nurbsknot[dir][nurbsknot_index])
+
+    def set_nurbsknot(
+        self, dir: int, nurbsknot_index: int, nurbsknot_value: float
+    ) -> bool:
+        if (
+            dir < 0
+            or dir > 1
+            or nurbsknot_index < 0
+            or nurbsknot_index >= len(self.m_nurbsknot[dir])
+        ):
             return False
         self.m_nurbsknot[dir][nurbsknot_index] = nurbsknot_value
         return True
-    
+
     def nurbsknot_multiplicity(self, dir: int, nurbsknot_index: int) -> int:
-        """Get nurbsknot multiplicity at index in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        nurbsknot_index : int
-            Index in nurbsknot vector.
-        
-        Returns
-        -------
-        int
-            Multiplicity of the nurbsknot.
-        """
-        if dir < 0 or dir >= 2:
+        if dir < 0 or dir > 1:
             return 0
-        
-        # Use nurbsknot module function
-        return nurbsknot.multiplicity(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], nurbsknot_index)
-    
+        return nurbsknot.multiplicity(
+            self.m_order[dir],
+            self.m_cv_count[dir],
+            self.m_nurbsknot[dir],
+            nurbsknot_index,
+        )
+
     def get_nurbsknots(self, dir: int) -> np.ndarray:
-        """Get all nurbsknot values for specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        np.ndarray
-            Copy of nurbsknot vector.
-        """
-        if dir < 0 or dir >= 2:
-            return np.array([])
-        return self.m_nurbsknot[dir].copy()
+        return (
+            self.m_nurbsknot[dir].copy()
+            if dir == 0 or dir == 1
+            else np.zeros(0, dtype=np.float64)
+        )
+
+    def insert_nurbsknot(
+        self, dir: int, nurbsknot_value: float, nurbsknot_multiplicity: int = 1
+    ) -> bool:
+        """Insert a nurbsknot with the given multiplicity in dir without changing the shape"""
+        if (
+            dir < 0
+            or dir > 1
+            or not self.is_valid()
+            or nurbsknot_multiplicity <= 0
+            or nurbsknot_multiplicity >= self.m_order[dir]
+        ):
+            return False
+        t0, t1 = self.domain(dir)
+        if nurbsknot_value < t0 or nurbsknot_value > t1:
+            return False
+        crv = self._to_curve(dir)
+        if not crv.insert_nurbsknot(nurbsknot_value, nurbsknot_multiplicity):
+            return False
+        return self._from_curve(crv, dir)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # DOMAIN & PARAMETERIZATION
+    # Domain
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     def domain(self, dir: int) -> tuple[float, float]:
-        """Get surface domain [start_param, end_param] in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        tuple
-            (start_param, end_param)
-        """
-        if not self.is_valid() or dir < 0 or dir >= 2:
+        """[nurbsknot[order - 2], nurbsknot[cv_count - 1]] in dir"""
+        if dir < 0 or dir > 1 or not self.is_valid():
             return (0.0, 0.0)
-        return (self.m_nurbsknot[dir][self.m_order[dir] - 2],
-                self.m_nurbsknot[dir][self.m_cv_count[dir] - 1])
-    
+        return (
+            float(self.m_nurbsknot[dir][self.m_order[dir] - 2]),
+            float(self.m_nurbsknot[dir][self.m_cv_count[dir] - 1]),
+        )
+
     def set_domain(self, dir: int, t0: float, t1: float) -> bool:
-        """Set surface domain in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        t0 : float
-            Start parameter.
-        t1 : float
-            End parameter.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if dir < 0 or dir >= 2 or t0 >= t1:
+        """Linearly remap the nurbsknots in dir onto [t0, t1]"""
+        if dir < 0 or dir > 1 or not self.is_valid() or t0 >= t1:
             return False
-        
-        old_t0, old_t1 = self.domain(dir)
-        if abs(old_t1 - old_t0) < 1e-14:
+        d0, d1 = self.domain(dir)
+        if abs(d1 - d0) < 1e-14:
             return False
-        
-        scale = (t1 - t0) / (old_t1 - old_t0)
+        scale = (t1 - t0) / (d1 - d0)
         for i in range(len(self.m_nurbsknot[dir])):
-            self.m_nurbsknot[dir][i] = t0 + (self.m_nurbsknot[dir][i] - old_t0) * scale
-        
+            self.m_nurbsknot[dir][i] = t0 + (self.m_nurbsknot[dir][i] - d0) * scale
         return True
-    
-    def get_span_vector(self, dir: int) -> np.ndarray:
-        """Get span (distinct nurbsknot intervals) values in specified direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        
-        Returns
-        -------
-        np.ndarray
-            Array of span values.
-        """
-        if dir < 0 or dir >= 2:
-            return np.array([])
-        
+
+    def get_span_vector(self, dir: int) -> list[float]:
+        """Distinct nurbsknot values inside the domain of dir"""
         spans = []
-        for i in range(len(self.m_nurbsknot[dir]) - 1):
-            if abs(self.m_nurbsknot[dir][i+1] - self.m_nurbsknot[dir][i]) > 1e-14:
-                spans.append(self.m_nurbsknot[dir][i])
-        
-        if len(self.m_nurbsknot[dir]) > 0:
-            spans.append(self.m_nurbsknot[dir][-1])
-        
-        return np.array(spans)
-    
+        if dir < 0 or dir > 1 or not self.is_valid():
+            return spans
+        spans.append(float(self.m_nurbsknot[dir][self.m_order[dir] - 2]))
+        for i in range(self.m_order[dir] - 1, self.m_cv_count[dir]):
+            if self.m_nurbsknot[dir][i] > spans[-1]:
+                spans.append(float(self.m_nurbsknot[dir][i]))
+        return spans
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # NURBSKNOT VECTOR OPERATIONS
+    # Division
     # ═══════════════════════════════════════════════════════════════════════════
-    
-    def make_clamped_uniform_nurbsknot_vector(self, dir: int, delta: float = 1.0) -> bool:
-        """Make nurbsknot vector a clamped uniform nurbsknot vector.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        delta : float, optional
-            Spacing between internal nurbsknots. Defaults to 1.0.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if dir < 0 or dir >= 2:
+
+    def divide_by_count_points(
+        self, nu: int, nv: int
+    ) -> tuple[list[list[Point]], list[list[Vector]], list[list[tuple[float, float]]]]:
+        """Points, normals and (u, v) on a (nu + 1) x (nv + 1) grid over the domain"""
+        grid = []
+        normals = []
+        params = []
+        if not self.is_valid():
+            return grid, normals, params
+        u0, u1 = self.domain(0)
+        v0, v1 = self.domain(1)
+        for i in range(nu + 1):
+            u = u0 + (u1 - u0) * i / nu if nu > 0 else u0
+            grid.append([])
+            normals.append([])
+            params.append([])
+            for j in range(nv + 1):
+                v = v0 + (v1 - v0) * j / nv if nv > 0 else v0
+                grid[i].append(self.point_at(u, v))
+                normals[i].append(self.normal_at(u, v))
+                params[i].append((u, v))
+        return grid, normals, params
+
+    def divide_by_count_planes(
+        self, nu: int, nv: int
+    ) -> tuple[list[list[Plane]], list[list[tuple[float, float]]]]:
+        """Frames (x = dS/du, y = dS/dv) and (u, v) on a (nu + 1) x (nv + 1) grid over the domain"""
+        grid = []
+        params = []
+        if not self.is_valid():
+            return grid, params
+        u0, u1 = self.domain(0)
+        v0, v1 = self.domain(1)
+        for i in range(nu + 1):
+            u = u0 + (u1 - u0) * i / nu if nu > 0 else u0
+            grid.append([])
+            params.append([])
+            for j in range(nv + 1):
+                v = v0 + (v1 - v0) * j / nv if nv > 0 else v0
+                derivs = self.evaluate(u, v, 1)
+                x_axis = derivs[2]
+                y_axis = derivs[1]
+                if x_axis.magnitude() > 1e-14:
+                    x_axis = x_axis.normalized()
+                if y_axis.magnitude() > 1e-14:
+                    y_axis = y_axis.normalized()
+                grid[i].append(
+                    Plane.from_frame(
+                        self.point_at(u, v), x_axis, y_axis, self.normal_at(u, v)
+                    )
+                )
+                params[i].append((u, v))
+        return grid, params
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Evaluation
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def point_at(self, u: float, v: float) -> Point:
+        """S(u, v) by the tensor-product basis; origin when invalid"""
+        if not self.is_valid():
+            return Point(0, 0, 0)
+        span_u = self._find_span(0, u)
+        span_v = self._find_span(1, v)
+        nu = nurbsknot.eval_basis(self.m_order[0], self.m_nurbsknot[0], span_u, u)
+        nv = nurbsknot.eval_basis(self.m_order[1], self.m_nurbsknot[1], span_v, v)
+        size = self.cv_size()
+        total = [0.0] * size
+        for i in range(self.m_order[0]):
+            for j in range(self.m_order[1]):
+                c = nu[i] * nv[j]
+                cv_ptr = self.cv(span_u + i, span_v + j)
+                for d in range(size):
+                    total[d] += c * cv_ptr[d]
+        return self._dehomogenize(total)
+
+    def closest_parameters(self, test_point: Point) -> tuple[float, float]:
+        """(u, v) of the closest surface point (grid seed + Newton)"""
+        from .closest import Closest
+
+        hit = Closest.surface_point(self, test_point)
+        return (hit[0], hit[1])
+
+    def closest_point(self, test_point: Point) -> Point:
+        u, v = self.closest_parameters(test_point)
+        return self.point_at(u, v)
+
+    def gaussian_curvature(self, u: float, v: float) -> float:
+        """K = (LN - M^2) / (EG - F^2)"""
+        forms = self._fundamental_forms(u, v)
+        if forms is None:
+            return 0.0
+        E, F, G, L, M, N = forms
+        denom = E * G - F * F
+        if abs(denom) < Tolerance.ZERO_TOLERANCE:
+            return 0.0
+        return (L * N - M * M) / denom
+
+    def mean_curvature(self, u: float, v: float) -> float:
+        """H = (EN - 2FM + GL) / (2(EG - F^2)), sign following Su x Sv"""
+        forms = self._fundamental_forms(u, v)
+        if forms is None:
+            return 0.0
+        E, F, G, L, M, N = forms
+        denom = E * G - F * F
+        if abs(denom) < Tolerance.ZERO_TOLERANCE:
+            return 0.0
+        return (E * N - 2.0 * F * M + G * L) / (2.0 * denom)
+
+    def normal_at(self, u: float, v: float) -> Vector:
+        """Unit normal dS/dv x dS/du, z-axis at singular points"""
+        derivs = self.evaluate(u, v, 1)
+        if len(derivs) < 3:
+            return Vector(0, 0, 1)
+        normal = derivs[2].cross(derivs[1])
+        length = normal.magnitude()
+        if length < 1e-14:
+            return Vector(0, 0, 1)
+        return normal / length
+
+    def frame_at(self, u: float, v: float) -> Plane:
+        """Frame at (u, v): origin S, x-axis dS/du, y-axis dS/dv"""
+        derivs = self.evaluate(u, v, 1)
+        if len(derivs) < 3:
+            return Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
+        return Plane(
+            Point(derivs[0][0], derivs[0][1], derivs[0][2]), derivs[2], derivs[1]
+        )
+
+    def intersections_with_line(self, line: "Line") -> list[Point]:
+        """Points where the infinite line pierces the surface (grid seed + Newton)"""
+        results = []
+        if not self.is_valid():
+            return results
+        p0 = line.start()
+        pe = line.end()
+        d = Vector(pe[0] - p0[0], pe[1] - p0[1], pe[2] - p0[2])
+        if d.magnitude() < 1e-14:
+            return results
+        d = d.normalized()
+        helper = Vector(1, 0, 0) if abs(d[0]) < 0.9 else Vector(0, 1, 0)
+        n1 = d.cross(helper).normalized()
+        n2 = d.cross(n1).normalized()
+        u0, u1 = self.domain(0)
+        v0, v1 = self.domain(1)
+        nu = max(12, self.cv_count(0) * 4)
+        nv = max(12, self.cv_count(1) * 4)
+        for a in range(nu + 1):
+            for b in range(nv + 1):
+                uv = [u0 + (u1 - u0) * a / nu, v0 + (v1 - v0) * b / nv]
+                if not self._line_newton(uv, p0, n1, n2):
+                    continue
+                p = self.point_at(uv[0], uv[1])
+                r = Vector(p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
+                if abs(n1.dot(r)) > 1e-7 or abs(n2.dot(r)) > 1e-7:
+                    continue
+                dup = False
+                for q in results:
+                    if p.distance(q) < 1e-6:
+                        dup = True
+                if not dup:
+                    results.append(p)
+        return results
+
+    def evaluate(self, u: float, v: float, num_derivs: int = 0) -> list[Vector]:
+        """Point and partials up to num_derivs (max 2) in (k, l) loop order: [S, Sv, Svv, Su, Suv, Suu]"""
+        result = []
+        if not self.is_valid() or num_derivs < 0:
+            return result
+        n = min(num_derivs, 2)
+        span_u = self._find_span(0, u)
+        span_v = self._find_span(1, v)
+        ders_u = self._basis_functions_derivatives(0, span_u, u, n)
+        ders_v = self._basis_functions_derivatives(1, span_v, v, n)
+        size = self.cv_size()
+        skl = []
+        for k in range(n + 1):
+            for l in range(n - k + 1):
+                total = [0.0] * size
+                for i in range(self.m_order[0]):
+                    for j in range(self.m_order[1]):
+                        c = ders_u[k][i] * ders_v[l][j]
+                        cv_ptr = self.cv(span_u + i, span_v + j)
+                        for d in range(size):
+                            total[d] += c * cv_ptr[d]
+                skl.append(total)
+        if self.m_is_rat:
+            return self._rational_derivatives(skl, n)
+        for s in skl:
+            result.append(
+                Vector(
+                    s[0],
+                    s[1] if self.m_dim > 1 else 0.0,
+                    s[2] if self.m_dim > 2 else 0.0,
+                )
+            )
+        return result
+
+    def point_at_corner(self, u_end: int, v_end: int) -> Point:
+        """Corner CV; u_end and v_end are 0 or 1"""
+        i = 0 if u_end == 0 else self.m_cv_count[0] - 1
+        j = 0 if v_end == 0 else self.m_cv_count[1] - 1
+        return self.get_cv(i, j)
+
+    def iso_curve(self, dir: int, c: float) -> NurbsCurve:
+        """Iso-curve varying along dir at the other parameter c; rational surfaces give their exact rational curve"""
+        if dir < 0 or dir > 1 or not self.is_valid():
+            return NurbsCurve()
+        crv = NurbsCurve(
+            self.m_dim, self.m_is_rat != 0, self.m_order[dir], self.m_cv_count[dir]
+        )
+        for i in range(crv.nurbsknot_count()):
+            crv.set_nurbsknot(i, self.nurbsknot(dir, i))
+        other = 1 - dir
+        span = self._find_span(other, c)
+        basis = nurbsknot.eval_basis(
+            self.m_order[other], self.m_nurbsknot[other], span, c
+        )
+        size = self.cv_size()
+        for i in range(self.m_cv_count[dir]):
+            total = [0.0] * size
+            for k in range(self.m_order[other]):
+                cv_ptr = self.cv(span + k, i) if dir else self.cv(i, span + k)
+                for d in range(size):
+                    total[d] += basis[k] * cv_ptr[d]
+            p = Point(
+                total[0],
+                total[1] if self.m_dim > 1 else 0.0,
+                total[2] if self.m_dim > 2 else 0.0,
+            )
+            if self.m_is_rat:
+                crv.set_cv_4d(i, p[0], p[1], p[2], total[self.m_dim])
+            else:
+                crv.set_cv(i, p)
+        return crv
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Modification
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def reverse(self, dir: int) -> bool:
+        """Flip the parameterization in dir"""
+        if dir < 0 or dir > 1 or not self.is_valid():
             return False
-        if self.m_order[dir] < 2 or self.m_cv_count[dir] < self.m_order[dir]:
-            return False
-        
-        # Use nurbsknot module function
-        result = nurbsknot.make_clamped_uniform(self.m_order[dir], self.m_cv_count[dir], delta)
-        if result is None:
-            return False
-        self.m_nurbsknot[dir] = result
+        nurbsknot.reverse(
+            self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir]
+        )
+        n = self.m_cv_count[dir]
+        for k in range(self.m_cv_count[1 - dir]):
+            for i in range(n // 2):
+                a = self.cv(k, i) if dir else self.cv(i, k)
+                b = self.cv(k, n - 1 - i) if dir else self.cv(n - 1 - i, k)
+                tmp = a.copy()
+                a[:] = b
+                b[:] = tmp
         return True
-    
-    def make_periodic_uniform_nurbsknot_vector(self, dir: int, delta: float = 1.0) -> bool:
-        """Make nurbsknot vector a periodic uniform nurbsknot vector.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        delta : float, optional
-            Spacing between nurbsknots. Defaults to 1.0.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if dir < 0 or dir >= 2:
+
+    def transpose(self) -> bool:
+        """Swap u and v"""
+        if not self.is_valid():
             return False
-        if self.m_order[dir] < 2 or self.m_cv_count[dir] < self.m_order[dir]:
-            return False
-        
-        # Use nurbsknot module function
-        result = nurbsknot.make_periodic_uniform(self.m_order[dir], self.m_cv_count[dir], delta)
-        if result is None:
-            return False
-        self.m_nurbsknot[dir] = result
+        size = self.cv_size()
+        new_cv = np.zeros(len(self.m_cv), dtype=np.float64)
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                dst = (j * self.m_cv_count[0] + i) * size
+                new_cv[dst : dst + size] = self.cv(i, j)
+        self.m_cv = new_cv
+        self.m_order = [self.m_order[1], self.m_order[0]]
+        self.m_cv_count = [self.m_cv_count[1], self.m_cv_count[0]]
+        self.m_nurbsknot = [self.m_nurbsknot[1], self.m_nurbsknot[0]]
+        self.m_cv_stride[0] = size * self.m_cv_count[1]
         return True
+
+    def swap_coordinates(self, axis_i: int, axis_j: int) -> bool:
+        """Swap two coordinate axes in every CV"""
+        if axis_i < 0 or axis_i >= self.m_dim or axis_j < 0 or axis_j >= self.m_dim:
+            return False
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                cv_ptr = self.cv(i, j)
+                cv_ptr[axis_i], cv_ptr[axis_j] = cv_ptr[axis_j], cv_ptr[axis_i]
+        return True
+
+    def trim(self, dir: int, domain: tuple[float, float]) -> bool:
+        """Restrict dir to the sub-domain"""
+        if dir < 0 or dir > 1 or not self.is_valid():
+            return False
+        crv = self._to_curve(dir)
+        if not crv.trim(domain[0], domain[1]):
+            return False
+        return self._from_curve(crv, dir)
+
+    def split(self, dir: int, c: float) -> tuple["NurbsSurface", "NurbsSurface"]:
+        """Two surfaces split at c in dir; both invalid when c is outside the domain"""
+        if dir < 0 or dir > 1 or not self.is_valid():
+            return (NurbsSurface(), NurbsSurface())
+        t0, t1 = self.domain(dir)
+        if c <= t0 or c >= t1:
+            return (NurbsSurface(), NurbsSurface())
+        lo = self.duplicate()
+        hi = self.duplicate()
+        if not lo.trim(dir, (t0, c)) or not hi.trim(dir, (c, t1)):
+            return (NurbsSurface(), NurbsSurface())
+        return (lo, hi)
+
+    def make_rational(self) -> bool:
+        """Add weights of 1"""
+        if self.m_is_rat:
+            return True
+        new_cv = np.zeros(self.cv_count() * (self.m_dim + 1), dtype=np.float64)
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                dst = (i * self.m_cv_count[1] + j) * (self.m_dim + 1)
+                new_cv[dst : dst + self.m_dim] = self.cv(i, j)
+                new_cv[dst + self.m_dim] = 1.0
+        self.m_cv = new_cv
+        self.m_is_rat = 1
+        self.m_cv_stride = [(self.m_dim + 1) * self.m_cv_count[1], self.m_dim + 1]
+        return True
+
+    def make_non_rational(self) -> bool:
+        """Drop weights, dividing each CV by its own"""
+        if not self.m_is_rat:
+            return True
+        new_cv = np.zeros(self.cv_count() * self.m_dim, dtype=np.float64)
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                src = self.cv(i, j)
+                dst = (i * self.m_cv_count[1] + j) * self.m_dim
+                w = src[self.m_dim] if abs(src[self.m_dim]) > 1e-14 else 1.0
+                new_cv[dst : dst + self.m_dim] = src[: self.m_dim] / w
+        self.m_cv = new_cv
+        self.m_is_rat = 0
+        self.m_cv_stride = [self.m_dim * self.m_cv_count[1], self.m_dim]
+        return True
+
+    def increase_degree(self, dir: int, desired_degree: int) -> bool:
+        """Elevate the degree in dir without changing the shape"""
+        if (
+            dir < 0
+            or dir > 1
+            or not self.is_valid()
+            or desired_degree < self.degree(dir)
+        ):
+            return False
+        if desired_degree == self.degree(dir):
+            return True
+        crv = self._to_curve(dir)
+        if not crv.increase_degree(desired_degree):
+            return False
+        return self._from_curve(crv, dir)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Transformation
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def transform(self, xform: Xform) -> bool:
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                p = self.get_cv(i, j)
+                p.transform(xform)
+                self.set_cv(i, j, p)
+        return True
+
+    def transformed(self, xform: Xform) -> "NurbsSurface":
+        result = self.duplicate()
+        result.transform(xform)
+        return result
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Splitting
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def split_by_plane(
+        self, plane: Plane, tolerance: float = 0.0
+    ) -> list["NurbsSurfaceTrimmed"]:
+        """Trimmed faces on each side of the plane"""
+        from .intersection import surface_plane_uv
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+
+        pcurves = []
+        for pair in surface_plane_uv(self, plane, tolerance):
+            pcurves.append(pair[1])
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
+    def split_by_curves(
+        self, curves: list[NurbsCurve], tolerance: float = 0.0
+    ) -> list["NurbsSurfaceTrimmed"]:
+        """Trimmed faces cut by curves pulled onto the surface; off-surface curves are skipped"""
+        from .closest import Closest
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+
+        pcurves = []
+        for crv in curves:
+            for pcurve in Closest.surface_curve(self, crv, 0.0, 0.0, tolerance):
+                pcurves.append(pcurve)
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
+    def split_by_line(
+        self, line: "Line", tolerance: float = 0.0
+    ) -> list["NurbsSurfaceTrimmed"]:
+        """Trimmed faces cut by a line pulled onto the surface"""
+        points = [line.start(), line.end()]
+        return self.split_by_curves([NurbsCurve.create(False, 1, points)], tolerance)
+
+    def split_by_surface(
+        self, cutter: "NurbsSurface", tolerance: float = 0.0
+    ) -> list["NurbsSurfaceTrimmed"]:
+        """Trimmed faces cut by the surface/surface intersection"""
+        from .intersection import surface_surface
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+
+        pcurves = []
+        for triple in surface_surface(self, cutter, tolerance):
+            pcurves.append(triple[1])
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
+    def split_by_brep(
+        self, brep: "BRep", tolerance: float = 0.0
+    ) -> list["NurbsSurfaceTrimmed"]:
+        """Trimmed faces cut by every overlapping face of the brep"""
+        from .intersection import cut_curves_on_surface
+        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
+
+        target_bb = _surface_aabb(self)
+        pcurves = []
+        for cutter in brep.m_surfaces:
+            if not _aabb_overlap_pad(target_bb, _surface_aabb(cutter)):
+                continue
+            for pcurve in cut_curves_on_surface(self, cutter, tolerance):
+                pcurves.append(pcurve)
+        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Meshing
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def mesh_adaptive(
+        self,
+        max_angle: float = 20.0,
+        max_edge_length: float = 0.0,
+        min_edge_length: float = 0.0,
+        max_chord_height: float = 0.0,
+    ) -> Mesh:
+        """Quadtree subdivision in UV up to depth 8; cached in m_mesh"""
+        from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
+
+        if self.m_mesh is None and self.is_valid():
+            mesher = RemeshNurbsSurfaceAdaptive(self)
+            mesher.set_max_angle(max_angle).set_max_edge_length(
+                max_edge_length
+            ).set_min_edge_length(min_edge_length).set_max_chord_height(
+                max_chord_height
+            )
+            self.m_mesh = mesher.mesh()
+        return self.m_mesh if self.m_mesh is not None else Mesh()
+
+    def mesh(self) -> Mesh:
+        """Two triangles for a planar surface, else the span grid; cached in m_mesh"""
+        from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
+
+        if self.m_mesh is None and self.is_valid():
+            self.m_mesh = (
+                self._mesh_planar()
+                if self.is_planar(None, 1e-6)
+                else RemeshNurbsSurfaceGrid.from_u_v(self, 0, 0)
+            )
+        return self.m_mesh if self.m_mesh is not None else Mesh()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # JSON
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __jsondump__(self) -> dict:
+        control_points = []
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                control_points.extend(self.cv(i, j).tolist())
+        data = {
+            "control_points": control_points,
+            "cv_count_u": int(self.m_cv_count[0]),
+            "cv_count_v": int(self.m_cv_count[1]),
+            "dimension": int(self.m_dim),
+            "facecolors": _colors_to_json(self.facecolors),
+            "guid": self.guid,
+            "is_rational": self.m_is_rat != 0,
+            "linecolors": _colors_to_json(self.linecolors),
+        }
+        if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
+            data["mesh"] = self.m_mesh.__jsondump__()
+        data["name"] = self.name
+        data["nurbsknots_u"] = self.m_nurbsknot[0].tolist()
+        data["nurbsknots_v"] = self.m_nurbsknot[1].tolist()
+        data["order_u"] = int(self.m_order[0])
+        data["order_v"] = int(self.m_order[1])
+        data["pointcolors"] = _colors_to_json(self.pointcolors)
+        data["type"] = "NurbsSurface"
+        data["width"] = float(self.width)
+        return data
+
+    @classmethod
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> "NurbsSurface":
+        surface = cls()
+        for key in ["dimension", "order_u", "order_v", "cv_count_u", "cv_count_v"]:
+            if key not in data:
+                return surface
+        surface.create_raw(
+            int(data["dimension"]),
+            bool(data.get("is_rational", False)),
+            int(data["order_u"]),
+            int(data["order_v"]),
+            int(data["cv_count_u"]),
+            int(data["cv_count_v"]),
+        )
+        if "nurbsknots_u" in data:
+            surface.m_nurbsknot[0] = np.array(data["nurbsknots_u"], dtype=np.float64)
+        if "nurbsknots_v" in data:
+            surface.m_nurbsknot[1] = np.array(data["nurbsknots_v"], dtype=np.float64)
+        if "control_points" in data:
+            surface.m_cv = np.array(data["control_points"], dtype=np.float64)
+        surface.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
+        surface.name = name if name is not None else data.get("name", "my_nurbssurface")
+        surface.width = data.get("width", 1.0)
+        surface.pointcolors = _colors_from_json(data, "pointcolors")
+        surface.facecolors = _colors_from_json(data, "facecolors")
+        surface.linecolors = _colors_from_json(data, "linecolors")
+        if data.get("mesh"):
+            surface.m_mesh = Mesh.__jsonload__(data["mesh"])
+        return surface
+
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+        with open(filepath, "w") as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurface":
+        with open(filepath) as f:
+            return cls.__jsonload__(json.load(f))
+
+    def file_json_dumps(self) -> str:
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def file_json_loads(cls, json_string: str) -> "NurbsSurface":
+        return cls.__jsonload__(json.loads(json_string))
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def pb_dumps(self) -> bytes:
+        from .proto import nurbssurface_pb2
+
+        proto = nurbssurface_pb2.NurbsSurface()
+        self.pb_fill(proto)
+        return proto.SerializeToString()
+
+    def pb_fill(self, proto: "nurbssurface_pb2.NurbsSurface") -> None:
+        """Fill a NurbsSurface proto in place (Session and Brep embed it directly)"""
+        if self.has_guid():
+            proto.guid = self._guid
+        proto.name = self.name
+        proto.dimension = int(self.m_dim)
+        proto.is_rational = self.m_is_rat != 0
+        proto.order_u = int(self.m_order[0])
+        proto.order_v = int(self.m_order[1])
+        proto.cv_count_u = int(self.m_cv_count[0])
+        proto.cv_count_v = int(self.m_cv_count[1])
+        proto.cv_stride_u = int(self.m_cv_stride[0])
+        proto.cv_stride_v = int(self.m_cv_stride[1])
+        proto.nurbsknots_u.extend(self.m_nurbsknot[0].tolist())
+        proto.nurbsknots_v.extend(self.m_nurbsknot[1].tolist())
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                proto.cvs.extend(self.cv(i, j).tolist())
+        proto.width = float(self.width)
+        _colors_to_proto(self.pointcolors, proto.pointcolors)
+        _colors_to_proto(self.facecolors, proto.facecolors)
+        _colors_to_proto(self.linecolors, proto.linecolors)
+        if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
+            proto.cached_mesh.ParseFromString(self.m_mesh.pb_dumps())
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> "NurbsSurface":
+        from .proto import nurbssurface_pb2
+
+        proto = nurbssurface_pb2.NurbsSurface()
+        proto.ParseFromString(data)
+        surface = cls(
+            proto.dimension,
+            proto.is_rational,
+            proto.order_u,
+            proto.order_v,
+            proto.cv_count_u,
+            proto.cv_count_v,
+        )
+        if proto.guid:
+            surface.guid = proto.guid
+        surface.name = proto.name
+        for i in range(min(len(proto.nurbsknots_u), len(surface.m_nurbsknot[0]))):
+            surface.m_nurbsknot[0][i] = proto.nurbsknots_u[i]
+        for i in range(min(len(proto.nurbsknots_v), len(surface.m_nurbsknot[1]))):
+            surface.m_nurbsknot[1][i] = proto.nurbsknots_v[i]
+        size = surface.cv_size()
+        stride_u = (
+            proto.cv_stride_u if proto.cv_stride_u > 0 else size * surface.m_cv_count[1]
+        )
+        stride_v = proto.cv_stride_v if proto.cv_stride_v > 0 else size
+        for i in range(surface.m_cv_count[0]):
+            for j in range(surface.m_cv_count[1]):
+                src = i * stride_u + j * stride_v
+                dst = surface.cv(i, j)
+                for d in range(size):
+                    if src + d < len(proto.cvs):
+                        dst[d] = proto.cvs[src + d]
+        surface.width = proto.width
+        surface.pointcolors = _colors_from_proto(proto.pointcolors)
+        surface.facecolors = _colors_from_proto(proto.facecolors)
+        surface.linecolors = _colors_from_proto(proto.linecolors)
+        if proto.HasField("cached_mesh") and len(proto.cached_mesh.vertices) > 0:
+            surface.m_mesh = Mesh.pb_loads(proto.cached_mesh.SerializeToString())
+        return surface
+
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+        with open(filepath, "wb") as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurface":
+        with open(filepath, "rb") as f:
+            return cls.pb_loads(f.read())
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __str__(self) -> str:
+        """NurbsSurface(name=..., degree=(u, v), cvs=(u, v))"""
+        return f"NurbsSurface(name={self.name}, degree=({self.degree(0)},{self.degree(1)}), cvs=({self.m_cv_count[0]},{self.m_cv_count[1]}))"
+
+    def __repr__(self) -> str:
+        """Multi-line form with every control point"""
+        rational = "true" if self.m_is_rat else "false"
+        result = f"NurbsSurface(\n  name={self.name},\n  degree=({self.degree(0)},{self.degree(1)}),\n  cvs=({self.m_cv_count[0]},{self.m_cv_count[1]}),\n  rational={rational},\n  control_points=[\n"
+        for i in range(self.m_cv_count[0]):
+            for j in range(self.m_cv_count[1]):
+                p = self.get_cv(i, j)
+                result += f"    {p[0]:g}, {p[1]:g}, {p[2]:g}\n"
+        result += "  ]\n)"
+        return result
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Private helpers
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _deep_copy_from(self, src: "NurbsSurface") -> None:
+        """Copy every field but the guid"""
+        self._guid = None
+        self.name = src.name
+        self.width = src.width
+        self.pointcolors = list(src.pointcolors)
+        self.facecolors = list(src.facecolors)
+        self.linecolors = list(src.linecolors)
+        self.m_dim = src.m_dim
+        self.m_is_rat = src.m_is_rat
+        self.m_order = list(src.m_order)
+        self.m_cv_count = list(src.m_cv_count)
+        self.m_cv_stride = list(src.m_cv_stride)
+        self.m_nurbsknot = [src.m_nurbsknot[0].copy(), src.m_nurbsknot[1].copy()]
+        self.m_cv = src.m_cv.copy()
+        self.m_mesh = copy.deepcopy(src.m_mesh)
+
+    def _zero_cvs(self) -> bool:
+        self.m_cv[:] = 0.0
+        if self.m_is_rat:
+            for i in range(self.m_cv_count[0]):
+                for j in range(self.m_cv_count[1]):
+                    self.cv(i, j)[self.m_dim] = 1.0
+        return True
+
+    def _make_clamped_uniform_nurbsknot_vector(
+        self, dir: int, delta: float = 1.0
+    ) -> bool:
+        if dir < 0 or dir > 1 or delta <= 0.0:
+            return False
+        self.m_nurbsknot[dir] = np.array(
+            nurbsknot.make_clamped_uniform(
+                self.m_order[dir], self.m_cv_count[dir], delta
+            ),
+            dtype=np.float64,
+        )
+        return len(self.m_nurbsknot[dir]) > 0
+
+    def _make_periodic_uniform_nurbsknot_vector(
+        self, dir: int, delta: float = 1.0
+    ) -> bool:
+        if dir < 0 or dir > 1 or delta <= 0.0:
+            return False
+        self.m_nurbsknot[dir] = np.array(
+            nurbsknot.make_periodic_uniform(
+                self.m_order[dir], self.m_cv_count[dir], delta
+            ),
+            dtype=np.float64,
+        )
+        return len(self.m_nurbsknot[dir]) > 0
+
+    def _dehomogenize(self, h) -> Point:
+        """Euclidean point of a homogeneous CV or blend"""
+        w = h[self.m_dim] if self.m_is_rat and abs(h[self.m_dim]) > 1e-14 else 1.0
+        return Point(
+            h[0] / w,
+            h[1] / w if self.m_dim > 1 else 0.0,
+            h[2] / w if self.m_dim > 2 else 0.0,
+        )
 
     def _find_span(self, dir: int, t: float) -> int:
-        """Find the nurbsknot span index containing parameter t.
-        
-        Implements ON_NurbsSpanIndex algorithm from OpenNURBS.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        t : float
-            Parameter value.
-        
-        Returns
-        -------
-        int
-            Span index in range [0, cv_count-order].
-        """
-        # Use nurbsknot module function
-        return nurbsknot.find_span(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], t)
-    
-    def _basis_functions(self, dir: int, span: int, t: float) -> np.ndarray:
-        """Compute basis functions.
-        
-        Implements ON_EvaluateNurbsBasis algorithm from OpenNURBS.
-        The span parameter is the offset returned by _find_span.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        span : int
-            Span index (offset in nurbsknot array).
-        t : float
-            Parameter value.
-        
-        Returns
-        -------
-        np.ndarray
-            Basis function values.
-        """
-        order = self.m_order[dir]
-        d = order - 1
-        nurbsknot_base = span + d
-        nurbsknot = self.m_nurbsknot[dir]
+        """Span index in dir containing t"""
+        return nurbsknot.find_span(
+            self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], t
+        )
 
-        if nurbsknot[nurbsknot_base - 1] == nurbsknot[nurbsknot_base]:
-            return np.zeros(order)
-
-        N = np.zeros(order * order)
-        N[order * order - 1] = 1.0
-        left = np.zeros(d)
-        right = np.zeros(d)
-        N_idx = order * order - 1
-        k_right = nurbsknot_base
-        k_left = nurbsknot_base - 1
-
-        for j in range(d):
-            N0_idx = N_idx
-            N_idx -= (order + 1)
-            left[j] = t - nurbsknot[k_left]
-            right[j] = nurbsknot[k_right] - t
-            k_left -= 1
-            k_right += 1
-
-            x = 0.0
-            for r in range(j + 1):
-                a0 = left[j - r]
-                a1 = right[r]
-                denom = a0 + a1
-                y = N[N0_idx + r] / denom if abs(denom) > 0.0 else 0.0
-                N[N_idx + r] = x + a1 * y
-                x = a0 * y
-            N[N_idx + j + 1] = x
-
-        return N[0:order]
-
-    def _basis_functions_derivatives(self, dir: int, span: int, t: float, deriv_order: int) -> list:
-        if dir < 0 or dir >= 2:
-            return []
+    def _basis_functions_derivatives(
+        self, dir: int, span: int, t: float, deriv_order: int
+    ) -> list[list[float]]:
+        """Basis derivatives ders[k][j] of the order functions on the span (Piegl & Tiller A2.3)"""
         order = self.m_order[dir]
         degree = order - 1
-        kv = self.m_nurbsknot[dir]
-        nurbsknot_base = span + degree
-
+        knot = self.m_nurbsknot[dir]
+        base = span + degree
         ders = [[0.0] * order for _ in range(deriv_order + 1)]
-
-        if kv[nurbsknot_base - 1] == kv[nurbsknot_base]:
+        if knot[base - 1] == knot[base]:
             return ders
-
         ndu = [[0.0] * order for _ in range(order)]
         ndu[0][0] = 1.0
-        left = [0.0] * (degree + 1)
-        right = [0.0] * (degree + 1)
-
+        left = [0.0] * order
+        right = [0.0] * order
         for j in range(1, degree + 1):
-            left[j] = t - kv[nurbsknot_base - j]
-            right[j] = kv[nurbsknot_base + j - 1] - t
+            left[j] = t - knot[base - j]
+            right[j] = knot[base + j - 1] - t
             saved = 0.0
             for r in range(j):
                 ndu[j][r] = right[r + 1] + left[j - r]
@@ -1386,13 +1492,12 @@ class NurbsSurface:
                 ndu[r][j] = saved + right[r + 1] * temp
                 saved = left[j - r] * temp
             ndu[j][j] = saved
-
         for j in range(degree + 1):
             ders[0][j] = ndu[j][degree]
-
         a = [[0.0] * order for _ in range(2)]
         for r in range(degree + 1):
-            s1, s2 = 0, 1
+            s1 = 0
+            s2 = 1
             a[0][0] = 1.0
             for k in range(1, deriv_order + 1):
                 d = 0.0
@@ -1411,1736 +1516,185 @@ class NurbsSurface:
                     d += a[s2][k] * ndu[r][pk]
                 ders[k][r] = d
                 s1, s2 = s2, s1
-
-        factorial = degree
+        factor = float(degree)
         for k in range(1, deriv_order + 1):
             for j in range(degree + 1):
-                ders[k][j] *= factorial
-            factorial *= (degree - k)
-
+                ders[k][j] *= factor
+            factor *= degree - k
         return ders
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # EVALUATION
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def closest_parameters(self, test_point: Point) -> tuple[float, float]:
-        """Parameters (u, v) of the closest point on the surface to test_point.
+    def _rational_derivatives(
+        self, skl: list[list[float]], num_derivs: int
+    ) -> list[Vector]:
+        """Rational quotient rule on homogeneous partials in (k, l) loop order (Piegl & Tiller A4.4)"""
+        result = []
+        n = num_derivs
+        w00 = skl[0][self.m_dim]
+        if abs(w00) < 1e-14:
+            return [Vector(0, 0, 0) for _ in range(len(skl))]
+        for k in range(n + 1):
+            for l in range(n - k + 1):
+                s = skl[k * (n + 1) - k * (k - 1) // 2 + l]
+                a = Vector(
+                    s[0],
+                    s[1] if self.m_dim > 1 else 0.0,
+                    s[2] if self.m_dim > 2 else 0.0,
+                )
+                for i in range(k + 1):
+                    for j in range(l + 1):
+                        if i == 0 and j == 0:
+                            continue
+                        c = (
+                            _binomial(k, i)
+                            * _binomial(l, j)
+                            * skl[i * (n + 1) - i * (i - 1) // 2 + j][self.m_dim]
+                        )
+                        a -= (
+                            result[
+                                (k - i) * (n + 1) - (k - i) * (k - i - 1) // 2 + (l - j)
+                            ]
+                            * c
+                        )
+                result.append(a / w00)
+        return result
 
-        Matches OCCT GeomAPI_ProjectPointOnSurface.
-        """
-        from session_py.closest import Closest
-        u, v, _dist = Closest.surface_point(self, test_point)
-        return (u, v)
+    def _line_newton(self, uv: list[float], p0: Point, n1: Vector, n2: Vector) -> bool:
+        """Newton on (n1, n2) . (S - p0) = 0 from uv; False when it leaves the domain or stalls"""
+        u0, u1 = self.domain(0)
+        v0, v1 = self.domain(1)
+        for it in range(40):
+            der = self.evaluate(uv[0], uv[1], 1)
+            if len(der) < 3:
+                return False
+            r = Vector(der[0][0] - p0[0], der[0][1] - p0[1], der[0][2] - p0[2])
+            f1 = n1.dot(r)
+            f2 = n2.dot(r)
+            if abs(f1) < 1e-12 and abs(f2) < 1e-12:
+                return True
+            j11 = n1.dot(der[2])
+            j12 = n1.dot(der[1])
+            j21 = n2.dot(der[2])
+            j22 = n2.dot(der[1])
+            det = j11 * j22 - j12 * j21
+            if abs(det) < 1e-14:
+                return False
+            du = -(j22 * f1 - j12 * f2) / det
+            dv = -(-j21 * f1 + j11 * f2) / det
+            uv[0] += du
+            uv[1] += dv
+            if uv[0] < u0 or uv[0] > u1 or uv[1] < v0 or uv[1] > v1:
+                return False
+            if abs(du) < 1e-13 and abs(dv) < 1e-13:
+                return True
+        return True
 
-    def closest_point(self, test_point: Point) -> Point:
-        """Closest point on the surface to test_point."""
-        u, v = self.closest_parameters(test_point)
-        return self.point_at(u, v)
-
-    def _fundamental_forms(self, u: float, v: float):
-        """First/second fundamental forms (E,F,G,L,M,N) at (u,v); None if degenerate."""
+    def _fundamental_forms(
+        self, u: float, v: float
+    ) -> tuple[float, float, float, float, float, float] | None:
+        """First and second fundamental forms at (u, v); None at a singular point"""
         d = self.evaluate(u, v, 2)
         if len(d) < 6:
             return None
-        # evaluate() result order is [S, Sv, Svv, Su, Suv, Suu].
-        sv, svv, su, suv, suu = d[1], d[2], d[3], d[4], d[5]
+        sv = d[1]
+        svv = d[2]
+        su = d[3]
+        suv = d[4]
+        suu = d[5]
         cr = su.cross(sv)
-        if cr.magnitude() < 1e-10:
+        if cr.magnitude() < Tolerance.ZERO_TOLERANCE:
             return None
-        nrm = cr.normalized()
-        E = su.dot(su); F = su.dot(sv); G = sv.dot(sv)
-        L = suu.dot(nrm); M = suv.dot(nrm); N = svv.dot(nrm)
-        return (E, F, G, L, M, N)
+        n = cr.normalized()
+        return (su.dot(su), su.dot(sv), sv.dot(sv), suu.dot(n), suv.dot(n), svv.dot(n))
 
-    def gaussian_curvature(self, u: float, v: float) -> float:
-        """Gaussian curvature K = (LN - M^2)/(EG - F^2) at (u,v).
-
-        Matches OCCT GeomLProp_SLProps.GaussianCurvature.
-        """
-        ff = self._fundamental_forms(u, v)
-        if ff is None:
-            return 0.0
-        E, F, G, L, M, N = ff
-        denom = E * G - F * F
-        if abs(denom) < 1e-10:
-            return 0.0
-        return (L * N - M * M) / denom
-
-    def mean_curvature(self, u: float, v: float) -> float:
-        """Mean curvature H = (EN - 2FM + GL)/(2(EG - F^2)) at (u,v).
-
-        Matches OCCT GeomLProp_SLProps.MeanCurvature (magnitude; sign follows Su x Sv).
-        """
-        ff = self._fundamental_forms(u, v)
-        if ff is None:
-            return 0.0
-        E, F, G, L, M, N = ff
-        denom = E * G - F * F
-        if abs(denom) < 1e-10:
-            return 0.0
-        return (E * N - 2.0 * F * M + G * L) / (2.0 * denom)
-
-    def point_at(self, u: float, v: float) -> Point:
-        """Evaluate point on surface at parameter (u, v).
-        
-        Parameters
-        ----------
-        u : float
-            Parameter in u direction.
-        v : float
-            Parameter in v direction.
-        
-        Returns
-        -------
-        Point
-            Point on surface.
-        """
-        if not self.is_valid():
-            return Point(0, 0, 0)
-        
-        # Find spans - returns indices in range [0, cv_count-order]
-        span_u = self._find_span(0, u)
-        span_v = self._find_span(1, v)
-        
-        # Compute basis functions
-        Nu = self._basis_functions(0, span_u, u)
-        Nv = self._basis_functions(1, span_v, v)
-        
-        # Evaluate surface point using vectorized einsum
-        cv_size_val = self.cv_size()
-        cv_3d = self.m_cv.reshape(self.m_cv_count[0], self.m_cv_count[1], cv_size_val)
-        cv_block = cv_3d[span_u:span_u + self.m_order[0], span_v:span_v + self.m_order[1]]
-        weights = Nu[:, np.newaxis] * Nv[np.newaxis, :]
-        point = np.einsum('ij,ijk->k', weights, cv_block)
-        
-        # Handle rational case
-        if self.m_is_rat and abs(point[self.m_dim]) > 1e-14:
-            w = point[self.m_dim]
-            return Point(point[0]/w,
-                        point[1]/w if self.m_dim > 1 else 0,
-                        point[2]/w if self.m_dim > 2 else 0)
-        
-        return Point(point[0],
-                    point[1] if self.m_dim > 1 else 0,
-                    point[2] if self.m_dim > 2 else 0)
-    
-    def batch_point_at(self, us: np.ndarray, vs: np.ndarray) -> np.ndarray:
-        """Evaluate surface at many (u, v) points. Returns (n, 3) array."""
-        us = np.asarray(us, dtype=np.float64)
-        vs = np.asarray(vs, dtype=np.float64)
-        n = len(us)
-        if n == 0:
-            return np.empty((0, 3))
-        if not self.is_valid():
-            return np.zeros((n, 3))
-
-        def _basis_batch(dir_idx, ts):
-            order = self.m_order[dir_idx]
-            cv_count = self.m_cv_count[dir_idx]
-            kn_arr = np.asarray(self.m_nurbsknot[dir_idx], dtype=np.float64)
-            pp1 = order
-            p = order - 1
-            m = len(ts)
-            if cv_count >= order and len(kn_arr) >= cv_count:
-                interior = kn_arr[order - 2:cv_count]
-                spans = np.clip(np.searchsorted(interior, ts, side='right') - 1, 0, cv_count - order)
-            else:
-                spans = np.zeros(m, dtype=np.int64)
-            offset = order - 2 + spans
-            N = np.zeros((m, pp1))
-            N[:, 0] = 1.0
-            left = np.zeros((m, pp1))
-            right = np.zeros((m, pp1))
-            for j in range(1, pp1):
-                left[:, j] = ts - kn_arr[offset + 1 - j]
-                right[:, j] = kn_arr[offset + j] - ts
-                saved = np.zeros(m)
-                for r in range(j):
-                    denom = right[:, r + 1] + left[:, j - r]
-                    nz = np.abs(denom) > 1e-14
-                    safe = np.where(nz, denom, 1.0)
-                    temp = np.where(nz, N[:, r] / safe, 0.0)
-                    N[:, r] = saved + right[:, r + 1] * temp
-                    saved = left[:, j - r] * temp
-                N[:, j] = saved
-            return N, spans
-
-        Nu, span_u = _basis_batch(0, us)
-        Nv, span_v = _basis_batch(1, vs)
-
-        order_u = self.m_order[0]
-        order_v = self.m_order[1]
-        cv_u = self.m_cv_count[0]
-        cv_v = self.m_cv_count[1]
-        stride = self.cv_size()
-        cv_3d = self.m_cv.reshape(cv_u, cv_v, stride)
-
-        iu = np.clip(span_u[:, None] + np.arange(order_u)[None, :], 0, cv_u - 1)
-        iv = np.clip(span_v[:, None] + np.arange(order_v)[None, :], 0, cv_v - 1)
-        cv_gathered = cv_3d[iu[:, :, None], iv[:, None, :]]
-
-        w = Nu[:, :, None] * Nv[:, None, :]
-        pt = np.einsum('nij,nijk->nk', w, cv_gathered)
-
-        result = np.zeros((n, 3))
-        if self.m_is_rat:
-            wcol = pt[:, self.m_dim]
-            mask = np.abs(wcol) > 1e-14
-            safe_w = np.where(mask, wcol, 1.0)
-            result[:, 0] = np.where(mask, pt[:, 0] / safe_w, pt[:, 0])
-            if self.m_dim > 1:
-                result[:, 1] = np.where(mask, pt[:, 1] / safe_w, pt[:, 1])
-            if self.m_dim > 2:
-                result[:, 2] = np.where(mask, pt[:, 2] / safe_w, pt[:, 2])
+    def _mesh_planar(self) -> Mesh:
+        """Two triangles through the four corners with one shared normal"""
+        result = Mesh()
+        p00 = self.point_at_corner(0, 0)
+        p10 = self.point_at_corner(1, 0)
+        p11 = self.point_at_corner(1, 1)
+        p01 = self.point_at_corner(0, 1)
+        v0 = result.add_vertex(p00)
+        v1 = result.add_vertex(p10)
+        v2 = result.add_vertex(p11)
+        result.add_face([v0, v1, v2])
+        if p00.distance(p01) < 1e-10:
+            e1 = Vector(p10[0] - p00[0], p10[1] - p00[1], p10[2] - p00[2])
+            e2 = Vector(p11[0] - p00[0], p11[1] - p00[1], p11[2] - p00[2])
+            normal = e1.cross(e2)
         else:
-            result[:, 0] = pt[:, 0]
-            if self.m_dim > 1:
-                result[:, 1] = pt[:, 1]
-            if self.m_dim > 2:
-                result[:, 2] = pt[:, 2]
+            v3 = result.add_vertex(p01)
+            result.add_face([v0, v2, v3])
+            derivs = self.evaluate(0.5, 0.5, 1)
+            normal = derivs[1].cross(derivs[2])
+        if normal.magnitude() > 1e-15:
+            normal = normal.normalized()
+        for vkey in result.vertex:
+            result.vertex[vkey].set_normal(normal[0], normal[1], normal[2])
         return result
 
-    def point_at_corner(self, u_end: int, v_end: int) -> Point:
-        """Get point at corner (u_end, v_end) where end is 0 or 1.
-        
-        Parameters
-        ----------
-        u_end : int
-            U corner (0 or 1).
-        v_end : int
-            V corner (0 or 1).
-        
-        Returns
-        -------
-        Point
-            Corner point.
-        """
-        i = 0 if u_end == 0 else self.m_cv_count[0] - 1
-        j = 0 if v_end == 0 else self.m_cv_count[1] - 1
-        return self.get_cv(i, j)
-    
-    def frame_at(self, u: float, v: float) -> 'Plane':
-        """Local frame at (u, v): origin = S(u,v), x-axis = dS/du, y-axis = dS/dv.
-
-        Mirrors OCCNurbsSurface.frame_at (which returns a compas Frame from the two
-        surface tangents). The returned Plane orthonormalizes the axes; its normal
-        (z-axis) equals normal_at(u, v).
-        """
-        d = self.evaluate(u, v, 1)
-        if len(d) < 3:
-            return Plane(Point(0, 0, 0), Vector(1, 0, 0), Vector(0, 1, 0))
-        origin = Point(d[0][0], d[0][1], d[0][2])
-        su = d[2]  # dS/du
-        sv = d[1]  # dS/dv
-        return Plane(origin, Vector(su[0], su[1], su[2]), Vector(sv[0], sv[1], sv[2]))
-
-    def intersections_with_line(self, line: "Line") -> list[Point]:
-        """Intersection points of an (infinite) line with the surface.
-
-        Mirrors OCCNurbsSurface.intersections_with_line (OCCT GeomAPI_IntCS). Solves
-        S(u,v) on the line by Newton on F(u,v) = (n1.(S-P0), n2.(S-P0)) where n1,n2 span
-        the plane perpendicular to the line direction; seeded by a dense (u,v) grid.
-        """
-        if not self.is_valid():
-            return []
-        p0 = line.start()
-        pe = line.end()
-        d = Vector(pe[0] - p0[0], pe[1] - p0[1], pe[2] - p0[2])
-        dl = d.magnitude()
-        if dl < 1e-14:
-            return []
-        d = d / dl
-        # Two unit vectors spanning the plane perpendicular to d.
-        helper = Vector(1, 0, 0) if abs(d[0]) < 0.9 else Vector(0, 1, 0)
-        n1 = d.cross(helper)
-        n1 = n1 / n1.magnitude()
-        n2 = d.cross(n1)
-        n2 = n2 / n2.magnitude()
-
-        u0, u1 = self.domain(0)
-        v0, v1 = self.domain(1)
-        nu = max(12, self.cv_count(0) * 4)
-        nv = max(12, self.cv_count(1) * 4)
-
-        def f_of(u, v):
-            p = self.point_at(u, v)
-            rx = p[0] - p0[0]; ry = p[1] - p0[1]; rz = p[2] - p0[2]
-            return (n1[0]*rx + n1[1]*ry + n1[2]*rz, n2[0]*rx + n2[1]*ry + n2[2]*rz, p)
-
-        results = []
-        seen = []
-        for a in range(nu + 1):
-            for b in range(nv + 1):
-                u = u0 + (u1 - u0) * a / nu
-                v = v0 + (v1 - v0) * b / nv
-                ok = True
-                for _ in range(40):
-                    der = self.evaluate(u, v, 1)
-                    if len(der) < 3:
-                        ok = False; break
-                    p = der[0]; sv = der[1]; su = der[2]
-                    rx = p[0] - p0[0]; ry = p[1] - p0[1]; rz = p[2] - p0[2]
-                    f1 = n1[0]*rx + n1[1]*ry + n1[2]*rz
-                    f2 = n2[0]*rx + n2[1]*ry + n2[2]*rz
-                    if abs(f1) < 1e-12 and abs(f2) < 1e-12:
-                        break
-                    j11 = n1[0]*su[0] + n1[1]*su[1] + n1[2]*su[2]
-                    j12 = n1[0]*sv[0] + n1[1]*sv[1] + n1[2]*sv[2]
-                    j21 = n2[0]*su[0] + n2[1]*su[1] + n2[2]*su[2]
-                    j22 = n2[0]*sv[0] + n2[1]*sv[1] + n2[2]*sv[2]
-                    det = j11*j22 - j12*j21
-                    if abs(det) < 1e-14:
-                        ok = False; break
-                    du = -(j22*f1 - j12*f2) / det
-                    dv = -(-j21*f1 + j11*f2) / det
-                    u += du; v += dv
-                    if u < u0 or u > u1 or v < v0 or v > v1:
-                        ok = False; break
-                    if abs(du) < 1e-13 and abs(dv) < 1e-13:
-                        break
-                if not ok:
-                    continue
-                f1, f2, p = f_of(u, v)
-                if abs(f1) > 1e-7 or abs(f2) > 1e-7:
-                    continue
-                pt = Point(p[0], p[1], p[2])
-                if any(pt.distance(q) < 1e-6 for q in seen):
-                    continue
-                seen.append(pt)
-                results.append(pt)
-        return results
-
-    def normal_at(self, u: float, v: float) -> Vector:
-        """Get normal vector at parameter (u, v).
-        
-        Parameters
-        ----------
-        u : float
-            Parameter in u direction.
-        v : float
-            Parameter in v direction.
-        
-        Returns
-        -------
-        Vector
-            Normal vector at (u, v).
-        """
-        derivs = self.evaluate(u, v, 1)
-        if len(derivs) < 3:
-            return Vector(0, 0, 1)
-        
-        du = derivs[1]
-        dv = derivs[2]
-        normal = dv.cross(du)
-        
-        mag = normal.magnitude()
-        if mag < 1e-14:
-            return Vector(0, 0, 1)
-        
-        return normal / mag
-    
-    def evaluate(self, u: float, v: float, num_derivs: int = 0) -> list[Vector]:
-        if not self.is_valid() or num_derivs < 0:
-            return []
-        max_derivs = min(num_derivs, 2)
-        span_u = self._find_span(0, u)
-        span_v = self._find_span(1, v)
-        ders_u = self._basis_functions_derivatives(0, span_u, u, max_derivs)
-        ders_v = self._basis_functions_derivatives(1, span_v, v, max_derivs)
-
-        cv_size_val = (self.m_dim + 1) if self.m_is_rat else self.m_dim
-
-        # Vectorized: extract CV block and compute all derivative combos with einsum
-        cv_3d = self.m_cv.reshape(self.m_cv_count[0], self.m_cv_count[1], cv_size_val)
-        cv_block = cv_3d[span_u:span_u + self.m_order[0], span_v:span_v + self.m_order[1]]
-        ders_u_np = np.array(ders_u)
-        ders_v_np = np.array(ders_v)
-
-        skl_all = []
-        for k in range(max_derivs + 1):
-            for l in range(max_derivs - k + 1):
-                weights_kl = ders_u_np[k, :, np.newaxis] * ders_v_np[l, np.newaxis, :]
-                skl = np.einsum('ij,ijk->k', weights_kl, cv_block)
-                skl_all.append((k, l, skl))
-
-        if not self.m_is_rat:
-            result = []
-            for k, l, skl in skl_all:
-                result.append(Vector(
-                    skl[0],
-                    skl[1] if self.m_dim > 1 else 0,
-                    skl[2] if self.m_dim > 2 else 0
-                ))
-            return result
-
-        # Rational: proper quotient rule (NURBS Book A4.2)
-        w00 = skl_all[0][2][self.m_dim]
-        if abs(w00) < 1e-14:
-            return [Vector(0, 0, 0)] * len(skl_all)
-        dim = self.m_dim
-        pt = Vector(skl_all[0][2][0] / w00,
-                    skl_all[0][2][1] / w00 if dim > 1 else 0,
-                    skl_all[0][2][2] / w00 if dim > 2 else 0)
-        result = [pt]
-
-        # Build lookup for weight derivatives
-        wders = {}
-        for k, l, skl in skl_all:
-            wders[(k, l)] = skl[dim]
-
-        # Cartesian derivatives lookup
-        aders = {(0, 0): pt}
-        for k, l, skl in skl_all[1:]:
-            a = [skl[0], skl[1] if dim > 1 else 0, skl[2] if dim > 2 else 0]
-            for i in range(1, k + 1):
-                from math import comb
-                prev = aders.get((k - i, l))
-                if prev is not None:
-                    c = comb(k, i) * wders.get((i, 0), 0)
-                    a[0] -= c * prev[0]
-                    a[1] -= c * prev[1]
-                    a[2] -= c * prev[2]
-            for j in range(1, l + 1):
-                from math import comb
-                prev = aders.get((k, l - j))
-                if prev is not None:
-                    c = comb(l, j) * wders.get((0, j), 0)
-                    a[0] -= c * prev[0]
-                    a[1] -= c * prev[1]
-                    a[2] -= c * prev[2]
-            # Mixed terms (NURBS Book A4.4): -sum_{i=1}^{k} sum_{j=1}^{l} C(k,i) C(l,j) w[i][j] SKL[k-i][l-j].
-            # Previously omitted -> rational mixed derivatives (e.g. Suv) were wrong.
-            from math import comb
-            for i in range(1, k + 1):
-                for j in range(1, l + 1):
-                    prev = aders.get((k - i, l - j))
-                    if prev is not None:
-                        c = comb(k, i) * comb(l, j) * wders.get((i, j), 0)
-                        a[0] -= c * prev[0]
-                        a[1] -= c * prev[1]
-                        a[2] -= c * prev[2]
-            v = Vector(a[0] / w00, a[1] / w00, a[2] / w00)
-            aders[(k, l)] = v
-            result.append(v)
-
-        return result
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # TRANSFORMATION
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def transform(self, xform: Xform) -> bool:
-        """Apply transformation to surface (in-place).
-        
-        Parameters
-        ----------
-        xform : Xform
-            Transformation to apply.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                pt = self.get_cv(i, j)
-                if pt is not None:
-                    pt.transform(xform)
-                    self.set_cv(i, j, pt)
-        
-        return True
-    
-    def transformed(self, xform: Xform) -> 'NurbsSurface':
-        """Get transformed copy of surface.
-        
-        Parameters
-        ----------
-        xform : Xform
-            Transformation to apply.
-        
-        Returns
-        -------
-        NurbsSurface
-            Transformed copy.
-        """
-        copy = NurbsSurface()
-        copy.m_dim = self.m_dim
-        copy.m_is_rat = self.m_is_rat
-        copy.m_order = self.m_order.copy()
-        copy.m_cv_count = self.m_cv_count.copy()
-        copy.m_cv_stride = self.m_cv_stride.copy()
-        copy.m_nurbsknot = [self.m_nurbsknot[0].copy(), self.m_nurbsknot[1].copy()]
-        copy.m_cv = self.m_cv.copy()
-        copy.guid = self.guid
-        copy.name = self.name
-        copy.width = self.width
-        copy.pointcolors = list(self.pointcolors)
-        copy.facecolors = list(self.facecolors)
-        copy.linecolors = list(self.linecolors)
-        
-        copy.transform(xform)
-        return copy
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # MODIFICATION OPERATIONS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def reverse(self, dir: int) -> bool:
-        """Reverse surface direction.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction to reverse (0 for u, 1 for v).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if dir < 0 or dir >= 2:
-            return False
-        if not self.is_valid():
-            return False
-        
-        # Reverse nurbsknot vector using nurbsknot module function
-        nurbsknot.reverse(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir])
-        
-        # Reverse control points in specified direction
-        if dir == 0:
-            # Reverse u direction (reverse rows)
-            for i in range(self.m_cv_count[0] // 2):
-                for j in range(self.m_cv_count[1]):
-                    # Swap CVs
-                    cv1 = self.get_cv(i, j)
-                    cv2 = self.get_cv(self.m_cv_count[0] - 1 - i, j)
-                    self.set_cv(i, j, cv2)
-                    self.set_cv(self.m_cv_count[0] - 1 - i, j, cv1)
-                    
-                    # Swap weights if rational
-                    if self.m_is_rat:
-                        w1 = self.weight(i, j)
-                        w2 = self.weight(self.m_cv_count[0] - 1 - i, j)
-                        self.set_weight(i, j, w2)
-                        self.set_weight(self.m_cv_count[0] - 1 - i, j, w1)
-        else:
-            # Reverse v direction (reverse columns)
-            for i in range(self.m_cv_count[0]):
-                for j in range(self.m_cv_count[1] // 2):
-                    # Swap CVs
-                    cv1 = self.get_cv(i, j)
-                    cv2 = self.get_cv(i, self.m_cv_count[1] - 1 - j)
-                    self.set_cv(i, j, cv2)
-                    self.set_cv(i, self.m_cv_count[1] - 1 - j, cv1)
-                    
-                    # Swap weights if rational
-                    if self.m_is_rat:
-                        w1 = self.weight(i, j)
-                        w2 = self.weight(i, self.m_cv_count[1] - 1 - j)
-                        self.set_weight(i, j, w2)
-                        self.set_weight(i, self.m_cv_count[1] - 1 - j, w1)
-        
-        return True
-    
-    def transpose(self) -> bool:
-        """Transpose surface (swap u and v parameters).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if not self.is_valid():
-            return False
-        
-        # Swap orders and counts
-        self.m_order[0], self.m_order[1] = self.m_order[1], self.m_order[0]
-        self.m_cv_count[0], self.m_cv_count[1] = self.m_cv_count[1], self.m_cv_count[0]
-
-        # Swap nurbsknot vectors
-        self.m_nurbsknot[0], self.m_nurbsknot[1] = self.m_nurbsknot[1], self.m_nurbsknot[0]
-
-        # Rebuild CV array with transposed indices
-        cv_size_val = self.cv_size()
-        new_cv = np.zeros(len(self.m_cv))
-        
-        for i in range(self.m_cv_count[1]):
-            for j in range(self.m_cv_count[0]):
-                old_index = i * self.m_cv_stride[0] + j * self.m_cv_stride[1]
-                new_index = j * cv_size_val * self.m_cv_count[1] + i * cv_size_val
-                new_cv[new_index:new_index + cv_size_val] = self.m_cv[old_index:old_index + cv_size_val]
-        
-        self.m_cv = new_cv
-        
-        # Update strides
-        self.m_cv_stride[1] = cv_size_val
-        self.m_cv_stride[0] = cv_size_val * self.m_cv_count[1]
-        
-        return True
-    
-    def swap_coordinates(self, axis_i: int, axis_j: int) -> bool:
-        """Swap two coordinate axes.
-        
-        Parameters
-        ----------
-        axis_i : int
-            First axis (0=x, 1=y, 2=z).
-        axis_j : int
-            Second axis (0=x, 1=y, 2=z).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if axis_i < 0 or axis_i >= self.m_dim or axis_j < 0 or axis_j >= self.m_dim:
-            return False
-        if axis_i == axis_j:
-            return True
-        
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                cv_ptr = self.cv(i, j)
-                if cv_ptr is not None:
-                    cv_ptr[axis_i], cv_ptr[axis_j] = cv_ptr[axis_j], cv_ptr[axis_i]
-        
-        return True
-    
-    def make_rational(self) -> bool:
-        """Make surface rational (if not already).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if self.m_is_rat:
-            return True
-        
-        old_cv_size = self.m_dim
-        new_cv_size = self.m_dim + 1
-        new_cv = np.zeros(self.m_cv_count[0] * self.m_cv_count[1] * new_cv_size)
-        
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                old_index = i * (old_cv_size * self.m_cv_count[1]) + j * old_cv_size
-                new_index = i * (new_cv_size * self.m_cv_count[1]) + j * new_cv_size
-                
-                # Copy coordinates
-                new_cv[new_index:new_index + self.m_dim] = self.m_cv[old_index:old_index + self.m_dim]
-                # Set weight to 1.0
-                new_cv[new_index + self.m_dim] = 1.0
-        
-        self.m_cv = new_cv
-        self.m_is_rat = 1
-        self.m_cv_stride[1] = new_cv_size
-        self.m_cv_stride[0] = new_cv_size * self.m_cv_count[1]
-
-        return True
-
-    def make_non_rational(self) -> bool:
-        """Convert surface to non-rational (OpenNURBS implementation).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if not self.m_is_rat:
-            return True
-        
-        # OpenNURBS algorithm: iterate through CVs, divide by weight, pack tightly
-        if self.m_order[0] > 0 and self.m_order[1] > 0 and self.m_dim > 0:
-            new_cv = np.zeros(self.m_cv_count[0] * self.m_cv_count[1] * self.m_dim, dtype=np.float64)
-            new_idx = 0
-            
-            # Process in optimal order based on stride
-            if self.m_cv_stride[0] < self.m_cv_stride[1]:
-                # Iterate j (outer), then i (inner)
-                for j in range(self.m_cv_count[1]):
-                    for i in range(self.m_cv_count[0]):
-                        cv_ptr = self.cv(i, j)
-                        if cv_ptr is not None and len(cv_ptr) > self.m_dim:
-                            w = cv_ptr[self.m_dim]
-                            w = 1.0 / w if abs(w) > 1e-14 else 1.0
-                            for d in range(self.m_dim):
-                                new_cv[new_idx] = w * cv_ptr[d]
-                                new_idx += 1
-            else:
-                # Iterate i (outer), then j (inner)
-                for i in range(self.m_cv_count[0]):
-                    for j in range(self.m_cv_count[1]):
-                        cv_ptr = self.cv(i, j)
-                        if cv_ptr is not None and len(cv_ptr) > self.m_dim:
-                            w = cv_ptr[self.m_dim]
-                            w = 1.0 / w if abs(w) > 1e-14 else 1.0
-                            for d in range(self.m_dim):
-                                new_cv[new_idx] = w * cv_ptr[d]
-                                new_idx += 1
-            
-            # Update strides for non-rational layout
-            self.m_is_rat = 0
-            if self.m_cv_stride[0] < self.m_cv_stride[1]:
-                self.m_cv_stride[0] = self.m_dim
-                self.m_cv_stride[1] = self.m_dim * self.m_cv_count[0]
-            else:
-                self.m_cv_stride[1] = self.m_dim
-                self.m_cv_stride[0] = self.m_dim * self.m_cv_count[1]
-            
-            self.m_cv = new_cv
-        
-        return not self.is_rational()
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # GEOMETRIC OPERATIONS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def get_bounding_box(self) -> OBB:
-        """Get bounding box of surface.
-
-        Returns
-        -------
-        OBB
-            Bounding box containing all control points.
-        """
-        if not self.is_valid() or self.m_cv_count[0] == 0 or self.m_cv_count[1] == 0:
-            return OBB()
-
-        min_pt = self.get_cv(0, 0)
-        max_pt = Point(min_pt.x, min_pt.y, min_pt.z)
-
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                pt = self.get_cv(i, j)
-                min_pt = Point(min(min_pt.x, pt.x),
-                              min(min_pt.y, pt.y),
-                              min(min_pt.z, pt.z))
-                max_pt = Point(max(max_pt.x, pt.x),
-                              max(max_pt.y, pt.y),
-                              max(max_pt.z, pt.z))
-
-        center = Point((min_pt.x + max_pt.x) / 2.0,
-                      (min_pt.y + max_pt.y) / 2.0,
-                      (min_pt.z + max_pt.z) / 2.0)
-        half_size = Vector((max_pt.x - min_pt.x) / 2.0,
-                          (max_pt.y - min_pt.y) / 2.0,
-                          (max_pt.z - min_pt.z) / 2.0)
-
-        return OBB(center, Vector.x_axis(), Vector.y_axis(), Vector.z_axis(), half_size)
-    
-    def divide_by_count(self, nu: int, nv: int) -> tuple[list[list[Point]], list[list[tuple[float, float]]]]:
-        u0, u1 = self.domain(0)
-        v0, v1 = self.domain(1)
-
-        grid = []
-        params = []
-        for i in range(nu + 1):
-            row = []
-            param_row = []
-            u = u0 + (u1 - u0) * (i / nu) if nu > 0 else u0
-            for j in range(nv + 1):
-                v = v0 + (v1 - v0) * (j / nv) if nv > 0 else v0
-                row.append(self.point_at(u, v))
-                param_row.append((u, v))
-            grid.append(row)
-            params.append(param_row)
-
-        return grid, params
-
-    def divide_by_count_points(self, nu: int, nv: int) -> tuple[list[list[Point]], list[list["Vector"]], list[list[tuple[float, float]]]]:
-        if not self.is_valid():
-            return [], [], []
-
-        u0, u1 = self.domain(0)
-        v0, v1 = self.domain(1)
-
-        grid = []
-        grid_vector = []
-        params = []
-        for i in range(nu + 1):
-            row = []
-            row_vector = []
-            param_row = []
-            u = u0 + (u1 - u0) * (i / nu) if nu > 0 else u0
-            for j in range(nv + 1):
-                v = v0 + (v1 - v0) * (j / nv) if nv > 0 else v0
-                row.append(self.point_at(u, v))
-                row_vector.append(self.normal_at(u, v))
-                param_row.append((u, v))
-            grid.append(row)
-            grid_vector.append(row_vector)
-            params.append(param_row)
-
-        return grid, grid_vector, params
-
-    def divide_by_count_planes(self, nu: int, nv: int) -> tuple[list[list["Plane"]], list[list[tuple[float, float]]]]:
-        if not self.is_valid():
-            return [], []
-
-        u0, u1 = self.domain(0)
-        v0, v1 = self.domain(1)
-
-        grid = []
-        params = []
-        for i in range(nu + 1):
-            row = []
-            param_row = []
-            u = u0 + (u1 - u0) * (i / nu) if nu > 0 else u0
-            for j in range(nv + 1):
-                v = v0 + (v1 - v0) * (j / nv) if nv > 0 else v0
-                origin = self.point_at(u, v)
-                derivs = self.evaluate(u, v, 1)
-                su = derivs[2]
-                sv = derivs[1]
-                x_axis = su.duplicate()
-                if x_axis.magnitude() > 1e-14:
-                    x_axis.normalize_self()
-                y_axis = sv.duplicate()
-                if y_axis.magnitude() > 1e-14:
-                    y_axis.normalize_self()
-                n = self.normal_at(u, v)
-                plane = Plane()
-                plane._origin = origin
-                plane._x_axis = x_axis
-                plane._y_axis = y_axis
-                plane._z_axis = n
-                plane._update_equation()
-                row.append(plane)
-                param_row.append((u, v))
-            grid.append(row)
-            params.append(param_row)
-
-        return grid, params
-
-    def _compute_bbox_diagonal(self):
-        import math
-        minx = miny = minz = 1e30
-        maxx = maxy = maxz = -1e30
-        for i in range(self.cv_count(0)):
-            for j in range(self.cv_count(1)):
-                p = self.get_cv(i, j)
-                if p[0] < minx: minx = p[0]
-                if p[1] < miny: miny = p[1]
-                if p[2] < minz: minz = p[2]
-                if p[0] > maxx: maxx = p[0]
-                if p[1] > maxy: maxy = p[1]
-                if p[2] > maxz: maxz = p[2]
-        dx, dy, dz = maxx-minx, maxy-miny, maxz-minz
-        return math.sqrt(dx*dx + dy*dy + dz*dz)
-
-    def _span_subs(self, dir, sp, osp, max_angle_deg, bbox_diag):
-        import math
-        n = len(sp) - 1
-        n_other = len(osp) - 1
-        subs = [1] * n
-        deg_u = self.degree(0)
-        deg_v = self.degree(1)
-        degree_dir = deg_u if dir == 0 else deg_v
-        s_positions = [(osp[k] + osp[k + 1]) * 0.5 for k in range(n_other)]
-        for i in range(n):
-            t0, t1 = sp[i], sp[i + 1]
-            if degree_dir > 1:
-                max_angle = 0.0
-                for s in s_positions:
-                    prev_n = None
-                    total_angle = 0.0
-                    for k in range(5):
-                        t = t0 + k * (t1 - t0) / 4.0
-                        if dir == 0:
-                            nv = self.normal_at(t, s)
-                        else:
-                            nv = self.normal_at(s, t)
-                        if prev_n is not None:
-                            dot = prev_n[0]*nv[0] + prev_n[1]*nv[1] + prev_n[2]*nv[2]
-                            dot = max(-1.0, min(1.0, dot))
-                            total_angle += math.acos(dot) * 180.0 / PI
-                        prev_n = nv
-                    if total_angle > max_angle:
-                        max_angle = total_angle
-                subs[i] = max(1, min(int(math.ceil(max_angle / max_angle_deg)), 24))
-            chord_tol = bbox_diag * 0.005
-            max_dev = 0.0
-            nc = min(n_other, 3)
-            for ci in range(nc + 1):
-                sv = osp[0] + ci * (osp[-1] - osp[0]) / max(nc, 1)
-                if dir == 0:
-                    pa = self.point_at(t0, sv)
-                    pb = self.point_at(t1, sv)
-                else:
-                    pa = self.point_at(sv, t0)
-                    pb = self.point_at(sv, t1)
-                for k in range(1, 4):
-                    frac = k / 4.0
-                    tm = t0 + frac * (t1 - t0)
-                    if dir == 0:
-                        pm = self.point_at(tm, sv)
-                    else:
-                        pm = self.point_at(sv, tm)
-                    lx = pa[0] + frac * (pb[0] - pa[0])
-                    ly = pa[1] + frac * (pb[1] - pa[1])
-                    lz = pa[2] + frac * (pb[2] - pa[2])
-                    dx, dy, dz = pm[0] - lx, pm[1] - ly, pm[2] - lz
-                    dev = math.sqrt(dx*dx + dy*dy + dz*dz)
-                    if dev > max_dev:
-                        max_dev = dev
-            if max_dev > chord_tol:
-                chord_subs = max(2, int(math.ceil(math.sqrt(max_dev / chord_tol))))
-                subs[i] = max(subs[i], min(chord_subs, 24))
-            if degree_dir > 1:
-                subs[i] = max(subs[i], 2)
-        return subs
-
-    def mesh_grid(self) -> "Mesh":
-        if self.m_mesh is not None:
-            return self.m_mesh
-        if not self.is_valid():
-            from .mesh import Mesh
-            return Mesh()
-        from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
-        self.m_mesh = RemeshNurbsSurfaceGrid.from_u_v(self, 0, 0)
-        return self.m_mesh
-
-    def mesh(self) -> "Mesh":
-        if self.m_mesh is not None:
-            return self.m_mesh
-        import math
-        from .mesh import Mesh
-        from .vector import Vector
-        usp = self.get_span_vector(0)
-        vsp = self.get_span_vector(1)
-        if len(usp) < 2 or len(vsp) < 2:
-            return Mesh()
-        if self.is_planar(tolerance=1e-6):
-            result = Mesh()
-            p00 = self.point_at_corner(0, 0)
-            p10 = self.point_at_corner(1, 0)
-            p11 = self.point_at_corner(1, 1)
-            p01 = self.point_at_corner(0, 1)
-            d2 = (p00[0]-p01[0])**2 + (p00[1]-p01[1])**2 + (p00[2]-p01[2])**2
-            if d2 < 1e-20:
-                v0 = result.add_vertex(p00)
-                v1 = result.add_vertex(p10)
-                v2 = result.add_vertex(p11)
-                result.add_face([v0, v1, v2])
-                e1 = Vector(p10[0]-p00[0], p10[1]-p00[1], p10[2]-p00[2])
-                e2 = Vector(p11[0]-p00[0], p11[1]-p00[1], p11[2]-p00[2])
-                normal = e1.cross(e2)
-            else:
-                v0 = result.add_vertex(p00)
-                v1 = result.add_vertex(p10)
-                v2 = result.add_vertex(p11)
-                v3 = result.add_vertex(p01)
-                result.add_face([v0, v1, v2])
-                result.add_face([v0, v2, v3])
-                derivs = self.evaluate(0.5, 0.5, 1)
-                normal = derivs[1].cross(derivs[2]) if len(derivs) >= 3 else Vector(0, 0, 1)
-            nlen = normal.magnitude()
-            n = normal * (1.0 / nlen) if nlen > 1e-15 else normal
-            for vkey in result.vertex:
-                result.vertex[vkey].set_normal(n[0], n[1], n[2])
-            self.m_mesh = result
-            return result
-        return self.mesh_grid()
-
-    def mesh_adaptive(self, max_angle: float = 20.0, max_edge_length: float = 0.0,
-                      min_edge_length: float = 0.0, max_chord_height: float = 0.0) -> "Mesh":
-        if self.m_mesh is not None:
-            return self.m_mesh
-        if not self.is_valid():
-            from .mesh import Mesh
-            return Mesh()
-        from .remesh_nurbssurface_adaptive import RemeshNurbsSurfaceAdaptive
-        mesher = RemeshNurbsSurfaceAdaptive(self)
-        mesher.set_max_angle(max_angle)
-        mesher.set_max_edge_length(max_edge_length)
-        mesher.set_min_edge_length(min_edge_length)
-        mesher.set_max_chord_height(max_chord_height)
-        self.m_mesh = mesher.mesh()
-        return self.m_mesh
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # JSON SERIALIZATION
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def jsondump(self) -> dict:
-        """Convert to JSON dictionary."""
-        return self.__jsondump__()
-    
-    @staticmethod
-    def jsonload(data: dict) -> 'NurbsSurface':
-        """Load from JSON dictionary."""
-        return NurbsSurface.__jsonload__(data)
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # STRING REPRESENTATION
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def to_string(self) -> str:
-        """Get string representation.
-        
-        Returns
-        -------
-        str
-            String representation of surface.
-        """
-        return (f"NurbsSurface(name={self.name}, "
-                f"degree=({self.degree(0)},{self.degree(1)}), "
-                f"cvs=({self.m_cv_count[0]},{self.m_cv_count[1]}))")
-    
-    def __str__(self) -> str:
-        return self.to_string()
-
-    def __repr__(self) -> str:
-        result = (f"NurbsSurface(\n  name={self.name},\n"
-                  f"  degree=({self.degree(0)},{self.degree(1)}),\n"
-                  f"  cvs=({self.m_cv_count[0]},{self.m_cv_count[1]}),\n"
-                  f"  rational={'true' if self.m_is_rat else 'false'},\n"
-                  f"  control_points=[\n")
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                p = self.get_cv(i, j)
-                result += f"    {p[0]:g}, {p[1]:g}, {p[2]:g}\n"
-        result += "  ]\n)"
-        return result
-
-    @staticmethod
-    def create_ruled(curveA: "NurbsCurve", curveB: "NurbsCurve") -> "NurbsSurface":
-        from .primitives import Primitives
-        return Primitives.create_ruled(curveA, curveB)
-
-    @staticmethod
-    def create_loft(input_curves: list["NurbsCurve"], degree_v: int = 3) -> "NurbsSurface":
-        from .primitives import Primitives
-        return Primitives.create_loft(input_curves, degree_v)
-
-    @staticmethod
-    def _merge_nurbsknot_vectors(a, b, tol=1e-10):
-        from .primitives import Primitives
-        return Primitives._merge_nurbsknot_vectors(a, b, tol)
-
-    @staticmethod
-    def _nurbsknot_vectors_equal(a, b, tol=1e-10):
-        from .primitives import Primitives
-        return Primitives._nurbsknot_vectors_equal(a, b, tol)
-
-    @staticmethod
-    def _make_curves_compatible(curves):
-        from .primitives import Primitives
-        Primitives._make_curves_compatible(curves)
-
-    @staticmethod
-    def create_planar(curves: Union["NurbsCurve", list["NurbsCurve"]]) -> "NurbsSurface":
-        from .primitives import Primitives
-        if isinstance(curves, list):
-            if len(curves) == 1:
-                return Primitives.create_planar(curves[0])
-            if not curves:
-                return NurbsSurface()
-            return Primitives.create_planar(curves[0])
-        return Primitives.create_planar(curves)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # ADDITIONAL CREATION METHODS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def create_clamped_uniform(self, dimension: int, order0: int, order1: int,
-                              cv_count0: int, cv_count1: int,
-                              nurbsknot_delta0: float = 1.0, nurbsknot_delta1: float = 1.0) -> bool:
-        """Create clamped uniform NURBS surface.
-        
-        Parameters
-        ----------
-        dimension : int
-            Dimension of the surface.
-        order0, order1 : int
-            Orders in u and v directions.
-        cv_count0, cv_count1 : int
-            Number of CVs in u and v directions.
-        nurbsknot_delta0, nurbsknot_delta1 : float, optional
-            NurbsKnot spacing.
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if not self._create_impl(dimension, False, order0, order1, cv_count0, cv_count1):
-            return False
-        
-        self.make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta0)
-        self.make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta1)
-        
-        return True
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # ADDITIONAL ACCESSORS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def cv_count_total(self) -> int:
-        """Get total number of control vertices.
-        
-        Returns
-        -------
-        int
-            Total number of CVs.
-        """
-        return self.m_cv_count[0] * self.m_cv_count[1]
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # NURBSKNOT VECTOR OPERATIONS (ADDITIONAL)
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def _to_curve_internal(self, dir: int):
-        """Pack surface into a high-dimensional curve along dir."""
-        dim = self.m_dim
-        if dir == 0:
-            n_along = self.cv_count(0)
-            n_other = self.cv_count(1)
-        else:
-            n_along = self.cv_count(1)
-            n_other = self.cv_count(0)
-        hdim = dim * n_other
-        crv = NurbsCurve(hdim, False, self.order(dir), n_along)
-        for k in range(self.nurbsknot_count(dir)):
-            crv.set_nurbsknot(k, self.m_nurbsknot[dir][k])
-        for i in range(n_along):
-            cv_data = []
-            for j in range(n_other):
-                if dir == 0:
-                    p = self.get_cv(i, j)
-                else:
-                    p = self.get_cv(j, i)
-                cv_data.extend([p[0], p[1], p[2]])
-            for d in range(hdim):
-                crv.m_cv[i * crv.m_cv_stride + d] = cv_data[d]
+    def _to_curve(self, dir: int) -> NurbsCurve:
+        """Pack the CV rows across dir into one curve along dir with cv_size * cv_count(1 - dir) doubles per CV"""
+        other = 1 - dir
+        size = self.cv_size()
+        crv = NurbsCurve(
+            size * self.m_cv_count[other],
+            False,
+            self.m_order[dir],
+            self.m_cv_count[dir],
+        )
+        for i in range(crv.nurbsknot_count()):
+            crv.set_nurbsknot(i, self.nurbsknot(dir, i))
+        for i in range(self.m_cv_count[dir]):
+            dst = crv.cv(i)
+            for j in range(self.m_cv_count[other]):
+                src = self.cv(j, i) if dir else self.cv(i, j)
+                dst[j * size : (j + 1) * size] = src
         return crv
 
-    def _from_curve_internal(self, crv, dir: int):
-        """Unpack high-dimensional curve back into surface."""
-        dim = self.m_dim
+    def _from_curve(self, crv: NurbsCurve, dir: int) -> bool:
+        """Unpack a curve made by _to_curve back into this surface along dir"""
+        other = 1 - dir
+        size = self.cv_size()
+        if crv.m_is_rat or crv.m_dim != size * self.m_cv_count[other]:
+            return False
+        srf = NurbsSurface()
         if dir == 0:
-            n_other = self.cv_count(1)
-            new_n_along = crv.cv_count()
+            srf.create_raw(
+                self.m_dim,
+                self.m_is_rat != 0,
+                crv.m_order,
+                self.m_order[1],
+                crv.m_cv_count,
+                self.m_cv_count[1],
+            )
         else:
-            n_other = self.cv_count(0)
-            new_n_along = crv.cv_count()
-        new_order = crv.order()
-        if dir == 0:
-            new_srf = NurbsSurface.create_raw(dim, False, new_order, self.order(1),
-                                               new_n_along, self.cv_count(1))
-            for k in range(crv.nurbsknot_count()):
-                new_srf.set_nurbsknot(0, k, crv.nurbsknot(k))
-            for k in range(self.nurbsknot_count(1)):
-                new_srf.set_nurbsknot(1, k, self.m_nurbsknot[1][k])
-        else:
-            new_srf = NurbsSurface.create_raw(dim, False, self.order(0), new_order,
-                                               self.cv_count(0), new_n_along)
-            for k in range(self.nurbsknot_count(0)):
-                new_srf.set_nurbsknot(0, k, self.m_nurbsknot[0][k])
-            for k in range(crv.nurbsknot_count()):
-                new_srf.set_nurbsknot(1, k, crv.nurbsknot(k))
-        for i in range(new_n_along):
-            for j in range(n_other):
-                base = i * crv.m_cv_stride + j * dim
-                x = crv.m_cv[base]
-                y = crv.m_cv[base + 1]
-                z = crv.m_cv[base + 2]
-                if dir == 0:
-                    new_srf.set_cv(i, j, Point(x, y, z))
-                else:
-                    new_srf.set_cv(j, i, Point(x, y, z))
-        self.m_order = new_srf.m_order
-        self.m_cv_count = new_srf.m_cv_count
-        self.m_nurbsknot = new_srf.m_nurbsknot
-        self.m_cv = new_srf.m_cv
-        self.m_cv_stride = new_srf.m_cv_stride
+            srf.create_raw(
+                self.m_dim,
+                self.m_is_rat != 0,
+                self.m_order[0],
+                crv.m_order,
+                self.m_cv_count[0],
+                crv.m_cv_count,
+            )
+        srf.m_nurbsknot[dir] = crv.m_nurbsknot.copy()
+        srf.m_nurbsknot[other] = self.m_nurbsknot[other].copy()
+        for i in range(crv.m_cv_count):
+            src = crv.cv(i)
+            for j in range(self.m_cv_count[other]):
+                dst = srf.cv(j, i) if dir else srf.cv(i, j)
+                dst[:] = src[j * size : (j + 1) * size]
+        self.m_order[dir] = srf.m_order[dir]
+        self.m_cv_count[dir] = srf.m_cv_count[dir]
+        self.m_cv_stride = list(srf.m_cv_stride)
+        self.m_nurbsknot[dir] = srf.m_nurbsknot[dir]
+        self.m_cv = srf.m_cv
         return True
 
-    def insert_nurbsknot(self, dir: int, nurbsknot_value: float, nurbsknot_multiplicity: int = 1) -> bool:
-        if dir < 0 or dir > 1:
-            return False
-        crv = self._to_curve_internal(dir)
-        if crv is None:
-            return False
-        for _ in range(nurbsknot_multiplicity):
-            if not crv.insert_nurbsknot(nurbsknot_value, 1):
-                return False
-        return self._from_curve_internal(crv, dir)
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # MODIFICATION OPERATIONS (ADDITIONAL)
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def trim(self, dir: int, domain: tuple[float, float]) -> bool:
-        """Trim surface to sub-domain in specified direction.
-
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        domain : tuple
-            (start, end) domain.
-
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if dir < 0 or dir > 1 or not self.is_valid():
-            return False
-        crv = self._to_curve_internal(dir)
-        if crv is None:
-            return False
-        if not crv.trim(domain[0], domain[1]):
-            return False
-        return self._from_curve_internal(crv, dir)
-    
-    def split(self, dir: int, c: float) -> tuple[Optional['NurbsSurface'], Optional['NurbsSurface']]:
-        """Split surface at parameter in specified direction.
-
-        Parameters
-        ----------
-        dir : int
-            Direction (0 for u, 1 for v).
-        c : float
-            Parameter value to split at.
-
-        Returns
-        -------
-        tuple
-            (west_or_south_side, east_or_north_side) or (None, None) on failure.
-        """
-        import copy
-        if dir < 0 or dir > 1 or not self.is_valid():
-            return (None, None)
-        t0, t1 = self.domain(dir)
-        if c <= t0 or c >= t1:
-            return (None, None)
-        lo = copy.deepcopy(self)
-        hi = copy.deepcopy(self)
-        if not lo.trim(dir, (t0, c)) or not hi.trim(dir, (c, t1)):
-            return (None, None)
-        return (lo, hi)
-    
-    def clamp_end(self, dir: int, end: int) -> bool:
-        """Clamp nurbsknot vector end(s) (OpenNURBS implementation).
-        
-        Sets initial/final (order-2) nurbsknot values to match nurbsknot[order-2]/nurbsknot[cv_count-1].
-        
-        Parameters
-        ----------
-        dir : int
-            Direction (0 or 1).
-        end : int
-            Which end to clamp (0=start, 1=end, 2=both).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        if dir < 0 or dir > 1:
-            return False
-        if not self.is_valid():
-            return False
-        
-        # Use nurbsknot module function
-        return nurbsknot.clamp(self.m_order[dir], self.m_cv_count[dir], self.m_nurbsknot[dir], end)
-    
-    def increase_degree(self, dir: int, desired_degree: int) -> bool:
-        if dir < 0 or dir > 1:
-            return False
-        if desired_degree < self.degree(dir):
-            return False
-        if desired_degree == self.degree(dir):
-            return True
-        crv = self._to_curve_internal(dir)
-        if crv is None:
-            return False
-        if not crv.increase_degree(desired_degree):
-            return False
-        return self._from_curve_internal(crv, dir)
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # TRANSFORMATION (OVERLOADS)
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # GEOMETRIC OPERATIONS (ADDITIONAL)
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def split_by_plane(self, plane: "Plane", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
-        """Split this surface by a plane into trimmed faces.
-
-        Computes the surface/plane intersection with UV pcurves and splits
-        the UV domain along them.
-
-        Returns
-        -------
-        list[NurbsSurfaceTrimmed]
-        """
-        from .intersection import surface_plane_uv
-        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
-        pairs = surface_plane_uv(self, plane, tolerance)
-        pcurves = []
-        for pair in pairs:
-            pcurves.append(pair[1])
-        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
-
-    def split_by_surface(self, cutter: "NurbsSurface", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
-        """Split this surface by another surface.
-
-        Computes the surface/surface intersection and splits the UV domain
-        along the pcurves on this surface.
-
-        Returns
-        -------
-        list[NurbsSurfaceTrimmed]
-        """
-        from .intersection import surface_surface
-        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
-        triples = surface_surface(self, cutter, tolerance)
-        pcurves = []
-        for triple in triples:
-            pcurves.append(triple[1])
-        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
-
-    def split_by_curves(self, curves: list["NurbsCurve"], tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
-        """Split this surface by 3D curves lying on (or near) it.
-
-        Each curve is pulled back to UV via closest-point projection; curves
-        whose pullback fails (off-surface) are skipped.
-
-        Returns
-        -------
-        list[NurbsSurfaceTrimmed]
-        """
-        from .closest import Closest
-        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
-        pcurves = []
-        for crv in curves:
-            for pcurve in Closest.surface_curve(self, crv, 0.0, 0.0, tolerance):
-                pcurves.append(pcurve)
-        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
-
-    def split_by_line(self, line: "Line", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
-        """Split this surface by a line pulled onto it (Rhino "pull then split").
-
-        The line is converted to a degree-1 curve and projected onto the
-        surface by closest points; the surface is split along the pulled
-        curve. A pulled curve that does not reach the boundary or another
-        cutter is discarded. For a planar cut, use split_by_plane.
-
-        Returns
-        -------
-        list[NurbsSurfaceTrimmed]
-        """
-        from .nurbscurve import NurbsCurve
-        pts = [line.start(), line.end()]
-        crv = NurbsCurve.create(False, 1, pts)
-        return self.split_by_curves([crv], tolerance)
-
-    def split_by_brep(self, brep: "BRep", tolerance: float | None = None) -> list["NurbsSurfaceTrimmed"]:
-        """Split this surface by every face of a BRep.
-
-        Each cutter face is intersected with this surface (planar faces via the
-        fast plane path, others via surface/surface); all cut pcurves split the
-        UV domain at once.
-
-        Returns
-        -------
-        list[NurbsSurfaceTrimmed]
-        """
-        from .intersection import cut_curves_on_surface
-        from .nurbssurface_trimmed import NurbsSurfaceTrimmed
-        target_bb = _surface_aabb(self)
-        pcurves = []
-        for cutter in brep.m_surfaces:
-            if not _aabb_overlap_pad(target_bb, _surface_aabb(cutter)):
-                continue
-            for pc in cut_curves_on_surface(self, cutter, tolerance):
-                pcurves.append(pc)
-        return NurbsSurfaceTrimmed.split_by_uv_curves(self, pcurves, tolerance)
-
-    def iso_curve(self, dir: int, c: float) -> Optional['NurbsCurve']:
-        """Get isoparametric curve at parameter.
-        
-        Parameters
-        ----------
-        dir : int
-            Direction that VARIES along the curve (0 = curve along u at v=c, 1 = curve along v at u=c).
-        c : float
-            Parameter value.
-        
-        Returns
-        -------
-        NurbsCurve or None
-            Isoparametric curve, or None on failure.
-        """
-        from .nurbscurve import NurbsCurve
-        
-        if (dir != 0 and dir != 1) or not self.is_valid():
-            return None
-        
-        # Create output curve with proper initialization
-        nurbs_crv = NurbsCurve()
-        if not nurbs_crv.create_curve(self.m_dim, self.m_is_rat != 0, self.m_order[dir], self.m_cv_count[dir]):
-            return None
-        
-        # Copy nurbsknot vector for varying direction
-        for i in range(nurbs_crv.nurbsknot_count()):
-            nurbs_crv.set_nurbsknot(i, self.nurbsknot(dir, i))
-        
-        # Find span in constant direction
-        span_index = self._find_span(1 - dir, c)
-        if span_index < 0:
-            span_index = 0
-        elif span_index > self.m_cv_count[1 - dir] - self.m_order[1 - dir]:
-            span_index = self.m_cv_count[1 - dir] - self.m_order[1 - dir]
-        
-        # Compute basis functions in constant direction
-        basis = self._basis_functions(1 - dir, span_index, c)
-        
-        # Evaluate CVs for isocurve
-        for i in range(nurbs_crv.m_cv_count):
-            cv_sum = np.zeros(self.cv_size())
-            
-            for k in range(self.m_order[1 - dir]):
-                if dir == 0:
-                    # curve along u (i) at v = c: blend over v
-                    cv_ptr = self.cv(i, span_index + k)
-                else:
-                    # curve along v (i) at u = c: blend over u
-                    cv_ptr = self.cv(span_index + k, i)
-                
-                if cv_ptr is not None:
-                    cv_sum += basis[k] * cv_ptr
-            
-            # The blend is homogeneous: store it as-is so rational surfaces give exact iso-curves
-            if self.m_is_rat:
-                nurbs_crv.set_cv_4d(i, cv_sum[0],
-                                    cv_sum[1] if self.m_dim > 1 else 0,
-                                    cv_sum[2] if self.m_dim > 2 else 0,
-                                    cv_sum[self.m_dim])
-            else:
-                pt = Point(cv_sum[0],
-                          cv_sum[1] if self.m_dim > 1 else 0,
-                          cv_sum[2] if self.m_dim > 2 else 0)
-                nurbs_crv.set_cv(i, pt)
-        
-        return nurbs_crv
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # ADVANCED OPERATIONS
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def zero_cvs(self) -> bool:
-        """Zero all control vertices (set weights to 1 if rational).
-        
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        for i in range(self.m_cv_count[0]):
-            for j in range(self.m_cv_count[1]):
-                self.set_cv(i, j, Point(0, 0, 0))
-                if self.m_is_rat:
-                    self.set_weight(i, j, 1.0)
-        return True
-    
-    # ═══════════════════════════════════════════════════════════════════════════
-    # JSON SERIALIZATION
-    # ═══════════════════════════════════════════════════════════════════════════
-    
-    def __jsondump__(self) -> dict:
-        """Convert to JSON-serializable dict. Field order matches C++ ground truth (alphabetical)."""
-        d = {
-            'control_points': self.m_cv.tolist(),
-            'cv_count_u': self.m_cv_count[0],
-            'cv_count_v': self.m_cv_count[1],
-            'dimension': self.m_dim,
-            'facecolors': [v for c in self.facecolors for v in (c.r, c.g, c.b, c.a)],
-            'guid': self.guid,
-            'is_rational': bool(self.m_is_rat),
-            'nurbsknots_u': self.m_nurbsknot[0].tolist(),
-            'nurbsknots_v': self.m_nurbsknot[1].tolist(),
-            'linecolors': [v for c in self.linecolors for v in (c.r, c.g, c.b, c.a)],
-            'name': self.name,
-            'order_u': self.m_order[0],
-            'order_v': self.m_order[1],
-            'pointcolors': [v for c in self.pointcolors for v in (c.r, c.g, c.b, c.a)],
-            'type': 'NurbsSurface',
-            'width': self.width,
-        }
-        if self.m_mesh is not None:
-            d['mesh'] = self.m_mesh.__jsondump__()
-        return d
-    
-    @classmethod
-    def __jsonload__(cls, data: dict, guid=None, name=None) -> 'NurbsSurface':
-        """Create from JSON dict."""
-        from .color import Color
-        srf = cls()
-
-        dimension = data.get('dimension', 3)
-        is_rational = data.get('is_rational', False)
-        order_u = data.get('order_u', 4)
-        order_v = data.get('order_v', 4)
-        cv_count_u = data.get('cv_count_u', 0)
-        cv_count_v = data.get('cv_count_v', 0)
-
-        if cv_count_u > 0 and cv_count_v > 0:
-            srf._create_impl(dimension, is_rational, order_u, order_v, cv_count_u, cv_count_v)
-
-            if 'nurbsknots_u' in data:
-                srf.m_nurbsknot[0] = np.array(data['nurbsknots_u'], dtype=np.float64)
-            if 'nurbsknots_v' in data:
-                srf.m_nurbsknot[1] = np.array(data['nurbsknots_v'], dtype=np.float64)
-            if 'control_points' in data:
-                srf.m_cv = np.array(data['control_points'], dtype=np.float64)
-
-        srf.guid = guid if guid is not None else data.get('guid', srf.guid)
-        srf.name = name if name is not None else data.get('name', 'my_nurbssurface')
-        srf.width = data.get('width', 1.0)
-
-        if 'pointcolors' in data:
-            arr = data['pointcolors']
-            srf.pointcolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
-        if 'facecolors' in data:
-            arr = data['facecolors']
-            srf.facecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
-        if 'linecolors' in data:
-            arr = data['linecolors']
-            srf.linecolors = [Color(arr[i], arr[i+1], arr[i+2], arr[i+3]) for i in range(0, len(arr) - 3, 4)]
-        if data.get('mesh'):
-            from .mesh import Mesh
-            srf.m_mesh = Mesh.__jsonload__(data['mesh'])
-
-        return srf
-    
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write JSON to file.
-        
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the output file.
-        """
-        import json
-        with open(filepath, 'w') as f:
-            json.dump(self.__jsondump__(), f, indent=2)
-    
-    @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> 'NurbsSurface':
-        """Read JSON from file.
-        
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the JSON file.
-        
-        Returns
-        -------
-        NurbsSurface
-            The deserialized NurbsSurface.
-        """
-        import json
-        with open(filepath) as f:
-            data = json.load(f)
-        return cls.__jsonload__(data)
-
-    def file_json_dumps(self) -> str:
-        """Convert to JSON string."""
-        import json
-        return json.dumps(self.__jsondump__())
-
-    @classmethod
-    def file_json_loads(cls, json_string: str) -> "NurbsSurface":
-        """Load from JSON string."""
-        import json
-        return cls.__jsonload__(json.loads(json_string))
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # PROTOBUF SERIALIZATION
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Convert to protobuf binary format.
-
-        Returns
-        -------
-        bytes
-            Serialized protobuf data.
-        """
-        from .proto import nurbssurface_pb2
-
-        proto = nurbssurface_pb2.NurbsSurface()
-        if self.has_guid():
-            proto.guid = self._guid
-        proto.name = self.name
-        proto.dimension = self.m_dim
-        proto.is_rational = bool(self.m_is_rat)
-        proto.order_u = self.m_order[0]
-        proto.order_v = self.m_order[1]
-        proto.cv_count_u = self.m_cv_count[0]
-        proto.cv_count_v = self.m_cv_count[1]
-        proto.cv_stride_u = self.m_cv_stride[0]
-        proto.cv_stride_v = self.m_cv_stride[1]
-
-        # NurbsKnot vectors
-        proto.nurbsknots_u.extend(self.m_nurbsknot[0].tolist())
-        proto.nurbsknots_v.extend(self.m_nurbsknot[1].tolist())
-
-        # Control vertices (flat array)
-        proto.cvs.extend(self.m_cv.tolist())
-
-        # Visual properties
-        proto.width = self.width
-
-        for c in self.pointcolors:
-            cp = proto.pointcolors.add()
-            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        for c in self.facecolors:
-            cp = proto.facecolors.add()
-            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        for c in self.linecolors:
-            cp = proto.linecolors.add()
-            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-
-        # Cached mesh
-        if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
-            mesh_data = self.m_mesh.pb_dumps()
-            proto.cached_mesh.ParseFromString(mesh_data)
-
-        return proto.SerializeToString()
-
-    def pb_fill(self, proto: "nurbssurface_pb2.NurbsSurface") -> None:
-        """Fill an existing NurbsSurface proto message directly (avoids serialize/deserialize cycle)."""
-        if self.has_guid():
-            proto.guid = self._guid
-        proto.name = self.name
-        proto.dimension = self.m_dim
-        proto.is_rational = bool(self.m_is_rat)
-        proto.order_u = self.m_order[0]
-        proto.order_v = self.m_order[1]
-        proto.cv_count_u = self.m_cv_count[0]
-        proto.cv_count_v = self.m_cv_count[1]
-        proto.cv_stride_u = self.m_cv_stride[0]
-        proto.cv_stride_v = self.m_cv_stride[1]
-        proto.nurbsknots_u.extend(self.m_nurbsknot[0].tolist())
-        proto.nurbsknots_v.extend(self.m_nurbsknot[1].tolist())
-        proto.cvs.extend(self.m_cv.tolist())
-        proto.width = self.width
-        for c in self.pointcolors:
-            cp = proto.pointcolors.add()
-            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        for c in self.facecolors:
-            cp = proto.facecolors.add()
-            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        for c in self.linecolors:
-            cp = proto.linecolors.add()
-            cp.r = int(c.r); cp.g = int(c.g); cp.b = int(c.b); cp.a = int(c.a)
-        if self.m_mesh is not None and self.m_mesh.number_of_vertices() > 0:
-            proto.cached_mesh.ParseFromString(self.m_mesh.pb_dumps())
-
-    @classmethod
-    def pb_loads(cls, data: bytes) -> "NurbsSurface":
-        """Create NurbsSurface from protobuf binary data.
-
-        Parameters
-        ----------
-        data : bytes
-            Protobuf-encoded surface data.
-
-        Returns
-        -------
-        NurbsSurface
-            The deserialized NurbsSurface.
-        """
-        from .proto import nurbssurface_pb2
-        from .color import Color
-        import numpy as np
-
-        proto = nurbssurface_pb2.NurbsSurface()
-        proto.ParseFromString(data)
-
-        # Create surface with correct dimensions
-        surface = cls()
-        surface._create_impl(
-            proto.dimension,
-            proto.is_rational,
-            proto.order_u,
-            proto.order_v,
-            proto.cv_count_u,
-            proto.cv_count_v
-        )
-
-        # Load metadata
-        if proto.guid:
-            surface.guid = proto.guid
-        surface.name = proto.name
-        surface.width = proto.width
-
-        # Load nurbsknot vectors
-        if len(proto.nurbsknots_u) == len(surface.m_nurbsknot[0]):
-            surface.m_nurbsknot[0] = np.array(list(proto.nurbsknots_u), dtype=np.float64)
-        if len(proto.nurbsknots_v) == len(surface.m_nurbsknot[1]):
-            surface.m_nurbsknot[1] = np.array(list(proto.nurbsknots_v), dtype=np.float64)
-
-        # Load control vertices - the wire is row-major (see pb_dumps); honor its strides
-        cv_sz = surface.cv_size()
-        stride_u = proto.cv_stride_u if proto.cv_stride_u > 0 else cv_sz * surface.m_cv_count[1]
-        stride_v = proto.cv_stride_v if proto.cv_stride_v > 0 else cv_sz
-        cvs = list(proto.cvs)
-        for i in range(surface.m_cv_count[0]):
-            for j in range(surface.m_cv_count[1]):
-                src = i * stride_u + j * stride_v
-                dst = i * surface.m_cv_stride[0] + j * surface.m_cv_stride[1]
-                for d in range(cv_sz):
-                    if src + d < len(cvs):
-                        surface.m_cv[dst + d] = cvs[src + d]
-
-        surface.pointcolors = [Color(c.r, c.g, c.b, c.a) for c in proto.pointcolors]
-        surface.facecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.facecolors]
-        surface.linecolors = [Color(c.r, c.g, c.b, c.a) for c in proto.linecolors]
-
-        # Load cached mesh
-        if proto.HasField('cached_mesh') and len(proto.cached_mesh.vertices) > 0:
-            from .mesh import Mesh
-            mesh_data = proto.cached_mesh.SerializeToString()
-            surface.m_mesh = Mesh.pb_loads(mesh_data)
-
-        return surface
-
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write protobuf to file.
-
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the output file.
-        """
-        data = self.pb_dumps()
-        with open(filepath, 'wb') as f:
-            f.write(data)
-
-    @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> 'NurbsSurface':
-        """Read protobuf from file.
-
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the protobuf file.
-
-        Returns
-        -------
-        NurbsSurface
-            The deserialized NurbsSurface.
-        """
-        with open(filepath, 'rb') as f:
-            data = f.read()
-        return cls.pb_loads(data)
+    @staticmethod
+    def _assign_plane(dst: Plane, src: Plane) -> None:
+        """Copy the frame of src into dst (the C++ Plane* out-parameter)"""
+        dst._origin = src.origin
+        dst._x_axis = src.x_axis
+        dst._y_axis = src.y_axis
+        dst._z_axis = src.z_axis
+        dst._update_equation()

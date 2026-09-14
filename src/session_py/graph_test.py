@@ -12,15 +12,12 @@ from .mini_test import run_all
 def test_vertex_constructor():
     from session_py import Vertex
 
-    # Default constructor
     v0 = Vertex()
-
-    # Constructor with name + attribute
     v = Vertex("v_named", "attr")
 
     MINI_CHECK(v0.name == "my_vertex")
     MINI_CHECK(v0.attribute == "")
-    MINI_CHECK(v0.guid)
+    MINI_CHECK(v0.guid != "")
     MINI_CHECK(v.name == "v_named")
     MINI_CHECK(v.attribute == "attr")
 
@@ -51,13 +48,12 @@ def test_vertex_json_roundtrip():
 def test_edge_constructor():
     from session_py import Edge
 
-    # Constructor with v0/v1/attribute
     e = Edge("a", "b", "attr")
 
     MINI_CHECK(e.v0 == "a")
     MINI_CHECK(e.v1 == "b")
     MINI_CHECK(e.attribute == "attr")
-    MINI_CHECK(e.guid)
+    MINI_CHECK(e.guid != "")
 
 
 @MINI_TEST("Edge", "Json Roundtrip")
@@ -83,7 +79,7 @@ def test_edge_vertices():
     from session_py import Edge
 
     e = Edge("a", "b")
-    u, v = e.vertices
+    u, v = e.vertices()
 
     MINI_CHECK(u == "a" and v == "b")
 
@@ -118,15 +114,16 @@ def test_edge_other_vertex():
 def test_graph_constructor():
     from session_py import Graph
 
-    # Default constructor
     g0 = Graph()
-
-    # Constructor with name
     g = Graph("my_named_graph")
+    gstr = str(g0)
 
     MINI_CHECK(g0.name == "my_graph")
-    MINI_CHECK(g0.guid)
+    MINI_CHECK(g0.guid != "")
+    MINI_CHECK(g0.vertex_count == 0)
+    MINI_CHECK(g0.edge_count == 0)
     MINI_CHECK(g.name == "my_named_graph")
+    MINI_CHECK("my_graph" in gstr)
 
 
 @MINI_TEST("Graph", "Json Roundtrip")
@@ -138,13 +135,6 @@ def test_graph_json_roundtrip():
     original.add_node("node1", "Node 1")
     original.add_node("node2", "Node 2")
     original.add_edge("node1", "node2", "edge1")
-
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   file_json_dumps()    │ str          │ to JSON string
-    #   file_json_loads(s)   │ str          │ from JSON string
-    #   file_json_dump(path) │ file         │ write to file
-    #   file_json_load(path) │ file         │ read from file
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_graph.json"
     original.file_json_dump(fname)
@@ -165,9 +155,9 @@ def test_graph_protobuf_roundtrip():
     original.add_node("node2", "Node 2")
     original.add_edge("node1", "node2", "edge1")
 
-    path = Path(__file__).resolve().parents[2] / "serialization" / "test_graph.bin"
-    original.pb_dump(path)
-    loaded = Graph.pb_load(path)
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_graph.bin"
+    original.pb_dump(filename)
+    loaded = Graph.pb_load(filename)
 
     MINI_CHECK(loaded.number_of_vertices() == 2)
     MINI_CHECK(loaded.number_of_edges() == 1)
@@ -198,23 +188,19 @@ def test_graph_has_edge():
 
 @MINI_TEST("Graph", "Has Guid")
 def test_graph_has_guid():
-    from session_py.graph import Edge
-    from session_py.graph import Vertex
+    from session_py import Edge
+    from session_py import Vertex
 
-    # A guid is lazily minted, so ASKING for one creates it. The writers used to ask for every
-    # vertex and edge, which minted 34,592 UUIDs for one drawing sheet and wrote 1.3 MB of them
-    # into a file whose reader discards them. has_guid() answers without minting, so a thing
-    # nobody names never pays for one.
     v = Vertex("a")
     e = Edge("a", "b")
 
-    MINI_CHECK(not v.has_guid())  # nobody has asked
+    MINI_CHECK(not v.has_guid())
     MINI_CHECK(not e.has_guid())
 
     minted = v.guid
     MINI_CHECK(minted != "")
-    MINI_CHECK(v.has_guid())  # asking created it
-    MINI_CHECK(v.guid == minted)  # and it is stable
+    MINI_CHECK(v.has_guid())
+    MINI_CHECK(v.guid == minted)
 
 
 @MINI_TEST("Graph", "Add Node")
@@ -287,7 +273,7 @@ def test_graph_get_edges():
     g.add_edge("a", "b")
     g.add_edge("b", "c")
 
-    edges = list(g.get_edges())
+    edges = g.get_edges()
 
     MINI_CHECK(len(edges) == 2)
 
@@ -300,7 +286,7 @@ def test_graph_neighbors():
     g.add_edge("a", "b")
     g.add_edge("a", "c")
 
-    neigh = list(g.neighbors("a"))
+    neigh = g.neighbors("a")
 
     MINI_CHECK(len(neigh) == 2)
 

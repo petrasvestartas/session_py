@@ -2,7 +2,6 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
-from .tolerance import PI
 
 
 @MINI_TEST("NurbsSurface", "Constructor")
@@ -11,22 +10,18 @@ def test_nurbssurface_constructor():
     from session_py import Point
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -35,24 +30,20 @@ def test_nurbssurface_constructor():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Get mesh
     m = s.mesh()
 
-    # Point division matching Rhino's 4x6 grid
     p, v, uv = s.divide_by_count_points(4, 6)
 
-    # Minimal and Full String Representation
     sstr = str(s)
     srepr = repr(s)
 
-    # Copy (duplicates everything except guid)
     scopy = s.duplicate()
     sother = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
     MINI_CHECK(s.is_valid() == True)
-    MINI_CHECK(s.cv_count_dir(0) == 4)
-    MINI_CHECK(s.cv_count_dir(1) == 4)
-    MINI_CHECK(s.cv_count_dir(None) == 16)
+    MINI_CHECK(s.cv_count(0) == 4)
+    MINI_CHECK(s.cv_count(1) == 4)
+    MINI_CHECK(s.cv_count() == 16)
     MINI_CHECK(s.degree(0) == 3)
     MINI_CHECK(s.degree(1) == 3)
     MINI_CHECK(s.order(0) == 4)
@@ -65,7 +56,7 @@ def test_nurbssurface_constructor():
     MINI_CHECK(s.guid)
     MINI_CHECK(sstr == "NurbsSurface(name=my_nurbssurface, degree=(3,3), cvs=(4,4))")
     MINI_CHECK(srepr == "NurbsSurface(\n  name=my_nurbssurface,\n  degree=(3,3),\n  cvs=(4,4),\n  rational=false,\n  control_points=[\n    0, 0, 0\n    -1, 0.75, 2\n    -1, 4.25, 2\n    0, 5, 0\n    0.75, -1, 2\n    1.25, 1.25, 4\n    1.25, 3.75, 4\n    0.75, 6, 2\n    4.25, -1, 2\n    3.75, 1.25, 4\n    3.75, 3.75, 4\n    4.25, 6, 2\n    5, 0, 0\n    6, 0.75, 2\n    6, 4.25, 2\n    5, 5, 0\n  ]\n)")
-    MINI_CHECK(scopy.cv_count_dir(None) == s.cv_count_dir(None))
+    MINI_CHECK(scopy.cv_count() == s.cv_count())
     MINI_CHECK(scopy.guid != s.guid)
     MINI_CHECK(TOLERANCE.is_point_close(p[0][0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(p[0][1], Point(-0.416666666666667, 0.578703703703704, 0.833333333333333)))
@@ -109,8 +100,6 @@ def test_nurbssurface_create_from_parameters():
     from session_py import NurbsSurface
     from session_py import Point
 
-    # Mirrors compas_occt OCCNurbsSurface.from_parameters / from_points (surface_from_points.py).
-    # Validated pointwise against OCCT (validation/compare_surface_eval.py).
     grid = [
         [Point(0, 0, 0), Point(1, 0, 0), Point(2, 0, 0), Point(3, 0, 0)],
         [Point(0, 1, 0), Point(1, 1, 2), Point(2, 1, 2), Point(3, 1, 0)],
@@ -132,17 +121,12 @@ def test_nurbssurface_create_from_parameters():
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.5, 0.5), Point(1.5, 1.5, 1.125)))
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.37, 0.41), Point(1.11, 1.23, 1.01496402)))
 
-    # frame_at (surface_frames.py): origin == point_at, z-axis == normal_at.
-    # Normal validated vs OCCT D1uxD1v (validation/compare_surface_eval.py).
     fr = s.frame_at(0.3, 0.4)
     MINI_CHECK(TOLERANCE.is_point_close(fr.origin, s.point_at(0.3, 0.4)))
     n = s.normal_at(0.3, 0.4)
     za = fr.z_axis
     MINI_CHECK(abs(za[0] - n[0]) < 1e-9 and abs(za[1] - n[1]) < 1e-9 and abs(za[2] - n[2]) < 1e-9)
 
-    # intersections_with_line (surface_intersections_with_line.py): a vertical line
-    # through (1.5, 1.5) hits the surface once at (1.5, 1.5, 1.125). Validated vs
-    # OCCT GeomAPI_IntCS (validation harness, dev <= 1.6e-16).
     from session_py import Line
     hits = s.intersections_with_line(Line(1.5, 1.5, -5, 1.5, 1.5, 5))
     MINI_CHECK(len(hits) == 1)
@@ -151,33 +135,25 @@ def test_nurbssurface_create_from_parameters():
 
 @MINI_TEST("NurbsSurface", "Booleans Queries")
 def test_booleans_queries():
-    from session_py import NurbsSurface
     from session_py import Plane
     from session_py import Primitives
 
     s = Primitives.sphere_surface(0, 0, 0, 5.0)
 
-    # Validity surface and nurbsknots
     is_valid = s.is_valid()
     are_nurbsknots_valid = s.is_valid_nurbsknot_vector(0) and s.is_valid_nurbsknot_vector(1)
 
-    # Are control points weights enabled?
     is_rational = s.is_rational()
 
-    # Sphere has one seam that is closed, but two poles
     is_closed = s.is_closed(0) == True and s.is_closed(1) == False
 
-    # sphere cannot be truly periodic because it has poles
     is_periodic = s.is_periodic(0) and s.is_periodic(1)
 
-    # Planarity
     plane = Plane.xy_plane()
     is_planar = s.is_planar(plane)
 
-    # Surface is collapsed to a point
     is_point = s.is_singular(0) and s.is_singular(1) and s.is_singular(2) and s.is_singular(3)
 
-    # Most surfaces are clamped except periodic surfaces
     is_clamped = s.is_clamped(0, 2) and s.is_clamped(1, 2)
 
     MINI_CHECK(is_valid)
@@ -196,22 +172,18 @@ def test_nurbssurface_attributes():
     from session_py import Point
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -220,27 +192,19 @@ def test_nurbssurface_attributes():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Check the dimentions of a surface
-    # Mostly 3d
-    # But 2d can be used for: scalar field over parameter space e.g. czrvatzre map, distance field
-    # Planar geometry: texture coordinates
     dimensions = s.dimension()
 
-    # Degree types 1 - linear, 2 - quadratic, 3 - cubic
     order_u = s.order(0)
     order_v = s.order(1)
 
-    # Control vertex count
-    cv_count_u = s.cv_count_dir(0)
-    cv_count_v = s.cv_count_dir(1)
-    cv_count = s.cv_count_dir(None)
+    cv_count_u = s.cv_count(0)
+    cv_count_v = s.cv_count(1)
+    cv_count = s.cv_count()
     cv_size = s.cv_size()
 
-    # Number of nurbsknots
     k_count_0 = s.nurbsknot_count(0)
     k_count_1 = s.nurbsknot_count(1)
 
-    # Span count
     s_count_0 = s.span_count(0)
     s_count_1 = s.span_count(1)
 
@@ -263,22 +227,18 @@ def test_control_vertices_access():
     from session_py import Point
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -288,17 +248,12 @@ def test_control_vertices_access():
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     s.make_rational()
 
-    # Raw CV access - cv() returns view of internal storage
     cv_arr = s.cv(0, 0)
 
     MINI_CHECK(cv_arr[2] == 0)
     cv_arr[2] = 10.0
     MINI_CHECK(cv_arr[2] == 10)
 
-    # Point and Weight
-    # NOTE
-    # point is (Xw, Yw, Zw, w)
-    # cv pointer is (X, Y, Z)
     cv = s.get_cv(0, 0)
     MINI_CHECK(cv == Point(0, 0, 10))
     ok, x, y, z, w = s.get_cv_4d(0, 0)
@@ -322,22 +277,18 @@ def test_nurbsknot_access():
     from session_py import Point
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -346,7 +297,6 @@ def test_nurbsknot_access():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Get nurbsknot vectors and individual nurbsknot
     nurbsknots_u = s.get_nurbsknots(0)
     for i in range(s.nurbsknot_count(0)):
         nurbsknot = s.nurbsknot(0, i)
@@ -357,14 +307,12 @@ def test_nurbsknot_access():
         nurbsknot = s.nurbsknot(1, i)
         MINI_CHECK(nurbsknot == nurbsknots_v[i])
 
-    # Set nurbsknots
     is_set = s.set_nurbsknot(0, 2, 0.5)
     MINI_CHECK(is_set)
     MINI_CHECK(s.nurbsknot(0, 2) == 0.5)
     is_set = s.set_nurbsknot(0, 2, 0.0)
     MINI_CHECK(is_set)
 
-    # Verify start multiplicity
     mult_u_start = s.nurbsknot_multiplicity(0, 0)
     mult_v_start = s.nurbsknot_multiplicity(1, 0)
     MINI_CHECK(mult_u_start == 3)
@@ -382,22 +330,18 @@ def test_domain():
     from session_py import Point
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -406,7 +350,6 @@ def test_domain():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # Get domain 0 - 1
     domain_u = s.domain(0)
     domain_v = s.domain(1)
 
@@ -415,7 +358,6 @@ def test_domain():
     MINI_CHECK(TOLERANCE.is_close(domain_v[0], 0))
     MINI_CHECK(TOLERANCE.is_close(domain_v[1], 1))
 
-    # Set Domain
     is_set_u = s.set_domain(0, -1.1, 2.3)
     is_set_v = s.set_domain(1, -5.1, 1.3)
     MINI_CHECK(is_set_u)
@@ -423,7 +365,6 @@ def test_domain():
     MINI_CHECK(is_set_v)
     MINI_CHECK(TOLERANCE.is_close(s.domain(1)[1], 1.3))
 
-    # Get sorted list of distinct nurbsknot values
     span_vector = s.get_span_vector(0)
     first_item = span_vector[0]
     last_item = span_vector[-1]
@@ -438,22 +379,18 @@ def test_division():
     from session_py import Vector
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -462,10 +399,8 @@ def test_division():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # points, normals, uv
     division_points, vectors, uvs0 = s.divide_by_count_points(3, 3)
 
-    # planes, uv
     planes, uvs1 = s.divide_by_count_planes(3, 3)
 
     MINI_CHECK(TOLERANCE.is_point_close(division_points[0][0], Point(0, 0, 0)))
@@ -573,22 +508,18 @@ def test_evaluation():
     from session_py import Vector
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -600,26 +531,21 @@ def test_evaluation():
     u = 0.5
     v = 0.5
 
-    # point_at(u, v) - returns Point
     p1 = s.point_at(u, v)
 
     MINI_CHECK(TOLERANCE.is_point_close(p1, Point(2.5, 2.5, 3.0)))
 
-    # normal_at(u, v) - returns Vector
     n1 = s.normal_at(u, v)
     MINI_CHECK(TOLERANCE.is_vector_close(n1, Vector(0, 0, 1)))
 
-    # evaluate(u, v, num_derivs) - returns vector of derivatives
     derivs = s.evaluate(u, v, 1)
     MINI_CHECK(TOLERANCE.is_vector_close(derivs[0], Vector(2.5, 2.5, 3.0)))
     MINI_CHECK(TOLERANCE.is_vector_close(derivs[1], Vector(0.0, 6.9375, 0.0)))
     MINI_CHECK(TOLERANCE.is_vector_close(derivs[2], Vector(6.9375, 0.0, 0.0)))
 
-    # point_at_corner(u_end, v_end) - corner point
     p_corner = s.point_at_corner(1, 1)
     MINI_CHECK(TOLERANCE.is_point_close(p_corner, Point(5.0, 5.0, 0.0)))
 
-    # get isocurve - returns NurbsCurve
     iso_u = s.iso_curve(0, v)
     iso_v = s.iso_curve(1, u)
     MINI_CHECK(TOLERANCE.is_point_close(iso_u.point_at(0.5), Point(2.5, 2.5, 3.0)))
@@ -631,25 +557,20 @@ def test_modification():
     import copy
     from session_py import NurbsSurface
     from session_py import Point
-    from session_py import Vector
 
     points = [
-        # i=0
         Point(0.0, 0.0, 0.0),
         Point(-1.0, 0.75, 2.0),
         Point(-1.0, 4.25, 2.0),
         Point(0.0, 5.0, 0.0),
-        # i=1
         Point(0.75, -1.0, 2.0),
         Point(1.25, 1.25, 4.0),
         Point(1.25, 3.75, 4.0),
         Point(0.75, 6.0, 2.0),
-        # i=2
         Point(4.25, -1.0, 2.0),
         Point(3.75, 1.25, 4.0),
         Point(3.75, 3.75, 4.0),
         Point(4.25, 6.0, 2.0),
-        # i=3
         Point(5.0, 0.0, 0.0),
         Point(6.0, 0.75, 2.0),
         Point(6.0, 4.25, 2.0),
@@ -659,32 +580,27 @@ def test_modification():
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
 
-    # Reverse one direction
     s_rev = copy.deepcopy(s)
     s_rev.reverse(0)
 
     MINI_CHECK(s_rev.point_at_corner(0, 0) == s.point_at_corner(1, 0))
     MINI_CHECK(s_rev.normal_at(0.5, 0.5) == s.normal_at(0.5, 0.5) * -1)
 
-    # Swap u and v direction
     s_tr = copy.deepcopy(s)
     s_tr.transpose()
     MINI_CHECK(s.point_at(0, 0.5) == s_tr.point_at(0.5, 0))
 
-    # Swap coordinates - swap x and z
     s_swap = copy.deepcopy(s)
     s_swap.swap_coordinates(0, 2)
     MINI_CHECK(s.point_at(0.5, 0.5)[0] == s_swap.point_at(0.5, 0.5)[2])
     MINI_CHECK(s.point_at(0.5, 0.5)[2] == s_swap.point_at(0.5, 0.5)[0])
 
-    # Trim surface, domain changed but parametrization preserved
     s_trim = copy.deepcopy(s)
     s_trim.trim(0, (0.25, 0.75))
     MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[0], 0.25))
     MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[1], 0.75))
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.25, 0.5), s_trim.point_at(0.25, 0.5)))
 
-    # Split surface into 4 quadrants, check shared corner point is the same
     west, east = s.split(0, 0.5)
     ww, we = west.split(1, (west.domain(1)[0] + west.domain(1)[1]) / 2.0)
     ew, ee = east.split(1, (east.domain(1)[0] + east.domain(1)[1]) / 2.0)
@@ -694,7 +610,6 @@ def test_modification():
     MINI_CHECK(TOLERANCE.is_point_close(ew.point_at_corner(0, 1), center))
     MINI_CHECK(TOLERANCE.is_point_close(ee.point_at_corner(0, 0), center))
 
-    # Make rational and change weight
     s_rat = copy.deepcopy(s)
     s_rat.make_rational()
     s_rat.set_weight(2, 2, 3.0)
@@ -702,7 +617,6 @@ def test_modification():
     s_rat.make_non_rational()
     MINI_CHECK(s.point_at(0.5, 0.5) == s_rat.point_at(0.5, 0.5))
 
-    # Increase degree
     s_deg = copy.deepcopy(s)
     s_deg.increase_degree(0, 6)
     s_deg.increase_degree(1, 6)
@@ -737,26 +651,22 @@ def test_transformations():
         Point(5.0, 5.0, 0.0),
     ]
 
-    # Variant 1: transform(xform) - in place
     surface1 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     surface1_xf = Xform.translation(0.0, 0.0, 1.0)
     surface1.transform(surface1_xf)
 
     MINI_CHECK(surface1.cv(0, 0)[2] == 1.0)
 
-    # Variant 2: transform(xform) - in place, matrix built separately
     surface2 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     x = Xform.translation(0.0, 0.0, 1.0)
     surface2.transform(x)
     MINI_CHECK(surface2.cv(0, 0)[2] == 1.0)
 
-    # Variant 3: transformed(xform) - returns a copy
     surface3 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     surface3_xf = Xform.translation(0.0, 0.0, 10.0)
     surface3_transformed = surface3.transformed(surface3_xf)
     MINI_CHECK(surface3_transformed.cv(0, 0)[2] == 10.0)
 
-    # Variant 4: transformed(xform) - returns a copy, matrix built separately
     surface4 = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
     x = Xform.translation(0.0, 0.0, 10.0)
     surface4_transformed = surface4.transformed(x)
@@ -765,14 +675,11 @@ def test_transformations():
 
 @MINI_TEST("NurbsSurface", "Meshing")
 def test_meshing():
-    from session_py import NurbsSurface
     from session_py import NurbsCurve
-    from session_py import Mesh
     from session_py import Primitives
     from session_py import Vector
     from session_py import Point
 
-    # 1. Sphere — two poles, closed U, rational
     sphere = Primitives.sphere_surface(0, 0, 0, 3.0)
     mesh_sphere = sphere.mesh()
     mesh_sphere_adaptive = sphere.mesh_adaptive(45.0)
@@ -780,21 +687,18 @@ def test_meshing():
     MINI_CHECK(mesh_sphere.is_valid())
     MINI_CHECK(mesh_sphere_adaptive.is_valid())
 
-    # 2. Cone — singular apex (pole), closed U
     cone = Primitives.cone_surface(0, 12, 0, 2.0, 6.0)
     mesh_cone = cone.mesh()
     mesh_cone_adaptive = cone.mesh_adaptive(45.0)
     MINI_CHECK(mesh_cone.is_valid())
     MINI_CHECK(mesh_cone_adaptive.is_valid())
 
-    # 3. Torus — doubly closed (U and V), rational
     torus = Primitives.torus_surface(0, 24, 0, 4.0, 1.5)
     mesh_torus = torus.mesh()
     mesh_torus_adaptive = torus.mesh_adaptive(45.0)
     MINI_CHECK(mesh_torus.is_valid())
     MINI_CHECK(mesh_torus_adaptive.is_valid())
 
-    # 4. Loft — varying radius circles, closed U, multi-span V
     loft = Primitives.create_loft([
         Primitives.circle(0, 38, 0, 2.0),
         Primitives.circle(0, 38, 2, 1.0),
@@ -805,7 +709,6 @@ def test_meshing():
     MINI_CHECK(mesh_loft.is_valid())
     MINI_CHECK(mesh_loft_adaptive.is_valid())
 
-    # 5. Extrusion (circle) — closed U, linear V, rational
     ext_dir = Vector(0, 0, 5)
     cylinder = Primitives.create_extrusion(Primitives.circle(0, 52, 0, 3.0), ext_dir)
     mesh_cylinder = cylinder.mesh()
@@ -813,7 +716,6 @@ def test_meshing():
     MINI_CHECK(mesh_cylinder.is_valid())
     MINI_CHECK(mesh_cylinder_adaptive.is_valid())
 
-    # 6. Ruled — bilinear (degree 1x1), tests twist subdivision
     ra = NurbsCurve.create(False, 1, [
         Point(0, 64, 0),
         Point(5, 64, 5),
@@ -828,7 +730,6 @@ def test_meshing():
     MINI_CHECK(mesh_hypar.is_valid())
     MINI_CHECK(mesh_hypar_adaptive.is_valid())
 
-    # 7. Sweep1 — circle along curved rail
     profile = Primitives.circle(0, 0, 0, 1.0)
     rail = NurbsCurve.create(False, 2, [
         Point(0, 76, 0),
@@ -841,7 +742,6 @@ def test_meshing():
     MINI_CHECK(mesh_sweep1.is_valid())
     MINI_CHECK(mesh_sweep1_adaptive.is_valid())
 
-    # 8. Sweep2 — two rails + cross sections
     r1 = NurbsCurve.create(False, 2, [
         Point(0, 89, 0),
         Point(1, 93, 0),
@@ -868,7 +768,6 @@ def test_meshing():
     MINI_CHECK(mesh_sweep2.is_valid())
     MINI_CHECK(mesh_sweep2_adaptive.is_valid())
 
-    # 9. Edge surface (Coons patch) — 4 boundary curves
     south = NurbsCurve.create(False, 3, [
         Point(1, 104, 0),
         Point(1, 106, 3),
@@ -897,14 +796,12 @@ def test_meshing():
     MINI_CHECK(mesh_arched.is_valid())
     MINI_CHECK(mesh_arched_adaptive.is_valid())
 
-    # 10. Wave — multi-span freeform (13x13 CVs, 10 spans)
     wave = Primitives.wave_surface(5.0, 1.5)
     mesh_wave = wave.mesh()
     mesh_wave_adaptive = wave.mesh_adaptive(45.0)
     MINI_CHECK(mesh_wave.is_valid())
     MINI_CHECK(mesh_wave_adaptive.is_valid())
 
-    # 11. Planar — mesh() early exit: 2 triangles
     planar = NurbsCurve.create(False, 1, [
         Point(0, 132, 0),
         Point(6, 132, 0),
@@ -1063,15 +960,12 @@ def test_json_roundtrip():
     ]
     surface = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # JSON object
     json_obj = surface.__jsondump__()
     loaded_json = NurbsSurface.__jsonload__(json_obj)
 
-    # String
     json_string = surface.file_json_dumps()
     loaded_json_string = NurbsSurface.file_json_loads(json_string)
 
-    # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.json"
     surface.file_json_dump(filename)
     loaded_from_file = NurbsSurface.file_json_load(filename)
@@ -1107,11 +1001,9 @@ def test_protobuf_roundtrip():
     ]
     surface = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    # String
     proto_string = surface.pb_dumps()
     loaded_proto_string = NurbsSurface.pb_loads(proto_string)
 
-    # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
     surface.pb_dump(filename)
     loaded = NurbsSurface.pb_load(filename)
@@ -1120,21 +1012,28 @@ def test_protobuf_roundtrip():
     MINI_CHECK(loaded == surface)
 
 
-@MINI_TEST("NurbsSurface", "ClosestPoint")
-def test_nurbssurface_closest_point():
+@MINI_TEST("NurbsSurface", "Closest Point")
+def test_closest_point():
     from session_py import Primitives
     from session_py import Point
-    # Sphere radius 2 at origin: closest surface point to an outside point is radial.
+
     sphere = Primitives.sphere_surface(0, 0, 0, 2.0)
     cp = sphere.closest_point(Point(5, 0, 0))
     MINI_CHECK(abs(cp[0] - 2.0) < 1e-4 and abs(cp[1]) < 1e-4 and abs(cp[2]) < 1e-4)
-    # Curvature: sphere radius R has Gaussian K = 1/R^2, |mean| = 1/R.
+
+
+@MINI_TEST("NurbsSurface", "Curvature")
+def test_curvature():
+    from session_py import Primitives
+
+    R = 2.0
+    sphere = Primitives.sphere_surface(0, 0, 0, R)
     u0, u1 = sphere.domain(0)
     v0, v1 = sphere.domain(1)
     um = u0 + 0.37 * (u1 - u0)
     vm = v0 + 0.41 * (v1 - v0)
-    MINI_CHECK(abs(sphere.gaussian_curvature(um, vm) - 0.25) < 1e-3)
-    MINI_CHECK(abs(abs(sphere.mean_curvature(um, vm)) - 0.5) < 1e-3)
+    MINI_CHECK(abs(sphere.gaussian_curvature(um, vm) - 1.0 / (R * R)) < 1e-3)
+    MINI_CHECK(abs(abs(sphere.mean_curvature(um, vm)) - 1.0 / R) < 1e-3)
 
 
 if __name__ == "__main__":

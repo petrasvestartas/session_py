@@ -1,50 +1,31 @@
 from __future__ import annotations
-# SpatialAABBTree — flat contiguous BVH over axis-aligned boxes (longest-axis median split).
-# Use for: closest-point on static mesh faces, ray-mesh intersection.
-#   Build once, query many times. Cache-friendly nodes.
-# Prefer over SpatialBVH  when geometry is static and all volumes are world-aligned.
-# Prefer over SpatialRTree when no dynamic insert/delete is needed.
-# Prefer over SpatialKDTree when querying faces/volumes, not bare point clouds.
-from typing import List
-from typing import Optional
+
 from .aabb import AABB
 
-
-def _nth_element(a: list[int], lo: int, mid: int, hi: int, key) -> None:
-    """Place the mid-th element in sorted position within a[lo:hi] (quickselect)."""
-    while hi - lo > 1:
-        pivot = key(a[(lo + hi) // 2])
-        i = lo
-        j = hi - 1
-        while i <= j:
-            while key(a[i]) < pivot:
-                i += 1
-            while key(a[j]) > pivot:
-                j -= 1
-            if i <= j:
-                a[i], a[j] = a[j], a[i]
-                i += 1
-                j -= 1
-        if mid <= j:
-            hi = j + 1
-        elif mid >= i:
-            lo = i
-        else:
-            return
+STACK_SIZE = 64
+NULL_IDX = -1
 
 
-class _Node:
-    __slots__ = ("aabb", "right", "object_id")
-
-    def __init__(self, aabb: AABB | None = None, right: int = -1, object_id: int = -1):
-        self.aabb = aabb if aabb is not None else AABB(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+class Node:
+    def __init__(self, aabb: AABB, right: int, object_id: int):
+        self.aabb = aabb
         self.right = right
         self.object_id = object_id
 
 
+class _Range:
+    def __init__(self, lo: int, hi: int, parent: int, is_left: bool):
+        self.lo = lo
+        self.hi = hi
+        self.parent = parent
+        self.is_left = is_left
+
+
 class SpatialAABBTree:
+    """Flat AABB tree with longest-axis median split; the left child of node i is i + 1, the right child is stored."""
+
     def __init__(self):
-        self.nodes: list[_Node] = []
+        self.nodes: list[Node] = []
 
     def empty(self) -> bool:
         return len(self.nodes) == 0
@@ -54,55 +35,86 @@ class SpatialAABBTree:
 
     def build(self, aabbs: list[AABB]) -> None:
         self.nodes = []
-        if not aabbs:
-            return
-        ids = list(range(len(aabbs)))
-        self._build_node(ids, 0, len(ids), aabbs)
+        n = len(aabbs)
+        ids = list(range(n))
+        stack: list[_Range] = []
+        if n > 0:
+            stack.append(_Range(0, n, NULL_IDX, False))
+        while len(stack) > 0:
+            range_ = stack.pop()
+            node = len(self.nodes)
+            aabb = self._bounds(ids, range_.lo, range_.hi, aabbs)
+            self.nodes.append(Node(aabb, NULL_IDX, NULL_IDX))
+            if range_.parent != NULL_IDX and not range_.is_left:
+                self.nodes[range_.parent].right = node
+            if range_.hi - range_.lo == 1:
+                self.nodes[node].object_id = ids[range_.lo]
+                continue
+            axis = self._longest_axis(self.nodes[node].aabb)
+            mid = range_.lo + (range_.hi - range_.lo) // 2
+            self._nth_element(ids, range_.lo, mid, range_.hi, axis, aabbs)
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(_Range(mid, range_.hi, node, False))
+            stack.append(_Range(range_.lo, mid, node, True))
 
     def query_aabb(self, query: AABB) -> list[int]:
+        """Ids of every leaf box that intersects query"""
         hits: list[int] = []
-        if self.empty():
-            return hits
-        stack = [0]
-        while stack:
+        stack: list[int] = []
+        if len(self.nodes) > 0:
+            stack.append(0)
+        while len(stack) > 0:
             idx = stack.pop()
             node = self.nodes[idx]
             if not node.aabb.intersects(query):
                 continue
-            if node.object_id >= 0:
+            if node.object_id != NULL_IDX:
                 hits.append(node.object_id)
-            else:
-                stack.append(idx + 1)
-                stack.append(node.right)
+                continue
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(idx + 1)
+            stack.append(node.right)
         return hits
 
-    def _build_node(self, ids: list[int], lo: int, hi: int, aabbs: list[AABB]) -> None:
-        idx = len(self.nodes)
-        self.nodes.append(_Node())
+    def _bounds(self, ids: list[int], lo: int, hi: int, aabbs: list[AABB]) -> AABB:
+        aabb = aabbs[ids[lo]]
+        for i in range(lo + 1, hi):
+            aabb = AABB.merge(aabb, aabbs[ids[i]])
+        return aabb
 
-        lo_x = lo_y = lo_z = 1e308
-        hi_x = hi_y = hi_z = -1e308
-        for k in range(lo, hi):
-            b = aabbs[ids[k]]
-            lo_x = min(lo_x, b.cx - b.hx); hi_x = max(hi_x, b.cx + b.hx)
-            lo_y = min(lo_y, b.cy - b.hy); hi_y = max(hi_y, b.cy + b.hy)
-            lo_z = min(lo_z, b.cz - b.hz); hi_z = max(hi_z, b.cz + b.hz)
-        self.nodes[idx].aabb = AABB(
-            (lo_x + hi_x) * 0.5, (lo_y + hi_y) * 0.5, (lo_z + hi_z) * 0.5,
-            (hi_x - lo_x) * 0.5, (hi_y - lo_y) * 0.5, (hi_z - lo_z) * 0.5,
-        )
+    def _longest_axis(self, aabb: AABB) -> int:
+        if aabb.hx >= aabb.hy and aabb.hx >= aabb.hz:
+            return 0
+        if aabb.hy >= aabb.hz:
+            return 1
+        return 2
 
-        if hi - lo == 1:
-            self.nodes[idx].object_id = ids[lo]
-            return
+    def _center(self, aabb: AABB, axis: int) -> float:
+        if axis == 0:
+            return aabb.cx
+        if axis == 1:
+            return aabb.cy
+        return aabb.cz
 
-        dx = hi_x - lo_x; dy = hi_y - lo_y; dz = hi_z - lo_z
-        axis = 0 if (dx >= dy and dx >= dz) else (1 if dy >= dz else 2)
-        mid = lo + (hi - lo) // 2
-
-        key = (lambda i: aabbs[i].cx) if axis == 0 else (lambda i: aabbs[i].cy) if axis == 1 else (lambda i: aabbs[i].cz)
-        _nth_element(ids, lo, mid, hi, key)
-
-        self._build_node(ids, lo, mid, aabbs)
-        self.nodes[idx].right = len(self.nodes)
-        self._build_node(ids, mid, hi, aabbs)
+    def _nth_element(
+        self, ids: list[int], lo: int, mid: int, hi: int, axis: int, aabbs: list[AABB]
+    ) -> None:
+        while hi - lo > 1:
+            pivot = self._center(aabbs[ids[(lo + hi) // 2]], axis)
+            i = lo
+            j = hi - 1
+            while i <= j:
+                while self._center(aabbs[ids[i]], axis) < pivot:
+                    i += 1
+                while self._center(aabbs[ids[j]], axis) > pivot:
+                    j -= 1
+                if i <= j:
+                    ids[i], ids[j] = ids[j], ids[i]
+                    i += 1
+                    j -= 1
+            if mid <= j:
+                hi = j + 1
+            elif mid >= i:
+                lo = i
+            else:
+                return

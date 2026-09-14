@@ -2,7 +2,6 @@ import math
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
-from .tolerance import TOLERANCE
 from .tolerance import PI
 
 
@@ -10,7 +9,8 @@ from .tolerance import PI
 def test_convex_hull_hull_2d():
     from session_py import ConvexHull
     from session_py import Point
-    pts = [
+
+    points = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
         Point(1.0, 1.0, 0.0),
@@ -18,7 +18,7 @@ def test_convex_hull_hull_2d():
         Point(0.5, 0.5, 0.0),
         Point(0.3, 0.3, 0.0),
     ]
-    hull = ConvexHull.hull_2d(pts)
+    hull = ConvexHull.hull_2d(points)
 
     MINI_CHECK(len(hull) == 4)
 
@@ -27,14 +27,15 @@ def test_convex_hull_hull_2d():
 def test_convex_hull_hull_2d_collinear():
     from session_py import ConvexHull
     from session_py import Point
-    pts = [
+
+    points = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
         Point(2.0, 0.0, 0.0),
         Point(3.0, 0.0, 0.0),
         Point(1.5, 1.0, 0.0),
     ]
-    hull = ConvexHull.hull_2d(pts)
+    hull = ConvexHull.hull_2d(points)
 
     MINI_CHECK(len(hull) >= 3)
 
@@ -43,13 +44,14 @@ def test_convex_hull_hull_2d_collinear():
 def test_convex_hull_hull_2d_circle():
     from session_py import ConvexHull
     from session_py import Point
-    pts = []
+
     n = 12
+    points = []
     for i in range(n):
         angle = 2.0 * PI * i / n
-        pts.append(Point(math.cos(angle), math.sin(angle), 0.0))
-    pts.append(Point(0.0, 0.0, 0.0))
-    hull = ConvexHull.hull_2d(pts)
+        points.append(Point(math.cos(angle), math.sin(angle), 0.0))
+    points.append(Point(0.0, 0.0, 0.0))
+    hull = ConvexHull.hull_2d(points)
 
     MINI_CHECK(len(hull) == n)
 
@@ -58,14 +60,15 @@ def test_convex_hull_hull_2d_circle():
 def test_convex_hull_hull_3d():
     from session_py import ConvexHull
     from session_py import Point
-    pts = [
+
+    points = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
         Point(0.0, 1.0, 0.0),
         Point(0.0, 0.0, 1.0),
         Point(0.25, 0.25, 0.25),
     ]
-    mesh = ConvexHull.hull_3d(pts)
+    mesh = ConvexHull.hull_3d(points)
 
     MINI_CHECK(mesh.number_of_vertices() == 4)
     MINI_CHECK(mesh.number_of_faces() == 4)
@@ -75,7 +78,8 @@ def test_convex_hull_hull_3d():
 def test_convex_hull_hull_3d_cube():
     from session_py import ConvexHull
     from session_py import Point
-    pts = [
+
+    points = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
         Point(1.0, 1.0, 0.0),
@@ -86,7 +90,7 @@ def test_convex_hull_hull_3d_cube():
         Point(0.0, 1.0, 1.0),
         Point(0.5, 0.5, 0.5),
     ]
-    mesh = ConvexHull.hull_3d(pts)
+    mesh = ConvexHull.hull_3d(points)
 
     MINI_CHECK(mesh.number_of_vertices() == 8)
     MINI_CHECK(mesh.number_of_faces() == 12)

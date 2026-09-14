@@ -1,192 +1,134 @@
 from __future__ import annotations
-from typing import Union
-from typing import TYPE_CHECKING
-import uuid
+
 import copy
+import json
+from typing import TYPE_CHECKING
+from typing import Optional
+from typing import Union
+import uuid
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-
-# Import protobuf at module level for performance
 try:
     from .proto import color_pb2
+
     _HAS_PROTOBUF = True
 except ImportError:
     _HAS_PROTOBUF = False
 
+
 class Color:
-    """An index-based 0.0-1.0 color with RGBA values.
+    """A named color with RGBA components clamped to ``[0.0, 1.0]``.
 
     Parameters
     ----------
     r : float, optional
-        Red component (0.0-1.0). Defaults to 1.0.
+        Red component.
     g : float, optional
-        Green component (0.0-1.0). Defaults to 1.0.
+        Green component.
     b : float, optional
-        Blue component (0.0-1.0). Defaults to 1.0.
+        Blue component.
     a : float, optional
-        Alpha component (0.0-1.0). Defaults to 1.0.
+        Alpha component.
     name : str, optional
-        Name of the color. Defaults to "white".
+        Color name.
 
     Attributes
     ----------
     name : str
-        The name of the color.
-    guid : str
-        The unique identifier of the color.
+        Color name.
+    r, g, b, a : float
+        Clamped color components.
+
+    Examples
+    --------
+    >>> Color(1.0, 0.5, 0.25).to_unified_array()
+    [1.0, 0.5, 0.25, 1.0]
     """
 
-    _cache: dict = {}
-
-    def __init__(self, r: float, g: float, b: float, a: float, name: str = "my_color"):
+    def __init__(
+        self,
+        r: float = 1.0,
+        g: float = 1.0,
+        b: float = 1.0,
+        a: float = 1.0,
+        name: str = "my_color",
+    ) -> None:
+        """Construct from RGBA components, each clamped to [0.0, 1.0]"""
         self._guid = None
         self.name = name
-        self._r = max(0.0, min(1.0, float(r)))
-        self._g = max(0.0, min(1.0, float(g)))
-        self._b = max(0.0, min(1.0, float(b)))
-        self._a = max(0.0, min(1.0, float(a)))
+        self.r = max(0.0, min(1.0, float(r)))
+        self.g = max(0.0, min(1.0, float(g)))
+        self.b = max(0.0, min(1.0, float(b)))
+        self.a = max(0.0, min(1.0, float(a)))
+
+    def __deepcopy__(self, memo: dict[int, object]) -> "Color":
+        """Copy (new guid, same data)"""
+        result = Color(self.r, self.g, self.b, self.a, self.name)
+        memo[id(self)] = result
+        return result
+
+    def duplicate(self) -> "Color":
+        """Copy (new guid, same data)"""
+        return copy.deepcopy(self)
 
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        """Return whether the lazy guid has been created."""
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        """Return the guid, creating it on first access."""
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
 
     @guid.setter
     def guid(self, value: str) -> None:
+        """Set the guid."""
         self._guid = value
-
-    @property
-    def r(self) -> float:
-        return self._r
-
-    @r.setter
-    def r(self, value: float) -> None:
-        self._r = max(0.0, min(1.0, float(value)))
-
-    @property
-    def g(self) -> float:
-        return self._g
-
-    @g.setter
-    def g(self, value: float) -> None:
-        self._g = max(0.0, min(1.0, float(value)))
-
-    @property
-    def b(self) -> float:
-        return self._b
-
-    @b.setter
-    def b(self, value: float) -> None:
-        self._b = max(0.0, min(1.0, float(value)))
-
-    @property
-    def a(self) -> float:
-        return self._a
-
-    @a.setter
-    def a(self, value: float) -> None:
-        self._a = max(0.0, min(1.0, float(value)))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def __deepcopy__(self, memo):
-
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-
-        # New guid
-        result.guid = str(uuid.uuid4())
-
-        # Copy remaining fields
-        result.name = copy.deepcopy(self.name, memo)
-        result._r = self._r
-        result._g = self._g
-        result._b = self._b
-        result._a = self._a
-        return result
-
-    def duplicate(self) -> "Color":
-        """Create a deep copy of this color with a new GUID.
-
-        Returns
-        -------
-        :class:`Color`
-            A new Color with identical RGBA values but a different GUID.
-
-        """
-        result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
-        return result
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # No-copy Operators
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> float:
         if index == 0:
-            return self._r
+            return self.r
+        if index == 1:
+            return self.g
+        if index == 2:
+            return self.b
+        if index == 3:
+            return self.a
+        raise IndexError("Index out of range")
+
+    def __setitem__(self, index: int, value: float) -> None:
+        if index == 0:
+            self.r = value
         elif index == 1:
-            return self._g
+            self.g = value
         elif index == 2:
-            return self._b
+            self.b = value
         elif index == 3:
-            return self._a
+            self.a = value
         else:
             raise IndexError("Index out of range")
 
-    def __setitem__(self, index, value):
-        if index == 0:
-            self._r = value
-        elif index == 1:
-            self._g = value
-        elif index == 2:
-            self._b = value
-        elif index == 3:
-            self._a = value
-        else:
-            raise IndexError("Index out of range")
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Color):
+            return False
+        return (
+            self.name == other.name
+            and self.r == other.r
+            and self.g == other.g
+            and self.b == other.b
+            and self.a == other.a
+        )
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Details
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def to_unified_array(self) -> list[float]:
-        """Convert to normalized float array [0-1].
-
-        Returns
-        -------
-        list[float]
-            Array [r, g, b, a] with values in [0.0, 1.0].
-
-        """
-        return [self[0], self[1], self[2], self[3]]
-
-    @classmethod
-    def from_unified_array(cls, arr: list[float]) -> "Color":
-        """Create color from normalized float values [0-1].
-
-        Parameters
-        ----------
-        arr : list[float]
-            Array [r, g, b, a] with values in [0.0, 1.0] range.
-
-        Returns
-        -------
-        :class:`Color`
-            A new Color with values in [0.0, 1.0] range.
-
-        """
-        return cls(arr[0], arr[1], arr[2], arr[3])
+    def __ne__(self, other: object) -> bool:
+        return not self == other
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Presets
@@ -194,342 +136,597 @@ class Color:
 
     @classmethod
     def white(cls) -> "Color":
-        """Create a white color."""
-        if "white" not in cls._cache:
-            c = cls(1.0, 1.0, 1.0, 1.0); c.name = "white"; cls._cache["white"] = c
-        return cls._cache["white"]
-
-    @classmethod
-    def black(cls) -> "Color":
-        """Create a black color."""
-        if "black" not in cls._cache:
-            c = cls(0.0, 0.0, 0.0, 1.0); c.name = "black"; cls._cache["black"] = c
-        return cls._cache["black"]
-
-    @classmethod
-    def grey(cls) -> "Color":
-        """Create a grey color."""
-        if "grey" not in cls._cache:
-            c = cls(0.5, 0.5, 0.5, 1.0); c.name = "grey"; cls._cache["grey"] = c
-        return cls._cache["grey"]
-
-    @classmethod
-    def red(cls) -> "Color":
-        """Create a red color."""
-        if "red" not in cls._cache:
-            c = cls(1.0, 0.0, 0.0, 1.0); c.name = "red"; cls._cache["red"] = c
-        return cls._cache["red"]
-
-    @classmethod
-    def orange(cls) -> "Color":
-        """Create an orange color."""
-        if "orange" not in cls._cache:
-            c = cls(1.0, 0.5, 0.0, 1.0); c.name = "orange"; cls._cache["orange"] = c
-        return cls._cache["orange"]
-
-    @classmethod
-    def yellow(cls) -> "Color":
-        """Create a yellow color."""
-        if "yellow" not in cls._cache:
-            c = cls(1.0, 1.0, 0.0, 1.0); c.name = "yellow"; cls._cache["yellow"] = c
-        return cls._cache["yellow"]
-
-    @classmethod
-    def lime(cls) -> "Color":
-        """Create a lime color."""
-        if "lime" not in cls._cache:
-            c = cls(0.5, 1.0, 0.0, 1.0); c.name = "lime"; cls._cache["lime"] = c
-        return cls._cache["lime"]
-
-    @classmethod
-    def green(cls) -> "Color":
-        """Create a green color."""
-        if "green" not in cls._cache:
-            c = cls(0.0, 1.0, 0.0, 1.0); c.name = "green"; cls._cache["green"] = c
-        return cls._cache["green"]
-
-    @classmethod
-    def mint(cls) -> "Color":
-        """Create a mint color."""
-        if "mint" not in cls._cache:
-            c = cls(0.0, 1.0, 0.5, 1.0); c.name = "mint"; cls._cache["mint"] = c
-        return cls._cache["mint"]
-
-    @classmethod
-    def cyan(cls) -> "Color":
-        """Create a cyan color."""
-        if "cyan" not in cls._cache:
-            c = cls(0.0, 1.0, 1.0, 1.0); c.name = "cyan"; cls._cache["cyan"] = c
-        return cls._cache["cyan"]
-
-    @classmethod
-    def azure(cls) -> "Color":
-        """Create an azure color."""
-        if "azure" not in cls._cache:
-            c = cls(0.0, 0.5, 1.0, 1.0); c.name = "azure"; cls._cache["azure"] = c
-        return cls._cache["azure"]
-
-    @classmethod
-    def blue(cls) -> "Color":
-        """Create a blue color."""
-        if "blue" not in cls._cache:
-            c = cls(0.0, 0.0, 1.0, 1.0); c.name = "blue"; cls._cache["blue"] = c
-        return cls._cache["blue"]
-
-    @classmethod
-    def violet(cls) -> "Color":
-        """Create a violet color."""
-        if "violet" not in cls._cache:
-            c = cls(0.5, 0.0, 1.0, 1.0); c.name = "violet"; cls._cache["violet"] = c
-        return cls._cache["violet"]
-
-    @classmethod
-    def magenta(cls) -> "Color":
-        """Create a magenta color."""
-        if "magenta" not in cls._cache:
-            c = cls(1.0, 0.0, 1.0, 1.0); c.name = "magenta"; cls._cache["magenta"] = c
-        return cls._cache["magenta"]
-
-    @classmethod
-    def pink(cls) -> "Color":
-        """Create a pink color."""
-        if "pink" not in cls._cache:
-            c = cls(1.0, 0.0, 0.5, 1.0); c.name = "pink"; cls._cache["pink"] = c
-        return cls._cache["pink"]
-
-    @classmethod
-    def maroon(cls) -> "Color":
-        """Create a maroon color."""
-        if "maroon" not in cls._cache:
-            c = cls(0.5, 0.0, 0.0, 1.0); c.name = "maroon"; cls._cache["maroon"] = c
-        return cls._cache["maroon"]
-
-    @classmethod
-    def brown(cls) -> "Color":
-        """Create a brown color."""
-        if "brown" not in cls._cache:
-            c = cls(0.5, 0.25, 0.0, 1.0); c.name = "brown"; cls._cache["brown"] = c
-        return cls._cache["brown"]
-
-    @classmethod
-    def olive(cls) -> "Color":
-        """Create an olive color."""
-        if "olive" not in cls._cache:
-            c = cls(0.5, 0.5, 0.0, 1.0); c.name = "olive"; cls._cache["olive"] = c
-        return cls._cache["olive"]
-
-    @classmethod
-    def teal(cls) -> "Color":
-        """Create a teal color."""
-        if "teal" not in cls._cache:
-            c = cls(0.0, 0.5, 0.5, 1.0); c.name = "teal"; cls._cache["teal"] = c
-        return cls._cache["teal"]
-
-    @classmethod
-    def navy(cls) -> "Color":
-        """Create a navy color."""
-        if "navy" not in cls._cache:
-            c = cls(0.0, 0.0, 0.5, 1.0); c.name = "navy"; cls._cache["navy"] = c
-        return cls._cache["navy"]
-
-    @classmethod
-    def purple(cls) -> "Color":
-        """Create a purple color."""
-        if "purple" not in cls._cache:
-            c = cls(0.5, 0.0, 0.5, 1.0); c.name = "purple"; cls._cache["purple"] = c
-        return cls._cache["purple"]
-
-    @classmethod
-    def silver(cls) -> "Color":
-        """Create a silver color."""
-        if "silver" not in cls._cache:
-            c = cls(0.75, 0.75, 0.75, 1.0); c.name = "silver"; cls._cache["silver"] = c
-        return cls._cache["silver"]
-
-    @classmethod
-    def palette(cls) -> list["Color"]:
-        """Return a palette of 12 spectral colors in order."""
-        return [cls.red(), cls.orange(), cls.yellow(), cls.lime(), cls.green(), cls.mint(), cls.cyan(), cls.azure(), cls.blue(), cls.violet(), cls.magenta(), cls.pink()]
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # JSON Serialization
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def __jsondump__(self):
-        """Serialize to polymorphic JSON format with type field."""
-        # Alphabetical order to match Rust's serde_json
-        return {
-            "a": self[3],
-            "b": self[2],
-            "g": self[1],
-            "guid": self.guid,
-            "name": self.name,
-            "r": self[0],
-            "type": f"{self.__class__.__name__}",
-        }
-
-    @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
-        """Deserialize from polymorphic JSON format."""
-        color = cls(data["r"], data["g"], data["b"], data.get("a", 1.0))
-        color.guid = guid if guid is not None else data.get("guid", color.guid)
-        color.name = name if name is not None else data.get("name", color.name)
-        return color
-
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write JSON to file.
-
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the output file.
-
-        """
-        import json
-        with open(filepath, 'w') as f:
-            json.dump(self.__jsondump__(), f, indent=2)
-
-    @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Color":
-        """Read JSON from file.
-
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the JSON file.
+        """Return opaque white.
 
         Returns
         -------
-        :class:`Color`
-            The deserialized Color.
+        Color
+            The named white preset.
 
+        Examples
+        --------
+        >>> Color.white().name
+        'white'
         """
-        import json
-        with open(filepath) as f:
-            data = json.load(f)
-        return cls.__jsonload__(data)
+        return cls(1.0, 1.0, 1.0, 1.0, "white")
+
+    @classmethod
+    def black(cls) -> "Color":
+        """Return opaque black.
+
+        Returns
+        -------
+        Color
+            The named black preset.
+
+        Examples
+        --------
+        >>> Color.black().name
+        'black'
+        """
+        return cls(0.0, 0.0, 0.0, 1.0, "black")
+
+    @classmethod
+    def grey(cls) -> "Color":
+        """Return opaque grey.
+
+        Returns
+        -------
+        Color
+            The named grey preset.
+
+        Examples
+        --------
+        >>> Color.grey().name
+        'grey'
+        """
+        return cls(0.5, 0.5, 0.5, 1.0, "grey")
+
+    @classmethod
+    def red(cls) -> "Color":
+        """Return opaque red.
+
+        Returns
+        -------
+        Color
+            The named red preset.
+
+        Examples
+        --------
+        >>> Color.red().name
+        'red'
+        """
+        return cls(1.0, 0.0, 0.0, 1.0, "red")
+
+    @classmethod
+    def orange(cls) -> "Color":
+        """Return opaque orange.
+
+        Returns
+        -------
+        Color
+            The named orange preset.
+
+        Examples
+        --------
+        >>> Color.orange().name
+        'orange'
+        """
+        return cls(1.0, 0.5, 0.0, 1.0, "orange")
+
+    @classmethod
+    def yellow(cls) -> "Color":
+        """Return opaque yellow.
+
+        Returns
+        -------
+        Color
+            The named yellow preset.
+
+        Examples
+        --------
+        >>> Color.yellow().name
+        'yellow'
+        """
+        return cls(1.0, 1.0, 0.0, 1.0, "yellow")
+
+    @classmethod
+    def lime(cls) -> "Color":
+        """Return opaque lime.
+
+        Returns
+        -------
+        Color
+            The named lime preset.
+
+        Examples
+        --------
+        >>> Color.lime().name
+        'lime'
+        """
+        return cls(0.5, 1.0, 0.0, 1.0, "lime")
+
+    @classmethod
+    def green(cls) -> "Color":
+        """Return opaque green.
+
+        Returns
+        -------
+        Color
+            The named green preset.
+
+        Examples
+        --------
+        >>> Color.green().name
+        'green'
+        """
+        return cls(0.0, 1.0, 0.0, 1.0, "green")
+
+    @classmethod
+    def mint(cls) -> "Color":
+        """Return opaque mint.
+
+        Returns
+        -------
+        Color
+            The named mint preset.
+
+        Examples
+        --------
+        >>> Color.mint().name
+        'mint'
+        """
+        return cls(0.0, 1.0, 0.5, 1.0, "mint")
+
+    @classmethod
+    def cyan(cls) -> "Color":
+        """Return opaque cyan.
+
+        Returns
+        -------
+        Color
+            The named cyan preset.
+
+        Examples
+        --------
+        >>> Color.cyan().name
+        'cyan'
+        """
+        return cls(0.0, 1.0, 1.0, 1.0, "cyan")
+
+    @classmethod
+    def azure(cls) -> "Color":
+        """Return opaque azure.
+
+        Returns
+        -------
+        Color
+            The named azure preset.
+
+        Examples
+        --------
+        >>> Color.azure().name
+        'azure'
+        """
+        return cls(0.0, 0.5, 1.0, 1.0, "azure")
+
+    @classmethod
+    def blue(cls) -> "Color":
+        """Return opaque blue.
+
+        Returns
+        -------
+        Color
+            The named blue preset.
+
+        Examples
+        --------
+        >>> Color.blue().name
+        'blue'
+        """
+        return cls(0.0, 0.0, 1.0, 1.0, "blue")
+
+    @classmethod
+    def violet(cls) -> "Color":
+        """Return opaque violet.
+
+        Returns
+        -------
+        Color
+            The named violet preset.
+
+        Examples
+        --------
+        >>> Color.violet().name
+        'violet'
+        """
+        return cls(0.5, 0.0, 1.0, 1.0, "violet")
+
+    @classmethod
+    def magenta(cls) -> "Color":
+        """Return opaque magenta.
+
+        Returns
+        -------
+        Color
+            The named magenta preset.
+
+        Examples
+        --------
+        >>> Color.magenta().name
+        'magenta'
+        """
+        return cls(1.0, 0.0, 1.0, 1.0, "magenta")
+
+    @classmethod
+    def pink(cls) -> "Color":
+        """Return opaque pink.
+
+        Returns
+        -------
+        Color
+            The named pink preset.
+
+        Examples
+        --------
+        >>> Color.pink().name
+        'pink'
+        """
+        return cls(1.0, 0.0, 0.5, 1.0, "pink")
+
+    @classmethod
+    def maroon(cls) -> "Color":
+        """Return opaque maroon.
+
+        Returns
+        -------
+        Color
+            The named maroon preset.
+
+        Examples
+        --------
+        >>> Color.maroon().name
+        'maroon'
+        """
+        return cls(0.5, 0.0, 0.0, 1.0, "maroon")
+
+    @classmethod
+    def brown(cls) -> "Color":
+        """Return opaque brown.
+
+        Returns
+        -------
+        Color
+            The named brown preset.
+
+        Examples
+        --------
+        >>> Color.brown().name
+        'brown'
+        """
+        return cls(0.5, 0.25, 0.0, 1.0, "brown")
+
+    @classmethod
+    def olive(cls) -> "Color":
+        """Return opaque olive.
+
+        Returns
+        -------
+        Color
+            The named olive preset.
+
+        Examples
+        --------
+        >>> Color.olive().name
+        'olive'
+        """
+        return cls(0.5, 0.5, 0.0, 1.0, "olive")
+
+    @classmethod
+    def teal(cls) -> "Color":
+        """Return opaque teal.
+
+        Returns
+        -------
+        Color
+            The named teal preset.
+
+        Examples
+        --------
+        >>> Color.teal().name
+        'teal'
+        """
+        return cls(0.0, 0.5, 0.5, 1.0, "teal")
+
+    @classmethod
+    def navy(cls) -> "Color":
+        """Return opaque navy.
+
+        Returns
+        -------
+        Color
+            The named navy preset.
+
+        Examples
+        --------
+        >>> Color.navy().name
+        'navy'
+        """
+        return cls(0.0, 0.0, 0.5, 1.0, "navy")
+
+    @classmethod
+    def purple(cls) -> "Color":
+        """Return opaque purple.
+
+        Returns
+        -------
+        Color
+            The named purple preset.
+
+        Examples
+        --------
+        >>> Color.purple().name
+        'purple'
+        """
+        return cls(0.5, 0.0, 0.5, 1.0, "purple")
+
+    @classmethod
+    def silver(cls) -> "Color":
+        """Return opaque silver.
+
+        Returns
+        -------
+        Color
+            The named silver preset.
+
+        Examples
+        --------
+        >>> Color.silver().name
+        'silver'
+        """
+        return cls(0.75, 0.75, 0.75, 1.0, "silver")
+
+    @classmethod
+    def palette(cls) -> list["Color"]:
+        """The 12 spectral colors in order"""
+        return [
+            cls.red(),
+            cls.orange(),
+            cls.yellow(),
+            cls.lime(),
+            cls.green(),
+            cls.mint(),
+            cls.cyan(),
+            cls.azure(),
+            cls.blue(),
+            cls.violet(),
+            cls.magenta(),
+            cls.pink(),
+        ]
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Conversion
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def to_unified_array(self) -> list[float]:
+        """Components as [r, g, b, a]"""
+        return [self.r, self.g, self.b, self.a]
+
+    @classmethod
+    def from_unified_array(cls, arr: list[float]) -> "Color":
+        """Color from [r, g, b, a]"""
+        return cls(arr[0], arr[1], arr[2], arr[3])
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # JSON
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __jsondump__(self) -> dict:
+        return {
+            "a": self.a,
+            "b": self.b,
+            "g": self.g,
+            "guid": self.guid,
+            "name": self.name,
+            "r": self.r,
+            "type": "Color",
+        }
+
+    @classmethod
+    def __jsonload__(
+        cls,
+        data: dict,
+        guid: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> "Color":
+        color = cls(data["r"], data["g"], data["b"], data["a"], name or data["name"])
+        color.guid = guid or data["guid"]
+        return color
 
     def file_json_dumps(self) -> str:
-        """Convert to JSON string."""
-        import json
+        """Serialize this color to a JSON string.
+
+        Returns
+        -------
+        str
+            JSON representation.
+        """
         return json.dumps(self.__jsondump__())
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> "Color":
-        """Load from JSON string."""
-        import json
-        return cls.__jsonload__(json.loads(json_string))
+        """Deserialize a color from a JSON string.
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Protobuf Serialization
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Convert to protobuf binary format.
+        Parameters
+        ----------
+        json_string : str
+            JSON representation.
 
         Returns
         -------
-        bytes
-            Serialized protobuf data.
+        Color
+            Parsed color.
+        """
+        return cls.__jsonload__(json.loads(json_string))
+
+    def file_json_dump(self, filepath: Union[str, Path]) -> None:
+        """Write this color as JSON to a file.
+
+        Parameters
+        ----------
+        filepath : Union[str, pathlib.Path]
+            Output path.
+        """
+        with open(filepath, "w") as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def file_json_load(cls, filepath: Union[str, Path]) -> "Color":
+        """Read a color from a JSON file.
+
+        Parameters
+        ----------
+        filepath : Union[str, pathlib.Path]
+            Input path.
+
+        Returns
+        -------
+        Color
+            Parsed color.
+        """
+        with open(filepath) as f:
+            return cls.__jsonload__(json.load(f))
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def to_proto(self) -> color_pb2.Color:
+        """Convert this color to its protobuf message.
+
+        Returns
+        -------
+        color_pb2.Color
+            Protobuf representation.
 
         Raises
         ------
         ImportError
-            If protobuf module is not available.
-
+            If protobuf support is unavailable.
         """
         if not _HAS_PROTOBUF:
             raise ImportError("protobuf not available")
         proto = color_pb2.Color()
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
         proto.name = self.name
-        proto.r = self[0]
-        proto.g = self[1]
-        proto.b = self[2]
-        proto.a = self[3]
-        return proto.SerializeToString()
+        proto.r = self.r
+        proto.g = self.g
+        proto.b = self.b
+        proto.a = self.a
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Color":
-        """Create color from protobuf binary data.
+    def from_proto(cls, proto: color_pb2.Color) -> "Color":
+        """Construct a color from its protobuf message.
 
         Parameters
         ----------
-        data : bytes
-            Protobuf-encoded color data.
+        proto : color_pb2.Color
+            Protobuf representation.
 
         Returns
         -------
-        :class:`Color`
-            The deserialized Color.
+        Color
+            Converted color.
 
         Raises
         ------
         ImportError
-            If protobuf module is not available.
+            If protobuf support is unavailable.
+        """
+        if not _HAS_PROTOBUF:
+            raise ImportError("protobuf not available")
+        color = cls(proto.r, proto.g, proto.b, proto.a, proto.name)
+        if proto.guid:
+            color.guid = proto.guid
+        return color
 
+    def pb_dumps(self) -> bytes:
+        """Serialize this color to protobuf bytes.
+
+        Returns
+        -------
+        bytes
+            Encoded protobuf message.
+        """
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> "Color":
+        """Deserialize a color from protobuf bytes.
+
+        Parameters
+        ----------
+        data : bytes
+            Encoded protobuf message.
+
+        Returns
+        -------
+        Color
+            Decoded color.
+
+        Raises
+        ------
+        ImportError
+            If protobuf support is unavailable.
         """
         if not _HAS_PROTOBUF:
             raise ImportError("protobuf not available")
         proto = color_pb2.Color()
         proto.ParseFromString(data)
-        
-        color = cls(proto.r, proto.g, proto.b, proto.a)
-        if proto.guid:
-            color.guid = proto.guid
-        color.name = proto.name
-        return color
+        return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write protobuf to file.
+    def pb_dump(self, filepath: Union[str, Path]) -> None:
+        """Write this color as protobuf bytes to a file.
 
         Parameters
         ----------
-        filepath : str
-            Path to the output file.
-
+        filepath : Union[str, pathlib.Path]
+            Output path.
         """
         data = self.pb_dumps()
-        with open(filepath, 'wb') as f:
-            f.write(data)
+        with open(filepath, "wb") as f:
+            written = f.write(data)
+            if written != len(data):
+                raise OSError(f"Failed to write protobuf file: {filepath}")
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Color":
-        """Read protobuf from file.
+    def pb_load(cls, filepath: Union[str, Path]) -> "Color":
+        """Read a color from a protobuf file.
 
         Parameters
         ----------
-        filepath : str
-            Path to the protobuf file.
+        filepath : Union[str, pathlib.Path]
+            Input path.
 
         Returns
         -------
-        :class:`Color`
-            The deserialized Color.
-
+        Color
+            Decoded color.
         """
-        with open(filepath, 'rb') as f:
+        with open(filepath, "rb") as f:
             data = f.read()
         return cls.pb_loads(data)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
+
     def __str__(self) -> str:
-        """String representation."""
-        return f"{self[0]:.1f}, {self[1]:.1f}, {self[2]:.1f}, {self[3]:.1f}"
+        """r, g, b, a"""
+        return f"{self.r:.1f}, {self.g:.1f}, {self.b:.1f}, {self.a:.1f}"
 
     def __repr__(self) -> str:
-        return f"Color({self.name}, {self[0]:.1f}, {self[1]:.1f}, {self[2]:.1f}, {self[3]:.1f})"
-
-    def __eq__(self, other) -> bool:
-        if not isinstance(other, Color):
-            return False
-        return (
-            self.name == other.name
-            and self[0] == other[0]
-            and self[1] == other[1]
-            and self[2] == other[2]
-            and self[3] == other[3]
-        )
-
-    def __ne__(self, other) -> bool:
-        return not self == other
+        """Color(name, r, g, b, a)"""
+        return f"Color({self.name}, {self.r:.1f}, {self.g:.1f}, {self.b:.1f}, {self.a:.1f})"

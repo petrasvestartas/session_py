@@ -1,65 +1,399 @@
 from __future__ import annotations
-# SpatialBVH — binary tree with OBB leaves, Morton-code (LBVH) construction.
-# Use for: collision detection and closest-point between many dynamic objects.
-#   Handles oriented boxes via their tight world-space AABBs (half-axes projected).
-# Prefer over SpatialAABBTree when objects rotate or you need OBB tightness.
-# Prefer over SpatialRTree  when all queries are nearest-object, not region overlap.
-# Prefer over SpatialKDTree when objects are volumetric (not point clouds).
-"""Boundary Volume Hierarchy (SpatialBVH) for spatial acceleration.
 
-This module implements a SpatialBVH tree using Morton codes for efficient spatial
-partitioning and collision detection. Uses Linear SpatialBVH (LBVH) construction
-algorithm from Karras 2012.
-"""
-
-from typing import List
-from typing import Tuple
-from typing import Optional
-from typing import Any
-from collections.abc import Callable
+import math
 import uuid
-import heapq
-import numpy as np
+from .aabb import AABB
+from .obb import OBB
 from .point import Point
 from .vector import Vector
-from .obb import OBB
-from .aabb import AABB
 
-# Try to import numba for JIT compilation
-try:
-    from numba import njit
-
-    HAS_NUMBA = True
-except ImportError:
-    HAS_NUMBA = False
-
-    # Fallback: no-op decorator
-    def njit(*args: Any, **kwargs: Any) -> Callable:
-        def decorator(func):
-            return func
-
-        if len(args) == 1 and callable(args[0]):
-            return args[0]
-        return decorator
+STACK_SIZE = 64
+NULL_IDX = -1
 
 
-class SpatialBVHNode:
-    """A node in the SpatialBVH tree."""
-
-    __slots__ = ("left", "right", "object_id", "aabb")
-
-    def __init__(self):
-        self.left: Optional["SpatialBVHNode"] = None
-        self.right: Optional["SpatialBVHNode"] = None
-        self.object_id: int = -1
-        self.aabb: AABB | None = None
+class Node:
+    def __init__(
+        self,
+        aabb: AABB | None = None,
+        left: int = NULL_IDX,
+        right: int = NULL_IDX,
+        object_id: int = NULL_IDX,
+    ):
+        self.aabb = AABB() if aabb is None else aabb
+        self.left = left
+        self.right = right
+        self.object_id = object_id
 
     def is_leaf(self) -> bool:
-        return self.object_id != -1
+        return self.object_id != NULL_IDX
+
+
+def _quantize(t: float) -> int:
+    return int(min(max(t, 0.0), 1.0) * 1023.0)
+
+
+class SpatialBVH:
+    """Linear BVH (Karras 2012): leaves in Morton order, internal node i splits the sorted range it covers, node 0 is the root."""
+
+    def __init__(self, world_size: float = 1000.0):
+        self._guid = None
+        self.name = "my_bvh"
+        self.world_size = world_size
+        self.object_guids: list[str] = []
+        self.nodes: list[Node] = []
+
+    def has_guid(self) -> bool:
+        return getattr(self, "_guid", None) is not None
+
+    @property
+    def guid(self) -> str:
+        if getattr(self, "_guid", None) is None:
+            self._guid = str(uuid.uuid4())
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str) -> None:
+        self._guid = value
+
+    @staticmethod
+    def from_boxes(bounding_boxes: list[OBB], world_size: float) -> SpatialBVH:
+        bvh = SpatialBVH(world_size)
+        bvh.build(bounding_boxes)
+        return bvh
+
+    def empty(self) -> bool:
+        return len(self.nodes) == 0
+
+    def size(self) -> int:
+        return len(self.nodes)
+
+    @staticmethod
+    def compute_world_size(bounding_boxes: list[OBB]) -> float:
+        """Largest absolute box coordinate times 2.2, at least 10"""
+        if len(bounding_boxes) == 0:
+            return 1000.0
+        max_extent = 0.0
+        for bbox in bounding_boxes:
+            for k in range(3):
+                max_extent = max(max_extent, abs(bbox.center[k]) + bbox.half_size[k])
+        return max(max_extent * 2.2, 10.0)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Build
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def build(self, bounding_boxes: list[OBB]) -> None:
+        self.build_from_boxes(bounding_boxes, self.world_size)
+
+    def build_from_boxes(self, boxes: list[OBB], ws: float) -> None:
+        aabbs = []
+        for bbox in boxes:
+            aabbs.append(self._aabb_from_obb(bbox))
+        self.build_from_aabbs(aabbs, ws)
+
+    def build_from_aabbs(self, aabbs: list[AABB], ws: float) -> None:
+        self.world_size = ws
+        self.nodes = []
+        n = len(aabbs)
+        if n == 0:
+            return
+        codes = self._sorted_codes(aabbs)
+        leaf = n - 1
+        for i in range(n - 1):
+            self.nodes.append(Node())
+        for code in codes:
+            self.nodes.append(Node(aabbs[code[1]], NULL_IDX, NULL_IDX, code[1]))
+        order = []
+        for i in range(n - 1):
+            first, last = self._determine_range(codes, i)
+            split = self._find_split(codes, first, last)
+            self.nodes[i].left = leaf + split if split == first else split
+            self.nodes[i].right = leaf + split + 1 if split + 1 == last else split + 1
+            order.append((last - first, i))
+        order.sort()
+        for item in order:
+            node = self.nodes[item[1]]
+            node.aabb = AABB.merge(
+                self.nodes[node.left].aabb, self.nodes[node.right].aabb
+            )
+
+    def build_with_guids(self, boxes_with_guids: list[tuple[OBB, str]]) -> None:
+        """Boxes paired with their guids, world size computed from the boxes"""
+        bounding_boxes = []
+        self.object_guids = []
+        for bbox, guid in boxes_with_guids:
+            bounding_boxes.append(bbox)
+            self.object_guids.append(guid)
+        self.world_size = self.compute_world_size(bounding_boxes)
+        self.build(bounding_boxes)
+
+    def _sorted_codes(self, aabbs: list[AABB]) -> list[tuple[int, int]]:
+        """(morton code, id) sorted by code, codes quantized over the bounding cube of the box centers"""
+        lo = [0.0, 0.0, 0.0]
+        hi = [0.0, 0.0, 0.0]
+        for k in range(3):
+            lo[k] = self._center(aabbs[0], k)
+            hi[k] = lo[k]
+        for aabb in aabbs[1:]:
+            for k in range(3):
+                lo[k] = min(lo[k], self._center(aabb, k))
+                hi[k] = max(hi[k], self._center(aabb, k))
+        ext = max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
+        codes = []
+        for i, aabb in enumerate(aabbs):
+            code = 0
+            for k in range(3):
+                t = (self._center(aabb, k) - lo[k]) / ext if ext > 0.0 else 0.0
+                code |= expand_bits(_quantize(t)) << k
+            codes.append((code, i))
+        codes.sort()
+        return codes
+
+    def _common_prefix(self, codes: list[tuple[int, int]], i: int, j: int) -> int:
+        """Leading bits shared by codes i and j, ties broken by index; -1 when j is out of range"""
+        if j < 0 or j >= len(codes):
+            return -1
+        if codes[i][0] != codes[j][0]:
+            return 32 - (codes[i][0] ^ codes[j][0]).bit_length()
+        return 32 + 32 - (i ^ j).bit_length()
+
+    def _determine_range(self, codes: list[tuple[int, int]], i: int) -> tuple[int, int]:
+        """Sorted range [first, last] covered by internal node i"""
+        d = (
+            1
+            if self._common_prefix(codes, i, i + 1)
+            > self._common_prefix(codes, i, i - 1)
+            else -1
+        )
+        delta_min = self._common_prefix(codes, i, i - d)
+        length = 1
+        while self._common_prefix(codes, i, i + length * d) > delta_min:
+            length *= 2
+        bound = 0
+        step = length // 2
+        while step > 0:
+            if self._common_prefix(codes, i, i + (bound + step) * d) > delta_min:
+                bound += step
+            step //= 2
+        j = i + bound * d
+        return (min(i, j), max(i, j))
+
+    def _find_split(self, codes: list[tuple[int, int]], first: int, last: int) -> int:
+        """Last index of the left half of [first, last]"""
+        common = self._common_prefix(codes, first, last)
+        split = first
+        step = last - first
+        while step > 1:
+            step = (step + 1) // 2
+            if (
+                split + step < last
+                and self._common_prefix(codes, first, split + step) > common
+            ):
+                split += step
+        return split
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Queries
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def check_all_collisions(
+        self, bounding_boxes: list[OBB]
+    ) -> tuple[list[tuple[int, int]], list[int], int]:
+        """Overlapping (i, j) pairs with i < j, the ids in any pair, and the number of nodes tested"""
+        pairs = []
+        visited = [False] * len(bounding_boxes)
+        total_checks = 0
+        for i in range(len(bounding_boxes)):
+            found = self.find_collisions(i, bounding_boxes[i], bounding_boxes)
+            total_checks += found[1]
+            for j in found[0]:
+                if j < i:
+                    continue
+                pairs.append((i, j))
+                visited[i] = True
+                visited[j] = True
+        colliding_indices = []
+        for i in range(len(visited)):
+            if visited[i]:
+                colliding_indices.append(i)
+        return (pairs, colliding_indices, total_checks)
+
+    def check_all_collisions_guids(
+        self, bounding_boxes: list[OBB]
+    ) -> list[tuple[str, str]]:
+        pairs, colliding_indices, total_checks = self.check_all_collisions(
+            bounding_boxes
+        )
+        guid_pairs = []
+        for i, j in pairs:
+            if i < len(self.object_guids) and j < len(self.object_guids):
+                guid_pairs.append((self.object_guids[i], self.object_guids[j]))
+        return guid_pairs
+
+    def find_collisions(
+        self, object_id: int, query_bbox: OBB, bounding_boxes: list[OBB]
+    ) -> tuple[list[int], int]:
+        """Ids overlapping query_bbox other than object_id, and the number of nodes tested"""
+        collisions = []
+        check_count = 0
+        query = self._aabb_from_obb(query_bbox)
+        stack: list[int] = []
+        if len(self.nodes) > 0:
+            stack.append(0)
+        while len(stack) > 0:
+            node = self.nodes[stack.pop()]
+            if not node.aabb.intersects(query):
+                continue
+            check_count += 1
+            if node.is_leaf():
+                id = node.object_id
+                if (
+                    id != object_id
+                    and id < len(bounding_boxes)
+                    and query.intersects(self._aabb_from_obb(bounding_boxes[id]))
+                ):
+                    collisions.append(id)
+                continue
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(node.left)
+            stack.append(node.right)
+        return (collisions, check_count)
+
+    def query_aabb(self, query: AABB | OBB) -> list[int]:
+        """Ids of every leaf box that intersects query"""
+        if isinstance(query, OBB):
+            query = self._aabb_from_obb(query)
+        hits: list[int] = []
+        stack: list[int] = []
+        if len(self.nodes) > 0:
+            stack.append(0)
+        while len(stack) > 0:
+            node = self.nodes[stack.pop()]
+            if not node.aabb.intersects(query):
+                continue
+            if node.is_leaf():
+                hits.append(node.object_id)
+                continue
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(node.left)
+            stack.append(node.right)
+        return hits
+
+    def nearest_neighbors(
+        self, object_id: int, bounding_boxes: list[OBB], inflate: float = 1.2
+    ) -> list[int]:
+        """Ids overlapping the box of object_id with its half-sizes scaled by inflate, object_id excluded"""
+        result: list[int] = []
+        if object_id < 0 or object_id >= len(bounding_boxes):
+            return result
+        query = self._aabb_from_obb(bounding_boxes[object_id])
+        query.hx *= inflate
+        query.hy *= inflate
+        query.hz *= inflate
+        for id in self.query_aabb(query):
+            if id != object_id:
+                result.append(id)
+        return result
+
+    def ray_cast(
+        self,
+        origin: Point,
+        direction: Vector,
+        candidate_leaf_ids: list[int],
+        find_all: bool = False,
+    ) -> bool:
+        """Leaf ids whose box the ray enters, nearest entry first; True when any"""
+        candidate_leaf_ids.clear()
+        found = []
+        stack: list[int] = []
+        if len(self.nodes) > 0:
+            stack.append(0)
+        while len(stack) > 0:
+            node = self.nodes[stack.pop()]
+            span = self._ray_aabb(origin, direction, node.aabb)
+            if span[1] < span[0] or span[1] < 0.0:
+                continue
+            if node.is_leaf():
+                found.append((span[0], node.object_id))
+                continue
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(node.left)
+            stack.append(node.right)
+        found.sort()
+        for hit in found:
+            candidate_leaf_ids.append(hit[1])
+        return len(candidate_leaf_ids) > 0
+
+    def _ray_aabb(
+        self, origin: Point, direction: Vector, aabb: AABB
+    ) -> tuple[float, float]:
+        """(entry, exit) ray parameters of the box slabs; a miss when exit < entry"""
+        tmin = -math.inf
+        tmax = math.inf
+        for k in range(3):
+            inv = 1.0 / direction[k] if direction[k] != 0.0 else math.inf
+            t1 = (self._center(aabb, k) - self._half(aabb, k) - origin[k]) * inv
+            t2 = (self._center(aabb, k) + self._half(aabb, k) - origin[k]) * inv
+            tmin = max(tmin, min(t1, t2))
+            tmax = min(tmax, max(t1, t2))
+        return (tmin, tmax)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Boxes
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def merge_aabb(self, aabb1: OBB, aabb2: OBB) -> OBB:
+        """Axis-aligned box enclosing both boxes"""
+        merged = AABB.merge(self._aabb_from_obb(aabb1), self._aabb_from_obb(aabb2))
+        return OBB(
+            merged.center(),
+            Vector(1, 0, 0),
+            Vector(0, 1, 0),
+            Vector(0, 0, 1),
+            Vector(merged.hx, merged.hy, merged.hz),
+        )
+
+    def aabb_intersect(self, aabb1: AABB | OBB, aabb2: AABB | OBB) -> bool:
+        if isinstance(aabb1, OBB):
+            aabb1 = self._aabb_from_obb(aabb1)
+        if isinstance(aabb2, OBB):
+            aabb2 = self._aabb_from_obb(aabb2)
+        return aabb1.intersects(aabb2)
+
+    @staticmethod
+    def _aabb_from_obb(obb: OBB) -> AABB:
+        half = [0.0, 0.0, 0.0]
+        for k in range(3):
+            half[k] = (
+                abs(obb.x_axis[k]) * obb.half_size[0]
+                + abs(obb.y_axis[k]) * obb.half_size[1]
+                + abs(obb.z_axis[k]) * obb.half_size[2]
+            )
+        return AABB(
+            obb.center[0], obb.center[1], obb.center[2], half[0], half[1], half[2]
+        )
+
+    def _center(self, aabb: AABB, axis: int) -> float:
+        if axis == 0:
+            return aabb.cx
+        if axis == 1:
+            return aabb.cy
+        return aabb.cz
+
+    def _half(self, aabb: AABB, axis: int) -> float:
+        if axis == 0:
+            return aabb.hx
+        if axis == 1:
+            return aabb.hy
+        return aabb.hz
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Morton codes
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 def expand_bits(v: int) -> int:
-    """Expand bits for Morton code calculation."""
     v = (v * 0x00010001) & 0xFF0000FF
     v = (v * 0x00000101) & 0x0F00F00F
     v = (v * 0x00000011) & 0xC30C30C3
@@ -70,1108 +404,8 @@ def expand_bits(v: int) -> int:
 def calculate_morton_code(
     x: float, y: float, z: float, world_size: float = 100.0
 ) -> int:
-    """Calculate 3D Morton code (Z-order curve) for spatial hashing."""
-    inv_world = 1.0 / world_size
-    half_world = world_size * 0.5
-    nx = (x + half_world) * inv_world
-    ny = (y + half_world) * inv_world
-    nz = (z + half_world) * inv_world
-
-    ix = min(int(max(0.0, min(1.0, nx)) * 1023.0), 1023)
-    iy = min(int(max(0.0, min(1.0, ny)) * 1023.0), 1023)
-    iz = min(int(max(0.0, min(1.0, nz)) * 1023.0), 1023)
-
-    ix = (ix * 0x00010001) & 0xFF0000FF
-    ix = (ix * 0x00000101) & 0x0F00F00F
-    ix = (ix * 0x00000011) & 0xC30C30C3
-    ix = (ix * 0x00000005) & 0x49249249
-
-    iy = (iy * 0x00010001) & 0xFF0000FF
-    iy = (iy * 0x00000101) & 0x0F00F00F
-    iy = (iy * 0x00000011) & 0xC30C30C3
-    iy = (iy * 0x00000005) & 0x49249249
-
-    iz = (iz * 0x00010001) & 0xFF0000FF
-    iz = (iz * 0x00000101) & 0x0F00F00F
-    iz = (iz * 0x00000011) & 0xC30C30C3
-    iz = (iz * 0x00000005) & 0x49249249
-
-    return ix | (iy << 1) | (iz << 2)
-
-
-def _aabb_from_obb(b: OBB) -> AABB:
-    """World-axis AABB of an OBB: project each half-axis onto the world axes."""
-    hx = b.half_size[0] * abs(b.x_axis[0]) + b.half_size[1] * abs(b.y_axis[0]) + b.half_size[2] * abs(b.z_axis[0])
-    hy = b.half_size[0] * abs(b.x_axis[1]) + b.half_size[1] * abs(b.y_axis[1]) + b.half_size[2] * abs(b.z_axis[1])
-    hz = b.half_size[0] * abs(b.x_axis[2]) + b.half_size[1] * abs(b.y_axis[2]) + b.half_size[2] * abs(b.z_axis[2])
-    return AABB(b.center[0], b.center[1], b.center[2], hx, hy, hz)
-
-
-def _clz32(x: int) -> int:
-    """Count leading zeros in a 32-bit integer."""
-    if x == 0:
-        return 32
-    n = 0
-    if x <= 0x0000FFFF:
-        n += 16
-        x <<= 16
-    if x <= 0x00FFFFFF:
-        n += 8
-        x <<= 8
-    if x <= 0x0FFFFFFF:
-        n += 4
-        x <<= 4
-    if x <= 0x3FFFFFFF:
-        n += 2
-        x <<= 2
-    if x <= 0x7FFFFFFF:
-        n += 1
-    return n
-
-
-def _radix_sort(objects: list[dict]) -> None:
-    """Radix sort objects by Morton code (in-place, 3 passes of 10 bits)."""
-    RADIX = 1024
-    PASSES = 3
-
-    tmp = [None] * len(objects)
-
-    for pass_num in range(PASSES):
-        count = [0] * RADIX
-        shift = pass_num * 10
-
-        for obj in objects:
-            bucket = (obj["morton_code"] >> shift) & (RADIX - 1)
-            count[bucket] += 1
-
-        total = 0
-        for i in range(RADIX):
-            c = count[i]
-            count[i] = total
-            total += c
-
-        for obj in objects:
-            bucket = (obj["morton_code"] >> shift) & (RADIX - 1)
-            tmp[count[bucket]] = obj
-            count[bucket] += 1
-
-        objects[:] = tmp
-
-
-@njit(cache=True)
-def _check_collisions_jit(
-    arena_left, arena_right, arena_object_id, arena_aabb, arena_root, n_boxes
-):
-    """JIT-compiled collision detection core (Numba-accelerated)."""
-    all_collisions = []
-    visited = np.zeros(n_boxes, dtype=np.bool_)
-    total_checks = 0
-
-    # Stack for traversal (pre-allocate large enough)
-    stack = np.zeros((10000, 2), dtype=np.int32)
-    stack_ptr = 0
-    stack[stack_ptr, 0] = arena_root
-    stack[stack_ptr, 1] = arena_root
-    stack_ptr += 1
-
-    while stack_ptr > 0:
-        stack_ptr -= 1
-        a_idx = stack[stack_ptr, 0]
-        b_idx = stack[stack_ptr, 1]
-
-        # AABB overlap test
-        aabb1 = arena_aabb[a_idx]
-        aabb2 = arena_aabb[b_idx]
-
-        min1_x = aabb1[0] - aabb1[3]
-        max1_x = aabb1[0] + aabb1[3]
-        min1_y = aabb1[1] - aabb1[4]
-        max1_y = aabb1[1] + aabb1[4]
-        min1_z = aabb1[2] - aabb1[5]
-        max1_z = aabb1[2] + aabb1[5]
-
-        min2_x = aabb2[0] - aabb2[3]
-        max2_x = aabb2[0] + aabb2[3]
-        min2_y = aabb2[1] - aabb2[4]
-        max2_y = aabb2[1] + aabb2[4]
-        min2_z = aabb2[2] - aabb2[5]
-        max2_z = aabb2[2] + aabb2[5]
-
-        if not (
-            min1_x <= max2_x
-            and max1_x >= min2_x
-            and min1_y <= max2_y
-            and max1_y >= min2_y
-            and min1_z <= max2_z
-            and max1_z >= min2_z
-        ):
-            continue
-
-        total_checks += 1
-
-        # Grow the stack when fewer than 4 free slots remain
-        if stack_ptr + 4 >= stack.shape[0]:
-            new_stack = np.zeros((stack.shape[0] * 2, 2), dtype=np.int32)
-            new_stack[: stack.shape[0]] = stack
-            stack = new_stack
-
-        a_obj_id = arena_object_id[a_idx]
-        b_obj_id = arena_object_id[b_idx]
-        a_leaf = a_obj_id >= 0
-        b_leaf = b_obj_id >= 0
-
-        # Both leaves
-        if a_leaf and b_leaf:
-            i = a_obj_id
-            j = b_obj_id
-            if i > j:
-                i, j = j, i
-            if 0 <= i < j < n_boxes:
-                all_collisions.append((i, j))
-                visited[i] = True
-                visited[j] = True
-            continue
-
-        # Same node: expand unique child pairs
-        if a_idx == b_idx:
-            if not a_leaf:
-                left_idx = arena_left[a_idx]
-                right_idx = arena_right[a_idx]
-                if left_idx >= 0:
-                    stack[stack_ptr, 0] = left_idx
-                    stack[stack_ptr, 1] = left_idx
-                    stack_ptr += 1
-                    if right_idx >= 0:
-                        stack[stack_ptr, 0] = left_idx
-                        stack[stack_ptr, 1] = right_idx
-                        stack_ptr += 1
-                        stack[stack_ptr, 0] = right_idx
-                        stack[stack_ptr, 1] = right_idx
-                        stack_ptr += 1
-            continue
-
-        # Both internal
-        if not a_leaf and not b_leaf:
-            a_left = arena_left[a_idx]
-            a_right = arena_right[a_idx]
-            b_left = arena_left[b_idx]
-            b_right = arena_right[b_idx]
-            if a_left >= 0 and b_left >= 0:
-                stack[stack_ptr, 0] = a_left
-                stack[stack_ptr, 1] = b_left
-                stack_ptr += 1
-            if a_left >= 0 and b_right >= 0:
-                stack[stack_ptr, 0] = a_left
-                stack[stack_ptr, 1] = b_right
-                stack_ptr += 1
-            if a_right >= 0 and b_left >= 0:
-                stack[stack_ptr, 0] = a_right
-                stack[stack_ptr, 1] = b_left
-                stack_ptr += 1
-            if a_right >= 0 and b_right >= 0:
-                stack[stack_ptr, 0] = a_right
-                stack[stack_ptr, 1] = b_right
-                stack_ptr += 1
-        # a is leaf, b is internal
-        elif a_leaf and not b_leaf:
-            b_left = arena_left[b_idx]
-            b_right = arena_right[b_idx]
-            if b_left >= 0:
-                stack[stack_ptr, 0] = a_idx
-                stack[stack_ptr, 1] = b_left
-                stack_ptr += 1
-            if b_right >= 0:
-                stack[stack_ptr, 0] = a_idx
-                stack[stack_ptr, 1] = b_right
-                stack_ptr += 1
-        # a is internal, b is leaf
-        elif not a_leaf and b_leaf:
-            a_left = arena_left[a_idx]
-            a_right = arena_right[a_idx]
-            if a_left >= 0:
-                stack[stack_ptr, 0] = a_left
-                stack[stack_ptr, 1] = b_idx
-                stack_ptr += 1
-            if a_right >= 0:
-                stack[stack_ptr, 0] = a_right
-                stack[stack_ptr, 1] = b_idx
-                stack_ptr += 1
-
-    return all_collisions, visited, total_checks
-
-
-def _ray_aabb_intersect(
-    origin: Point, direction: Vector, box: AABB
-) -> tuple[bool, float, float]:
-    """Check if a ray intersects an AABB."""
-    min_x = box.cx - box.hx
-    max_x = box.cx + box.hx
-    min_y = box.cy - box.hy
-    max_y = box.cy + box.hy
-    min_z = box.cz - box.hz
-    max_z = box.cz + box.hz
-
-    def inv(v):
-        return float("inf") if v == 0.0 else 1.0 / v
-
-    invx = inv(direction[0])
-    invy = inv(direction[1])
-    invz = inv(direction[2])
-
-    tx1 = (min_x - origin[0]) * invx
-    tx2 = (max_x - origin[0]) * invx
-    tmin = min(tx1, tx2)
-    tmax = max(tx1, tx2)
-
-    ty1 = (min_y - origin[1]) * invy
-    ty2 = (max_y - origin[1]) * invy
-    tmin = max(tmin, min(ty1, ty2))
-    tmax = min(tmax, max(ty1, ty2))
-
-    tz1 = (min_z - origin[2]) * invz
-    tz2 = (max_z - origin[2]) * invz
-    tmin = max(tmin, min(tz1, tz2))
-    tmax = min(tmax, max(tz1, tz2))
-
-    return tmax >= tmin, tmin, tmax
-
-
-class SpatialBVH:
-    """Boundary Volume Hierarchy for spatial acceleration."""
-
-    def __init__(self, world_size: float = 1000.0):
-        self._guid = None
-        self.name = "my_bvh"
-        self.root: SpatialBVHNode | None = None
-        self.world_size = world_size
-        self.object_guids: list[str] = []
-        # Flat arena for fast queries (NumPy arrays)
-        self.arena_left: np.ndarray | None = None  # int32
-        self.arena_right: np.ndarray | None = None  # int32
-        self.arena_object_id: np.ndarray | None = None  # int32
-        self.arena_aabb: np.ndarray | None = (
-            None  # float64, shape (n, 6) for cx,cy,cz,hx,hy,hz
-        )
-        self.arena_root: int = -1
-
-    def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
-
-    @property
-    def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
-            self._guid = str(uuid.uuid4())
-        return self._guid
-
-    @guid.setter
-    def guid(self, value: str) -> None:
-        self._guid = value
-
-    @staticmethod
-    def compute_world_size(bounding_boxes: list[OBB]) -> float:
-        """Compute world size from bounding boxes."""
-        if not bounding_boxes:
-            return 1000.0
-
-        max_extent = 0.0
-        for bbox in bounding_boxes:
-            x_extent = max(
-                abs(bbox.center[0] + bbox.half_size[0]),
-                abs(bbox.center[0] - bbox.half_size[0]),
-            )
-            y_extent = max(
-                abs(bbox.center[1] + bbox.half_size[1]),
-                abs(bbox.center[1] - bbox.half_size[1]),
-            )
-            z_extent = max(
-                abs(bbox.center[2] + bbox.half_size[2]),
-                abs(bbox.center[2] - bbox.half_size[2]),
-            )
-            max_extent = max(max_extent, x_extent, y_extent, z_extent)
-
-        return max(max_extent * 2.2, 10.0)
-
-    @classmethod
-    def from_boxes(cls, bounding_boxes: list[OBB], world_size: float) -> "SpatialBVH":
-        """Create a SpatialBVH from a list of bounding boxes."""
-        bvh = cls(world_size)
-        bvh.build(bounding_boxes)
-        return bvh
-
-    def build_with_guids(self, boxes_with_guids: list[tuple[OBB, str]]) -> None:
-        """Build SpatialBVH from bounding boxes with GUIDs."""
-        if not boxes_with_guids:
-            self.object_guids = []
-            self.build([])
-            return
-
-        bounding_boxes = [bbox for bbox, _ in boxes_with_guids]
-        self.object_guids = [guid for _, guid in boxes_with_guids]
-        self.world_size = self.compute_world_size(bounding_boxes)
-        self.build(bounding_boxes)
-
-    def build_from_boxes(self, boxes: list[OBB], ws: float) -> None:
-        """Build from bounding boxes with an explicit world size."""
-        self.world_size = ws
-        self.build(boxes)
-
-    def build(self, bounding_boxes: list[OBB]) -> None:
-        """Build the SpatialBVH tree from bounding boxes using LBVH algorithm."""
-        if not bounding_boxes:
-            self.root = None
-            self.arena_root = -1
-            self.arena_left = None
-            self.arena_right = None
-            self.arena_object_id = None
-            self.arena_aabb = None
-            return
-
-        N = len(bounding_boxes)
-
-        # Morton codes normalized over the INPUT's own bounds - not the
-        # origin-centered world_size. Sized by max |coordinate|, a scene far from the origin
-        # collapses into a handful of Morton cells: the tree stays balanced (index tiebreak)
-        # but loses all spatial coherence - measured 480x slower queries for the same boxes
-        # moved 5 km out. Bounds normalization makes tree quality translation-invariant;
-        # query results are unaffected (they test exact AABBs), world_size stays as metadata.
-        lo = [min(b.center[k] for b in bounding_boxes) for k in range(3)]
-        hi = [max(b.center[k] for b in bounding_boxes) for k in range(3)]
-        # ONE scale for all three axes (the scene's bounding CUBE): per-axis stretch would
-        # blow a nearly-flat axis up to the full 1024 cells and scatter xy-neighbours in the
-        # sort - measured 4x slower queries on a sheet-like scene. Cubic cells keep the sort
-        # spatially honest; a flat axis simply occupies few cells, which is the truth.
-        ext = max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
-        s = 1023.0 / ext if ext > 0.0 else 0.0
-
-        def q(c: float, k: int) -> int:
-            return min(int((c - lo[k]) * s), 1023)
-
-        objects = []
-        for i, bbox in enumerate(bounding_boxes):
-            morton_code = (
-                expand_bits(q(bbox.center[0], 0))
-                | (expand_bits(q(bbox.center[1], 1)) << 1)
-                | (expand_bits(q(bbox.center[2], 2)) << 2)
-            )
-            aabb = _aabb_from_obb(bbox)
-            objects.append({"id": i, "morton_code": morton_code, "aabb": aabb})
-
-        # Radix sort by Morton code
-        _radix_sort(objects)
-
-        # Single leaf case
-        if N == 1:
-            # Build arena only (no tree)
-            obj = objects[0]
-            self.arena_left = np.array([-1], dtype=np.int32)
-            self.arena_right = np.array([-1], dtype=np.int32)
-            self.arena_object_id = np.array([obj["id"]], dtype=np.int32)
-            aabb = obj["aabb"]
-            self.arena_aabb = np.array(
-                [[aabb.cx, aabb.cy, aabb.cz, aabb.hx, aabb.hy, aabb.hz]],
-                dtype=np.float64,
-            )
-            self.arena_root = 0
-            self.root = None
-            return
-
-        # Extract sorted codes
-        codes = [obj["morton_code"] for obj in objects]
-
-        def common_prefix(i: int, j: int) -> int:
-            """Calculate common prefix length between two codes."""
-            if j < 0 or j >= N:
-                return -1
-            ci = codes[i]
-            cj = codes[j]
-            if ci != cj:
-                return _clz32(ci ^ cj)
-            return 32 + _clz32(i ^ j)
-
-        def determine_range(i: int) -> tuple[int, int]:
-            """Determine the range of keys covered by internal node i."""
-            d = 1 if common_prefix(i, i + 1) - common_prefix(i, i - 1) > 0 else -1
-            delta_min = common_prefix(i, i - d)
-
-            length = 1
-            while common_prefix(i, i + length * d) > delta_min:
-                length <<= 1
-
-            bound = 0
-            t = length >> 1
-            while t > 0:
-                if common_prefix(i, i + (bound + t) * d) > delta_min:
-                    bound += t
-                t >>= 1
-
-            j = i + bound * d
-            return (min(i, j), max(i, j))
-
-        def find_split(first: int, last: int) -> int:
-            """Find split position for range [first, last]."""
-            common = common_prefix(first, last)
-            split = first
-            step = last - first
-
-            while step > 1:
-                step = (step + 1) >> 1
-                new_split = split + step
-                if new_split < last:
-                    split_prefix = common_prefix(first, new_split)
-                    if split_prefix > common:
-                        split = new_split
-
-            return split
-
-        # Allocate leaves
-        leaves = []
-        for i in range(N):
-            leaf = SpatialBVHNode()
-            leaf.object_id = objects[i]["id"]
-            leaf.aabb = objects[i]["aabb"]
-            leaves.append(leaf)
-
-        # Allocate internal nodes
-        internals = []
-        for i in range(N - 1):
-            node = SpatialBVHNode()
-            internals.append(node)
-
-        # Build topology
-        has_parent = [False] * (N - 1)
-        for i in range(N - 1):
-            first, last = determine_range(i)
-            split = find_split(first, last)
-
-            if split == first:
-                internals[i].left = leaves[split]
-            else:
-                internals[i].left = internals[split]
-                has_parent[split] = True
-
-            if split + 1 == last:
-                internals[i].right = leaves[split + 1]
-            else:
-                internals[i].right = internals[split + 1]
-                has_parent[split + 1] = True
-
-        # Find root
-        root_idx = 0
-        for i in range(N - 1):
-            if not has_parent[i]:
-                root_idx = i
-                break
-        self.root = internals[root_idx]
-
-        # Post-order compute internal AABBs
-        def compute_aabb(node: SpatialBVHNode) -> None:
-            if not node or node.is_leaf():
-                return
-
-            compute_aabb(node.left)
-            compute_aabb(node.right)
-
-            a = node.left.aabb
-            b = node.right.aabb
-
-            min_x = min(a.cx - a.hx, b.cx - b.hx)
-            min_y = min(a.cy - a.hy, b.cy - b.hy)
-            min_z = min(a.cz - a.hz, b.cz - b.hz)
-            max_x = max(a.cx + a.hx, b.cx + b.hx)
-            max_y = max(a.cy + a.hy, b.cy + b.hy)
-            max_z = max(a.cz + a.hz, b.cz + b.hz)
-
-            node.aabb = AABB(
-                (min_x + max_x) * 0.5,
-                (min_y + max_y) * 0.5,
-                (min_z + max_z) * 0.5,
-                (max_x - min_x) * 0.5,
-                (max_y - min_y) * 0.5,
-                (max_z - min_z) * 0.5,
-            )
-
-        compute_aabb(self.root)
-
-        # Build flat arena for fast queries (NumPy arrays)
-        self._build_arena(N + (N - 1))  # leaves + internals
-        # Don't build Box tree - arena is sufficient
-        self.root = None
-
-    def _build_arena(self, total_nodes: int) -> None:
-        """Flatten the pointer tree at `self.root` into the NumPy arena."""
-        self.arena_left = np.full(total_nodes, -1, dtype=np.int32)
-        self.arena_right = np.full(total_nodes, -1, dtype=np.int32)
-        self.arena_object_id = np.full(total_nodes, -1, dtype=np.int32)
-        self.arena_aabb = np.zeros((total_nodes, 6), dtype=np.float64)
-
-        arena_idx = [0]  # Use list to allow mutation in nested function
-
-        def build_arena(node: SpatialBVHNode | None) -> int:
-            """Build flat arena from tree, return index."""
-            if not node:
-                return -1
-
-            idx = arena_idx[0]
-            arena_idx[0] += 1
-
-            # Store AABB
-            if node.aabb:
-                self.arena_aabb[idx] = [
-                    node.aabb.cx,
-                    node.aabb.cy,
-                    node.aabb.cz,
-                    node.aabb.hx,
-                    node.aabb.hy,
-                    node.aabb.hz,
-                ]
-
-            # Leaf node
-            if node.is_leaf():
-                self.arena_object_id[idx] = node.object_id
-                return idx
-
-            # Internal node - build children first
-            self.arena_object_id[idx] = -1
-            left_idx = build_arena(node.left) if node.left else -1
-            right_idx = build_arena(node.right) if node.right else -1
-            self.arena_left[idx] = left_idx
-            self.arena_right[idx] = right_idx
-
-            return idx
-
-        self.arena_root = build_arena(self.root)
-
-    def build_from_aabbs(self, aabbs: list[AABB], world_size: float) -> None:
-        """Build the BVH directly from axis-aligned AABBs, keeping the pointer tree (`root`)."""
-        if not aabbs:
-            self.build([])
-            return
-
-        self.world_size = world_size
-        N = len(aabbs)
-
-        # Morton codes normalized over the INPUT's own bounds - not the
-        # origin-centered world_size. Sized by max |coordinate|, a scene far from the origin
-        # collapses into a handful of Morton cells: the tree stays balanced (index tiebreak)
-        # but loses all spatial coherence - measured 480x slower queries for the same boxes
-        # moved 5 km out. Bounds normalization makes tree quality translation-invariant;
-        # query results are unaffected (they test exact AABBs), world_size stays as metadata.
-        lo = [min(a.cx for a in aabbs), min(a.cy for a in aabbs), min(a.cz for a in aabbs)]
-        hi = [max(a.cx for a in aabbs), max(a.cy for a in aabbs), max(a.cz for a in aabbs)]
-        # ONE scale for all three axes (the scene's bounding CUBE): per-axis stretch would
-        # blow a nearly-flat axis up to the full 1024 cells and scatter xy-neighbours in the
-        # sort - measured 4x slower queries on a sheet-like scene. Cubic cells keep the sort
-        # spatially honest; a flat axis simply occupies few cells, which is the truth.
-        ext = max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
-        s = 1023.0 / ext if ext > 0.0 else 0.0
-
-        def q(c: float, k: int) -> int:
-            return min(int((c - lo[k]) * s), 1023)
-
-        objects = []
-        for i in range(N):
-            ab = aabbs[i]
-            morton_code = expand_bits(q(ab.cx, 0)) | (expand_bits(q(ab.cy, 1)) << 1) | (expand_bits(q(ab.cz, 2)) << 2)
-            objects.append({"id": i, "morton_code": morton_code, "aabb": ab})
-
-        _radix_sort(objects)
-
-        if N == 1:
-            leaf = SpatialBVHNode()
-            leaf.object_id = objects[0]["id"]
-            leaf.aabb = objects[0]["aabb"]
-            self.root = leaf
-            self._build_arena(1)
-            return
-
-        codes = [obj["morton_code"] for obj in objects]
-
-        def common_prefix(i: int, j: int) -> int:
-            if j < 0 or j >= N:
-                return -1
-            ci = codes[i]
-            cj = codes[j]
-            if ci != cj:
-                return _clz32(ci ^ cj)
-            return 32 + _clz32(i ^ j)
-
-        def determine_range(i: int) -> tuple[int, int]:
-            d = 1 if common_prefix(i, i + 1) - common_prefix(i, i - 1) > 0 else -1
-            delta_min = common_prefix(i, i - d)
-
-            length = 1
-            while common_prefix(i, i + length * d) > delta_min:
-                length <<= 1
-
-            bound = 0
-            t = length >> 1
-            while t > 0:
-                if common_prefix(i, i + (bound + t) * d) > delta_min:
-                    bound += t
-                t >>= 1
-
-            j = i + bound * d
-            return (min(i, j), max(i, j))
-
-        def find_split(first: int, last: int) -> int:
-            common = common_prefix(first, last)
-            split = first
-            step = last - first
-
-            while step > 1:
-                step = (step + 1) >> 1
-                new_split = split + step
-                if new_split < last:
-                    split_prefix = common_prefix(first, new_split)
-                    if split_prefix > common:
-                        split = new_split
-
-            return split
-
-        leaves = []
-        for i in range(N):
-            leaf = SpatialBVHNode()
-            leaf.object_id = objects[i]["id"]
-            leaf.aabb = objects[i]["aabb"]
-            leaves.append(leaf)
-
-        internals = []
-        for i in range(N - 1):
-            internals.append(SpatialBVHNode())
-
-        has_parent = [False] * (N - 1)
-        for i in range(N - 1):
-            first, last = determine_range(i)
-            split = find_split(first, last)
-
-            if split == first:
-                internals[i].left = leaves[split]
-            else:
-                internals[i].left = internals[split]
-                has_parent[split] = True
-
-            if split + 1 == last:
-                internals[i].right = leaves[split + 1]
-            else:
-                internals[i].right = internals[split + 1]
-                has_parent[split + 1] = True
-
-        root_idx = 0
-        for i in range(N - 1):
-            if not has_parent[i]:
-                root_idx = i
-                break
-        self.root = internals[root_idx]
-
-        def compute_aabb(node: SpatialBVHNode) -> None:
-            if not node or node.is_leaf():
-                return
-
-            compute_aabb(node.left)
-            compute_aabb(node.right)
-
-            a = node.left.aabb
-            b = node.right.aabb
-
-            min_x = min(a.cx - a.hx, b.cx - b.hx)
-            min_y = min(a.cy - a.hy, b.cy - b.hy)
-            min_z = min(a.cz - a.hz, b.cz - b.hz)
-            max_x = max(a.cx + a.hx, b.cx + b.hx)
-            max_y = max(a.cy + a.hy, b.cy + b.hy)
-            max_z = max(a.cz + a.hz, b.cz + b.hz)
-
-            node.aabb = AABB(
-                (min_x + max_x) * 0.5,
-                (min_y + max_y) * 0.5,
-                (min_z + max_z) * 0.5,
-                (max_x - min_x) * 0.5,
-                (max_y - min_y) * 0.5,
-                (max_z - min_z) * 0.5,
-            )
-
-        compute_aabb(self.root)
-        self._build_arena(N + (N - 1))
-
-    def merge_aabb(self, aabb1: OBB, aabb2: OBB) -> OBB:
-        """Merge two AABBs into a single encompassing AABB."""
-        min_x = min(
-            aabb1.center[0] - aabb1.half_size[0], aabb2.center[0] - aabb2.half_size[0]
-        )
-        min_y = min(
-            aabb1.center[1] - aabb1.half_size[1], aabb2.center[1] - aabb2.half_size[1]
-        )
-        min_z = min(
-            aabb1.center[2] - aabb1.half_size[2], aabb2.center[2] - aabb2.half_size[2]
-        )
-
-        max_x = max(
-            aabb1.center[0] + aabb1.half_size[0], aabb2.center[0] + aabb2.half_size[0]
-        )
-        max_y = max(
-            aabb1.center[1] + aabb1.half_size[1], aabb2.center[1] + aabb2.half_size[1]
-        )
-        max_z = max(
-            aabb1.center[2] + aabb1.half_size[2], aabb2.center[2] + aabb2.half_size[2]
-        )
-
-        center = Point((min_x + max_x) / 2, (min_y + max_y) / 2, (min_z + max_z) / 2)
-        half_size = Vector(
-            (max_x - min_x) / 2, (max_y - min_y) / 2, (max_z - min_z) / 2
-        )
-
-        return OBB(
-            center, Vector(1, 0, 0), Vector(0, 1, 0), Vector(0, 0, 1), half_size
-        )
-
-    def aabb_intersect(self, aabb1: OBB, aabb2: OBB) -> bool:
-        """Check if two AABBs intersect."""
-        min1_x = aabb1.center[0] - aabb1.half_size[0]
-        max1_x = aabb1.center[0] + aabb1.half_size[0]
-        min1_y = aabb1.center[1] - aabb1.half_size[1]
-        max1_y = aabb1.center[1] + aabb1.half_size[1]
-        min1_z = aabb1.center[2] - aabb1.half_size[2]
-        max1_z = aabb1.center[2] + aabb1.half_size[2]
-
-        min2_x = aabb2.center[0] - aabb2.half_size[0]
-        max2_x = aabb2.center[0] + aabb2.half_size[0]
-        min2_y = aabb2.center[1] - aabb2.half_size[1]
-        max2_y = aabb2.center[1] + aabb2.half_size[1]
-        min2_z = aabb2.center[2] - aabb2.half_size[2]
-        max2_z = aabb2.center[2] + aabb2.half_size[2]
-
-        return (
-            min1_x <= max2_x
-            and max1_x >= min2_x
-            and min1_y <= max2_y
-            and max1_y >= min2_y
-            and min1_z <= max2_z
-            and max1_z >= min2_z
-        )
-
-    def _aabb_intersect_internal(self, aabb1: AABB, aabb2: AABB) -> bool:
-        """Check if two internal AABBs intersect."""
-        min1_x = aabb1.cx - aabb1.hx
-        max1_x = aabb1.cx + aabb1.hx
-        min1_y = aabb1.cy - aabb1.hy
-        max1_y = aabb1.cy + aabb1.hy
-        min1_z = aabb1.cz - aabb1.hz
-        max1_z = aabb1.cz + aabb1.hz
-
-        min2_x = aabb2.cx - aabb2.hx
-        max2_x = aabb2.cx + aabb2.hx
-        min2_y = aabb2.cy - aabb2.hy
-        max2_y = aabb2.cy + aabb2.hy
-        min2_z = aabb2.cz - aabb2.hz
-        max2_z = aabb2.cz + aabb2.hz
-
-        return (
-            min1_x <= max2_x
-            and max1_x >= min2_x
-            and min1_y <= max2_y
-            and max1_y >= min2_y
-            and min1_z <= max2_z
-            and max1_z >= min2_z
-        )
-
-    def _aabb_intersect_fast(self, idx1: int, idx2: int) -> bool:
-        """Fast AABB intersection check using NumPy arena."""
-        aabb1 = self.arena_aabb[idx1]
-        aabb2 = self.arena_aabb[idx2]
-
-        min1_x = aabb1[0] - aabb1[3]
-        max1_x = aabb1[0] + aabb1[3]
-        min1_y = aabb1[1] - aabb1[4]
-        max1_y = aabb1[1] + aabb1[4]
-        min1_z = aabb1[2] - aabb1[5]
-        max1_z = aabb1[2] + aabb1[5]
-
-        min2_x = aabb2[0] - aabb2[3]
-        max2_x = aabb2[0] + aabb2[3]
-        min2_y = aabb2[1] - aabb2[4]
-        max2_y = aabb2[1] + aabb2[4]
-        min2_z = aabb2[2] - aabb2[5]
-        max2_z = aabb2[2] + aabb2[5]
-
-        return (
-            min1_x <= max2_x
-            and max1_x >= min2_x
-            and min1_y <= max2_y
-            and max1_y >= min2_y
-            and min1_z <= max2_z
-            and max1_z >= min2_z
-        )
-
-    def check_all_collisions(
-        self, bounding_boxes: list[OBB]
-    ) -> tuple[list[tuple[int, int]], list[int], int]:
-        """Check for all pairwise collisions in the scene using fast NumPy arena."""
-        if self.arena_root < 0 or self.arena_aabb is None:
-            return [], [], 0
-
-        # Use Numba-JIT version if available for C++-level speed
-        if HAS_NUMBA:
-            all_collisions, visited, total_checks = _check_collisions_jit(
-                self.arena_left,
-                self.arena_right,
-                self.arena_object_id,
-                self.arena_aabb,
-                self.arena_root,
-                len(bounding_boxes),
-            )
-            colliding_indices = [i for i in range(len(visited)) if visited[i]]
-            return all_collisions, colliding_indices, total_checks
-
-        # Fallback: Pure Python version (slower)
-        all_collisions = []
-        visited = [False] * len(bounding_boxes)
-        total_checks = 0
-        stack = [(self.arena_root, self.arena_root)]
-
-        while stack:
-            a_idx, b_idx = stack.pop()
-
-            # AABB overlap test
-            aabb1 = self.arena_aabb[a_idx]
-            aabb2 = self.arena_aabb[b_idx]
-            min1_x, max1_x = aabb1[0] - aabb1[3], aabb1[0] + aabb1[3]
-            min1_y, max1_y = aabb1[1] - aabb1[4], aabb1[1] + aabb1[4]
-            min1_z, max1_z = aabb1[2] - aabb1[5], aabb1[2] + aabb1[5]
-            min2_x, max2_x = aabb2[0] - aabb2[3], aabb2[0] + aabb2[3]
-            min2_y, max2_y = aabb2[1] - aabb2[4], aabb2[1] + aabb2[4]
-            min2_z, max2_z = aabb2[2] - aabb2[5], aabb2[2] + aabb2[5]
-
-            if not (
-                min1_x <= max2_x
-                and max1_x >= min2_x
-                and min1_y <= max2_y
-                and max1_y >= min2_y
-                and min1_z <= max2_z
-                and max1_z >= min2_z
-            ):
-                continue
-
-            total_checks += 1
-            a_obj_id, b_obj_id = (
-                self.arena_object_id[a_idx],
-                self.arena_object_id[b_idx],
-            )
-            a_leaf, b_leaf = a_obj_id >= 0, b_obj_id >= 0
-
-            if a_leaf and b_leaf:
-                i, j = a_obj_id, b_obj_id
-                if i > j:
-                    i, j = j, i
-                if 0 <= i < j < len(bounding_boxes):
-                    all_collisions.append((i, j))
-                    visited[i], visited[j] = True, True
-                continue
-
-            if a_idx == b_idx:
-                if not a_leaf:
-                    left_idx, right_idx = (
-                        self.arena_left[a_idx],
-                        self.arena_right[a_idx],
-                    )
-                    if left_idx >= 0:
-                        stack.append((left_idx, left_idx))
-                        if right_idx >= 0:
-                            stack.extend(
-                                [(left_idx, right_idx), (right_idx, right_idx)]
-                            )
-                continue
-
-            if not a_leaf and not b_leaf:
-                a_left, a_right = self.arena_left[a_idx], self.arena_right[a_idx]
-                b_left, b_right = self.arena_left[b_idx], self.arena_right[b_idx]
-                if a_left >= 0 and b_left >= 0:
-                    stack.append((a_left, b_left))
-                if a_left >= 0 and b_right >= 0:
-                    stack.append((a_left, b_right))
-                if a_right >= 0 and b_left >= 0:
-                    stack.append((a_right, b_left))
-                if a_right >= 0 and b_right >= 0:
-                    stack.append((a_right, b_right))
-            elif a_leaf and not b_leaf:
-                b_left, b_right = self.arena_left[b_idx], self.arena_right[b_idx]
-                if b_left >= 0:
-                    stack.append((a_idx, b_left))
-                if b_right >= 0:
-                    stack.append((a_idx, b_right))
-            elif not a_leaf and b_leaf:
-                a_left, a_right = self.arena_left[a_idx], self.arena_right[a_idx]
-                if a_left >= 0:
-                    stack.append((a_left, b_idx))
-                if a_right >= 0:
-                    stack.append((a_right, b_idx))
-
-        colliding_indices = [i for i, v in enumerate(visited) if v]
-        return all_collisions, colliding_indices, total_checks
-
-    def check_all_collisions_guids(
-        self, bounding_boxes: list[OBB]
-    ) -> list[tuple[str, str]]:
-        """Check for all collisions and return GUID pairs."""
-        collisions, _, _ = self.check_all_collisions(bounding_boxes)
-        guid_collisions = []
-        for i, j in collisions:
-            if i < len(self.object_guids) and j < len(self.object_guids):
-                guid_collisions.append((self.object_guids[i], self.object_guids[j]))
-        return guid_collisions
-
-    def ray_cast(
-        self,
-        origin: Point,
-        direction: Vector,
-        candidate_leaf_ids: list[int],
-        find_all: bool = False,
-    ) -> bool:
-        """Cast a ray through the SpatialBVH and return candidate leaf IDs ordered by distance."""
-        candidate_leaf_ids.clear()
-
-        if self.arena_root < 0 or self.arena_aabb is None:
-            return False
-
-        heap = []
-
-        # Test root node
-        root_aabb_data = self.arena_aabb[self.arena_root]
-        root_aabb = AABB(*root_aabb_data)
-        intersects, rtmin, rtmax = _ray_aabb_intersect(origin, direction, root_aabb)
-        if not intersects or rtmax < 0.0:
-            return False
-
-        heapq.heappush(heap, (rtmin, self.arena_root))
-
-        any_found = False
-        while heap:
-            tmin, idx = heapq.heappop(heap)
-
-            if idx < 0:
-                continue
-
-            obj_id = self.arena_object_id[idx]
-            is_leaf = obj_id >= 0
-
-            if is_leaf:
-                candidate_leaf_ids.append(obj_id)
-                any_found = True
-                if not find_all and len(candidate_leaf_ids) >= 1:
-                    pass  # Continue for ordering
-                continue
-
-            # Internal node - test children
-            left_idx = self.arena_left[idx]
-            if left_idx >= 0:
-                left_aabb_data = self.arena_aabb[left_idx]
-                left_aabb = AABB(*left_aabb_data)
-                intersects, cmin, cmax = _ray_aabb_intersect(
-                    origin, direction, left_aabb
-                )
-                if intersects and cmax >= 0.0:
-                    heapq.heappush(heap, (cmin, left_idx))
-
-            right_idx = self.arena_right[idx]
-            if right_idx >= 0:
-                right_aabb_data = self.arena_aabb[right_idx]
-                right_aabb = AABB(*right_aabb_data)
-                intersects, cmin, cmax = _ray_aabb_intersect(
-                    origin, direction, right_aabb
-                )
-                if intersects and cmax >= 0.0:
-                    heapq.heappush(heap, (cmin, right_idx))
-
-        return any_found
-
-    def find_collisions(
-        self, object_id: int, query_bbox: OBB, bounding_boxes: list[OBB]
-    ) -> tuple[list[int], int]:
-        """Collisions of one object against the tree, excluding self; returns (object_ids, check_count)."""
-        collisions: list[int] = []
-        check_count = 0
-        if self.arena_root < 0 or self.arena_aabb is None:
-            return collisions, check_count
-        query = _aabb_from_obb(query_bbox)
-        stack: list[int] = [self.arena_root]
-        while stack:
-            idx = stack.pop()
-            a = self.arena_aabb[idx]
-            if not self._aabb_intersect_internal(query, AABB(a[0], a[1], a[2], a[3], a[4], a[5])):
-                continue
-            check_count += 1
-            obj_id = int(self.arena_object_id[idx])
-            if obj_id >= 0:
-                if (
-                    obj_id != object_id
-                    and obj_id < len(bounding_boxes)
-                    and self._aabb_intersect_internal(query, _aabb_from_obb(bounding_boxes[obj_id]))
-                ):
-                    collisions.append(obj_id)
-                continue
-            left_idx = int(self.arena_left[idx])
-            right_idx = int(self.arena_right[idx])
-            if left_idx >= 0:
-                stack.append(left_idx)
-            if right_idx >= 0:
-                stack.append(right_idx)
-        return collisions, check_count
-
-    def query_aabb(self, query: OBB) -> list[int]:
-        """Return object_ids of all leaves whose AABB overlaps the query box."""
-        hits: list[int] = []
-        if self.arena_root < 0 or self.arena_aabb is None:
-            return hits
-        q = _aabb_from_obb(query)
-        qcx = q.cx
-        qcy = q.cy
-        qcz = q.cz
-        qhx = q.hx
-        qhy = q.hy
-        qhz = q.hz
-        stack: list[int] = [self.arena_root]
-        while stack:
-            idx = stack.pop()
-            a = self.arena_aabb[idx]
-            if (
-                a[0] - a[3] > qcx + qhx
-                or a[0] + a[3] < qcx - qhx
-                or a[1] - a[4] > qcy + qhy
-                or a[1] + a[4] < qcy - qhy
-                or a[2] - a[5] > qcz + qhz
-                or a[2] + a[5] < qcz - qhz
-            ):
-                continue
-            obj_id = int(self.arena_object_id[idx])
-            if obj_id >= 0:
-                hits.append(obj_id)
-            else:
-                left_idx = int(self.arena_left[idx])
-                right_idx = int(self.arena_right[idx])
-                if left_idx >= 0:
-                    stack.append(left_idx)
-                if right_idx >= 0:
-                    stack.append(right_idx)
-        return hits
-
-    def nearest_neighbors(
-        self, object_id: int, bounding_boxes: list[OBB], inflate: float = 1.2
-    ) -> list[int]:
-        """Find leaf object_ids near `object_id`, excluding self.
-
-        Inflates the half-extents of the object's AABB by `inflate` and queries.
-        """
-        if object_id < 0 or object_id >= len(bounding_boxes):
-            return []
-        bb = bounding_boxes[object_id]
-        inflated = OBB(
-            bb.center,
-            bb.x_axis,
-            bb.y_axis,
-            bb.z_axis,
-            Vector(
-                bb.half_size[0] * inflate,
-                bb.half_size[1] * inflate,
-                bb.half_size[2] * inflate,
-            ),
-        )
-        hits = self.query_aabb(inflated)
-        return [h for h in hits if h != object_id]
+    half = world_size * 0.5
+    ix = _quantize((x + half) / world_size)
+    iy = _quantize((y + half) / world_size)
+    iz = _quantize((z + half) / world_size)
+    return expand_bits(ix) | (expand_bits(iy) << 1) | (expand_bits(iz) << 2)

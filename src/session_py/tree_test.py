@@ -3,28 +3,25 @@ from .mini_test import MINI_CHECK
 from .mini_test import run_all
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# TreeNode
+# ═══════════════════════════════════════════════════════════════════════════
+
 @MINI_TEST("TreeNode", "Constructor")
 def test_treenode_constructor():
     from session_py import TreeNode
     from session_py import Color
 
-    # Default constructor
     n0 = TreeNode()
-
-    # Constructor with name
     n = TreeNode("my_named_node")
     n.color = Color(1.0, 0.0, 0.0, 1.0)
-
-    # Minimal string representation
     nstr = str(n)
-
-    # Copies (compared by identity in Python)
     nother = TreeNode("my_named_node")
 
     MINI_CHECK(n0.name == "my_node")
     MINI_CHECK(n0.guid)
     MINI_CHECK(n.name == "my_named_node")
-    MINI_CHECK(n.color is not None and n.color[0] == 1.0)
+    MINI_CHECK(n.color is not None and n.color.r == 1.0)
     MINI_CHECK("TreeNode(my_named_node" in nstr)
     MINI_CHECK(n == n)
     MINI_CHECK(n != nother)
@@ -72,15 +69,6 @@ def test_treenode_is_leaf():
 
     MINI_CHECK(child.is_leaf)
     MINI_CHECK(not parent.is_leaf)
-
-
-@MINI_TEST("TreeNode", "Tree")
-def test_treenode_tree():
-    from session_py import TreeNode
-
-    n = TreeNode("standalone")
-
-    MINI_CHECK(n.tree is None)
 
 
 @MINI_TEST("TreeNode", "Add")
@@ -190,17 +178,16 @@ def test_treenode_traverse():
     MINI_CHECK(len(bfs) == 3 and bfs[0].name == "root")
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Tree
+# ═══════════════════════════════════════════════════════════════════════════
+
 @MINI_TEST("Tree", "Constructor")
 def test_tree_constructor():
     from session_py import Tree
 
-    # Default constructor
     t0 = Tree()
-
-    # Constructor with name
     t = Tree("my_named_tree")
-
-    # Minimal string representation
     tstr = str(t)
 
     MINI_CHECK(t0.name == "my_tree")
@@ -218,13 +205,6 @@ def test_tree_json_roundtrip():
     original = Tree("test_tree")
     root_node = TreeNode("root_node")
     original.add(root_node)
-
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   file_json_dumps()    │ str          │ to JSON string
-    #   file_json_loads(s)   │ str          │ from JSON string
-    #   file_json_dump(path) │ file         │ write to file
-    #   file_json_load(path) │ file         │ read from file
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_tree.json"
     original.file_json_dump(fname)

@@ -1,1731 +1,1380 @@
 from __future__ import annotations
-from typing import List
-import numpy as np
 import math
-import copy
-import os
+import numpy as np
 
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
+from .nurbsknot import CurveInterpStyle
+from .nurbsknot import CurveNurbsKnotStyle
 from .plane import Plane
 from .point import Point
 from .vector import Vector
 from .line import Line
-from .polyline import Polyline
 from .xform import Xform
 from .mesh import Mesh
 from .tolerance import Tolerance
 from .tolerance import PI
 from . import nurbsknot
-from . import intersection
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rational quadratic circle pattern
+# ═══════════════════════════════════════════════════════════════════════════
+
+_CIRCLE_W = 0.7071067811865476
+_CIRCLE_X = [1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0, 1.0, 1.0]
+_CIRCLE_Y = [0.0, 1.0, 1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0]
+_CIRCLE_WEIGHTS = [1.0, _CIRCLE_W, 1.0, _CIRCLE_W, 1.0, _CIRCLE_W, 1.0, _CIRCLE_W, 1.0]
+_CIRCLE_NURBSKNOTS = [0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0]
+
+
+def _set_circle_row(
+    srf: NurbsSurface,
+    j: int,
+    cx: float,
+    cy: float,
+    cz: float,
+    radius: float,
+    weight: float,
+) -> None:
+    """Row j of a surface set to a circle in the plane z = cz, weights scaled by weight."""
+    for i in range(9):
+        w = _CIRCLE_WEIGHTS[i] * weight
+        px = cx + radius * _CIRCLE_X[i]
+        py = cy + radius * _CIRCLE_Y[i]
+        srf.set_cv_4d(i, j, px * w, py * w, cz * w, w)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Mesh helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _add_ring(vertices: list[Point], n: int, radius: float, z: float) -> None:
+    """Appends n points of a circle of the given radius in the plane z."""
+    for i in range(n):
+        angle = 2.0 * PI * i / n
+        vertices.append(Point(radius * math.cos(angle), radius * math.sin(angle), z))
+
+
+def _dedup_face(face: list[int]) -> list[int]:
+    """Face without consecutive duplicate vertices."""
+    unique = []
+    for k in range(len(face)):
+        if face[k] != face[(k + 1) % len(face)]:
+            unique.append(face[k])
+    return unique
+
+
+def _surface_grid(
+    surface: NurbsSurface, u_count: int, v_count: int, mesh: Mesh
+) -> list[list[int]]:
+    """Vertex keys of the surface sampled on a (u_count + 1) x (v_count + 1) grid; seam and poles share keys."""
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    closed_u = surface.is_closed(0)
+    singular_south = surface.is_singular(0)
+    singular_north = surface.is_singular(2)
+    grid = [[0] * (v_count + 1) for _ in range(u_count + 1)]
+    for i in range(u_count + 1):
+        u = u0 + (u1 - u0) * i / u_count
+        for j in range(v_count + 1):
+            v = v0 + (v1 - v0) * j / v_count
+            if closed_u and i == u_count:
+                grid[i][j] = grid[0][j]
+            elif singular_south and j == 0 and i > 0:
+                grid[i][j] = grid[0][0]
+            elif singular_north and j == v_count and i > 0:
+                grid[i][j] = grid[0][v_count]
+            else:
+                grid[i][j] = mesh.add_vertex(surface.point_at(u, v))
+    return grid
+
+
+def _surface_mid_grid(
+    surface: NurbsSurface, u_count: int, v_count: int, t: float, mesh: Mesh
+) -> list[list[int]]:
+    """Vertex keys of the surface sampled at v offset by t cells on a (u_count + 1) x v_count grid; seam shares keys."""
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    closed_u = surface.is_closed(0)
+    grid = [[0] * v_count for _ in range(u_count + 1)]
+    for i in range(u_count + 1):
+        u = u0 + (u1 - u0) * i / u_count
+        for j in range(v_count):
+            v = v0 + (v1 - v0) * (j + t) / v_count
+            if closed_u and i == u_count:
+                grid[i][j] = grid[0][j]
+            else:
+                grid[i][j] = mesh.add_vertex(surface.point_at(u, v))
+    return grid
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Curve compatibility
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _merge_nurbsknot_vectors(a: list[float], b: list[float]) -> list[float]:
+    """Sorted union of two nurbsknot vectors, equal values kept once."""
+    tol = 1e-10
+    merged = []
+    i = 0
+    j = 0
+    while i < len(a) and j < len(b):
+        if abs(a[i] - b[j]) < tol:
+            merged.append(a[i])
+            i += 1
+            j += 1
+        elif a[i] < b[j]:
+            merged.append(a[i])
+            i += 1
+        else:
+            merged.append(b[j])
+            j += 1
+    while i < len(a):
+        merged.append(a[i])
+        i += 1
+    while j < len(b):
+        merged.append(b[j])
+        j += 1
+    return merged
+
+
+def _nurbsknot_vectors_equal(a: list[float], b: list[float]) -> bool:
+    tol = 1e-10
+    if len(a) != len(b):
+        return False
+    for i in range(len(a)):
+        if abs(a[i] - b[i]) > tol:
+            return False
+    return True
+
+
+def _make_curves_compatible(curves: list[NurbsCurve]) -> None:
+    """Same degree, rationality, domain [0, 1] and nurbsknot vector for every curve."""
+    if len(curves) < 2:
+        return
+    max_degree = 0
+    any_rational = False
+    for c in curves:
+        max_degree = max(max_degree, c.degree())
+        any_rational = any_rational or c.is_rational()
+    for c in curves:
+        if c.degree() < max_degree:
+            c.increase_degree(max_degree)
+        if any_rational:
+            c.make_rational()
+    compatible = True
+    for i in range(1, len(curves)):
+        if curves[i].cv_count() != curves[0].cv_count() or not _nurbsknot_vectors_equal(
+            curves[i].get_nurbsknots(), curves[0].get_nurbsknots()
+        ):
+            compatible = False
+    if compatible:
+        return
+    for c in curves:
+        c.set_domain(0.0, 1.0)
+    unified = curves[0].get_nurbsknots()
+    for i in range(1, len(curves)):
+        unified = _merge_nurbsknot_vectors(unified, curves[i].get_nurbsknots())
+    tol = 1e-10
+    for c in curves:
+        nurbsknots = c.get_nurbsknots()
+        ci = 0
+        for ui in range(len(unified)):
+            if ci < len(nurbsknots) and abs(nurbsknots[ci] - unified[ui]) < tol:
+                ci += 1
+            else:
+                c.insert_nurbsknot(unified[ui], 1)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Planar helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _bilinear_patch(p00: Point, p10: Point, p01: Point, p11: Point) -> NurbsSurface:
+    """Bilinear patch: u runs p00 to p10, v runs p00 to p01."""
+    srf = NurbsSurface(3, False, 2, 2, 2, 2)
+    srf.set_cv(0, 0, p00)
+    srf.set_cv(1, 0, p10)
+    srf.set_cv(0, 1, p01)
+    srf.set_cv(1, 1, p11)
+    return srf
+
+
+def _longest_edge_dir(pts: list[Point]) -> Vector:
+    """Unit direction of the longest edge of a closed polygon."""
+    best = Vector(0.0, 0.0, 0.0)
+    for i in range(len(pts)):
+        edge = pts[(i + 1) % len(pts)] - pts[i]
+        if edge.magnitude() > best.magnitude():
+            best = edge
+    return best.normalized()
+
+
+def _bounded_patch(
+    pts: list[Point], origin: Point, x_axis: Vector, y_axis: Vector
+) -> NurbsSurface:
+    """Bilinear patch in the frame covering the points with a 5% margin."""
+    min_u = 1e30
+    max_u = -1e30
+    min_v = 1e30
+    max_v = -1e30
+    for pt in pts:
+        d = pt - origin
+        min_u = min(min_u, d.dot(x_axis))
+        max_u = max(max_u, d.dot(x_axis))
+        min_v = min(min_v, d.dot(y_axis))
+        max_v = max(max_v, d.dot(y_axis))
+    pad = max(max_u - min_u, max_v - min_v) * 0.05
+    if pad < 1e-6:
+        pad = 1.0
+    min_u -= pad
+    max_u += pad
+    min_v -= pad
+    max_v += pad
+    return _bilinear_patch(
+        origin + x_axis * min_u + y_axis * min_v,
+        origin + x_axis * max_u + y_axis * min_v,
+        origin + x_axis * min_u + y_axis * max_v,
+        origin + x_axis * max_u + y_axis * max_v,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Loft helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _loft_section_params(curves: list[NurbsCurve]) -> list[float]:
+    """Section parameters in [0, 1] from the mean CV distance between consecutive sections."""
+    n = len(curves)
+    cv_count = curves[0].cv_count()
+    v_params = [0.0] * n
+    for k in range(1, n):
+        total = 0.0
+        for i in range(cv_count):
+            total += curves[k - 1].get_cv(i).distance(curves[k].get_cv(i))
+        v_params[k] = v_params[k - 1] + total / cv_count
+    total = v_params[n - 1]
+    for k in range(n):
+        v_params[k] = v_params[k] / total if total > 1e-14 else float(k) / (n - 1)
+    return v_params
+
+
+def _loft_nurbsknots(v_params: list[float], order_v: int) -> list[float]:
+    """Clamped nurbsknot vector averaging the section parameters."""
+    n = len(v_params)
+    degree_v = order_v - 1
+    nurbsknots = [v_params[0]] * (order_v + n - 2)
+    for j in range(1, n - order_v + 1):
+        total = 0.0
+        for i in range(j, j + degree_v):
+            total += v_params[i]
+        nurbsknots[degree_v - 1 + j] = total / degree_v
+    for i in range(n - 1, order_v + n - 2):
+        nurbsknots[i] = v_params[n - 1]
+    return nurbsknots
+
+
+def _loft_basis_row(
+    nurbsknots: list[float], order: int, cv_count: int, t: float
+) -> list[float]:
+    """Row of the collocation matrix: the cv_count basis values at t."""
+    row = [0.0] * cv_count
+    span = nurbsknot.find_span(order, cv_count, nurbsknots, t)
+    base = span + order - 1
+    if nurbsknots[base - 1] == nurbsknots[base]:
+        row[span if t <= nurbsknots[base] else span + order - 1] = 1.0
+        return row
+    basis = nurbsknot.eval_basis(order, nurbsknots, span, t)
+    for j in range(order):
+        if span + j < cv_count:
+            row[span + j] = basis[j]
+    return row
+
+
+def _solve_linear(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
+    """Solves a x = b by Gaussian elimination with partial pivoting, one right-hand side per column of b."""
+    a = [list(row) for row in a]
+    b = [list(row) for row in b]
+    n = len(a)
+    dim = len(b[0])
+    for col in range(n):
+        max_row = col
+        for row in range(col + 1, n):
+            if abs(a[row][col]) > abs(a[max_row][col]):
+                max_row = row
+        if abs(a[max_row][col]) < 1e-14:
+            continue
+        a[col], a[max_row] = a[max_row], a[col]
+        b[col], b[max_row] = b[max_row], b[col]
+        for row in range(col + 1, n):
+            factor = a[row][col] / a[col][col]
+            for c in range(col, n):
+                a[row][c] -= factor * a[col][c]
+            for d in range(dim):
+                b[row][d] -= factor * b[col][d]
+    x = [[0.0] * dim for _ in range(n)]
+    for row in range(n - 1, -1, -1):
+        for d in range(dim):
+            x[row][d] = b[row][d]
+            for c in range(row + 1, n):
+                x[row][d] -= a[row][c] * x[c][d]
+            if abs(a[row][row]) > 1e-14:
+                x[row][d] /= a[row][row]
+    return x
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sweep helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _lerp_point(a: Point, b: Point, s: float) -> Point:
+    return a + (b - a) * s
+
+
+def _lerp_vector(a: Vector, b: Vector, s: float) -> Vector:
+    return a + (b - a) * s
+
+
+def _profile_to_xy(profile: NurbsCurve) -> Xform:
+    """World to the profile frame: centroid origin, x toward the start point, z the profile normal."""
+    centroid = Vector(0.0, 0.0, 0.0)
+    for i in range(profile.cv_count()):
+        centroid += profile.get_cv(i) - Point(0.0, 0.0, 0.0)
+    origin = Point(0.0, 0.0, 0.0) + centroid / profile.cv_count()
+    t0, t1 = profile.domain()
+    pa = profile.point_at(t0)
+    pb = profile.point_at(t0 + (t1 - t0) / 3.0)
+    pc = profile.point_at(t0 + 2.0 * (t1 - t0) / 3.0)
+    normal = (pb - pa).cross(pc - pa)
+    if not normal.normalize_self():
+        normal = Vector(1.0, 0.0, 0.0)
+    x_axis = pa - origin
+    if not x_axis.normalize_self():
+        x_axis = Vector(0.0, 1.0, 0.0)
+    x_axis -= normal * x_axis.dot(normal)
+    if not x_axis.normalize_self():
+        x_axis = Vector(0.0, 1.0, 0.0)
+    return Xform.world_to_frame(origin, x_axis, normal.cross(x_axis), normal)
+
+
+def _shape_plane(shape: NurbsCurve) -> Plane:
+    """Frame of a sweep shape: start point origin, x along the chord, z across it."""
+    start = shape.point_at_start()
+    direction = shape.point_at_end() - start
+    if not direction.normalize_self():
+        direction = Vector(1.0, 0.0, 0.0)
+    side = direction.cross(Vector(0.0, 0.0, 1.0))
+    if side.magnitude() < 1e-10:
+        side = direction.cross(Vector(0.0, 1.0, 0.0))
+    return Plane(start, direction, side.cross(direction))
+
+
+def _shape_width(shape: NurbsCurve) -> float:
+    """Chord length of a shape, 1 when degenerate."""
+    width = shape.point_at_start().distance(shape.point_at_end())
+    return 1.0 if width < 1e-14 else width
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Edge helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _chain_curves(input_curves: list[NurbsCurve]) -> list[NurbsCurve]:
+    """Curves ordered head to tail, reversed where needed; empty when they do not close a loop."""
+    tol = 1e-6
+    loop = [input_curves[0]]
+    used = [False] * len(input_curves)
+    used[0] = True
+    for _step in range(1, len(input_curves)):
+        tail = loop[-1].point_at_end()
+        found = False
+        for i in range(len(input_curves)):
+            if found or used[i]:
+                continue
+            next_curve = input_curves[i].duplicate()
+            if (
+                next_curve.point_at_start().distance(tail) >= tol
+                and next_curve.point_at_end().distance(tail) < tol
+            ):
+                next_curve.reverse()
+            if next_curve.point_at_start().distance(tail) >= tol:
+                continue
+            loop.append(next_curve)
+            used[i] = True
+            found = True
+        if not found:
+            return []
+    if loop[-1].point_at_end().distance(loop[0].point_at_start()) > tol:
+        return []
+    return loop
+
+
+def _normalized_greville(curve: NurbsCurve) -> list[float]:
+    """Greville abcissae mapped to [0, 1]."""
+    grev = curve.get_greville_abcissae()
+    t0, t1 = curve.domain()
+    for i in range(len(grev)):
+        grev[i] = (grev[i] - t0) / (t1 - t0) if t1 > t0 else 0.0
+    return grev
 
 
 class Primitives:
-    """Static factory methods for creating NURBS curve primitives."""
+    """Factory for primitive meshes, NURBS curves and NURBS surfaces."""
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Mesh primitives
+    # ═══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
-    def circle(cx: float, cy: float, cz: float, radius: float) -> NurbsCurve:
-        """Create a circle as a rational NURBS curve (9 control points)."""
-        w = math.sqrt(2.0) / 2.0
-
-        cx_pat = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-        cy_pat = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        weights = [1, w, 1, w, 1, w, 1, w, 1]
-
-        curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-        curve.m_nurbsknot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
-        curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
-
-        for i in range(9):
-            px = cx + radius * cx_pat[i]
-            py = cy + radius * cy_pat[i]
-            curve.set_cv_4d(i, px * weights[i], py * weights[i], cz * weights[i], weights[i])
-
-        return curve
-
-    @staticmethod
-    def ellipse(cx: float, cy: float, cz: float, major_radius: float, minor_radius: float) -> NurbsCurve:
-        """Create an ellipse as a rational NURBS curve."""
-        w = math.sqrt(2.0) / 2.0
-        ex = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-        ey = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        weights = [1, w, 1, w, 1, w, 1, w, 1]
-
-        curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
-        curve.m_nurbsknot = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4], dtype=np.float64)
-        curve.m_cv = np.zeros(9 * 4, dtype=np.float64)
-
-        for i in range(9):
-            px = cx + major_radius * ex[i]
-            py = cy + minor_radius * ey[i]
-            curve.set_cv_4d(i, px * weights[i], py * weights[i], cz * weights[i], weights[i])
-
-        return curve
-
-    @staticmethod
-    def arc(start: Point, mid: Point, end: Point) -> NurbsCurve:
-        """Create an arc through three points as a rational NURBS curve."""
-        d1 = [mid[0] - start[0], mid[1] - start[1], mid[2] - start[2]]
-        d2 = [end[0] - mid[0], end[1] - mid[1], end[2] - mid[2]]
-
-        m1 = [(start[0] + mid[0]) / 2, (start[1] + mid[1]) / 2, (start[2] + mid[2]) / 2]
-        m2 = [(mid[0] + end[0]) / 2, (mid[1] + end[1]) / 2, (mid[2] + end[2]) / 2]
-
-        normal = [d1[1]*d2[2] - d1[2]*d2[1],
-                  d1[2]*d2[0] - d1[0]*d2[2],
-                  d1[0]*d2[1] - d1[1]*d2[0]]
-        normal_len = math.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2)
-
-        if normal_len < Tolerance.ZERO_TOLERANCE:
-            return NurbsCurve.create(periodic=False, degree=1, points=[start, end])
-
-        # Calculate weight from arc geometry
-        chord_mid = Point((start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2)
-        sagitta = chord_mid.distance(mid)
-        chord_len = start.distance(end)
-
-        if sagitta < Tolerance.ZERO_TOLERANCE:
-            return NurbsCurve.create(periodic=False, degree=1, points=[start, end])
-
-        # w = cos(theta/2) where theta is the arc angle
-        # For a circular arc: sagitta = r(1 - cos(theta/2))
-        # Using the relation: w relates to how much the shoulder point is pushed out
-        half_chord = chord_len / 2
-        r_approx = (half_chord**2 + sagitta**2) / (2 * sagitta) if sagitta > 0 else float('inf')
-
-        if r_approx > 0:
-            cos_half = (r_approx - sagitta) / r_approx
-            cos_half = max(-1.0, min(1.0, cos_half))
-            w = abs(cos_half) if cos_half > 0 else 0.5
-        else:
-            w = 0.5
-
-        w = max(0.1, min(1.0, w))
-
-        curve = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=3)
-        curve.m_nurbsknot = np.array([0, 0, 1, 1], dtype=np.float64)
-        curve.m_cv = np.zeros(3 * 4, dtype=np.float64)
-
-        shoulder = Point(
-            (start[0] + end[0]) / 2 + (mid[0] - (start[0] + end[0]) / 2) / w,
-            (start[1] + end[1]) / 2 + (mid[1] - (start[1] + end[1]) / 2) / w,
-            (start[2] + end[2]) / 2 + (mid[2] - (start[2] + end[2]) / 2) / w
-        )
-
-        curve.set_cv_4d(0, start[0], start[1], start[2], 1.0)
-        curve.set_cv_4d(1, shoulder[0] * w, shoulder[1] * w, shoulder[2] * w, w)
-        curve.set_cv_4d(2, end[0], end[1], end[2], 1.0)
-
-        return curve
-
-    @staticmethod
-    def parabola(p0: Point, p1: Point, p2: Point) -> NurbsCurve:
-        """Create a parabola through 3 points as a non-rational quadratic NURBS."""
-        curve = NurbsCurve(dimension=3, is_rational=False, order=3, cv_count=3)
-        curve.m_nurbsknot = np.array([0, 0, 1, 1], dtype=np.float64)
-        curve.m_cv = np.zeros(3 * 3, dtype=np.float64)
-
-        cv1 = Point(
-            2 * p1[0] - (p0[0] + p2[0]) / 2,
-            2 * p1[1] - (p0[1] + p2[1]) / 2,
-            2 * p1[2] - (p0[2] + p2[2]) / 2
-        )
-
-        curve.set_cv(0, p0)
-        curve.set_cv(1, cv1)
-        curve.set_cv(2, p2)
-
-        return curve
-
-    @staticmethod
-    def hyperbola(center: Point, a: float, b: float, extent: float) -> NurbsCurve:
-        """Create a hyperbola segment as a NURBS curve."""
-        num_segments = 8
-        cv_count = num_segments + 1
-
-        curve = NurbsCurve(dimension=3, is_rational=False, order=4, cv_count=cv_count)
-        curve.m_cv = np.zeros(cv_count * 3, dtype=np.float64)
-
-        for i in range(cv_count):
-            t = -extent + 2 * extent * i / num_segments
-            x = center[0] + a * math.cosh(t)
-            y = center[1] + b * math.sinh(t)
-            z = center[2]
-            curve.set_cv(i, Point(x, y, z))
-
-        curve.m_nurbsknot = nurbsknot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
-        return curve
-
-    @staticmethod
-    def spiral(start_radius: float, end_radius: float, pitch: float, turns: float) -> NurbsCurve:
-        """Create a spiral (helix with varying radius)."""
-        segments_per_turn = 8
-        total_segments = max(4, int(turns * segments_per_turn))
-        cv_count = total_segments + 1
-
-        curve = NurbsCurve(dimension=3, is_rational=False, order=4, cv_count=cv_count)
-        curve.m_cv = np.zeros(cv_count * 3, dtype=np.float64)
-
-        total_angle = turns * 2 * PI
-
-        for i in range(cv_count):
-            t = i / total_segments
-            angle = t * total_angle
-            r = start_radius + t * (end_radius - start_radius)
-            x = r * math.cos(angle)
-            y = r * math.sin(angle)
-            z = t * turns * pitch
-            curve.set_cv(i, Point(x, y, z))
-
-        curve.m_nurbsknot = nurbsknot.make_clamped_uniform(curve.m_order, curve.m_cv_count, 1.0)
-        return curve
-
-    @staticmethod
-    def _unit_cylinder_geometry():
-        vertices = [
-            Point(0.5, 0.0, -0.5), Point(0.404508, 0.293893, -0.5),
-            Point(0.154508, 0.475528, -0.5), Point(-0.154508, 0.475528, -0.5),
-            Point(-0.404508, 0.293893, -0.5), Point(-0.5, 0.0, -0.5),
-            Point(-0.404508, -0.293893, -0.5), Point(-0.154508, -0.475528, -0.5),
-            Point(0.154508, -0.475528, -0.5), Point(0.404508, -0.293893, -0.5),
-            Point(0.5, 0.0, 0.5), Point(0.404508, 0.293893, 0.5),
-            Point(0.154508, 0.475528, 0.5), Point(-0.154508, 0.475528, 0.5),
-            Point(-0.404508, 0.293893, 0.5), Point(-0.5, 0.0, 0.5),
-            Point(-0.404508, -0.293893, 0.5), Point(-0.154508, -0.475528, 0.5),
-            Point(0.154508, -0.475528, 0.5), Point(0.404508, -0.293893, 0.5),
-        ]
-        triangles = [
-            [0, 1, 11], [0, 11, 10], [1, 2, 12], [1, 12, 11],
-            [2, 3, 13], [2, 13, 12], [3, 4, 14], [3, 14, 13],
-            [4, 5, 15], [4, 15, 14], [5, 6, 16], [5, 16, 15],
-            [6, 7, 17], [6, 17, 16], [7, 8, 18], [7, 18, 17],
-            [8, 9, 19], [8, 19, 18], [9, 0, 10], [9, 10, 19],
-        ]
-        return vertices, triangles
-
-    @staticmethod
-    def _capsule_geometry(start_pt, end_pt, radius):
-        n = 10
-        lat = PI / 4
-        r_hemi = radius * math.sin(lat)
-        off = radius * math.cos(lat)
-        ax = end_pt[0] - start_pt[0]
-        ay = end_pt[1] - start_pt[1]
-        az = end_pt[2] - start_pt[2]
-        length = math.sqrt(ax*ax + ay*ay + az*az)
-        if length < 1e-12:
-            ax, ay, az = 0.0, 0.0, 1.0
-        else:
-            ax, ay, az = ax/length, ay/length, az/length
-        if abs(az) < 0.9:
-            tx, ty, tz = 0.0, 0.0, 1.0
-        else:
-            tx, ty, tz = 1.0, 0.0, 0.0
-        xx = ty*az - tz*ay; xy = tz*ax - tx*az; xz = tx*ay - ty*ax
-        xlen = math.sqrt(xx*xx + xy*xy + xz*xz)
-        xx, xy, xz = xx/xlen, xy/xlen, xz/xlen
-        yx = ay*xz - az*xy; yy = az*xx - ax*xz; yz = ax*xy - ay*xx
-
-        def ring(cx, cy, cz, axis_off, ring_r):
-            pts = []
-            for i in range(n):
-                a = 2 * PI * i / n
-                ca, sa = math.cos(a), math.sin(a)
-                pts.append(Point(
-                    cx + axis_off*ax + ring_r*(ca*xx + sa*yx),
-                    cy + axis_off*ay + ring_r*(ca*xy + sa*yy),
-                    cz + axis_off*az + ring_r*(ca*xz + sa*yz),
-                ))
-            return pts
-
-        sx, sy, sz = start_pt[0], start_pt[1], start_pt[2]
-        ex, ey, ez = end_pt[0], end_pt[1], end_pt[2]
-        vertices = []
-        vertices.extend(ring(sx, sy, sz, 0.0, radius))       # 0-9:  base ring
-        vertices.extend(ring(ex, ey, ez, 0.0, radius))       # 10-19: top ring
-        vertices.extend(ring(sx, sy, sz, -off, r_hemi))      # 20-29: bottom hemi ring
-        vertices.append(Point(sx - radius*ax, sy - radius*ay, sz - radius*az))  # 30: bottom pole
-        vertices.extend(ring(ex, ey, ez, off, r_hemi))       # 31-40: top hemi ring
-        vertices.append(Point(ex + radius*ax, ey + radius*ay, ez + radius*az))  # 41: top pole
-        triangles = []
-        for i in range(n):
-            ni = (i + 1) % n
-            triangles.append([i, ni, 10+ni]); triangles.append([i, 10+ni, 10+i])
-            triangles.append([20+i, ni, i]); triangles.append([20+i, 20+ni, ni])
-            triangles.append([10+i, 10+ni, 31+ni]); triangles.append([10+i, 31+ni, 31+i])
-        for i in range(n):
-            ni = (i + 1) % n
-            triangles.append([30, 20+ni, 20+i])
-            triangles.append([41, 31+i, 31+ni])
-        return vertices, triangles
-
-    @staticmethod
-    def _unit_cone_geometry():
-        vertices = [
-            Point(0.0, 0.0, 0.5),
-            Point(0.5, 0.0, -0.5), Point(0.353553, -0.353553, -0.5),
-            Point(0.0, -0.5, -0.5), Point(-0.353553, -0.353553, -0.5),
-            Point(-0.5, 0.0, -0.5), Point(-0.353553, 0.353553, -0.5),
-            Point(0.0, 0.5, -0.5), Point(0.353553, 0.353553, -0.5),
-        ]
-        triangles = [
-            [0, 2, 1], [0, 3, 2], [0, 4, 3], [0, 5, 4],
-            [0, 6, 5], [0, 7, 6], [0, 8, 7], [0, 1, 8],
-        ]
-        return vertices, triangles
-
-    @staticmethod
-    def _line_to_cylinder_transform(line, radius):
+    def arrow_mesh(line: Line, radius: float) -> Mesh:
+        """Arrow mesh along a line: cylinder body over 80% of the length, cone head of 1.5x radius over 20%."""
         start = line.start()
-        end = line.end()
-        line_vec = line.to_vector()
+        axis = line.to_vector()
         length = line.length()
-
-        z_axis = line_vec.normalized()
-        if abs(z_axis[2]) < 0.9:
-            x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalized()
-        else:
-            x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalized()
-        y_axis = z_axis.cross(x_axis).normalized()
-
-        scale = Xform.scale_xyz(radius * 2.0, radius * 2.0, length)
-        rotation = Xform()
-        rotation.m[0] = x_axis[0]; rotation.m[1] = x_axis[1]; rotation.m[2] = x_axis[2]
-        rotation.m[4] = y_axis[0]; rotation.m[5] = y_axis[1]; rotation.m[6] = y_axis[2]
-        rotation.m[8] = z_axis[0]; rotation.m[9] = z_axis[1]; rotation.m[10] = z_axis[2]
-
-        center = Point(
-            (start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5, (start[2] + end[2]) * 0.5
+        body = Primitives._line_frame(line, start + axis * 0.4) * Xform.scale_xyz(
+            radius * 2.0, radius * 2.0, length * 0.8
         )
-        translation = Xform.translation(center[0], center[1], center[2])
-        return translation * rotation * scale
-
-    @staticmethod
-    def _transform_geometry(geometry, xform):
-        vertices, triangles = geometry
+        head = Primitives._line_frame(line, start + axis * 0.9) * Xform.scale_xyz(
+            radius * 3.0, radius * 3.0, length * 0.2
+        )
         mesh = Mesh()
-        vertex_keys = []
-        for v in vertices:
-            vertex_keys.append(mesh.add_vertex(v.transformed(xform)))
-        for tri in triangles:
-            face_vertices = [vertex_keys[tri[0]], vertex_keys[tri[1]], vertex_keys[tri[2]]]
-            mesh.add_face(face_vertices)
+        Primitives._add_geometry(mesh, Primitives._unit_cylinder_geometry(), body)
+        Primitives._add_geometry(mesh, Primitives._unit_cone_geometry(), head)
         return mesh
 
     @staticmethod
-    def cylinder_mesh(line: Line, radius: float) -> "Mesh":
-        return Primitives._transform_geometry(Primitives._unit_cylinder_geometry(), Primitives._line_to_cylinder_transform(line, radius))
+    def cylinder_mesh(line: Line, radius: float) -> Mesh:
+        """Ten-sided cylinder mesh along a line."""
+        start = line.start()
+        axis = line.to_vector()
+        xform = Primitives._line_frame(line, start + axis * 0.5) * Xform.scale_xyz(
+            radius * 2.0, radius * 2.0, line.length()
+        )
+        mesh = Mesh()
+        Primitives._add_geometry(mesh, Primitives._unit_cylinder_geometry(), xform)
+        return mesh
 
     @staticmethod
-    def capsule_mesh(line: Line, radius: float) -> "Mesh":
-        start, end = line.start(), line.end()
-        return Primitives._transform_geometry(
-            Primitives._capsule_geometry(start, end, radius), Xform.identity())
+    def capsule_mesh(line: Line, radius: float) -> Mesh:
+        """Ten-sided cylinder mesh with hemispherical caps along a line."""
+        mesh = Mesh()
+        Primitives._add_geometry(
+            mesh,
+            Primitives._capsule_geometry(line.length(), radius),
+            Primitives._line_frame(line, line.start()),
+        )
+        return mesh
 
     @staticmethod
-    def edge_pipes(mesh: "Mesh", radius: float) -> list["Mesh"]:
-        from session_py.line import Line
+    def edge_pipes(mesh: Mesh, radius: float) -> list[Mesh]:
+        """One capsule mesh per edge, colored by mesh.linecolors[i]."""
         edges = mesh.edges()
-        result = []
-        for i, (u, v) in enumerate(edges):
-            if i >= len(mesh.linecolors):
-                break
-            start = mesh.vertex[u].position()
-            end = mesh.vertex[v].position()
-            line = Line(start[0], start[1], start[2], end[0], end[1], end[2])
-            pipe = Primitives.capsule_mesh(line, radius)
-            pipe.set_facecolors([mesh.linecolors[i]] * pipe.number_of_faces())
-            result.append(pipe)
-        return result
-
-    @staticmethod
-    def arrow_mesh(line: Line, radius: float) -> "Mesh":
-        start = line.start()
-        line_vec = line.to_vector()
-        length = line.length()
-
-        z_axis = line_vec.normalized()
-        if abs(z_axis[2]) < 0.9:
-            x_axis = Vector(0.0, 0.0, 1.0).cross(z_axis).normalized()
-        else:
-            x_axis = Vector(1.0, 0.0, 0.0).cross(z_axis).normalized()
-        y_axis = z_axis.cross(x_axis).normalized()
-
-        cone_length = length * 0.2
-        body_length = length * 0.8
-
-        body_center = Point(
-            start[0] + line_vec[0] * 0.4,
-            start[1] + line_vec[1] * 0.4,
-            start[2] + line_vec[2] * 0.4,
-        )
-        cone_base_center = Point(
-            start[0] + line_vec[0] * 0.9,
-            start[1] + line_vec[1] * 0.9,
-            start[2] + line_vec[2] * 0.9,
-        )
-
-        body_scale = Xform.scale_xyz(radius * 2.0, radius * 2.0, body_length)
-        rotation = Xform()
-        rotation.m[0] = x_axis[0]; rotation.m[1] = x_axis[1]; rotation.m[2] = x_axis[2]
-        rotation.m[4] = y_axis[0]; rotation.m[5] = y_axis[1]; rotation.m[6] = y_axis[2]
-        rotation.m[8] = z_axis[0]; rotation.m[9] = z_axis[1]; rotation.m[10] = z_axis[2]
-        body_translation = Xform.translation(body_center[0], body_center[1], body_center[2])
-        body_xform = body_translation * rotation * body_scale
-
-        cone_scale = Xform.scale_xyz(radius * 3.0, radius * 3.0, cone_length)
-        cone_translation = Xform.translation(
-            cone_base_center[0], cone_base_center[1], cone_base_center[2]
-        )
-        cone_xform = cone_translation * rotation * cone_scale
-
-        body_geometry = Primitives._unit_cylinder_geometry()
-        cone_geometry = Primitives._unit_cone_geometry()
-
-        mesh = Mesh()
-
-        body_vertex_map = []
-        for v in body_geometry[0]:
-            body_vertex_map.append(mesh.add_vertex(v.transformed(body_xform)))
-        for tri in body_geometry[1]:
-            face_vertices = [body_vertex_map[tri[0]], body_vertex_map[tri[1]], body_vertex_map[tri[2]]]
-            mesh.add_face(face_vertices)
-
-        cone_vertex_map = []
-        for v in cone_geometry[0]:
-            cone_vertex_map.append(mesh.add_vertex(v.transformed(cone_xform)))
-        for tri in cone_geometry[1]:
-            face_vertices = [cone_vertex_map[tri[0]], cone_vertex_map[tri[1]], cone_vertex_map[tri[2]]]
-            mesh.add_face(face_vertices)
-
-        return mesh
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Surface Factory Methods
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    @staticmethod
-    def _merge_nurbsknot_vectors(a, b, tol=1e-10):
-        merged = []
-        i, j = 0, 0
-        while i < len(a) and j < len(b):
-            if abs(a[i] - b[j]) < tol:
-                merged.append(a[i])
-                i += 1
-                j += 1
-            elif a[i] < b[j]:
-                merged.append(a[i])
-                i += 1
-            else:
-                merged.append(b[j])
-                j += 1
-        while i < len(a):
-            merged.append(a[i])
-            i += 1
-        while j < len(b):
-            merged.append(b[j])
-            j += 1
-        return merged
-
-    @staticmethod
-    def _nurbsknot_vectors_equal(a, b, tol=1e-10):
-        if len(a) != len(b):
-            return False
-        for i in range(len(a)):
-            if abs(a[i] - b[i]) > tol:
-                return False
-        return True
-
-    @staticmethod
-    def _make_curves_compatible(curves):
-        if len(curves) < 2:
-            return
-        max_deg = max(c.degree() for c in curves)
-        for c in curves:
-            if c.degree() < max_deg:
-                c.increase_degree(max_deg)
-        any_rational = any(c.is_rational() for c in curves)
-        if any_rational:
-            for c in curves:
-                c.make_rational()
-        already_compatible = True
-        for i in range(1, len(curves)):
-            if curves[i].cv_count() != curves[0].cv_count():
-                already_compatible = False
-                break
-            if not Primitives._nurbsknot_vectors_equal(list(curves[i].get_nurbsknots()), list(curves[0].get_nurbsknots())):
-                already_compatible = False
-                break
-        if already_compatible:
-            return
-        for c in curves:
-            c.set_domain(0.0, 1.0)
-        unified = list(curves[0].get_nurbsknots())
-        for i in range(1, len(curves)):
-            unified = Primitives._merge_nurbsknot_vectors(unified, list(curves[i].get_nurbsknots()))
-        tol = 1e-10
-        for c in curves:
-            cur_nurbsknots = list(c.get_nurbsknots())
-            ci = 0
-            for ui in range(len(unified)):
-                if ci < len(cur_nurbsknots) and abs(cur_nurbsknots[ci] - unified[ui]) < tol:
-                    ci += 1
-                else:
-                    c.insert_nurbsknot(unified[ui], 1)
-
-    @staticmethod
-    def cylinder_surface(cx: float, cy: float, cz: float, radius: float, height: float) -> NurbsSurface:
-        w = math.sqrt(2.0) / 2.0
-        circle_weights = [1, w, 1, w, 1, w, 1, w, 1]
-        circle_x = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-        circle_y = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-        v_nurbsknots = [0, 1]
-
-        srf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2)
-        for i in range(10):
-            srf.set_nurbsknot(0, i, u_nurbsknots[i])
-        for i in range(2):
-            srf.set_nurbsknot(1, i, v_nurbsknots[i])
-
-        for i in range(9):
-            wi = circle_weights[i]
-            px = cx + radius * circle_x[i]
-            py = cy + radius * circle_y[i]
-            srf.set_cv_4d(i, 0, px * wi, py * wi, cz * wi, wi)
-            srf.set_cv_4d(i, 1, px * wi, py * wi, (cz + height) * wi, wi)
-
-        return srf
-
-    @staticmethod
-    def cone_surface(cx: float, cy: float, cz: float, radius: float, height: float) -> NurbsSurface:
-        w = math.sqrt(2.0) / 2.0
-        circle_weights = [1, w, 1, w, 1, w, 1, w, 1]
-        circle_x = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-        circle_y = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-        v_nurbsknots = [0, 1]
-
-        srf = NurbsSurface.create_raw(3, True, 3, 2, 9, 2)
-        for i in range(10):
-            srf.set_nurbsknot(0, i, u_nurbsknots[i])
-        for i in range(2):
-            srf.set_nurbsknot(1, i, v_nurbsknots[i])
-
-        apex_z = cz + height
-        for i in range(9):
-            wi = circle_weights[i]
-            px = cx + radius * circle_x[i]
-            py = cy + radius * circle_y[i]
-            srf.set_cv_4d(i, 0, px * wi, py * wi, cz * wi, wi)
-            srf.set_cv_4d(i, 1, cx * wi, cy * wi, apex_z * wi, wi)
-
-        return srf
-
-    @staticmethod
-    def torus_surface(cx: float, cy: float, cz: float, major_radius: float, minor_radius: float) -> NurbsSurface:
-        w = math.sqrt(2.0) / 2.0
-        cw = [1, w, 1, w, 1, w, 1, w, 1]
-        cos_a = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-        sin_a = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-
-        srf = NurbsSurface.create_raw(3, True, 3, 3, 9, 9)
-        for d in range(2):
-            for i in range(10):
-                srf.set_nurbsknot(d, i, u_nurbsknots[i])
-
-        for i in range(9):
-            ca = cos_a[i]
-            sa = sin_a[i]
-            for j in range(9):
-                cb = cos_a[j]
-                sb = sin_a[j]
-                r = major_radius + minor_radius * cb
-                px = cx + r * ca
-                py = cy + r * sa
-                pz = cz + minor_radius * sb
-                wij = cw[i] * cw[j]
-                srf.set_cv_4d(i, j, px * wij, py * wij, pz * wij, wij)
-
-        return srf
-
-    @staticmethod
-    def sphere_surface(cx: float, cy: float, cz: float, radius: float) -> NurbsSurface:
-        w = math.sqrt(2.0) / 2.0
-        cw = [1, w, 1, w, 1, w, 1, w, 1]
-        cos_a = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-        sin_a = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-        u_nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-        v_nurbsknots = [0, 0, 1, 1, 2, 2]
-        lat_r = [0, 1, 1, 1, 0]
-        lat_z = [-1, -1, 0, 1, 1]
-        lat_w = [1, w, 1, w, 1]
-
-        srf = NurbsSurface.create_raw(3, True, 3, 3, 9, 5)
-        for i in range(10):
-            srf.set_nurbsknot(0, i, u_nurbsknots[i])
-        for i in range(6):
-            srf.set_nurbsknot(1, i, v_nurbsknots[i])
-
-        for j in range(5):
-            r = radius * lat_r[j]
-            pz = cz + radius * lat_z[j]
-            wj = lat_w[j]
-            for i in range(9):
-                px = cx + r * cos_a[i]
-                py = cy + r * sin_a[i]
-                wij = cw[i] * wj
-                srf.set_cv_4d(i, j, px * wij, py * wij, pz * wij, wij)
-
-        return srf
-
-    @staticmethod
-    def quad_sphere(cx: float, cy: float, cz: float, radius: float) -> list[NurbsSurface]:
-        R = radius
-        a = R / math.sqrt(3.0)
-        e = R * math.sqrt(3.0) / 2.0
-        wk = math.sqrt(2.0 / 3.0)
-        wc = (-72.0 - 32.0*math.sqrt(6.0) + 48.0*math.sqrt(3.0) + 56.0*math.sqrt(2.0)) \
-           / (48.0*(1.0 + math.sqrt(2.0/3.0) - 1.0/math.sqrt(3.0) - 1.0/math.sqrt(2.0)))
-        K = R * (1.0 - 1.0/math.sqrt(3.0) + 2.0*math.sqrt(2.0/3.0) - math.sqrt(2.0))
-        h = R + K / wc
-
-        zf = [
-            [(-a,-a, a, 1), (-e, 0, e, wk), (-a, a, a, 1)],
-            [( 0,-e, e, wk),( 0, 0, h, wc), ( 0, e, e, wk)],
-            [( a,-a, a, 1), ( e, 0, e, wk), ( a, a, a, 1)]
-        ]
-
-        rot = [
-            [[ 1, 0, 0],[ 0, 1, 0],[ 0, 0, 1]],
-            [[ 1, 0, 0],[ 0,-1, 0],[ 0, 0,-1]],
-            [[ 0, 0, 1],[ 0, 1, 0],[-1, 0, 0]],
-            [[ 0, 0,-1],[ 0, 1, 0],[ 1, 0, 0]],
-            [[ 1, 0, 0],[ 0, 0, 1],[ 0,-1, 0]],
-            [[ 1, 0, 0],[ 0, 0,-1],[ 0, 1, 0]]
-        ]
-
-        faces = []
-        for f in range(6):
-            srf = NurbsSurface.create_raw(3, True, 3, 3, 3, 3)
-            for i in range(3):
-                for j in range(3):
-                    p = zf[i][j]
-                    rx = rot[f][0][0]*p[0] + rot[f][0][1]*p[1] + rot[f][0][2]*p[2] + cx
-                    ry = rot[f][1][0]*p[0] + rot[f][1][1]*p[1] + rot[f][1][2]*p[2] + cy
-                    rz = rot[f][2][0]*p[0] + rot[f][2][1]*p[1] + rot[f][2][2]*p[2] + cz
-                    srf.set_cv_4d(i, j, rx*p[3], ry*p[3], rz*p[3], p[3])
-            faces.append(srf)
-        return faces
-
-    @staticmethod
-    def create_ruled(curveA: NurbsCurve, curveB: NurbsCurve) -> NurbsSurface:
-        if not curveA.is_valid() or not curveB.is_valid():
-            return NurbsSurface()
-
-        cA = curveA.duplicate()
-        cB = curveB.duplicate()
-
-        cA.set_domain(0.0, 1.0)
-        cB.set_domain(0.0, 1.0)
-
-        if cA.degree() < cB.degree():
-            cA.increase_degree(cB.degree())
-        elif cB.degree() < cA.degree():
-            cB.increase_degree(cA.degree())
-
-        if cA.is_rational() or cB.is_rational():
-            cA.make_rational()
-            cB.make_rational()
-
-        nurbsknots_a = list(cA.get_nurbsknots())
-        nurbsknots_b = list(cB.get_nurbsknots())
-        tol = 1e-10
-
-        for k in nurbsknots_b:
-            found = any(abs(ka - k) < tol for ka in nurbsknots_a)
-            if not found:
-                cA.insert_nurbsknot(k, 1)
-
-        nurbsknots_a = list(cA.get_nurbsknots())
-        for k in nurbsknots_a:
-            found = any(abs(kb - k) < tol for kb in nurbsknots_b)
-            if not found:
-                cB.insert_nurbsknot(k, 1)
-
-        order_u = cA.order()
-        cv_count_u = cA.cv_count()
-        is_rat = cA.is_rational()
-
-        surface = NurbsSurface.create_raw(3, is_rat, order_u, 2, cv_count_u, 2)
-        if surface is None:
-            return NurbsSurface()
-
-        for i in range(cA.nurbsknot_count()):
-            surface.set_nurbsknot(0, i, cA.nurbsknot(i))
-
-        surface.set_nurbsknot(1, 0, 0.0)
-        surface.set_nurbsknot(1, 1, 1.0)
-
-        if is_rat:
-            for i in range(cv_count_u):
-                ax, ay, az, aw = cA.get_cv_4d(i)
-                surface.set_cv_4d(i, 0, ax, ay, az, aw)
-                bx, by, bz, bw = cB.get_cv_4d(i)
-                surface.set_cv_4d(i, 1, bx, by, bz, bw)
-        else:
-            for i in range(cv_count_u):
-                surface.set_cv(i, 0, cA.get_cv(i))
-                surface.set_cv(i, 1, cB.get_cv(i))
-
-        return surface
-
-    @staticmethod
-    def create_extrusion(curve: NurbsCurve, direction: Vector) -> NurbsSurface:
-        if not curve.is_valid():
-            return NurbsSurface()
-        translated = curve.duplicate()
-        t = Xform.translation(direction[0], direction[1], direction[2])
-        translated.transform(t)
-        return Primitives.create_ruled(curve, translated)
-
-    @staticmethod
-    def create_planar(boundary: NurbsCurve) -> NurbsSurface:
-        if not boundary.is_valid():
-            return NurbsSurface()
-
-        all_pts = []
-        for i in range(boundary.cv_count()):
-            pt = boundary.get_cv(i)
-            if pt is not None:
-                all_pts.append(pt)
-
-        unique_pts = list(all_pts)
-        if len(unique_pts) >= 2:
-            f = unique_pts[0]
-            l = unique_pts[-1]
-            d2 = (f[0]-l[0])**2 + (f[1]-l[1])**2 + (f[2]-l[2])**2
-            if d2 < 1e-20:
-                unique_pts.pop()
-        if len(unique_pts) < 3:
-            return NurbsSurface()
-
-        def make_bilinear(orig, xax, yax, min_u, max_u, min_v, max_v):
-            srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2)
-            srf.set_nurbsknot(0, 0, 0.0)
-            srf.set_nurbsknot(0, 1, 1.0)
-            srf.set_nurbsknot(1, 0, 0.0)
-            srf.set_nurbsknot(1, 1, 1.0)
-            def pt(u, v):
-                return Point(orig[0] + u*xax[0] + v*yax[0],
-                             orig[1] + u*xax[1] + v*yax[1],
-                             orig[2] + u*xax[2] + v*yax[2])
-            srf.set_cv(0, 0, pt(min_u, min_v))
-            srf.set_cv(1, 0, pt(max_u, min_v))
-            srf.set_cv(1, 1, pt(max_u, max_v))
-            srf.set_cv(0, 1, pt(min_u, max_v))
-            return srf
-
-        def longest_edge_dir(pts):
-            best_d2 = 0.0
-            best_i = 0
-            for i in range(len(pts)):
-                j = (i + 1) % len(pts)
-                dx = pts[j][0]-pts[i][0]
-                dy = pts[j][1]-pts[i][1]
-                dz = pts[j][2]-pts[i][2]
-                d2 = dx*dx + dy*dy + dz*dz
-                if d2 > best_d2:
-                    best_d2 = d2
-                    best_i = i
-            j = (best_i + 1) % len(pts)
-            dx = pts[j][0]-pts[best_i][0]
-            dy = pts[j][1]-pts[best_i][1]
-            dz = pts[j][2]-pts[best_i][2]
-            length = math.sqrt(dx*dx + dy*dy + dz*dz)
-            return Vector(dx/length, dy/length, dz/length)
-
-        if len(unique_pts) == 3 and boundary.degree() <= 1:
-            srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2)
-            srf.set_nurbsknot(0, 0, 0.0)
-            srf.set_nurbsknot(0, 1, 1.0)
-            srf.set_nurbsknot(1, 0, 0.0)
-            srf.set_nurbsknot(1, 1, 1.0)
-            srf.set_cv(0, 0, unique_pts[0])
-            srf.set_cv(1, 0, unique_pts[1])
-            srf.set_cv(1, 1, unique_pts[2])
-            srf.set_cv(0, 1, unique_pts[0])
-            return srf
-
-        if len(unique_pts) == 4 and boundary.degree() <= 1:
-            srf = NurbsSurface.create_raw(3, False, 2, 2, 2, 2)
-            srf.set_nurbsknot(0, 0, 0.0)
-            srf.set_nurbsknot(0, 1, 1.0)
-            srf.set_nurbsknot(1, 0, 0.0)
-            srf.set_nurbsknot(1, 1, 1.0)
-            srf.set_cv(0, 0, unique_pts[0])
-            srf.set_cv(1, 0, unique_pts[1])
-            srf.set_cv(1, 1, unique_pts[2])
-            srf.set_cv(0, 1, unique_pts[3])
-            return srf
-
-        if boundary.degree() <= 1:
-            e1 = Vector(unique_pts[1][0]-unique_pts[0][0], unique_pts[1][1]-unique_pts[0][1], unique_pts[1][2]-unique_pts[0][2])
-            e2 = Vector(unique_pts[2][0]-unique_pts[0][0], unique_pts[2][1]-unique_pts[0][1], unique_pts[2][2]-unique_pts[0][2])
-            normal = e1.cross(e2)
-            nlen = normal.magnitude()
-            if nlen < 1e-14:
-                return NurbsSurface()
-            normal = normal * (1.0 / nlen)
-
-            xax = longest_edge_dir(unique_pts)
-            yax = normal.cross(xax)
-            ylen = yax.magnitude()
-            if ylen < 1e-14:
-                return NurbsSurface()
-            yax = yax * (1.0 / ylen)
-
-            orig = unique_pts[0]
-            min_u, max_u, min_v, max_v = 0.0, 0.0, 0.0, 0.0
-            for pt in unique_pts:
-                dx = pt[0]-orig[0]
-                dy = pt[1]-orig[1]
-                dz = pt[2]-orig[2]
-                u = dx*xax[0] + dy*xax[1] + dz*xax[2]
-                v = dx*yax[0] + dy*yax[1] + dz*yax[2]
-                if u < min_u: min_u = u
-                if u > max_u: max_u = u
-                if v < min_v: min_v = v
-                if v > max_v: max_v = v
-
-            pad = max(max_u - min_u, max_v - min_v) * 0.05
-            if pad < 1e-6:
-                pad = 1.0
-            min_u -= pad
-            max_u += pad
-            min_v -= pad
-            max_v += pad
-            return make_bilinear(orig, xax, yax, min_u, max_u, min_v, max_v)
-
-        n_samples = max(20, boundary.cv_count() * 4)
-        sample_pts, _sample_params = boundary.divide_by_count(n_samples, True)
-        plane = Plane.from_points_pca(sample_pts)
-        if plane.z_axis.magnitude() < 1e-10:
-            return NurbsSurface()
-
-        xax = plane.x_axis
-        yax = plane.y_axis
-        orig = plane.origin
-
-        min_u, max_u = 1e30, -1e30
-        min_v, max_v = 1e30, -1e30
-        for pt in sample_pts:
-            dx = pt[0]-orig[0]
-            dy = pt[1]-orig[1]
-            dz = pt[2]-orig[2]
-            u = dx*xax[0] + dy*xax[1] + dz*xax[2]
-            v = dx*yax[0] + dy*yax[1] + dz*yax[2]
-            if u < min_u: min_u = u
-            if u > max_u: max_u = u
-            if v < min_v: min_v = v
-            if v > max_v: max_v = v
-
-        pad = max(max_u - min_u, max_v - min_v) * 0.05
-        if pad < 1e-6:
-            pad = 1.0
-        min_u -= pad
-        max_u += pad
-        min_v -= pad
-        max_v += pad
-        return make_bilinear(orig, xax, yax, min_u, max_u, min_v, max_v)
-
-    @staticmethod
-    def create_loft(input_curves: list[NurbsCurve], degree_v: int = 3) -> NurbsSurface:
-        if len(input_curves) < 2:
-            return NurbsSurface()
-        for c in input_curves:
-            if not c.is_valid():
-                return NurbsSurface()
-
-        curves = [c.duplicate() for c in input_curves]
-        Primitives._make_curves_compatible(curves)
-        Primitives._make_curves_compatible(curves)
-
-        n_sections = len(curves)
-        cv_count_u = curves[0].cv_count()
-        order_u = curves[0].order()
-        is_rat = curves[0].is_rational()
-
-        if degree_v >= n_sections:
-            degree_v = n_sections - 1
-        if degree_v < 1:
-            degree_v = 1
-        order_v = degree_v + 1
-
-        v_params = [0.0] * n_sections
-        for k in range(1, n_sections):
-            # Average chord length over corresponding control points (robust section
-            # spacing, vs a single midpoint sample which mis-spaces rotated/reshaped sections).
-            s = 0.0
-            for i in range(cv_count_u):
-                a = curves[k - 1].get_cv(i)
-                b = curves[k].get_cv(i)
-                dx = b[0] - a[0]
-                dy = b[1] - a[1]
-                dz = b[2] - a[2]
-                s += math.sqrt(dx * dx + dy * dy + dz * dz)
-            v_params[k] = v_params[k - 1] + s / cv_count_u
-
-        total_len = v_params[-1]
-        if total_len > 1e-14:
-            for k in range(n_sections):
-                v_params[k] /= total_len
-        else:
-            for k in range(n_sections):
-                v_params[k] = float(k) / (n_sections - 1)
-
-        cv_count_v = n_sections
-        nurbsknot_count_v = order_v + cv_count_v - 2
-        nurbsknots_v = [0.0] * nurbsknot_count_v
-
-        if degree_v >= n_sections - 1:
-            d = degree_v
-            for i in range(d):
-                nurbsknots_v[i] = 0.0
-            for i in range(d, nurbsknot_count_v):
-                nurbsknots_v[i] = 1.0
-        else:
-            for i in range(order_v - 1):
-                nurbsknots_v[i] = v_params[0]
-            for j in range(1, n_sections - order_v + 1):
-                s = 0.0
-                for i in range(j, j + degree_v):
-                    s += v_params[i]
-                nurbsknots_v[order_v - 2 + j] = s / degree_v
-            for i in range(nurbsknot_count_v - order_v + 1, nurbsknot_count_v):
-                nurbsknots_v[i] = v_params[n_sections - 1]
-
-        surface = NurbsSurface.create_raw(3, is_rat, order_u, order_v, cv_count_u, cv_count_v)
-        if surface is None:
-            return NurbsSurface()
-
-        for i in range(surface.nurbsknot_count(0)):
-            surface.set_nurbsknot(0, i, curves[0].nurbsknot(i))
-        for i in range(len(nurbsknots_v)):
-            if i < surface.nurbsknot_count(1):
-                surface.set_nurbsknot(1, i, nurbsknots_v[i])
-
-        n = n_sections
-        N_matrix = [[0.0] * n for _ in range(n)]
-        nurbsknots_v_arr = np.array(nurbsknots_v)
-
-        for k in range(n):
-            t = v_params[k]
-            t0 = nurbsknots_v[order_v - 2]
-            t1 = nurbsknots_v[nurbsknot_count_v - order_v + 1]
-            if t < t0:
-                t = t0
-            if t > t1:
-                t = t1
-
-            span = nurbsknot.find_span(order_v, cv_count_v, nurbsknots_v_arr, t)
-            d = order_v - 1
-            nurbsknot_base = span + d
-
-            if nurbsknots_v[nurbsknot_base - 1] == nurbsknots_v[nurbsknot_base]:
-                if t <= nurbsknots_v[nurbsknot_base]:
-                    N_matrix[k][span] = 1.0
-                else:
-                    N_matrix[k][span + order_v - 1] = 1.0
-                continue
-
-            Nvals = [0.0] * (order_v * order_v)
-            Nvals[order_v * order_v - 1] = 1.0
-            left = [0.0] * d
-            right = [0.0] * d
-            N_idx = order_v * order_v - 1
-            k_right = nurbsknot_base
-            k_left = nurbsknot_base - 1
-
-            for j in range(d):
-                N0_idx = N_idx
-                N_idx -= (order_v + 1)
-                left[j] = t - nurbsknots_v[k_left]
-                right[j] = nurbsknots_v[k_right] - t
-                k_left -= 1
-                k_right += 1
-
-                x = 0.0
-                for r in range(j + 1):
-                    a0 = left[j - r]
-                    a1 = right[r]
-                    denom = a0 + a1
-                    y = Nvals[N0_idx + r] / denom if denom != 0.0 else 0.0
-                    Nvals[N_idx + r] = x + a1 * y
-                    x = a0 * y
-                Nvals[N_idx + j + 1] = x
-
-            for j in range(order_v):
-                col = span + j
-                if 0 <= col < n:
-                    N_matrix[k][col] = Nvals[j]
-
-        dim = 4 if is_rat else 3
-        for i in range(cv_count_u):
-            rhs = [[0.0] * dim for _ in range(n)]
-            for k in range(n):
-                if is_rat:
-                    cx_v, cy_v, cz_v, cw_v = curves[k].get_cv_4d(i)
-                    rhs[k] = [cx_v, cy_v, cz_v, cw_v]
-                else:
-                    p = curves[k].get_cv(i)
-                    rhs[k] = [p[0], p[1], p[2]]
-
-            A = [row[:] for row in N_matrix]
-            b = [row[:] for row in rhs]
-
-            for col in range(n):
-                max_row = col
-                max_val = abs(A[col][col])
-                for row in range(col + 1, n):
-                    if abs(A[row][col]) > max_val:
-                        max_val = abs(A[row][col])
-                        max_row = row
-                if max_val < 1e-14:
-                    continue
-                A[col], A[max_row] = A[max_row], A[col]
-                b[col], b[max_row] = b[max_row], b[col]
-                for row in range(col + 1, n):
-                    factor = A[row][col] / A[col][col]
-                    for c in range(col, n):
-                        A[row][c] -= factor * A[col][c]
-                    for d2 in range(dim):
-                        b[row][d2] -= factor * b[col][d2]
-
-            Q = [[0.0] * dim for _ in range(n)]
-            for row in range(n - 1, -1, -1):
-                for d2 in range(dim):
-                    Q[row][d2] = b[row][d2]
-                    for c in range(row + 1, n):
-                        Q[row][d2] -= A[row][c] * Q[c][d2]
-                    if abs(A[row][row]) > 1e-14:
-                        Q[row][d2] /= A[row][row]
-
-            for j in range(n):
-                if is_rat:
-                    surface.set_cv_4d(i, j, Q[j][0], Q[j][1], Q[j][2], Q[j][3])
-                else:
-                    surface.set_cv(i, j, Point(Q[j][0], Q[j][1], Q[j][2]))
-
-        return surface
-
-    @staticmethod
-    def create_revolve(profile: NurbsCurve, axis_origin: Point, axis_direction: Vector, angle: float) -> NurbsSurface:
-        if not profile.is_valid():
-            return NurbsSurface()
-        ax_len = axis_direction.magnitude()
-        if ax_len < 1e-14:
-            return NurbsSurface()
-        axis_dir = axis_direction * (1.0 / ax_len)
-
-        angle = abs(angle)
-        PI = Tolerance.PI
-        if angle > 2.0 * PI:
-            angle = 2.0 * PI
-        if angle < 1e-14:
-            return NurbsSurface()
-
-        if angle <= PI / 2.0 + 1e-10:
-            n_arcs = 1
-        elif angle <= PI + 1e-10:
-            n_arcs = 2
-        elif angle <= 3.0 * PI / 2.0 + 1e-10:
-            n_arcs = 3
-        else:
-            n_arcs = 4
-
-        d_theta = angle / n_arcs
-        w_mid = math.cos(d_theta / 2.0)
-        n_u = 2 * n_arcs + 1
-
-        nurbsknot_count_u = n_u + 1
-        nurbsknots_u = [0.0] * nurbsknot_count_u
-        nurbsknots_u[0] = 0.0
-        nurbsknots_u[1] = 0.0
-        for i in range(1, n_arcs + 1):
-            kv = i * d_theta
-            nurbsknots_u[2 * i] = kv
-            nurbsknots_u[2 * i + 1] = kv
-        nurbsknots_u[nurbsknot_count_u - 1] = angle
-        nurbsknots_u[nurbsknot_count_u - 2] = angle
-
-        cv_count_v = profile.cv_count()
-        order_v = profile.order()
-        profile_rational = profile.is_rational()
-
-        surface = NurbsSurface.create_raw(3, True, 3, order_v, n_u, cv_count_v)
-        if surface is None:
-            return NurbsSurface()
-
-        for i in range(min(nurbsknot_count_u, surface.nurbsknot_count(0))):
-            surface.set_nurbsknot(0, i, nurbsknots_u[i])
-        for i in range(min(profile.nurbsknot_count(), surface.nurbsknot_count(1))):
-            surface.set_nurbsknot(1, i, profile.nurbsknot(i))
-
-        u_angles = [0.0] * n_u
-        u_weights = [0.0] * n_u
-        for i in range(n_u):
-            if i % 2 == 0:
-                u_angles[i] = (i // 2) * d_theta
-                u_weights[i] = 1.0
-            else:
-                u_angles[i] = (i // 2) * d_theta + d_theta / 2.0
-                u_weights[i] = w_mid
-
-        for j in range(cv_count_v):
-            p_j = profile.get_cv(j)
-            if p_j is None:
-                p_j = Point(0.0, 0.0, 0.0)
-            profile_w = profile.weight(j) if profile_rational else 1.0
-
-            dx = p_j[0] - axis_origin[0]
-            dy = p_j[1] - axis_origin[1]
-            dz = p_j[2] - axis_origin[2]
-            proj = dx * axis_dir[0] + dy * axis_dir[1] + dz * axis_dir[2]
-            o_j = Point(
-                axis_origin[0] + proj * axis_dir[0],
-                axis_origin[1] + proj * axis_dir[1],
-                axis_origin[2] + proj * axis_dir[2]
+        colors = mesh.get_linecolors()
+        count = min(len(edges), len(colors))
+        pipes = []
+        for i in range(count):
+            u, v = edges[i]
+            pipe = Primitives.capsule_mesh(
+                Line.from_points(mesh.vertex[u].position(), mesh.vertex[v].position()),
+                radius,
             )
-
-            rx = p_j[0] - o_j[0]
-            ry = p_j[1] - o_j[1]
-            rz = p_j[2] - o_j[2]
-            r_j = math.sqrt(rx * rx + ry * ry + rz * rz)
-
-            if r_j < 1e-14:
-                for i in range(n_u):
-                    combined_w = u_weights[i] * profile_w
-                    surface.set_cv(i, j, o_j)
-                    surface.set_weight(i, j, combined_w)
-            else:
-                x_local = Vector(rx / r_j, ry / r_j, rz / r_j)
-                y_local = axis_dir.cross(x_local)
-                y_len = y_local.magnitude()
-                if y_len > 1e-14:
-                    y_local = y_local * (1.0 / y_len)
-
-                for i in range(n_u):
-                    theta = u_angles[i]
-                    cos_t = math.cos(theta)
-                    sin_t = math.sin(theta)
-
-                    effective_r = r_j / w_mid if i % 2 == 1 else r_j
-
-                    px = o_j[0] + effective_r * (cos_t * x_local[0] + sin_t * y_local[0])
-                    py = o_j[1] + effective_r * (cos_t * x_local[1] + sin_t * y_local[1])
-                    pz = o_j[2] + effective_r * (cos_t * x_local[2] + sin_t * y_local[2])
-
-                    combined_w = u_weights[i] * profile_w
-                    surface.set_cv_4d(i, j, px * combined_w, py * combined_w, pz * combined_w, combined_w)
-
-        return surface
+            pipe.set_facecolors([colors[i]] * pipe.number_of_faces())
+            pipes.append(pipe)
+        return pipes
 
     @staticmethod
-    def create_revolve_full(profile: NurbsCurve, axis_origin: Point, axis_direction: Vector) -> NurbsSurface:
-        return Primitives.create_revolve(profile, axis_origin, axis_direction, 2.0 * Tolerance.PI)
-
-    @staticmethod
-    def create_sweep1(rail: NurbsCurve, profile: NurbsCurve) -> NurbsSurface:
-        if not rail.is_valid() or not profile.is_valid():
-            return NurbsSurface()
-
-        working_profile = profile.duplicate()
-
-        n = min(max(rail.span_count() * 2 + 1, 5), 200)
-        frames = rail.get_perpendicular_planes(n)
-        if not frames:
-            return NurbsSurface()
-
-        nc = working_profile.cv_count()
-        cx, cy, cz = 0.0, 0.0, 0.0
-        for k in range(nc):
-            cv = working_profile.get_cv(k)
-            if cv is not None:
-                cx += cv[0]
-                cy += cv[1]
-                cz += cv[2]
-        cx /= nc
-        cy /= nc
-        cz /= nc
-
-        t0, t1 = working_profile.domain()
-        pa = working_profile.point_at(t0)
-        pb = working_profile.point_at(t0 + (t1 - t0) / 3.0)
-        pc = working_profile.point_at(t0 + 2.0 * (t1 - t0) / 3.0)
-        v1 = Vector(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2])
-        v2 = Vector(pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2])
-        prof_normal = v1.cross(v2)
-        nlen = prof_normal.magnitude()
-        if nlen < 1e-14:
-            prof_normal = Vector(1.0, 0.0, 0.0)
-        else:
-            prof_normal = prof_normal * (1.0 / nlen)
-
-        prof_x = Vector(pa[0] - cx, pa[1] - cy, pa[2] - cz)
-        pxlen = prof_x.magnitude()
-        if pxlen < 1e-14:
-            prof_x = Vector(0.0, 1.0, 0.0)
-        else:
-            prof_x = prof_x * (1.0 / pxlen)
-        dot = prof_x[0] * prof_normal[0] + prof_x[1] * prof_normal[1] + prof_x[2] * prof_normal[2]
-        prof_x = Vector(prof_x[0] - dot * prof_normal[0], prof_x[1] - dot * prof_normal[1], prof_x[2] - dot * prof_normal[2])
-        pxlen = prof_x.magnitude()
-        if pxlen < 1e-14:
-            prof_x = Vector(0.0, 1.0, 0.0)
-        else:
-            prof_x = prof_x * (1.0 / pxlen)
-        prof_y = prof_normal.cross(prof_x)
-        pylen = prof_y.magnitude()
-        if pylen > 1e-14:
-            prof_y = prof_y * (1.0 / pylen)
-
-        positioned_profiles = []
-        for i in range(len(frames)):
-            prof_copy = working_profile.duplicate()
-            fo = frames[i].origin
-            fx = frames[i].x_axis
-            fy = frames[i].y_axis
-            fz = frames[i].z_axis
-
-            t1x = Xform.translation(-cx, -cy, -cz)
-
-            rot = Xform()
-            rot.m[0]  = fx[0]*prof_x[0] + fy[0]*prof_y[0] + fz[0]*prof_normal[0]
-            rot.m[1]  = fx[1]*prof_x[0] + fy[1]*prof_y[0] + fz[1]*prof_normal[0]
-            rot.m[2]  = fx[2]*prof_x[0] + fy[2]*prof_y[0] + fz[2]*prof_normal[0]
-            rot.m[4]  = fx[0]*prof_x[1] + fy[0]*prof_y[1] + fz[0]*prof_normal[1]
-            rot.m[5]  = fx[1]*prof_x[1] + fy[1]*prof_y[1] + fz[1]*prof_normal[1]
-            rot.m[6]  = fx[2]*prof_x[1] + fy[2]*prof_y[1] + fz[2]*prof_normal[1]
-            rot.m[8]  = fx[0]*prof_x[2] + fy[0]*prof_y[2] + fz[0]*prof_normal[2]
-            rot.m[9]  = fx[1]*prof_x[2] + fy[1]*prof_y[2] + fz[1]*prof_normal[2]
-            rot.m[10] = fx[2]*prof_x[2] + fy[2]*prof_y[2] + fz[2]*prof_normal[2]
-            rot.m[12] = fo[0]
-            rot.m[13] = fo[1]
-            rot.m[14] = fo[2]
-
-            prof_copy.transform(t1x)
-            prof_copy.transform(rot)
-            positioned_profiles.append(prof_copy)
-
-        loft_degree = min(3, len(positioned_profiles) - 1)
-        return Primitives.create_loft(positioned_profiles, loft_degree)
-
-    @staticmethod
-    def create_sweep2(rail1: NurbsCurve, rail2: NurbsCurve, shapes: list[NurbsCurve]) -> NurbsSurface:
-        if not rail1.is_valid() or not rail2.is_valid() or not shapes:
-            return NurbsSurface()
-        for s in shapes:
-            if not s.is_valid():
-                return NurbsSurface()
-
-        compat_shapes = [s.duplicate() for s in shapes]
-        if len(compat_shapes) >= 2:
-            Primitives._make_curves_compatible(compat_shapes)
-
-        n_shapes = len(compat_shapes)
-        shape_params = [0.0 if n_shapes == 1 else float(k) / (n_shapes - 1) for k in range(n_shapes)]
-
-        n = min(max(max(rail1.span_count(), rail2.span_count()) * 2 + 1, 5), 200)
-
-        pts1, _params1 = rail1.divide_by_count(n + 1, True)
-        pts2, _params2 = rail2.divide_by_count(n + 1, True)
-
-        frames1 = rail1.get_perpendicular_planes(n)
-        if not frames1:
-            return NurbsSurface()
-
-        class ShapeInfo:
-            pass
-
-        sinfo = []
-        for k in range(n_shapes):
-            si = ShapeInfo()
-            si.start = compat_shapes[k].point_at_start()
-            si.end = compat_shapes[k].point_at_end()
-            span = Vector(si.end[0]-si.start[0], si.end[1]-si.start[1], si.end[2]-si.start[2])
-            si.width = span.magnitude()
-            if si.width < 1e-14:
-                si.width = 1.0
-            si.dir = span * (1.0 / si.width)
-            up_try = Vector(0.0, 0.0, 1.0)
-            si.side = si.dir.cross(up_try)
-            if si.side.magnitude() < 1e-10:
-                up_try = Vector(0.0, 1.0, 0.0)
-                si.side = si.dir.cross(up_try)
-            si.side = si.side * (1.0 / si.side.magnitude())
-            si.up = si.side.cross(si.dir)
-            ulen = si.up.magnitude()
-            if ulen > 1e-14:
-                si.up = si.up * (1.0 / ulen)
-            sinfo.append(si)
-
-        positioned_profiles = []
-        for i in range(min(len(frames1), len(pts1), len(pts2))):
-            t = 0.0 if len(frames1) <= 1 else float(i) / (len(frames1) - 1)
-
-            j = 0
-            s = 0.0
-            if n_shapes == 1:
-                j = 0
-                s = 0.0
-            else:
-                for k in range(n_shapes - 1):
-                    if t <= shape_params[k + 1] + 1e-14:
-                        j = k
-                        break
-                    j = k
-                denom = shape_params[j + 1] - shape_params[j]
-                s = (t - shape_params[j]) / denom if denom > 1e-14 else 0.0
-                s = max(0.0, min(1.0, s))
-
-            interp_shape = compat_shapes[j].duplicate()
-            if n_shapes > 1 and j + 1 < n_shapes:
-                nc = compat_shapes[j].cv_count()
-                for c in range(nc):
-                    cv0 = compat_shapes[j].get_cv(c)
-                    cv1 = compat_shapes[j + 1].get_cv(c)
-                    if cv0 is None:
-                        cv0 = Point(0.0, 0.0, 0.0)
-                    if cv1 is None:
-                        cv1 = Point(0.0, 0.0, 0.0)
-                    lerped = Point(cv0[0]*(1-s) + cv1[0]*s, cv0[1]*(1-s) + cv1[1]*s, cv0[2]*(1-s) + cv1[2]*s)
-                    interp_shape.set_cv(c, lerped)
-
-            if n_shapes == 1:
-                shape_width = sinfo[0].width
-            else:
-                shape_width = sinfo[j].width * (1 - s) + (sinfo[j+1].width * s if j + 1 < n_shapes else 0.0)
-
-            def lerp_vec(a, b):
-                return Vector(a[0]*(1-s)+b[0]*s, a[1]*(1-s)+b[1]*s, a[2]*(1-s)+b[2]*s)
-
-            if n_shapes > 1 and j + 1 < n_shapes:
-                prof_dir = lerp_vec(sinfo[j].dir, sinfo[j+1].dir)
-                prof_side = lerp_vec(sinfo[j].side, sinfo[j+1].side)
-                prof_up = lerp_vec(sinfo[j].up, sinfo[j+1].up)
-            else:
-                prof_dir = Vector(sinfo[j].dir[0], sinfo[j].dir[1], sinfo[j].dir[2])
-                prof_side = Vector(sinfo[j].side[0], sinfo[j].side[1], sinfo[j].side[2])
-                prof_up = Vector(sinfo[j].up[0], sinfo[j].up[1], sinfo[j].up[2])
-
-            pdlen = prof_dir.magnitude()
-            if pdlen > 1e-14:
-                prof_dir = prof_dir * (1.0 / pdlen)
-            pslen = prof_side.magnitude()
-            if pslen > 1e-14:
-                prof_side = prof_side * (1.0 / pslen)
-            pulen = prof_up.magnitude()
-            if pulen > 1e-14:
-                prof_up = prof_up * (1.0 / pulen)
-
-            if n_shapes == 1:
-                interp_start = sinfo[0].start
-            elif j + 1 < n_shapes:
-                interp_start = Point(
-                    sinfo[j].start[0]*(1-s) + sinfo[j+1].start[0]*s,
-                    sinfo[j].start[1]*(1-s) + sinfo[j+1].start[1]*s,
-                    sinfo[j].start[2]*(1-s) + sinfo[j+1].start[2]*s)
-            else:
-                interp_start = sinfo[j].start
-
-            p1 = pts1[i]
-            p2 = pts2[i]
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-            dz = p2[2] - p1[2]
-            rail_dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-            scale_factor = rail_dist / shape_width if rail_dist > 1e-14 and shape_width > 1e-14 else 1.0
-
-            prof_copy = interp_shape.duplicate()
-            t1_xf = Xform.translation(-interp_start[0], -interp_start[1], -interp_start[2])
-            prof_copy.transform(t1_xf)
-
-            sc = Xform.scale_xyz(scale_factor, scale_factor, scale_factor)
-            prof_copy.transform(sc)
-
-            tangent_orig = frames1[i].z_axis
-            x_dir = Vector(dx, dy, dz)
-            x_len = x_dir.magnitude()
-            if x_len > 1e-14:
-                x_dir = x_dir * (1.0 / x_len)
-            else:
-                x_dir = frames1[i].x_axis
-            y_dir = tangent_orig.cross(x_dir)
-            y_len = y_dir.magnitude()
-            if y_len > 1e-14:
-                y_dir = y_dir * (1.0 / y_len)
-            else:
-                y_dir = frames1[i].y_axis
-            dot_up = y_dir[0]*prof_up[0] + y_dir[1]*prof_up[1] + y_dir[2]*prof_up[2]
-            if dot_up < 0:
-                y_dir = Vector(-y_dir[0], -y_dir[1], -y_dir[2])
-            tangent = x_dir.cross(y_dir)
-            tz = tangent.magnitude()
-            if tz > 1e-14:
-                tangent = tangent * (1.0 / tz)
-
-            rot = Xform()
-            rot.m[0]  = tangent[0]*prof_side[0] + x_dir[0]*prof_dir[0] + y_dir[0]*prof_up[0]
-            rot.m[1]  = tangent[1]*prof_side[0] + x_dir[1]*prof_dir[0] + y_dir[1]*prof_up[0]
-            rot.m[2]  = tangent[2]*prof_side[0] + x_dir[2]*prof_dir[0] + y_dir[2]*prof_up[0]
-            rot.m[4]  = tangent[0]*prof_side[1] + x_dir[0]*prof_dir[1] + y_dir[0]*prof_up[1]
-            rot.m[5]  = tangent[1]*prof_side[1] + x_dir[1]*prof_dir[1] + y_dir[1]*prof_up[1]
-            rot.m[6]  = tangent[2]*prof_side[1] + x_dir[2]*prof_dir[1] + y_dir[2]*prof_up[1]
-            rot.m[8]  = tangent[0]*prof_side[2] + x_dir[0]*prof_dir[2] + y_dir[0]*prof_up[2]
-            rot.m[9]  = tangent[1]*prof_side[2] + x_dir[1]*prof_dir[2] + y_dir[1]*prof_up[2]
-            rot.m[10] = tangent[2]*prof_side[2] + x_dir[2]*prof_dir[2] + y_dir[2]*prof_up[2]
-            rot.m[12] = p1[0]
-            rot.m[13] = p1[1]
-            rot.m[14] = p1[2]
-
-            prof_copy.transform(rot)
-            positioned_profiles.append(prof_copy)
-
-        loft_degree = min(3, len(positioned_profiles) - 1)
-        return Primitives.create_loft(positioned_profiles, loft_degree)
-
-    @staticmethod
-    def create_edge(c0: NurbsCurve, c1: NurbsCurve, c2: NurbsCurve, c3: NurbsCurve) -> NurbsSurface:
-        if not c0.is_valid() or not c1.is_valid() or not c2.is_valid() or not c3.is_valid():
-            return NurbsSurface()
-
-        input_curves = [c0.duplicate(), c1.duplicate(), c2.duplicate(), c3.duplicate()]
-        loop = [input_curves[0].duplicate()]
-        used = [True, False, False, False]
-        tol = 1e-6
-
-        for _step in range(3):
-            tail = loop[-1].point_at_end()
-            found = False
-            for idx in range(4):
-                if used[idx]:
-                    continue
-                s = input_curves[idx].point_at_start()
-                e = input_curves[idx].point_at_end()
-                if s.distance(tail) < tol:
-                    loop.append(input_curves[idx].duplicate())
-                    used[idx] = True
-                    found = True
-                    break
-                if e.distance(tail) < tol:
-                    rev = input_curves[idx].duplicate()
-                    rev.reverse()
-                    loop.append(rev)
-                    used[idx] = True
-                    found = True
-                    break
-            if not found:
-                return NurbsSurface()
-
-        if loop[3].point_at_end().distance(loop[0].point_at_start()) > tol:
-            return NurbsSurface()
-
-        south = loop[0].duplicate()
-        east = loop[1].duplicate()
-        north = loop[2].duplicate()
-        north.reverse()
-        west = loop[3].duplicate()
-        west.reverse()
-
-        v_pair = [south.duplicate(), north.duplicate()]
-        Primitives._make_curves_compatible(v_pair)
-        south = v_pair[0]
-        north = v_pair[1]
-
-        u_pair = [west.duplicate(), east.duplicate()]
-        Primitives._make_curves_compatible(u_pair)
-        west = u_pair[0]
-        east = u_pair[1]
-
-        order_v = south.order()
-        cv_count_v = south.cv_count()
-        order_u = west.order()
-        cv_count_u = west.cv_count()
-        is_rat = south.is_rational() or west.is_rational()
-
-        surface = NurbsSurface.create_raw(3, is_rat, order_u, order_v, cv_count_u, cv_count_v)
-        if surface is None:
-            return NurbsSurface()
-
-        for i in range(surface.nurbsknot_count(0)):
-            surface.set_nurbsknot(0, i, west.nurbsknot(i))
-        for i in range(surface.nurbsknot_count(1)):
-            surface.set_nurbsknot(1, i, south.nurbsknot(i))
-
-        u_grev = west.get_greville_abcissae()
-        v_grev = south.get_greville_abcissae()
-
-        u0, u1 = west.domain()
-        v0, v1 = south.domain()
-        u_grev = [(g - u0) / (u1 - u0) if u1 > u0 else 0.0 for g in u_grev]
-        v_grev = [(g - v0) / (v1 - v0) if v1 > v0 else 0.0 for g in v_grev]
-
-        c00 = south.get_cv(0) or Point(0.0, 0.0, 0.0)
-        c01 = south.get_cv(cv_count_v - 1) or Point(0.0, 0.0, 0.0)
-        c10 = north.get_cv(0) or Point(0.0, 0.0, 0.0)
-        c11 = north.get_cv(cv_count_v - 1) or Point(0.0, 0.0, 0.0)
-
-        for i in range(cv_count_u):
-            ui = u_grev[i]
-            wi = west.get_cv(i) or Point(0.0, 0.0, 0.0)
-            ei = east.get_cv(i) or Point(0.0, 0.0, 0.0)
-            for j in range(cv_count_v):
-                vj = v_grev[j]
-                sj = south.get_cv(j) or Point(0.0, 0.0, 0.0)
-                nj = north.get_cv(j) or Point(0.0, 0.0, 0.0)
-
-                x = ((1-ui)*sj[0] + ui*nj[0] + (1-vj)*wi[0] + vj*ei[0]
-                     - (1-ui)*(1-vj)*c00[0] - (1-ui)*vj*c01[0]
-                     - ui*(1-vj)*c10[0] - ui*vj*c11[0])
-                y = ((1-ui)*sj[1] + ui*nj[1] + (1-vj)*wi[1] + vj*ei[1]
-                     - (1-ui)*(1-vj)*c00[1] - (1-ui)*vj*c01[1]
-                     - ui*(1-vj)*c10[1] - ui*vj*c11[1])
-                z = ((1-ui)*sj[2] + ui*nj[2] + (1-vj)*wi[2] + vj*ei[2]
-                     - (1-ui)*(1-vj)*c00[2] - (1-ui)*vj*c01[2]
-                     - ui*(1-vj)*c10[2] - ui*vj*c11[2])
-
-                surface.set_cv(i, j, Point(x, y, z))
-
-        return surface
-
-    @staticmethod
-    def create_interpolated(points: list[Point], parameterization: "nurbsknot.CurveNurbsKnotStyle" = nurbsknot.CurveNurbsKnotStyle.Chord) -> NurbsCurve:
-        return NurbsCurve.create_interpolated(points, parameterization)
-
-    @staticmethod
-    def quad_mesh(surface: NurbsSurface, u_count: int, v_count: int) -> "Mesh":
-        mesh = Mesh()
-        du = surface.domain(0)
-        dv = surface.domain(1)
-        nu, nv = u_count + 1, v_count + 1
-        closed_u = surface.is_closed(0)
-        singular_south = surface.is_singular(0)
-        singular_north = surface.is_singular(2)
-
-        vkeys = [[0]*nv for _ in range(nu)]
-        for i in range(nu):
-            u = du[0] + (du[1] - du[0]) * i / u_count
-            for j in range(nv):
-                if closed_u and i == u_count:
-                    vkeys[i][j] = vkeys[0][j]; continue
-                if singular_south and j == 0 and i > 0:
-                    vkeys[i][j] = vkeys[0][0]; continue
-                if singular_north and j == v_count and i > 0:
-                    vkeys[i][j] = vkeys[0][v_count]; continue
-                v = dv[0] + (dv[1] - dv[0]) * j / v_count
-                vkeys[i][j] = mesh.add_vertex(surface.point_at(u, v))
-
-        if singular_south:
-            for i in range(u_count):
-                mesh.add_face([vkeys[0][0], vkeys[i+1][1], vkeys[i][1]])
-        if singular_north:
-            for i in range(u_count):
-                mesh.add_face([vkeys[0][v_count], vkeys[i][v_count-1], vkeys[i+1][v_count-1]])
-
-        j0 = 1 if singular_south else 0
-        j1 = v_count - 1 if singular_north else v_count
-        for i in range(u_count):
-            for j in range(j0, j1):
-                mesh.add_face([vkeys[i][j], vkeys[i+1][j], vkeys[i+1][j+1], vkeys[i][j+1]])
-        return mesh
-
-    @staticmethod
-    def diamond_mesh(surface: NurbsSurface, u_count: int, v_count: int) -> "Mesh":
-        mesh = Mesh()
-        du = surface.domain(0)
-        dv = surface.domain(1)
-        su = (du[1] - du[0]) / u_count
-        sv = (dv[1] - dv[0]) / v_count
-        nu, nv = u_count + 1, v_count + 1
-        closed_u = surface.is_closed(0)
-        singular_south = surface.is_singular(0)
-        singular_north = surface.is_singular(2)
-
-        grid = [[0]*nv for _ in range(nu)]
-        for i in range(nu):
-            u = du[0] + su * i
-            for j in range(nv):
-                if closed_u and i == u_count:
-                    grid[i][j] = grid[0][j]; continue
-                if singular_south and j == 0 and i > 0:
-                    grid[i][j] = grid[0][0]; continue
-                if singular_north and j == v_count and i > 0:
-                    grid[i][j] = grid[0][v_count]; continue
-                v = dv[0] + sv * j
-                grid[i][j] = mesh.add_vertex(surface.point_at(u, v))
-
-        u_end = u_count - 1 if closed_u else u_count
-        for i in range(u_end + 1):
-            for j in range(nv):
-                if (i + j) % 2 != 0:
-                    continue
-                center = grid[i][j]
-                il = i - 1 if i > 0 else (u_count - 1 if closed_u else -1)
-                left   = grid[il][j] if il >= 0 else center
-                bottom = grid[i][j-1] if j > 0 else center
-                right  = grid[i+1][j] if i < u_count else center
-                top    = grid[i][j+1] if j < v_count else center
-                verts = [left, bottom, right, top]
-                unique = []
-                for k in range(4):
-                    if verts[k] != verts[(k + 1) % 4]:
-                        unique.append(verts[k])
-                if len(unique) >= 3:
-                    mesh.add_face(unique)
-        return mesh
-
-    @staticmethod
-    def hex_mesh(surface: NurbsSurface, u_count: int, v_count: int, t: float = 1.0/3.0) -> "Mesh":
-        mesh = Mesh()
-        du = surface.domain(0)
-        dv = surface.domain(1)
-        su = (du[1] - du[0]) / u_count
-        sv = (dv[1] - dv[0]) / v_count
-
-        nu, nv = u_count + 1, v_count + 1
-        closed_u = surface.is_closed(0)
-        singular_south = surface.is_singular(0)
-        singular_north = surface.is_singular(2)
-
-        grid = [[0]*nv for _ in range(nu)]
-        for i in range(nu):
-            u = du[0] + su * i
-            for j in range(nv):
-                if closed_u and i == u_count:
-                    grid[i][j] = grid[0][j]; continue
-                if singular_south and j == 0 and i > 0:
-                    grid[i][j] = grid[0][0]; continue
-                if singular_north and j == v_count and i > 0:
-                    grid[i][j] = grid[0][v_count]; continue
-                v = dv[0] + sv * j
-                grid[i][j] = mesh.add_vertex(surface.point_at(u, v))
-
-        mid_a = [[0]*v_count for _ in range(nu)]
-        for i in range(nu):
-            u = du[0] + su * i
-            for j in range(v_count):
-                if closed_u and i == u_count:
-                    mid_a[i][j] = mid_a[0][j]; continue
-                v = dv[0] + sv * (j + t)
-                mid_a[i][j] = mesh.add_vertex(surface.point_at(u, v))
-
-        mid_b = [[0]*v_count for _ in range(nu)]
-        for i in range(nu):
-            u = du[0] + su * i
-            for j in range(v_count):
-                if closed_u and i == u_count:
-                    mid_b[i][j] = mid_b[0][j]; continue
-                v = dv[0] + sv * (j + (1.0 - t))
-                mid_b[i][j] = mesh.add_vertex(surface.point_at(u, v))
-
-        def dedup_face(v):
-            r = []
-            n = len(v)
-            for k in range(n):
-                if v[k] != v[(k + 1) % n]:
-                    r.append(v[k])
-            return r
-
-        u_end = u_count - 1 if closed_u else u_count
-        for i in range(u_end + 1):
-            for j in range(nv):
-                if (i + j) % 2 != 0:
-                    continue
-                center = grid[i][j]
-                il = i - 1 if i > 0 else (u_count - 1 if closed_u else -1)
-                ul = mid_a[il][j]   if (il >= 0 and j < v_count)         else (grid[il][j] if il >= 0 else center)
-                ll = mid_b[il][j-1] if (il >= 0 and j > 0)               else (grid[il][j] if il >= 0 else center)
-                bt = mid_a[i][j-1]  if j > 0                             else center
-                lr = mid_b[i+1][j-1] if (i < u_count and j > 0)          else (grid[i+1][j] if i < u_count else center)
-                ur = mid_a[i+1][j]   if (i < u_count and j < v_count)    else (grid[i+1][j] if i < u_count else center)
-                tp = mid_b[i][j]     if j < v_count                      else center
-
-                face = dedup_face([ul, ll, bt, lr, ur, tp])
-                if len(face) >= 3:
-                    mesh.add_face(face)
-        return mesh
-
-    @staticmethod
-    def tetrahedron(edge: float = 2.0) -> "Mesh":
+    def tetrahedron(edge: float = 2.0) -> Mesh:
+        """Tetrahedron mesh (4 triangles) with the given edge length."""
         a = edge / 2.0
         h = edge * math.sqrt(2.0 / 3.0)
         r = edge / math.sqrt(3.0)
         z0 = -h / 4.0
         z1 = 3.0 * h / 4.0
         faces = [
-            [Point(a, -r/2.0, z0), Point(-a, -r/2.0, z0), Point(0, r, z0)],
-            [Point(0, 0, z1), Point(-a, -r/2.0, z0), Point(a, -r/2.0, z0)],
-            [Point(0, 0, z1), Point(0, r, z0), Point(-a, -r/2.0, z0)],
-            [Point(0, 0, z1), Point(a, -r/2.0, z0), Point(0, r, z0)],
+            [
+                Point(a, -r / 2.0, z0),
+                Point(-a, -r / 2.0, z0),
+                Point(0.0, r, z0),
+            ],
+            [
+                Point(0.0, 0.0, z1),
+                Point(-a, -r / 2.0, z0),
+                Point(a, -r / 2.0, z0),
+            ],
+            [
+                Point(0.0, 0.0, z1),
+                Point(0.0, r, z0),
+                Point(-a, -r / 2.0, z0),
+            ],
+            [
+                Point(0.0, 0.0, z1),
+                Point(a, -r / 2.0, z0),
+                Point(0.0, r, z0),
+            ],
         ]
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def cube(edge: float = 2.0) -> "Mesh":
+    def cube(edge: float = 2.0) -> Mesh:
+        """Cube mesh (6 quads) with the given edge length."""
         a = edge / 2.0
-        v0, v1, v2, v3 = Point(-a, -a, -a), Point(a, -a, -a), Point(a, a, -a), Point(-a, a, -a)
-        v4, v5, v6, v7 = Point(-a, -a, a), Point(a, -a, a), Point(a, a, a), Point(-a, a, a)
+        v0 = Point(-a, -a, -a)
+        v1 = Point(a, -a, -a)
+        v2 = Point(a, a, -a)
+        v3 = Point(-a, a, -a)
+        v4 = Point(-a, -a, a)
+        v5 = Point(a, -a, a)
+        v6 = Point(a, a, a)
+        v7 = Point(-a, a, a)
         faces = [
-            [v3, v2, v1, v0], [v4, v5, v6, v7],
-            [v0, v1, v5, v4], [v2, v3, v7, v6],
-            [v0, v4, v7, v3], [v1, v2, v6, v5],
+            [v3, v2, v1, v0],
+            [v4, v5, v6, v7],
+            [v0, v1, v5, v4],
+            [v2, v3, v7, v6],
+            [v0, v4, v7, v3],
+            [v1, v2, v6, v5],
         ]
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def octahedron(edge: float = 2.0) -> "Mesh":
+    def octahedron(edge: float = 2.0) -> Mesh:
+        """Octahedron mesh (8 triangles) with the given edge length."""
         a = edge / math.sqrt(2.0)
-        px, nx = Point(a, 0, 0), Point(-a, 0, 0)
-        py, ny = Point(0, a, 0), Point(0, -a, 0)
-        pz, nz = Point(0, 0, a), Point(0, 0, -a)
+        px = Point(a, 0.0, 0.0)
+        nx = Point(-a, 0.0, 0.0)
+        py = Point(0.0, a, 0.0)
+        ny = Point(0.0, -a, 0.0)
+        pz = Point(0.0, 0.0, a)
+        nz = Point(0.0, 0.0, -a)
         faces = [
-            [pz, px, py], [pz, py, nx], [pz, nx, ny], [pz, ny, px],
-            [nz, py, px], [nz, nx, py], [nz, ny, nx], [nz, px, ny],
+            [pz, px, py],
+            [pz, py, nx],
+            [pz, nx, ny],
+            [pz, ny, px],
+            [nz, py, px],
+            [nz, nx, py],
+            [nz, ny, nx],
+            [nz, px, ny],
         ]
         return Mesh.from_polylines(faces, 1e-10)
 
     @staticmethod
-    def icosahedron(edge: float = 2.0) -> "Mesh":
+    def icosahedron(edge: float = 2.0) -> Mesh:
+        """Icosahedron mesh (20 triangles) with the given edge length."""
         phi = (1.0 + math.sqrt(5.0)) / 2.0
         s = edge / 2.0
         sp = s * phi
         verts = [
-            Point(-s, sp, 0), Point(s, sp, 0), Point(-s, -sp, 0), Point(s, -sp, 0),
-            Point(0, -s, sp), Point(0, s, sp), Point(0, -s, -sp), Point(0, s, -sp),
-            Point(sp, 0, -s), Point(sp, 0, s), Point(-sp, 0, -s), Point(-sp, 0, s),
+            Point(-s, sp, 0.0),
+            Point(s, sp, 0.0),
+            Point(-s, -sp, 0.0),
+            Point(s, -sp, 0.0),
+            Point(0.0, -s, sp),
+            Point(0.0, s, sp),
+            Point(0.0, -s, -sp),
+            Point(0.0, s, -sp),
+            Point(sp, 0.0, -s),
+            Point(sp, 0.0, s),
+            Point(-sp, 0.0, -s),
+            Point(-sp, 0.0, s),
         ]
         idx = [
-            [0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],
-            [1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],
-            [3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],
-            [4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1],
+            [0, 11, 5],
+            [0, 5, 1],
+            [0, 1, 7],
+            [0, 7, 10],
+            [0, 10, 11],
+            [1, 5, 9],
+            [5, 11, 4],
+            [11, 10, 2],
+            [10, 7, 6],
+            [7, 1, 8],
+            [3, 9, 4],
+            [3, 4, 2],
+            [3, 2, 6],
+            [3, 6, 8],
+            [3, 8, 9],
+            [4, 9, 5],
+            [2, 4, 11],
+            [6, 2, 10],
+            [8, 6, 7],
+            [9, 8, 1],
         ]
-        faces = [[verts[f[0]], verts[f[1]], verts[f[2]]] for f in idx]
+        faces = []
+        for f in idx:
+            faces.append([verts[f[0]], verts[f[1]], verts[f[2]]])
         return Mesh.from_polylines(faces, 1e-10)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Curve primitives
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def circle(cx: float, cy: float, cz: float, radius: float) -> NurbsCurve:
+        """Full circle as a rational quadratic NURBS (9 CVs)."""
+        return Primitives.ellipse(cx, cy, cz, radius, radius)
+
+    @staticmethod
+    def ellipse(
+        cx: float, cy: float, cz: float, major_radius: float, minor_radius: float
+    ) -> NurbsCurve:
+        """Full ellipse as a rational quadratic NURBS (9 CVs)."""
+        curve = NurbsCurve(3, True, 3, 9)
+        for i in range(10):
+            curve.set_nurbsknot(i, _CIRCLE_NURBSKNOTS[i])
+        for i in range(9):
+            w = _CIRCLE_WEIGHTS[i]
+            px = cx + major_radius * _CIRCLE_X[i]
+            py = cy + minor_radius * _CIRCLE_Y[i]
+            curve.set_cv_4d(i, px * w, py * w, cz * w, w)
+        return curve
+
+    @staticmethod
+    def arc(start: Point, mid: Point, end: Point) -> NurbsCurve:
+        """Circular arc from start through the arc midpoint to end as a rational quadratic NURBS; a line when collinear."""
+        chord = end - start
+        chord_mid = start + chord * 0.5
+        sagitta = mid - chord_mid
+        if chord.cross(sagitta).magnitude() < Tolerance.ZERO_TOLERANCE:
+            return NurbsCurve.create(False, 1, [start, end])
+        h = chord.magnitude() * 0.5
+        s = sagitta.magnitude()
+        radius = (h * h + s * s) / (2.0 * s)
+        w = (radius - s) / radius
+        if abs(w) < Tolerance.ZERO_TOLERANCE:
+            w = Tolerance.ZERO_TOLERANCE
+        curve = NurbsCurve(3, True, 3, 3)
+        curve.m_nurbsknot = np.array([0.0, 0.0, 1.0, 1.0], dtype=np.float64)
+        curve.set_cv_4d(0, start[0], start[1], start[2], 1.0)
+        curve.set_cv_4d(
+            1,
+            chord_mid[0] * w + sagitta[0],
+            chord_mid[1] * w + sagitta[1],
+            chord_mid[2] * w + sagitta[2],
+            w,
+        )
+        curve.set_cv_4d(2, end[0], end[1], end[2], 1.0)
+        return curve
+
+    @staticmethod
+    def parabola(p0: Point, p1: Point, p2: Point) -> NurbsCurve:
+        """Parabola through three points with p1 as the apex, as a quadratic NURBS."""
+        curve = NurbsCurve(3, False, 3, 3)
+        curve.m_nurbsknot = np.array([0.0, 0.0, 1.0, 1.0], dtype=np.float64)
+        curve.set_cv(0, p0)
+        curve.set_cv(
+            1,
+            Point(
+                2.0 * p1[0] - (p0[0] + p2[0]) / 2.0,
+                2.0 * p1[1] - (p0[1] + p2[1]) / 2.0,
+                2.0 * p1[2] - (p0[2] + p2[2]) / 2.0,
+            ),
+        )
+        curve.set_cv(2, p2)
+        return curve
+
+    @staticmethod
+    def hyperbola(center: Point, a: float, b: float, extent: float) -> NurbsCurve:
+        """Hyperbola x = a cosh(t), y = b sinh(t) for t in [-extent, extent] as a cubic NURBS through 9 points."""
+        segments = 8
+        points = []
+        for i in range(segments + 1):
+            t = -extent + 2.0 * extent * i / segments
+            points.append(
+                Point(
+                    center[0] + a * math.cosh(t),
+                    center[1] + b * math.sinh(t),
+                    center[2],
+                )
+            )
+        curve = NurbsCurve()
+        if not curve.create_clamped_uniform(3, 4, points, 1.0):
+            return NurbsCurve()
+        return curve
+
+    @staticmethod
+    def spiral(
+        start_radius: float, end_radius: float, pitch: float, turns: float
+    ) -> NurbsCurve:
+        """Helix with linearly varying radius as a cubic NURBS, 8 points per turn."""
+        segments = max(4, int(turns * 8))
+        points = []
+        for i in range(segments + 1):
+            t = float(i) / segments
+            angle = t * turns * 2.0 * PI
+            r = start_radius + t * (end_radius - start_radius)
+            points.append(
+                Point(r * math.cos(angle), r * math.sin(angle), t * turns * pitch)
+            )
+        curve = NurbsCurve()
+        if not curve.create_clamped_uniform(3, 4, points, 1.0):
+            return NurbsCurve()
+        return curve
+
+    @staticmethod
+    def create_interpolated(
+        points: list[Point],
+        parameterization: CurveNurbsKnotStyle = CurveNurbsKnotStyle.Chord,
+        end_condition: CurveInterpStyle = CurveInterpStyle.Rhino,
+    ) -> NurbsCurve:
+        """Interpolated cubic NURBS through points."""
+        return NurbsCurve.create_interpolated(points, parameterization, end_condition)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Surface primitives
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def cylinder_surface(
+        cx: float, cy: float, cz: float, radius: float, height: float
+    ) -> NurbsSurface:
+        """Rational cylinder surface of degree 2x1 around the z axis through (cx, cy, cz)."""
+        srf = NurbsSurface(3, True, 3, 2, 9, 2)
+        for i in range(10):
+            srf.set_nurbsknot(0, i, _CIRCLE_NURBSKNOTS[i])
+        _set_circle_row(srf, 0, cx, cy, cz, radius, 1.0)
+        _set_circle_row(srf, 1, cx, cy, cz + height, radius, 1.0)
+        return srf
+
+    @staticmethod
+    def cone_surface(
+        cx: float, cy: float, cz: float, radius: float, height: float
+    ) -> NurbsSurface:
+        """Rational cone surface of degree 2x1 with the apex at cz + height."""
+        srf = NurbsSurface(3, True, 3, 2, 9, 2)
+        for i in range(10):
+            srf.set_nurbsknot(0, i, _CIRCLE_NURBSKNOTS[i])
+        _set_circle_row(srf, 0, cx, cy, cz, radius, 1.0)
+        _set_circle_row(srf, 1, cx, cy, cz + height, 0.0, 1.0)
+        return srf
+
+    @staticmethod
+    def torus_surface(
+        cx: float, cy: float, cz: float, major_radius: float, minor_radius: float
+    ) -> NurbsSurface:
+        """Rational torus surface of degree 2x2."""
+        srf = NurbsSurface(3, True, 3, 3, 9, 9)
+        for i in range(10):
+            srf.set_nurbsknot(0, i, _CIRCLE_NURBSKNOTS[i])
+            srf.set_nurbsknot(1, i, _CIRCLE_NURBSKNOTS[i])
+        for j in range(9):
+            _set_circle_row(
+                srf,
+                j,
+                cx,
+                cy,
+                cz + minor_radius * _CIRCLE_Y[j],
+                major_radius + minor_radius * _CIRCLE_X[j],
+                _CIRCLE_WEIGHTS[j],
+            )
+        return srf
+
+    @staticmethod
+    def sphere_surface(cx: float, cy: float, cz: float, radius: float) -> NurbsSurface:
+        """Rational sphere surface of degree 2x2 with poles on the z axis."""
+        lat_r = [0.0, 1.0, 1.0, 1.0, 0.0]
+        lat_z = [-1.0, -1.0, 0.0, 1.0, 1.0]
+        lat_w = [1.0, _CIRCLE_W, 1.0, _CIRCLE_W, 1.0]
+        v_nurbsknots = [0.0, 0.0, 1.0, 1.0, 2.0, 2.0]
+        srf = NurbsSurface(3, True, 3, 3, 9, 5)
+        for i in range(10):
+            srf.set_nurbsknot(0, i, _CIRCLE_NURBSKNOTS[i])
+        for i in range(6):
+            srf.set_nurbsknot(1, i, v_nurbsknots[i])
+        for j in range(5):
+            _set_circle_row(
+                srf, j, cx, cy, cz + radius * lat_z[j], radius * lat_r[j], lat_w[j]
+            )
+        return srf
+
+    @staticmethod
+    def quad_sphere(
+        cx: float, cy: float, cz: float, radius: float
+    ) -> list[NurbsSurface]:
+        """Sphere as 6 rational biquadratic patches projected from the cube faces."""
+        a = radius / math.sqrt(3.0)
+        e = radius * math.sqrt(3.0) / 2.0
+        wk = math.sqrt(2.0 / 3.0)
+        wc = (
+            -72.0
+            - 32.0 * math.sqrt(6.0)
+            + 48.0 * math.sqrt(3.0)
+            + 56.0 * math.sqrt(2.0)
+        ) / (
+            48.0
+            * (1.0 + math.sqrt(2.0 / 3.0) - 1.0 / math.sqrt(3.0) - 1.0 / math.sqrt(2.0))
+        )
+        k = radius * (
+            1.0 - 1.0 / math.sqrt(3.0) + 2.0 * math.sqrt(2.0 / 3.0) - math.sqrt(2.0)
+        )
+        h = radius + k / wc
+        zf = [
+            [[-a, -a, a, 1.0], [-e, 0.0, e, wk], [-a, a, a, 1.0]],
+            [[0.0, -e, e, wk], [0.0, 0.0, h, wc], [0.0, e, e, wk]],
+            [[a, -a, a, 1.0], [e, 0.0, e, wk], [a, a, a, 1.0]],
+        ]
+        rot = [
+            [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            [[1, 0, 0], [0, -1, 0], [0, 0, -1]],
+            [[0, 0, 1], [0, 1, 0], [-1, 0, 0]],
+            [[0, 0, -1], [0, 1, 0], [1, 0, 0]],
+            [[1, 0, 0], [0, 0, 1], [0, -1, 0]],
+            [[1, 0, 0], [0, 0, -1], [0, 1, 0]],
+        ]
+        faces = []
+        for f in range(6):
+            srf = NurbsSurface(3, True, 3, 3, 3, 3)
+            for i in range(3):
+                for j in range(3):
+                    p = zf[i][j]
+                    rx = (
+                        rot[f][0][0] * p[0]
+                        + rot[f][0][1] * p[1]
+                        + rot[f][0][2] * p[2]
+                        + cx
+                    )
+                    ry = (
+                        rot[f][1][0] * p[0]
+                        + rot[f][1][1] * p[1]
+                        + rot[f][1][2] * p[2]
+                        + cy
+                    )
+                    rz = (
+                        rot[f][2][0] * p[0]
+                        + rot[f][2][1] * p[1]
+                        + rot[f][2][2] * p[2]
+                        + cz
+                    )
+                    srf.set_cv_4d(i, j, rx * p[3], ry * p[3], rz * p[3], p[3])
+            faces.append(srf)
+        return faces
 
     @staticmethod
     def wave_surface(size: float, amplitude: float) -> NurbsSurface:
+        """Tileable egg-crate surface z = amplitude sin(2 pi x / size) sin(2 pi y / size) as a 13x13 cubic NURBS."""
         n = 13
-        PI2 = 2.0 * PI
         pts = []
         for i in range(n):
-            u = i / (n - 1)
-            x = size * u
+            u = float(i) / (n - 1)
             for j in range(n):
-                v = j / (n - 1)
-                y = size * v
-                z = amplitude * math.sin(PI2 * u) * math.sin(PI2 * v)
-                pts.append(Point(x, y, z))
+                v = float(j) / (n - 1)
+                pts.append(
+                    Point(
+                        size * u,
+                        size * v,
+                        amplitude * math.sin(2.0 * PI * u) * math.sin(2.0 * PI * v),
+                    )
+                )
         return NurbsSurface.create(False, False, 3, 3, n, n, pts)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Surface factories
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def create_ruled(curve_a: NurbsCurve, curve_b: NurbsCurve) -> NurbsSurface:
+        """Ruled surface between two curves."""
+        if not curve_a.is_valid() or not curve_b.is_valid():
+            return NurbsSurface()
+        curves = [curve_a.duplicate(), curve_b.duplicate()]
+        curves[0].set_domain(0.0, 1.0)
+        curves[1].set_domain(0.0, 1.0)
+        _make_curves_compatible(curves)
+        cv_count_u = curves[0].cv_count()
+        is_rat = curves[0].is_rational()
+        surface = NurbsSurface(3, is_rat, curves[0].order(), 2, cv_count_u, 2)
+        if not surface.is_valid():
+            return NurbsSurface()
+        for i in range(surface.nurbsknot_count(0)):
+            surface.set_nurbsknot(0, i, curves[0].nurbsknot(i))
+        for i in range(cv_count_u):
+            for j in range(2):
+                if is_rat:
+                    x, y, z, w = curves[j].get_cv_4d(i)
+                    surface.set_cv_4d(i, j, x, y, z, w)
+                else:
+                    surface.set_cv(i, j, curves[j].get_cv(i))
+        return surface
+
+    @staticmethod
+    def create_extrusion(curve: NurbsCurve, direction: Vector) -> NurbsSurface:
+        """Extrusion of a curve along a direction."""
+        if not curve.is_valid():
+            return NurbsSurface()
+        translated = curve.duplicate()
+        translated.transform(
+            Xform.translation(direction[0], direction[1], direction[2])
+        )
+        return Primitives.create_ruled(curve, translated)
+
+    @staticmethod
+    def create_planar(boundary: NurbsCurve) -> NurbsSurface:
+        """Bilinear planar patch containing a closed boundary curve."""
+        if not boundary.is_valid():
+            return NurbsSurface()
+        pts = []
+        for i in range(boundary.cv_count()):
+            pts.append(boundary.get_cv(i))
+        if len(pts) >= 2 and pts[0].distance(pts[-1]) < 1e-10:
+            pts.pop()
+        if len(pts) < 3:
+            return NurbsSurface()
+        if boundary.degree() <= 1 and len(pts) == 3:
+            return _bilinear_patch(pts[0], pts[1], pts[0], pts[2])
+        if boundary.degree() <= 1 and len(pts) == 4:
+            return _bilinear_patch(pts[0], pts[1], pts[3], pts[2])
+        if boundary.degree() <= 1:
+            normal = (pts[1] - pts[0]).cross(pts[2] - pts[0])
+            if not normal.normalize_self():
+                return NurbsSurface()
+            x_axis = _longest_edge_dir(pts)
+            y_axis = normal.cross(x_axis)
+            if not y_axis.normalize_self():
+                return NurbsSurface()
+            return _bounded_patch(pts, pts[0], x_axis, y_axis)
+        samples, _params = boundary.divide_by_count(max(20, boundary.cv_count() * 4))
+        plane = Plane.from_points_pca(samples)
+        if plane.z_axis.magnitude() < 1e-10:
+            return NurbsSurface()
+        return _bounded_patch(samples, plane.origin, plane.x_axis, plane.y_axis)
+
+    @staticmethod
+    def create_loft(input_curves: list[NurbsCurve], degree_v: int = 3) -> NurbsSurface:
+        """Loft through section curves, interpolating them in v."""
+        if len(input_curves) < 2:
+            return NurbsSurface()
+        for c in input_curves:
+            if not c.is_valid():
+                return NurbsSurface()
+        curves = []
+        for c in input_curves:
+            curves.append(c.duplicate())
+        _make_curves_compatible(curves)
+        n = len(curves)
+        cv_count_u = curves[0].cv_count()
+        is_rat = curves[0].is_rational()
+        order_v = max(1, min(degree_v, n - 1)) + 1
+        v_params = _loft_section_params(curves)
+        nurbsknots_v = _loft_nurbsknots(v_params, order_v)
+        surface = NurbsSurface(3, is_rat, curves[0].order(), order_v, cv_count_u, n)
+        if not surface.is_valid():
+            return NurbsSurface()
+        for i in range(surface.nurbsknot_count(0)):
+            surface.set_nurbsknot(0, i, curves[0].nurbsknot(i))
+        for i in range(surface.nurbsknot_count(1)):
+            surface.set_nurbsknot(1, i, nurbsknots_v[i])
+        basis = []
+        for k in range(n):
+            basis.append(_loft_basis_row(nurbsknots_v, order_v, n, v_params[k]))
+        dim = 4 if is_rat else 3
+        for i in range(cv_count_u):
+            rhs = [[0.0] * dim for _ in range(n)]
+            for k in range(n):
+                if is_rat:
+                    x, y, z, w = curves[k].get_cv_4d(i)
+                    rhs[k] = [x, y, z, w]
+                else:
+                    p = curves[k].get_cv(i)
+                    rhs[k] = [p[0], p[1], p[2]]
+            q = _solve_linear(basis, rhs)
+            for j in range(n):
+                if is_rat:
+                    surface.set_cv_4d(i, j, q[j][0], q[j][1], q[j][2], q[j][3])
+                else:
+                    surface.set_cv(i, j, Point(q[j][0], q[j][1], q[j][2]))
+        return surface
+
+    @staticmethod
+    def create_revolve(
+        profile: NurbsCurve,
+        axis_origin: Point,
+        axis_direction: Vector,
+        angle: float = 2.0 * PI,
+    ) -> NurbsSurface:
+        """Surface of revolution of a profile around an axis."""
+        if not profile.is_valid():
+            return NurbsSurface()
+        axis = Vector(axis_direction[0], axis_direction[1], axis_direction[2])
+        if not axis.normalize_self():
+            return NurbsSurface()
+        angle = min(abs(angle), 2.0 * PI)
+        if angle < 1e-14:
+            return NurbsSurface()
+        n_arcs = 4
+        if angle <= PI / 2.0 + 1e-10:
+            n_arcs = 1
+        elif angle <= PI + 1e-10:
+            n_arcs = 2
+        elif angle <= 3.0 * PI / 2.0 + 1e-10:
+            n_arcs = 3
+        d_theta = angle / n_arcs
+        w_mid = math.cos(d_theta / 2.0)
+        n_u = 2 * n_arcs + 1
+        cv_count_v = profile.cv_count()
+        surface = NurbsSurface(3, True, 3, profile.order(), n_u, cv_count_v)
+        if not surface.is_valid():
+            return NurbsSurface()
+        for i in range(surface.nurbsknot_count(0)):
+            surface.set_nurbsknot(
+                0, i, angle if i // 2 == n_arcs else (i // 2) * d_theta
+            )
+        for i in range(surface.nurbsknot_count(1)):
+            surface.set_nurbsknot(1, i, profile.nurbsknot(i))
+        for j in range(cv_count_v):
+            p = profile.get_cv(j)
+            profile_w = profile.weight(j) if profile.is_rational() else 1.0
+            center = axis_origin + axis * (p - axis_origin).dot(axis)
+            x_local = p - center
+            r = x_local.magnitude()
+            if r > 1e-14:
+                x_local /= r
+            y_local = axis.cross(x_local)
+            for i in range(n_u):
+                shoulder = i % 2 == 1
+                theta = (i // 2) * d_theta + (d_theta / 2.0 if shoulder else 0.0)
+                w = (w_mid if shoulder else 1.0) * profile_w
+                q = center + (x_local * math.cos(theta) + y_local * math.sin(theta)) * (
+                    r / w_mid if shoulder else r
+                )
+                surface.set_cv_4d(i, j, q[0] * w, q[1] * w, q[2] * w, w)
+        return surface
+
+    @staticmethod
+    def create_sweep1(rail: NurbsCurve, profile: NurbsCurve) -> NurbsSurface:
+        """Sweep of a closed profile along one rail."""
+        if not rail.is_valid() or not profile.is_valid():
+            return NurbsSurface()
+        count = max(5, min(rail.span_count() * 2 + 1, 200))
+        frames = rail.get_perpendicular_planes(count)
+        if len(frames) == 0:
+            return NurbsSurface()
+        to_xy = _profile_to_xy(profile)
+        sections = []
+        for frame in frames:
+            section = profile.duplicate()
+            section.transform(Xform.to_frame(frame) * to_xy)
+            sections.append(section)
+        return Primitives.create_loft(sections, min(3, len(sections) - 1))
+
+    @staticmethod
+    def create_sweep2(
+        rail1: NurbsCurve, rail2: NurbsCurve, shapes: list[NurbsCurve]
+    ) -> NurbsSurface:
+        """Sweep of shape curves between two rails."""
+        if not rail1.is_valid() or not rail2.is_valid() or len(shapes) == 0:
+            return NurbsSurface()
+        for shape in shapes:
+            if not shape.is_valid():
+                return NurbsSurface()
+        compat = []
+        for shape in shapes:
+            compat.append(shape.duplicate())
+        _make_curves_compatible(compat)
+        n_shapes = len(compat)
+        planes = []
+        widths = []
+        for shape in compat:
+            planes.append(_shape_plane(shape))
+            widths.append(_shape_width(shape))
+        count = max(5, min(max(rail1.span_count(), rail2.span_count()) * 2 + 1, 200))
+        pts1, _params1 = rail1.divide_by_count(count + 1)
+        pts2, _params2 = rail2.divide_by_count(count + 1)
+        frames = rail1.get_perpendicular_planes(count)
+        if len(frames) == 0:
+            return NurbsSurface()
+        sections = []
+        for i in range(min(len(frames), len(pts1), len(pts2))):
+            t = 0.0 if len(frames) <= 1 else float(i) / (len(frames) - 1)
+            j = 0 if n_shapes == 1 else min(int(t * (n_shapes - 1)), n_shapes - 2)
+            j1 = 0 if n_shapes == 1 else j + 1
+            s = 0.0 if n_shapes == 1 else max(0.0, min(t * (n_shapes - 1) - j, 1.0))
+            section = compat[j].duplicate()
+            for c in range(section.cv_count()):
+                section.set_cv(
+                    c, _lerp_point(compat[j].get_cv(c), compat[j1].get_cv(c), s)
+                )
+            source = Plane(
+                _lerp_point(planes[j].origin, planes[j1].origin, s),
+                _lerp_vector(planes[j].x_axis, planes[j1].x_axis, s),
+                _lerp_vector(planes[j].y_axis, planes[j1].y_axis, s),
+            )
+            width = widths[j] * (1.0 - s) + widths[j1] * s
+            p1 = pts1[i]
+            x_dir = pts2[i] - p1
+            rail_dist = x_dir.magnitude()
+            if not x_dir.normalize_self():
+                x_dir = frames[i].x_axis
+            y_dir = frames[i].z_axis.cross(x_dir)
+            if not y_dir.normalize_self():
+                y_dir = frames[i].y_axis
+            if y_dir.dot(source.y_axis) < 0.0:
+                y_dir = -y_dir
+            scale = rail_dist / width if rail_dist > 1e-14 and width > 1e-14 else 1.0
+            target = Plane(p1, x_dir, y_dir)
+            to_source = Xform.world_to_frame(
+                source.origin, source.x_axis, source.y_axis, source.z_axis
+            )
+            section.transform(
+                Xform.to_frame(target)
+                * Xform.scale_xyz(scale, scale, scale)
+                * to_source
+            )
+            sections.append(section)
+        return Primitives.create_loft(sections, min(3, len(sections) - 1))
+
+    @staticmethod
+    def create_edge(
+        c0: NurbsCurve, c1: NurbsCurve, c2: NurbsCurve, c3: NurbsCurve
+    ) -> NurbsSurface:
+        """Coons patch from four boundary curves in any order and direction."""
+        if (
+            not c0.is_valid()
+            or not c1.is_valid()
+            or not c2.is_valid()
+            or not c3.is_valid()
+        ):
+            return NurbsSurface()
+        loop = _chain_curves(
+            [c0.duplicate(), c1.duplicate(), c2.duplicate(), c3.duplicate()]
+        )
+        if len(loop) == 0:
+            return NurbsSurface()
+        v_pair = [loop[0].duplicate(), loop[2].duplicate()]
+        v_pair[1].reverse()
+        _make_curves_compatible(v_pair)
+        u_pair = [loop[3].duplicate(), loop[1].duplicate()]
+        u_pair[0].reverse()
+        _make_curves_compatible(u_pair)
+        south = v_pair[0]
+        north = v_pair[1]
+        west = u_pair[0]
+        east = u_pair[1]
+        cv_count_u = west.cv_count()
+        cv_count_v = south.cv_count()
+        surface = NurbsSurface(
+            3,
+            south.is_rational() or west.is_rational(),
+            west.order(),
+            south.order(),
+            cv_count_u,
+            cv_count_v,
+        )
+        if not surface.is_valid():
+            return NurbsSurface()
+        for i in range(surface.nurbsknot_count(0)):
+            surface.set_nurbsknot(0, i, west.nurbsknot(i))
+        for i in range(surface.nurbsknot_count(1)):
+            surface.set_nurbsknot(1, i, south.nurbsknot(i))
+        u_grev = _normalized_greville(west)
+        v_grev = _normalized_greville(south)
+        c00 = south.get_cv(0)
+        c01 = south.get_cv(cv_count_v - 1)
+        c10 = north.get_cv(0)
+        c11 = north.get_cv(cv_count_v - 1)
+        for i in range(cv_count_u):
+            ui = u_grev[i]
+            wi = west.get_cv(i)
+            ei = east.get_cv(i)
+            for j in range(cv_count_v):
+                vj = v_grev[j]
+                sj = south.get_cv(j)
+                nj = north.get_cv(j)
+                q = [0.0, 0.0, 0.0]
+                for axis in range(3):
+                    q[axis] = (
+                        (1.0 - ui) * sj[axis]
+                        + ui * nj[axis]
+                        + (1.0 - vj) * wi[axis]
+                        + vj * ei[axis]
+                        - (1.0 - ui) * (1.0 - vj) * c00[axis]
+                        - (1.0 - ui) * vj * c01[axis]
+                        - ui * (1.0 - vj) * c10[axis]
+                        - ui * vj * c11[axis]
+                    )
+                surface.set_cv(i, j, Point(q[0], q[1], q[2]))
+        return surface
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Surface to mesh
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def quad_mesh(surface: NurbsSurface, u_count: int, v_count: int) -> Mesh:
+        """Quad mesh sampled on a u_count x v_count grid."""
+        mesh = Mesh()
+        grid = _surface_grid(surface, u_count, v_count, mesh)
+        singular_south = surface.is_singular(0)
+        singular_north = surface.is_singular(2)
+        if singular_south:
+            for i in range(u_count):
+                mesh.add_face([grid[0][0], grid[i + 1][1], grid[i][1]])
+        if singular_north:
+            for i in range(u_count):
+                mesh.add_face(
+                    [grid[0][v_count], grid[i][v_count - 1], grid[i + 1][v_count - 1]]
+                )
+        j0 = 1 if singular_south else 0
+        j1 = v_count - 1 if singular_north else v_count
+        for i in range(u_count):
+            for j in range(j0, j1):
+                mesh.add_face(
+                    [grid[i][j], grid[i + 1][j], grid[i + 1][j + 1], grid[i][j + 1]]
+                )
+        return mesh
+
+    @staticmethod
+    def diamond_mesh(surface: NurbsSurface, u_count: int, v_count: int) -> Mesh:
+        """Diamond mesh sampled on a u_count x v_count grid."""
+        mesh = Mesh()
+        grid = _surface_grid(surface, u_count, v_count, mesh)
+        closed_u = surface.is_closed(0)
+        u_end = u_count - 1 if closed_u else u_count
+        for i in range(u_end + 1):
+            for j in range(v_count + 1):
+                if (i + j) % 2 != 0:
+                    continue
+                center = grid[i][j]
+                il = i - 1 if i > 0 else (u_count - 1 if closed_u else -1)
+                left = grid[il][j] if il >= 0 else center
+                bottom = grid[i][j - 1] if j > 0 else center
+                right = grid[i + 1][j] if i < u_count else center
+                top = grid[i][j + 1] if j < v_count else center
+                face = _dedup_face([left, bottom, right, top])
+                if len(face) >= 3:
+                    mesh.add_face(face)
+        return mesh
+
+    @staticmethod
+    def hex_mesh(
+        surface: NurbsSurface, u_count: int, v_count: int, t: float = 1.0 / 3.0
+    ) -> Mesh:
+        """Hexagonal mesh sampled on a u_count x v_count grid, t the split of each v cell."""
+        mesh = Mesh()
+        grid = _surface_grid(surface, u_count, v_count, mesh)
+        mid_a = _surface_mid_grid(surface, u_count, v_count, t, mesh)
+        mid_b = _surface_mid_grid(surface, u_count, v_count, 1.0 - t, mesh)
+        closed_u = surface.is_closed(0)
+        u_end = u_count - 1 if closed_u else u_count
+        for i in range(u_end + 1):
+            for j in range(v_count + 1):
+                if (i + j) % 2 != 0:
+                    continue
+                center = grid[i][j]
+                il = i - 1 if i > 0 else (u_count - 1 if closed_u else -1)
+                ul = (
+                    mid_a[il][j]
+                    if il >= 0 and j < v_count
+                    else (grid[il][j] if il >= 0 else center)
+                )
+                ll = (
+                    mid_b[il][j - 1]
+                    if il >= 0 and j > 0
+                    else (grid[il][j] if il >= 0 else center)
+                )
+                bt = mid_a[i][j - 1] if j > 0 else center
+                lr = (
+                    mid_b[i + 1][j - 1]
+                    if i < u_count and j > 0
+                    else (grid[i + 1][j] if i < u_count else center)
+                )
+                ur = (
+                    mid_a[i + 1][j]
+                    if i < u_count and j < v_count
+                    else (grid[i + 1][j] if i < u_count else center)
+                )
+                tp = mid_b[i][j] if j < v_count else center
+                face = _dedup_face([ul, ll, bt, lr, ur, tp])
+                if len(face) >= 3:
+                    mesh.add_face(face)
+        return mesh
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Mesh geometry
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _unit_cylinder_geometry() -> tuple[list[Point], list[list[int]]]:
+        """Ten-sided unit cylinder: radius 0.5, z from -0.5 to 0.5."""
+        n = 10
+        vertices = []
+        _add_ring(vertices, n, 0.5, -0.5)
+        _add_ring(vertices, n, 0.5, 0.5)
+        triangles = []
+        for i in range(n):
+            next_i = (i + 1) % n
+            triangles.append([i, next_i, n + next_i])
+            triangles.append([i, n + next_i, n + i])
+        return vertices, triangles
+
+    @staticmethod
+    def _unit_cone_geometry() -> tuple[list[Point], list[list[int]]]:
+        """Eight-sided unit cone: base radius 0.5 at z = -0.5, apex at z = 0.5."""
+        n = 8
+        vertices = [Point(0.0, 0.0, 0.5)]
+        _add_ring(vertices, n, 0.5, -0.5)
+        triangles = []
+        for i in range(n):
+            triangles.append([0, 1 + i, 1 + (i + 1) % n])
+        return vertices, triangles
+
+    @staticmethod
+    def _capsule_geometry(
+        length: float, radius: float
+    ) -> tuple[list[Point], list[list[int]]]:
+        """Ten-sided capsule along z from 0 to length with hemispherical caps."""
+        n = 10
+        r_hemi = radius * math.sin(PI / 4.0)
+        off = radius * math.cos(PI / 4.0)
+        top = n
+        hemi_a = 2 * n
+        pole_a = 3 * n
+        hemi_b = 3 * n + 1
+        pole_b = 4 * n + 1
+        vertices = []
+        _add_ring(vertices, n, radius, 0.0)
+        _add_ring(vertices, n, radius, length)
+        _add_ring(vertices, n, r_hemi, -off)
+        vertices.append(Point(0.0, 0.0, -radius))
+        _add_ring(vertices, n, r_hemi, length + off)
+        vertices.append(Point(0.0, 0.0, length + radius))
+        triangles = []
+        for i in range(n):
+            next_i = (i + 1) % n
+            triangles.append([i, next_i, top + next_i])
+            triangles.append([i, top + next_i, top + i])
+            triangles.append([hemi_a + i, next_i, i])
+            triangles.append([hemi_a + i, hemi_a + next_i, next_i])
+            triangles.append([top + i, top + next_i, hemi_b + next_i])
+            triangles.append([top + i, hemi_b + next_i, hemi_b + i])
+            triangles.append([pole_a, hemi_a + next_i, hemi_a + i])
+            triangles.append([pole_b, hemi_b + i, hemi_b + next_i])
+        return vertices, triangles
+
+    @staticmethod
+    def _line_frame(line: Line, origin: Point) -> Xform:
+        """Frame at origin with z along the line."""
+        z_axis = line.to_vector()
+        if not z_axis.normalize_self():
+            z_axis = Vector(0.0, 0.0, 1.0)
+        pole = Vector(0.0, 0.0, 1.0) if abs(z_axis[2]) < 0.9 else Vector(1.0, 0.0, 0.0)
+        x_axis = pole.cross(z_axis)
+        return Xform.xy_to_plane(origin, x_axis, z_axis.cross(x_axis), z_axis)
+
+    @staticmethod
+    def _add_geometry(
+        mesh: Mesh, geometry: tuple[list[Point], list[list[int]]], xform: Xform
+    ) -> None:
+        """Appends transformed geometry to a mesh."""
+        vertices, triangles = geometry
+        keys = []
+        for v in vertices:
+            keys.append(mesh.add_vertex(v.transformed(xform)))
+        for tri in triangles:
+            mesh.add_face([keys[tri[0]], keys[tri[1]], keys[tri[2]]])

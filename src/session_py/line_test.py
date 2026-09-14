@@ -6,15 +6,13 @@ from .tolerance import TOLERANCE
 
 @MINI_TEST("Line", "Constructor")
 def test_line_constructor():
+    from session_py import Color
     from session_py import Line
     from session_py import Point
     from session_py import Vector
-    from session_py import Color
 
-    # Constructor
     l = Line(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
 
-    # Setters
     l[0] = 10.0
     l[1] = 20.0
     l[2] = 30.0
@@ -22,7 +20,6 @@ def test_line_constructor():
     l[4] = 50.0
     l[5] = 60.0
 
-    # Getters
     x0 = l[0]
     y0 = l[1]
     z0 = l[2]
@@ -30,15 +27,12 @@ def test_line_constructor():
     y1 = l[4]
     z1 = l[5]
 
-    # Minimal and Full String Representation
     lstr = str(l)
     lrepr = repr(l)
 
-    # Copy (duplicate everything but guid)
     lcopy = l.duplicate()
     lother = Line(10.0, 20.0, 30.0, 40.0, 50.0, 60.0)
 
-    # No-copy operators
     lmult = l.duplicate()
     lmult *= 2.0
     ldiv = l.duplicate()
@@ -48,50 +42,44 @@ def test_line_constructor():
     lsub = l.duplicate()
     lsub -= Vector(1.0, 1.0, 1.0)
 
-    # Copy operators
     rmul = l * 2.0
     rdiv = l / 2.0
     radd = l + Vector(1.0, 1.0, 1.0)
     rdif = l - Vector(1.0, 1.0, 1.0)
 
-    # Negation (flip start and end)
     lneg = Line(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
     neg = -lneg
 
-    # From points constructor
     p0 = Point(1.0, 2.0, 3.0)
     p1 = Point(4.0, 5.0, 6.0)
     l2p = Line.from_points(p0, p1)
 
-    # from_point_and_vector constructor
     pv = Point(1.0, 2.0, 3.0)
     vv = Vector(3.0, 4.0, 5.0)
     l_pv = Line.from_point_and_vector(pv, vv)
 
-    # from_point_direction_length constructor
     pd = Point(0.0, 0.0, 0.0)
     dd = Vector(1.0, 0.0, 0.0)
     l_pdl = Line.from_point_direction_length(pd, dd, 5.0)
 
-    # Line with custom color and width
     lc = Line(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
     lc.linecolor = Color(1.0, 0.0, 0.0, 1.0, "red")
     lc.width = 2.5
 
-    # with_name constructor
     lwn = Line.with_name("custom", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
-    # get_middle_line
-    ms, me = Line.get_middle_line(
-        Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0),
-        Point(0.0, 2.0, 0.0), Point(2.0, 2.0, 0.0))
+    ms, me = Line.get_middle_line(Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(0.0, 2.0, 0.0), Point(2.0, 2.0, 0.0))
 
-    MINI_CHECK(l.name == "my_line" and l[0] == 10.0 and l[1] == 20.0 and l[2] == 30.0 and l.guid)
-    MINI_CHECK(x0 == 10.0 and y0 == 20.0 and z0 == 30.0)
-    MINI_CHECK(x1 == 40.0 and y1 == 50.0 and z1 == 60.0)
-    MINI_CHECK("10.0" in lstr and "20.0" in lstr and "60.0" in lstr)
-    MINI_CHECK("my_line" in lrepr and "10.0" in lrepr and "Color" in lrepr)
-    MINI_CHECK(lcopy.guid != l.guid)
+    MINI_CHECK(l.name == "my_line")
+    MINI_CHECK(l[0] == 10.0 and l[1] == 20.0 and l[2] == 30.0)
+    MINI_CHECK(l.width == 1.0)
+    MINI_CHECK(l.linecolor == Color.black())
+    MINI_CHECK(l.guid != "")
+    MINI_CHECK(x0 == 10.0 and y0 == 20.0 and z0 == 30.0 and x1 == 40.0 and y1 == 50.0 and z1 == 60.0)
+    MINI_CHECK(lstr == "10.000000, 20.000000, 30.000000, 40.000000, 50.000000, 60.000000")
+    MINI_CHECK(lrepr == "Line(my_line, 10.000000, 20.000000, 30.000000, 40.000000, 50.000000, 60.000000, Color(black, 0.0, 0.0, 0.0, 1.0), 1.000000)")
+    MINI_CHECK(lcopy == l and lcopy.guid != l.guid)
+    MINI_CHECK(lother == l and lneg != l)
     MINI_CHECK(lmult[0] == 20.0 and lmult[3] == 80.0)
     MINI_CHECK(ldiv[0] == 5.0 and ldiv[3] == 20.0)
     MINI_CHECK(ladd[0] == 11.0 and ladd[3] == 41.0)
@@ -117,47 +105,37 @@ def test_line_transformation():
     from session_py import Xform
 
     l = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-    l_xf = Xform.translation(10.0, 0.0, 0.0)
-    l_transformed = l.transformed(l_xf)  # Make a copy
-    l.transform(l_xf)
+    xform = Xform.translation(10.0, 0.0, 0.0)
+    moved = l.transformed(xform)
+    l.transform(xform)
 
-    MINI_CHECK(l_transformed[0] == 10.0 and l_transformed[3] == 11.0)
+    MINI_CHECK(moved[0] == 10.0 and moved[3] == 11.0)
     MINI_CHECK(l[0] == 10.0 and l[3] == 11.0)
 
 
 @MINI_TEST("Line", "Json Roundtrip")
 def test_line_json_roundtrip():
-    from session_py import Line
     from pathlib import Path
+    from session_py import Line
 
     l = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     l.name = "test_line"
     l.dash = [3.0, 2.0]
 
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   file_json_dumps()    │ str          │ to JSON string
-    #   file_json_loads(s)   │ str          │ from JSON string
-    #   file_json_dump(path) │ file         │ write to file
-    #   file_json_load(path) │ file         │ read from file
+    j = l.__jsondump__()
+    loaded_j = Line.__jsonload__(j)
 
-    # JSON object
-    d = l.__jsondump__()
-    loaded_j = Line.__jsonload__(d)
-
-    MINI_CHECK(loaded_j.name == "test_line")
-
-    # String
     s = l.file_json_dumps()
     loaded_s = Line.file_json_loads(s)
-    MINI_CHECK(loaded_s.name == "test_line")
-    MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
 
-    # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.json"
     l.file_json_dump(fname)
     loaded = Line.file_json_load(fname)
 
+    MINI_CHECK(loaded_j.name == "test_line")
+    MINI_CHECK(TOLERANCE.is_close(loaded_j[0], 42.1))
+    MINI_CHECK(loaded_s.name == "test_line")
+    MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
     MINI_CHECK(loaded.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))
     MINI_CHECK(TOLERANCE.is_close(loaded[1], 84.2))
@@ -170,32 +148,24 @@ def test_line_json_roundtrip():
 
 @MINI_TEST("Line", "Protobuf Roundtrip")
 def test_line_protobuf_roundtrip():
-    from session_py import Line
     from pathlib import Path
+    from session_py import Line
 
     l = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     l.name = "test_line"
     l.dash = [3.0, 2.0]
 
-    #   pb_dumps()      │ bytes        │ to protobuf bytes
-    #   pb_loads(b)     │ bytes        │ from protobuf bytes
-    #   pb_dump(path)   │ file         │ write to file
-    #   pb_load(path)   │ file         │ read from file
-
-    # Bytes
     guid = l.guid
-    b = l.pb_dumps()
-    loaded_s = Line.pb_loads(b)
+    s = l.pb_dumps()
+    loaded_s = Line.pb_loads(s)
 
-    MINI_CHECK(loaded_s.name == "test_line")
-    MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
-    MINI_CHECK(loaded_s.guid == guid)
-
-    # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_line.bin"
     l.pb_dump(fname)
     loaded = Line.pb_load(fname)
 
+    MINI_CHECK(loaded_s.name == "test_line")
+    MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
+    MINI_CHECK(loaded_s.guid == guid)
     MINI_CHECK(loaded.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))
     MINI_CHECK(TOLERANCE.is_close(loaded[1], 84.2))
@@ -204,7 +174,7 @@ def test_line_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[4], 210.5))
     MINI_CHECK(TOLERANCE.is_close(loaded[5], 252.6))
     MINI_CHECK(loaded.dash == [3.0, 2.0])
-    MINI_CHECK(loaded.guid == l.guid)
+    MINI_CHECK(loaded.guid == guid)
 
 
 @MINI_TEST("Line", "Length")
@@ -312,11 +282,7 @@ def test_line_subdivide():
     from session_py import Line
 
     l = Line(0.0, 0.0, 0.0, 10.0, 0.0, 0.0)
-
-    # subdivide by count
     pts = l.subdivide(3)
-
-    # subdivide_by_distance
     pts_dist = l.subdivide_by_distance(2.5)
 
     MINI_CHECK(len(pts) == 3)
@@ -333,9 +299,11 @@ def test_line_subdivide():
 def test_line_overlap():
     from session_py import Line
     from session_py import Point
+
     l0 = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
     l1 = Line.from_points(Point(5.0, 0.0, 0.0), Point(15.0, 0.0, 0.0))
     out = l0.overlap(l1)
+
     MINI_CHECK(out is not None)
     MINI_CHECK(TOLERANCE.is_close(out.start()[0], 5.0))
     MINI_CHECK(TOLERANCE.is_close(out.end()[0], 10.0))
@@ -345,9 +313,11 @@ def test_line_overlap():
 def test_line_overlap_average():
     from session_py import Line
     from session_py import Point
+
     l0 = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
     l1 = Line.from_points(Point(5.0, 0.0, 0.0), Point(15.0, 0.0, 0.0))
     out = l0.overlap_average(l1)
+
     MINI_CHECK(out is not None)
     MINI_CHECK(TOLERANCE.is_close(out.start()[0], 5.0))
     MINI_CHECK(TOLERANCE.is_close(out.end()[0], 10.0))
@@ -357,8 +327,10 @@ def test_line_overlap_average():
 def test_line_extend():
     from session_py import Line
     from session_py import Point
+
     l = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
     l.extend(1.0, 2.0)
+
     MINI_CHECK(TOLERANCE.is_close(l.start()[0], -1.0))
     MINI_CHECK(TOLERANCE.is_close(l.end()[0], 12.0))
 

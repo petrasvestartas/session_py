@@ -59,7 +59,7 @@ for i in range(grid_size):
         
         # Evaluate point
         pt = srf.point_at(u, v)
-        row.append(CompasPoint(pt.x, pt.y, pt.z))
+        row.append(CompasPoint(pt[0], pt[1], pt[2]))
     points_grid.append(row)
 
 print(f"Evaluated {grid_size}x{grid_size} = {grid_size*grid_size} points")
@@ -73,7 +73,7 @@ for i in range(grid_size):
     row_keys = []
     for j in range(grid_size):
         pt = points_grid[i][j]
-        key = mesh.add_vertex(x=pt.x, y=pt.y, z=pt.z)
+        key = mesh.add_vertex(x=pt[0], y=pt[1], z=pt[2])
         row_keys.append(key)
     vertex_keys.append(row_keys)
 
@@ -113,7 +113,7 @@ for i in range(num_iso_curves):
         for j in range(curve_divisions):
             t = t_min + (t_max - t_min) * j / (curve_divisions - 1)
             pt = iso_curve.point_at(t)
-            curve_points.append(CompasPoint(pt.x, pt.y, pt.z))
+            curve_points.append(CompasPoint(pt[0], pt[1], pt[2]))
         
         polyline = Polyline(curve_points)
         iso_polylines.append(polyline)
@@ -132,7 +132,7 @@ for i in range(num_iso_curves):
         for j in range(curve_divisions):
             t = t_min + (t_max - t_min) * j / (curve_divisions - 1)
             pt = iso_curve.point_at(t)
-            curve_points.append(CompasPoint(pt.x, pt.y, pt.z))
+            curve_points.append(CompasPoint(pt[0], pt[1], pt[2]))
         
         polyline = Polyline(curve_points)
         iso_polylines.append(polyline)

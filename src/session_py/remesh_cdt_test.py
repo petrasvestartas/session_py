@@ -10,18 +10,22 @@ def test_remesh_cdt_triangulate():
     from session_py import Point
     from session_py import Mesh
 
-    border = Polyline([
-        Point(0, 0, 0),
-        Point(4, 0, 0),
-        Point(4, 4, 0),
-        Point(0, 4, 0),
-    ])
-    hole = Polyline([
-        Point(1, 1, 0),
-        Point(1, 3, 0),
-        Point(3, 3, 0),
-        Point(3, 1, 0),
-    ])
+    border = Polyline(
+        [
+            Point(0, 0, 0),
+            Point(4, 0, 0),
+            Point(4, 4, 0),
+            Point(0, 4, 0),
+        ]
+    )
+    hole = Polyline(
+        [
+            Point(1, 1, 0),
+            Point(1, 3, 0),
+            Point(3, 3, 0),
+            Point(3, 1, 0),
+        ]
+    )
     tris = RemeshCDT.triangulate([border, hole])
     flat = []
     for p in border.get_points():
@@ -44,11 +48,13 @@ def test_remesh_cdt_triangle():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([
-        Point(0, 0, 0),
-        Point(1, 0, 0),
-        Point(0, 1, 0),
-    ])
+    pl = Polyline(
+        [
+            Point(0, 0, 0),
+            Point(1, 0, 0),
+            Point(0, 1, 0),
+        ]
+    )
     m = RemeshCDT.from_polylines([pl])
 
     MINI_CHECK(m.is_valid())
@@ -60,52 +66,58 @@ def test_remesh_cdt_rectangle():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([
-        Point(3, 0, 0),
-        Point(5, 0, 0),
-        Point(5, 2, 0),
-        Point(3, 2, 0),
-    ])
+    pl = Polyline(
+        [
+            Point(3, 0, 0),
+            Point(5, 0, 0),
+            Point(5, 2, 0),
+            Point(3, 2, 0),
+        ]
+    )
     m = RemeshCDT.from_polylines([pl])
 
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "L-shape")
+@MINI_TEST("RemeshCDT", "L Shape")
 def test_remesh_cdt_l_shape():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([
-        Point(7, 0, 0),
-        Point(10, 0, 0),
-        Point(10, 1, 0),
-        Point(8, 1, 0),
-        Point(8, 3, 0),
-        Point(7, 3, 0),
-    ])
+    pl = Polyline(
+        [
+            Point(7, 0, 0),
+            Point(10, 0, 0),
+            Point(10, 1, 0),
+            Point(8, 1, 0),
+            Point(8, 3, 0),
+            Point(7, 3, 0),
+        ]
+    )
     m = RemeshCDT.from_polylines([pl])
 
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "U-shape")
+@MINI_TEST("RemeshCDT", "U Shape")
 def test_remesh_cdt_u_shape():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([
-        Point(25, 0, 0),
-        Point(31, 0, 0),
-        Point(31, 4, 0),
-        Point(29, 4, 0),
-        Point(29, 2, 0),
-        Point(27, 2, 0),
-        Point(27, 4, 0),
-        Point(25, 4, 0),
-    ])
+    pl = Polyline(
+        [
+            Point(25, 0, 0),
+            Point(31, 0, 0),
+            Point(31, 4, 0),
+            Point(29, 4, 0),
+            Point(29, 2, 0),
+            Point(27, 2, 0),
+            Point(27, 4, 0),
+            Point(25, 4, 0),
+        ]
+    )
     m = RemeshCDT.from_polylines([pl])
 
     MINI_CHECK(m.is_valid())
@@ -124,73 +136,82 @@ def test_remesh_cdt_octagon():
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "Rectangle with rectangle hole")
+@MINI_TEST("RemeshCDT", "Rectangle With Rectangle Hole")
 def test_remesh_cdt_rectangle_with_rectangle_hole():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
 
-    border = Polyline([
-        Point(0, 0, 0),
-        Point(4, 0, 0),
-        Point(4, 4, 0),
-        Point(0, 4, 0),
-    ])
-    hole = Polyline([
-        Point(1, 1, 0),
-        Point(1, 3, 0),
-        Point(3, 3, 0),
-        Point(3, 1, 0),
-    ])
+    border = Polyline(
+        [
+            Point(0, 0, 0),
+            Point(4, 0, 0),
+            Point(4, 4, 0),
+            Point(0, 4, 0),
+        ]
+    )
+    hole = Polyline(
+        [
+            Point(1, 1, 0),
+            Point(1, 3, 0),
+            Point(3, 3, 0),
+            Point(3, 1, 0),
+        ]
+    )
     m = RemeshCDT.from_polylines([border, hole])
 
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "Duplicate vertices")
+@MINI_TEST("RemeshCDT", "Duplicate Vertices")
 def test_remesh_cdt_duplicate_vertices():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([
-        Point(33, 0, 0),
-        Point(36, 0, 0),
-        Point(37, 2, 0),
-        Point(35, 3, 0),
-        Point(33, 2, 0),
-        Point(33, 0, 0),
-    ])
+    pl = Polyline(
+        [
+            Point(33, 0, 0),
+            Point(36, 0, 0),
+            Point(37, 2, 0),
+            Point(35, 3, 0),
+            Point(33, 2, 0),
+            Point(33, 0, 0),
+        ]
+    )
     m = RemeshCDT.from_polylines([pl])
 
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "Tilted rectangle with rectangle hole")
+@MINI_TEST("RemeshCDT", "Tilted Rectangle With Rectangle Hole")
 def test_remesh_cdt_tilted_rectangle_with_rectangle_hole():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
 
-    m = RemeshCDT.from_polylines([
-        Polyline([
+    border = Polyline(
+        [
             Point(55, 0, 0),
             Point(62, 0, 0),
             Point(62, 4, 2),
             Point(55, 4, 2),
-        ]),
-        Polyline([
+        ]
+    )
+    hole = Polyline(
+        [
             Point(56, 1, 0.5),
             Point(61, 1, 0.5),
             Point(61, 3, 1.5),
             Point(56, 3, 1.5),
-        ]),
-    ], False, False)
+        ]
+    )
+    m = RemeshCDT.from_polylines([border, hole], False, False)
 
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "Irregular tilted polyline.")
+@MINI_TEST("RemeshCDT", "Irregular Tilted Polyline")
 def test_remesh_cdt_irregular_tilted_polyline():
     from session_py import RemeshCDT
     from session_py import Polyline
@@ -251,7 +272,7 @@ def test_remesh_cdt_irregular_tilted_polyline():
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "Irregular tilted polyline with holes.")
+@MINI_TEST("RemeshCDT", "Irregular Tilted Polyline With Holes")
 def test_remesh_cdt_irregular_tilted_polyline_with_holes():
     from session_py import RemeshCDT
     from session_py import Polyline
@@ -364,65 +385,73 @@ def test_remesh_cdt_irregular_tilted_polyline_with_holes():
         Point(78.759389, 19.25978, 0),
     ]
     m = RemeshCDT.from_polylines(
-        [
-            Polyline(border),
-            Polyline(h1),
-            Polyline(h2),
-            Polyline(h3),
-            Polyline(h4),
-        ],
-        False, False)
+        [Polyline(border), Polyline(h1), Polyline(h2), Polyline(h3), Polyline(h4)],
+        False,
+        False,
+    )
 
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("RemeshCDT", "Degenerate hole keeps flat indices")
+@MINI_TEST("RemeshCDT", "Degenerate Hole Keeps Flat Indices")
 def test_remesh_cdt_degenerate_hole_keeps_flat_indices():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
 
-    border = Polyline([
-        Point(0, 0, 0),
-        Point(4, 0, 0),
-        Point(4, 4, 0),
-        Point(0, 4, 0),
-    ])
-    degen = Polyline([
-        Point(1.5, 2, 0),
-        Point(2.5, 2, 0),
-    ])
-    hole = Polyline([
-        Point(1, 1, 0),
-        Point(1, 3, 0),
-        Point(3, 3, 0),
-        Point(3, 1, 0),
-    ])
+    border = Polyline(
+        [
+            Point(0, 0, 0),
+            Point(4, 0, 0),
+            Point(4, 4, 0),
+            Point(0, 4, 0),
+        ]
+    )
+    degen = Polyline(
+        [
+            Point(1.5, 2, 0),
+            Point(2.5, 2, 0),
+        ]
+    )
+    hole = Polyline(
+        [
+            Point(1, 1, 0),
+            Point(1, 3, 0),
+            Point(3, 3, 0),
+            Point(3, 1, 0),
+        ]
+    )
     tris = RemeshCDT.triangulate([border, degen, hole])
-    mx = max(max(t) for t in tris)
+    mx = 0
+    for t in tris:
+        for k in range(3):
+            if t[k] > mx:
+                mx = t[k]
 
     MINI_CHECK(len(tris) > 0 and mx == 9)
 
 
-@MINI_TEST("RemeshCDT", "Large coordinates")
+@MINI_TEST("RemeshCDT", "Large Coordinates")
 def test_remesh_cdt_large_coordinates():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
 
-    border = Polyline([
-        Point(1e13, 1e13, 0),
-        Point(1e13 + 4, 1e13, 0),
-        Point(1e13 + 4, 1e13 + 4, 0),
-        Point(1e13, 1e13 + 4, 0),
-    ])
+    border = Polyline(
+        [
+            Point(1e13, 1e13, 0),
+            Point(1e13 + 4, 1e13, 0),
+            Point(1e13 + 4, 1e13 + 4, 0),
+            Point(1e13, 1e13 + 4, 0),
+        ]
+    )
     tris = RemeshCDT.triangulate([border])
 
     MINI_CHECK(len(tris) == 2)
 
 
-@MINI_TEST("RemeshCDT", "plate_failing 15-vert outer + 4 holes")
-def test_remesh_cdt_plate_failing_15_vert_outer_4_holes():
+@MINI_TEST("RemeshCDT", "Plate Four Holes")
+def test_remesh_cdt_plate_four_holes():
     from session_py import RemeshCDT
     from session_py import Polyline
     from session_py import Point
@@ -473,14 +502,10 @@ def test_remesh_cdt_plate_failing_15_vert_outer_4_holes():
         Point(219.882876, -1531.572963, 353.83603),
     ]
     m = RemeshCDT.from_polylines(
-        [
-            Polyline(border),
-            Polyline(h1),
-            Polyline(h2),
-            Polyline(h3),
-            Polyline(h4),
-        ],
-        False, False)
+        [Polyline(border), Polyline(h1), Polyline(h2), Polyline(h3), Polyline(h4)],
+        False,
+        False,
+    )
 
     MINI_CHECK(m.is_valid())
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any
-import json
 import importlib
+import json
 
 
 _CLASS_MODULE_MAP = {
@@ -14,261 +14,87 @@ _EXTERNAL_CLASS_MAP: dict = {}
 
 
 def file_register_class(name: str, cls) -> None:
-    """Register an external class for polymorphic JSON deserialization.
-
-    Call this from external packages (e.g. session_tf) at import time so that
-    ``file_decode_node`` can reconstruct custom objects stored in ``objects.components``.
-
-    Parameters
-    ----------
-    name : str
-        The value of the ``"type"`` field in the object's ``__jsondump__`` output.
-    cls : type
-        The class to instantiate (must implement ``__jsonload__``).
-    """
+    """Register an external class by its "type" name for polymorphic decoding"""
     _EXTERNAL_CLASS_MAP[name] = cls
 
 
 def _get_class_from_name(class_name: str):
-    """Dynamically import a class by name from the session_py package.
-
-    Convention: Class name maps to module name (lowercase).
-    Example: "Color" -> "session_py.color", "TreeNode" -> "session_py.tree"
-
-    Parameters
-    ----------
-    class_name : str
-        Name of the class to import (e.g., "Color", "Point", "TreeNode")
-
-    Returns
-    -------
-    type or None
-        The class object if found, None otherwise
-    """
+    """Find a class by name in the registry or by importing session_py.<lowercase name>"""
     if class_name in _EXTERNAL_CLASS_MAP:
         return _EXTERNAL_CLASS_MAP[class_name]
     try:
         mod = _CLASS_MODULE_MAP.get(class_name, class_name.lower())
-        module_name = f"session_py.{mod}"
-        module = importlib.import_module(module_name)
+        module = importlib.import_module(f"session_py.{mod}")
         return getattr(module, class_name, None)
     except (ImportError, AttributeError):
         return None
 
 
+def _decode_typed(node: dict) -> Any:
+    """Rebuild a geometry object from a dict with a "type" field, or return the dict"""
+    try:
+        class_name = node["type"].rsplit("/", 1)[-1]
+        cls = _get_class_from_name(class_name)
+        if cls is None or not hasattr(cls, "__jsonload__"):
+            return node
+        return cls.__jsonload__(node, node.get("guid"), node.get("name"))
+    except Exception:
+        return node
+
+
 class GeometryFileEncoder(json.JSONEncoder):
-    """Custom JSON encoder that handles geometry objects with __jsondump__ method.
-
-    Automatically serializes:
-    - Geometry objects (via __jsondump__)
-    - Nested lists, dicts, tuples
-    - Primitive types
-
-    """
+    """JSON encoder that serializes geometry objects through __jsondump__"""
 
     def default(self, obj: Any) -> Any:
-        # Check if object has __jsondump__ method
         if hasattr(obj, "__jsondump__"):
             return obj.__jsondump__()
-
-        # Handle iterators
         if hasattr(obj, "__next__"):
             return list(obj)
-
-        # Let the base class handle it
         return super().default(obj)
 
 
 class GeometryFileDecoder(json.JSONDecoder):
-    """Custom JSON decoder that reconstructs geometry objects from the 'type' field.
-
-    Automatically deserializes:
-    - Geometry objects (via __jsonload__)
-    - Nested lists, dicts
-    - Primitive types
-
-    """
+    """JSON decoder that rebuilds geometry objects from their "type" field"""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(object_hook=self.object_hook, *args, **kwargs)
 
     def object_hook(self, obj: dict) -> Any:
-        """Hook called for every JSON object decoded.
-
-        If the object has a 'type' field, attempts to reconstruct the
-        corresponding geometry object using its __jsonload__ method.
-
-        Parameters
-        ----------
-        obj : dict
-            Dictionary decoded from JSON.
-
-        Returns
-        -------
-        Any
-            Reconstructed geometry object or original dict.
-
-        """
-        # Check if it has type field
         if "type" not in obj:
             return obj
-
-        try:
-            # Get class name from type field
-            # Supports: "ClassName", "session/ClassName", or "session_py.module/ClassName"
-            type_str = obj["type"]
-            if "/" in type_str:
-                _, class_name = type_str.rsplit("/", 1)
-            else:
-                class_name = type_str
-
-            # Dynamically import the class
-            cls = _get_class_from_name(class_name)
-            if cls is None:
-                return obj
-
-            if hasattr(cls, "__jsonload__"):
-                return cls.__jsonload__(obj, obj.get("guid"), obj.get("name"))
-        except Exception:
-            return obj
-
-        return obj
+        return _decode_typed(obj)
 
 
 def file_json_dump(data: Any, filepath: str, pretty: bool = True) -> None:
-    """Write data to JSON file with geometry object support.
-
-    Parameters
-    ----------
-    data : Any
-        Any data structure (can contain geometry objects).
-    filepath : str
-        Path to output file.
-    pretty : bool, optional
-        If True, format with indentation. Defaults to True.
-
-    """
+    """Write data to a json file"""
     with open(filepath, "w") as f:
-        if pretty:
-            json.dump(data, f, cls=GeometryFileEncoder, indent=4)
-        else:
-            json.dump(data, f, cls=GeometryFileEncoder)
-
-
-def file_json_dumps(data: Any, pretty: bool = True) -> str:
-    """Serialize data to JSON string with geometry object support.
-
-    Parameters
-    ----------
-    data : Any
-        Any data structure (can contain geometry objects).
-    pretty : bool, optional
-        If True, format with indentation. Defaults to True.
-
-    Returns
-    -------
-    str
-        JSON string.
-
-    """
-    if pretty:
-        return json.dumps(data, cls=GeometryFileEncoder, indent=4)
-    else:
-        return json.dumps(data, cls=GeometryFileEncoder)
+        f.write(file_json_dumps(data, pretty))
 
 
 def file_json_load(filepath: str) -> Any:
-    """Load data from JSON file with geometry object reconstruction.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to input file.
-
-    Returns
-    -------
-    Any
-        Reconstructed data (geometry objects are restored).
-
-    """
+    """Read data from a json file"""
     with open(filepath) as f:
-        return json.load(f, cls=GeometryFileDecoder)
+        return file_json_loads(f.read())
 
 
-def file_json_loads(s: str) -> Any:
-    """Deserialize JSON string with geometry object reconstruction.
+def file_json_dumps(data: Any, pretty: bool = True) -> str:
+    """Serialize data to a json string"""
+    if pretty:
+        return json.dumps(data, cls=GeometryFileEncoder, indent=4)
+    return json.dumps(data, cls=GeometryFileEncoder)
 
-    Parameters
-    ----------
-    s : str
-        JSON string.
 
-    Returns
-    -------
-    Any
-        Reconstructed data (geometry objects are restored).
-
-    """
-    data = json.loads(s, cls=GeometryFileDecoder)
-    # If root decoded as Session, return its JSON mapping form
-    try:
-        from .session import Session  # local import to avoid cycles
-
-        if isinstance(data, Session):
-            return data.__jsondump__()
-    except Exception:
-        pass
-    return data
+def file_json_loads(json_str: str) -> Any:
+    """Deserialize data from a json string"""
+    return json.loads(json_str, cls=GeometryFileDecoder)
 
 
 def file_decode_node(node: Any) -> Any:
-    """Recursively decode a node that may contain polymorphic objects.
-
-    - If dict with 'type', dynamically import the class and call __jsonload__.
-    - If list, decode each element.
-    - If plain dict, decode values recursively.
-    - Otherwise, return as-is.
-
-    Parameters
-    ----------
-    node : Any
-        Node to decode (can be primitive, list, dict, or geometry object).
-
-    Returns
-    -------
-    Any
-        Decoded node with geometry objects reconstructed.
-
-    """
-    # Primitives
-    if node is None or isinstance(node, (bool, int, float, str)):
-        return node
-    # Lists
+    """Recursively rebuild geometry objects inside a decoded json node"""
     if isinstance(node, list):
         return [file_decode_node(x) for x in node]
-    # Dicts
-    if isinstance(node, dict):
-        # Polymorphic geometry object
-        if "type" in node:
-            try:
-                # Get class name from type field
-                # Supports: "ClassName", "session/ClassName", or "session_py.module/ClassName"
-                type_str = node["type"]
-                if "/" in type_str:
-                    _, class_name = type_str.rsplit("/", 1)
-                else:
-                    class_name = type_str
-
-                # Dynamically import the class
-                cls = _get_class_from_name(class_name)
-                if cls is None:
-                    return node
-
-                if hasattr(cls, "__jsonload__"):
-                    return cls.__jsonload__(node, node.get("guid"), node.get("name"))
-            except Exception:
-                return node
-        # Plain dict: decode values
-        return {k: file_decode_node(v) for k, v in node.items()}
-    # Fallback
-    return node
+    if not isinstance(node, dict):
+        return node
+    if "type" in node:
+        return _decode_typed(node)
+    return {k: file_decode_node(v) for k, v in node.items()}

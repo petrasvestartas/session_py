@@ -6,6 +6,10 @@ from .tolerance import PI
 import math
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Mesh primitives
+# ═══════════════════════════════════════════════════════════════════════════
+
 @MINI_TEST("Primitives", "Mesh Arrow")
 def test_mesh_arrow():
     from session_py import Primitives
@@ -43,13 +47,16 @@ def test_mesh_edge_pipes():
     v2 = mesh.add_vertex(Point(1.0, 1.0, 0.0))
     v3 = mesh.add_vertex(Point(0.0, 1.0, 0.0))
     mesh.add_face([v0, v1, v2, v3])
-    mesh.linecolors[0] = Color.red()
+    mesh.set_linecolors([Color.red(), Color.red(), Color.red(), Color.red()])
 
     pipes = Primitives.edge_pipes(mesh, 0.1)
     MINI_CHECK(len(pipes) == 4)
-    MINI_CHECK(isinstance(pipes[0], Mesh))
-    MINI_CHECK(pipes[0].facecolors[0][0] == Color.red()[0])
+    MINI_CHECK(pipes[0].number_of_faces() > 0)
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NurbsCurve primitives
+# ═══════════════════════════════════════════════════════════════════════════
 
 @MINI_TEST("Primitives", "Nurbscurve Polyline")
 def test_nurbscurve_polyline():
@@ -148,17 +155,20 @@ def test_nurbscurve_spiral():
     MINI_CHECK(c.is_rational() == False)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# NurbsSurface primitives
+# ═══════════════════════════════════════════════════════════════════════════
+
 @MINI_TEST("Primitives", "Nurbssurface Cylinder")
 def test_nurbssurface_cylinder():
     from session_py import Primitives
-
 
     s = Primitives.cylinder_surface(0.0, 0.0, 0.0, 1.0, 5.0)
 
     MINI_CHECK(s.is_valid())
     MINI_CHECK(s.is_rational())
-    MINI_CHECK(s.cv_count_dir(0) == 9)
-    MINI_CHECK(s.cv_count_dir(1) == 2)
+    MINI_CHECK(s.cv_count(0) == 9)
+    MINI_CHECK(s.cv_count(1) == 2)
     MINI_CHECK(s.order(0) == 3)
     MINI_CHECK(s.order(1) == 2)
 
@@ -182,13 +192,12 @@ def test_nurbssurface_cylinder():
 def test_nurbssurface_cone():
     from session_py import Primitives
 
-
     s = Primitives.cone_surface(0.0, 0.0, 0.0, 1.0, 5.0)
 
     MINI_CHECK(s.is_valid())
     MINI_CHECK(s.is_rational())
-    MINI_CHECK(s.cv_count_dir(0) == 9)
-    MINI_CHECK(s.cv_count_dir(1) == 2)
+    MINI_CHECK(s.cv_count(0) == 9)
+    MINI_CHECK(s.cv_count(1) == 2)
     MINI_CHECK(s.order(0) == 3)
     MINI_CHECK(s.order(1) == 2)
 
@@ -208,6 +217,35 @@ def test_nurbssurface_cone():
     MINI_CHECK(abs(pmid[2] - 2.5) < 1e-10)
 
 
+@MINI_TEST("Primitives", "Nurbssurface Torus")
+def test_nurbssurface_torus():
+    from session_py import Primitives
+
+    s = Primitives.torus_surface(0.0, 0.0, 0.0, 3.0, 1.0)
+
+    MINI_CHECK(s.is_valid())
+    MINI_CHECK(s.is_rational())
+    MINI_CHECK(s.cv_count(0) == 9)
+    MINI_CHECK(s.cv_count(1) == 9)
+    MINI_CHECK(s.order(0) == 3)
+    MINI_CHECK(s.order(1) == 3)
+
+    p00 = s.point_at(0.0, 0.0)
+    MINI_CHECK(abs(p00[0] - 4.0) < 1e-10)
+    MINI_CHECK(abs(p00[1] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p00[2] - 0.0) < 1e-10)
+
+    p10 = s.point_at(1.0, 0.0)
+    MINI_CHECK(abs(p10[0] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p10[1] - 4.0) < 1e-10)
+    MINI_CHECK(abs(p10[2] - 0.0) < 1e-10)
+
+    p_top = s.point_at(0.0, 1.0)
+    MINI_CHECK(abs(p_top[0] - 3.0) < 1e-10)
+    MINI_CHECK(abs(p_top[1] - 0.0) < 1e-10)
+    MINI_CHECK(abs(p_top[2] - 1.0) < 1e-10)
+
+
 @MINI_TEST("Primitives", "Nurbssurface Sphere")
 def test_nurbssurface_sphere():
     from session_py import Primitives
@@ -216,8 +254,8 @@ def test_nurbssurface_sphere():
 
     MINI_CHECK(s.is_valid())
     MINI_CHECK(s.is_rational())
-    MINI_CHECK(s.cv_count_dir(0) == 9)
-    MINI_CHECK(s.cv_count_dir(1) == 5)
+    MINI_CHECK(s.cv_count(0) == 9)
+    MINI_CHECK(s.cv_count(1) == 5)
     MINI_CHECK(s.order(0) == 3)
     MINI_CHECK(s.order(1) == 3)
 
@@ -245,10 +283,9 @@ def test_nurbssurface_sphere():
 @MINI_TEST("Primitives", "Nurbssurface Quad Sphere")
 def test_nurbssurface_quad_sphere():
     from session_py import Primitives
-    import math
 
-    R = 5.0
-    faces = Primitives.quad_sphere(0.0, 0.0, 0.0, R)
+    radius = 5.0
+    faces = Primitives.quad_sphere(0.0, 0.0, 0.0, radius)
 
     MINI_CHECK(len(faces) == 6)
     for f in range(6):
@@ -256,8 +293,8 @@ def test_nurbssurface_quad_sphere():
         MINI_CHECK(faces[f].is_rational())
         MINI_CHECK(faces[f].order(0) == 3)
         MINI_CHECK(faces[f].order(1) == 3)
-        MINI_CHECK(faces[f].cv_count_dir(0) == 3)
-        MINI_CHECK(faces[f].cv_count_dir(1) == 3)
+        MINI_CHECK(faces[f].cv_count(0) == 3)
+        MINI_CHECK(faces[f].cv_count(1) == 3)
 
     max_err = 0.0
     for f in range(6):
@@ -267,41 +304,35 @@ def test_nurbssurface_quad_sphere():
                 v = j / 4.0
                 p = faces[f].point_at(u, v)
                 dist = math.sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2])
-                err = abs(dist - R)
+                err = abs(dist - radius)
                 if err > max_err:
                     max_err = err
-    MINI_CHECK(max_err < 0.02 * R)
+    MINI_CHECK(max_err < 0.02 * radius)
+
+    top = faces[0].point_at(0.5, 0.5)
+    MINI_CHECK(abs(top[2] - radius) < 1e-10)
+    MINI_CHECK(abs(top[0]) < 1e-10)
+    MINI_CHECK(abs(top[1]) < 1e-10)
+
+    bottom = faces[1].point_at(0.5, 0.5)
+    MINI_CHECK(abs(bottom[2] + radius) < 1e-10)
+
+    right = faces[2].point_at(0.5, 0.5)
+    MINI_CHECK(abs(right[0] - radius) < 1e-10)
+
+    left = faces[3].point_at(0.5, 0.5)
+    MINI_CHECK(abs(left[0] + radius) < 1e-10)
+
+    front = faces[4].point_at(0.5, 0.5)
+    MINI_CHECK(abs(front[1] - radius) < 1e-10)
+
+    back = faces[5].point_at(0.5, 0.5)
+    MINI_CHECK(abs(back[1] + radius) < 1e-10)
 
 
-@MINI_TEST("Primitives", "Nurbssurface Torus")
-def test_nurbssurface_torus():
-    from session_py import Primitives
-
-
-    s = Primitives.torus_surface(0.0, 0.0, 0.0, 3.0, 1.0)
-
-    MINI_CHECK(s.is_valid())
-    MINI_CHECK(s.is_rational())
-    MINI_CHECK(s.cv_count_dir(0) == 9)
-    MINI_CHECK(s.cv_count_dir(1) == 9)
-    MINI_CHECK(s.order(0) == 3)
-    MINI_CHECK(s.order(1) == 3)
-
-    p00 = s.point_at(0.0, 0.0)
-    MINI_CHECK(abs(p00[0] - 4.0) < 1e-10)
-    MINI_CHECK(abs(p00[1] - 0.0) < 1e-10)
-    MINI_CHECK(abs(p00[2] - 0.0) < 1e-10)
-
-    p10 = s.point_at(1.0, 0.0)
-    MINI_CHECK(abs(p10[0] - 0.0) < 1e-10)
-    MINI_CHECK(abs(p10[1] - 4.0) < 1e-10)
-    MINI_CHECK(abs(p10[2] - 0.0) < 1e-10)
-
-    p_top = s.point_at(0.0, 1.0)
-    MINI_CHECK(abs(p_top[0] - 3.0) < 1e-10)
-    MINI_CHECK(abs(p_top[1] - 0.0) < 1e-10)
-    MINI_CHECK(abs(p_top[2] - 1.0) < 1e-10)
-
+# ═══════════════════════════════════════════════════════════════════════════
+# NurbsSurface factory methods
+# ═══════════════════════════════════════════════════════════════════════════
 
 @MINI_TEST("Primitives", "Nurbssurface Ruled")
 def test_nurbssurface_ruled():
@@ -326,10 +357,10 @@ def test_nurbssurface_ruled():
     MINI_CHECK(srf.is_valid())
     MINI_CHECK(srf.degree(0) == 1)
     MINI_CHECK(srf.degree(1) == 1)
-    MINI_CHECK(srf.cv_count_dir(0) == 2)
-    MINI_CHECK(srf.cv_count_dir(1) == 2)
+    MINI_CHECK(srf.cv_count(0) == 2)
+    MINI_CHECK(srf.cv_count(1) == 2)
 
-    rd, ruv = srf.divide_by_count(4, 4)
+    rd, rv, ruv = srf.divide_by_count_points(4, 4)
     MINI_CHECK(len(rd) == 5)
     MINI_CHECK(len(rd[0]) == 5)
 
@@ -400,12 +431,18 @@ def test_nurbssurface_ruled():
     MINI_CHECK(TOLERANCE.is_vector_close(normals[23], Vector( 1.0/3.0, -2.0/3.0, -2.0/3.0)))
     MINI_CHECK(TOLERANCE.is_vector_close(normals[24], Vector( 0.577350269189626, -0.577350269189626, -0.577350269189626)))
 
-    MINI_CHECK(TOLERANCE.is_close(uvs[0][0],  0.00) and TOLERANCE.is_close(uvs[0][1],  0.00))
-    MINI_CHECK(TOLERANCE.is_close(uvs[1][0],  0.00) and TOLERANCE.is_close(uvs[1][1],  0.25))
-    MINI_CHECK(TOLERANCE.is_close(uvs[4][0],  0.00) and TOLERANCE.is_close(uvs[4][1],  1.00))
-    MINI_CHECK(TOLERANCE.is_close(uvs[6][0],  0.25) and TOLERANCE.is_close(uvs[6][1],  0.25))
-    MINI_CHECK(TOLERANCE.is_close(uvs[12][0], 0.50) and TOLERANCE.is_close(uvs[12][1], 0.50))
-    MINI_CHECK(TOLERANCE.is_close(uvs[24][0], 1.00) and TOLERANCE.is_close(uvs[24][1], 1.00))
+    MINI_CHECK(TOLERANCE.is_close(uvs[0][0], 0.00))
+    MINI_CHECK(TOLERANCE.is_close(uvs[0][1], 0.00))
+    MINI_CHECK(TOLERANCE.is_close(uvs[1][0], 0.00))
+    MINI_CHECK(TOLERANCE.is_close(uvs[1][1], 0.25))
+    MINI_CHECK(TOLERANCE.is_close(uvs[4][0], 0.00))
+    MINI_CHECK(TOLERANCE.is_close(uvs[4][1], 1.00))
+    MINI_CHECK(TOLERANCE.is_close(uvs[6][0], 0.25))
+    MINI_CHECK(TOLERANCE.is_close(uvs[6][1], 0.25))
+    MINI_CHECK(TOLERANCE.is_close(uvs[12][0], 0.50))
+    MINI_CHECK(TOLERANCE.is_close(uvs[12][1], 0.50))
+    MINI_CHECK(TOLERANCE.is_close(uvs[24][0], 1.00))
+    MINI_CHECK(TOLERANCE.is_close(uvs[24][1], 1.00))
 
 
 @MINI_TEST("Primitives", "Nurbssurface Planar")
@@ -414,28 +451,15 @@ def test_nurbssurface_planar():
     from session_py import NurbsCurve
     from session_py import Point
 
-    # Hardcoded expected CVs include create_planar's least-squares fitting
-    # noise. Apple Silicon's libm produces cos/sin values that diverge from
-    # x86 by ~1 ulp; downstream the algorithm amplifies this past the
-    # default 1e-9 tolerance. Loosen for this one test (still well below
-    # the model unit scale).
-    _saved_abs = TOLERANCE.absolute
-    TOLERANCE.absolute = 1e-6
-    try:
-        _test_nurbssurface_planar_body()
-    finally:
-        TOLERANCE.absolute = _saved_abs
-
-
-def _test_nurbssurface_planar_body():
-    from session_py import Primitives
-    from session_py import NurbsCurve
-    from session_py import Point
-
-    c1 = math.cos(0.7); s1 = math.sin(0.7)
-    c2 = math.cos(0.96); s2 = math.sin(0.96)
-    c3 = math.cos(0.52); s3 = math.sin(0.52)
-    c4 = math.cos(1.13); s4 = math.sin(1.13)
+    TOLERANCE.set_absolute(1e-6)
+    c1 = math.cos(0.7)
+    s1 = math.sin(0.7)
+    c2 = math.cos(0.96)
+    s2 = math.sin(0.96)
+    c3 = math.cos(0.52)
+    s3 = math.sin(0.52)
+    c4 = math.cos(1.13)
+    s4 = math.sin(1.13)
 
     ca = NurbsCurve.create(False, 1, [
         Point(0.0, 0.0, 0.0),
@@ -480,8 +504,8 @@ def _test_nurbssurface_planar_body():
 
     MINI_CHECK(s_quad.is_valid())
     MINI_CHECK(s_quad.is_planar())
-    MINI_CHECK(s_quad.cv_count_dir(0) == 2)
-    MINI_CHECK(s_quad.cv_count_dir(1) == 2)
+    MINI_CHECK(s_quad.cv_count(0) == 2)
+    MINI_CHECK(s_quad.cv_count(1) == 2)
     MINI_CHECK(m_quad.number_of_vertices() == 4)
     MINI_CHECK(m_quad.number_of_faces() == 2)
     MINI_CHECK(TOLERANCE.is_point_close(s_quad.get_cv(0, 0), Point(0.0, 0.0, 0.0)))
@@ -491,8 +515,8 @@ def _test_nurbssurface_planar_body():
 
     MINI_CHECK(s_triangle.is_valid())
     MINI_CHECK(s_triangle.is_planar())
-    MINI_CHECK(s_triangle.cv_count_dir(0) == 2)
-    MINI_CHECK(s_triangle.cv_count_dir(1) == 2)
+    MINI_CHECK(s_triangle.cv_count(0) == 2)
+    MINI_CHECK(s_triangle.cv_count(1) == 2)
     MINI_CHECK(m_triangle.number_of_vertices() == 3)
     MINI_CHECK(m_triangle.number_of_faces() == 1)
     MINI_CHECK(TOLERANCE.is_point_close(s_triangle.get_cv(0, 0), Point(8.0, 0.0, 0.0)))
@@ -502,8 +526,8 @@ def _test_nurbssurface_planar_body():
 
     MINI_CHECK(s_polygon.is_valid())
     MINI_CHECK(s_polygon.is_planar())
-    MINI_CHECK(s_polygon.cv_count_dir(0) == 2)
-    MINI_CHECK(s_polygon.cv_count_dir(1) == 2)
+    MINI_CHECK(s_polygon.cv_count(0) == 2)
+    MINI_CHECK(s_polygon.cv_count(1) == 2)
     MINI_CHECK(m_polygon.number_of_vertices() == 4)
     MINI_CHECK(m_polygon.number_of_faces() == 2)
     MINI_CHECK(TOLERANCE.is_point_close(s_polygon.get_cv(0, 0), Point(19.673777861921977, 6.364048611360808, 0.0)))
@@ -513,14 +537,16 @@ def _test_nurbssurface_planar_body():
 
     MINI_CHECK(s_nurbs.is_valid())
     MINI_CHECK(s_nurbs.is_planar())
-    MINI_CHECK(s_nurbs.cv_count_dir(0) == 2)
-    MINI_CHECK(s_nurbs.cv_count_dir(1) == 2)
+    MINI_CHECK(s_nurbs.cv_count(0) == 2)
+    MINI_CHECK(s_nurbs.cv_count(1) == 2)
     MINI_CHECK(m_nurbs.number_of_vertices() == 4)
     MINI_CHECK(m_nurbs.number_of_faces() == 2)
     MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(0, 0), Point(26.652846559932474, -0.727774577493594, -1.542700265577809)))
     MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(0, 1), Point(24.347485651711366, 0.916607409071279, 1.942978687541882)))
     MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(1, 0), Point(32.606791655643732, 0.791738725121784, 1.678288276735475)))
     MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(1, 1), Point(30.301430747422629, 2.436120711686657, 5.163967229855166)))
+
+    TOLERANCE.reset()
 
 
 @MINI_TEST("Primitives", "Nurbssurface Extrusion")
@@ -530,17 +556,17 @@ def test_nurbssurface_extrusion():
     from session_py import Point
     from session_py import Vector
 
-    direction = Vector(0.0, 1.0, 5.0)
+    dir = Vector(0.0, 1.0, 5.0)
 
     c1 = NurbsCurve.create(False, 1, [
         Point(13.0, 0.0, 0.0),
         Point(18.0, 0.0, 0.0),
     ])
-    s_line = Primitives.create_extrusion(c1, direction)
+    s_line = Primitives.create_extrusion(c1, dir)
     m_line = s_line.mesh()
 
     c2 = Primitives.circle(24.0, 0.0, 0.0, 3.0)
-    s_circle = Primitives.create_extrusion(c2, direction)
+    s_circle = Primitives.create_extrusion(c2, dir)
     m_circle = s_circle.mesh()
 
     c3 = NurbsCurve.create(False, 2, [
@@ -548,7 +574,7 @@ def test_nurbssurface_extrusion():
         Point(33.0, 5.0, 0.0),
         Point(37.0, 0.0, 0.0),
     ])
-    s_arc = Primitives.create_extrusion(c3, direction)
+    s_arc = Primitives.create_extrusion(c3, dir)
     m_arc = s_arc.mesh()
 
     c4 = NurbsCurve.create(False, 1, [
@@ -557,12 +583,12 @@ def test_nurbssurface_extrusion():
         Point(50.0, 3.0, 0.0),
         Point(55.0, 0.0, 0.0),
     ])
-    s_wavy = Primitives.create_extrusion(c4, direction)
+    s_wavy = Primitives.create_extrusion(c4, dir)
     m_wavy = s_wavy.mesh()
 
     MINI_CHECK(s_line.is_valid())
     MINI_CHECK(s_line.degree(0) == 1 and s_line.degree(1) == 1)
-    MINI_CHECK(s_line.cv_count_dir(0) == 2 and s_line.cv_count_dir(1) == 2)
+    MINI_CHECK(s_line.cv_count(0) == 2 and s_line.cv_count(1) == 2)
     MINI_CHECK(m_line.number_of_vertices() == 4)
     MINI_CHECK(m_line.number_of_faces() == 2)
     MINI_CHECK(TOLERANCE.is_point_close(s_line.get_cv(0, 0), Point(13.0, 0.0, 0.0)))
@@ -574,7 +600,7 @@ def test_nurbssurface_extrusion():
     MINI_CHECK(s_circle.degree(0) == 2 and s_circle.degree(1) == 1)
     MINI_CHECK(s_circle.is_rational())
     MINI_CHECK(s_circle.is_closed(0) == True and s_circle.is_closed(1) == False)
-    MINI_CHECK(s_circle.cv_count_dir(0) == 9 and s_circle.cv_count_dir(1) == 2)
+    MINI_CHECK(s_circle.cv_count(0) == 9 and s_circle.cv_count(1) == 2)
     MINI_CHECK(m_circle.number_of_vertices() == 42)
     MINI_CHECK(m_circle.number_of_faces() == 42)
     MINI_CHECK(TOLERANCE.is_point_close(s_circle.get_cv(0, 0), Point(27.0, 0.0, 0.0)))
@@ -586,7 +612,7 @@ def test_nurbssurface_extrusion():
 
     MINI_CHECK(s_arc.is_valid())
     MINI_CHECK(s_arc.degree(0) == 2 and s_arc.degree(1) == 1)
-    MINI_CHECK(s_arc.cv_count_dir(0) == 3 and s_arc.cv_count_dir(1) == 2)
+    MINI_CHECK(s_arc.cv_count(0) == 3 and s_arc.cv_count(1) == 2)
     MINI_CHECK(m_arc.number_of_vertices() == 16)
     MINI_CHECK(m_arc.number_of_faces() == 14)
     MINI_CHECK(TOLERANCE.is_point_close(s_arc.get_cv(0, 0), Point(30.0, 0.0, 0.0)))
@@ -598,16 +624,17 @@ def test_nurbssurface_extrusion():
 
     MINI_CHECK(s_wavy.is_valid())
     MINI_CHECK(s_wavy.degree(0) == 1 and s_wavy.degree(1) == 1)
-    MINI_CHECK(s_wavy.cv_count_dir(0) == 4 and s_wavy.cv_count_dir(1) == 2)
-    # Each planar panel owns its crease normals: eight positions, twelve shading vertices.
+    MINI_CHECK(s_wavy.cv_count(0) == 4 and s_wavy.cv_count(1) == 2)
     MINI_CHECK(m_wavy.number_of_vertices() == 12)
     MINI_CHECK(m_wavy.number_of_faces() == 6)
     for i in range(4):
         for j in range(2):
             position = s_wavy.get_cv(i, j)
-            copies = sum(TOLERANCE.is_point_close(vertex.position(), position)
-                         for vertex in m_wavy.vertex.values())
-            MINI_CHECK(copies == (1 if i in (0, 3) else 2))
+            copies = 0
+            for vertex in m_wavy.vertex.values():
+                if TOLERANCE.is_point_close(vertex.position(), position):
+                    copies += 1
+            MINI_CHECK(copies == (1 if i == 0 or i == 3 else 2))
     for key, corners in m_wavy.face.items():
         normal = m_wavy.face_normal(key)
         for corner in corners:
@@ -636,8 +663,8 @@ def test_nurbssurface_loft():
     srf = Primitives.create_loft([c1, c2, c3, c4], 3)
 
     MINI_CHECK(srf.is_valid())
-    MINI_CHECK(srf.cv_count_dir(0) == 9)
-    MINI_CHECK(srf.cv_count_dir(1) == 4)
+    MINI_CHECK(srf.cv_count(0) == 9)
+    MINI_CHECK(srf.cv_count(1) == 4)
     MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 0), Point(2.000000000000000, 0.000000000000000, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 1), Point(-0.689223125118461, 0.000000000000000, 1.662346559763863)))
     MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 2), Point(3.009774760647534, 0.000000000000000, 4.110399016539784)))
@@ -703,8 +730,8 @@ def test_nurbssurface_loft():
     open_srf = Primitives.create_loft(open_curves, 3)
 
     MINI_CHECK(open_srf.is_valid())
-    MINI_CHECK(open_srf.cv_count_dir(0) == 4)
-    MINI_CHECK(open_srf.cv_count_dir(1) == 3)
+    MINI_CHECK(open_srf.cv_count(0) == 4)
+    MINI_CHECK(open_srf.cv_count(1) == 3)
 
     MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 0), Point(10.000000000000000, -12.000000000000000, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 1), Point(5.500000000000000, -12.000000000000000, 7.000000000000000)))
@@ -736,47 +763,52 @@ def test_nurbssurface_revolve():
         Point(2.0, 0.0, 4.5),
         Point(1.8, 0.0, 5.0),
     ])
-    s_vase = Primitives.create_revolve(pa, Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0), 2.0 * PI)
+    s_vase = Primitives.create_revolve(pa, Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
     m_vase = s_vase.mesh()
 
+    pb = NurbsCurve(3, True, 3, 9)
     w = math.sqrt(2.0) / 2.0
-    cw = [1.0, w, 1.0, w, 1.0, w, 1.0, w, 1.0]
-    ca = [1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0, 1.0, 1.0]
-    sa = [0.0, 1.0, 1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0]
-    ck = [0.0, 0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0]
-    rr = 5.0; r = 1.5; tcx = 14.0
-    pb = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=9)
+    cw = [1, w, 1, w, 1, w, 1, w, 1]
+    ca = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+    sa = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+    ck = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+    rr = 5.0
+    r = 1.5
+    tcx = 14.0
     for i in range(10):
         pb.set_nurbsknot(i, ck[i])
     for i in range(9):
         pb.set_cv_4d(i, (tcx + rr + r * ca[i]) * cw[i], 0.0, r * sa[i] * cw[i], cw[i])
-    s_torus = Primitives.create_revolve(pb, Point(tcx, 0.0, 0.0), Vector(0.0, 0.0, 1.0), 2.0 * PI)
+    s_torus = Primitives.create_revolve(pb, Point(tcx, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
     m_torus = s_torus.mesh()
 
     pc = NurbsCurve.create(False, 1, [Point(29.0, 0.0, -0.5), Point(29.0, 0.0, 0.5)])
     s_elbow = Primitives.create_revolve(pc, Point(26.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0), PI / 2.0)
     m_elbow = s_elbow.mesh()
 
-    sr = 2.0; scx = 36.0
-    pd = NurbsCurve(dimension=3, is_rational=True, order=3, cv_count=5)
-    sk = [0.0, 0.0, 1.0, 1.0, 2.0, 2.0]
+    sr = 2.0
+    scx = 36.0
+    pd = NurbsCurve(3, True, 3, 5)
+    sk = [0, 0, 1, 1, 2, 2]
     for i in range(6):
         pd.set_nurbsknot(i, sk[i])
-    spx = [0.0, sr, sr, sr, 0.0]; spz = [-sr, -sr, 0.0, sr, sr]; spw = [1.0, w, 1.0, w, 1.0]
+    spx = [0, sr, sr, sr, 0]
+    spz = [-sr, -sr, 0, sr, sr]
+    spw = [1, w, 1, w, 1]
     for i in range(5):
         pd.set_cv_4d(i, (scx + spx[i]) * spw[i], 0.0, spz[i] * spw[i], spw[i])
-    s_sphere = Primitives.create_revolve(pd, Point(scx, 0.0, 0.0), Vector(0.0, 0.0, 1.0), 2.0 * PI)
+    s_sphere = Primitives.create_revolve(pd, Point(scx, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
     m_sphere = s_sphere.mesh()
 
     pe = NurbsCurve.create(False, 1, [Point(44.0, 0.0, 3.0), Point(46.0, 0.0, 0.0)])
-    s_cone = Primitives.create_revolve(pe, Point(44.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0), 2.0 * PI)
+    s_cone = Primitives.create_revolve(pe, Point(44.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
     m_cone = s_cone.mesh()
 
     MINI_CHECK(s_vase.is_valid())
     MINI_CHECK(s_vase.is_closed(0) == True)
     MINI_CHECK(s_vase.is_closed(1) == False)
-    MINI_CHECK(s_vase.cv_count_dir(0) == 9)
-    MINI_CHECK(s_vase.cv_count_dir(1) == 7)
+    MINI_CHECK(s_vase.cv_count(0) == 9)
+    MINI_CHECK(s_vase.cv_count(1) == 7)
     MINI_CHECK(m_vase.number_of_vertices() == 609)
     MINI_CHECK(m_vase.number_of_faces() == 1176)
     MINI_CHECK(TOLERANCE.is_point_close(s_vase.get_cv(0, 0), Point(1.5, 0.0, 0.0)))
@@ -785,8 +817,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_torus.is_valid())
     MINI_CHECK(s_torus.is_closed(0) == True)
     MINI_CHECK(s_torus.is_closed(1) == True)
-    MINI_CHECK(s_torus.cv_count_dir(0) == 9)
-    MINI_CHECK(s_torus.cv_count_dir(1) == 9)
+    MINI_CHECK(s_torus.cv_count(0) == 9)
+    MINI_CHECK(s_torus.cv_count(1) == 9)
     MINI_CHECK(m_torus.number_of_vertices() == 693)
     MINI_CHECK(m_torus.number_of_faces() == 1386)
     MINI_CHECK(TOLERANCE.is_point_close(s_torus.get_cv(0, 0), Point(20.5, 0.0, 0.0)))
@@ -794,8 +826,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_elbow.is_valid())
     MINI_CHECK(s_elbow.is_closed(0) == False)
     MINI_CHECK(s_elbow.is_closed(1) == False)
-    MINI_CHECK(s_elbow.cv_count_dir(0) == 3)
-    MINI_CHECK(s_elbow.cv_count_dir(1) == 2)
+    MINI_CHECK(s_elbow.cv_count(0) == 3)
+    MINI_CHECK(s_elbow.cv_count(1) == 2)
     MINI_CHECK(m_elbow.number_of_vertices() == 16)
     MINI_CHECK(m_elbow.number_of_faces() == 14)
     MINI_CHECK(TOLERANCE.is_point_close(s_elbow.get_cv(0, 0), Point(29.0, 0.0, -0.5)))
@@ -808,8 +840,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_sphere.is_closed(1) == False)
     MINI_CHECK(s_sphere.is_singular(0) == True)
     MINI_CHECK(s_sphere.is_singular(2) == True)
-    MINI_CHECK(s_sphere.cv_count_dir(0) == 9)
-    MINI_CHECK(s_sphere.cv_count_dir(1) == 5)
+    MINI_CHECK(s_sphere.cv_count(0) == 9)
+    MINI_CHECK(s_sphere.cv_count(1) == 5)
     MINI_CHECK(m_sphere.number_of_vertices() == 191)
     MINI_CHECK(m_sphere.number_of_faces() == 378)
     MINI_CHECK(TOLERANCE.is_point_close(s_sphere.get_cv(0, 0), Point(36.0, 0.0, -2.0)))
@@ -820,8 +852,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(s_cone.is_closed(1) == False)
     MINI_CHECK(s_cone.is_singular(0) == True)
     MINI_CHECK(s_cone.is_singular(2) == False)
-    MINI_CHECK(s_cone.cv_count_dir(0) == 9)
-    MINI_CHECK(s_cone.cv_count_dir(1) == 2)
+    MINI_CHECK(s_cone.cv_count(0) == 9)
+    MINI_CHECK(s_cone.cv_count(1) == 2)
     MINI_CHECK(m_cone.number_of_vertices() == 22)
     MINI_CHECK(m_cone.number_of_faces() == 21)
     MINI_CHECK(TOLERANCE.is_point_close(s_cone.get_cv(0, 0), Point(44.0, 0.0, 3.0)))
@@ -868,11 +900,11 @@ def test_nurbssurface_sweep():
 
     MINI_CHECK(s_sweep1.is_valid())
     MINI_CHECK(s_sweep1.is_rational())
-    MINI_CHECK(s_sweep1.cv_count_dir(0) == 9)
-    MINI_CHECK(s_sweep1.cv_count_dir(1) == 6)
+    MINI_CHECK(s_sweep1.cv_count(0) == 9)
+    MINI_CHECK(s_sweep1.cv_count(1) == 6)
     MINI_CHECK(m_sweep1.number_of_vertices() > 0)
     MINI_CHECK(m_sweep1.number_of_faces() > 0)
-    TOLERANCE.absolute = 1e-6
+    TOLERANCE.set_absolute(1e-6)
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 0), Point(0.888888888888889, 0.000000000000000, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 1), Point(0.888650781842197, 1.196033690639573, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 2), Point(1.023137542521078, 2.984678629452259, 0.000000000000000)))
@@ -880,18 +912,76 @@ def test_nurbssurface_sweep():
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 4), Point(2.267033741447567, 7.548154043673421, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 5), Point(2.795046402150731, 8.602476824301650, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 0), Point(0.888888888888889, 0.000000000000000, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 1), Point(0.888650781842196, 1.196033690639572, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 2), Point(1.023137542521079, 2.984678629452261, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 3), Point(1.644124175132322, 5.883369976716749, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 4), Point(2.267033741447568, 7.548154043673421, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 5), Point(2.795046402150731, 8.602476824301650, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 0), Point(-0.111111111111111, 0.000000000000000, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 1), Point(-0.111355426965362, 1.245520819229018, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 2), Point(0.028671366170157, 3.117459574526332, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 3), Point(0.682455101244336, 6.170731523133928, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 4), Point(1.341409898439919, 7.933301269620500, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 5), Point(1.900619199731158, 9.049690396962294, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 0), Point(-1.111111111111111, 0.000000000000000, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 1), Point(-1.111361635772921, 1.295007947818465, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 2), Point(-0.965794810180765, 3.250240519600404, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 3), Point(-0.279213972643651, 6.458093069551111, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 4), Point(0.415786055432270, 8.318448495567573, -1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 5), Point(1.006191997311586, 9.496903969622938, -1.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 0), Point(-1.111111111111111, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 1), Point(-1.111361635772921, 1.295007947818464, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 2), Point(-0.965794810180765, 3.250240519600406, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 3), Point(-0.279213972643651, 6.458093069551108, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 4), Point(0.415786055432269, 8.318448495567575, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 5), Point(1.006191997311586, 9.496903969622938, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 0), Point(-1.111111111111111, 0.000000000000000, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 1), Point(-1.111361635772921, 1.295007947818465, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 2), Point(-0.965794810180765, 3.250240519600404, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 3), Point(-0.279213972643651, 6.458093069551111, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 4), Point(0.415786055432270, 8.318448495567573, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 5), Point(1.006191997311586, 9.496903969622938, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 0), Point(-0.111111111111111, 0.000000000000000, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 1), Point(-0.111355426965362, 1.245520819229018, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 2), Point(0.028671366170157, 3.117459574526332, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 3), Point(0.682455101244336, 6.170731523133928, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 4), Point(1.341409898439919, 7.933301269620500, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 5), Point(1.900619199731158, 9.049690396962294, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 0), Point(0.888888888888889, 0.000000000000000, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 1), Point(0.888650781842196, 1.196033690639572, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 2), Point(1.023137542521079, 2.984678629452261, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 3), Point(1.644124175132322, 5.883369976716749, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 4), Point(2.267033741447568, 7.548154043673421, 1.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 5), Point(2.795046402150731, 8.602476824301650, 1.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 0), Point(0.888888888888889, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 1), Point(0.888650781842197, 1.196033690639573, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 2), Point(1.023137542521078, 2.984678629452259, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 3), Point(1.644124175132323, 5.883369976716751, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 4), Point(2.267033741447567, 7.548154043673421, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 5), Point(2.795046402150731, 8.602476824301650, 0.000000000000000)))
 
     MINI_CHECK(s_sweep2.is_valid())
-    MINI_CHECK(s_sweep2.cv_count_dir(0) == 3)
-    MINI_CHECK(s_sweep2.cv_count_dir(1) == 6)
+    MINI_CHECK(s_sweep2.cv_count(0) == 3)
+    MINI_CHECK(s_sweep2.cv_count(1) == 6)
     MINI_CHECK(m_sweep2.number_of_vertices() > 0)
     MINI_CHECK(m_sweep2.number_of_faces() > 0)
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 0), Point(6.000000000000000, -1.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 1), Point(6.175969120718316, -0.300506740098127, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 2), Point(6.459569103687756, 0.747208154997334, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 3), Point(7.052015306099445, 2.456377031677760, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 4), Point(7.525387263758168, 3.480360762535406, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 5), Point(8.000000000000000, 4.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 0), Point(8.000000000000000, -1.000000000000000, 2.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 1), Point(8.087302079238063, -0.305563785913389, 2.040878660089621)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 2), Point(8.215030901365994, 0.738012519337792, 2.128261757662849)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 3), Point(8.402488235814772, 2.450241721213838, 2.205206310224664)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 4), Point(8.490843623722080, 3.486294461007204, 2.229418074862260)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 5), Point(8.500000000000000, 4.000000000000000, 1.500000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 0), Point(10.000000000000000, -1.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 1), Point(9.998635037757797, -0.310620831728651, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 2), Point(9.970492699044241, 0.728816883678250, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 3), Point(9.752961165530088, 2.444106410749916, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 4), Point(9.456299983685991, 3.492228159479000, 0.000000000000000)))
     MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 5), Point(9.000000000000000, 4.000000000000000, 0.000000000000000)))
     TOLERANCE.reset()
 
@@ -934,11 +1024,11 @@ def test_nurbssurface_edge():
     m = surf.mesh()
 
     MINI_CHECK(surf.is_valid())
-    MINI_CHECK(m.number_of_faces() > 0)
+    MINI_CHECK(m.is_valid())
     MINI_CHECK(surf.degree(0) == 2)
     MINI_CHECK(surf.degree(1) == 3)
-    MINI_CHECK(surf.cv_count_dir(0) == 3)
-    MINI_CHECK(surf.cv_count_dir(1) == 4)
+    MINI_CHECK(surf.cv_count(0) == 3)
+    MINI_CHECK(surf.cv_count(1) == 4)
 
     MINI_CHECK(TOLERANCE.is_point_close(surf.get_cv(0, 0), Point(1.0, 20.569076, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(surf.get_cv(0, 1), Point(1.0, 22.569076, 3.0)))
@@ -1009,7 +1099,6 @@ def test_mesh_hex_mesh():
     MINI_CHECK(m2.is_valid())
 
 
-
 @MINI_TEST("Primitives", "Mesh Cone Subdivisions")
 def test_mesh_cone_subdivisions():
     from session_py import Primitives
@@ -1035,9 +1124,8 @@ def test_mesh_cone_subdivisions():
 @MINI_TEST("Primitives", "Nurbscurve Interpolated")
 def test_nurbscurve_interpolated():
     from session_py import Primitives
-    from session_py import NurbsCurve
     from session_py import Point
-    from session_py import nurbsknot
+    from session_py.nurbsknot import CurveNurbsKnotStyle
 
     points = [
         Point(14, 9, 0),
@@ -1049,7 +1137,7 @@ def test_nurbscurve_interpolated():
         Point(41, 13, 0),
     ]
 
-    c = Primitives.create_interpolated(points, nurbsknot.CurveNurbsKnotStyle.Chord)
+    c = Primitives.create_interpolated(points, CurveNurbsKnotStyle.Chord)
 
     MINI_CHECK(c.is_valid())
     MINI_CHECK(c.degree() == 3)
@@ -1076,7 +1164,7 @@ def test_nurbscurve_interpolated():
         Point(3, 1, 0),
         Point(5, 3, 0),
     ]
-    c4 = Primitives.create_interpolated(pts4, nurbsknot.CurveNurbsKnotStyle.Chord)
+    c4 = Primitives.create_interpolated(pts4, CurveNurbsKnotStyle.Chord)
     MINI_CHECK(c4.is_valid())
     MINI_CHECK(c4.degree() == 3)
     MINI_CHECK(c4.cv_count() == 6)

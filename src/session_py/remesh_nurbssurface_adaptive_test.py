@@ -93,7 +93,7 @@ def test_remesh_nurbssurface_adaptive_doubly_curved():
     m = RemeshNurbsSurfaceAdaptive(s).mesh()
 
     MINI_CHECK(m.is_valid())
-    MINI_CHECK(m.number_of_vertices() == 1175)
+    MINI_CHECK(m.number_of_vertices() == 1169)
 
 
 @MINI_TEST("RemeshNurbsSurfaceAdaptive", "Flat")

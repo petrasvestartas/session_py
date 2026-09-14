@@ -4,8 +4,7 @@ from .mini_test import run_all
 
 
 def _edges_manifold(b) -> bool:
-    # Every non-degenerated edge of a solid is used by exactly two faces with opposite
-    # composed orientations (the manifold contract BRepCheck enforces).
+    """Every non-degenerated edge of a solid is used by exactly two faces with opposite composed orientations"""
     for ei in range(b.edge_count()):
         if b.m_edges[ei].degenerated:
             continue
@@ -17,18 +16,147 @@ def _edges_manifold(b) -> bool:
     return True
 
 
+def _boundary_points(mesh) -> list[tuple[float, float, float]]:
+    """Sorted positions of the mesh vertices on the v = 0 side"""
+    points = []
+    for v in mesh.vertex.values():
+        if v.attributes["v"] == 0.0:
+            points.append((v.x, v.y, v.z))
+    points.sort()
+    return points
+
+
+def _build_quad_face(b) -> int:
+    """Unit planar quad face with straight edges and pcurves; returns the face index"""
+    from session_py import BRepOrientation
+    from session_py import BRepRef
+    from session_py import NurbsSurface
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    srf = NurbsSurface(3, False, 2, 2, 2, 2)
+    srf.set_cv(0, 0, Point(0, 0, 0))
+    srf.set_cv(1, 0, Point(1, 0, 0))
+    srf.set_cv(0, 1, Point(0, 1, 0))
+    srf.set_cv(1, 1, Point(1, 1, 0))
+    si = b.add_surface(srf)
+    corners = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
+    for i in range(4):
+        b.add_vertex(corners[i])
+    refs = []
+    for i in range(4):
+        j = (i + 1) % 4
+        ci = b.add_curve_3d(NurbsCurve.create(False, 1, [corners[i], corners[j]]))
+        ei = b.add_edge(ci, i, j)
+        c2 = b.add_curve_2d(NurbsCurve.create(False, 1, [corners[i], corners[j]]))
+        b.add_pcurve(ei, si, c2)
+        refs.append(BRepRef(ei, BRepOrientation.Forward))
+    wi = b.add_wire(refs)
+    return b.add_face(si, [BRepRef(wi, BRepOrientation.Forward)])
+
+
+@MINI_TEST("BRep", "Shared Grid Boundary")
+def test_brep_shared_grid_boundary():
+    from session_py import BRep
+    from session_py import BRepOrientation
+    from session_py import BRepRef
+    from session_py import NurbsSurface
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import RemeshNurbsSurfaceGrid
+    from session_py.tolerance import PI
+    import math
+    import sys
+
+    b = BRep()
+    surfaces = []
+    for face in range(2):
+        points = []
+        for i in range(3):
+            for j in range(2):
+                z = 0.0 if i != 1 else (0.5 if j == 0 or face == 0 else 4.0)
+                points.append(Point(i * 0.5, j * (1.0 if face == 0 else -1.0), z))
+        surface = NurbsSurface.create(False, False, 2, 1, 3, 2, points)
+        si = b.add_surface(surface)
+        corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        vertices = []
+        for side in range(4):
+            vertices.append(
+                b.add_vertex(surface.point_at(corners[side][0], corners[side][1]))
+            )
+        edges = []
+        for side in range(4):
+            a = corners[side]
+            z = corners[(side + 1) % 4]
+            edge = 0
+            if side != 0 or face != 1:
+                dir = 0 if a[0] != z[0] else 1
+                curve = surface.iso_curve(dir, a[1 - dir])
+                if a[dir] > z[dir]:
+                    curve.reverse()
+                edge = b.add_edge(
+                    b.add_curve_3d(curve), vertices[side], vertices[(side + 1) % 4]
+                )
+            pc = NurbsCurve.create(
+                False, 1, [Point(a[0], a[1], 0), Point(z[0], z[1], 0)]
+            )
+            b.add_pcurve(edge, si, b.add_curve_2d(pc))
+            edges.append(BRepRef(edge, BRepOrientation.Forward))
+        b.add_face(si, [BRepRef(b.add_wire(edges), BRepOrientation.Forward)], 1e-8)
+        surfaces.append(surface)
+    original = []
+    for s in surfaces:
+        original.append(RemeshNurbsSurfaceGrid.from_u_v_q(s, 0, 0, 20.0, 0.005))
+    MINI_CHECK(
+        len(_boundary_points(original[0])) == 7
+        and len(_boundary_points(original[1])) == 11
+    )
+    meshes = b.face_meshes_q(True, 20.0, 0.005)
+    first = _boundary_points(meshes[0])
+    second = _boundary_points(meshes[1])
+    MINI_CHECK(first == second and len(first) == 7)
+    MINI_CHECK(len(meshes[0].face) == len(original[0].face) and len(meshes[1].face) > 0)
+    maximum = 0.0
+    for i in range(len(first) - 1):
+        a = first[i]
+        z = first[i + 1]
+        actual = surfaces[0].point_at((a[0] + z[0]) * 0.5, 0.0)
+        sag = 0.0
+        for d in range(3):
+            sag += (actual[d] - (a[d] + z[d]) * 0.5) ** 2
+        maximum = max(maximum, math.sqrt(sag))
+    MINI_CHECK(maximum <= 0.005 * 1.5)
+    refined = RemeshNurbsSurfaceGrid.from_u_v_q(surfaces[0], 0, 0, 5.0, 0.001)
+    meshes = b.face_meshes_q(True, 5.0, 0.001)
+    first = _boundary_points(meshes[0])
+    MINI_CHECK(
+        first == _boundary_points(meshes[1])
+        and len(meshes[0].face) > 0
+        and len(meshes[1].face) > 0
+    )
+    for point in _boundary_points(refined):
+        MINI_CHECK(point in first)
+    cosine = math.cos(5.0 * PI / 180.0)
+    for i in range(len(first) - 1):
+        a = surfaces[0].normal_at(first[i][0], 0.0)
+        z = surfaces[0].normal_at(first[i + 1][0], 0.0)
+        MINI_CHECK(a.dot(z) >= cosine - 64.0 * sys.float_info.epsilon)
+
+
 @MINI_TEST("BRep", "Constructor")
 def test_brep_constructor():
     from session_py import BRep
-    from session_py import Point
 
     b = BRep()
 
-    # String representations
     sstr = str(b)
     srepr = repr(b)
 
-    # Copy (new guid)
     bcopy = b.duplicate()
 
     MINI_CHECK(not b.is_valid())
@@ -45,7 +173,6 @@ def test_brep_constructor():
 @MINI_TEST("BRep", "Create Box")
 def test_brep_create_box():
     from session_py import BRep
-    from session_py import Point
 
     box = BRep.create_box(2.0, 3.0, 4.0)
 
@@ -60,7 +187,6 @@ def test_brep_create_box():
 @MINI_TEST("BRep", "Accessors")
 def test_brep_accessors():
     from session_py import BRep
-    from session_py import Point
 
     box = BRep.create_box(2.0, 3.0, 4.0)
 
@@ -93,12 +219,13 @@ def test_brep_add_face():
     from session_py import NurbsSurface
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py import Mesh
 
     b = BRep()
     srf = NurbsSurface(3, False, 2, 2, 2, 2)
-    srf.set_cv(0, 0, Point(0, 0, 0)); srf.set_cv(1, 0, Point(1, 0, 0))
-    srf.set_cv(0, 1, Point(0, 1, 0)); srf.set_cv(1, 1, Point(1, 1, 0))
+    srf.set_cv(0, 0, Point(0, 0, 0))
+    srf.set_cv(1, 0, Point(1, 0, 0))
+    srf.set_cv(0, 1, Point(0, 1, 0))
+    srf.set_cv(1, 1, Point(1, 1, 0))
     si = b.add_surface(srf)
 
     corners = [
@@ -136,7 +263,6 @@ def test_brep_add_face():
 @MINI_TEST("BRep", "Mesh")
 def test_brep_mesh():
     from session_py import BRep
-    from session_py import Mesh
 
     box = BRep.create_box(2.0, 3.0, 4.0)
     m = box.mesh()
@@ -152,8 +278,6 @@ def test_brep_mesh():
 @MINI_TEST("BRep", "Point At")
 def test_brep_point_at():
     from session_py import BRep
-    from session_py import Point
-    from session_py import Vector
 
     box = BRep.create_box(2.0, 3.0, 4.0)
     pt = box.point_at(0, 0.5, 0.5)
@@ -181,13 +305,15 @@ def test_brep_is_solid():
     tor = BRep.create_torus(2.0, 0.5)
     blk = BRep.create_block_with_hole(4.0, 4.0, 2.0, 1.0)
 
-    quad = Polyline([
-        Point(0, 0, 0),
-        Point(1, 0, 0),
-        Point(1, 1, 0),
-        Point(0, 1, 0),
-        Point(0, 0, 0),
-    ])
+    quad = Polyline(
+        [
+            Point(0, 0, 0),
+            Point(1, 0, 0),
+            Point(1, 1, 0),
+            Point(0, 1, 0),
+            Point(0, 0, 0),
+        ]
+    )
     sheet = BRep.from_polylines([quad])
 
     MINI_CHECK(box.is_solid() and _edges_manifold(box))
@@ -233,9 +359,18 @@ def test_brep_wire_edges():
     MINI_CHECK(len(c) == 4)
     MINI_CHECK(a[0].index == c[3].index)
     MINI_CHECK(a[0].orientation == brep_reverse(c[3].orientation))
-    MINI_CHECK(brep_compose(BRepOrientation.Reversed, BRepOrientation.Reversed) == BRepOrientation.Forward)
-    MINI_CHECK(brep_compose(BRepOrientation.Forward, BRepOrientation.Reversed) == BRepOrientation.Reversed)
-    MINI_CHECK(brep_compose(BRepOrientation.Internal, BRepOrientation.Reversed) == BRepOrientation.Internal)
+    MINI_CHECK(
+        brep_compose(BRepOrientation.Reversed, BRepOrientation.Reversed)
+        == BRepOrientation.Forward
+    )
+    MINI_CHECK(
+        brep_compose(BRepOrientation.Forward, BRepOrientation.Reversed)
+        == BRepOrientation.Reversed
+    )
+    MINI_CHECK(
+        brep_compose(BRepOrientation.Internal, BRepOrientation.Reversed)
+        == BRepOrientation.Internal
+    )
 
 
 @MINI_TEST("BRep", "Edge Faces")
@@ -269,9 +404,16 @@ def test_brep_update_tolerances():
     bent = box.duplicate()
     bent.m_vertices[0].point = Point(-1.0, -1.5, -2.01)
     worst_bent = bent.update_tolerances()
-    prims = [BRep.create_cylinder(1.0, 2.0), BRep.create_sphere(1.0), BRep.create_cone(1.0, 2.0),
-             BRep.create_pyramid(2.0, 1.0), BRep.create_torus(2.0, 0.5), BRep.create_block_with_hole(4.0, 4.0, 2.0, 1.0)]
-    worst_prims = max(p.update_tolerances() for p in prims)
+    worst_prims = 0.0
+    for p in [
+        BRep.create_cylinder(1.0, 2.0),
+        BRep.create_sphere(1.0),
+        BRep.create_cone(1.0, 2.0),
+        BRep.create_pyramid(2.0, 1.0),
+        BRep.create_torus(2.0, 0.5),
+        BRep.create_block_with_hole(4.0, 4.0, 2.0, 1.0),
+    ]:
+        worst_prims = max(worst_prims, p.update_tolerances())
 
     MINI_CHECK(worst < 1e-9)
     MINI_CHECK(box.m_edges[0].tolerance < 1e-9)
@@ -284,7 +426,6 @@ def test_brep_update_tolerances():
 @MINI_TEST("BRep", "Transformation")
 def test_brep_transformation():
     from session_py import BRep
-    from session_py import Point
     from session_py import Xform
 
     box = BRep.create_box(2.0, 3.0, 4.0)
@@ -297,13 +438,14 @@ def test_brep_transformation():
     MINI_CHECK(abs(pt[0] - pt_orig[0] - 10.0) < 0.01)
     MINI_CHECK(abs(pt[1] - pt_orig[1] - 20.0) < 0.01)
     MINI_CHECK(abs(pt[2] - pt_orig[2] - 30.0) < 0.01)
-    MINI_CHECK(abs(moved.m_vertices[0].point[0] - box.m_vertices[0].point[0] - 10.0) < 0.01)
+    MINI_CHECK(
+        abs(moved.m_vertices[0].point[0] - box.m_vertices[0].point[0] - 10.0) < 0.01
+    )
 
 
 @MINI_TEST("BRep", "Transform Roundtrip")
 def test_brep_transform_roundtrip():
     from session_py import BRep
-    from session_py import Point
     from session_py import Vector
     from session_py import Xform
 
@@ -344,15 +486,12 @@ def test_json_roundtrip():
     box.width = 2.0
     box.surfacecolor = Color(255, 128, 64, 255)
 
-    # JSON object
     json_obj = box.__jsondump__()
     loaded_json = BRep.__jsonload__(json_obj)
 
-    # String
     json_string = box.file_json_dumps()
     loaded_json_string = BRep.file_json_loads(json_string)
 
-    # File
     filename = Path(__file__).parent.parent.parent / "serialization" / "test_brep.json"
     box.file_json_dump(filename)
     loaded_from_file = BRep.file_json_load(filename)
@@ -362,13 +501,14 @@ def test_json_roundtrip():
     MINI_CHECK(loaded_from_file == box)
     MINI_CHECK(loaded_from_file.is_solid())
     MINI_CHECK(loaded_from_file.m_edges[2].pcurves[0].curve_2d_index_2 >= 0)
-    MINI_CHECK(loaded_from_file.m_wires[0].edges[2].orientation == BRepOrientation.Reversed)
+    MINI_CHECK(
+        loaded_from_file.m_wires[0].edges[2].orientation == BRepOrientation.Reversed
+    )
 
 
 @MINI_TEST("BRep", "Create Cylinder")
 def test_brep_create_cylinder():
     from session_py import BRep
-    from session_py import Mesh
 
     cyl = BRep.create_cylinder(1.0, 2.0)
     m = cyl.mesh()
@@ -385,7 +525,6 @@ def test_brep_create_cylinder():
 @MINI_TEST("BRep", "Create Sphere")
 def test_brep_create_sphere():
     from session_py import BRep
-    from session_py import Mesh
 
     sph = BRep.create_sphere(1.0)
     m = sph.mesh()
@@ -403,7 +542,6 @@ def test_brep_create_sphere():
 @MINI_TEST("BRep", "Create Cone")
 def test_brep_create_cone():
     from session_py import BRep
-    from session_py import Mesh
 
     cone = BRep.create_cone(1.0, 2.0)
     m = cone.mesh()
@@ -420,7 +558,6 @@ def test_brep_create_cone():
 @MINI_TEST("BRep", "Create Pyramid")
 def test_brep_create_pyramid():
     from session_py import BRep
-    from session_py import Mesh
 
     pyr = BRep.create_pyramid(2.0, 1.0)
     m = pyr.mesh()
@@ -437,7 +574,6 @@ def test_brep_create_pyramid():
 @MINI_TEST("BRep", "Create Torus")
 def test_brep_create_torus():
     from session_py import BRep
-    from session_py import Mesh
 
     tor = BRep.create_torus(2.0, 0.5)
     m = tor.mesh()
@@ -455,7 +591,6 @@ def test_brep_create_torus():
 def test_brep_create_block_with_hole():
     from session_py import BRep
     from session_py import BRepOrientation
-    from session_py import Mesh
 
     bh = BRep.create_block_with_hole(8.0, 6.0, 4.0, 1.5)
     m = bh.mesh()
@@ -476,62 +611,73 @@ def test_brep_from_polylines():
     from session_py import BRep
     from session_py import Point
     from session_py import Polyline
-    from session_py import Mesh
 
     hx, hy, hz = 1.0, 1.5, 2.0
     c = [
         Point(-hx, -hy, -hz),
-        Point( hx, -hy, -hz),
-        Point( hx,  hy, -hz),
-        Point(-hx,  hy, -hz),
-        Point(-hx, -hy,  hz),
-        Point( hx, -hy,  hz),
-        Point( hx,  hy,  hz),
-        Point(-hx,  hy,  hz),
+        Point(hx, -hy, -hz),
+        Point(hx, hy, -hz),
+        Point(-hx, hy, -hz),
+        Point(-hx, -hy, hz),
+        Point(hx, -hy, hz),
+        Point(hx, hy, hz),
+        Point(-hx, hy, hz),
     ]
 
-    bottom = Polyline([
-        c[0],
-        c[3],
-        c[2],
-        c[1],
-        c[0],
-    ])
-    top = Polyline([
-        c[4],
-        c[5],
-        c[6],
-        c[7],
-        c[4],
-    ])
-    front = Polyline([
-        c[0],
-        c[1],
-        c[5],
-        c[4],
-        c[0],
-    ])
-    right = Polyline([
-        c[1],
-        c[2],
-        c[6],
-        c[5],
-        c[1],
-    ])
-    back = Polyline([
-        c[2],
-        c[3],
-        c[7],
-        c[6],
-        c[2],
-    ])
-    left = Polyline([
-        c[3],
-        c[0],
-        c[4],
-        c[7],
-        c[3],
-    ])
+    bottom = Polyline(
+        [
+            c[0],
+            c[3],
+            c[2],
+            c[1],
+            c[0],
+        ]
+    )
+    top = Polyline(
+        [
+            c[4],
+            c[5],
+            c[6],
+            c[7],
+            c[4],
+        ]
+    )
+    front = Polyline(
+        [
+            c[0],
+            c[1],
+            c[5],
+            c[4],
+            c[0],
+        ]
+    )
+    right = Polyline(
+        [
+            c[1],
+            c[2],
+            c[6],
+            c[5],
+            c[1],
+        ]
+    )
+    back = Polyline(
+        [
+            c[2],
+            c[3],
+            c[7],
+            c[6],
+            c[2],
+        ]
+    )
+    left = Polyline(
+        [
+            c[3],
+            c[0],
+            c[4],
+            c[7],
+            c[3],
+        ]
+    )
 
     b = BRep.from_polylines([bottom, top, front, right, back, left])
     m = b.mesh()
@@ -552,62 +698,85 @@ def test_brep_from_nurbscurves():
     from session_py import BRep
     from session_py import Point
     from session_py import NurbsCurve
-    from session_py import Mesh
 
     hx, hy, hz = 1.0, 1.5, 2.0
     c = [
         Point(-hx, -hy, -hz),
-        Point( hx, -hy, -hz),
-        Point( hx,  hy, -hz),
-        Point(-hx,  hy, -hz),
-        Point(-hx, -hy,  hz),
-        Point( hx, -hy,  hz),
-        Point( hx,  hy,  hz),
-        Point(-hx,  hy,  hz),
+        Point(hx, -hy, -hz),
+        Point(hx, hy, -hz),
+        Point(-hx, hy, -hz),
+        Point(-hx, -hy, hz),
+        Point(hx, -hy, hz),
+        Point(hx, hy, hz),
+        Point(-hx, hy, hz),
     ]
 
-    bottom = NurbsCurve.create(False, 1, [
-        c[0],
-        c[3],
-        c[2],
-        c[1],
-        c[0],
-    ])
-    top = NurbsCurve.create(False, 1, [
-        c[4],
-        c[5],
-        c[6],
-        c[7],
-        c[4],
-    ])
-    front = NurbsCurve.create(False, 1, [
-        c[0],
-        c[1],
-        c[5],
-        c[4],
-        c[0],
-    ])
-    right = NurbsCurve.create(False, 1, [
-        c[1],
-        c[2],
-        c[6],
-        c[5],
-        c[1],
-    ])
-    back = NurbsCurve.create(False, 1, [
-        c[2],
-        c[3],
-        c[7],
-        c[6],
-        c[2],
-    ])
-    left = NurbsCurve.create(False, 1, [
-        c[3],
-        c[0],
-        c[4],
-        c[7],
-        c[3],
-    ])
+    bottom = NurbsCurve.create(
+        False,
+        1,
+        [
+            c[0],
+            c[3],
+            c[2],
+            c[1],
+            c[0],
+        ],
+    )
+    top = NurbsCurve.create(
+        False,
+        1,
+        [
+            c[4],
+            c[5],
+            c[6],
+            c[7],
+            c[4],
+        ],
+    )
+    front = NurbsCurve.create(
+        False,
+        1,
+        [
+            c[0],
+            c[1],
+            c[5],
+            c[4],
+            c[0],
+        ],
+    )
+    right = NurbsCurve.create(
+        False,
+        1,
+        [
+            c[1],
+            c[2],
+            c[6],
+            c[5],
+            c[1],
+        ],
+    )
+    back = NurbsCurve.create(
+        False,
+        1,
+        [
+            c[2],
+            c[3],
+            c[7],
+            c[6],
+            c[2],
+        ],
+    )
+    left = NurbsCurve.create(
+        False,
+        1,
+        [
+            c[3],
+            c[0],
+            c[4],
+            c[7],
+            c[3],
+        ],
+    )
 
     b = BRep.from_nurbscurves([bottom, top, front, right, back, left])
     m = b.mesh()
@@ -626,17 +795,20 @@ def test_brep_from_nurbscurves_holes():
     from session_py import BRep
     from session_py import Point
     from session_py import NurbsCurve
-    from session_py import Mesh
     from session_py import Primitives
     from session_py.tolerance import PI
 
-    outer = NurbsCurve.create(False, 1, [
-        Point(-5, -5, 0),
-        Point(5, -5, 0),
-        Point(5, 5, 0),
-        Point(-5, 5, 0),
-        Point(-5, -5, 0),
-    ])
+    outer = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(-5, -5, 0),
+            Point(5, -5, 0),
+            Point(5, 5, 0),
+            Point(-5, 5, 0),
+            Point(-5, -5, 0),
+        ],
+    )
     hole = Primitives.circle(0.0, 0.0, 0.0, 2.0)
 
     b = BRep.from_nurbscurves([outer], [[hole]])
@@ -654,10 +826,8 @@ def test_brep_from_nurbscurves_holes():
 @MINI_TEST("BRep", "Mesh Orientation")
 def test_brep_mesh_orientation():
     from session_py import BRep
-    from session_py import Mesh
     from session_py.tolerance import PI
 
-    # Reversed faces must flip winding; an unflipped bore inflates the volume.
     bh = BRep.create_block_with_hole(8.0, 6.0, 4.0, 1.5)
     vol = bh.mesh().volume()
     ref = 8.0 * 6.0 * 4.0 - PI * 1.5 * 1.5 * 4.0
@@ -677,11 +847,9 @@ def test_protobuf_roundtrip():
     box.width = 2.0
     box.surfacecolor = Color(255, 128, 64, 255)
 
-    # String
     proto_string = box.pb_dumps()
     loaded_proto_string = BRep.pb_loads(proto_string)
 
-    # File
     filename = Path(__file__).parent.parent.parent / "serialization" / "test_brep.bin"
     box.pb_dump(filename)
     loaded = BRep.pb_load(filename)
@@ -698,72 +866,212 @@ def test_brep_volume():
     from session_py import BRep
     from session_py.tolerance import PI
 
-    box = BRep.create_box(2, 3, 4)          # 2x3x4 -> 24
-    cyl = BRep.create_cylinder(1.0, 4.0)    # pi r^2 h = 4 pi
-    sph = BRep.create_sphere(2.0)           # 4/3 pi r^3
+    box = BRep.create_box(2, 3, 4)
+    cyl = BRep.create_cylinder(1.0, 4.0)
+    sph = BRep.create_sphere(2.0)
     vbox, vcyl, vsph = box.volume(), cyl.volume(), sph.volume()
 
-    # Tessellated volume: the default grid density is 2-4% under the analytic value.
     MINI_CHECK(abs(vbox - 24.0) < 1e-9)
     MINI_CHECK(abs(vcyl - 4 * PI) / (4 * PI) < 0.05)
     MINI_CHECK(abs(vsph - (4.0 / 3.0) * PI * 8) / ((4.0 / 3.0) * PI * 8) < 0.05)
 
 
-@MINI_TEST("BRep", "Shared Grid Boundary")
-def test_brep_shared_grid_boundary():
-    from session_py import BRep, NurbsSurface, NurbsCurve, Point
-    from session_py.brep import BRepRef, BRepOrientation
-    from session_py.remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
-    b=BRep();surfaces=[]
-    for face in range(2):
-     pts=[]
-     for i in range(3):
-      for j in range(2):
-       z=0 if i!=1 else (.5 if j==0 or face==0 else 4)
-       pts.append(Point(i*.5,j*(1 if face==0 else -1),z))
-     s=NurbsSurface.create(False,False,2,1,3,2,pts);surfaces.append(s);si=b.add_surface(s)
-     corners=[(0.,0.),(1.,0.),(1.,1.),(0.,1.)]
-     vi=[b.add_vertex(s.point_at(u,v),0) for u,v in corners]
-     edges=[]
-     for side in range(4):
-      a=corners[side];z=corners[(side+1)%4]
-      if side==0 and face==1: ei=0
-      else:
-       d=0 if a[0]!=z[0] else 1
-       c=s.iso_curve(d,a[1-d])
-       if a[d]>z[d]:c.reverse()
-       ci=b.add_curve_3d(c);ei=b.add_edge(ci,vi[side],vi[(side+1)%4])
-      pc=NurbsCurve.create(False,1,[Point(*a,0),Point(*z,0)])
-      pci=b.add_curve_2d(pc);b.add_pcurve(ei,si,pci,-1)
-      edges.append(BRepRef(ei,BRepOrientation.Forward))
-     wi=b.add_wire(edges);b.add_face(si,[BRepRef(wi,BRepOrientation.Forward)],1e-8)
-    original = [RemeshNurbsSurfaceGrid.from_u_v_q(s,0,0,20,.005) for s in surfaces]
-    def boundary(mesh):
-        return sorted((vd.x,vd.y,vd.z) for vd in mesh.vertex.values() if vd.attributes["v"]==0.0)
-    MINI_CHECK(len(boundary(original[0]))==7 and len(boundary(original[1]))==11)
-    meshes = b.face_meshes_q((20,.005))
-    first,second = boundary(meshes[0]),boundary(meshes[1])
-    MINI_CHECK(first==second and len(first)==7)
-    MINI_CHECK(len(meshes[0].face)==len(original[0].face) and bool(meshes[1].face))
-    maximum = 0.0
-    for a,z in zip(first,first[1:]):
-        u=(a[0]+z[0])*.5
-        actual=surfaces[0].point_at(u,0.0)
-        sag=sum((actual[d]-(a[d]+z[d])*.5)**2 for d in range(3))**.5
-        maximum=max(maximum,sag)
-    MINI_CHECK(maximum <= .005 * 1.5)
+@MINI_TEST("BRep", "Face Polylines Box")
+def test_brep_face_polylines_box():
+    from session_py import BRep
+
+    b = BRep.create_box(2.0, 2.0, 2.0)
+    pls = b.face_polylines()
+    pls_planes = b.face_planes()
+    MINI_CHECK(len(pls) == 6)
+    MINI_CHECK(len(pls_planes) == len(pls))
+
+    seen = [[False, False], [False, False], [False, False]]
+    for fi in range(len(pls)):
+        p = pls[fi]
+        pl = pls_planes[fi]
+        MINI_CHECK(p.point_count() == 5)
+        MINI_CHECK(p.get_point(0) == p.get_point(4))
+
+        axis = -1
+        sign = 0.0
+        for a in range(3):
+            constant = True
+            for i in range(1, p.point_count()):
+                if abs(p.get_point(i)[a] - p.get_point(0)[a]) > 1e-9:
+                    constant = False
+                    break
+            if constant and abs(abs(p.get_point(0)[a]) - 1.0) < 1e-9:
+                axis = a
+                sign = 1.0 if p.get_point(0)[a] > 0 else -1.0
+                break
+        MINI_CHECK(axis >= 0)
+        MINI_CHECK(abs(pl.origin[axis] - sign) < 1e-9)
+
+        n = pl.z_axis
+        MINI_CHECK(abs(abs(n[axis]) - 1.0) < 1e-6)
+        for a2 in range(3):
+            if a2 != axis:
+                MINI_CHECK(abs(n[a2]) < 1e-6)
+
+        normal_sign = 1 if n[axis] > 0.0 else 0
+        MINI_CHECK(not seen[axis][normal_sign])
+        seen[axis][normal_sign] = True
+    for a in range(3):
+        for s in range(2):
+            MINI_CHECK(seen[a][s])
+
+
+@MINI_TEST("BRep", "Face Polylines Cylinder Caps Only")
+def test_brep_face_polylines_cylinder_caps_only():
+    from session_py import BRep
+
+    b = BRep.create_cylinder(1.0, 4.0)
+    MINI_CHECK(b.face_count() == 3)
+    MINI_CHECK(len(b.face_polylines()) == 2)
+    MINI_CHECK(len(b.face_planes()) == 2)
+
+
+@MINI_TEST("BRep", "Face Polylines Ignores Holes")
+def test_brep_face_polylines_ignores_holes():
+    from session_py import BRep
     import math
-    import sys
-    original = RemeshNurbsSurfaceGrid.from_u_v_q(surfaces[0], 0, 0, 5.0, .001)
-    meshes = b.face_meshes_q((5.0, .001))
-    first = boundary(meshes[0])
-    MINI_CHECK(first == boundary(meshes[1]) and bool(meshes[0].face) and bool(meshes[1].face))
-    MINI_CHECK(all(point in first for point in boundary(original)))
-    cosine = math.cos(math.radians(5.0))
-    for point, following in zip(first, first[1:]):
-        a = surfaces[0].normal_at(point[0], 0.0)
-        z = surfaces[0].normal_at(following[0], 0.0)
-        MINI_CHECK(a.dot(z) >= cosine - 64.0 * sys.float_info.epsilon)
+
+    b = BRep.create_block_with_hole(4.0, 4.0, 2.0, 1.0)
+    pls = b.face_polylines()
+    MINI_CHECK(len(pls) == 6)
+    MINI_CHECK(len(pls) == len(b.face_planes()))
+    for p in pls:
+        MINI_CHECK(p.point_count() == 5)
+        for i in range(p.point_count()):
+            pt = p.get_point(i)
+            on_bounds = (
+                abs(abs(pt[0]) - 2.0) < 1e-6
+                or abs(abs(pt[1]) - 2.0) < 1e-6
+                or abs(abs(pt[2]) - 1.0) < 1e-6
+            )
+            MINI_CHECK(on_bounds)
+            radius_to_z_axis = math.sqrt(pt[0] * pt[0] + pt[1] * pt[1])
+            MINI_CHECK(radius_to_z_axis > 1.0 + 1e-6)
+
+
+@MINI_TEST("BRep", "Face Polylines No Planar Faces")
+def test_brep_face_polylines_no_planar_faces():
+    from session_py import BRep
+
+    b = BRep.create_sphere(1.0)
+    MINI_CHECK(len(b.face_polylines()) == 0)
+    MINI_CHECK(len(b.face_planes()) == 0)
+
+
+@MINI_TEST("BRep", "Face Planes Reversed Flip")
+def test_brep_face_planes_reversed_flip():
+    from session_py import BRep
+    from session_py import BRepOrientation
+    from session_py import BRepRef
+
+    b = BRep()
+    fi_forward = _build_quad_face(b)
+    b.add_shell([BRepRef(fi_forward, BRepOrientation.Forward)])
+    fi_reversed = _build_quad_face(b)
+    b.add_shell([BRepRef(fi_reversed, BRepOrientation.Reversed)])
+
+    MINI_CHECK(b.face_orientation(fi_forward) == BRepOrientation.Forward)
+    MINI_CHECK(b.face_orientation(fi_reversed) == BRepOrientation.Reversed)
+
+    planes = b.face_planes()
+    MINI_CHECK(len(planes) == 2)
+    n_forward = planes[0].z_axis
+    n_reversed = planes[1].z_axis
+    MINI_CHECK(abs(n_forward[0] + n_reversed[0]) < 1e-9)
+    MINI_CHECK(abs(n_forward[1] + n_reversed[1]) < 1e-9)
+    MINI_CHECK(abs(n_forward[2] + n_reversed[2]) < 1e-9)
+
+
+@MINI_TEST("BRep", "Face Planes Point Outward")
+def test_brep_face_planes_point_outward():
+    from session_py import BRep
+
+    box = BRep.create_box(2.0, 2.0, 2.0)
+    box_planes = box.face_planes()
+    MINI_CHECK(len(box_planes) == 6)
+    for pl in box_planes:
+        o = pl.origin
+        n = pl.z_axis
+        d = o[0] * n[0] + o[1] * n[1] + o[2] * n[2]
+        MINI_CHECK(d > 0.0)
+
+    cyl = BRep.create_cylinder(1.0, 4.0)
+    cyl_planes = cyl.face_planes()
+    MINI_CHECK(len(cyl_planes) == 2)
+    for pl in cyl_planes:
+        o = pl.origin
+        n = pl.z_axis
+        mid_z = 2.0
+        MINI_CHECK((o[2] - mid_z) * n[2] > 0.0)
+
+
+@MINI_TEST("BRep", "Face Planes Outward Block With Hole")
+def test_brep_face_planes_outward_block_with_hole():
+    from session_py import BRep
+    from session_py import Point
+
+    b = BRep.create_block_with_hole(4.0, 4.0, 2.0, 1.0)
+    MINI_CHECK(b.is_solid())
+    solid_centroid = Point.centroid(b.vertex_points())
+    planes = b.face_planes()
+    MINI_CHECK(len(planes) == 6)
+    for pl in planes:
+        o = pl.origin
+        n = pl.z_axis
+        d = (
+            (o[0] - solid_centroid[0]) * n[0]
+            + (o[1] - solid_centroid[1]) * n[1]
+            + (o[2] - solid_centroid[2]) * n[2]
+        )
+        MINI_CHECK(d > 0.0)
+
+
+@MINI_TEST("BRep", "Face Planes Outward Under Mirrored Winding")
+def test_brep_face_planes_outward_under_mirrored_winding():
+    from session_py import BRep
+    from session_py import BRepOrientation
+    from session_py import Point
+    from session_py import Xform
+
+    mirror = Xform.scale_xyz(-1.0, 1.0, 1.0)
+    b = BRep.create_box(2.0, 2.0, 2.0).transformed(mirror)
+    MINI_CHECK(b.is_solid())
+
+    pls = b.face_polylines()
+    planes = b.face_planes()
+    MINI_CHECK(len(pls) == 6)
+    MINI_CHECK(len(planes) == 6)
+
+    solid_centroid = Point.centroid(b.vertex_points())
+
+    for fi in range(len(pls)):
+        o = planes[fi].origin
+        n = planes[fi].z_axis
+        d = (
+            (o[0] - solid_centroid[0]) * n[0]
+            + (o[1] - solid_centroid[1]) * n[1]
+            + (o[2] - solid_centroid[2]) * n[2]
+        )
+        MINI_CHECK(d > 0.0)
+
+        expected = []
+        for er in b.wire_edges(b.m_faces[fi].wires[0]):
+            edge = b.m_edges[er.index]
+            reversed_ = er.orientation == BRepOrientation.Reversed
+            start = edge.end_vertex if reversed_ else edge.start_vertex
+            expected.append(b.m_vertices[start].point)
+        expected.append(expected[0])
+
+        actual = pls[fi].get_points()
+        MINI_CHECK(len(actual) == len(expected))
+        for k in range(len(actual)):
+            MINI_CHECK(actual[k] == expected[k])
 
 
 if __name__ == "__main__":

@@ -1,1011 +1,1139 @@
 from __future__ import annotations
-"""Constrained Delaunay Triangulation via sweep-line."""
-from typing import TYPE_CHECKING
+
 import math
+from typing import TYPE_CHECKING
+
+from .point import Point
+from .polyline import Polyline
+from .session_config import SESSION_CONFIG
+from .vector import Vector
 
 if TYPE_CHECKING:
-    from .polyline import Polyline
     from .mesh import Mesh
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Integer geometry
+# ═══════════════════════════════════════════════════════════════════════════
 
-_LOOSE = 0
-_ASCEND = 1
-_DESCEND = 2
-_IX_NONE = 0
-_IX_COLLINEAR = 1
-_IX_INTERSECT = 2
-_EC_NEITHER = 0
-_EC_LEFT = 1
-_EC_RIGHT = 2
+NULL_IDX = None
+MAX_COORD64 = 9e17
+MAX_PRECISION = 6
 
 
-class _P64:
-    __slots__ = ('x', 'y')
-
-    def __init__(self, x: int = 0, y: int = 0):
-        self.x = int(x)
-        self.y = int(y)
-
-    def __eq__(self, o):
-        return self.x == o.x and self.y == o.y
-
-    def __ne__(self, o):
-        return not self.__eq__(o)
-
-    def __hash__(self):
-        return hash((self.x, self.y))
+def _to_int64(x: float) -> int:
+    if x >= 0.0:
+        return math.floor(x + 0.5)
+    return -math.floor(-x + 0.5)
 
 
-class _V2:
-    __slots__ = ('pt', 'edges', 'innerLM')
-
-    def __init__(self, pt: "_P64"):
-        self.pt = pt
-        self.edges = []
-        self.innerLM = False
+def _to_point64(p, scale: float) -> tuple[int, int]:
+    return (_to_int64(p[0] * scale), _to_int64(p[1] * scale))
 
 
-class _Edge:
-    __slots__ = ('vL', 'vR', 'vB', 'vT', 'kind', 'triA', 'triB', 'isActive', 'nextE', 'prevE')
-
-    def __init__(self):
-        self.vL = self.vR = self.vB = self.vT = None
-        self.kind = _LOOSE
-        self.triA = self.triB = None
-        self.isActive = False
-        self.nextE = self.prevE = None
+def _div3(s: int) -> int:
+    """Integer division truncating towards zero like C++"""
+    if s >= 0:
+        return s // 3
+    return -((-s) // 3)
 
 
-class _Tri:
-    __slots__ = ('edges',)
-
-    def __init__(self, e1: "_Edge", e2: "_Edge", e3: "_Edge"):
-        self.edges = [e1, e2, e3]
-
-
-class _DegenBail(Exception):
-    pass
-
-
-def _cps(p1, p2, p3):
-    cp = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x)
-    return 1 if cp > 0 else (-1 if cp < 0 else 0)
+def _cross_sign(p1, p2, p3) -> int:
+    """Sign of the turn p1 -> p2 -> p3"""
+    cp = float(p2[0] - p1[0]) * float(p3[1] - p2[1]) - float(p2[1] - p1[1]) * float(
+        p3[0] - p2[0]
+    )
+    if cp > 0:
+        return 1
+    if cp < 0:
+        return -1
+    return 0
 
 
-def _sqr(x):
-    return x * x
+def _left_turning(p1, p2, p3) -> bool:
+    return _cross_sign(p1, p2, p3) < 0
 
 
-def _dist_sqr(a, b):
-    dx = a.x - b.x
-    dy = a.y - b.y
+def _right_turning(p1, p2, p3) -> bool:
+    return _cross_sign(p1, p2, p3) > 0
+
+
+def _sweep_before(a, b) -> bool:
+    """True when a is swept before b: higher y first, then lower x"""
+    if a[1] == b[1]:
+        return a[0] < b[0]
+    return a[1] > b[1]
+
+
+def _dist_sqr(a, b) -> float:
+    dx = float(a[0] - b[0])
+    dy = float(a[1] - b[1])
     return dx * dx + dy * dy
 
 
-def _left_turning(p1, p2, p3):
-    cp = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x)
-    return cp < 0
+def _in_circle(a, b, c, d) -> float:
+    """Positive when d lies inside the circumcircle of the counter-clockwise triangle a, b, c"""
+    m00 = float(a[0] - d[0])
+    m01 = float(a[1] - d[1])
+    m02 = m00 * m00 + m01 * m01
+    m10 = float(b[0] - d[0])
+    m11 = float(b[1] - d[1])
+    m12 = m10 * m10 + m11 * m11
+    m20 = float(c[0] - d[0])
+    m21 = float(c[1] - d[1])
+    m22 = m20 * m20 + m21 * m21
+    return (
+        m00 * (m11 * m22 - m21 * m12)
+        - m10 * (m01 * m22 - m21 * m02)
+        + m20 * (m01 * m12 - m11 * m02)
+    )
 
 
-def _right_turning(p1, p2, p3):
-    cp = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x)
-    return cp > 0
+def _dist_sqr_segment(p, a, b) -> float:
+    """Squared distance from p to the segment a-b"""
+    dx = float(b[0] - a[0])
+    dy = float(b[1] - a[1])
+    ax = float(p[0] - a[0])
+    ay = float(p[1] - a[1])
+    q = ax * dx + ay * dy
+    if q < 0:
+        return _dist_sqr(p, a)
+    if q > dx * dx + dy * dy:
+        return _dist_sqr(p, b)
+    return (ax * dy - dx * ay) * (ax * dy - dx * ay) / (dx * dx + dy * dy)
 
 
-def _is_horiz(e):
-    return e.vB.pt.y == e.vT.pt.y
-
-
-def _is_loose(e):
-    return e.kind == _LOOSE
-
-
-def _is_left_edge(e):
-    return e.kind == _ASCEND
-
-
-def _is_right_edge(e):
-    return e.kind == _DESCEND
-
-
-def _edge_completed(e):
-    if not e.triA:
+def _segments_intersect(a1, a2, b1, b2) -> bool:
+    """True when a1-a2 and b1-b2 cross strictly inside both segments"""
+    if a1 == b1 or a2 == b1 or a2 == b2 or a1 == b2:
         return False
-    if e.triB:
-        return True
-    return e.kind != _LOOSE
-
-
-def _edge_contains(e, v):
-    if e.vL is v:
-        return _EC_LEFT
-    if e.vR is v:
-        return _EC_RIGHT
-    return _EC_NEITHER
-
-
-def _remove_from_vert(vert, edge):
-    vert.edges.remove(edge)
-
-
-def _find_loc_min_idx(path, length, idx):
-    if length < 3:
-        return False, idx
-    i0 = idx
-    n = (idx + 1) % length
-    while path[n].y <= path[idx].y:
-        idx = n
-        n = (n + 1) % length
-        if idx == i0:
-            return False, idx
-    while path[n].y >= path[idx].y:
-        idx = n
-        n = (n + 1) % length
-    return True, idx
-
-
-def _prev(idx, length):
-    return length - 1 if idx == 0 else idx - 1
-
-
-def _next_idx(idx, length):
-    return (idx + 1) % length
-
-
-def _find_linking_edge(vert1, vert2, prefer_ascending):
-    res = None
-    for e in vert1.edges:
-        if e.vL is vert2 or e.vR is vert2:
-            if e.kind == _LOOSE or ((e.kind == _ASCEND) == prefer_ascending):
-                return e
-            res = e
-    return res
-
-
-def _path_from_tri(tri):
-    e0 = tri.edges[0]
-    res = [e0.vL.pt, e0.vR.pt]
-    e1 = tri.edges[1]
-    if e1.vL.pt == res[0] or e1.vL.pt == res[1]:
-        res.append(e1.vR.pt)
-    else:
-        res.append(e1.vL.pt)
-    return res
-
-
-def _in_circle(pA, pB, pC, pD):
-    dx = pD.x; dy = pD.y
-    m00 = pA.x - dx; m01 = pA.y - dy; m02 = m00*m00 + m01*m01
-    m10 = pB.x - dx; m11 = pB.y - dy; m12 = m10*m10 + m11*m11
-    m20 = pC.x - dx; m21 = pC.y - dy; m22 = m20*m20 + m21*m21
-    return m00*(m11*m22-m21*m12) - m10*(m01*m22-m21*m02) + m20*(m01*m12-m11*m02)
-
-
-def _shortest_dist_seg(pt, sp1, sp2):
-    dx = float(sp2.x - sp1.x)
-    dy = float(sp2.y - sp1.y)
-    ax = float(pt.x - sp1.x)
-    ay = float(pt.y - sp1.y)
-    qnum = ax*dx + ay*dy
-    if qnum < 0:
-        return _dist_sqr(pt, sp1)
-    dd = dx*dx + dy*dy
-    if qnum > dd:
-        return _dist_sqr(pt, sp2)
-    return _sqr(ax*dy - dx*ay) / dd
-
-
-def _segs_intersect(s1a, s1b, s2a, s2b):
-    if s1a == s2a or s1b == s2a or s1b == s2b or s1a == s2b:
-        return _IX_NONE
-    dy1 = float(s1b.y - s1a.y)
-    dx1 = float(s1b.x - s1a.x)
-    dy2 = float(s2b.y - s2a.y)
-    dx2 = float(s2b.x - s2a.x)
-    cp = dy1*dx2 - dy2*dx1
+    dy1 = float(a2[1] - a1[1])
+    dx1 = float(a2[0] - a1[0])
+    dy2 = float(b2[1] - b1[1])
+    dx2 = float(b2[0] - b1[0])
+    cp = dy1 * dx2 - dy2 * dx1
     if cp == 0:
-        return _IX_COLLINEAR
-    t = float(s1a.x - s2a.x)*dy2 - float(s1a.y - s2a.y)*dx2
-    if t >= 0:
-        if cp < 0 or t >= cp:
-            return _IX_NONE
-    else:
-        if cp > 0 or t <= cp:
-            return _IX_NONE
-    t = float(s1a.x - s2a.x)*dy1 - float(s1a.y - s2a.y)*dx1
-    if t >= 0:
-        if cp > 0 and t < cp:
-            return _IX_INTERSECT
-    else:
-        if cp < 0 and t > cp:
-            return _IX_INTERSECT
-    return _IX_NONE
+        return False
+    t = float(a1[0] - b1[0]) * dy2 - float(a1[1] - b1[1]) * dx2
+    if t >= 0 and (cp < 0 or t >= cp):
+        return False
+    if t < 0 and (cp > 0 or t <= cp):
+        return False
+    u = float(a1[0] - b1[0]) * dy1 - float(a1[1] - b1[1]) * dx1
+    if u >= 0:
+        return cp > 0 and u < cp
+    return cp < 0 and u > cp
+
+
+def _inside_path64(p, poly) -> bool:
+    """Even-odd test of an integer point against an integer ring"""
+    inside = False
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        if (poly[i][1] > p[1]) != (poly[j][1] > p[1]):
+            x = float(poly[i][0]) + float(p[1] - poly[i][1]) * float(
+                poly[j][0] - poly[i][0]
+            ) / float(poly[j][1] - poly[i][1])
+            if float(p[0]) < x:
+                inside = not inside
+        j = i
+    return inside
+
+
+def _prev_index(i: int, n: int) -> int:
+    return n - 1 if i == 0 else i - 1
+
+
+def _next_index(i: int, n: int) -> int:
+    return (i + 1) % n
+
+
+def _find_loc_min(path, i: int) -> tuple[bool, int]:
+    """Advance i to the next vertex that ends a rising run and starts a falling one; false when the path is flat"""
+    n = len(path)
+    if n < 3:
+        return False, i
+    i0 = i
+    k = _next_index(i, n)
+    while path[k][1] <= path[i][1]:
+        i = k
+        k = _next_index(k, n)
+        if i == i0:
+            return False, i
+    while path[k][1] >= path[i][1]:
+        i = k
+        k = _next_index(k, n)
+    return True, i
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sweep graph
+# ═══════════════════════════════════════════════════════════════════════════
+
+LOOSE = 0
+ASCEND = 1
+DESCEND = 2
+
+
+class _Vertex:
+    __slots__ = ("edges", "inner_lm", "pt")
+
+    def __init__(self, pt: tuple[int, int]):
+        self.pt = pt
+        self.edges = []
+        self.inner_lm = False
+
+
+class _Edge:
+    __slots__ = (
+        "active",
+        "kind",
+        "next",
+        "prev",
+        "tri_a",
+        "tri_b",
+        "vb",
+        "vl",
+        "vr",
+        "vt",
+    )
+
+    def __init__(self):
+        self.vl = NULL_IDX
+        self.vr = NULL_IDX
+        self.vb = NULL_IDX
+        self.vt = NULL_IDX
+        self.kind = LOOSE
+        self.tri_a = NULL_IDX
+        self.tri_b = NULL_IDX
+        self.active = False
+        self.next = NULL_IDX
+        self.prev = NULL_IDX
+
+
+class _Tri:
+    __slots__ = ("edges",)
+
+    def __init__(self, e1: int, e2: int, e3: int):
+        self.edges = [e1, e2, e3]
 
 
 class _Delaunay:
-    def __init__(self, use_delaunay: bool = True):
-        self._verts = []
-        self._edges = []
-        self._tris = []
-        self._pending = []
-        self._horz = []
-        self._loc_mins = []
-        self._use_del = use_delaunay
-        self._lowermost = None
-        self._first_active = None
+    """Sweep-line constrained Delaunay: boundary edges ascend on the left and descend on the right, diagonals are loose"""
 
-    def _cleanup(self):
-        self._verts = []
-        self._edges = []
-        self._tris = []
-        self._first_active = None
-        self._lowermost = None
+    def __init__(self):
+        self.vs = []
+        self.es = []
+        self.ts = []
+        self.pending = []
+        self.horz = []
+        self.loc_mins = []
+        self.lowermost = NULL_IDX
+        self.first_active = NULL_IDX
 
-    def _add_active(self, edge):
-        if edge.isActive:
+    def _is_horizontal(self, e: int) -> bool:
+        return self.vs[self.es[e].vb].pt[1] == self.vs[self.es[e].vt].pt[1]
+
+    def _completed(self, e: int) -> bool:
+        """An edge is done with two triangles, or with one when it is a boundary edge"""
+        if self.es[e].tri_a is NULL_IDX:
+            return False
+        if self.es[e].tri_b is not NULL_IDX:
+            return True
+        return self.es[e].kind != LOOSE
+
+    def _other(self, e: int, v: int) -> int:
+        """The endpoint of e that is not v"""
+        return self.es[e].vt if self.es[e].vb == v else self.es[e].vb
+
+    def _add_vertex(self, p: tuple[int, int]) -> int:
+        self.vs.append(_Vertex(p))
+        return len(self.vs) - 1
+
+    def _add_active(self, e: int) -> None:
+        """Prepend e to the doubly-linked active list"""
+        if self.es[e].active:
             return
-        edge.prevE = None
-        edge.nextE = self._first_active
-        edge.isActive = True
-        if self._first_active:
-            self._first_active.prevE = edge
-        self._first_active = edge
+        self.es[e].prev = NULL_IDX
+        self.es[e].next = self.first_active
+        self.es[e].active = True
+        if self.first_active is not NULL_IDX:
+            self.es[self.first_active].prev = e
+        self.first_active = e
 
-    def _remove_active(self, edge):
-        _remove_from_vert(edge.vB, edge)
-        _remove_from_vert(edge.vT, edge)
-        prev = edge.prevE
-        nxt = edge.nextE
-        if nxt:
-            nxt.prevE = prev
-        if prev:
-            prev.nextE = nxt
-        edge.isActive = False
-        if self._first_active is edge:
-            self._first_active = nxt
+    def _remove_active(self, e: int) -> None:
+        """Unlink e from the active list and from both endpoint edge lists"""
+        self._remove_from_vertex(self.es[e].vb, e)
+        self._remove_from_vertex(self.es[e].vt, e)
+        prev = self.es[e].prev
+        next = self.es[e].next
+        if next is not NULL_IDX:
+            self.es[next].prev = prev
+        if prev is not NULL_IDX:
+            self.es[prev].next = next
+        self.es[e].active = False
+        if self.first_active == e:
+            self.first_active = next
 
-    def _create_edge(self, v1, v2, kind):
-        res = _Edge()
-        self._edges.append(res)
-        if v1.pt.y == v2.pt.y:
-            res.vB = v1; res.vT = v2
-        elif v1.pt.y < v2.pt.y:
-            res.vB = v2; res.vT = v1
+    def _remove_from_vertex(self, v: int, e: int) -> None:
+        edges = self.vs[v].edges
+        if e in edges:
+            edges.remove(e)
+
+    def _create_edge(self, v1: int, v2: int, kind: int) -> int:
+        """New edge between v1 and v2; loose edges go straight to the active list and the legalize queue"""
+        e = len(self.es)
+        self.es.append(_Edge())
+        p1 = self.vs[v1].pt
+        p2 = self.vs[v2].pt
+        self.es[e].vb = v2 if p1[1] < p2[1] else v1
+        self.es[e].vt = v1 if p1[1] < p2[1] else v2
+        self.es[e].vl = v1 if p1[0] <= p2[0] else v2
+        self.es[e].vr = v2 if p1[0] <= p2[0] else v1
+        self.es[e].kind = kind
+        self.vs[v1].edges.append(e)
+        self.vs[v2].edges.append(e)
+        if kind == LOOSE:
+            self.pending.append(e)
+            self._add_active(e)
+        return e
+
+    def _create_tri(self, e1: int, e2: int, e3: int) -> int:
+        """New triangle on three edges; an edge leaves the active list when it is completed"""
+        t = len(self.ts)
+        self.ts.append(_Tri(e1, e2, e3))
+        for e in (e1, e2, e3):
+            if self.es[e].tri_a is not NULL_IDX:
+                self.es[e].tri_b = t
+                self._remove_active(e)
+            else:
+                self.es[e].tri_a = t
+                if self.es[e].kind != LOOSE:
+                    self._remove_active(e)
+        return t
+
+    def _split_edge(self, long_e: int, short_e: int) -> None:
+        """Shorten long_e to end at short_e's top and continue it with a new edge to the old top"""
+        old_t = self.es[long_e].vt
+        new_t = self.es[short_e].vt
+        self._remove_from_vertex(old_t, long_e)
+        self.es[long_e].vt = new_t
+        if self.es[long_e].vl == old_t:
+            self.es[long_e].vl = new_t
         else:
-            res.vB = v1; res.vT = v2
-        if v1.pt.x <= v2.pt.x:
-            res.vL = v1; res.vR = v2
-        else:
-            res.vL = v2; res.vR = v1
-        res.kind = kind
-        v1.edges.append(res)
-        v2.edges.append(res)
-        if kind == _LOOSE:
-            self._pending.append(res)
-            self._add_active(res)
+            self.es[long_e].vr = new_t
+        self.vs[new_t].edges.append(long_e)
+        self._create_edge(new_t, old_t, self.es[long_e].kind)
+
+    def _split_collinear(self, v: int) -> None:
+        """Split the longer of two collinear non-horizontal edges leaving v downwards"""
+        snapshot = list(self.vs[v].edges)
+        for e1 in snapshot:
+            if self._is_horizontal(e1) or self.es[e1].vb != v:
+                continue
+            for e2 in snapshot:
+                if e2 == e1 or self.es[e2].vb != v:
+                    continue
+                t1 = self.vs[self.es[e1].vt].pt
+                t2 = self.vs[self.es[e2].vt].pt
+                if t1[1] == t2[1] or _cross_sign(t1, self.vs[v].pt, t2) != 0:
+                    continue
+                if t1[1] < t2[1]:
+                    self._split_edge(e1, e2)
+                else:
+                    self._split_edge(e2, e1)
+                break
+
+    def _merge_duplicates(self, order: list[int]) -> None:
+        """Merge coincident vertices that are neighbours in sweep order into the first one"""
+        v1 = order[0]
+        for v2 in order[1:]:
+            if self.vs[v1].pt != self.vs[v2].pt:
+                v1 = v2
+                continue
+            if not self.vs[v1].inner_lm or not self.vs[v2].inner_lm:
+                self.vs[v1].inner_lm = False
+            for e in self.vs[v2].edges:
+                if self.es[e].vb == v2:
+                    self.es[e].vb = v1
+                else:
+                    self.es[e].vt = v1
+                if self.es[e].vl == v2:
+                    self.es[e].vl = v1
+                else:
+                    self.es[e].vr = v1
+            self.vs[v1].edges.extend(self.vs[v2].edges)
+            self.vs[v2].edges = []
+            self._split_collinear(v1)
+
+    def _find_linking_edge(self, v1: int, v2: int, prefer_ascend: bool) -> int:
+        """Edge of v1 that reaches v2, a loose one or one of the preferred kind first"""
+        res = NULL_IDX
+        for e in self.vs[v1].edges:
+            if self.es[e].vl != v2 and self.es[e].vr != v2:
+                continue
+            if self.es[e].kind == LOOSE or (self.es[e].kind == ASCEND) == prefer_ascend:
+                return e
+            res = e
         return res
 
-    def _create_tri(self, e1, e2, e3):
-        res = _Tri(e1, e2, e3)
-        self._tris.append(res)
-        for i in range(3):
-            if res.edges[i].triA:
-                res.edges[i].triB = res
-                self._remove_active(res.edges[i])
-            else:
-                res.edges[i].triA = res
-                if not _is_loose(res.edges[i]):
-                    self._remove_active(res.edges[i])
-        return res
+    def _horizontal_between(self, v1: int, v2: int) -> bool:
+        """True when an active horizontal edge lies on the row of v1 between v1 and v2"""
+        y = self.vs[v1].pt[1]
+        lo = min(self.vs[v1].pt[0], self.vs[v2].pt[0])
+        hi = max(self.vs[v1].pt[0], self.vs[v2].pt[0])
+        e = self.first_active
+        while e is not NULL_IDX:
+            pl = self.vs[self.es[e].vl].pt
+            pr = self.vs[self.es[e].vr].pt
+            if (
+                pl[1] == y
+                and pr[1] == y
+                and pl[0] >= lo
+                and pr[0] <= hi
+                and (pl[0] != lo or pl[0] != hi)
+            ):
+                return True
+            e = self.es[e].next
+        return False
 
-    def _split_edge(self, longE, shortE):
-        oldT = longE.vT
-        newT = shortE.vT
-        _remove_from_vert(oldT, longE)
-        longE.vT = newT
-        if longE.vL is oldT:
-            longE.vL = newT
-        else:
-            longE.vR = newT
-        newT.edges.append(longE)
-        self._create_edge(newT, oldT, longE.kind)
+    def _edge_below(self, v_above: int) -> int:
+        """Nearest active edge spanning the x of v_above below it, NULL_IDX when there is none"""
+        pa = self.vs[v_above].pt
+        best = NULL_IDX
+        best_d = -1.0
+        e = self.first_active
+        while e is not NULL_IDX:
+            pl = self.vs[self.es[e].vl].pt
+            pr = self.vs[self.es[e].vr].pt
+            spans = (
+                pl[0] <= pa[0]
+                and pr[0] >= pa[0]
+                and self.vs[self.es[e].vb].pt[1] >= pa[1]
+            )
+            if (
+                spans
+                and self.es[e].vb != v_above
+                and self.es[e].vt != v_above
+                and not _left_turning(pl, pa, pr)
+            ):
+                d = _dist_sqr_segment(pa, pl, pr)
+                if best is NULL_IDX or d < best_d:
+                    best = e
+                    best_d = d
+            e = self.es[e].next
+        return best
 
-    def _merge_dup_collinear(self):
-        vIter1 = 0
-        for vIter2 in range(1, len(self._verts)):
-            v1 = self._verts[vIter1]
-            v2 = self._verts[vIter2]
-            if v1.pt != v2.pt:
-                vIter1 = vIter2
+    def _visible_vertex(self, e_below: int, v_above: int) -> int:
+        """Endpoint of e_below visible from v_above, moved past every active edge crossing the connection"""
+        pa = self.vs[v_above].pt
+        best = (
+            self.es[e_below].vb
+            if self.vs[self.es[e_below].vt].pt[1] <= pa[1]
+            else self.es[e_below].vt
+        )
+        left = self.vs[best].pt[0] < pa[0]
+        e = self.first_active
+        while e is not NULL_IDX:
+            pb = self.vs[best].pt
+            pl = self.vs[self.es[e].vl].pt
+            pr = self.vs[self.es[e].vr].pt
+            eb = self.vs[self.es[e].vb].pt
+            et = self.vs[self.es[e].vt].pt
+            spans = (
+                (pr[0] > pb[0] and pl[0] < pa[0])
+                if left
+                else (pr[0] < pb[0] and pl[0] > pa[0])
+            )
+            if (
+                spans
+                and eb[1] > pa[1]
+                and et[1] < pb[1]
+                and _segments_intersect(eb, et, pb, pa)
+            ):
+                best = self.es[e].vt if et[1] > pa[1] else self.es[e].vb
+            e = self.es[e].next
+        return best
+
+    def _create_loc_min_edge(self, v_above: int) -> int:
+        """Connect a hole local minimum to the visible vertex of the nearest active edge below it"""
+        below = self._edge_below(v_above)
+        if below is NULL_IDX:
+            return NULL_IDX
+        return self._create_edge(self._visible_vertex(below, v_above), v_above, LOOSE)
+
+    def _fan_vertex(self, edge: int, pivot: int, left: bool) -> tuple[int, int]:
+        """Tightest active fan candidate around pivot on the left (or right) side of edge and its edge, turns read with the side as sign; NULL_IDX when there is none"""
+        v = self._other(edge, pivot)
+        side = 1 if left else -1
+        v_alt = NULL_IDX
+        e_alt = NULL_IDX
+        for e in self.vs[pivot].edges:
+            if e == edge or not self.es[e].active:
                 continue
-            if not v1.innerLM or not v2.innerLM:
-                v1.innerLM = False
-            for e in v2.edges:
-                if e.vB is v2:
-                    e.vB = v1
-                else:
-                    e.vT = v1
-                if e.vL is v2:
-                    e.vL = v1
-                else:
-                    e.vR = v1
-            v1.edges.extend(v2.edges)
-            v2.edges = []
-            for e1 in list(v1.edges):
-                if _is_horiz(e1) or e1.vB is not v1:
+            vx = self._other(e, pivot)
+            if vx == v:
+                continue
+            sign = side * _cross_sign(self.vs[v].pt, self.vs[pivot].pt, self.vs[vx].pt)
+            if sign == 0:
+                if (self.vs[v].pt[0] > self.vs[pivot].pt[0]) == (
+                    self.vs[pivot].pt[0] > self.vs[vx].pt[0]
+                ):
                     continue
-                for e2 in list(v1.edges):
-                    if e2 is e1 or e2.vB is not v1:
-                        continue
-                    if e1.vT.pt.y == e2.vT.pt.y:
-                        continue
-                    if _cps(e1.vT.pt, v1.pt, e2.vT.pt) != 0:
-                        continue
-                    if e1.vT.pt.y < e2.vT.pt.y:
-                        self._split_edge(e1, e2)
-                    else:
-                        self._split_edge(e2, e1)
-                    break
+            elif sign > 0 or (
+                v_alt is not NULL_IDX
+                and side
+                * _cross_sign(self.vs[vx].pt, self.vs[pivot].pt, self.vs[v_alt].pt)
+                >= 0
+            ):
+                continue
+            v_alt = vx
+            e_alt = e
+        return v_alt, e_alt
 
-    def _inner_loc_min_edge(self, vAbove):
-        if not self._first_active:
-            return None
-        xA = vAbove.pt.x
-        yA = vAbove.pt.y
-        e = self._first_active
-        eBelow = None
-        bestD = -1.0
-        while e:
-            if (e.vL.pt.x <= xA and e.vR.pt.x >= xA and
-                    e.vB.pt.y >= yA and e.vB is not vAbove and e.vT is not vAbove and
-                    not _left_turning(e.vL.pt, vAbove.pt, e.vR.pt)):
-                d = _shortest_dist_seg(vAbove.pt, e.vL.pt, e.vR.pt)
-                if eBelow is None or d < bestD:
-                    eBelow = e
-                    bestD = d
-            e = e.nextE
-        if not eBelow:
-            return None
-        vBest = eBelow.vB if eBelow.vT.pt.y <= yA else eBelow.vT
-        xBest = vBest.pt.x
-        yBest = vBest.pt.y
-        e = self._first_active
-        if xBest < xA:
-            while e:
-                if (e.vR.pt.x > xBest and e.vL.pt.x < xA and
-                        e.vB.pt.y > yA and e.vT.pt.y < yBest and
-                        _segs_intersect(e.vB.pt, e.vT.pt, vBest.pt, vAbove.pt) == _IX_INTERSECT):
-                    vBest = e.vT if e.vT.pt.y > yA else e.vB
-                    xBest = vBest.pt.x
-                    yBest = vBest.pt.y
-                e = e.nextE
-        else:
-            while e:
-                if (e.vR.pt.x < xBest and e.vL.pt.x > xA and
-                        e.vB.pt.y > yA and e.vT.pt.y < yBest and
-                        _segs_intersect(e.vB.pt, e.vT.pt, vBest.pt, vAbove.pt) == _IX_INTERSECT):
-                    vBest = e.vT if e.vT.pt.y > yA else e.vB
-                    xBest = vBest.pt.x
-                    yBest = vBest.pt.y
-                e = e.nextE
-        return self._create_edge(vBest, vAbove, _LOOSE)
-
-    def _horiz_between(self, v1, v2):
-        y = v1.pt.y
-        if v1.pt.x > v2.pt.x:
-            l, r = v2.pt.x, v1.pt.x
-        else:
-            l, r = v1.pt.x, v2.pt.x
-        res = self._first_active
-        while res:
-            if (res.vL.pt.y == y and res.vR.pt.y == y and
-                    res.vL.pt.x >= l and res.vR.pt.x <= r and
-                    (res.vL.pt.x != l or res.vL.pt.x != r)):
-                return res
-            res = res.nextE
-        return None
-
-    def _tri_left(self, edge, pivot, minY):
-        vAlt = None
-        eAlt = None
-        v = edge.vT if edge.vB is pivot else edge.vB
-        for e in pivot.edges:
-            if e is edge or not e.isActive:
-                continue
-            vX = e.vB if e.vT is pivot else e.vT
-            if vX is v:
-                continue
-            cps = _cps(v.pt, pivot.pt, vX.pt)
-            if cps == 0:
-                if (v.pt.x > pivot.pt.x) == (pivot.pt.x > vX.pt.x):
-                    continue
-            elif cps > 0 or (vAlt and not _left_turning(vX.pt, pivot.pt, vAlt.pt)):
-                continue
-            vAlt = vX
-            eAlt = e
-        if not vAlt or vAlt.pt.y < minY:
-            return
-        if vAlt.pt.y < pivot.pt.y:
-            if _is_left_edge(eAlt):
+    def _triangulate_fan(self, edge: int, pivot: int, min_y: int, left: bool) -> None:
+        """Fan triangles around pivot on one side of edge, walking onto each new diagonal, never below min_y"""
+        max_fan = 2 * len(self.vs) + 2
+        for step in range(max_fan):
+            v_alt, e_alt = self._fan_vertex(edge, pivot, left)
+            if v_alt is NULL_IDX or self.vs[v_alt].pt[1] < min_y:
                 return
-        elif vAlt.pt.y > pivot.pt.y:
-            if _is_right_edge(eAlt):
+            kind_below = ASCEND if left else DESCEND
+            kind_above = DESCEND if left else ASCEND
+            if (
+                self.vs[v_alt].pt[1] < self.vs[pivot].pt[1]
+                and self.es[e_alt].kind == kind_below
+            ):
                 return
-        eX = _find_linking_edge(vAlt, v, vAlt.pt.y < v.pt.y)
-        if not eX:
-            if vAlt.pt.y == v.pt.y == minY and self._horiz_between(vAlt, v):
+            if (
+                self.vs[v_alt].pt[1] > self.vs[pivot].pt[1]
+                and self.es[e_alt].kind == kind_above
+            ):
                 return
-            eX = self._create_edge(vAlt, v, _LOOSE)
-        self._create_tri(edge, eAlt, eX)
-        if not _edge_completed(eX):
-            self._tri_left(eX, vAlt, minY)
-
-    def _tri_right(self, edge, pivot, minY):
-        vAlt = None
-        eAlt = None
-        v = edge.vT if edge.vB is pivot else edge.vB
-        for e in pivot.edges:
-            if e is edge or not e.isActive:
-                continue
-            vX = e.vB if e.vT is pivot else e.vT
-            if vX is v:
-                continue
-            cps = _cps(v.pt, pivot.pt, vX.pt)
-            if cps == 0:
-                if (v.pt.x > pivot.pt.x) == (pivot.pt.x > vX.pt.x):
-                    continue
-            elif cps < 0 or (vAlt and not _right_turning(vX.pt, pivot.pt, vAlt.pt)):
-                continue
-            vAlt = vX
-            eAlt = e
-        if not vAlt or vAlt.pt.y < minY:
-            return
-        if vAlt.pt.y < pivot.pt.y:
-            if _is_right_edge(eAlt):
-                return
-        elif vAlt.pt.y > pivot.pt.y:
-            if _is_left_edge(eAlt):
-                return
-        eX = _find_linking_edge(vAlt, v, vAlt.pt.y > v.pt.y)
-        if not eX:
-            if vAlt.pt.y == v.pt.y == minY and self._horiz_between(vAlt, v):
-                return
-            eX = self._create_edge(vAlt, v, _LOOSE)
-        self._create_tri(edge, eX, eAlt)
-        if not _edge_completed(eX):
-            self._tri_right(eX, vAlt, minY)
-
-    def _force_legal(self, edge):
-        triA = edge.triA
-        triB = edge.triB
-        if not triA or not triB:
-            return
-        eL = edge.vL
-        eR = edge.vR
-        vertA = None
-        vertB = None
-        edgesA = [None, None, None]
-        edgesB = [None, None, None]
-        triA_edges = triA.edges
-        for i in range(3):
-            te = triA_edges[i]
-            if te is edge:
-                continue
-            if te.vL is eL:
-                edgesA[1] = te
-                vertA = te.vR
-            elif te.vR is eL:
-                edgesA[1] = te
-                vertA = te.vL
+            v = self._other(edge, pivot)
+            prefer_ascend = (
+                self.vs[v_alt].pt[1] < self.vs[v].pt[1]
+                if left
+                else self.vs[v_alt].pt[1] > self.vs[v].pt[1]
+            )
+            ex = self._find_linking_edge(v_alt, v, prefer_ascend)
+            if ex is NULL_IDX:
+                if (
+                    self.vs[v_alt].pt[1] == self.vs[v].pt[1]
+                    and self.vs[v].pt[1] == min_y
+                    and self._horizontal_between(v_alt, v)
+                ):
+                    return
+                ex = self._create_edge(v_alt, v, LOOSE)
+            if left:
+                self._create_tri(edge, e_alt, ex)
             else:
-                edgesB[1] = te
-        triB_edges = triB.edges
-        for i in range(3):
-            te = triB_edges[i]
-            if te is edge:
-                continue
-            if te.vL is eL:
-                edgesA[2] = te
-                vertB = te.vR
-            elif te.vR is eL:
-                edgesA[2] = te
-                vertB = te.vL
-            else:
-                edgesB[2] = te
-        ap = vertA.pt
-        lp = eL.pt
-        rp = eR.pt
-        lpx = lp.x; lpy = lp.y; rpx = rp.x; rpy = rp.y
-        apx = ap.x; apy = ap.y
-        cp = (lpx - apx) * (rpy - lpy) - (lpy - apy) * (rpx - lpx)
-        if cp == 0:
-            return
-        bp = vertB.pt
-        dx = bp.x; dy = bp.y
-        m00 = apx - dx; m01 = apy - dy; m02 = m00*m00 + m01*m01
-        m10 = lpx - dx; m11 = lpy - dy; m12 = m10*m10 + m11*m11
-        m20 = rpx - dx; m21 = rpy - dy; m22 = m20*m20 + m21*m21
-        ict = m00*(m11*m22-m21*m12) - m10*(m01*m22-m21*m02) + m20*(m01*m12-m11*m02)
-        if ict == 0:
-            return
-        right_turn = cp > 0
-        if right_turn == (ict < 0):
-            return
-        edge.vL = vertA
-        edge.vR = vertB
-        edge.triA.edges[0] = edge
-        for i in range(1, 3):
-            edge.triA.edges[i] = edgesA[i]
-            if _is_loose(edgesA[i]):
-                self._pending.append(edgesA[i])
-            if edgesA[i].triA is edge.triA or edgesA[i].triB is edge.triA:
-                continue
-            if edgesA[i].triA is edge.triB:
-                edgesA[i].triA = edge.triA
-            elif edgesA[i].triB is edge.triB:
-                edgesA[i].triB = edge.triA
-        edge.triB.edges[0] = edge
-        for i in range(1, 3):
-            edge.triB.edges[i] = edgesB[i]
-            if _is_loose(edgesB[i]):
-                self._pending.append(edgesB[i])
-            if edgesB[i].triA is edge.triB or edgesB[i].triB is edge.triB:
-                continue
-            if edgesB[i].triA is edge.triA:
-                edgesB[i].triA = edge.triB
-            elif edgesB[i].triB is edge.triA:
-                edgesB[i].triB = edge.triB
-
-    def _add_path(self, path):
-        length = len(path)
-        ok, i0 = _find_loc_min_idx(path, length, 0)
-        if not ok:
-            return
-        iPrev = _prev(i0, length)
-        while path[iPrev] == path[i0]:
-            iPrev = _prev(iPrev, length)
-        iNext = _next_idx(i0, length)
-        i = i0
-        while _cps(path[iPrev], path[i], path[iNext]) == 0:
-            ok, i = _find_loc_min_idx(path, length, i)
-            if not ok or i == i0:
+                self._create_tri(edge, ex, e_alt)
+            if self._completed(ex):
                 return
-            iPrev = _prev(i, length)
-            while path[iPrev] == path[i]:
-                iPrev = _prev(iPrev, length)
-            iNext = _next_idx(i, length)
-        vert_cnt = len(self._verts)
-        v0 = _V2(path[i])
-        self._verts.append(v0)
-        if _left_turning(path[iPrev], path[i], path[iNext]):
-            v0.innerLM = True
-        vPrev = v0
-        i = iNext
-        # Degeneracy guard: a valid simple path is walked in O(len) advances. A degenerate or
-        # self-intersecting path (e.g. an inexact conic pcurve that collapses to a collinear/looping
-        # run after integer quantization) can spin these sweep loops forever -> bound the total work
-        # and discard the path if the budget is blown, so the CDT can never hang the kernel.
+            edge = ex
+            pivot = v_alt
+
+    def _opposite(self, tri: int, edge: int, vl: int) -> tuple[int, int, int]:
+        """Of the two edges of tri other than edge, a gets the one touching vl and b the other; returns the far vertex, a, b"""
+        far = NULL_IDX
+        a = NULL_IDX
+        b = NULL_IDX
+        for e in self.ts[tri].edges:
+            if e == edge:
+                continue
+            if self.es[e].vl == vl:
+                a = e
+                far = self.es[e].vr
+            elif self.es[e].vr == vl:
+                a = e
+                far = self.es[e].vl
+            else:
+                b = e
+        return far, a, b
+
+    def _rewire(self, tri: int, other: int, edge: int, e1: int, e2: int) -> None:
+        """Give tri the edges (edge, e1, e2) and move e1/e2 from the other triangle onto it"""
+        self.ts[tri].edges = [edge, e1, e2]
+        for e in (e1, e2):
+            if self.es[e].kind == LOOSE:
+                self.pending.append(e)
+            if self.es[e].tri_a == tri or self.es[e].tri_b == tri:
+                continue
+            if self.es[e].tri_a == other:
+                self.es[e].tri_a = tri
+            elif self.es[e].tri_b == other:
+                self.es[e].tri_b = tri
+
+    def _force_legal(self, edge: int) -> None:
+        """Flip edge when the far vertex of one triangle lies inside the circumcircle of the other"""
+        ta = self.es[edge].tri_a
+        tb = self.es[edge].tri_b
+        if ta is NULL_IDX or tb is NULL_IDX:
+            return
+        vl = self.es[edge].vl
+        vr = self.es[edge].vr
+        va, a1, b1 = self._opposite(ta, edge, vl)
+        vb, a2, b2 = self._opposite(tb, edge, vl)
+        if va is NULL_IDX or vb is NULL_IDX or b1 is NULL_IDX or b2 is NULL_IDX:
+            return
+        if _cross_sign(self.vs[va].pt, self.vs[vl].pt, self.vs[vr].pt) == 0:
+            return
+        ict = _in_circle(self.vs[va].pt, self.vs[vl].pt, self.vs[vr].pt, self.vs[vb].pt)
+        if ict == 0 or _right_turning(
+            self.vs[va].pt, self.vs[vl].pt, self.vs[vr].pt
+        ) == (ict < 0):
+            return
+        self.es[edge].vl = va
+        self.es[edge].vr = vb
+        self._rewire(ta, tb, edge, a1, a2)
+        self._rewire(tb, ta, edge, b1, b2)
+
+    def _walk_path(self, path, i0: int, i: int, v0: int) -> bool:
+        """Walk the path from i back round to i0 creating boundary edges; false when the step budget of a degenerate path is blown"""
+        n = len(path)
+        budget = 16 * n + 256
         steps = 0
-        budget = 16 * length + 256
-
-        def _step():
-            nonlocal steps
+        v_prev = v0
+        while True:
             steps += 1
             if steps > budget:
-                raise _DegenBail
+                return False
+            self.loc_mins.append(v_prev)
+            if self.lowermost is NULL_IDX or _sweep_before(
+                self.vs[v_prev].pt, self.vs[self.lowermost].pt
+            ):
+                self.lowermost = v_prev
+            i_next = _next_index(i, n)
+            if _cross_sign(self.vs[v_prev].pt, path[i], path[i_next]) == 0:
+                i = i_next
+                continue
+            while path[i][1] <= self.vs[v_prev].pt[1]:
+                steps += 1
+                if steps > budget:
+                    return False
+                v = self._add_vertex(path[i])
+                self._create_edge(v_prev, v, ASCEND)
+                v_prev = v
+                i = i_next
+                i_next = _next_index(i, n)
+                while _cross_sign(self.vs[v_prev].pt, path[i], path[i_next]) == 0:
+                    steps += 1
+                    if steps > budget:
+                        return False
+                    i = i_next
+                    i_next = _next_index(i, n)
+            v_prev_prev = v_prev
+            while i != i0 and path[i][1] >= self.vs[v_prev].pt[1]:
+                steps += 1
+                if steps > budget:
+                    return False
+                v = self._add_vertex(path[i])
+                self._create_edge(v, v_prev, DESCEND)
+                v_prev_prev = v_prev
+                v_prev = v
+                i = i_next
+                i_next = _next_index(i, n)
+                while _cross_sign(self.vs[v_prev].pt, path[i], path[i_next]) == 0:
+                    steps += 1
+                    if steps > budget:
+                        return False
+                    i = i_next
+                    i_next = _next_index(i, n)
+            if i == i0:
+                break
+            if _left_turning(self.vs[v_prev_prev].pt, self.vs[v_prev].pt, path[i]):
+                self.vs[v_prev].inner_lm = True
+        self._create_edge(v0, v_prev, DESCEND)
+        return True
 
-        try:
-            while True:
-                _step()
-                self._loc_mins.append(vPrev)
-                if (not self._lowermost or
-                        vPrev.pt.y > self._lowermost.pt.y or
-                        (vPrev.pt.y == self._lowermost.pt.y and vPrev.pt.x < self._lowermost.pt.x)):
-                    self._lowermost = vPrev
-                iNext = _next_idx(i, length)
-                if _cps(vPrev.pt, path[i], path[iNext]) == 0:
-                    i = iNext
-                    continue
-                while path[i].y <= vPrev.pt.y:
-                    _step()
-                    v = _V2(path[i])
-                    self._verts.append(v)
-                    self._create_edge(vPrev, v, _ASCEND)
-                    vPrev = v
-                    i = iNext
-                    iNext = _next_idx(i, length)
-                    while _cps(vPrev.pt, path[i], path[iNext]) == 0:
-                        _step()
-                        i = iNext
-                        iNext = _next_idx(i, length)
-                vPrevPrev = vPrev
-                while i != i0 and path[i].y >= vPrev.pt.y:
-                    _step()
-                    v = _V2(path[i])
-                    self._verts.append(v)
-                    self._create_edge(v, vPrev, _DESCEND)
-                    vPrevPrev = vPrev
-                    vPrev = v
-                    i = iNext
-                    iNext = _next_idx(i, length)
-                    while _cps(vPrev.pt, path[i], path[iNext]) == 0:
-                        _step()
-                        i = iNext
-                        iNext = _next_idx(i, length)
-                if i == i0:
-                    break
-                if _left_turning(vPrevPrev.pt, vPrev.pt, path[i]):
-                    vPrev.innerLM = True
-        except _DegenBail:
-            # Sweep budget blown -> degenerate/self-intersecting path; discard its partial edges.
-            for j in range(vert_cnt, len(self._verts)):
-                self._verts[j].edges = []
+    def _discard(self, start: int) -> None:
+        """Detach the edges of every vertex added since start"""
+        for v in range(start, len(self.vs)):
+            self.vs[v].edges = []
+
+    def _add_path(self, path) -> None:
+        """Register one closed path; paths that are flat, degenerate or too tiny to hold a triangle are dropped"""
+        n = len(path)
+        ok, i = _find_loc_min(path, 0)
+        if not ok:
             return
-        self._create_edge(v0, vPrev, _DESCEND)
-        n_new = len(self._verts) - vert_cnt
-        if n_new < 3 or (n_new == 3 and (
-                _dist_sqr(self._verts[vert_cnt].pt, self._verts[vert_cnt+1].pt) <= 1 or
-                _dist_sqr(self._verts[vert_cnt+1].pt, self._verts[vert_cnt+2].pt) <= 1 or
-                _dist_sqr(self._verts[vert_cnt+2].pt, self._verts[vert_cnt].pt) <= 1)):
-            for j in range(vert_cnt, len(self._verts)):
-                self._verts[j].edges = []
+        i0 = i
+        i_prev = _prev_index(i, n)
+        while path[i_prev] == path[i]:
+            i_prev = _prev_index(i_prev, n)
+        i_next = _next_index(i, n)
+        while _cross_sign(path[i_prev], path[i], path[i_next]) == 0:
+            ok, i = _find_loc_min(path, i)
+            if not ok or i == i0:
+                return
+            i_prev = _prev_index(i, n)
+            while path[i_prev] == path[i]:
+                i_prev = _prev_index(i_prev, n)
+            i_next = _next_index(i, n)
+        start = len(self.vs)
+        v0 = self._add_vertex(path[i])
+        if _left_turning(path[i_prev], path[i], path[i_next]):
+            self.vs[v0].inner_lm = True
+        if not self._walk_path(path, i0, i_next, v0):
+            self._discard(start)
+            return
+        count = len(self.vs) - start
+        tiny = count == 3 and (
+            _dist_sqr(self.vs[start].pt, self.vs[start + 1].pt) <= 1
+            or _dist_sqr(self.vs[start + 1].pt, self.vs[start + 2].pt) <= 1
+            or _dist_sqr(self.vs[start + 2].pt, self.vs[start].pt) <= 1
+        )
+        if count < 3 or tiny:
+            self._discard(start)
 
-    def _add_paths(self, paths):
-        total = sum(len(p) for p in paths)
+    def _add_paths(self, paths) -> bool:
+        total = 0
+        for path in paths:
+            total += len(path)
         if total == 0:
             return False
         for path in paths:
             self._add_path(path)
-        return len(self._verts) > 2
+        return len(self.vs) > 2
 
-    def execute(self, paths: list[list["_P64"]]) -> list[list["_P64"]] | None:
-        if not self._add_paths(paths):
-            return []
-        if self._lowermost.innerLM:
-            for lm in self._loc_mins:
-                lm.innerLM = not lm.innerLM
-            for e in self._edges:
-                if e.kind == _ASCEND:
-                    e.kind = _DESCEND
-                elif e.kind == _DESCEND:
-                    e.kind = _ASCEND
-        self._loc_mins = []
-        self._verts.sort(key=lambda v: (-v.pt.y, v.pt.x))
-        self._merge_dup_collinear()
-        currY = self._verts[0].pt.y
-        for v in self._verts:
-            if not v.edges:
+    def _flip_winding(self) -> None:
+        """The outer path was wound clockwise: swap the hole flags and the boundary sides"""
+        for v in self.loc_mins:
+            self.vs[v].inner_lm = not self.vs[v].inner_lm
+        for e in self.es:
+            if e.kind == ASCEND:
+                e.kind = DESCEND
+            elif e.kind == DESCEND:
+                e.kind = ASCEND
+
+    def _sweep_loc_mins(self, curr_y: int) -> bool:
+        """Connect and fan the hole local minima collected on the finished row; false when one cannot be reached"""
+        while self.loc_mins:
+            lm = self.loc_mins.pop()
+            e = self._create_loc_min_edge(lm)
+            if e is NULL_IDX:
+                return False
+            vb = self.es[e].vb
+            if self._is_horizontal(e):
+                self._triangulate_fan(e, vb, curr_y, self.es[e].vl == vb)
+            else:
+                self._triangulate_fan(e, vb, curr_y, True)
+                if not self._completed(e):
+                    self._triangulate_fan(e, vb, curr_y, False)
+            if len(self.vs[lm].edges) < 2:
                 continue
-            if v.pt.y != currY:
-                while self._loc_mins:
-                    lm = self._loc_mins.pop()
-                    e = self._inner_loc_min_edge(lm)
-                    if not e:
-                        self._cleanup()
-                        return None
-                    if _is_horiz(e):
-                        if e.vL is e.vB:
-                            self._tri_left(e, e.vB, currY)
-                        else:
-                            self._tri_right(e, e.vB, currY)
-                    else:
-                        self._tri_left(e, e.vB, currY)
-                        if not _edge_completed(e):
-                            self._tri_right(e, e.vB, currY)
-                    self._add_active(lm.edges[0])
-                    self._add_active(lm.edges[1])
-                while self._horz:
-                    e = self._horz.pop()
-                    if _edge_completed(e):
-                        continue
-                    if e.vB is e.vL:
-                        if _is_left_edge(e):
-                            self._tri_left(e, e.vB, currY)
-                    else:
-                        if _is_right_edge(e):
-                            self._tri_right(e, e.vB, currY)
-                currY = v.pt.y
-            for i in range(len(v.edges) - 1, -1, -1):
-                if i >= len(v.edges):
-                    continue
-                e = v.edges[i]
-                if _edge_completed(e) or _is_loose(e):
-                    continue
-                if v is e.vB:
-                    if _is_horiz(e):
-                        self._horz.append(e)
-                    if not v.innerLM:
-                        self._add_active(e)
-                else:
-                    if _is_horiz(e):
-                        self._horz.append(e)
-                    elif _is_left_edge(e):
-                        self._tri_left(e, e.vB, v.pt.y)
-                    else:
-                        self._tri_right(e, e.vB, v.pt.y)
-            if v.innerLM:
-                self._loc_mins.append(v)
-        while self._horz:
-            e = self._horz.pop()
-            if not _edge_completed(e) and e.vB is e.vL:
-                self._tri_left(e, e.vB, currY)
-        # Legalize all interior diagonal edges. _force_legal re-pushes up to 4 neighbours per flip, so
-        # on degenerate / near-cocircular integer points the InCircle vs turn signs can disagree and two
-        # edges flip-flop forever. Bound the total flips: a valid triangulation legalizes in O(n) flips,
-        # far under this budget; a degenerate one stops early with a still-valid (non-optimal) mesh.
-        if self._use_del:
-            flips = 0
-            flip_budget = 64 * len(self._verts) + 4096
-            while self._pending:
-                flips += 1
-                if flips > flip_budget:
-                    break
-                e = self._pending.pop()
-                self._force_legal(e)
+            self._add_active(self.vs[lm].edges[0])
+            self._add_active(self.vs[lm].edges[1])
+        return True
+
+    def _sweep_horizontals(self, curr_y: int) -> None:
+        """Fan the horizontal edges deferred from the finished row"""
+        while self.horz:
+            e = self.horz.pop()
+            if self._completed(e):
+                continue
+            if self.es[e].vb == self.es[e].vl:
+                if self.es[e].kind == ASCEND:
+                    self._triangulate_fan(e, self.es[e].vb, curr_y, True)
+            elif self.es[e].kind == DESCEND:
+                self._triangulate_fan(e, self.es[e].vb, curr_y, False)
+
+    def _sweep_vertex(self, v: int) -> None:
+        """Activate the boundary edges starting at v and fan the ones ending at it"""
+        for i in range(len(self.vs[v].edges) - 1, -1, -1):
+            if i >= len(self.vs[v].edges):
+                continue
+            e = self.vs[v].edges[i]
+            if self._completed(e) or self.es[e].kind == LOOSE:
+                continue
+            if self._is_horizontal(e):
+                self.horz.append(e)
+            if v == self.es[e].vb:
+                if not self.vs[v].inner_lm:
+                    self._add_active(e)
+            elif not self._is_horizontal(e):
+                self._triangulate_fan(
+                    e, self.es[e].vb, self.vs[v].pt[1], self.es[e].kind == ASCEND
+                )
+
+    def _sweep(self, order: list[int]) -> bool:
+        """Sweep the vertices top to bottom filling triangles row by row; false when a hole cannot be connected"""
+        curr_y = self.vs[order[0]].pt[1]
+        for v in order:
+            if not self.vs[v].edges:
+                continue
+            if self.vs[v].pt[1] != curr_y:
+                if not self._sweep_loc_mins(curr_y):
+                    return False
+                self._sweep_horizontals(curr_y)
+                curr_y = self.vs[v].pt[1]
+            self._sweep_vertex(v)
+            if self.vs[v].inner_lm:
+                self.loc_mins.append(v)
+        while self.horz:
+            e = self.horz.pop()
+            if not self._completed(e) and self.es[e].vb == self.es[e].vl:
+                self._triangulate_fan(e, self.es[e].vb, curr_y, True)
+        return True
+
+    def _legalize(self) -> None:
+        """Flip loose edges until Delaunay, capped so near-cocircular integer points cannot flip-flop forever"""
+        max_flips = 64 * len(self.vs) + 4096
+        for flips in range(max_flips):
+            if not self.pending:
+                return
+            e = self.pending.pop()
+            self._force_legal(e)
+
+    def _tri_points(self, t: _Tri) -> list[tuple[int, int]]:
+        """Both ends of edge 0 and the far end of edge 1"""
+        e0 = self.es[t.edges[0]]
+        e1 = self.es[t.edges[1]]
+        p0 = self.vs[e0.vl].pt
+        p1 = self.vs[e0.vr].pt
+        p2 = (
+            self.vs[e1.vr].pt
+            if self.vs[e1.vl].pt == p0 or self.vs[e1.vl].pt == p1
+            else self.vs[e1.vl].pt
+        )
+        return [p0, p1, p2]
+
+    def _triangles(self) -> list[list[tuple[int, int]]]:
+        """Counter-clockwise triangles, flat ones dropped"""
         res = []
-        for tri in self._tris:
-            p = _path_from_tri(tri)
-            cps = _cps(p[0], p[1], p[2])
-            if cps == 0:
+        for t in self.ts:
+            p = self._tri_points(t)
+            sign = _cross_sign(p[0], p[1], p[2])
+            if sign == 0:
                 continue
-            if cps < 0:
-                p = [p[2], p[1], p[0]]
+            if sign < 0:
+                p[0], p[2] = p[2], p[0]
             res.append(p)
-        self._cleanup()
         return res
 
-
-def _from_polygon_with_holes(polylines, is_2d=False, is_first_boundary=True):
-    from .mesh import Mesh
-    from .point import Point
-    from .session_config import SESSION_CONFIG
-    if not polylines:
-        return Mesh()
-    border_idx = 0
-    if not is_first_boundary and len(polylines) > 1:
-        max_diag = 0.0
-        for i, pl in enumerate(polylines):
-            pts = pl if not hasattr(pl, 'get_points') else pl.get_points()
-            if len(pts) < 3:
-                continue
-            xs = [p[0] for p in pts]; ys = [p[1] for p in pts]; zs = [p[2] for p in pts]
-            dx = max(xs) - min(xs); dy = max(ys) - min(ys); dz = max(zs) - min(zs)
-            diag = math.sqrt(dx*dx + dy*dy + dz*dz)
-            if diag > max_diag:
-                max_diag = diag; border_idx = i
-    def strip_close(pts):
-        if len(pts) > 1:
-            f, b = pts[0], pts[-1]
-            if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
-                return pts[:-1]
-        return pts
-    raw_border = polylines[border_idx]
-    border = strip_close(raw_border if not hasattr(raw_border, 'get_points') else raw_border.get_points())
-    if len(border) < 3:
-        return Mesh()
-    hole_pts_3d = []
-    for i, pl in enumerate(polylines):
-        if i == border_idx:
-            continue
-        raw = pl if not hasattr(pl, 'get_points') else pl.get_points()
-        h = strip_close(raw)
-        if len(h) >= 3:
-            hole_pts_3d.append(h)
-    def signed_area(pts):
-        a = 0.0; n = len(pts)
-        for i in range(n):
-            j = (i + 1) % n
-            a += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1]
-        return a * 0.5
-    if is_2d:
-        boundary_2d = [(p[0], p[1]) for p in border]
-        holes_2d = [[(p[0], p[1]) for p in h] for h in hole_pts_3d]
-    else:
-        all_pts_for_plane = list(border)
-        for h in hole_pts_3d:
-            all_pts_for_plane.extend(h)
-        from .polyline import Polyline as _Polyline
-        origin, xaxis, yaxis, _ = _Polyline(all_pts_for_plane).get_average_plane()
-        def project_2d(p):
-            dx = p[0] - origin[0]; dy = p[1] - origin[1]; dz = p[2] - origin[2]
-            return (dx*xaxis[0]+dy*xaxis[1]+dz*xaxis[2], dx*yaxis[0]+dy*yaxis[1]+dz*yaxis[2])
-        boundary_2d = [project_2d(p) for p in border]
-        holes_2d = [[project_2d(p) for p in h] for h in hole_pts_3d]
-    if signed_area(boundary_2d) < 0.0:
-        border = list(reversed(border)); boundary_2d = list(reversed(boundary_2d))
-    for idx in range(len(hole_pts_3d)):
-        if signed_area(holes_2d[idx]) > 0.0:
-            hole_pts_3d[idx] = list(reversed(hole_pts_3d[idx]))
-            holes_2d[idx] = list(reversed(holes_2d[idx]))
-    tris = _cdt_triangulate(boundary_2d, holes_2d)
-    all_pts = list(border)
-    for h in hole_pts_3d:
-        all_pts.extend(h)
-    m = Mesh()
-    vkeys = []
-    for p in all_pts:
-        vkeys.append(m.add_vertex(Point(p[0], p[1], p[2])))
-    if SESSION_CONFIG.explode_mesh_faces:
-        for t in tris:
-            m.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
-        return m
-    if not hole_pts_3d:
-        fkey = m.add_face(list(vkeys[:len(border)]))
-        if fkey is not None:
-            tri_list = []
-            for t in tris:
-                if vkeys[t[0]] == vkeys[t[1]] or vkeys[t[1]] == vkeys[t[2]] or vkeys[t[2]] == vkeys[t[0]]:
-                    continue
-                tri_list.append([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
-            n_vk = len(border)
-            covered = {k for tri in tri_list for k in tri}
-            for i in range(n_vk):
-                if vkeys[i] not in covered:
-                    tri_list.append([vkeys[(i - 1) % n_vk], vkeys[i], vkeys[(i + 1) % n_vk]])
-            m.triangulation[fkey] = tri_list
-    else:
-        fkey = m.add_face(list(vkeys[:len(border)]))
-        if fkey is not None:
-            hole_rings = []
-            off = len(border)
-            for h in hole_pts_3d:
-                hole_rings.append(list(vkeys[off:off+len(h)]))
-                off += len(h)
-            m.face_holes[fkey] = hole_rings
-            tri_list = []
-            for t in tris:
-                a, b, c = vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]
-                if a != b and b != c and c != a:
-                    tri_list.append([a, b, c])
-            m.triangulation[fkey] = tri_list
-    return m
+    def _execute(self, paths) -> list[list[tuple[int, int]]]:
+        """Triangles of the paths, empty when they hold no polygon or a hole cannot be connected"""
+        if not self._add_paths(paths):
+            return []
+        if self.vs[self.lowermost].inner_lm:
+            self._flip_winding()
+        self.loc_mins = []
+        order = list(range(len(self.vs)))
+        order.sort(key=lambda v: (-self.vs[v].pt[1], self.vs[v].pt[0]))
+        self._merge_duplicates(order)
+        if not self._sweep(order):
+            return []
+        self._legalize()
+        return self._triangles()
 
 
-def _cdt_triangulate(border_2d, holes_2d=None):
-    """Constrained Delaunay triangulation of a polygon with optional holes.
-    border_2d: list of Point (uses [0],[1] as x,y)
-    holes_2d: optional list of lists of Point
-    Returns: list of (i,j,k) index tuples into flat array [border..., hole0..., hole1...]"""
+# ═══════════════════════════════════════════════════════════════════════════
+# Triangulation
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _cdt_scale(border_2d, holes_2d) -> float:
+    """Power of ten keeping the largest coordinate inside int64 headroom"""
     max_coord = 1.0
     for p in border_2d:
         max_coord = max(max_coord, abs(p[0]), abs(p[1]))
-    if holes_2d:
-        for h in holes_2d:
-            for p in h:
-                max_coord = max(max_coord, abs(p[0]), abs(p[1]))
-    precision = 6
-    while precision > 0 and max_coord * (10 ** precision) > 9e17:
+    for hole in holes_2d:
+        for p in hole:
+            max_coord = max(max_coord, abs(p[0]), abs(p[1]))
+    precision = MAX_PRECISION
+    while precision > 0 and max_coord * 10.0**precision > MAX_COORD64:
         precision -= 1
-    scale = 10 ** precision
+    return 10.0**precision
 
-    # Break y-collinearity between hole vertices and border vertices.
-    # The sweep-line CDT fails when a hole vertex shares the same int64
-    # y-coordinate as a border vertex (purely y-collinear constraint segments
-    # at different x positions break event ordering → 0 adjacent triangles for
-    # that hole). Fix: shift each conflicting hole vertex by -1 int64 unit in y
-    # (≈ 1/scale metres), which is imperceptible in practice.
-    border_ys = {round(p[1] * scale) for p in border_2d}
-    holes_adj = []
-    if holes_2d:
-        for hole in holes_2d:
-            adj = []
-            for p in hole:
-                iy = round(p[1] * scale)
-                if iy in border_ys:
-                    adj.append((p[0], (iy - 1) / scale))
-                else:
-                    adj.append(p)
-            holes_adj.append(adj)
 
-    flat = list(border_2d)
-    for h in holes_adj:
-        flat.extend(h)
-    pt_map = {}
-    for i, p in enumerate(flat):
-        key = (round(p[0] * scale), round(p[1] * scale))
-        if key not in pt_map:
-            pt_map[key] = i
+def _shift_hole_rows(
+    border_2d, holes_2d, scale: float
+) -> list[list[tuple[float, float]]]:
+    """Hole rows sharing an integer y with a border row move one unit down so the sweep never sees a collinear constraint"""
+    border_ys = set()
+    for p in border_2d:
+        border_ys.add(_to_int64(p[1] * scale))
+    holes = []
+    for hole in holes_2d:
+        shifted = []
+        for p in hole:
+            iy = _to_int64(p[1] * scale)
+            if iy in border_ys:
+                shifted.append((p[0], float(iy - 1) / scale))
+            else:
+                shifted.append((p[0], p[1]))
+        holes.append(shifted)
+    return holes
 
-    def make_path(pts):
-        path = [_P64(round(p[0]*scale), round(p[1]*scale)) for p in pts]
-        if len(path) > 1 and path[0] == path[-1]:
-            path.pop()
-        return path
 
-    paths = [make_path(border_2d)]
-    for h in holes_adj:
-        paths.append(make_path(h))
-    d = _Delaunay(True)
-    tris = d.execute(paths)
-    if not tris:
-        return []
+def _to_path64(pts, scale: float) -> list[tuple[int, int]]:
+    """Integer ring, closing duplicate dropped"""
+    path = []
+    for p in pts:
+        path.append(_to_point64(p, scale))
+    if len(path) > 1 and path[0] == path[-1]:
+        path.pop()
+    return path
 
-    # Post-process: remove triangles inside holes.
-    # Two tests (centroid-only — edge midpoints are intentionally excluded because
-    # valid triangles adjacent to a hole share an edge with the hole boundary, so
-    # their midpoints land exactly on the boundary and would be false-positives):
-    #   1. Vertex-set: all 3 vertices belong to the same hole → remove.
-    #   2. Centroid outside outer boundary or inside any hole → remove.
-    if holes_2d:
-        hole_vsets = [{(p.x, p.y) for p in paths[hi + 1]} for hi in range(len(holes_2d))]
 
-        def _pt_in_poly_int(px, py, poly):
-            inside = False
-            j = len(poly) - 1
-            for i in range(len(poly)):
-                xi, yi = poly[i].x, poly[i].y
-                xj, yj = poly[j].x, poly[j].y
-                if (yi > py) != (yj > py):
-                    if px < xi + (py - yi) * (xj - xi) / (yj - yi):
-                        inside = not inside
-                j = i
-            return inside
+def _index_map(border_2d, holes_2d, scale: float) -> dict[tuple[int, int], int]:
+    """Index of every integer point in the flat list [border..., hole0..., hole1...], first occurrence wins"""
+    indices = {}
+    index = 0
+    for p in border_2d:
+        indices.setdefault(_to_point64(p, scale), index)
+        index += 1
+    for hole in holes_2d:
+        for p in hole:
+            indices.setdefault(_to_point64(p, scale), index)
+            index += 1
+    return indices
 
-        def _pt_invalid(px, py):
-            if not _pt_in_poly_int(px, py, paths[0]):
-                return True
-            for h_path in paths[1:]:
-                if _pt_in_poly_int(px, py, h_path):
-                    return True
-            return False
 
-        def _keep(tri):
-            t = [(p.x, p.y) for p in tri]
-            for vs in hole_vsets:
-                if t[0] in vs and t[1] in vs and t[2] in vs:
-                    return False
-            cx = (tri[0].x + tri[1].x + tri[2].x) // 3
-            cy = (tri[0].y + tri[1].y + tri[2].y) // 3
-            return not _pt_invalid(cx, cy)
+def _inside_hole(tri, paths, hole_sets) -> bool:
+    """A triangle lies in a hole when all its corners are on one hole ring or its centroid is outside the border or inside a hole"""
+    for hole_set in hole_sets:
+        if tri[0] in hole_set and tri[1] in hole_set and tri[2] in hole_set:
+            return True
+    c = (
+        _div3(tri[0][0] + tri[1][0] + tri[2][0]),
+        _div3(tri[0][1] + tri[1][1] + tri[2][1]),
+    )
+    if not _inside_path64(c, paths[0]):
+        return True
+    for path in paths[1:]:
+        if _inside_path64(c, path):
+            return True
+    return False
 
-        tris = [tri for tri in tris if _keep(tri)]
 
+def _remove_hole_triangles(tris, paths) -> None:
+    """Drop the triangles the sweep filled inside the holes; edge midpoints are not tested because valid triangles touch the hole rings"""
+    hole_sets = []
+    for path in paths[1:]:
+        hole_sets.append(set(path))
+    kept = []
+    for tri in tris:
+        if not _inside_hole(tri, paths, hole_sets):
+            kept.append(tri)
+    tris[:] = kept
+
+
+def _to_indices(tris, indices) -> list[tuple[int, int, int]]:
+    """Corner indices into the flat list, triangles with an unknown corner dropped"""
     out = []
     for tri in tris:
-        f = []
-        ok = True
-        for pt in tri:
-            key = (pt.x, pt.y)
-            if key not in pt_map:
-                ok = False
-                break
-            f.append(pt_map[key])
-        if ok:
+        f = [0, 0, 0]
+        known = True
+        for k in range(3):
+            if tri[k] not in indices:
+                known = False
+            else:
+                f[k] = indices[tri[k]]
+        if known:
             out.append((f[0], f[1], f[2]))
     return out
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Mesh assembly
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _strip_close(polyline: Polyline) -> list[Point]:
+    """Polyline points without the closing duplicate"""
+    pts = polyline.get_points()
+    if len(pts) > 1:
+        f = pts[0]
+        b = pts[-1]
+        if (
+            abs(f[0] - b[0]) < 1e-12
+            and abs(f[1] - b[1]) < 1e-12
+            and abs(f[2] - b[2]) < 1e-12
+        ):
+            pts.pop()
+    return pts
+
+
+def _signed_area(pts) -> float:
+    """Signed area of a 2D ring, positive when counter-clockwise"""
+    area = 0.0
+    n = len(pts)
+    for i in range(n):
+        j = (i + 1) % n
+        area += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1]
+    return area * 0.5
+
+
+def _border_index(polylines: list[Polyline]) -> int:
+    """Index of the polyline with the largest bounding-box diagonal"""
+    border = 0
+    max_diag = 0.0
+    for i in range(len(polylines)):
+        pts = polylines[i].get_points()
+        if len(pts) < 3:
+            continue
+        lo = Point(pts[0][0], pts[0][1], pts[0][2])
+        hi = Point(pts[0][0], pts[0][1], pts[0][2])
+        for p in pts:
+            for k in range(3):
+                lo[k] = min(lo[k], p[k])
+                hi[k] = max(hi[k], p[k])
+        diag = lo.distance(hi)
+        if diag > max_diag:
+            max_diag = diag
+            border = i
+    return border
+
+
+def _project_2d(
+    pts: list[Point], origin: Point, xaxis: Vector, yaxis: Vector
+) -> list[tuple[float, float]]:
+    """Plane coordinates of the points in the frame (origin, xaxis, yaxis)"""
+    out = []
+    for p in pts:
+        dx = p[0] - origin[0]
+        dy = p[1] - origin[1]
+        dz = p[2] - origin[2]
+        out.append(
+            (
+                dx * xaxis[0] + dy * xaxis[1] + dz * xaxis[2],
+                dx * yaxis[0] + dy * yaxis[1] + dz * yaxis[2],
+            )
+        )
+    return out
+
+
+def _cover_missing(tri_list: list[list[int]], vkeys: list[int], n: int) -> None:
+    """Ear triangles for border vertices no triangle touches, so every vertex is drawn"""
+    covered = set()
+    for t in tri_list:
+        covered.update(t)
+    for m in range(n):
+        if vkeys[m] not in covered:
+            tri_list.append([vkeys[(m + n - 1) % n], vkeys[m], vkeys[(m + 1) % n]])
+
+
+def _build_mesh(
+    border: list[Point], holes: list[list[Point]], tris: list[tuple[int, int, int]]
+) -> Mesh:
+    """One face over the border with the holes as face holes, or one face per triangle under SESSION_CONFIG.explode_mesh_faces"""
+    from .mesh import Mesh
+
+    mesh = Mesh()
+    vkeys = []
+    for p in border:
+        vkeys.append(mesh.add_vertex(p))
+    for hole in holes:
+        for p in hole:
+            vkeys.append(mesh.add_vertex(p))
+    if SESSION_CONFIG.explode_mesh_faces:
+        for t in tris:
+            mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+        return mesh
+    ring = vkeys[: len(border)]
+    fkey = mesh.add_face(ring)
+    if fkey is None:
+        return mesh
+    tri_list = []
+    for t in tris:
+        f = [vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]]
+        if f[0] != f[1] and f[1] != f[2] and f[2] != f[0]:
+            tri_list.append(f)
+    if not holes:
+        _cover_missing(tri_list, vkeys, len(border))
+    else:
+        hole_rings = []
+        off = len(border)
+        for hole in holes:
+            hole_rings.append(vkeys[off : off + len(hole)])
+            off += len(hole)
+        mesh.set_face_holes(fkey, hole_rings)
+    mesh.set_face_triangulation(fkey, tri_list)
+    return mesh
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RemeshCDT
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _cdt_triangulate(border_2d, holes_2d) -> list[tuple[int, int, int]]:
+    """Triangle index triples of a counter-clockwise 2D border with clockwise holes into the flat list [border..., hole0..., hole1...]"""
+    scale = _cdt_scale(border_2d, holes_2d)
+    holes = _shift_hole_rows(border_2d, holes_2d, scale)
+    paths = [_to_path64(border_2d, scale)]
+    for hole in holes:
+        paths.append(_to_path64(hole, scale))
+    delaunay = _Delaunay()
+    tris = delaunay._execute(paths)
+    if holes:
+        _remove_hole_triangles(tris, paths)
+    return _to_indices(tris, _index_map(border_2d, holes, scale))
+
+
 class RemeshCDT:
+    """Constrained Delaunay triangulation of a border polyline with hole polylines"""
+
     @staticmethod
-    def triangulate(polylines: list["Polyline"]) -> list[tuple[int, int, int]]:
-        """CDT (sweep-line + Delaunay legalization). polylines[0]=border, rest=holes (x,y used; z ignored).
-        Closing duplicate vertex (first==last) is stripped.
-        Returns list of (i,j,k) index triples into flat array [border..., hole0..., hole1...].
-        To build a Mesh from the result:
-            border = Polyline([Point(0,0,0), Point(4,0,0), Point(4,4,0), Point(0,4,0)])
-            hole   = Polyline([Point(1,1,0), Point(1,3,0), Point(3,3,0), Point(3,1,0)])
-            tris = RemeshCDT.triangulate([border, hole])
-            flat = border.get_points() + hole.get_points()
-            m = Mesh()
-            vkeys = [m.add_vertex(Point(p[0], p[1], p[2])) for p in flat]
-            for a, b, c in tris:
-                m.add_face([vkeys[a], vkeys[b], vkeys[c]])"""
-        def _strip(pts):
-            if len(pts) > 1:
-                f, b = pts[0], pts[-1]
-                if abs(f[0]-b[0]) < 1e-12 and abs(f[1]-b[1]) < 1e-12 and abs(f[2]-b[2]) < 1e-12:
-                    return pts[:-1]
-            return pts
+    def triangulate(polylines: list[Polyline]) -> list[tuple[int, int, int]]:
+        """Triangle index triples into the flat list [border..., hole0..., hole1...], closing duplicates stripped"""
         if not polylines:
             return []
-        bpts = _strip(polylines[0].get_points())
-        hpts_list = [_strip(h.get_points()) for h in polylines[1:]]
-        return _cdt_triangulate(bpts, hpts_list)
+        border = _strip_close(polylines[0])
+        if len(border) < 3:
+            return []
+        border_2d = []
+        for p in border:
+            border_2d.append((p[0], p[1]))
+        holes_2d = []
+        for i in range(1, len(polylines)):
+            hole_2d = []
+            for p in _strip_close(polylines[i]):
+                hole_2d.append((p[0], p[1]))
+            holes_2d.append(hole_2d)
+        return _cdt_triangulate(border_2d, holes_2d)
 
     @staticmethod
-    def from_polylines(polylines: list["Polyline"], is_2d: bool = False, is_first_boundary: bool = True) -> "Mesh":
-        """Polylines → Mesh. polylines[0]=border (or auto-detected), rest=holes.
-        is_2d=True skips plane projection. is_first_boundary=False detects border by largest bbox diagonal."""
-        return _from_polygon_with_holes(polylines, is_2d=is_2d, is_first_boundary=is_first_boundary)
+    def from_polylines(
+        polylines: list[Polyline], is_2d: bool = False, is_first_boundary: bool = True
+    ) -> Mesh:
+        """Mesh of one face with holes, or one face per triangle under SESSION_CONFIG.explode_mesh_faces; is_2d skips the plane projection, is_first_boundary=False picks the border by largest bbox diagonal"""
+        from .mesh import Mesh
 
-
+        if not polylines:
+            return Mesh()
+        border_idx = (
+            0 if is_first_boundary or len(polylines) == 1 else _border_index(polylines)
+        )
+        border = _strip_close(polylines[border_idx])
+        if len(border) < 3:
+            return Mesh()
+        holes = []
+        for i in range(len(polylines)):
+            if i == border_idx:
+                continue
+            hole = _strip_close(polylines[i])
+            if len(hole) >= 3:
+                holes.append(hole)
+        origin = Point(0.0, 0.0, 0.0)
+        xaxis = Vector(1.0, 0.0, 0.0)
+        yaxis = Vector(0.0, 1.0, 0.0)
+        if not is_2d:
+            all_pts = list(border)
+            for hole in holes:
+                all_pts.extend(hole)
+            origin, xaxis, yaxis, _zaxis = Polyline(all_pts).get_average_plane()
+        border_2d = _project_2d(border, origin, xaxis, yaxis)
+        if _signed_area(border_2d) < 0.0:
+            border.reverse()
+            border_2d.reverse()
+        holes_2d = []
+        for hole in holes:
+            hole_2d = _project_2d(hole, origin, xaxis, yaxis)
+            if _signed_area(hole_2d) > 0.0:
+                hole.reverse()
+                hole_2d.reverse()
+            holes_2d.append(hole_2d)
+        return _build_mesh(border, holes, _cdt_triangulate(border_2d, holes_2d))

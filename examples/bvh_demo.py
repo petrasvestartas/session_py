@@ -80,20 +80,20 @@ def naive_collision_detection(boxes):
             box1 = boxes[i]
             box2 = boxes[j]
 
-            min1_x = box1.center.x - box1.half_size.x
-            max1_x = box1.center.x + box1.half_size.x
-            min2_x = box2.center.x - box2.half_size.x
-            max2_x = box2.center.x + box2.half_size.x
+            min1_x = box1.center[0] - box1.half_size[0]
+            max1_x = box1.center[0] + box1.half_size[0]
+            min2_x = box2.center[0] - box2.half_size[0]
+            max2_x = box2.center[0] + box2.half_size[0]
 
-            min1_y = box1.center.y - box1.half_size.y
-            max1_y = box1.center.y + box1.half_size.y
-            min2_y = box2.center.y - box2.half_size.y
-            max2_y = box2.center.y + box2.half_size.y
+            min1_y = box1.center[1] - box1.half_size[1]
+            max1_y = box1.center[1] + box1.half_size[1]
+            min2_y = box2.center[1] - box2.half_size[1]
+            max2_y = box2.center[1] + box2.half_size[1]
 
-            min1_z = box1.center.z - box1.half_size.z
-            max1_z = box1.center.z + box1.half_size.z
-            min2_z = box2.center.z - box2.half_size.z
-            max2_z = box2.center.z + box2.half_size.z
+            min1_z = box1.center[2] - box1.half_size[2]
+            max1_z = box1.center[2] + box1.half_size[2]
+            min2_z = box2.center[2] - box2.half_size[2]
+            max2_z = box2.center[2] + box2.half_size[2]
 
             if (
                 min1_x <= max2_x

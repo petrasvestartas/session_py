@@ -1,29 +1,13 @@
 from __future__ import annotations
-from typing import Union
 from collections.abc import Callable
-from typing import Optional
 from typing import TYPE_CHECKING
+from typing import ClassVar
 import uuid
 import copy
 from .xform import Xform
 
-
-def _to_hex(data: bytes) -> str:
-    """``element_data`` is opaque BYTES and JSON has no byte type, so it travels as hex.
-
-    Hex rather than base64 because it is a handful of lines in each of the three languages and
-    needs no dependency in any of them - and this has to encode identically in all three, or the
-    JSON stops being a cross-language format.
-    """
-    return data.hex()
-
-
-def _from_hex(s: str) -> bytes:
-    return bytes.fromhex(s) if s else b""
-
 if TYPE_CHECKING:
     from pathlib import Path
-    from .vector import Vector
     from .brep import BRep
     from .line import Line
     from .mesh import Mesh
@@ -31,43 +15,61 @@ if TYPE_CHECKING:
     from .plane import Plane
     from .point import Point
     from .polyline import Polyline
+    from .vector import Vector
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Hex encoding
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _to_hex(data: bytes) -> str:
+    """``element_data`` is opaque bytes and JSON has none, so it travels as hex, identically in the three kernels."""
+    return data.hex()
+
+
+def _from_hex(s: str) -> bytes:
+    return bytes.fromhex(s) if s else b""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ElementFeature
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 class ElementFeature:
-    """One modification applied to a host element - a cut, a drill, a joint pocket.
+    """One serializable modification of a host element - a cut, a drill, a joint pocket - that the kernel draws but never applies."""
 
-    The serializable half of what :meth:`Element.add_geometry_op` cannot be: that takes a
-    callable, so an operation applied in memory vanishes the moment the Session is written.
-    Domains worked around it by adding flat arrays to Element - a joint type code per face -
-    which is how timber fields ended up in element.proto and had to be reserved out again.
-
-    The kernel does not know how to APPLY one: ``feature_type`` means something only to the
-    package that wrote it. It knows enough to DRAW one, which is what lets a viewer show
-    features from a package it has never heard of.
-    """
-
-    def __init__(self, feature_type: str = "", face_index: int = -1, outlines=None, name: str = ""):
+    def __init__(
+        self,
+        feature_type: str = "",
+        face_index: int = -1,
+        outlines: list[Polyline] | None = None,
+        name: str = "",
+    ):
         self._guid: str | None = None
         self.name = name
         self.feature_type = feature_type
-        #: Face of the host this applies to; -1 = the whole element.
         self.face_index = face_index
         self.outlines = list(outlines or [])
 
+    def __deepcopy__(self, memo):
+        """A copy is a new feature and mints its own guid."""
+        result = ElementFeature(
+            self.feature_type,
+            self.face_index,
+            copy.deepcopy(self.outlines, memo),
+            self.name,
+        )
+        memo[id(self)] = result
+        return result
+
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        """Lazily minted, like every other identity in the kernel - a feature nobody names never
-        pays for a guid.
-
-        A feature is addressable in its own right: the package that wrote a joint needs to name
-        it again later, to update it, to report a clash against it, or to let a viewer select one
-        of the forty cuts on a beam. The only other handle is the index in ``features``, and that
-        moves the moment an earlier feature is removed.
-        """
-        if getattr(self, "_guid", None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
 
@@ -75,7 +77,12 @@ class ElementFeature:
     def guid(self, value: str) -> None:
         self._guid = value
 
+    def refresh_guid(self) -> None:
+        """Clear the guid so a fresh one mints lazily on next read."""
+        self._guid = None
+
     def __eq__(self, other) -> bool:
+        """Data equality, not identity: the guid is ignored."""
         if not isinstance(other, ElementFeature):
             return NotImplemented
         return (
@@ -85,26 +92,14 @@ class ElementFeature:
             and self.outlines == other.outlines
         )
 
-    def __str__(self) -> str:
-        return (
-            f"ElementFeature({self.feature_type}, face {self.face_index}, "
-            f"{len(self.outlines)} outline(s))"
-        )
-
-    def __repr__(self) -> str:
-        return self.__str__()
+    def __ne__(self, other) -> bool:
+        return not self.__eq__(other)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization - JSON
+    # ElementFeature - JSON
     # ═══════════════════════════════════════════════════════════════════════════
 
     def __jsondump__(self):
-        """A feature serializes on its own, not only as part of its host.
-
-        A package that stores a library of standard cuts, or reports one across a wire, has a
-        single feature in hand and nothing to attach it to - and every other class in the kernel
-        round-trips by itself.
-        """
         return {
             "face_index": self.face_index,
             "feature_type": self.feature_type,
@@ -117,45 +112,49 @@ class ElementFeature:
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
         from .polyline import Polyline
-        feature = cls(
-            feature_type=data.get("feature_type", ""),
-            face_index=data.get("face_index", -1),
-            outlines=[Polyline.__jsonload__(o) for o in data.get("outlines", [])],
-            name=name if name is not None else data.get("name", ""),
-        )
-        # Assigned, not minted: a feature read back is the SAME feature, so anything holding its
-        # guid still finds it. Absent means the file predates the field - leave the lazy mint.
+
+        f = cls()
+        f.face_index = data.get("face_index", -1)
+        f.feature_type = data.get("feature_type", "")
         g = guid if guid is not None else data.get("guid", "")
         if g:
-            feature.guid = g
-        return feature
+            f.guid = g
+        f.name = name if name is not None else data.get("name", "")
+        for o in data.get("outlines", []):
+            f.outlines.append(Polyline.__jsonload__(o))
+        return f
 
     def file_json_dumps(self) -> str:
         import json
+
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s: str) -> "ElementFeature":
+    def file_json_loads(cls, s: str) -> ElementFeature:
         import json
+
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         import json
-        with open(filepath, 'w') as f:
+
+        with open(filepath, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "ElementFeature":
+    def file_json_load(cls, filepath: str | Path) -> ElementFeature:
         import json
+
         with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization - Protobuf
+    # ElementFeature - Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
 
     def pb_dumps(self) -> bytes:
         from .proto import element_pb2
+
         proto = element_pb2.ElementFeature()
         if self.has_guid():
             proto.guid = self._guid
@@ -167,64 +166,78 @@ class ElementFeature:
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "ElementFeature":
+    def pb_loads(cls, data: bytes) -> ElementFeature:
         from .polyline import Polyline
         from .proto import element_pb2
+
         proto = element_pb2.ElementFeature()
         proto.ParseFromString(data)
-        feature = cls(
-            feature_type=proto.feature_type,
-            face_index=proto.face_index,
-            outlines=[Polyline.pb_loads(o.SerializeToString()) for o in proto.outlines],
-            name=proto.name,
-        )
+        f = cls()
         if proto.guid:
-            feature.guid = proto.guid
-        return feature
+            f.guid = proto.guid
+        f.name = proto.name
+        f.feature_type = proto.feature_type
+        f.face_index = proto.face_index
+        for o in proto.outlines:
+            f.outlines.append(Polyline.pb_loads(o.SerializeToString()))
+        return f
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        with open(filepath, 'wb') as f:
+    def pb_dump(self, filepath: str | Path) -> None:
+        with open(filepath, "wb") as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "ElementFeature":
-        with open(filepath, 'rb') as f:
+    def pb_load(cls, filepath: str | Path) -> ElementFeature:
+        with open(filepath, "rb") as f:
             return cls.pb_loads(f.read())
+
+    def __str__(self) -> str:
+        return f"ElementFeature({self.feature_type}, face {self.face_index}, {len(self.outlines)} outline(s))"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Element
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 class Element:
-    def __init__(self, geometry: Union["Mesh", "BRep"] | None = None, name: str = "my_element"):
-        self._guid = None
+    def __init__(self, geometry: Mesh | BRep | None = None, name: str = "my_element"):
+        self._guid: str | None = None
         self.name = name
         self._geometry = geometry
-        # Callables, applied lazily when geometry is computed - NOT serializable. Renamed off
-        # "feature" so the serializable `features` below can own that name; two different
-        # things wearing one name is what made a joint type code look like it needed its own
-        # field on Element.
-        self._geometry_ops = []
+        self._geometry_ops: list[Callable] = []
         self._features: list[ElementFeature] = []
-        self._insertion_vectors: list = []
-        self._dimensions = None
-        # The derived type name and payload this element was LOADED with, for an element whose
-        # type nobody registered. Empty on anything authored in memory. See element_type_name.
+        self._insertion_vectors: list[Vector] = []
+        self._dimensions: Vector | None = None
         self._element_type = ""
         self._element_data = b""
-        self._is_dirty = True
-        self._aabb = None
-        self._obb = None
-        self._collision_mesh = None
-        self._point = None
-        self._polylines = None
-        self._planes = None
-        self._edge_vectors = None
-        self._axis = None
+        self.reset()
+
+    def __deepcopy__(self, memo):
+        """A copy is a new element and mints its own guid."""
+        result = self.__class__.__new__(self.__class__)
+        memo[id(self)] = result
+        result._guid = None
+        result.name = self.name
+        result._geometry = copy.deepcopy(self._geometry, memo)
+        result._geometry_ops = list(self._geometry_ops)
+        result._features = copy.deepcopy(self._features, memo)
+        result._insertion_vectors = copy.deepcopy(self._insertion_vectors, memo)
+        result._dimensions = copy.deepcopy(self._dimensions, memo)
+        result._element_type = self._element_type
+        result._element_data = self._element_data
+        result.reset()
+        return result
 
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
 
@@ -233,7 +246,7 @@ class Element:
         self._guid = value
 
     @property
-    def geometry(self) -> Union["Mesh", "BRep"] | None:
+    def geometry(self) -> Mesh | BRep | None:
         return self._geometry
 
     @property
@@ -242,87 +255,94 @@ class Element:
 
     @property
     def geometry_type_name(self) -> str:
-        return type(self._geometry).__name__ if self._geometry is not None else "None"
-
-    def session_geometry(self, xform: Xform) -> Union["Mesh", "BRep"] | None:
-        """The element's geometry placed by ``xform``. The placement is supplied by the caller -
-        an Element no longer stores one; the Session does. Pass identity for local geometry.
-        """
+        from .brep import BRep
         from .mesh import Mesh
+
+        if isinstance(self._geometry, Mesh):
+            return "Mesh"
+        if isinstance(self._geometry, BRep):
+            return "BRep"
+        return "None"
+
+    def session_geometry(self, xform: Xform) -> Mesh | BRep | None:
+        """The geometry placed by ``xform``; the Session owns the placement, so pass identity for local geometry."""
+        from .mesh import Mesh
+
         if self._geometry is None:
             return None
         geo = copy.deepcopy(self._geometry)
         if isinstance(geo, Mesh):
-            geo = self.apply_geometry_ops(geo)
+            geo = self._apply_geometry_ops(geo)
         if not xform.is_identity():
             geo.transform(xform)
         return geo
 
     @property
-    def aabb(self) -> "OBB":
+    def aabb(self) -> OBB:
         if self._is_dirty or self._aabb is None:
-            self._aabb = self.compute_aabb()
+            self._aabb = self._compute_aabb()
         return self._aabb
 
     @property
-    def obb(self) -> "OBB":
+    def obb(self) -> OBB:
         if self._is_dirty or self._obb is None:
-            self._obb = self.compute_obb()
+            self._obb = self._compute_obb()
         return self._obb
 
     @property
-    def collision_mesh(self) -> "Mesh":
+    def collision_mesh(self) -> Mesh:
         if self._is_dirty or self._collision_mesh is None:
-            self._collision_mesh = self.compute_collision_mesh()
+            self._collision_mesh = self._compute_collision_mesh()
         return self._collision_mesh
 
     @property
-    def point(self) -> "Point":
+    def point(self) -> Point:
         if self._is_dirty or self._point is None:
-            self._point = self.compute_point()
+            self._point = self._compute_point()
         return self._point
 
     @property
-    def polylines(self) -> list["Polyline"]:
+    def polylines(self) -> list[Polyline]:
         if self._is_dirty or self._polylines is None:
-            self._polylines = self.compute_polylines()
+            self._polylines = self._compute_polylines()
         return self._polylines
 
     @property
-    def planes(self) -> list["Plane"]:
+    def planes(self) -> list[Plane]:
         if self._is_dirty or self._planes is None:
-            self._planes = self.compute_planes()
+            self._planes = self._compute_planes()
         return self._planes
 
     @property
-    def edge_vectors(self) -> list["Vector"]:
+    def edge_vectors(self) -> list[Vector]:
         if self._is_dirty or self._edge_vectors is None:
-            self._edge_vectors = self.compute_edge_vectors()
+            self._edge_vectors = self._compute_edge_vectors()
         return self._edge_vectors
 
     @property
-    def axis(self) -> Optional["Line"]:
+    def axis(self) -> Line | None:
         if self._is_dirty or self._axis is None:
-            self._axis = self.compute_axis()
+            self._axis = self._compute_axis()
         return self._axis
 
     @property
     def is_dirty(self) -> bool:
         return self._is_dirty
+
     @property
-    def cached_aabb(self) -> Optional["OBB"]:
+    def cached_aabb(self) -> OBB | None:
         return self._aabb
 
     @property
-    def cached_obb(self) -> Optional["OBB"]:
+    def cached_obb(self) -> OBB | None:
         return self._obb
 
     @property
-    def cached_collision_mesh(self) -> Optional["Mesh"]:
+    def cached_collision_mesh(self) -> Mesh | None:
         return self._collision_mesh
 
     @property
-    def cached_point(self) -> Optional["Point"]:
+    def cached_point(self) -> Point | None:
         return self._point
 
     @property
@@ -333,136 +353,65 @@ class Element:
     def features_count(self) -> int:
         return len(self._features)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Operators
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        result.guid = str(uuid.uuid4())
-        result.name = copy.deepcopy(self.name, memo)
-        result._geometry = copy.deepcopy(self._geometry, memo)
-        result._geometry_ops = list(self._geometry_ops)
-        result._features = copy.deepcopy(self._features, memo)
-        # __new__ runs no __init__, so anything not assigned here does not merely come back
-        # empty - the attribute does not EXIST, and the next read raises AttributeError. These
-        # two were added with the registry and missed, which made `duplicate()` and any
-        # `copy.deepcopy` crash on the following `pb_dumps` or property read. C++ copies all
-        # four in its copy constructor and Rust gets them from `#[derive(Clone)]`.
-        result._insertion_vectors = copy.deepcopy(self._insertion_vectors, memo)
-        result._dimensions = copy.deepcopy(self._dimensions, memo)
-        result._element_type = self._element_type
-        result._element_data = self._element_data
-        result._is_dirty = True
-        result._aabb = None
-        result._obb = None
-        result._collision_mesh = None
-        result._point = None
-        result._polylines = None
-        result._planes = None
-        result._edge_vectors = None
-        result._axis = None
-        return result
-
-    def duplicate(self) -> "Element":
-        result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
-        return result
-
-    def __eq__(self, other):
-        if not isinstance(other, Element):
-            return False
-        # Data equality, not identity - the guid is excluded, exactly as in Line. Every field
-        # that survives a round trip is compared, so ``pb_loads(e.pb_dumps()) == e`` is a real
-        # test rather than one that passes on two fields and ignores the other five.
-        return (
-            self.name == other.name
-            and self.geometry_type_name == other.geometry_type_name
-            and self.element_type_name() == other.element_type_name()
-            and self.element_data_dumps() == other.element_data_dumps()
-            and self._insertion_vectors == other._insertion_vectors
-            and self._dimensions == other._dimensions
-            and self._features == other._features
-        )
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __str__(self):
-        return f"Element({self.name}, {self.geometry_type_name})"
-
-    def __repr__(self):
-        return f"Element({self.guid}, {self.name}, {self.geometry_type_name})"
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Mutators
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def add_geometry_op(self, op: Callable) -> None:
-        """Add an in-memory mesh operation. Not serialized - see :class:`ElementFeature`."""
-        self._geometry_ops.append(op)
-        self._is_dirty = True
-
-    def add_feature(self, feature: "ElementFeature") -> None:
-        """Add a modification carried BY this element, and written with it."""
-        self._features.append(feature)
-
     @property
-    def features(self) -> list:
+    def features(self) -> list[ElementFeature]:
+        """Modifications carried by this element and written with it; ``add_geometry_op`` is the in-memory counterpart that is not."""
         return self._features
 
     @features.setter
-    def features(self, features) -> None:
+    def features(self, features: list[ElementFeature]) -> None:
         self._features = list(features)
 
     @property
-    def insertion_vectors(self) -> list:
-        """Direction(s) the element is inserted along when the assembly is put together.
-
-        General to any assembly: it is what an assembly sequence is ordered by. Plural because
-        an element with several jointed faces can admit a different direction per face.
-        """
+    def insertion_vectors(self) -> list[Vector]:
+        """Direction(s) the element is inserted along when the assembly is put together, one per jointed face."""
         return self._insertion_vectors
 
     @insertion_vectors.setter
-    def insertion_vectors(self, vectors) -> None:
+    def insertion_vectors(self, vectors: list[Vector]) -> None:
         self._insertion_vectors = list(vectors)
 
     @property
-    def dimensions(self):
-        """NOMINAL extents in this element's own frame - authored intent, NOT a measurement.
-
-        Plate: x/y outline extent, z thickness. Beam: x/y cross-section, z length.
-
-        Deliberately distinct from :attr:`obb`, which MEASURES the geometry that exists. The
-        two are allowed to disagree: a thickness drives a loft before there is any geometry to
-        measure, so the nominal value has to exist first and outlive what is built from it.
-        Read ``obb`` for how big it IS, this for how big it was MEANT to be. ``None`` = never
-        authored, which (0, 0, 0) does not mean.
-        """
+    def dimensions(self) -> Vector | None:
+        """Nominal extents in the element's own frame (plate: x/y outline, z thickness) - authored intent, not the measured ``obb``; None = never authored."""
         return self._dimensions
 
     @dimensions.setter
-    def dimensions(self, value) -> None:
+    def dimensions(self, value: Vector | None) -> None:
         self._dimensions = value
 
+    def element_type_name(self) -> str:
+        """The derived type name this element was loaded with, written to ``element_type``; a plain Element authored in memory returns ``""``."""
+        return self._element_type
+
+    def element_data_dumps(self) -> bytes:
+        """The derived type's own state, opaque to the kernel and carried through untouched."""
+        return self._element_data
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Element - Mutators
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def add_geometry_op(self, op: Callable) -> None:
+        self._geometry_ops.append(op)
+        self._is_dirty = True
+
+    def add_feature(self, feature: ElementFeature) -> None:
+        self._features.append(feature)
+
     def place(self, xform: Xform) -> None:
-        """Bake a placement into this element's own geometry, invalidating the cached boxes.
-        The Session owns the placement, so it hands it in here rather than the Element storing it.
-        """
+        """Bake a placement into the element's own geometry, invalidating the cached boxes."""
         self._geometry = self.session_geometry(xform)
         self._is_dirty = True
 
-    def set_geometry(self, geometry: Union["Mesh", "BRep"] | None) -> None:
+    def set_geometry(self, geometry: Mesh | BRep | None) -> None:
         self._geometry = geometry
         self._is_dirty = True
 
-    def set_polylines(self, polylines: list["Polyline"]) -> None:
+    def set_polylines(self, polylines: list[Polyline]) -> None:
         self._polylines = polylines
 
-    def set_planes(self, planes: list["Plane"]) -> None:
+    def set_planes(self, planes: list[Plane]) -> None:
         self._planes = planes
 
     def reset(self) -> None:
@@ -477,108 +426,125 @@ class Element:
         self._axis = None
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Computation
+    # Element - Operators
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def compute_aabb(self) -> "OBB":
-        from .obb import OBB
-        from .point import Point
-        geo = self.session_geometry(Xform.identity())
-        if geo is None:
-            return OBB.from_point(Point(0, 0, 0), 0.0)
-        return self._obb_from_geometry(geo)
+    def __eq__(self, other) -> bool:
+        """Data equality, not identity: every field that survives a round trip, guid excluded."""
+        if not isinstance(other, Element):
+            return False
+        return (
+            self.name == other.name
+            and self.geometry_type_name == other.geometry_type_name
+            and self.element_type_name() == other.element_type_name()
+            and self.element_data_dumps() == other.element_data_dumps()
+            and self._insertion_vectors == other._insertion_vectors
+            and self._dimensions == other._dimensions
+            and self._features == other._features
+        )
 
-    def compute_obb(self) -> "OBB":
-        from .obb import OBB
-        from .point import Point
-        geo = self.session_geometry(Xform.identity())
-        if geo is None:
-            return OBB.from_point(Point(0, 0, 0), 0.0)
-        return self._obb_from_geometry(geo)
+    def __ne__(self, other) -> bool:
+        return not self.__eq__(other)
 
-    def compute_collision_mesh(self) -> "Mesh":
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Element - Computation
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def duplicate(self) -> Element:
+        return copy.deepcopy(self)
+
+    def _compute_aabb(self) -> OBB:
+        return self._obb_from_geometry(self.session_geometry(Xform.identity()))
+
+    def _compute_obb(self) -> OBB:
+        return self._obb_from_geometry(self.session_geometry(Xform.identity()))
+
+    def _compute_collision_mesh(self) -> Mesh:
         from .mesh import Mesh
+
         geo = self.session_geometry(Xform.identity())
-        if geo is None:
-            return Mesh()
         if isinstance(geo, Mesh):
             return geo
         return Mesh()
 
-    def compute_point(self) -> "Point":
+    def _compute_point(self) -> Point:
         from .point import Point
+
+        return Point.centroid(
+            self._points_from_geometry(self.session_geometry(Xform.identity()))
+        )
+
+    def _compute_polylines(self) -> list[Polyline]:
+        """A mesh solid is its face outlines; a domain type with its own face order overrides this."""
         from .mesh import Mesh
-        from .brep import BRep
-        geo = self.session_geometry(Xform.identity())
-        if geo is None:
-            return Point(0, 0, 0)
-        if isinstance(geo, Mesh):
-            verts = list(geo.vertex.values())
-            if not verts:
-                return Point(0, 0, 0)
-            sx = sum(v.x for v in verts)
-            sy = sum(v.y for v in verts)
-            sz = sum(v.z for v in verts)
-            n = len(verts)
-            return Point(sx / n, sy / n, sz / n)
-        if isinstance(geo, BRep):
-            pts = geo.vertex_points()
-            if not pts:
-                return Point(0, 0, 0)
-            sx = sum(p[0] for p in pts)
-            sy = sum(p[1] for p in pts)
-            sz = sum(p[2] for p in pts)
-            n = len(pts)
-            return Point(sx / n, sy / n, sz / n)
-        return Point(0, 0, 0)
 
-    def compute_polylines(self) -> list["Polyline"]:
+        if isinstance(self._geometry, Mesh):
+            return self._geometry.face_outlines()
         return []
 
-    def compute_planes(self) -> list["Plane"]:
+    def _compute_planes(self) -> list[Plane]:
+        """One plane per face outline: centroid origin, Newell normal, closing point dropped first."""
+        from .plane import Plane
+        from .point import Point
+        from .vector import Vector
+
+        planes = []
+        for outline in self._compute_polylines():
+            points = outline.get_points()
+            if len(points) > 1 and points[0] == points[-1]:
+                points.pop()
+            if len(points) < 3:
+                continue
+            planes.append(
+                Plane.from_point_normal(
+                    Point.centroid(points), Vector.average_normal(points)
+                )
+            )
+        return planes
+
+    def _compute_edge_vectors(self) -> list[Vector]:
         return []
 
-    def compute_edge_vectors(self) -> list["Vector"]:
-        return []
-
-    def compute_axis(self) -> Optional["Line"]:
+    def _compute_axis(self) -> Line | None:
         return None
 
-    def apply_geometry_ops(self, geometry: "Mesh") -> "Mesh":
-        for op in self._geometry_ops:
-            geometry = op(geometry)
-        return geometry
+    def _apply_geometry_ops(self, geo: Mesh) -> Mesh:
+        for f in self._geometry_ops:
+            geo = f(geo)
+        return geo
 
     @staticmethod
-    def _obb_from_geometry(geo):
+    def _points_from_geometry(geo: Mesh | BRep | None) -> list[Point]:
+        from .brep import BRep
+        from .mesh import Mesh
+
+        points = []
+        if isinstance(geo, Mesh):
+            for v in geo.vertex.values():
+                points.append(v.position())
+        if isinstance(geo, BRep):
+            points = geo.vertex_points()
+        return points
+
+    @staticmethod
+    def _obb_from_geometry(geo: Mesh | BRep | None) -> OBB:
         from .obb import OBB
         from .point import Point
-        from .mesh import Mesh
-        from .brep import BRep
-        inflate = 0.0
-        if isinstance(geo, Mesh):
-            points = [v.position() for v in geo.vertex.values()]
-            if not points:
-                return OBB.from_point(Point(0, 0, 0), inflate)
-            return OBB.from_points(points, inflate)
-        if isinstance(geo, BRep):
-            if not geo.m_vertices:
-                return OBB.from_point(Point(0, 0, 0), inflate)
-            return OBB.from_points(geo.vertex_points(), inflate)
-        return OBB.from_point(Point(0, 0, 0), inflate)
+
+        points = Element._points_from_geometry(geo)
+        if not points:
+            return OBB.from_point(Point(0, 0, 0), 0.0)
+        return OBB.from_points(points, 0.0)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization - JSON
+    # Element - JSON
     # ═══════════════════════════════════════════════════════════════════════════
 
     def __jsondump__(self):
         geo_data = self._geometry.__jsondump__() if self._geometry is not None else None
-        # Everything the element carries, not just the two fields it had before the registry: a
-        # format that silently drops five of them is not a serialization format, and
-        # ``file_json_dump`` has to round-trip whatever ``pb_dumps`` does, or the two disagree
-        # about what an Element is.
+        dims = self._dimensions.__jsondump__() if self._dimensions is not None else None
         return {
-            "dimensions": self._dimensions.__jsondump__() if self._dimensions is not None else None,
+            "dimensions": dims,
             "element_data": _to_hex(self.element_data_dumps()),
             "element_type": self.element_type_name(),
             "features": [f.__jsondump__() for f in self._features],
@@ -592,169 +558,131 @@ class Element:
 
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
-        from .file_encoders import file_decode_node
+        from .brep import BRep
+        from .mesh import Mesh
+        from .vector import Vector
+
+        elem = cls()
         geo_type = data.get("geometry_type", "None")
         geo_data = data.get("geometry_data")
-        geometry = None
-        if geo_data is not None and geo_type != "None":
-            geometry = file_decode_node(geo_data)
-        elem = cls(geometry=geometry)
-        elem.guid = guid if guid is not None else data.get("guid", elem.guid)
+        if geo_type == "Mesh" and geo_data is not None:
+            elem._geometry = Mesh.__jsonload__(geo_data)
+        if geo_type == "BRep" and geo_data is not None:
+            elem._geometry = BRep.__jsonload__(geo_data)
+        g = guid if guid is not None else data.get("guid", "")
+        if g:
+            elem.guid = g
         elem.name = name if name is not None else data.get("name", elem.name)
-        from .vector import Vector
-        # None, not absent-or-empty: (0, 0, 0) is a legitimate authored dimension, so the two
-        # cases stay distinguishable here exactly as HasField keeps them apart on the wire.
         dims = data.get("dimensions")
         if dims is not None:
             elem._dimensions = Vector.__jsonload__(dims)
         elem._element_type = data.get("element_type", "")
         elem._element_data = _from_hex(data.get("element_data", ""))
-        elem._features = [ElementFeature.__jsonload__(f) for f in data.get("features", [])]
-        elem._insertion_vectors = [Vector.__jsonload__(v) for v in data.get("insertion_vectors", [])]
+        for f in data.get("features", []):
+            elem._features.append(ElementFeature.__jsonload__(f))
+        for v in data.get("insertion_vectors", []):
+            elem._insertion_vectors.append(Vector.__jsonload__(v))
         return elem
 
     def file_json_dumps(self) -> str:
         import json
+
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s: str) -> "Element":
+    def file_json_loads(cls, s: str) -> Element:
         import json
+
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         import json
-        with open(filepath, 'w') as f:
+
+        with open(filepath, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Element":
+    def file_json_load(cls, filepath: str | Path) -> Element:
         import json
+
         with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization - Protobuf
+    # Element - Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
 
     def pb_dumps(self) -> bytes:
         from .proto import element_pb2
+
         proto = element_pb2.Element()
         if self.has_guid():
             proto.guid = self._guid
         proto.name = self.name
+        proto.geometry_type = self.geometry_type_name
         if self._geometry is not None:
-            proto.geometry_type = type(self._geometry).__name__
             proto.geometry_data = self._geometry.pb_dumps()
-        else:
-            proto.geometry_type = "None"
-        # Both empty for a plain Element, and proto3 does not emit empty scalars - so a base
-        # element's bytes are unchanged by the registry, keeping the golden files valid.
         proto.element_type = self.element_type_name()
         proto.element_data = self.element_data_dumps()
-
-        # Packed triples, not sub-messages. Not for the bytes - a unit axis is 2 B CHEAPER as a
-        # sub-message - but for the shape: no per-entry `name` String allocated on decode, and
-        # no serialize-then-reparse round trip. See element.proto.
         for v in self._insertion_vectors:
             proto.insertion_vectors.extend([v[0], v[1], v[2]])
         if self._dimensions is not None:
-            proto.dimensions.extend([self._dimensions[0], self._dimensions[1], self._dimensions[2]])
+            proto.dimensions.extend(
+                [self._dimensions[0], self._dimensions[1], self._dimensions[2]]
+            )
         for f in self._features:
-            pf = proto.features.add()
-            pf.guid = f.guid
-            pf.name = f.name
-            pf.feature_type = f.feature_type
-            pf.face_index = f.face_index
-            for o in f.outlines:
-                pf.outlines.add().ParseFromString(o.pb_dumps())
+            proto.features.add().ParseFromString(f.pb_dumps())
         return proto.SerializeToString()
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Element":
+    def pb_loads(cls, data: bytes) -> Element:
+        from .brep import BRep
+        from .mesh import Mesh
         from .proto import element_pb2
+        from .vector import Vector
+
         proto = element_pb2.Element()
         proto.ParseFromString(data)
-        geometry = None
-        if proto.geometry_type and proto.geometry_type != "None" and proto.geometry_data:
-            geometry = cls._pb_load_geometry(proto.geometry_type, proto.geometry_data)
-        elem = cls(geometry=geometry)
+        elem = cls()
         if proto.guid:
             elem.guid = proto.guid
         elem.name = proto.name
-        # Carried, not interpreted. A viewer with no wood package registered loads a wood element
-        # as a base Element; if these two were dropped here, saving it again wrote empty values
-        # and destroyed the payload the file was written with. See ``element_type_name``.
+        has_data = len(proto.geometry_data) > 0
+        if proto.geometry_type == "Mesh" and has_data:
+            elem._geometry = Mesh.pb_loads(proto.geometry_data)
+        if proto.geometry_type == "BRep" and has_data:
+            elem._geometry = BRep.pb_loads(proto.geometry_data)
         elem._element_type = proto.element_type
         elem._element_data = proto.element_data
-
-        from .polyline import Polyline
-        from .vector import Vector
-
-        iv = list(proto.insertion_vectors)
-        elem._insertion_vectors = [
-            Vector(iv[i], iv[i + 1], iv[i + 2]) for i in range(0, len(iv) - 2, 3)
-        ]
-        # Length, not a truthiness check: (0, 0, 0) is a legitimate authored value and must not
-        # be confused with "never authored", which is what an EMPTY field means here.
+        iv = proto.insertion_vectors
+        for i in range(0, len(iv) - 2, 3):
+            elem._insertion_vectors.append(Vector(iv[i], iv[i + 1], iv[i + 2]))
         if len(proto.dimensions) == 3:
-            elem._dimensions = Vector(proto.dimensions[0], proto.dimensions[1], proto.dimensions[2])
-        # Assigned, not minted: a feature off the wire is the SAME feature the package wrote,
-        # and anything holding its guid must still find it. Empty means the file predates the
-        # field, so the lazy mint is left to whoever asks first.
-        elem._features = []
-        for f in proto.features:
-            feature = ElementFeature(
-                feature_type=f.feature_type,
-                face_index=f.face_index,
-                outlines=[Polyline.pb_loads(o.SerializeToString()) for o in f.outlines],
-                name=f.name,
+            elem._dimensions = Vector(
+                proto.dimensions[0], proto.dimensions[1], proto.dimensions[2]
             )
-            if f.guid:
-                feature.guid = f.guid
-            elem._features.append(feature)
+        for f in proto.features:
+            elem._features.append(ElementFeature.pb_loads(f.SerializeToString()))
         return elem
 
-    # ── Polymorphic elements ────────────────────────────────────────────────────────────
-    # Port of the C++ registry (session_cpp/src/element.cpp). An Element is a geometry
-    # container that knows nothing about domains; a downstream package that needs more
-    # registers a factory under its own type name, and the kernel carries `element_type` and
-    # `element_data` through without interpreting either.
-    #
-    # `pb_loads` returns `cls`, so it cannot produce a subclass it was never told about -
-    # Objects.pb_loads called it and got a base Element back, silently dropping whatever the
-    # package had written. `pb_loads_polymorphic` is the missing half of that round trip.
-
-    #: type name -> factory(data: bytes) -> Element
-    _registry: dict = {}
-
-    def element_type_name(self) -> str:
-        """This element's own type name, written to ``element_type``.
-
-        A plain Element authored in memory returns ``""``, so nothing is emitted for it.
-
-        A base Element that was LOADED from a derived element's bytes returns the type it was
-        carrying. Without that, opening a wood file in a viewer with no wood registered and
-        saving it again wrote ``element_type=""`` and destroyed the payload. A derived class
-        overrides this and never consults the carried value.
-        """
-        return self._element_type
-
-    def element_data_dumps(self) -> bytes:
-        """This element's own state, written to ``element_data``.
-
-        Opaque to the kernel - the format is the registering package's business. Carried
-        through for the same reason as ``element_type_name`` above.
-        """
-        return self._element_data
+    def pb_dump(self, filepath: str | Path) -> None:
+        with open(filepath, "wb") as f:
+            f.write(self.pb_dumps())
 
     @classmethod
-    def register_type(cls, type_name: str, factory) -> None:
-        """Register ``factory`` for ``type_name``; re-registering the same name replaces it.
+    def pb_load(cls, filepath: str | Path) -> Element:
+        with open(filepath, "rb") as f:
+            return cls.pb_loads(f.read())
 
-        ``factory`` takes the full serialized ``session_proto.Element`` bytes - the same
-        bytes ``pb_loads`` takes - so it can read the base fields as well as ``element_data``.
-        """
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Element - Polymorphic registry
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    _registry: ClassVar[dict[str, Callable]] = {}
+
+    @staticmethod
+    def register_type(type_name: str, factory: Callable) -> None:
+        """Register ``factory`` for ``type_name``; re-registering the same name replaces it."""
         if not type_name or factory is None:
             return
         Element._registry[type_name] = factory
@@ -764,94 +692,43 @@ class Element:
         return type_name in Element._registry
 
     @staticmethod
-    def registered_types() -> list:
+    def registered_types() -> list[str]:
         return sorted(Element._registry)
 
-    @classmethod
-    def pb_loads_polymorphic(cls, data: bytes) -> "Element":
-        """Load an element, preserving its derived type when one is registered.
+    @staticmethod
+    def _build_registered(type_name: str, data: bytes) -> Element | None:
+        """A factory that raises or returns None degrades to the base exactly like an unregistered type."""
+        factory = Element._registry.get(type_name) if type_name else None
+        if factory is None:
+            return None
+        try:
+            return factory(data)
+        except Exception:
+            return None
 
-        Falls back to a base Element when ``element_type`` is empty OR names a type nobody
-        registered - an unknown domain type degrades to its geometry rather than failing the
-        whole Session, which is what lets a viewer open a file written by a package it does
-        not have.
-        """
+    @classmethod
+    def pb_loads_polymorphic(cls, data: bytes) -> Element:
+        """Load through the registered factory, degrading to a base Element that still carries ``element_type``/``element_data`` when the type is unknown or the factory fails."""
         from .proto import element_pb2
+
         proto = element_pb2.Element()
         proto.ParseFromString(data)
-
-        factory = Element._registry.get(proto.element_type) if proto.element_type else None
-        if factory is not None:
-            # A THROWING factory is the same failure as one returning None - a bug in that
-            # package - and it must not take the whole Session with it either.
-            try:
-                derived = factory(data)
-                if derived is not None:
-                    return derived
-            except Exception:
-                pass
-            # A factory returning None is a bug in that package, not a corrupt file - fall
-            # through to the base so one bad type cannot take the Session with it.
-
+        derived = cls._build_registered(proto.element_type, data)
+        if derived is not None:
+            return derived
         return cls.pb_loads(data)
 
     @classmethod
-    def file_json_loads_polymorphic(cls, s: str) -> "Element":
-        """The same, from JSON - and through the SAME factory, not a second registry.
-
-        A factory takes serialized proto bytes. That is the only contract, and it stays the
-        only contract: this reads the JSON into a base Element, which carries ``element_type``
-        and ``element_data`` through unchanged, and re-encodes THAT for the factory. So a
-        package registers once and both formats reconstruct its type. Without this the JSON
-        path could not rebuild a derived element at all - it kept the payload but always
-        handed back a base.
-        """
+    def file_json_loads_polymorphic(cls, s: str) -> Element:
+        """The same from JSON, re-encoded to proto bytes so one registration serves both formats."""
         base = cls.file_json_loads(s)
-        type_name = base.element_type_name()
-        factory = Element._registry.get(type_name) if type_name else None
-        if factory is not None:
-            try:
-                derived = factory(base.pb_dumps())
-                if derived is not None:
-                    return derived
-            except Exception:
-                pass
+        derived = cls._build_registered(base.element_type_name(), base.pb_dumps())
+        if derived is not None:
+            return derived
         return base
 
-    @staticmethod
-    def _pb_load_geometry(geo_type, geo_data):
-        from .point import Point
-        from .line import Line
-        from .plane import Plane
-        from .polyline import Polyline
-        from .mesh import Mesh
-        from .obb import OBB
-        from .pointcloud import PointCloud
-        from .nurbscurve import NurbsCurve
-        from .nurbssurface import NurbsSurface
-        from .brep import BRep
-        type_map = {
-            "Point": Point,
-            "Line": Line,
-            "Plane": Plane,
-            "Polyline": Polyline,
-            "Mesh": Mesh,
-            "OBB": OBB,
-            "PointCloud": PointCloud,
-            "NurbsCurve": NurbsCurve,
-            "NurbsSurface": NurbsSurface,
-            "BRep": BRep,
-        }
-        klass = type_map.get(geo_type)
-        if klass is None:
-            return None
-        return klass.pb_loads(geo_data)
+    def __str__(self) -> str:
+        return f"Element({self.name}, {self.geometry_type_name})"
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        with open(filepath, 'wb') as f:
-            f.write(self.pb_dumps())
-
-    @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Element":
-        with open(filepath, 'rb') as f:
-            return cls.pb_loads(f.read())
+    def __repr__(self) -> str:
+        return f"Element({self.guid}, {self.name}, {self.geometry_type_name})"

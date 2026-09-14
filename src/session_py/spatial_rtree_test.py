@@ -6,16 +6,17 @@ from .mini_test import run_all
 @MINI_TEST("SpatialRTree", "Constructor")
 def test_rtree_constructor():
     from session_py import SpatialRTree
-
-    # RTree3: dynamic spatial index — insert/remove support, O(log n) overlap search
     t = SpatialRTree()
     t.insert([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0)
     t.insert([5.0, 0.0, 0.0], [6.0, 1.0, 1.0], 1)
     t.insert([10.0, 0.0, 0.0], [11.0, 1.0, 1.0], 2)
-    found = []
-    t.search([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], lambda id: found.append(id) or True)
+    found = [-1]
+    def cb(id):
+        found[0] = id
+        return True
+    t.search([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], cb)
 
-    MINI_CHECK(0 in found)
+    MINI_CHECK(found[0] == 0)
 
 
 @MINI_TEST("SpatialRTree", "Creation")
@@ -123,10 +124,11 @@ def test_rtree_search_stop():
 def test_rtree_search_100_boxes():
     from session_py import SpatialRTree
     t = SpatialRTree()
-    ids = [0]
+    id = 0
     def add(x0, y0, z0, x1, y1, z1):
-        t.insert([x0, y0, z0], [x1, y1, z1], ids[0])
-        ids[0] += 1
+        nonlocal id
+        t.insert([x0, y0, z0], [x1, y1, z1], id)
+        id += 1
     add(-53.1254, -0.98185, 20.5516, -46.8089, 5.89927, 26.5331)
     add(44.4446, -1.5359, -1.49382, 50.7301, 3.99953, 7.58362)
     add(36.9359, -7.76782, -28.7694, 43.173, -1.82645, -22.1528)

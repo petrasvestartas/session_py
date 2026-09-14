@@ -1,20 +1,40 @@
 from __future__ import annotations
+
+
 class SessionConfig:
-    _instance = None
+    """Runtime settings used by session operations.
 
-    def __new__(cls):
-        if not cls._instance:
-            cls._instance = object.__new__(cls)
-            cls._instance.explode_mesh_faces = False
-            cls._instance.scale_factor = 1.0
-        return cls._instance
+    Attributes
+    ----------
+    explode_mesh_faces : bool
+        Whether meshing emits one face per triangle.
+    scale_factor : float
+        Scale applied by external session adapters.
 
-    def reset(self) -> None:
+    Examples
+    --------
+    >>> config = SessionConfig()
+    >>> config.scale_factor
+    1.0
+    >>> repr(config)
+    'SessionConfig(explode_mesh_faces=False, scale_factor=1.0)'
+    """
+
+    explode_mesh_faces: bool
+    scale_factor: float
+
+    def __init__(self) -> None:
         self.explode_mesh_faces = False
         self.scale_factor = 1.0
 
-    def __repr__(self):
+    def reset(self) -> None:
+        """Restore every setting to its default value."""
+        self.explode_mesh_faces = False
+        self.scale_factor = 1.0
+
+    def __repr__(self) -> str:
+        """Return a constructor-style representation."""
         return f"SessionConfig(explode_mesh_faces={self.explode_mesh_faces}, scale_factor={self.scale_factor})"
 
 
-SESSION_CONFIG = SessionConfig()
+SESSION_CONFIG: SessionConfig = SessionConfig()

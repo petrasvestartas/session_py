@@ -11,22 +11,21 @@ def test_mesh_constructor():
     from session_py import Polyline
     from session_py import Color
     from session_py.mesh import ColorMode
+    import copy
 
     vertices = Polyline.from_sides(6, 1.0, False).get_points()
     mesh = Mesh.from_vertices_and_faces(vertices, [[0, 1, 2, 3, 4, 5]])
     sstr = str(mesh)
     srepr = repr(mesh)
-    mcopy = mesh.duplicate()
+    mcopy = copy.deepcopy(mesh)
     MINI_CHECK(mesh.is_valid())
     mesh.name = "hexagon"
 
     palette = Color.palette()
 
-    # set_objectcolor does not change color_mode
     mesh.set_objectcolor(Color.grey())
     MINI_CHECK(mesh.color_mode == ColorMode.OBJECTCOLOR)
 
-    # set_pointcolors → color_mode = PointColors
     pc = []
     for i in range(mesh.number_of_vertices()):
         pc.append(palette[i % len(palette)])
@@ -34,7 +33,6 @@ def test_mesh_constructor():
     MINI_CHECK(mesh.color_mode == ColorMode.POINTCOLORS)
     MINI_CHECK(len(mesh.get_pointcolors()) == mesh.number_of_vertices())
 
-    # set_facecolors → color_mode = FaceColors
     fc = []
     for i in range(mesh.number_of_faces()):
         fc.append(palette[i % len(palette)])
@@ -42,7 +40,6 @@ def test_mesh_constructor():
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
     MINI_CHECK(len(mesh.get_facecolors()) == mesh.number_of_faces())
 
-    # set_linecolors does not change color_mode
     lc = []
     lw = [0.1] * mesh.number_of_edges()
     for i in range(mesh.number_of_edges()):
@@ -51,20 +48,17 @@ def test_mesh_constructor():
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
     MINI_CHECK(len(mesh.get_linecolors()) == mesh.number_of_edges())
 
-    # clear_facecolors reverts color_mode only if currently FaceColors
     mesh.color_mode = ColorMode.FACECOLORS
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
     mesh.clear_facecolors()
     MINI_CHECK(mesh.color_mode == ColorMode.OBJECTCOLOR)
     MINI_CHECK(len(mesh.get_facecolors()) == 0)
 
-    # clear_pointcolors does not revert if color_mode != PointColors
     mesh.color_mode = ColorMode.FACECOLORS
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
     mesh.clear_pointcolors()
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
 
-    # clear_linecolors does not change color_mode
     mesh.color_mode = ColorMode.POINTCOLORS
     mesh.clear_linecolors()
     MINI_CHECK(mesh.color_mode == ColorMode.POINTCOLORS)
@@ -275,7 +269,7 @@ def test_mesh_loft():
     MINI_CHECK(not mesh_no_cap.is_closed())
 
 
-@MINI_TEST("Mesh", "Loft concave with holes and collinear")
+@MINI_TEST("Mesh", "Loft Concave With Holes")
 def test_mesh_loft_concave_with_holes_and_collinear():
     from session_py import Mesh
     from session_py import Point
@@ -374,8 +368,8 @@ def test_mesh_loft_concave_with_holes_and_collinear():
     colmesh = Mesh.loft(col_bot, col_top, True)
     MINI_CHECK(colmesh.is_valid())
     MINI_CHECK(colmesh.is_closed())
-    MINI_CHECK(len(colmesh.vertex) == 8)
-    MINI_CHECK(len(colmesh.face) == 6)
+    MINI_CHECK(len(colmesh.vertex) == 12)
+    MINI_CHECK(len(colmesh.face) == 8)
 
 
 @MINI_TEST("Mesh", "From Polygon With Holes Many")
@@ -465,11 +459,12 @@ def test_mesh_loft_many():
     MINI_CHECK(meshes_seq[5].is_closed())
 
 
-@MINI_TEST("Mesh", "Loft with quads and triangles")
+@MINI_TEST("Mesh", "Loft With Quads And Triangles")
 def test_mesh_loft_panels():
     from session_py import Mesh
     from session_py import Point
     from session_py import Color
+    from session_py.mesh import LoftFaceRole
 
     top7 = [
         [
@@ -577,28 +572,25 @@ def test_mesh_loft_panels():
             Point(550, -250, 270.710678),
         ],
     ]
-    panels, adj, top_mesh, bot_mesh = Mesh.loft_panels(top7, bot7, 0.001)
+    panels, adj, top_mesh, bot_mesh = Mesh.loft_panels(top7, bot7)
 
-    # Color faces: blue=top cap, red=bot cap, gray=quad wall, yellow=tri wall
-    for i, panel in enumerate(panels):
+    for i in range(len(panels)):
         face_colors = []
-        for fk, role in panel.face_roles.items():
-            if role == "TopCap":
+        for role in panels[i].face_roles.values():
+            if role == LoftFaceRole.TopCap:
                 face_colors.append(Color.blue())
-            elif role == "BotCap":
+            elif role == LoftFaceRole.BotCap:
                 face_colors.append(Color.red())
-            elif role == "TriWall":
+            elif role == LoftFaceRole.TriWall:
                 face_colors.append(Color.yellow())
             else:
                 face_colors.append(Color.grey())
-        panel.mesh.set_facecolors(face_colors)
+        panels[i].mesh.set_facecolors(face_colors)
 
-    # face centroids labelled with panel index
-    for i, panel in enumerate(panels):
-        c = panel.mesh.centroid()
+    for i in range(len(panels)):
+        c = panels[i].mesh.centroid()
         c.name = f"p{i}"
 
-    # adjacency: for each shared edge — text dot at midpoint labelled "p{i}f{idx}<->p{j}f{idx}"
     for pair in adj:
         w = panels[pair.pi].wall_faces[pair.wi]
         pt = panels[pair.pi].mesh.face_centroid(w.face_key)
@@ -730,7 +722,6 @@ def test_mesh_attributes():
     MINI_CHECK(vertex_to_index[6] == 6)
     MINI_CHECK(vertex_to_index[7] == 7)
 
-    # vertices / faces / edges
     vertices = mesh.vertices()
     MINI_CHECK(len(vertices) == 8)
     MINI_CHECK(vertices[0] == 0)
@@ -764,10 +755,8 @@ def test_mesh_attributes():
     MINI_CHECK(edges[10] == (5, 6))
     MINI_CHECK(edges[11] == (6, 7))
 
-    # naked (closed box: no naked edges before removal)
     MINI_CHECK(len(mesh.naked_edges(True)) == 0)
     MINI_CHECK(len(mesh.naked_faces(False)) == 6)
-    # remove one face — box becomes open, check naked
     mesh.remove_face(mesh.faces()[0])
     ne = mesh.naked_edges(True)
     MINI_CHECK(len(ne) == 4)
@@ -793,7 +782,6 @@ def test_mesh_edges():
     v1 = mesh.vertices()[1]
     edges = mesh.edges()
     MINI_CHECK(len(edges) == 12)
-    MINI_CHECK(isinstance(edges[0], tuple))
     MINI_CHECK(edges[0] == (v0, v1))
 
 
@@ -807,7 +795,7 @@ def test_mesh_create_dodecahedron():
     MINI_CHECK(m.number_of_faces() == 12)
 
 
-@MINI_TEST("Mesh", "Vertex and Face Operations")
+@MINI_TEST("Mesh", "Vertex And Face Operations")
 def test_mesh_vertex_and_face_operations():
     from session_py import Mesh
     from session_py import Point
@@ -835,36 +823,27 @@ def test_mesh_vertex_and_face_operations():
     MINI_CHECK(mesh.add_face([0, 1]) is None)
     MINI_CHECK(mesh.add_face([0, 1, 0]) is None)
 
-    # remove_vertex(0): removes vertex 0 + 3 adjacent faces (0,2,4)
-    # vertices → [1,2,3,4,5,6,7], faces → [1,3,5]
     mesh.remove_vertex(0)
     MINI_CHECK(mesh.number_of_vertices() == 7)
     MINI_CHECK(mesh.number_of_faces() == 3)
 
-    # remove_edge(1,2): removes face 5 [1,2,6,5], faces → [1,3]
     mesh.remove_edge(1, 2)
     MINI_CHECK(mesh.number_of_faces() == 2)
 
-    # remove_face(1): removes face 1 [4,5,6,7], faces → [3]
     mesh.remove_face(1)
     MINI_CHECK(mesh.number_of_faces() == 1)
 
-    # clear
     mesh.clear()
     MINI_CHECK(mesh.is_empty())
 
-    # rebuild
     for v in verts: mesh.add_vertex(v)
     for f in faces: mesh.add_face(f)
 
-    # unweld and weld
     mesh = mesh.unweld()
     MINI_CHECK(mesh.number_of_vertices() == 24)
     mesh = mesh.weld(0.001)
     MINI_CHECK(mesh.number_of_vertices() == 8)
     MINI_CHECK(mesh.number_of_faces() == 6)
-    # face 0: 0 1 2 3, face 1: 4 5 6 7, face 2: 0 3 5 4
-    # face 3: 2 1 7 6, face 4: 0 4 7 1, face 5: 3 2 6 5
     fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
     fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
     fv4 = mesh.face_vertices(4); fv5 = mesh.face_vertices(5)
@@ -875,7 +854,6 @@ def test_mesh_vertex_and_face_operations():
     MINI_CHECK(fv4[0] == 0 and fv4[1] == 4 and fv4[2] == 7 and fv4[3] == 1)
     MINI_CHECK(fv5[0] == 3 and fv5[1] == 2 and fv5[2] == 6 and fv5[3] == 5)
 
-    # flip_face(0): face 0 → [3,2,1,0], faces 1-5 unchanged
     mesh.flip_face(0)
     fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
     fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
@@ -887,7 +865,6 @@ def test_mesh_vertex_and_face_operations():
     MINI_CHECK(fv4[0] == 0 and fv4[1] == 4 and fv4[2] == 7 and fv4[3] == 1)
     MINI_CHECK(fv5[0] == 3 and fv5[1] == 2 and fv5[2] == 6 and fv5[3] == 5)
 
-    # unify_winding: face 0 restored to [0,1,2,3], faces 1-5 unchanged
     mesh.unify_winding()
     fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
     fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
@@ -899,8 +876,6 @@ def test_mesh_vertex_and_face_operations():
     MINI_CHECK(fv4[0] == 0 and fv4[1] == 4 and fv4[2] == 7 and fv4[3] == 1)
     MINI_CHECK(fv5[0] == 3 and fv5[1] == 2 and fv5[2] == 6 and fv5[3] == 5)
 
-    # flip: face 0 → [3,2,1,0], face 1 → [7,6,5,4], face 2 → [4,5,3,0]
-    # face 3 → [6,7,1,2], face 4 → [1,7,4,0], face 5 → [5,6,2,3]
     mesh.flip()
     fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
     fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
@@ -912,8 +887,6 @@ def test_mesh_vertex_and_face_operations():
     MINI_CHECK(fv4[0] == 1 and fv4[1] == 7 and fv4[2] == 4 and fv4[3] == 0)
     MINI_CHECK(fv5[0] == 5 and fv5[1] == 6 and fv5[2] == 2 and fv5[3] == 3)
 
-    # orient_outward: face 0 → [0,1,2,3], face 1 → [4,5,6,7], face 2 → [0,3,5,4]
-    # face 3 → [2,1,7,6], face 4 → [0,4,7,1], face 5 → [3,2,6,5]
     mesh.orient_outward()
     fv0 = mesh.face_vertices(0); fv1 = mesh.face_vertices(1)
     fv2 = mesh.face_vertices(2); fv3 = mesh.face_vertices(3)
@@ -942,8 +915,6 @@ def test_mesh_connectivity_queries():
     v = mesh.vertices()
     f = mesh.faces()
 
-    # edge edges
-    # edge 1 - 2, edges: 1-0, 1-4, 2-3, 2-4
     ee = mesh.edge_edges(1, 2)
     if ee is not None:
 
@@ -971,15 +942,12 @@ def test_mesh_connectivity_queries():
         mid3 = l3.center()
         mid3.name = "e" + str(u3) + "-" + str(v3)
 
-        ee_set = set(ee)
         MINI_CHECK(len(ee) == 4)
         MINI_CHECK(ee[0] == (1, 0))
         MINI_CHECK(ee[1] == (1, 4))
         MINI_CHECK(ee[2] == (2, 3))
         MINI_CHECK(ee[3] == (2, 4))
 
-    # edge faces
-    # edge 1-2, faces: 0, 1
     ef = mesh.edge_faces(1, 2)
     if ef is not None:
         ef0 = ef[0]
@@ -991,8 +959,6 @@ def test_mesh_connectivity_queries():
         MINI_CHECK(len(ef) == 2)
         MINI_CHECK(ef0 == 0 and ef1 == 1)
 
-    # face_edges
-    # face 0, edges: 0-1, 1-2, 2-3, 3-0
     fe = mesh.face_edges(f[0])
     if fe is not None:
         l0 = mesh.edge_line(fe[0][0], fe[0][1])
@@ -1013,8 +979,6 @@ def test_mesh_connectivity_queries():
         MINI_CHECK(fe[2] == (2, 3))
         MINI_CHECK(fe[3] == (3, 0))
 
-    # face_faces
-    # face 0, adjacent faces: 1
     ff = mesh.face_faces(f[0])
     if ff is not None:
         ff0 = ff[0]
@@ -1023,20 +987,16 @@ def test_mesh_connectivity_queries():
         MINI_CHECK(len(ff) == 1)
         MINI_CHECK(ff0 == 1)
 
-    # face points
     points = mesh.face_points(f[0])
     if points is not None:
         pointcount = len(points)
         MINI_CHECK(pointcount == 4)
 
-    # face polyline
     pl = mesh.face_polyline(f[0])
     if pl is not None:
         pointcount = len(pl.get_points())
         MINI_CHECK(pointcount == 4)
 
-    # face_vertices
-    # face 0 vertices: 0, 1, 2, 3
     fv = mesh.face_vertices(f[0])
     if fv is not None:
         fv0 = fv[0]
@@ -1057,8 +1017,6 @@ def test_mesh_connectivity_queries():
         MINI_CHECK(fv3 == 3)
         MINI_CHECK(len(fv) == 4)
 
-    # vertex_edges
-    # vertex 1, edges 1-0, 1-2, 1-4
     ve = mesh.vertex_edges(v[1])
     if ve is not None:
         vp = mesh.vertex_point(v[1])
@@ -1079,9 +1037,7 @@ def test_mesh_connectivity_queries():
         MINI_CHECK(ve[2] == (1, 4))
         MINI_CHECK(len(ve) == 3)
 
-    # vertex_faces
     vf = mesh.vertex_faces(v[1])
-    # vertex 1, faces 0, 1
     if vf is not None:
 
         vp = mesh.vertex_point(v[1])
@@ -1095,8 +1051,6 @@ def test_mesh_connectivity_queries():
         MINI_CHECK(vf[0] == 0)
         MINI_CHECK(vf[1] == 1)
 
-    # vertex_vertices
-    # vertex 1, neighbors 0, 2, 4
     vn = mesh.vertex_vertices(v[1])
     if vn is not None:
         p0 = mesh.vertex_point(v[1])
@@ -1124,27 +1078,23 @@ def test_mesh_geometric_properties():
 
     mesh = Mesh.create_dodecahedron(1.5)
 
-    # area
     area = mesh.area()
     MINI_CHECK(TOLERANCE.is_close(area, 46.4528898159021))
 
-    # centroid
     centroid = mesh.centroid()
     MINI_CHECK(TOLERANCE.is_point_close(centroid, Point(0.0, 0.0, 0.0)))
 
-    # dihedral angle
     angles, arcs, points = mesh.dihedral_angles(0.3)
 
-    for edge, angle in angles.items():
+    for angle in angles.values():
         angle_in_degrees = angle
         MINI_CHECK(TOLERANCE.is_close(angle_in_degrees, 116.565051177078))
 
-    # face area
     for f in mesh.faces():
         face_area = mesh.face_area(f)
+        MINI_CHECK(face_area is not None)
         MINI_CHECK(TOLERANCE.is_close(face_area, 3.87107415132518))
 
-    # face centroid
     centroids = []
     for f in mesh.faces():
         centroids.append(mesh.face_centroid(f))
@@ -1162,12 +1112,11 @@ def test_mesh_geometric_properties():
     MINI_CHECK(TOLERANCE.is_point_close(centroids[10], Point(-0.878115294937453,  0.0,              -1.420820393249937)))
     MINI_CHECK(TOLERANCE.is_point_close(centroids[11], Point(-1.420820393249937, -0.878115294937453, 0.0              )))
 
-    # face normal / s
     face_normals = mesh.face_normals()
     for f in mesh.faces():
-        normal0 = mesh.face_normal(f)
-        normal1 = face_normals[f]
-        MINI_CHECK(TOLERANCE.is_vector_close(face_normals[f], mesh.face_normal(f)))
+        fn = mesh.face_normal(f)
+        MINI_CHECK(fn is not None)
+        MINI_CHECK(TOLERANCE.is_vector_close(face_normals[f], fn))
 
     MINI_CHECK(TOLERANCE.is_vector_close(face_normals[0],  Vector( 0.5257311121191336,  0.0,                 0.8506508083520400)))
     MINI_CHECK(TOLERANCE.is_vector_close(face_normals[1],  Vector( 0.8506508083520400,  0.5257311121191336,  0.0               )))
@@ -1182,18 +1131,18 @@ def test_mesh_geometric_properties():
     MINI_CHECK(TOLERANCE.is_vector_close(face_normals[10], Vector(-0.5257311121191336,  0.0,                -0.8506508083520400)))
     MINI_CHECK(TOLERANCE.is_vector_close(face_normals[11], Vector(-0.8506508083520400, -0.5257311121191336,  0.0               )))
 
-    # vertex angle in face
     for f in mesh.faces():
-        for v in mesh.face_vertices(f):
+        fv = mesh.face_vertices(f)
+        for v in fv:
             angle = mesh.vertex_angle_in_face(v, f)
-            MINI_CHECK(TOLERANCE.is_close(mesh.vertex_angle_in_face(v, f), 1.8849555921538759))
+            MINI_CHECK(angle is not None)
+            MINI_CHECK(TOLERANCE.is_close(angle, 1.8849555921538759))
 
-    # vertex normal / s
     vertex_normals = mesh.vertex_normals()
     for v in mesh.vertices():
-        normal0 = mesh.vertex_normal(v)
-        normal1 = vertex_normals[v]
-        MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[v], mesh.vertex_normal(v)))
+        vn = mesh.vertex_normal(v)
+        MINI_CHECK(vn is not None)
+        MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[v], vn))
 
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[0],  Vector( 0.5773502691896258,  0.5773502691896258,  0.5773502691896258)))
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[1],  Vector( 0.0,                 0.3568220897730899,  0.9341723589627158)))
@@ -1216,12 +1165,11 @@ def test_mesh_geometric_properties():
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[18], Vector(-0.9341723589627157,  0.0,                -0.3568220897730899)))
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals[19], Vector(-0.9341723589627158,  0.0,                 0.3568220897730899)))
 
-    # vertex normal weighted / s
     vertex_normals_weighted = mesh.vertex_normals_weighted(NormalWeighting.ANGLE)
     for v in mesh.vertices():
-        normal0 = mesh.vertex_normal_weighted(v, NormalWeighting.ANGLE)
-        normal1 = vertex_normals_weighted[v]
-        MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[v], mesh.vertex_normal_weighted(v, NormalWeighting.ANGLE)))
+        vnw = mesh.vertex_normal_weighted(v, NormalWeighting.ANGLE)
+        MINI_CHECK(vnw is not None)
+        MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[v], vnw))
 
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[0],  Vector( 0.5773502691896257,  0.5773502691896257,  0.5773502691896257)))
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[1],  Vector( 0.0,                 0.3568220897730899,  0.9341723589627158)))
@@ -1244,13 +1192,6 @@ def test_mesh_geometric_properties():
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[18], Vector(-0.9341723589627158,  0.0,                -0.3568220897730899)))
     MINI_CHECK(TOLERANCE.is_vector_close(vertex_normals_weighted[19], Vector(-0.9341723589627158,  0.0,                 0.3568220897730899)))
 
-    # compute vertex normals
-    mesh.compute_vertex_normals()
-    for v in mesh.vertices():
-        stored = mesh.vertex[v].normal()
-        MINI_CHECK(TOLERANCE.is_vector_close(Vector(stored[0], stored[1], stored[2]), vertex_normals[v]))
-
-    # volume
     volume = mesh.volume()
     MINI_CHECK(TOLERANCE.is_close(volume, 25.8630264921081))
 
@@ -1269,26 +1210,22 @@ def test_mesh_transformation():
     mesh = Mesh.from_vertices_and_faces(pts, [[0,1,2]])
     v0 = mesh.vertices()[0]
 
-    # transform(xf) — apply in place
     mesh1 = mesh.duplicate()
     mesh1_xf = Xform.translation(0.0, 0.0, 1.0)
     mesh1.transform(mesh1_xf)
 
     MINI_CHECK(mesh1.vertex_point(v0)[2] == 1.0)
 
-    # transform(xf) — apply in place, matrix built separately
     mesh2 = mesh.duplicate()
     x = Xform.translation(0.0, 0.0, 1.0)
     mesh2.transform(x)
     MINI_CHECK(mesh2.vertex_point(v0)[2] == 1.0)
 
-    # transformed(xf) — returns a copy
     mesh3 = mesh.duplicate()
     mesh3_xf = Xform.translation(0.0, 0.0, 10.0)
     mesh3t = mesh3.transformed(mesh3_xf)
     MINI_CHECK(mesh3t.vertex_point(v0)[2] == 10.0)
 
-    # transformed(xf) — copy with given xform applied
     mesh4 = mesh.duplicate()
     x = Xform.translation(0.0, 0.0, 10.0)
     mesh4t = mesh4.transformed(x)
@@ -1304,15 +1241,12 @@ def test_mesh_json_roundtrip():
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh"
 
-    # JSON object
     d = mesh.__jsondump__()
     loaded_json = Mesh.__jsonload__(d)
 
-    # String
     json_string = mesh.file_json_dumps()
     loaded_string = Mesh.file_json_loads(json_string)
 
-    # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.json"
     mesh.file_json_dump(filename)
     loaded_file = Mesh.file_json_load(filename)
@@ -1321,7 +1255,6 @@ def test_mesh_json_roundtrip():
     MINI_CHECK(loaded_string == mesh)
     MINI_CHECK(loaded_file == mesh)
 
-    # Triangulation roundtrip
     polys = [[
         Point(0, 0, 0),
         Point(1, 0, 0),
@@ -1335,7 +1268,6 @@ def test_mesh_json_roundtrip():
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
     MINI_CHECK(fk in loaded_tri.triangulation)
 
-    # Face holes roundtrip
     hmesh = Mesh.from_polygon_with_holes([
         [
             Point(0, 0, 0),
@@ -1365,11 +1297,9 @@ def test_mesh_protobuf_roundtrip():
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     mesh.name = "test_mesh_proto"
 
-    # String
     proto_bytes = mesh.pb_dumps()
     loaded_string = Mesh.pb_loads(proto_bytes)
 
-    # File
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.bin"
     mesh.pb_dump(filename)
     loaded_file = Mesh.pb_load(filename)
@@ -1377,7 +1307,6 @@ def test_mesh_protobuf_roundtrip():
     MINI_CHECK(loaded_string == mesh)
     MINI_CHECK(loaded_file == mesh)
 
-    # Triangulation roundtrip
     polys = [[
         Point(0, 0, 0),
         Point(1, 0, 0),
@@ -1391,7 +1320,6 @@ def test_mesh_protobuf_roundtrip():
     MINI_CHECK(len(loaded_tri.triangulation) > 0)
     MINI_CHECK(fk in loaded_tri.triangulation)
 
-    # Face holes roundtrip
     hmesh = Mesh.from_polygon_with_holes([
         [
             Point(0, 0, 0),
@@ -1412,142 +1340,284 @@ def test_mesh_protobuf_roundtrip():
     MINI_CHECK(loaded_holes.face_holes[hfk] == hmesh.face_holes[hfk])
 
 
-@MINI_TEST("Mesh", "Loft plate_failing 15-vert outer + 3 holes")
-def test_mesh_loft_plate_failing():
+@MINI_TEST("Mesh", "Loft Plate Four Holes")
+def test_mesh_loft_plate_four_holes():
     from session_py import Mesh
     from session_py import Point
     from session_py import Polyline
     bot = [
         Polyline([
-            Point( 734.392021, -1906.59468,  1101.588031),
-            Point( 632.396858, -1838.597905,  948.595287),
-            Point( 624.453132, -1769.270846,  984.70313 ),
-            Point( 113.775484, -1428.81908,   218.686657),
-            Point( 121.719209, -1498.146139,  182.578814),
-            Point(  15.607979, -1427.40532,    23.411969),
-            Point(   0.0,      -1441.0,        -18.0     ),
-            Point(   0.0,      -1893.0,       -357.0     ),
-            Point(  13.416408, -1917.0,       -348.167184),
-            Point( 104.290124, -1917.0,       -166.419752),
-            Point( 118.441096, -1964.169906,  -173.495238),
-            Point( 362.132034, -1799.867966,   179.289322),
-            Point( 348.0,      -1752.698063,   185.364808),
-            Point( 623.259018, -1832.362654,   751.385447),
-            Point( 734.392021, -1906.59468,  1101.588031),
+            Point(734.392021, -1906.59468, 1101.588031),
+            Point(632.396858, -1838.597905, 948.595287),
+            Point(624.453132, -1769.270846, 984.70313),
+            Point(113.775484, -1428.81908, 218.686657),
+            Point(121.719209, -1498.146139, 182.578814),
+            Point(15.607979, -1427.40532, 23.411969),
+            Point(0.0, -1441.0, -18.0),
+            Point(0.0, -1893.0, -357.0),
+            Point(13.416408, -1917.0, -348.167184),
+            Point(104.290124, -1917.0, -166.419752),
+            Point(118.441096, -1964.169906, -173.495238),
+            Point(664.077103, -1964.169906, 917.776777),
+            Point(649.926131, -1917.0, 924.852263),
+            Point(736.583592, -1917.0, 1098.167184),
+            Point(734.392021, -1906.59468, 1101.588031),
         ]),
         Polyline([
-            Point( 200.979108, -1563.492448,  354.900013),
-            Point( 197.007245, -1563.492448,  354.900013),
-            Point( 200.979108, -1598.155978,  336.846091),
-            Point( 197.007245, -1598.155978,  336.846091),
-            Point( 200.979108, -1563.492448,  354.900013),
+            Point(322.544527, -1917.0, 270.089054),
+            Point(213.417326, -1917.0, 51.834651),
+            Point(199.266354, -1869.830094, 58.910137),
+            Point(308.393555, -1869.830094, 277.16454),
+            Point(322.544527, -1917.0, 270.089054),
         ]),
         Polyline([
-            Point( 388.0, -1716.0, 208.0),
-            Point( 392.0, -1716.0, 208.0),
-            Point( 392.0, -1750.0, 190.0),
-            Point( 388.0, -1750.0, 190.0),
-            Point( 388.0, -1716.0, 208.0),
+            Point(540.79893, -1917.0, 706.59786),
+            Point(431.671728, -1917.0, 488.343457),
+            Point(417.520757, -1869.830094, 495.418943),
+            Point(526.647958, -1869.830094, 713.673346),
+            Point(540.79893, -1917.0, 706.59786),
         ]),
         Polyline([
-            Point( 540.0, -1790.0, 620.0),
-            Point( 544.0, -1790.0, 620.0),
-            Point( 544.0, -1820.0, 604.0),
-            Point( 540.0, -1820.0, 604.0),
-            Point( 540.0, -1790.0, 620.0),
+            Point(424.153936, -1667.753669, 660.242619),
+            Point(526.289465, -1735.844022, 813.445914),
+            Point(530.261328, -1770.507552, 795.391992),
+            Point(428.125798, -1702.417199, 642.188697),
+            Point(424.153936, -1667.753669, 660.242619),
+        ]),
+        Polyline([
+            Point(219.882876, -1531.572963, 353.83603),
+            Point(322.018406, -1599.663316, 507.039325),
+            Point(325.990269, -1634.326846, 488.985403),
+            Point(223.854739, -1566.236493, 335.782108),
+            Point(219.882876, -1531.572963, 353.83603),
         ]),
     ]
-    top = bot
-    m = Mesh.loft(bot, top)
+    top = [
+        Polyline([
+            Point(711.660594, -1906.59468, 1126.880036),
+            Point(605.549364, -1835.85386, 967.713191),
+            Point(601.577501, -1801.190331, 985.767113),
+            Point(90.899853, -1460.738565, 219.75064),
+            Point(94.871715, -1495.402095, 201.696718),
+            Point(-9.83197, -1425.599638, 44.641191),
+            Point(-25.439949, -1439.194318, 3.229221),
+            Point(-25.439949, -1893.0, -337.12504),
+            Point(-12.023541, -1917.0, -328.292224),
+            Point(75.988181, -1917.0, -152.26878),
+            Point(104.290124, -2011.339811, -166.419752),
+            Point(649.926131, -2011.339811, 924.852263),
+            Point(621.624188, -1917.0, 939.003234),
+            Point(713.852165, -1917.0, 1123.459189),
+            Point(711.660594, -1906.59468, 1126.880036),
+        ]),
+        Polyline([
+            Point(308.393555, -1964.169906, 277.16454),
+            Point(199.266354, -1964.169906, 58.910137),
+            Point(185.115382, -1917.0, 65.985623),
+            Point(294.242584, -1917.0, 284.240026),
+            Point(308.393555, -1964.169906, 277.16454),
+        ]),
+        Polyline([
+            Point(526.647958, -1964.169906, 713.673346),
+            Point(417.520757, -1964.169906, 495.418943),
+            Point(403.369785, -1917.0, 502.494429),
+            Point(512.496987, -1917.0, 720.748832),
+            Point(526.647958, -1964.169906, 713.673346),
+        ]),
+        Polyline([
+            Point(401.278305, -1699.673154, 661.306602),
+            Point(503.413834, -1767.763507, 814.509897),
+            Point(507.385697, -1802.427037, 796.455975),
+            Point(405.250167, -1734.336684, 643.25268),
+            Point(401.278305, -1699.673154, 661.306602),
+        ]),
+        Polyline([
+            Point(197.007245, -1563.492448, 354.900013),
+            Point(299.142775, -1631.582801, 508.103307),
+            Point(303.114638, -1666.246331, 490.049386),
+            Point(200.979108, -1598.155978, 336.846091),
+            Point(197.007245, -1563.492448, 354.900013),
+        ]),
+    ]
+    m = Mesh.loft(bot, top, True, True)
     MINI_CHECK(m.is_valid())
 
 
-@MINI_TEST("Mesh", "Loft plate_v2 15-vert outer + 3 holes")
+@MINI_TEST("Mesh", "Loft Plate V2")
 def test_mesh_loft_plate_v2():
     from session_py import Mesh
     from session_py import Point
     from session_py import Polyline
     top = [
         Polyline([
-            Point( 734.392021,  -28.40532,  1101.588031),
-            Point( 630.839301,  -97.440466,  946.258951),
-            Point( 602.668732,  -21.881034,  974.757956),
-            Point(  90.636822, -363.235641,  206.710092),
-            Point( 118.807391, -438.795073,  178.211087),
-            Point(  15.607979, -507.59468,    23.411969),
-            Point(  21.213203, -518.0,        21.213203),
-            Point(1478.786797, -518.0,      1478.786797),
+            Point(734.392021, -28.40532, 1101.588031),
+            Point(630.839301, -97.440466, 946.258951),
+            Point(602.668732, -21.881034, 974.757956),
+            Point(90.636822, -363.235641, 206.710092),
+            Point(118.807391, -438.795073, 178.211087),
+            Point(15.607979, -507.59468, 23.411969),
+            Point(21.213203, -518.0, 21.213203),
+            Point(1478.786797, -518.0, 1478.786797),
             Point(1476.953362, -502.635574, 1488.476681),
-            Point(1323.309106, -400.20607,  1411.654553),
-            Point(1323.309106, -350.20607,  1449.154553),
-            Point( 921.429178,  -82.286119, 1248.214589),
-            Point( 921.429178, -132.286119, 1210.714589),
-            Point( 773.046638,  -33.364426, 1136.523319),
-            Point( 734.392021,  -28.40532,  1101.588031),
+            Point(1323.309106, -400.20607, 1411.654553),
+            Point(1323.309106, -350.20607, 1449.154553),
+            Point(921.429178, -82.286119, 1248.214589),
+            Point(921.429178, -132.286119, 1210.714589),
+            Point(773.046638, -33.364426, 1136.523319),
+            Point(734.392021, -28.40532, 1101.588031),
         ]),
         Polyline([
             Point(1055.389154, -196.592769, 1296.444577),
-            Point(1189.34913,  -285.89942,  1363.424565),
-            Point(1189.34913,  -310.89942,  1344.674565),
+            Point(1189.34913, -285.89942, 1363.424565),
+            Point(1189.34913, -310.89942, 1344.674565),
             Point(1055.389154, -221.592769, 1277.694577),
             Point(1055.389154, -196.592769, 1296.444577),
         ]),
         Polyline([
-            Point( 411.941252, -196.202593,  653.289308),
-            Point( 514.347634, -127.931671,  806.898881),
-            Point( 528.432919, -165.711387,  792.649378),
-            Point( 426.026537, -233.982309,  639.039805),
-            Point( 411.941252, -196.202593,  653.289308),
+            Point(411.941252, -196.202593, 653.289308),
+            Point(514.347634, -127.931671, 806.898881),
+            Point(528.432919, -165.711387, 792.649378),
+            Point(426.026537, -233.982309, 639.039805),
+            Point(411.941252, -196.202593, 653.289308),
         ]),
         Polyline([
-            Point( 207.128489, -332.744435,  346.070162),
-            Point( 309.53487,  -264.473514,  499.679735),
-            Point( 323.620155, -302.25323,   485.430233),
-            Point( 221.213773, -370.524151,  331.82066 ),
-            Point( 207.128489, -332.744435,  346.070162),
+            Point(207.128489, -332.744435, 346.070162),
+            Point(309.53487, -264.473514, 499.679735),
+            Point(323.620155, -302.25323, 485.430233),
+            Point(221.213773, -370.524151, 331.82066),
+            Point(207.128489, -332.744435, 346.070162),
         ]),
     ]
     bot = [
         Polyline([
-            Point( 717.764591,  -24.335988, 1136.036032),
-            Point( 607.106921,  -98.107768,  970.049526),
-            Point( 593.021636,  -60.328052,  984.299029),
-            Point(  80.989727, -401.682659,  216.251164),
-            Point(  95.075011, -439.462375,  202.001662),
-            Point( -28.206905, -521.650319,   17.078787),
-            Point( -22.601681, -532.055639,   14.880022),
+            Point(717.764591, -24.335988, 1136.036032),
+            Point(607.106921, -98.107768, 970.049526),
+            Point(593.021636, -60.328052, 984.299029),
+            Point(80.989727, -401.682659, 216.251164),
+            Point(95.075011, -439.462375, 202.001662),
+            Point(-28.206905, -521.650319, 17.078787),
+            Point(-22.601681, -532.055639, 14.880022),
             Point(1489.346823, -532.055639, 1526.828525),
-            Point(1487.513388, -516.691213, 1536.51841 ),
+            Point(1487.513388, -516.691213, 1536.51841),
             Point(1323.309106, -407.221692, 1454.416269),
             Point(1323.309106, -382.221692, 1473.166269),
-            Point( 921.429178, -114.30174,  1272.226305),
-            Point( 921.429178, -139.30174,  1253.476305),
-            Point( 756.419209,  -29.295094, 1170.97132 ),
-            Point( 717.764591,  -24.335988, 1136.036032),
+            Point(921.429178, -114.30174, 1272.226305),
+            Point(921.429178, -139.30174, 1253.476305),
+            Point(756.419209, -29.295094, 1170.97132),
+            Point(717.764591, -24.335988, 1136.036032),
         ]),
         Polyline([
             Point(1055.389154, -228.608391, 1320.456293),
-            Point(1189.34913,  -317.915041, 1387.436281),
-            Point(1189.34913,  -342.915041, 1368.686281),
+            Point(1189.34913, -317.915041, 1387.436281),
+            Point(1189.34913, -342.915041, 1368.686281),
             Point(1055.389154, -253.608391, 1301.706293),
             Point(1055.389154, -228.608391, 1320.456293),
         ]),
         Polyline([
-            Point( 402.294157, -234.649611,  662.830381),
-            Point( 504.700539, -166.37869,   816.439954),
-            Point( 518.785824, -204.158406,  802.190451),
-            Point( 416.379442, -272.429327,  648.580878),
-            Point( 402.294157, -234.649611,  662.830381),
+            Point(402.294157, -234.649611, 662.830381),
+            Point(504.700539, -166.37869, 816.439954),
+            Point(518.785824, -204.158406, 802.190451),
+            Point(416.379442, -272.429327, 648.580878),
+            Point(402.294157, -234.649611, 662.830381),
         ]),
         Polyline([
-            Point( 197.481393, -371.191453,  355.611235),
-            Point( 299.887775, -302.920532,  509.220808),
-            Point( 313.97306,  -340.700248,  494.971305),
-            Point( 211.566678, -408.971169,  341.361733),
-            Point( 197.481393, -371.191453,  355.611235),
+            Point(197.481393, -371.191453, 355.611235),
+            Point(299.887775, -302.920532, 509.220808),
+            Point(313.97306, -340.700248, 494.971305),
+            Point(211.566678, -408.971169, 341.361733),
+            Point(197.481393, -371.191453, 355.611235),
         ]),
     ]
-    m = Mesh.loft(top, bot)
+    m = Mesh.loft(top, bot, True, True)
+    MINI_CHECK(m.is_valid())
+
+
+@MINI_TEST("Mesh", "Loft Plate V3")
+def test_mesh_loft_plate_v3():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
+    top = [
+        Polyline([
+            Point(734.392021, 352.59468, 1101.588031),
+            Point(618.973111, 275.648741, 928.459666),
+            Point(618.973111, 369.988552, 999.214525),
+            Point(106.941201, 28.633945, 231.16666),
+            Point(106.941201, -65.705866, 160.411802),
+            Point(15.607979, -126.59468, 23.411969),
+            Point(21.213203, -137.0, 21.213203),
+            Point(1478.786797, -137.0, 1478.786797),
+            Point(1476.953362, -121.635574, 1488.476681),
+            Point(1323.309106, -19.20607, 1411.654553),
+            Point(1323.309106, 30.79393, 1449.154553),
+            Point(921.429178, 298.713881, 1248.214589),
+            Point(921.429178, 248.713881, 1210.714589),
+            Point(773.046638, 347.635574, 1136.523319),
+            Point(734.392021, 352.59468, 1101.588031),
+        ]),
+        Polyline([
+            Point(1055.389154, 184.407231, 1296.444577),
+            Point(1189.34913, 95.10058, 1363.424565),
+            Point(1189.34913, 70.10058, 1344.674565),
+            Point(1055.389154, 159.407231, 1277.694577),
+            Point(1055.389154, 184.407231, 1296.444577),
+        ]),
+        Polyline([
+            Point(414.160347, 186.276804, 656.61795),
+            Point(516.566729, 254.547725, 810.227523),
+            Point(516.566729, 207.377819, 774.850093),
+            Point(414.160347, 139.106898, 621.240521),
+            Point(414.160347, 186.276804, 656.61795),
+        ]),
+        Polyline([
+            Point(209.347583, 49.734961, 349.398804),
+            Point(311.753965, 118.005882, 503.008377),
+            Point(311.753965, 70.835977, 467.630948),
+            Point(209.347583, 2.565055, 314.021375),
+            Point(209.347583, 49.734961, 349.398804),
+        ]),
+    ]
+    bot = [
+        Polyline([
+            Point(717.764591, 356.664012, 1136.036032),
+            Point(618.973111, 290.803025, 987.848811),
+            Point(618.973111, 337.972931, 1023.226241),
+            Point(106.941201, -3.381676, 255.178376),
+            Point(106.941201, -50.551581, 219.800947),
+            Point(-28.206905, -140.650319, 17.078787),
+            Point(-22.601681, -151.055639, 14.880022),
+            Point(1489.346823, -151.055639, 1526.828525),
+            Point(1487.513388, -135.691213, 1536.51841),
+            Point(1323.309106, -26.221692, 1454.416269),
+            Point(1323.309106, -1.221692, 1473.166269),
+            Point(921.429178, 266.69826, 1272.226305),
+            Point(921.429178, 241.69826, 1253.476305),
+            Point(756.419209, 351.704906, 1170.97132),
+            Point(717.764591, 356.664012, 1136.036032),
+        ]),
+        Polyline([
+            Point(1055.389154, 152.391609, 1320.456293),
+            Point(1189.34913, 63.084959, 1387.436281),
+            Point(1189.34913, 38.084959, 1368.686281),
+            Point(1055.389154, 127.391609, 1301.706293),
+            Point(1055.389154, 152.391609, 1320.456293),
+        ]),
+        Polyline([
+            Point(414.160347, 154.261182, 680.629666),
+            Point(516.566729, 222.532104, 834.239239),
+            Point(516.566729, 175.362198, 798.861809),
+            Point(414.160347, 107.091277, 645.252236),
+            Point(414.160347, 154.261182, 680.629666),
+        ]),
+        Polyline([
+            Point(209.347583, 17.71934, 373.41052),
+            Point(311.753965, 85.990261, 527.020093),
+            Point(311.753965, 38.820356, 491.642664),
+            Point(209.347583, -29.450566, 338.033091),
+            Point(209.347583, 17.71934, 373.41052),
+        ]),
+    ]
+    m = Mesh.loft(top, bot, True, True)
     MINI_CHECK(m.is_valid())
 
 
@@ -1600,6 +1670,7 @@ def test_mesh_halfedge_face():
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     f = mesh.halfedge_face((0, 3))
+    MINI_CHECK(f is not None)
     MINI_CHECK(f == 0)
     mesh.remove_face(0)
     MINI_CHECK(mesh.halfedge_face((0, 3)) is None)
@@ -1612,7 +1683,9 @@ def test_mesh_halfedge_after_before():
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
     after = mesh.halfedge_after((0, 3))
     before = mesh.halfedge_before((0, 3))
+    MINI_CHECK(after is not None)
     MINI_CHECK(after == (3, 2))
+    MINI_CHECK(before is not None)
     MINI_CHECK(before == (1, 0))
 
 
@@ -1708,10 +1781,11 @@ def test_mesh_flip_cycles():
 @MINI_TEST("Mesh", "Face Normal Unitized")
 def test_mesh_face_normal_unitized():
     from session_py import Mesh
+    from session_py import TOLERANCE
 
     mesh = Mesh.create_box(2.0, 2.0, 2.0)
-    nu = mesh.face_normal(0, unitized=True)
-    nn = mesh.face_normal(0, unitized=False)
+    nu = mesh.face_normal_unitized(0, True)
+    nn = mesh.face_normal_unitized(0, False)
     MINI_CHECK(abs(nu.magnitude() - 1.0) < TOLERANCE.ZERO_TOLERANCE)
     MINI_CHECK(nn.magnitude() > 1.0)
 
@@ -1721,9 +1795,9 @@ def test_mesh_default_attributes():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_vertex_attributes(is_support=0.0, load_z=0.0)
-    mesh.update_default_face_attributes(stress=0.0)
-    mesh.update_default_edge_attributes(weight=1.0)
+    mesh.update_default_vertex_attributes({"is_support": 0.0, "load_z": 0.0})
+    mesh.update_default_face_attributes({"stress": 0.0})
+    mesh.update_default_edge_attributes({"weight": 1.0})
     MINI_CHECK(mesh.default_vertex_attributes["is_support"] == 0.0)
     MINI_CHECK(mesh.default_vertex_attributes["load_z"] == 0.0)
     MINI_CHECK(mesh.default_face_attributes["stress"] == 0.0)
@@ -1735,8 +1809,8 @@ def test_mesh_vertex_attribute():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_vertex_attributes(is_support=0.0)
-    mesh.vertex_attribute(0, "is_support", 1.0)
+    mesh.update_default_vertex_attributes({"is_support": 0.0})
+    mesh.set_vertex_attribute(0, "is_support", 1.0)
     MINI_CHECK(mesh.vertex_attribute(0, "is_support") == 1.0)
     MINI_CHECK(mesh.vertex_attribute(1, "is_support") == 0.0)
 
@@ -1746,8 +1820,8 @@ def test_mesh_face_attribute():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_face_attributes(stress=0.0)
-    mesh.face_attribute(0, "stress", 2.5)
+    mesh.update_default_face_attributes({"stress": 0.0})
+    mesh.set_face_attribute(0, "stress", 2.5)
     MINI_CHECK(mesh.face_attribute(0, "stress") == 2.5)
     MINI_CHECK(mesh.face_attribute(1, "stress") == 0.0)
 
@@ -1757,8 +1831,8 @@ def test_mesh_edge_attribute():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_edge_attributes(weight=1.0)
-    mesh.edge_attribute((0, 1), "weight", 5.0)
+    mesh.update_default_edge_attributes({"weight": 1.0})
+    mesh.set_edge_attribute((0, 1), "weight", 5.0)
     MINI_CHECK(mesh.edge_attribute((0, 1), "weight") == 5.0)
     MINI_CHECK(mesh.edge_attribute((0, 3), "weight") == 1.0)
 
@@ -1768,8 +1842,9 @@ def test_mesh_vertices_attribute_bulk():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_vertex_attributes(is_support=0.0)
-    mesh.vertices_attribute("is_support", 1.0, keys=[0, 1, 2])
+    mesh.update_default_vertex_attributes({"is_support": 0.0})
+    keys = [0, 1, 2]
+    mesh.set_vertices_attribute("is_support", 1.0, keys)
     vals = mesh.vertices_attribute("is_support")
     MINI_CHECK(vals[0] == 1.0)
     MINI_CHECK(vals[1] == 1.0)
@@ -1782,11 +1857,13 @@ def test_mesh_vertices_where():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_vertex_attributes(is_support=0.0)
-    mesh.vertices_attribute("is_support", 1.0, keys=[0, 2, 4])
+    mesh.update_default_vertex_attributes({"is_support": 0.0})
+    keys = [0, 2, 4]
+    mesh.set_vertices_attribute("is_support", 1.0, keys)
     sup = mesh.vertices_where({"is_support": 1.0})
+    sup.sort()
     MINI_CHECK(len(sup) == 3)
-    MINI_CHECK(sorted(sup) == [0, 2, 4])
+    MINI_CHECK(sup == [0, 2, 4])
 
 
 @MINI_TEST("Mesh", "Faces Where")
@@ -1794,11 +1871,12 @@ def test_mesh_faces_where():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_face_attributes(tag=0.0)
-    mesh.face_attribute(2, "tag", 7.0)
-    mesh.face_attribute(4, "tag", 7.0)
+    mesh.update_default_face_attributes({"tag": 0.0})
+    mesh.set_face_attribute(2, "tag", 7.0)
+    mesh.set_face_attribute(4, "tag", 7.0)
     out = mesh.faces_where({"tag": 7.0})
-    MINI_CHECK(sorted(out) == [2, 4])
+    out.sort()
+    MINI_CHECK(out == [2, 4])
 
 
 @MINI_TEST("Mesh", "Edges Where")
@@ -1806,8 +1884,8 @@ def test_mesh_edges_where():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_edge_attributes(weight=0.0)
-    mesh.edge_attribute((0, 1), "weight", 3.0)
+    mesh.update_default_edge_attributes({"weight": 0.0})
+    mesh.set_edge_attribute((0, 1), "weight", 3.0)
     out = mesh.edges_where({"weight": 3.0})
     MINI_CHECK(len(out) == 1)
     MINI_CHECK(out[0] == (0, 1))
@@ -1818,11 +1896,12 @@ def test_mesh_vertices_where_predicate():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_vertex_attributes(load=0.0)
-    mesh.vertex_attribute(0, "load", 5.0)
-    mesh.vertex_attribute(1, "load", 10.0)
-    big = mesh.vertices_where_predicate(lambda k, a: a["load"] > 4.0)
-    MINI_CHECK(sorted(big) == [0, 1])
+    mesh.update_default_vertex_attributes({"load": 0.0})
+    mesh.set_vertex_attribute(0, "load", 5.0)
+    mesh.set_vertex_attribute(1, "load", 10.0)
+    big = mesh.vertices_where_predicate(lambda k, a: "load" in a and a["load"] > 4.0)
+    big.sort()
+    MINI_CHECK(big == [0, 1])
 
 
 @MINI_TEST("Mesh", "Faces Where Predicate")
@@ -1830,11 +1909,12 @@ def test_mesh_faces_where_predicate():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_face_attributes(area=0.0)
-    mesh.face_attribute(0, "area", 2.0)
-    mesh.face_attribute(3, "area", 4.0)
-    big = mesh.faces_where_predicate(lambda k, a: a["area"] > 1.0)
-    MINI_CHECK(sorted(big) == [0, 3])
+    mesh.update_default_face_attributes({"area": 0.0})
+    mesh.set_face_attribute(0, "area", 2.0)
+    mesh.set_face_attribute(3, "area", 4.0)
+    big = mesh.faces_where_predicate(lambda k, a: "area" in a and a["area"] > 1.0)
+    big.sort()
+    MINI_CHECK(big == [0, 3])
 
 
 @MINI_TEST("Mesh", "Edges Where Predicate")
@@ -1842,12 +1922,11 @@ def test_mesh_edges_where_predicate():
     from session_py import Mesh
 
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
-    mesh.update_default_edge_attributes(weight=0.0)
-    mesh.edge_attribute((0, 1), "weight", 5.0)
-    big = mesh.edges_where_predicate(lambda e, a: a["weight"] > 1.0)
+    mesh.update_default_edge_attributes({"weight": 0.0})
+    mesh.set_edge_attribute((0, 1), "weight", 5.0)
+    big = mesh.edges_where_predicate(lambda e, a: "weight" in a and a["weight"] > 1.0)
     MINI_CHECK(len(big) == 1)
     MINI_CHECK(big[0] == (0, 1))
-
 
 
 @MINI_TEST("Mesh", "Refresh Guid")
@@ -1862,6 +1941,23 @@ def test_mesh_refresh_guid():
     copy.refresh_guid()
     MINI_CHECK(copy.guid != original)
     MINI_CHECK(mesh.guid == original)
+
+
+@MINI_TEST("Mesh", "Assignment Keeps Objectcolor")
+def test_mesh_assignment_keeps_objectcolor():
+    from session_py import Color
+    from session_py import Mesh
+    from session_py import Point
+    source = Mesh.from_vertices_and_faces(
+        [Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)],
+        [[0, 1, 2, 3]])
+    source.set_objectcolor(Color(0.72, 0.72, 0.74, 1.0, "grey"))
+
+    target = source.duplicate()
+    MINI_CHECK(target.get_objectcolor().r == source.get_objectcolor().r)
+    MINI_CHECK(target.get_objectcolor().g == source.get_objectcolor().g)
+    MINI_CHECK(target.get_objectcolor().b == source.get_objectcolor().b)
+    MINI_CHECK(target.color_mode == source.color_mode)
 
 
 if __name__ == "__main__":

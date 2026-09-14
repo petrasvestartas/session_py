@@ -1,58 +1,198 @@
 from __future__ import annotations
-from typing import List
 from typing import Optional
-from typing import Tuple
 from typing import TYPE_CHECKING
 from typing import Union
-import uuid
 import copy
-
-if TYPE_CHECKING:
-    from .proto import polyline_pb2
-    from pathlib import Path
-    from .xform import Xform
-
+import heapq
+import json
+import math
+import uuid
 from .color import Color
 from .plane import Plane
 from .point import Point
 from .tolerance import Tolerance
 from .vector import Vector
 
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .line import Line
+    from .proto import polyline_pb2
+    from .xform import Xform
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2D helpers
+# ═══════════════════════════════════════════════════════════════════════════
+def _ccw_2d(ax: float, ay: float, bx: float, by: float, px: float, py: float) -> float:
+    return (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+
+
+def _seg_dist_sq(
+    px: float, py: float, ax: float, ay: float, bx: float, by: float
+) -> float:
+    x = ax
+    y = ay
+    dx = bx - x
+    dy = by - y
+    if dx != 0.0 or dy != 0.0:
+        t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy)
+        if t > 1.0:
+            x = bx
+            y = by
+        elif t > 0.0:
+            x += dx * t
+            y += dy * t
+    dx = px - x
+    dy = py - y
+    return dx * dx + dy * dy
+
+
+def _point_to_polygon_dist(
+    px: float, py: float, polygon: list[list[tuple[float, float]]]
+) -> float:
+    """Signed distance to the polygon rings, positive inside"""
+    inside = False
+    min_dist_sq = float("inf")
+    for ring in polygon:
+        length = len(ring)
+        j = length - 1
+        for i in range(length):
+            ax = ring[i][0]
+            ay = ring[i][1]
+            bx = ring[j][0]
+            by = ring[j][1]
+            if (ay > py) != (by > py) and px < (bx - ax) * (py - ay) / (by - ay) + ax:
+                inside = not inside
+            min_dist_sq = min(min_dist_sq, _seg_dist_sq(px, py, ax, ay, bx, by))
+            j = i
+    return (1.0 if inside else -1.0) * math.sqrt(min_dist_sq)
+
+
+class _PCell:
+    """Quadtree cell of the polylabel search: center, half size, distance and its upper bound"""
+
+    def __init__(
+        self, cx: float, cy: float, h: float, polygon: list[list[tuple[float, float]]]
+    ):
+        self.cx = cx
+        self.cy = cy
+        self.h = h
+        self.d = _point_to_polygon_dist(cx, cy, polygon)
+        self.mx = self.d + h * math.sqrt(2.0)
+
+    def __lt__(self, o: "_PCell") -> bool:
+        return self.mx > o.mx
+
+
+def _centroid_cell(polygon: list[list[tuple[float, float]]]) -> _PCell:
+    area = 0.0
+    cx = 0.0
+    cy = 0.0
+    ring = polygon[0]
+    length = len(ring)
+    j = length - 1
+    for i in range(length):
+        ax = ring[i][0]
+        ay = ring[i][1]
+        bx = ring[j][0]
+        by = ring[j][1]
+        f = ax * by - bx * ay
+        cx += (ax + bx) * f
+        cy += (ay + by) * f
+        area += f * 3.0
+        j = i
+    if area == 0.0:
+        return _PCell(ring[0][0], ring[0][1], 0.0, polygon)
+    return _PCell(cx / area, cy / area, 0.0, polygon)
+
+
+def _mapbox_polylabel(
+    polygon: list[list[tuple[float, float]]], precision: float
+) -> tuple[float, float, float]:
+    """Mapbox polylabel: center and radius of the largest inscribed circle in 2D"""
+    min_x = float("inf")
+    min_y = float("inf")
+    max_x = float("-inf")
+    max_y = float("-inf")
+    for p in polygon[0]:
+        min_x = min(min_x, p[0])
+        max_x = max(max_x, p[0])
+        min_y = min(min_y, p[1])
+        max_y = max(max_y, p[1])
+    size_x = max_x - min_x
+    size_y = max_y - min_y
+    cell_size = min(size_x, size_y)
+    h = cell_size / 2.0
+    if cell_size == 0.0:
+        return (min_x, min_y, 0.0)
+    queue = []
+    x = min_x
+    while x < max_x:
+        y = min_y
+        while y < max_y:
+            heapq.heappush(queue, _PCell(x + h, y + h, h, polygon))
+            y += cell_size
+        x += cell_size
+    best = _centroid_cell(polygon)
+    bbox_cell = _PCell(min_x + size_x / 2.0, min_y + size_y / 2.0, 0.0, polygon)
+    if bbox_cell.d > best.d:
+        best = bbox_cell
+    max_iter = 1000000
+    for _ in range(max_iter):
+        if not queue:
+            break
+        cell = heapq.heappop(queue)
+        if cell.d > best.d:
+            best = cell
+        if cell.mx - best.d <= precision:
+            continue
+        nh = cell.h / 2.0
+        heapq.heappush(queue, _PCell(cell.cx - nh, cell.cy - nh, nh, polygon))
+        heapq.heappush(queue, _PCell(cell.cx + nh, cell.cy - nh, nh, polygon))
+        heapq.heappush(queue, _PCell(cell.cx - nh, cell.cy + nh, nh, polygon))
+        heapq.heappush(queue, _PCell(cell.cx + nh, cell.cy + nh, nh, polygon))
+    return (best.cx, best.cy, best.d)
+
 
 class Polyline:
-    """A polyline defined by a collection of coordinates with an associated plane.
-
-    Internally stores coordinates as a flat array [x0, y0, z0, x1, y1, z1, ...] for
-    efficient serialization. Provides Point-based API for compatibility.
-    """
+    """A polyline stored as flat coordinates [x0, y0, z0, x1, y1, z1, ...] with a lazily computed plane"""
 
     def __init__(self, points: list[Point] | None = None):
-        """Creates a new Polyline with default guid and name.
-
-        Args:
-            points: The collection of points (converted to flat coords internally).
-        """
         self._guid = None
         self.name = "my_polyline"
+        self.coords: list[float] = []
+        self.plane = Plane()
+        self._plane_dirty = True
         self.width = 1.0
         self.dash = []
-        self._linecolor = None
-
-        # Flat coordinate array [x0, y0, z0, x1, y1, z1, ...]
-        self.coords: list[float] = []
+        self.linecolor = Color.black()
         if points is not None:
             for p in points:
                 self.coords.extend([p[0], p[1], p[2]])
 
-        # Plane computed lazily on first access
-        self._plane = None
+    def __deepcopy__(self, memo):
+        """Copy (new guid, same data)"""
+        result = Polyline()
+        result.name = self.name
+        result.coords = list(self.coords)
+        result.plane = copy.deepcopy(self.plane, memo)
+        result._plane_dirty = self._plane_dirty
+        result.width = self.width
+        result.dash = list(self.dash)
+        result.linecolor = copy.deepcopy(self.linecolor, memo)
+        memo[id(self)] = result
+        return result
+
+    def duplicate(self) -> "Polyline":
+        """Copy (new guid, same data)"""
+        return copy.deepcopy(self)
 
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
 
@@ -61,94 +201,41 @@ class Polyline:
         self._guid = value
 
     def refresh_guid(self) -> None:
-        """Clear the guid so a FRESH one mints lazily on next read — the duplicate/copy enabler."""
+        """Clear the guid so a fresh one mints lazily on next read"""
         self._guid = None
 
-    @property
-    def plane(self) -> Optional["Plane"]:
-        if self._plane is None:
-            n = self.point_count()
-            if n >= 3:
-                pts = self.get_points()
-                p0 = pts[0]
-                found = False
-                for i in range(1, n):
-                    v1 = Vector(pts[i][0]-p0[0], pts[i][1]-p0[1], pts[i][2]-p0[2])
-                    if v1[0]*v1[0]+v1[1]*v1[1]+v1[2]*v1[2] < 1e-20:
-                        continue
-                    for j in range(i + 1, n):
-                        v2 = Vector(pts[j][0]-p0[0], pts[j][1]-p0[1], pts[j][2]-p0[2])
-                        normal = v1.cross(v2)
-                        if normal[0]*normal[0]+normal[1]*normal[1]+normal[2]*normal[2] < 1e-20:
-                            continue
-                        normal.normalize_self()
-                        v1.normalize_self()
-                        yax = normal.cross(v1)
-                        yax.normalize_self()
-                        self._plane = Plane(p0, v1, yax)
-                        found = True
-                        break
-                    if found:
-                        break
-                if not found:
-                    self._plane = Plane()
-            else:
-                self._plane = Plane()
-        return self._plane
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Static constructors
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    @plane.setter
-    def plane(self, value: Optional["Plane"]) -> None:
-        self._plane = value
-
-    @property
-    def linecolor(self) -> Color:
-        if self._linecolor is None:
-            self._linecolor = Color.black()
-        return self._linecolor
-
-    @linecolor.setter
-    def linecolor(self, value: Color) -> None:
-        self._linecolor = value
-
-    @classmethod
-    def from_coords(cls, coords: list[float]) -> "Polyline":
-        """Create a Polyline from a flat coordinate array.
-
-        Args:
-            coords: Flat array [x0, y0, z0, x1, y1, z1, ...]
-
-        Returns:
-            New Polyline instance.
-        """
-        pl = cls()
+    @staticmethod
+    def from_coords(coords: list[float]) -> "Polyline":
+        pl = Polyline()
         pl.coords = list(coords)
-        if pl.point_count() >= 3:
-            pl.plane = Plane.from_points(pl.get_points())
+        pl._recompute_plane_if_needed()
         return pl
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Point Access (compatibility layer)
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def point_count(self) -> int:
-        """Returns the number of points."""
-        return len(self.coords) // 3
-
-    @classmethod
-    def from_sides(cls, sides: int, radius: float = 1.0, close: bool = False) -> "Polyline":
-        """Create a regular polygon with given number of sides and radius."""
-        import math
+    @staticmethod
+    def from_sides(sides: int, radius: float = 1.0, close: bool = False) -> "Polyline":
+        """Regular polygon of sides around the origin in the XY plane"""
         pts = []
         for i in range(sides):
             angle = 2.0 * Tolerance.PI * i / sides
             pts.append(Point(radius * math.cos(angle), radius * math.sin(angle), 0.0))
         if close:
             pts.append(pts[0])
-        return cls(pts)
+        return Polyline(pts)
 
-    @classmethod
-    def rectangle(cls, origin: Point, x_axis: Vector, y_axis: Vector, width: float, height: float, close: bool = True) -> "Polyline":
-        """Create a rectangle with its corner at origin, sides along x_axis and y_axis."""
+    @staticmethod
+    def rectangle(
+        origin: Point,
+        x_axis: Vector,
+        y_axis: Vector,
+        width: float,
+        height: float,
+        close: bool = True,
+    ) -> "Polyline":
+        """Rectangle with its corner at origin, sides along x_axis and y_axis"""
         plane = Plane(origin, x_axis, y_axis)
         o = plane.origin
         x = plane.x_axis * width
@@ -156,743 +243,343 @@ class Polyline:
         pts = [o, o + x, o + x + y, o + y]
         if close:
             pts.append(pts[0])
-        return cls(pts)
-
-    def get_points(self) -> list[Point]:
-        """Returns all points as Point objects."""
-        points = []
-        for i in range(self.point_count()):
-            idx = i * 3
-            points.append(Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2]))
-        return points
-
-    @property
-    def points(self) -> list[Point]:
-        """Property for backward compatibility - returns list of Point objects."""
-        return self.get_points()
-
-    @points.setter
-    def points(self, value: list[Point]) -> None:
-        """Set points from a list of Point objects."""
-        self.coords = []
-        for p in value:
-            self.coords.extend([p[0], p[1], p[2]])
-
-    def __len__(self) -> int:
-        """Returns the number of points in the polyline."""
-        return self.point_count()
-
-    def __getitem__(self, index: int) -> Point:
-        if 0 <= index < self.point_count():
-            idx = index * 3
-            return Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
-        raise IndexError("Index out of range")
-
-    def __setitem__(self, index: int, point: Point) -> None:
-        if 0 <= index < self.point_count():
-            idx = index * 3
-            self.coords[idx] = point[0]
-            self.coords[idx + 1] = point[1]
-            self.coords[idx + 2] = point[2]
-        else:
-            raise IndexError("Index out of range")
-
-    def is_empty(self) -> bool:
-        """Returns true if the polyline has no points."""
-        return self.point_count() == 0
-
-    def segment_count(self) -> int:
-        """Returns the number of segments (n-1 for n points)."""
-        n = self.point_count()
-        return n - 1 if n > 1 else 0
-
-    def get_lines(self) -> list:
-        """Returns all segments as Line objects."""
-        from .line import Line
-        result = []
-        for i in range(self.segment_count()):
-            idx0 = i * 3
-            idx1 = (i + 1) * 3
-            result.append(Line(
-                self.coords[idx0], self.coords[idx0 + 1], self.coords[idx0 + 2],
-                self.coords[idx1], self.coords[idx1 + 1], self.coords[idx1 + 2],
-            ))
-        return result
-
-    @property
-    def lines(self) -> list:
-        """Property returning all segments as Line objects."""
-        return self.get_lines()
-
-    def length(self) -> float:
-        """Calculates the total length of the polyline."""
-        total_length = 0.0
-        for i in range(self.segment_count()):
-            idx0 = i * 3
-            idx1 = (i + 1) * 3
-            dx = self.coords[idx1] - self.coords[idx0]
-            dy = self.coords[idx1 + 1] - self.coords[idx0 + 1]
-            dz = self.coords[idx1 + 2] - self.coords[idx0 + 2]
-            total_length += (dx * dx + dy * dy + dz * dz) ** 0.5
-        return total_length
-
-    def length_squared(self) -> float:
-        """Sum of squared segment lengths — avoids sqrt when only relative lengths matter."""
-        total = 0.0
-        for i in range(self.segment_count()):
-            idx0 = i * 3
-            idx1 = (i + 1) * 3
-            dx = self.coords[idx1] - self.coords[idx0]
-            dy = self.coords[idx1 + 1] - self.coords[idx0 + 1]
-            dz = self.coords[idx1 + 2] - self.coords[idx0 + 2]
-            total += dx * dx + dy * dy + dz * dz
-        return total
-
-    def get_point(self, index: int) -> Point | None:
-        """Returns the point at the given index, or None if out of bounds."""
-        if 0 <= index < self.point_count():
-            idx = index * 3
-            return Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
-        return None
-
-    def set_point(self, index: int, point: Point) -> None:
-        """Sets the point at the given index."""
-        if 0 <= index < self.point_count():
-            idx = index * 3
-            self.coords[idx] = point[0]
-            self.coords[idx + 1] = point[1]
-            self.coords[idx + 2] = point[2]
-
-    def add_point(self, point: Point) -> None:
-        """Adds a point to the end of the polyline."""
-        self.coords.extend([point[0], point[1], point[2]])
-        if self.point_count() == 3:
-            self._recompute_plane()
-
-    def insert_point(self, index: int, point: Point) -> None:
-        """Inserts a point at the specified index."""
-        idx = index * 3
-        self.coords[idx:idx] = [point[0], point[1], point[2]]
-        if self.point_count() == 3:
-            self._recompute_plane()
-
-    def remove_point(self, index: int) -> Point | None:
-        """Removes and returns the point at the specified index."""
-        if 0 <= index < self.point_count():
-            idx = index * 3
-            point = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
-            del self.coords[idx:idx + 3]
-            if self.point_count() == 3:
-                self._recompute_plane()
-            return point
-        return None
-
-    def reverse(self) -> None:
-        """Reverses the order of points in the polyline."""
-        # Reverse coords in groups of 3
-        n = self.point_count()
-        new_coords = []
-        for i in range(n - 1, -1, -1):
-            idx = i * 3
-            new_coords.extend([self.coords[idx], self.coords[idx + 1], self.coords[idx + 2]])
-        self.coords = new_coords
-        self.plane.reverse()
-
-    def reversed(self) -> "Polyline":
-        """Returns a new polyline with reversed point order."""
-        result = Polyline.from_coords(self.coords[:])
-        result.guid = self.guid
-        result.name = self.name
-        result.width = self.width
-        result.linecolor = copy.deepcopy(self.linecolor)
-        result.plane = copy.deepcopy(self.plane)
-        result.reverse()
-        return result
-
-    def _recompute_plane(self) -> None:
-        """Mark plane as dirty — recomputed lazily on next access."""
-        self._plane = None
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Core Methods
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def duplicate(self) -> "Polyline":
-        """Create a deep copy with a new GUID."""
-        result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
-        return result
-
-    def __iadd__(self, vector: Vector) -> "Polyline":
-        """Translates all points in the polyline by a vector (+=)."""
-        for i in range(self.point_count()):
-            idx = i * 3
-            self.coords[idx] += vector[0]
-            self.coords[idx + 1] += vector[1]
-            self.coords[idx + 2] += vector[2]
-        # Update plane origin
-        self.plane = Plane(
-            self.plane.origin + vector, self.plane.x_axis, self.plane.y_axis
-        )
-        return self
-
-    def __add__(self, vector: Vector) -> "Polyline":
-        """Translates the polyline by a vector and returns a new polyline (+)."""
-        result = Polyline.from_coords(self.coords[:])
-        result.guid = self.guid
-        result.name = self.name
-        result.width = self.width
-        result.linecolor = copy.deepcopy(self.linecolor)
-        result.plane = copy.deepcopy(self.plane)
-        result += vector
-        return result
-
-    def __isub__(self, vector: Vector) -> "Polyline":
-        """Translates all points by the negative of a vector (-=)."""
-        for i in range(self.point_count()):
-            idx = i * 3
-            self.coords[idx] -= vector[0]
-            self.coords[idx + 1] -= vector[1]
-            self.coords[idx + 2] -= vector[2]
-        # Update plane origin
-        self.plane = Plane(
-            self.plane.origin - vector, self.plane.x_axis, self.plane.y_axis
-        )
-        return self
-
-    def __sub__(self, vector: Vector) -> "Polyline":
-        """Translates the polyline by the negative of a vector and returns a new polyline (-)."""
-        result = Polyline.from_coords(self.coords[:])
-        result.guid = self.guid
-        result.name = self.name
-        result.width = self.width
-        result.linecolor = copy.deepcopy(self.linecolor)
-        result.plane = copy.deepcopy(self.plane)
-        result -= vector
-        return result
-
-    def __imul__(self, factor: float) -> "Polyline":
-        """Multiply all coordinates by scalar in place (*=)."""
-        for i in range(len(self.coords)):
-            self.coords[i] *= factor
-        return self
-
-    def __mul__(self, factor: float) -> "Polyline":
-        """Multiply polyline by scalar and return new polyline (*)."""
-        result = Polyline.from_coords([c * factor for c in self.coords])
-        result.name = self.name
-        result.width = self.width
-        result.linecolor = copy.deepcopy(self.linecolor)
-        result.plane = copy.deepcopy(self.plane)
-        return result
-
-    def __itruediv__(self, factor: float) -> "Polyline":
-        """Divide all coordinates by scalar in place (/=)."""
-        for i in range(len(self.coords)):
-            self.coords[i] /= factor
-        return self
-
-    def __truediv__(self, factor: float) -> "Polyline":
-        """Divide polyline by scalar and return new polyline (/)."""
-        result = Polyline.from_coords([c / factor for c in self.coords])
-        result.name = self.name
-        result.width = self.width
-        result.linecolor = copy.deepcopy(self.linecolor)
-        result.plane = copy.deepcopy(self.plane)
-        return result
-
-    def __neg__(self) -> "Polyline":
-        """Negate polyline (reverse point order)."""
-        return self.reversed()
-
-    def transform(self, xform: "Xform") -> None:
-        """Apply a transformation to the polyline, in place."""
-        for i in range(self.point_count()):
-            idx = i * 3
-            pt = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
-            pt.transform(xform)
-            self.coords[idx] = pt[0]
-            self.coords[idx + 1] = pt[1]
-            self.coords[idx + 2] = pt[2]
-
-    def transformed(self, xform: "Xform") -> "Polyline":
-        """Return a transformed copy of the polyline."""
-        result = copy.deepcopy(self)
-        result.transform(xform)
-        return result
-
-    def translate(self, v: Vector) -> None:
-        """Translate every point of this polyline by ``v`` (in place).
-
-        Mirrors C++ ``Polyline::translate``.
-
-        Parameters
-        ----------
-        v : :class:`Vector`
-        """
-        for i in range(self.point_count()):
-            idx = i * 3
-            self.coords[idx]     += v[0]
-            self.coords[idx + 1] += v[1]
-            self.coords[idx + 2] += v[2]
-
-    def extend_edge_equally(self, edge_idx: int, distance: float) -> None:
-        """Slide both endpoints of edge ``edge_idx`` outward by ``distance``.
-
-        Negative ``distance`` slides them inward. For closed polylines the
-        closing-duplicate vertex is kept in sync.
-
-        Parameters
-        ----------
-        edge_idx : int
-        distance : float
-        """
-        n = self.point_count()
-        if n < 2 or edge_idx + 1 >= n:
-            return
-        i = edge_idx
-        j = edge_idx + 1
-        pi = self.get_point(i)
-        pj = self.get_point(j)
-        dx = pj[0] - pi[0]
-        dy = pj[1] - pi[1]
-        dz = pj[2] - pi[2]
-        length = (dx*dx + dy*dy + dz*dz) ** 0.5
-        if length < 1e-12:
-            return
-        inv = 1.0 / length
-        ux = dx * inv * distance
-        uy = dy * inv * distance
-        uz = dz * inv * distance
-        new_pi = Point(pi[0]-ux, pi[1]-uy, pi[2]-uz)
-        new_pj = Point(pj[0]+ux, pj[1]+uy, pj[2]+uz)
-        self.set_point(i, new_pi)
-        self.set_point(j, new_pj)
-        if i == 0:
-            self.set_point(n - 1, new_pi)
-        if j == n - 1:
-            self.set_point(0, new_pj)
-
-    # ===========================================================================================
-    # Geometric Utilities
-    # ===========================================================================================
-
-    def shift(self, times: int) -> None:
-        """Shift polyline points by specified number of positions."""
-        if not self.points:
-            return
-        n = len(self.points)
-        shift_amount = times % n
-        self.points = self.points[shift_amount:] + self.points[:shift_amount]
-
-    def magnitude_squared(self) -> float:
-        """Calculate squared magnitude of polyline (faster, no sqrt)."""
-        mag = 0.0
-        for i in range(self.segment_count()):
-            segment = self.points[i + 1] - self.points[i]
-            mag += segment.magnitude_squared()
-        return mag
-
-    @staticmethod
-    def quadratic_points(p0: Point, p1: Point, p2: Point, divisions: int = 7) -> "Polyline":
-        """Generate a polyline along a quadratic Bezier curve (parabola through 3 points).
-
-        Parameters
-        ----------
-        p0 : Point
-            Start point.
-        p1 : Point
-            Control point.
-        p2 : Point
-            End point.
-        divisions : int
-            Number of points along the curve (minimum 2).
-
-        Returns
-        -------
-        Polyline
-            Polyline of ``divisions`` points sampled uniformly in parameter t ∈ [0, 1].
-        """
-        if divisions < 2:
-            divisions = 2
-        pts = []
-        d = divisions - 1
-        for k in range(divisions):
-            t  = k / d
-            s  = 1.0 - t
-            s2 = s * s
-            ts = 2.0 * s * t
-            t2 = t * t
-            pts.append(Point(
-                s2 * p0.x + ts * p1.x + t2 * p2.x,
-                s2 * p0.y + ts * p1.y + t2 * p2.y,
-                s2 * p0.z + ts * p1.z + t2 * p2.z,
-            ))
         return Polyline(pts)
 
     @staticmethod
-    def point_at(start: Point, end: Point, t: float) -> Point:
-        """Get point at parameter t along a line segment (t=0 is start, t=1 is end)."""
-        s = 1.0 - t
-        return Point(
-            start.x if start.x == end.x else s * start.x + t * end.x,
-            start.y if start.y == end.y else s * start.y + t * end.y,
-            start.z if start.z == end.z else s * start.z + t * end.z,
-        )
-
-    @staticmethod
-    def closest_point_to_line(
-        point: Point, line_start: Point, line_end: Point
-    ) -> float:
-        """Find closest point on line segment to given point, returns parameter t."""
-        d = line_end - line_start
-        dod = d.magnitude_squared()
-
-        if dod > 0.0:
-            if (point - line_start).magnitude_squared() <= (
-                point - line_end
-            ).magnitude_squared():
-                t = (point - line_start).dot(d) / dod
-            else:
-                t = 1.0 + (point - line_end).dot(d) / dod
-            return t
-        else:
-            return 0.0
-
-    @staticmethod
-    def line_line_overlap(
-        line0_start: Point,
-        line0_end: Point,
-        line1_start: Point,
-        line1_end: Point,
-    ) -> tuple[Point, Point] | None:
-        """Check if two line segments overlap and return the overlapping segment."""
-        t = [0.0, 1.0, 0.0, 0.0]
-        t[2] = Polyline.closest_point_to_line(line1_start, line0_start, line0_end)
-        t[3] = Polyline.closest_point_to_line(line1_end, line0_start, line0_end)
-
-        do_overlap = not ((t[2] < 0.0 and t[3] < 0.0) or (t[2] > 1.0 and t[3] > 1.0))
-        t.sort()
-
-        overlap_valid = abs(t[2] - t[1]) > Tolerance.ZERO_TOLERANCE
-
-        if do_overlap and overlap_valid:
-            return (
-                Polyline.point_at(line0_start, line0_end, t[1]),
-                Polyline.point_at(line0_start, line0_end, t[2]),
+    def quadratic_points(
+        p0: Point, p1: Point, p2: Point, divisions: int = 7
+    ) -> "Polyline":
+        """Quadratic Bezier through p0, p1, p2 sampled at divisions points"""
+        n = max(divisions, 2)
+        d = float(n - 1)
+        pts = []
+        for k in range(n):
+            t = k / d
+            s = 1.0 - t
+            s2 = s * s
+            ts = 2.0 * s * t
+            t2 = t * t
+            pts.append(
+                Point(
+                    s2 * p0[0] + ts * p1[0] + t2 * p2[0],
+                    s2 * p0[1] + ts * p1[1] + t2 * p2[1],
+                    s2 * p0[2] + ts * p1[2] + t2 * p2[2],
+                )
             )
-        else:
+        return Polyline(pts)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def point_count(self) -> int:
+        return len(self.coords) // 3
+
+    def __len__(self) -> int:
+        return self.point_count()
+
+    def is_empty(self) -> bool:
+        return len(self.coords) == 0
+
+    def segment_count(self) -> int:
+        n = self.point_count()
+        return n - 1 if n > 1 else 0
+
+    def get_point(self, index: int) -> Point | None:
+        """Point at index, or None when out of range"""
+        if index < 0 or index >= self.point_count():
             return None
+        idx = index * 3
+        return Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
 
-    @staticmethod
-    def line_line_average(
-        line0_start: Point,
-        line0_end: Point,
-        line1_start: Point,
-        line1_end: Point,
-    ) -> tuple[Point, Point]:
-        """Calculate average of two line segments."""
-        output_start = Point(
-            (line0_start.x + line1_start.x) * 0.5,
-            (line0_start.y + line1_start.y) * 0.5,
-            (line0_start.z + line1_start.z) * 0.5,
+    def get_points(self) -> list[Point]:
+        points = []
+        for i in range(self.point_count()):
+            points.append(
+                Point(
+                    self.coords[i * 3], self.coords[i * 3 + 1], self.coords[i * 3 + 2]
+                )
+            )
+        return points
+
+    def get_lines(self) -> list["Line"]:
+        from .line import Line
+
+        lines = []
+        for i in range(self.segment_count()):
+            idx0 = i * 3
+            idx1 = (i + 1) * 3
+            lines.append(
+                Line(
+                    self.coords[idx0],
+                    self.coords[idx0 + 1],
+                    self.coords[idx0 + 2],
+                    self.coords[idx1],
+                    self.coords[idx1 + 1],
+                    self.coords[idx1 + 2],
+                )
+            )
+        return lines
+
+    def get_plane(self) -> Plane:
+        """Plane from the first non-collinear triple, computed on first access"""
+        if not self._plane_dirty or self.point_count() < 3:
+            return self.plane
+        n = self.point_count()
+        p0 = self.get_point(0)
+        found = False
+        for i in range(1, n):
+            if found:
+                break
+            v1 = self.get_point(i) - p0
+            if v1.magnitude_squared() < 1e-20:
+                continue
+            for j in range(i + 1, n):
+                if found:
+                    break
+                normal = v1.cross(self.get_point(j) - p0)
+                if normal.magnitude_squared() < 1e-20:
+                    continue
+                normal.normalize_self()
+                v1.normalize_self()
+                yax = normal.cross(v1)
+                yax.normalize_self()
+                self.plane = Plane.from_frame(p0, v1, yax, normal)
+                found = True
+        if not found:
+            self.plane = Plane()
+        self._plane_dirty = False
+        return self.plane
+
+    def length(self) -> float:
+        total = 0.0
+        for i in range(self.segment_count()):
+            total += math.sqrt(
+                (self.get_point(i + 1) - self.get_point(i)).magnitude_squared()
+            )
+        return total
+
+    def length_squared(self) -> float:
+        total = 0.0
+        for i in range(self.segment_count()):
+            total += (self.get_point(i + 1) - self.get_point(i)).magnitude_squared()
+        return total
+
+    def is_closed(self) -> bool:
+        """First and last points coincide"""
+        if self.point_count() < 2:
+            return False
+        return (
+            self.get_point(0).distance(self.get_point(self.point_count() - 1))
+            < Tolerance.ZERO_TOLERANCE
         )
-        output_end = Point(
-            (line0_end.x + line1_end.x) * 0.5,
-            (line0_end.y + line1_end.y) * 0.5,
-            (line0_end.z + line1_end.z) * 0.5,
+
+    def closed(self) -> "Polyline":
+        """Copy with the first point appended when open"""
+        if self.is_closed():
+            return Polyline.from_coords(self.coords)
+        coords = list(self.coords)
+        coords.append(self.coords[0])
+        coords.append(self.coords[1])
+        coords.append(self.coords[2])
+        return Polyline.from_coords(coords)
+
+    def center(self) -> Point:
+        """Average of the points, closing duplicate excluded"""
+        if not self.coords:
+            return Point(0.0, 0.0, 0.0)
+        n = self.point_count() - 1 if self.is_closed() else self.point_count()
+        x = 0.0
+        y = 0.0
+        z = 0.0
+        for i in range(n):
+            x += self.coords[i * 3]
+            y += self.coords[i * 3 + 1]
+            z += self.coords[i * 3 + 2]
+        return Point(x / n, y / n, z / n)
+
+    def get_average_plane(self) -> tuple[Point, Vector, Vector, Vector]:
+        """Origin at center, x along the first segment, z the average normal"""
+        origin = self.center()
+        x_axis = (
+            self.get_point(1) - self.get_point(0)
+            if self.point_count() >= 2
+            else Vector(1.0, 0.0, 0.0)
         )
-        return output_start, output_end
+        x_axis.normalize_self()
+        z_axis = self._average_normal()
+        y_axis = z_axis.cross(x_axis)
+        y_axis.normalize_self()
+        return (origin, x_axis, y_axis, z_axis)
 
-    @staticmethod
-    def line_line_overlap_average(
-        line0_start: Point,
-        line0_end: Point,
-        line1_start: Point,
-        line1_end: Point,
-    ) -> tuple[Point, Point]:
-        """Calculate overlap average of two line segments."""
-        line_a = Polyline.line_line_overlap(
-            line0_start, line0_end, line1_start, line1_end
-        )
-        line_b = Polyline.line_line_overlap(
-            line1_start, line1_end, line0_start, line0_end
-        )
+    def get_fast_plane(self) -> tuple[Point, Plane]:
+        """Origin at the first point, normal the average normal"""
+        if not self.coords:
+            return (Point(0.0, 0.0, 0.0), Plane())
+        origin = self.get_point(0)
+        normal = self._average_normal()
+        return (origin, Plane.from_point_normal(origin, normal))
 
-        if line_a and line_b:
-            line_a_start, line_a_end = line_a
-            line_b_start, line_b_end = line_b
+    def get_convex_corners(self) -> list[bool]:
+        """One flag per corner, true when convex against the average normal"""
+        if self.point_count() < 3:
+            return []
+        n = self.point_count() - 1 if self.is_closed() else self.point_count()
+        normal = self._average_normal()
+        convex_or_concave = []
+        for current in range(n):
+            prev = n - 1 if current == 0 else current - 1
+            next = 0 if current == n - 1 else current + 1
+            dir0 = self.get_point(current) - self.get_point(prev)
+            dir0.normalize_self()
+            dir1 = self.get_point(next) - self.get_point(current)
+            dir1.normalize_self()
+            cross = dir0.cross(dir1)
+            cross.normalize_self()
+            convex_or_concave.append(cross.dot(normal) >= 0.0)
+        return convex_or_concave
 
-            mid_line0_start = Point(
-                (line_a_start.x + line_b_start.x) * 0.5,
-                (line_a_start.y + line_b_start.y) * 0.5,
-                (line_a_start.z + line_b_start.z) * 0.5,
-            )
-            mid_line0_end = Point(
-                (line_a_end.x + line_b_end.x) * 0.5,
-                (line_a_end.y + line_b_end.y) * 0.5,
-                (line_a_end.z + line_b_end.z) * 0.5,
-            )
-            mid_line1_start = Point(
-                (line_a_start.x + line_b_end.x) * 0.5,
-                (line_a_start.y + line_b_end.y) * 0.5,
-                (line_a_start.z + line_b_end.z) * 0.5,
-            )
-            mid_line1_end = Point(
-                (line_a_end.x + line_b_start.x) * 0.5,
-                (line_a_end.y + line_b_start.y) * 0.5,
-                (line_a_end.z + line_b_start.z) * 0.5,
-            )
+    def is_clockwise(self, pln: Plane) -> bool:
+        """Shoelace sign of the points projected onto pln"""
+        n = self.point_count()
+        if n < 3:
+            return False
+        xv = pln.x_axis
+        yv = pln.y_axis
+        orig = pln.origin
+        lim = n - 1 if self.is_closed() else n
+        area = 0.0
+        for i in range(lim):
+            d0 = self.get_point(i) - orig
+            d1 = self.get_point((i + 1) % lim) - orig
+            u0 = d0.dot(xv)
+            v0 = d0.dot(yv)
+            u1 = d1.dot(xv)
+            v1 = d1.dot(yv)
+            area += (u1 - u0) * (v1 + v0)
+        return area > 0
 
-            mid0_vec = mid_line0_end - mid_line0_start
-            mid1_vec = mid_line1_end - mid_line1_start
-
-            if mid0_vec.magnitude_squared() > mid1_vec.magnitude_squared():
-                return mid_line0_start, mid_line0_end
-            else:
-                return mid_line1_start, mid_line1_end
-        else:
-            return Polyline.line_line_average(
-                line0_start, line0_end, line1_start, line1_end
-            )
-
-    @staticmethod
-    def line_from_projected_points(
-        line_start: Point,
-        line_end: Point,
-        points: list[Point],
-    ) -> tuple[Point, Point] | None:
-        """Create line from projected points onto a base line."""
-        if not points:
-            return None
-
-        t_values = [
-            Polyline.closest_point_to_line(p, line_start, line_end) for p in points
-        ]
-        t_values.sort()
-
-        output_start = Polyline.point_at(line_start, line_end, t_values[0])
-        output_end = Polyline.point_at(line_start, line_end, t_values[-1])
-
-        if abs(t_values[0] - t_values[-1]) > Tolerance.ZERO_TOLERANCE:
-            return output_start, output_end
-        else:
-            return None
+    def point_in_polygon_2d(self, p: Point) -> bool:
+        """Winding-number test on x and y"""
+        px = p[0]
+        py = p[1]
+        n = self.point_count()
+        winding = 0
+        for i in range(n):
+            j = (i + 1) % n
+            x0 = self.coords[i * 3]
+            y0 = self.coords[i * 3 + 1]
+            x1 = self.coords[j * 3]
+            y1 = self.coords[j * 3 + 1]
+            side = (x1 - x0) * (py - y0) - (px - x0) * (y1 - y0)
+            if y0 <= py and y1 > py and side > 0.0:
+                winding += 1
+            elif y0 > py and y1 <= py and side < 0.0:
+                winding -= 1
+        return winding != 0
 
     def closest_distance_and_point(self, point: Point) -> tuple[float, int, Point]:
-        """Find closest distance and point from a point to this polyline."""
+        """Distance to the nearest segment, with its index and the closest point"""
         edge_id = 0
         closest_distance = float("inf")
         best_t = 0.0
-
         for i in range(self.segment_count()):
-            t = self.closest_point_to_line(point, self.points[i], self.points[i + 1])
-            point_on_segment = Polyline.point_at(
-                self.points[i], self.points[i + 1], t
+            t = Polyline.closest_point_to_line(
+                point, self.get_point(i), self.get_point(i + 1)
             )
-            distance = point.distance(point_on_segment)
-
+            distance = point.distance(
+                Polyline.point_at(self.get_point(i), self.get_point(i + 1), t)
+            )
             if distance < closest_distance:
                 closest_distance = distance
                 edge_id = i
                 best_t = t
-
             if closest_distance < Tolerance.ZERO_TOLERANCE:
                 break
-
         closest_point = Polyline.point_at(
-            self.points[edge_id], self.points[edge_id + 1], best_t
+            self.get_point(edge_id), self.get_point(edge_id + 1), best_t
         )
-        return closest_distance, edge_id, closest_point
+        return (closest_distance, edge_id, closest_point)
 
-    def is_closed(self) -> bool:
-        """Check if polyline is closed (first and last points are the same)."""
-        if len(self.points) < 2:
-            return False
-        return self.points[0].distance(self.points[-1]) < Tolerance.ZERO_TOLERANCE
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Mutators
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    def closed(self) -> "Polyline":
-        if self.is_closed():
-            return Polyline.from_coords(self.coords[:])
-        new_coords = self.coords[:]
-        new_coords.extend([self.coords[0], self.coords[1], self.coords[2]])
-        return Polyline.from_coords(new_coords)
+    def set_point(self, index: int, point: Point) -> None:
+        if index < 0 or index >= self.point_count():
+            return
+        idx = index * 3
+        self.coords[idx] = point[0]
+        self.coords[idx + 1] = point[1]
+        self.coords[idx + 2] = point[2]
 
-    def merge_collinear(self, tol: float = Tolerance.APPROXIMATION) -> None:
-        """Merge consecutive collinear segments in-place; closed polyline wraps around."""
-        closed = self.is_closed()
-        pts = self.get_points()
-        if closed and len(pts) > 1:
-            pts.pop()
-        zt2 = Tolerance.ZERO_TOLERANCE ** 2
-        changed = True
-        while changed:
-            changed = False
-            m = len(pts)
-            if m < 3:
-                break
-            out = []
-            for i in range(m):
-                p, nx = (i - 1) % m, (i + 1) % m
-                if not closed and (i == 0 or i == m - 1):
-                    out.append(pts[i])
-                    continue
-                ax, ay, az = pts[i][0]-pts[p][0], pts[i][1]-pts[p][1], pts[i][2]-pts[p][2]
-                bx, by, bz = pts[nx][0]-pts[i][0], pts[nx][1]-pts[i][1], pts[nx][2]-pts[i][2]
-                cx, cy, cz = ay*bz-az*by, az*bx-ax*bz, ax*by-ay*bx
-                a2, b2 = ax*ax+ay*ay+az*az, bx*bx+by*by+bz*bz
-                if a2 < zt2 or b2 < zt2 or cx*cx+cy*cy+cz*cz < tol*tol*a2*b2:
-                    changed = True
-                else:
-                    out.append(pts[i])
-            pts = out
-        self.coords = []
-        for p in pts:
-            self.coords.extend([p[0], p[1], p[2]])
-        if closed and pts:
-            self.coords.extend([pts[0][0], pts[0][1], pts[0][2]])
-        if self.point_count() >= 3:
-            self.plane = Plane.from_points(self.get_points())
+    def add_point(self, point: Point) -> None:
+        self.coords.extend([point[0], point[1], point[2]])
+        if self.point_count() == 3:
+            self._recompute_plane_if_needed()
 
-    def center(self) -> Point:
-        """Calculate center point of polyline."""
-        if not self.points:
-            return Point(0.0, 0.0, 0.0)
+    def insert_point(self, index: int, point: Point) -> None:
+        if index < 0 or index > self.point_count():
+            return
+        idx = index * 3
+        self.coords[idx:idx] = [point[0], point[1], point[2]]
+        if self.point_count() == 3:
+            self._recompute_plane_if_needed()
 
-        n = (
-            len(self.points) - 1
-            if self.is_closed() and len(self.points) > 1
-            else len(self.points)
-        )
+    def remove_point(self, index: int) -> Point | None:
+        """Remove and return the point at index; None when out of range"""
+        if index < 0 or index >= self.point_count():
+            return None
+        idx = index * 3
+        out_point = Point(self.coords[idx], self.coords[idx + 1], self.coords[idx + 2])
+        del self.coords[idx : idx + 3]
+        if self.point_count() == 3:
+            self._recompute_plane_if_needed()
+        return out_point
 
-        sum_x = sum(self.points[i].x for i in range(n))
-        sum_y = sum(self.points[i].y for i in range(n))
-        sum_z = sum(self.points[i].z for i in range(n))
+    def reverse(self) -> None:
+        n = self.point_count()
+        coords = []
+        for i in range(n, 0, -1):
+            idx = (i - 1) * 3
+            coords.extend(
+                [self.coords[idx], self.coords[idx + 1], self.coords[idx + 2]]
+            )
+        self.coords = coords
+        self.plane.reverse()
 
-        return Point(sum_x / n, sum_y / n, sum_z / n)
+    def reversed(self) -> "Polyline":
+        result = self.duplicate()
+        result.reverse()
+        return result
 
-    def cut_by_plane(self, plane: "Plane", flip: bool | None = None) -> "Polyline":
-        """Cut polyline by plane, returning the portion on one side.
+    def shift(self, times: int) -> None:
+        """Rotate the points by times positions, keeping the closing duplicate"""
+        if not self.coords:
+            return
+        was_closed = self.is_closed()
+        if was_closed:
+            del self.coords[-3:]
+        n = self.point_count()
+        if n > 0 and times != 0:
+            offset = times % n
+            coords = []
+            for i in range(n):
+                src = ((i + offset) % n) * 3
+                coords.extend(
+                    [self.coords[src], self.coords[src + 1], self.coords[src + 2]]
+                )
+            self.coords = coords
+        if was_closed and n > 0:
+            self.coords.extend([self.coords[0], self.coords[1], self.coords[2]])
 
-        By default (``flip=None``) the side containing the arc-length midpoint
-        is kept.  Pass ``flip=False`` to keep the side opposite to the plane
-        normal, or ``flip=True`` to keep the normal-aligned side.
+    def translate(self, v: Vector) -> None:
+        self += v
 
-        Parameters
-        ----------
-        plane : Plane
-            Cutting plane whose ``z_axis`` is the normal.
-        flip : bool or None
-            Manual override of which side to keep.  ``None`` picks the side
-            containing the polyline's arc-length midpoint.
-
-        Returns
-        -------
-        Polyline
-            The portion of the polyline on the chosen side, with
-            segment-plane intersection points inserted as needed.
-        """
-        if len(self.points) < 2:
-            return Polyline(list(self.points))
-
-        nx, ny, nz = plane.z_axis.x, plane.z_axis.y, plane.z_axis.z
-        ox, oy, oz = plane.origin.x, plane.origin.y, plane.origin.z
-
-        def signed_dist(pt):
-            return nx*(pt.x-ox) + ny*(pt.y-oy) + nz*(pt.z-oz)
-
-        if flip is None:
-            # Arc-length midpoint
-            half_len = self.length() * 0.5
-            acc = 0.0
-            mid = self.points[0]
-            for i in range(len(self.points) - 1):
-                a, b = self.points[i], self.points[i+1]
-                dx, dy, dz = b.x-a.x, b.y-a.y, b.z-a.z
-                seg_len = (dx*dx + dy*dy + dz*dz) ** 0.5
-                if acc + seg_len >= half_len:
-                    t = (half_len - acc) / seg_len if seg_len > 1e-14 else 0.0
-                    mid = Point(a.x + t*dx, a.y + t*dy, a.z + t*dz)
-                    break
-                acc += seg_len
-            keep_sign = 1.0 if signed_dist(mid) >= 0.0 else -1.0
-        else:
-            keep_sign = 1.0 if flip else -1.0
-
-        def on_keep_side(pt):
-            return signed_dist(pt) * keep_sign >= 0.0
-
-        result = []
-        pts = self.points
-        for i in range(len(pts) - 1):
-            a, b = pts[i], pts[i+1]
-            if on_keep_side(a):
-                result.append(a)
-            dA = signed_dist(a)
-            dB = signed_dist(b)
-            if (dA > 0.0) != (dB > 0.0):
-                t = dA / (dA - dB)
-                result.append(Point(a.x + t*(b.x-a.x),
-                                    a.y + t*(b.y-a.y),
-                                    a.z + t*(b.z-a.z)))
-        if on_keep_side(pts[-1]):
-            result.append(pts[-1])
-
-        # Remove consecutive near-duplicate points
-        tol = 1e-6
-        deduped = []
-        for p in result:
-            if not deduped:
-                deduped.append(p)
-            else:
-                prev = deduped[-1]
-                dx, dy, dz = p.x-prev.x, p.y-prev.y, p.z-prev.z
-                if (dx*dx + dy*dy + dz*dz) ** 0.5 > tol:
-                    deduped.append(p)
-
-        return Polyline(deduped)
-
-    def point_in_polygon_2d(self, p: Point) -> bool:
-        """Winding-number point-in-polygon test. p.x/y tested; polygon vertex z ignored."""
-        px, py = p[0], p[1]
-        coords = self.points
-        winding = 0
-        n = len(coords)
-        for i in range(n):
-            j = (i + 1) % n
-            y0, y1 = coords[i][1], coords[j][1]
-            if y0 <= py:
-                if y1 > py:
-                    x0, x1 = coords[i][0], coords[j][0]
-                    if (x1 - x0) * (py - y0) - (px - x0) * (y1 - y0) > 0:
-                        winding += 1
-            else:
-                if y1 <= py:
-                    x0, x1 = coords[i][0], coords[j][0]
-                    if (x1 - x0) * (py - y0) - (px - x0) * (y1 - y0) < 0:
-                        winding -= 1
-        return winding != 0
-
-    def get_average_plane(self) -> tuple[Point, Vector, Vector, Vector]:
-        """Get average plane from polyline points."""
-        origin = self.center()
-
-        if len(self.points) >= 2:
-            x_axis = (self.points[1] - self.points[0]).normalized()
-        else:
-            x_axis = Vector(1.0, 0.0, 0.0)
-
-        z_axis = self._average_normal()
-        y_axis = z_axis.cross(x_axis).normalized()
-
-        return origin, x_axis, y_axis, z_axis
-
-    def get_fast_plane(self) -> tuple[Point, Plane]:
-        """Get fast plane calculation from polyline."""
-        origin = self.points[0] if self.points else Point(0.0, 0.0, 0.0)
-        average_normal = self._average_normal()
-        plane = Plane.from_point_normal(origin, average_normal)
-        return origin, plane
+    def translated(self, v: Vector) -> "Polyline":
+        result = self.duplicate()
+        result.translate(v)
+        return result
 
     def extend_segment(
         self,
@@ -902,647 +589,167 @@ class Polyline:
         proportion0: float = 0.0,
         proportion1: float = 0.0,
     ) -> None:
-        """Extend polyline segment."""
+        """Move the segment ends by dist0 and dist1, or by proportions of its length when non-zero"""
         if segment_id < 0 or segment_id >= self.segment_count():
             return
-
+        if dist0 == 0 and dist1 == 0 and proportion0 == 0 and proportion1 == 0:
+            return
+        was_closed = self.is_closed()
         p0 = self.get_point(segment_id)
         p1 = self.get_point(segment_id + 1)
         v = p1 - p0
-
-        if proportion0 != 0.0 or proportion1 != 0.0:
-            p0 -= v * proportion0
-            p1 += v * proportion1
+        if proportion0 != 0 or proportion1 != 0:
+            p0 = p0 - v * proportion0
+            p1 = p1 + v * proportion1
         else:
-            v_norm = v.normalized()
-            p0 -= v_norm * dist0
-            p1 += v_norm * dist1
-
+            v.normalize_self()
+            p0 = p0 - v * dist0
+            p1 = p1 + v * dist1
         self.set_point(segment_id, p0)
         self.set_point(segment_id + 1, p1)
-
-        if self.is_closed():
-            if segment_id == 0:
-                self.set_point(self.point_count() - 1, self.get_point(0))
-            elif segment_id + 1 == self.point_count() - 1:
-                self.set_point(0, self.get_point(self.point_count() - 1))
-
-    @staticmethod
-    def extend_segment_equally_static(
-        segment_start: Point, segment_end: Point, dist: float, proportion: float = 0.0
-    ) -> None:
-        """Extend segment equally on both ends (static utility)."""
-        if dist == 0.0 and proportion == 0.0:
+        if not was_closed:
             return
-
-        v = segment_end - segment_start
-
-        if proportion != 0.0:
-            segment_start -= v * proportion
-            segment_end += v * proportion
-        else:
-            v_norm = v.normalized()
-            segment_start -= v_norm * dist
-            segment_end += v_norm * dist
+        if segment_id == 0:
+            self.set_point(self.point_count() - 1, self.get_point(0))
+        elif segment_id + 1 == self.point_count() - 1:
+            self.set_point(0, self.get_point(self.point_count() - 1))
 
     def extend_segment_equally(
         self, segment_id: int, dist: float, proportion: float = 0.0
     ) -> None:
-        """Extend polyline segment equally."""
+        """Move both segment ends by dist, or by proportion of its length when non-zero"""
         if segment_id < 0 or segment_id >= self.segment_count():
             return
+        p0 = self.get_point(segment_id)
+        p1 = self.get_point(segment_id + 1)
+        Polyline.extend_segment_equally_static(p0, p1, dist, proportion)
+        self.set_point(segment_id, p0)
+        self.set_point(segment_id + 1, p1)
+        if self.point_count() <= 2 or not self.is_closed():
+            return
+        if segment_id == 0:
+            self.set_point(self.point_count() - 1, self.get_point(0))
+        elif segment_id + 1 == self.point_count() - 1:
+            self.set_point(0, self.get_point(self.point_count() - 1))
 
-        start = self.get_point(segment_id)
-        end = self.get_point(segment_id + 1)
-        self.extend_segment_equally_static(start, end, dist, proportion)
-        self.set_point(segment_id, start)
-        self.set_point(segment_id + 1, end)
+    def extend_edge_equally(self, edge_idx: int, distance: float) -> None:
+        """Slide both ends of edge edge_idx outward by distance, keeping the closing duplicate in sync"""
+        n = self.point_count()
+        if n < 2 or edge_idx + 1 >= n:
+            return
+        i = edge_idx
+        j = edge_idx + 1
+        pi = self.get_point(i)
+        pj = self.get_point(j)
+        dir = pj - pi
+        length = math.sqrt(dir.magnitude_squared())
+        if length < 1e-12:
+            return
+        dir = dir * (distance / length)
+        new_pi = pi - dir
+        new_pj = pj + dir
+        self.set_point(i, new_pi)
+        self.set_point(j, new_pj)
+        if i == 0:
+            self.set_point(n - 1, new_pi)
+        if j == n - 1:
+            self.set_point(0, new_pj)
 
-        if self.point_count() > 2 and self.is_closed():
-            if segment_id == 0:
-                self.set_point(self.point_count() - 1, self.get_point(0))
-            elif segment_id + 1 == self.point_count() - 1:
-                self.set_point(0, self.get_point(self.point_count() - 1))
-
-    @staticmethod
-    def extend_line_segment(start: Point, end: Point, d0: float, d1: float) -> None:
-        """Extend a line segment independently at each end by a real (normalized) distance."""
-        v = end - start
-        v_norm = v.normalized()
-        start -= v_norm * d0
-        end += v_norm * d1
-
-    @staticmethod
-    def shrink_line_segment(start: Point, end: Point, dist: float) -> None:
-        """Shrink a line segment equally from both ends by a fraction of its length (not normalized)."""
-        v = end - start
-        start += v * dist
-        end -= v * dist
-
-    def is_clockwise(self, plane: Plane) -> bool:
-        """Check if polyline is clockwise oriented."""
-        if len(self.points) < 3:
-            return False
-
-        sum_val = 0.0
-        n = len(self.points) - 1 if self.is_closed() else len(self.points)
-
-        for i in range(n):
-            current = self.points[i]
-            next_pt = self.points[(i + 1) % n]
-            sum_val += (next_pt.x - current.x) * (next_pt.y + current.y)
-
-        return sum_val > 0.0
-
-    def get_convex_corners(self) -> list[bool]:
-        """Get convex/concave corners of polyline."""
-        if len(self.points) < 3:
-            return []
-
+    def merge_collinear(self, tol: float = Tolerance.APPROXIMATION) -> None:
+        """Drop points whose neighbours are collinear within tol; closed polylines wrap around"""
         closed = self.is_closed()
-        normal = self._average_normal()
-        n = len(self.points) - 1 if closed else len(self.points)
-        convex_corners = []
-
-        for current in range(n):
-            prev = n - 1 if current == 0 else current - 1
-            next_pt = 0 if current == n - 1 else current + 1
-
-            dir0 = (self.points[current] - self.points[prev]).normalized()
-            dir1 = (self.points[next_pt] - self.points[current]).normalized()
-
-            cross = dir0.cross(dir1).normalized()
-            dot = cross.dot(normal)
-            is_convex = not (dot < 0.0)
-            convex_corners.append(is_convex)
-
-        return convex_corners
-
-    @staticmethod
-    def tween_two_polylines(
-        polyline0: "Polyline", polyline1: "Polyline", weight: float
-    ) -> "Polyline":
-        """Interpolate between two polylines."""
-        if len(polyline0.points) != len(polyline1.points):
-            return Polyline(polyline0.points[:])
-
-        result_points = []
-        for i in range(len(polyline0.points)):
-            diff = polyline1.points[i] - polyline0.points[i]
-            interpolated = polyline0.points[i] + diff * weight
-            result_points.append(interpolated)
-
-        return Polyline(result_points)
-
-    @staticmethod
-    def interpolate_points(
-        from_pt: Point, to_pt: Point, steps: int, kind: int = 0
-    ) -> list[Point]:
-        """Linear interpolation between two points.
-
-        kind: 0=no endpoints, 1=both endpoints, 2=start only
-        """
-        result = []
-        for i in range(1, steps + 1):
-            t = float(i) / float(steps + 1)
-            result.append(Point(
-                from_pt[0] + t * (to_pt[0] - from_pt[0]),
-                from_pt[1] + t * (to_pt[1] - from_pt[1]),
-                from_pt[2] + t * (to_pt[2] - from_pt[2]),
-            ))
-        if kind == 1:
-            result.insert(0, Point(from_pt[0], from_pt[1], from_pt[2]))
-            result.append(Point(to_pt[0], to_pt[1], to_pt[2]))
-        elif kind == 2:
-            result.insert(0, Point(from_pt[0], from_pt[1], from_pt[2]))
-        return result
-
-    @staticmethod
-    def quick_hull(polygon: "Polyline") -> "Polyline":
-        """2D convex hull via quickhull in the polygon's local plane."""
-        pts = polygon.get_points()
-        if len(pts) < 3:
-            return Polyline(pts[:])
-
-        origin, x_axis, y_axis, _ = polygon.get_average_plane()
-
-        def proj2d(p):
-            d = Vector(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
-            return (d.dot(x_axis), d.dot(y_axis))
-
-        def unproj(u, v):
-            return origin + x_axis * u + y_axis * v
-
-        def cross2d(o, a, b):
-            return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-        def qh_upper(a, b, points):
-            if not points:
-                return []
-            apex = max(points, key=lambda p: cross2d(a, b, p))
-            if cross2d(a, b, apex) <= 0.0:
-                return []
-            left = [p for p in points if cross2d(a, apex, p) > 0.0]
-            right = [p for p in points if cross2d(apex, b, p) > 0.0]
-            return qh_upper(a, apex, left) + [apex] + qh_upper(apex, b, right)
-
-        pts2d = [proj2d(p) for p in pts]
-        min_x = min(pts2d, key=lambda p: p[0])
-        max_x = max(pts2d, key=lambda p: p[0])
-
-        upper = [p for p in pts2d if cross2d(min_x, max_x, p) > 0.0]
-        lower = [p for p in pts2d if cross2d(max_x, min_x, p) > 0.0]
-
-        hull2d = (
-            [min_x]
-            + qh_upper(min_x, max_x, upper)
-            + [max_x]
-            + qh_upper(max_x, min_x, lower)
-        )
-
-        return Polyline([unproj(u, v) for u, v in hull2d])
-
-    @staticmethod
-    def bounding_rectangle(polygon: "Polyline") -> Optional["Polyline"]:
-        """Minimum area bounding rectangle via rotating calipers; returns closed 5-point Polyline."""
-        import math
-
-        hull = Polyline.quick_hull(polygon)
-        hull_pts = hull.get_points()
-        n = len(hull_pts)
-        if n < 3:
-            return None
-
-        origin, x_axis, y_axis, _ = polygon.get_average_plane()
-
-        def proj2d(p):
-            d = Vector(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
-            return (d.dot(x_axis), d.dot(y_axis))
-
-        def unproj(u, v):
-            return origin + x_axis * u + y_axis * v
-
-        hull2d = [proj2d(p) for p in hull_pts]
-        best_area = float("inf")
-        best_corners = None
-
-        for i in range(n):
-            ax, ay = hull2d[i]
-            bx, by = hull2d[(i + 1) % n]
-            ex, ey = bx - ax, by - ay
-            length = math.sqrt(ex * ex + ey * ey)
-            if length < 1e-12:
-                continue
-            ex /= length
-            ey /= length
-
-            min_u = min_v = float("inf")
-            max_u = max_v = float("-inf")
-            for px, py in hull2d:
-                u = px * ex + py * ey
-                v = -px * ey + py * ex
-                if u < min_u:
-                    min_u = u
-                if u > max_u:
-                    max_u = u
-                if v < min_v:
-                    min_v = v
-                if v > max_v:
-                    max_v = v
-
-            area = (max_u - min_u) * (max_v - min_v)
-            if area < best_area:
-                best_area = area
-                best_corners = [
-                    (min_u * ex - min_v * ey, min_u * ey + min_v * ex),
-                    (max_u * ex - min_v * ey, max_u * ey + min_v * ex),
-                    (max_u * ex - max_v * ey, max_u * ey + max_v * ex),
-                    (min_u * ex - max_v * ey, min_u * ey + max_v * ex),
-                ]
-
-        if best_corners is None:
-            return None
-
-        pts3d = [unproj(u, v) for u, v in best_corners]
-        pts3d.append(pts3d[0])
-        return Polyline(pts3d)
-
-    @staticmethod
-    def grid_of_points_in_polygon(
-        polygon: "Polyline",
-        offset_dist: float,
-        div_dist: float,
-        max_pts: int = 100,
-    ) -> list[Point]:
-        """Grid of interior points; offset_dist insets (-) or outsets (+) polygon via miter offset."""
-        pts = polygon.get_points()
-        if len(pts) < 3:
-            return []
-
-        origin, x_axis, y_axis, _ = polygon.get_average_plane()
-
-        def proj2d(p):
-            d = Vector(p[0] - origin[0], p[1] - origin[1], p[2] - origin[2])
-            return (d.dot(x_axis), d.dot(y_axis))
-
-        def unproj(u, v):
-            return origin + x_axis * u + y_axis * v
-
-        poly2d = [proj2d(p) for p in pts]
-
-        # Miter offset in 2D (negative = inward, positive = outward). Reuses
-        # the same algorithm as Intersection::offset_in_3d. Falls back to the
-        # un-offset polygon if the result degenerates.
-        if offset_dist != 0.0 and len(poly2d) >= 3:
-            n = len(poly2d)
-            signed_area = 0.0
-            for i in range(n):
-                a = poly2d[i]
-                b = poly2d[(i + 1) % n]
-                signed_area += a[0] * b[1] - b[0] * a[1]
-            delta = -offset_dist if signed_area < 0.0 else offset_dist
-
-            normals = []
-            for i in range(n):
-                a = poly2d[i]
-                b = poly2d[(i + 1) % n]
-                ex = b[0] - a[0]
-                ey = b[1] - a[1]
-                length = (ex * ex + ey * ey) ** 0.5
-                if length < 1e-12:
-                    normals.append((0.0, 0.0))
-                else:
-                    normals.append((ey / length, -ex / length))
-
+        pts = self.get_points()
+        if closed and len(pts) > 1:
+            pts.pop()
+        zt2 = Tolerance.ZERO_TOLERANCE * Tolerance.ZERO_TOLERANCE
+        max_pass = len(pts)
+        changed = True
+        for _ in range(max_pass):
+            if not changed or len(pts) < 3:
+                break
+            changed = False
+            m = len(pts)
             out = []
-            for i in range(n):
-                np_ = normals[(i + n - 1) % n]
-                nn = normals[i]
-                cos_a = np_[0] * nn[0] + np_[1] * nn[1]
-                sin_a = np_[0] * nn[1] - np_[1] * nn[0]
-                denom = 1.0 + cos_a
-                concave = (cos_a > -0.999) and (sin_a * delta < 0.0) and (offset_dist > 0.0)
-                if concave:
-                    out.append((poly2d[i][0] + np_[0] * delta, poly2d[i][1] + np_[1] * delta))
-                    out.append((poly2d[i][0], poly2d[i][1]))
-                    out.append((poly2d[i][0] + nn[0] * delta, poly2d[i][1] + nn[1] * delta))
-                elif abs(denom) < 1e-9:
-                    mx = (np_[0] + nn[0]) * 0.5
-                    my = (np_[1] + nn[1]) * 0.5
-                    out.append((poly2d[i][0] + mx * delta, poly2d[i][1] + my * delta))
+            for i in range(m):
+                p = (i + m - 1) % m
+                nx = (i + 1) % m
+                if not closed and (i == 0 or i == m - 1):
+                    out.append(pts[i])
+                    continue
+                a = pts[i] - pts[p]
+                b = pts[nx] - pts[i]
+                a2 = a.magnitude_squared()
+                b2 = b.magnitude_squared()
+                if (
+                    a2 < zt2
+                    or b2 < zt2
+                    or a.cross(b).magnitude_squared() < tol * tol * a2 * b2
+                ):
+                    changed = True
                 else:
-                    bx = (np_[0] + nn[0]) / denom
-                    by = (np_[1] + nn[1]) / denom
-                    out.append((poly2d[i][0] + bx * delta, poly2d[i][1] + by * delta))
+                    out.append(pts[i])
+            pts = out
+        if closed and pts:
+            pts.append(pts[0])
+        self.coords = Polyline(pts).coords
+        self._recompute_plane_if_needed()
 
-            out_area = 0.0
-            for i in range(len(out)):
-                a = out[i]
-                b = out[(i + 1) % len(out)]
-                out_area += a[0] * b[1] - b[0] * a[1]
-            if len(out) >= 3 and abs(out_area) > 1e-4:
-                poly2d = out
+    def remove_consecutive_duplicates(
+        self, tol: float = Tolerance.APPROXIMATION
+    ) -> None:
+        """Drop consecutive points closer than tol"""
+        tol_sq = tol * tol
+        cleaned = []
+        for p in self.get_points():
+            if not cleaned or (p - cleaned[-1]).magnitude_squared() >= tol_sq:
+                cleaned.append(p)
+        self.coords = Polyline(cleaned).coords
+        self._recompute_plane_if_needed()
 
-        nv = len(poly2d)
+    def simplify(self, tolerance: float) -> "Polyline":
+        """Ramer-Douglas-Peucker copy"""
+        return Polyline(Polyline.simplify_points(self.get_points(), tolerance))
 
-        def pt_in_poly(pu, pv):
-            inside = False
-            j = nv - 1
-            for i in range(nv):
-                xi, yi = poly2d[i]
-                xj, yj = poly2d[j]
-                if (yi > pv) != (yj > pv):
-                    t = (xj - xi) * (pv - yi) / (yj - yi + 1e-300) + xi
-                    if pu < t:
-                        inside = not inside
-                j = i
-            return inside
-
-        min_u = min(p[0] for p in poly2d)
-        max_u = max(p[0] for p in poly2d)
-        min_v = min(p[1] for p in poly2d)
-        max_v = max(p[1] for p in poly2d)
-
-        result = []
-        u = min_u + div_dist * 0.5
-        while u <= max_u and len(result) < max_pts:
-            v = min_v + div_dist * 0.5
-            while v <= max_v and len(result) < max_pts:
-                if pt_in_poly(u, v):
-                    result.append(unproj(u, v))
-                v += div_dist
-            u += div_dist
-
-        return result
-
-    def _average_normal(self) -> Vector:
-        """Calculate average normal from polyline points."""
-        if len(self.points) < 3:
-            return Vector(0.0, 0.0, 1.0)
-
-        closed = self.is_closed()
-        n = (
-            len(self.points) - 1
-            if closed and len(self.points) > 1
-            else len(self.points)
-        )
-
-        average_normal = Vector(0.0, 0.0, 0.0)
-
-        for i in range(n):
-            prev = n - 1 if i == 0 else i - 1
-            next_pt = (i + 1) % n
-
-            v1 = self.points[prev] - self.points[i]
-            v2 = self.points[i] - self.points[next_pt]
-            cross = v1.cross(v2)
-            average_normal += cross
-
-        return average_normal.normalized()
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Polymorphic JSON Serialization
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def __jsondump__(self):
-        """Serialize to polymorphic JSON format with type field.
-
-        Uses compact coords array format: [x0, y0, z0, x1, y1, z1, ...]
-
-        Returns
-        -------
-        dict
-            Dictionary with 'type', 'guid', 'name', and object fields.
-
-        """
-        # Alphabetical order to match Rust's serde_json
-        return {
-            "coords": self.coords,
-            "dash": list(self.dash),
-            "guid": self.guid,
-            "linecolor": self.linecolor.__jsondump__(),
-            "name": self.name,
-            "type": f"{self.__class__.__name__}",
-            "width": self.width,
-        }
-
-    @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
-        """Deserialize from polymorphic JSON format.
-
-        Supports both compact coords format and legacy points format.
-
-        Parameters
-        ----------
-        data : dict
-            Dictionary containing polyline data.
-        guid : str, optional
-            GUID for the polyline.
-        name : str, optional
-            Name for the polyline.
-
-        Returns
-        -------
-        :class:`Polyline`
-            Reconstructed polyline instance.
-
-        """
-        from .file_encoders import file_decode_node
-
-        # Support both new coords format and legacy points format
-        if "coords" in data:
-            polyline = cls.from_coords(data["coords"])
+    def cut_by_plane(self, plane: Plane, flip: bool | None = None) -> "Polyline":
+        """Part on one side of plane; flip picks the normal side, None keeps the arc-length midpoint side"""
+        n = self.point_count()
+        if n < 2:
+            return self.duplicate()
+        normal = plane.z_axis
+        origin = plane.origin
+        keep_sign = 1.0
+        if flip is not None:
+            keep_sign = 1.0 if flip else -1.0
         else:
-            # Legacy format with full Point objects
-            points = [file_decode_node(p) for p in data["points"]]
-            polyline = cls(points)
-
-        polyline.guid = guid if guid is not None else data.get("guid", polyline.guid)
-        polyline.name = name if name is not None else data.get("name", polyline.name)
-
-        if "width" in data:
-            polyline.width = data["width"]
-        if "dash" in data:
-            polyline.dash = list(data["dash"])
-        if "linecolor" in data:
-            polyline.linecolor = file_decode_node(data["linecolor"])
-
-        return polyline
-
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write JSON to file.
-
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the output file.
-
-        """
-        import json
-        with open(filepath, 'w') as f:
-            json.dump(self.__jsondump__(), f, indent=2)
-
-    @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
-        """Read JSON from file.
-
-        Parameters
-        ----------
-        filepath : str or Path
-            Path to the JSON file.
-
-        Returns
-        -------
-        :class:`Polyline`
-            The deserialized Polyline.
-
-        """
-        import json
-        with open(filepath) as f:
-            data = json.load(f)
-        return cls.__jsonload__(data)
-
-    def file_json_dumps(self) -> str:
-        """Convert to JSON string."""
-        import json
-        return json.dumps(self.__jsondump__())
-
-    @classmethod
-    def file_json_loads(cls, json_string: str) -> "Polyline":
-        """Load from JSON string."""
-        import json
-        return cls.__jsonload__(json.loads(json_string))
+            keep_sign = (
+                1.0
+                if normal.dot(self._point_at_length(self.length() * 0.5) - origin)
+                >= 0.0
+                else -1.0
+            )
+        result = []
+        for i in range(n - 1):
+            a = self.get_point(i)
+            b = self.get_point(i + 1)
+            da = normal.dot(a - origin)
+            db = normal.dot(b - origin)
+            if da * keep_sign >= 0.0:
+                result.append(a)
+            if (da > 0.0) != (db > 0.0):
+                result.append(a + (b - a) * (da / (da - db)))
+        last = self.get_point(n - 1)
+        if normal.dot(last - origin) * keep_sign >= 0.0:
+            result.append(last)
+        cut = Polyline(result)
+        cut.remove_consecutive_duplicates(1e-6)
+        return cut
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Protobuf Serialization
+    # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Convert to protobuf binary format.
-
-        Returns
-        -------
-        bytes
-            Serialized protobuf data.
-
-        """
-        from .proto import polyline_pb2
-
-        proto = polyline_pb2.Polyline()
-        if self.has_guid():
-            proto.guid = self._guid
-        proto.name = self.name
-        proto.coords.extend(self.coords)
-        proto.width = self.width
-        proto.dash.extend(self.dash)
-
-        # Set linecolor
-        proto.linecolor.name = self.linecolor.name
-        proto.linecolor.r = self.linecolor[0]
-        proto.linecolor.g = self.linecolor[1]
-        proto.linecolor.b = self.linecolor[2]
-        proto.linecolor.a = self.linecolor[3]
-
-        return proto.SerializeToString()
-
-    def pb_fill(self, proto: "polyline_pb2.Polyline") -> None:
-        """Fill an existing Polyline proto message directly (avoids serialize/deserialize cycle)."""
-        if self.has_guid():
-            proto.guid = self._guid
-        proto.name = self.name
-        proto.coords.extend(self.coords)
-        proto.width = self.width
-        proto.dash.extend(self.dash)
-        proto.linecolor.name = self.linecolor.name
-        proto.linecolor.r = self.linecolor[0]
-        proto.linecolor.g = self.linecolor[1]
-        proto.linecolor.b = self.linecolor[2]
-        proto.linecolor.a = self.linecolor[3]
-
-    @classmethod
-    def pb_loads(cls, data: bytes) -> "Polyline":
-        """Create Polyline from protobuf binary data.
-
-        Parameters
-        ----------
-        data : bytes
-            Protobuf-encoded polyline data.
-
-        Returns
-        -------
-        :class:`Polyline`
-            The deserialized Polyline.
-
-        """
-        from .proto import polyline_pb2
-
-        proto = polyline_pb2.Polyline()
-        proto.ParseFromString(data)
-
-        polyline = cls.from_coords(list(proto.coords))
-        if proto.guid:
-            polyline.guid = proto.guid
-        polyline.name = proto.name
-        polyline.width = proto.width
-        polyline.dash = list(proto.dash)
-
-        # Load linecolor
-        polyline.linecolor = Color(
-            proto.linecolor.r,
-            proto.linecolor.g,
-            proto.linecolor.b,
-            proto.linecolor.a
-        )
-        polyline.linecolor.name = proto.linecolor.name
-
-        return polyline
-
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write protobuf to file.
-
-        Parameters
-        ----------
-        filepath : str
-            Path to the output file.
-
-        """
-        data = self.pb_dumps()
-        with open(filepath, 'wb') as f:
-            f.write(data)
-
-    @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
-        """Read protobuf from file.
-
-        Parameters
-        ----------
-        filepath : str
-            Path to the protobuf file.
-
-        Returns
-        -------
-        :class:`Polyline`
-            The deserialized Polyline.
-
-        """
-        with open(filepath, 'rb') as f:
-            data = f.read()
-        return cls.pb_loads(data)
-
-    def __str__(self) -> str:
-        """Returns a minimal string representation of the polyline."""
-        pts = []
-        for i in range(self.point_count()):
-            idx = i * 3
-            pts.append(f"({self.coords[idx]}, {self.coords[idx + 1]}, {self.coords[idx + 2]})")
-        return "[" + ", ".join(pts) + "]"
-
-    def __repr__(self) -> str:
-        """Returns a detailed string representation."""
-        return f"Polyline({self.name}, {self.point_count()} points)"
 
     def __eq__(self, other) -> bool:
-        """Compare polylines by value (ignoring GUIDs)."""
+        """Same name, coordinates to 1e-6, width and linecolor; guid ignored"""
         if not isinstance(other, Polyline):
             return False
         if self.name != other.name:
@@ -1550,41 +757,927 @@ class Polyline:
         if self.point_count() != other.point_count():
             return False
         for i in range(len(self.coords)):
-            if round(self.coords[i], Tolerance.ROUNDING) != round(other.coords[i], Tolerance.ROUNDING):
+            if round(self.coords[i], Tolerance.ROUNDING) != round(
+                other.coords[i], Tolerance.ROUNDING
+            ):
                 return False
-        if round(self.width, Tolerance.ROUNDING) != round(other.width, Tolerance.ROUNDING):
+        if round(self.width, Tolerance.ROUNDING) != round(
+            other.width, Tolerance.ROUNDING
+        ):
             return False
-        if self.linecolor != other.linecolor:
-            return False
-        return True
+        return self.linecolor == other.linecolor
 
     def __ne__(self, other) -> bool:
         return not self == other
 
-    @staticmethod
-    def _simplify_perp_dist(pt, line_start, line_end):
-        import math
-        dx = line_end[0] - line_start[0]
-        dy = line_end[1] - line_start[1]
-        dz = line_end[2] - line_start[2]
-        len_sq = dx * dx + dy * dy + dz * dz
-        if len_sq == 0.0:
-            ex = pt[0] - line_start[0]
-            ey = pt[1] - line_start[1]
-            ez = pt[2] - line_start[2]
-            return math.sqrt(ex * ex + ey * ey + ez * ez)
-        t = ((pt[0] - line_start[0]) * dx + (pt[1] - line_start[1]) * dy + (pt[2] - line_start[2]) * dz) / len_sq
-        t = max(0.0, min(1.0, t))
-        cx = line_start[0] + t * dx
-        cy = line_start[1] + t * dy
-        cz = line_start[2] + t * dz
-        ex = pt[0] - cx
-        ey = pt[1] - cy
-        ez = pt[2] - cz
-        return math.sqrt(ex * ex + ey * ey + ez * ez)
+    def __getitem__(self, index: int) -> Point:
+        if index < 0 or index >= self.point_count():
+            raise IndexError("Index out of range")
+        return self.get_point(index)
+
+    def __setitem__(self, index: int, point: Point) -> None:
+        if index < 0 or index >= self.point_count():
+            raise IndexError("Index out of range")
+        self.set_point(index, point)
+
+    def __iadd__(self, v: Vector) -> "Polyline":
+        for i in range(self.point_count()):
+            self.coords[i * 3] += v[0]
+            self.coords[i * 3 + 1] += v[1]
+            self.coords[i * 3 + 2] += v[2]
+        self.plane = Plane(self.plane.origin + v, self.plane.x_axis, self.plane.y_axis)
+        return self
+
+    def __isub__(self, v: Vector) -> "Polyline":
+        for i in range(self.point_count()):
+            self.coords[i * 3] -= v[0]
+            self.coords[i * 3 + 1] -= v[1]
+            self.coords[i * 3 + 2] -= v[2]
+        self.plane = Plane(self.plane.origin - v, self.plane.x_axis, self.plane.y_axis)
+        return self
+
+    def __imul__(self, factor: float) -> "Polyline":
+        for i in range(len(self.coords)):
+            self.coords[i] *= factor
+        return self
+
+    def __itruediv__(self, factor: float) -> "Polyline":
+        for i in range(len(self.coords)):
+            self.coords[i] /= factor
+        return self
+
+    def __add__(self, v: Vector) -> "Polyline":
+        result = self.duplicate()
+        result += v
+        return result
+
+    def __sub__(self, v: Vector) -> "Polyline":
+        result = self.duplicate()
+        result -= v
+        return result
+
+    def __mul__(self, factor: float) -> "Polyline":
+        result = self.duplicate()
+        result *= factor
+        return result
+
+    def __truediv__(self, factor: float) -> "Polyline":
+        result = self.duplicate()
+        result /= factor
+        return result
+
+    def __neg__(self) -> "Polyline":
+        """Reversed copy"""
+        return self.reversed()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Transformation
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def transform(self, xform: "Xform") -> None:
+        for i in range(self.point_count()):
+            pt = self.get_point(i)
+            pt.transform(xform)
+            self.set_point(i, pt)
+
+    def transformed(self, xform: "Xform") -> "Polyline":
+        result = self.duplicate()
+        result.transform(xform)
+        return result
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Segment utilities
+    # ═══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
-    def _simplify_rdp(points, start, end, tolerance, keep):
+    def point_at(start: Point, end: Point, t: float) -> Point:
+        """Point at parameter t (0 = start, 1 = end)"""
+        s = 1.0 - t
+        return Point(
+            start[0] if start[0] == end[0] else s * start[0] + t * end[0],
+            start[1] if start[1] == end[1] else s * start[1] + t * end[1],
+            start[2] if start[2] == end[2] else s * start[2] + t * end[2],
+        )
+
+    @staticmethod
+    def closest_point_to_line(
+        point: Point, line_start: Point, line_end: Point
+    ) -> float:
+        """Parameter t of the closest point on the line through line_start and line_end"""
+        d = line_end - line_start
+        dod = d.magnitude_squared()
+        if dod <= 0.0:
+            return 0.0
+        to_start = point - line_start
+        to_end = point - line_end
+        if to_start.magnitude_squared() <= to_end.magnitude_squared():
+            return to_start.dot(d) / dod
+        return 1.0 + to_end.dot(d) / dod
+
+    @staticmethod
+    def line_line_overlap(
+        line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point
+    ) -> tuple[Point, Point] | None:
+        """Collinear overlap of two segments; None when none or a single point"""
+        do_overlap, overlap_start, overlap_end = Polyline._line_line_overlap_points(
+            line0_start, line0_end, line1_start, line1_end
+        )
+        if not do_overlap:
+            return None
+        return (overlap_start, overlap_end)
+
+    @staticmethod
+    def line_line_average(
+        line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point
+    ) -> tuple[Point, Point]:
+        """Midpoints of the paired starts and ends"""
+        output_start = Point(
+            (line0_start[0] + line1_start[0]) * 0.5,
+            (line0_start[1] + line1_start[1]) * 0.5,
+            (line0_start[2] + line1_start[2]) * 0.5,
+        )
+        output_end = Point(
+            (line0_end[0] + line1_end[0]) * 0.5,
+            (line0_end[1] + line1_end[1]) * 0.5,
+            (line0_end[2] + line1_end[2]) * 0.5,
+        )
+        return (output_start, output_end)
+
+    @staticmethod
+    def line_line_overlap_average(
+        line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point
+    ) -> tuple[Point, Point]:
+        """Longer of the two midpoint pairings of the mutual overlaps"""
+        _, line_a_start, line_a_end = Polyline._line_line_overlap_points(
+            line0_start, line0_end, line1_start, line1_end
+        )
+        _, line_b_start, line_b_end = Polyline._line_line_overlap_points(
+            line1_start, line1_end, line0_start, line0_end
+        )
+        mid_line0_start, mid_line0_end = Polyline.line_line_average(
+            line_a_start, line_a_end, line_b_start, line_b_end
+        )
+        mid_line1_start, mid_line1_end = Polyline.line_line_average(
+            line_a_start, line_a_end, line_b_end, line_b_start
+        )
+        if (mid_line0_end - mid_line0_start).magnitude_squared() > (
+            mid_line1_end - mid_line1_start
+        ).magnitude_squared():
+            return (mid_line0_start, mid_line0_end)
+        return (mid_line1_start, mid_line1_end)
+
+    @staticmethod
+    def line_from_projected_points(
+        line_start: Point, line_end: Point, points: list[Point]
+    ) -> tuple[Point, Point] | None:
+        """Extreme sub-segment of the line spanned by the projected points; None when empty or a single point"""
+        if not points:
+            return None
+        t_values = []
+        for point in points:
+            t_values.append(Polyline.closest_point_to_line(point, line_start, line_end))
+        t_values.sort()
+        output_start = Polyline.point_at(line_start, line_end, t_values[0])
+        output_end = Polyline.point_at(line_start, line_end, t_values[-1])
+        if abs(t_values[0] - t_values[-1]) <= Tolerance.ZERO_TOLERANCE:
+            return None
+        return (output_start, output_end)
+
+    @staticmethod
+    def extend_segment_equally_static(
+        segment_start: Point, segment_end: Point, dist: float, proportion: float = 0.0
+    ) -> None:
+        """Move both ends by dist, or by proportion of the length when non-zero"""
+        if dist == 0 and proportion == 0:
+            return
+        v = segment_end - segment_start
+        if proportion != 0:
+            segment_start -= v * proportion
+            segment_end += v * proportion
+        else:
+            v.normalize_self()
+            segment_start -= v * dist
+            segment_end += v * dist
+
+    @staticmethod
+    def extend_line_segment(start: Point, end: Point, d0: float, d1: float) -> None:
+        """Move start by d0 and end by d1 along the unit direction"""
+        v = end - start
+        v.normalize_self()
+        start -= v * d0
+        end += v * d1
+
+    @staticmethod
+    def shrink_line_segment(start: Point, end: Point, dist: float) -> None:
+        """Move both ends inward by dist as a fraction of the length"""
+        v = end - start
+        start += v * dist
+        end -= v * dist
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Polygon utilities
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def tween_two_polylines(
+        polyline0: "Polyline", polyline1: "Polyline", weight: float
+    ) -> "Polyline":
+        """Pointwise blend; polyline0 when the counts differ"""
+        if polyline0.point_count() != polyline1.point_count():
+            return polyline0.duplicate()
+        result = Polyline()
+        for i in range(polyline0.point_count()):
+            p0 = polyline0.get_point(i)
+            p1 = polyline1.get_point(i)
+            result.add_point(p0 + (p1 - p0) * weight)
+        return result
+
+    @staticmethod
+    def interpolate_points(
+        from_pt: Point, to_pt: Point, steps: int, kind: int = 0
+    ) -> list[Point]:
+        """steps points between from and to; kind 0 none, 1 both, 2 start endpoint"""
+        return Point.interpolate(from_pt, to_pt, steps, kind)
+
+    @staticmethod
+    def quick_hull(polygon: "Polyline") -> "Polyline":
+        """Convex hull in the polygon's average plane"""
+        origin, xa, ya, _ = polygon.get_average_plane()
+        pts2d = polygon._project_to_plane(origin, xa, ya)
+        ai = 0
+        bi = 0
+        for i in range(1, len(pts2d)):
+            if pts2d[i][0] < pts2d[ai][0]:
+                ai = i
+            if pts2d[i][0] >= pts2d[bi][0]:
+                bi = i
+        ax = pts2d[ai][0]
+        ay = pts2d[ai][1]
+        bx = pts2d[bi][0]
+        by = pts2d[bi][1]
+        left = []
+        right = []
+        for p in pts2d:
+            if _ccw_2d(ax, ay, bx, by, p[0], p[1]) > 0.0:
+                left.append(p)
+            else:
+                right.append(p)
+        hull = [(ax, ay)]
+        Polyline._quick_hull_recurse(left, ax, ay, bx, by, hull)
+        hull.append((bx, by))
+        Polyline._quick_hull_recurse(right, bx, by, ax, ay, hull)
+        pts3d = []
+        for h in hull:
+            pts3d.append(Polyline._unproject(origin, xa, ya, h[0], h[1]))
+        return Polyline(pts3d)
+
+    @staticmethod
+    def bounding_rectangle(polygon: "Polyline") -> Optional["Polyline"]:
+        """Minimum-area rectangle of the hull as a closed 5-point polyline"""
+        hull = Polyline.quick_hull(polygon)
+        if hull.point_count() <= 2:
+            return None
+        origin, xa, ya, _ = polygon.get_average_plane()
+        hull2d = hull._project_to_plane(origin, xa, ya)
+        best_area = float("inf")
+        best_min_u = 0.0
+        best_max_u = 0.0
+        best_min_v = 0.0
+        best_max_v = 0.0
+        best_angle = 0.0
+        hn = len(hull2d)
+        for i in range(hn):
+            j = (i + 1) % hn
+            ex = hull2d[j][0] - hull2d[i][0]
+            ey = hull2d[j][1] - hull2d[i][1]
+            length = math.sqrt(ex * ex + ey * ey)
+            if length < 1e-12:
+                continue
+            ca = ex / length
+            sa = ey / length
+            min_u = float("inf")
+            max_u = float("-inf")
+            min_v = float("inf")
+            max_v = float("-inf")
+            for h in hull2d:
+                u = h[0] * ca + h[1] * sa
+                v = -h[0] * sa + h[1] * ca
+                min_u = min(min_u, u)
+                max_u = max(max_u, u)
+                min_v = min(min_v, v)
+                max_v = max(max_v, v)
+            area = (max_u - min_u) * (max_v - min_v)
+            if area < best_area:
+                best_area = area
+                best_min_u = min_u
+                best_max_u = max_u
+                best_min_v = min_v
+                best_max_v = max_v
+                best_angle = math.atan2(ey, ex)
+        ca = math.cos(best_angle)
+        sa = math.sin(best_angle)
+        uv = [
+            (best_min_u, best_min_v),
+            (best_min_u, best_max_v),
+            (best_max_u, best_max_v),
+            (best_max_u, best_min_v),
+        ]
+        pts3d = []
+        for c in uv:
+            pts3d.append(
+                Polyline._unproject(
+                    origin, xa, ya, c[0] * ca - c[1] * sa, c[0] * sa + c[1] * ca
+                )
+            )
+        pts3d.append(pts3d[0])
+        return Polyline(pts3d)
+
+    @staticmethod
+    def grid_of_points_in_polygon(
+        polygon: "Polyline", offset_dist: float, div_dist: float, max_pts: int = 100
+    ) -> list[Point]:
+        """Grid of interior points spaced div_dist, on the polygon miter-offset by offset_dist"""
+        if div_dist < 1e-12:
+            return []
+        origin, xa, ya, _ = polygon.get_average_plane()
+        poly2d = polygon._project_to_plane(origin, xa, ya)
+        if (
+            len(poly2d) > 1
+            and polygon.get_point(0).distance(
+                polygon.get_point(polygon.point_count() - 1)
+            )
+            < 1e-10
+        ):
+            poly2d.pop()
+        if not poly2d:
+            return []
+        poly2d = Polyline._offset_polygon_2d(poly2d, offset_dist)
+        x_min = float("inf")
+        x_max = float("-inf")
+        y_min = float("inf")
+        y_max = float("-inf")
+        for p in poly2d:
+            x_min = min(x_min, p[0])
+            x_max = max(x_max, p[0])
+            y_min = min(y_min, p[1])
+            y_max = max(y_max, p[1])
+        result = []
+        u = x_min
+        while u <= x_max + 1e-10 and len(result) < max_pts:
+            v = y_min
+            while v <= y_max + 1e-10 and len(result) < max_pts:
+                if Polyline._point_in_polygon(poly2d, u, v):
+                    result.append(Polyline._unproject(origin, xa, ya, u, v))
+                v += div_dist
+            u += div_dist
+        return result
+
+    @staticmethod
+    def polylabel(
+        polylines: list["Polyline"], precision: float = 1.0
+    ) -> tuple[Point, Plane, float]:
+        """Largest inscribed circle of polylines[0] minus the holes polylines[1..]: center, plane, radius"""
+        if not polylines:
+            return (Point(0.0, 0.0, 0.0), Plane(), 0.0)
+        origin, xa, ya, za = polylines[0].get_average_plane()
+        rings2d = []
+        sizes = []
+        for pl in polylines:
+            ring = pl._project_to_plane(origin, xa, ya)
+            if (
+                len(ring) > 1
+                and pl.get_point(0).distance(pl.get_point(pl.point_count() - 1)) < 1e-10
+            ):
+                ring.pop()
+            mnx = float("inf")
+            mny = float("inf")
+            mxx = float("-inf")
+            mxy = float("-inf")
+            for uv in ring:
+                mnx = min(mnx, uv[0])
+                mxx = max(mxx, uv[0])
+                mny = min(mny, uv[1])
+                mxy = max(mxy, uv[1])
+            rings2d.append(ring)
+            sizes.append((mxx - mnx) * (mxx - mnx) + (mxy - mny) * (mxy - mny))
+        ids = sorted(range(len(rings2d)), key=lambda i: -sizes[i])
+        polygon = []
+        for id in ids:
+            polygon.append(rings2d[id])
+        cr = _mapbox_polylabel(polygon, precision)
+        center = Polyline._unproject(origin, xa, ya, cr[0], cr[1])
+        return (center, Plane.from_frame(origin, xa, ya, za), cr[2])
+
+    @staticmethod
+    def polylabel_circle_division_points(
+        division_direction_in_3d: Vector,
+        polylines: list["Polyline"],
+        division: int = 4,
+        scale: float = 0.75,
+        precision: float = 1.0,
+        orient_to_closest_edge: bool = True,
+    ) -> list[Point]:
+        """division points on the polylabel circle scaled by scale, oriented to the closest edge or division_direction_in_3d"""
+        center, plane, r = Polyline.polylabel(polylines, precision)
+        radius = r * scale
+        is_direction_valid = (
+            division_direction_in_3d[0] != 0.0
+            or division_direction_in_3d[1] != 0.0
+            or division_direction_in_3d[2] != 0.0
+        )
+        found, edge_i, edge_j = Polyline._closest_edge(center, polylines)
+        found = orient_to_closest_edge and found
+        x_axis = plane.x_axis
+        y_axis = plane.y_axis
+        z_axis = plane.z_axis
+        if is_direction_valid or orient_to_closest_edge:
+            dir = (
+                polylines[edge_i].get_point(edge_j + 1)
+                - polylines[edge_i].get_point(edge_j)
+                if found
+                else division_direction_in_3d
+            )
+            x_axis = Vector(dir[0], dir[1], dir[2])
+            y_axis = dir.cross(z_axis)
+        x_axis.normalize_self()
+        y_axis.normalize_self()
+        z_axis.normalize_self()
+        points = []
+        chunk = 360.0 / division
+        for i in range(division):
+            rad = (45.0 + i * chunk) * Tolerance.PI / 180.0
+            points.append(
+                Polyline._unproject(
+                    center,
+                    x_axis,
+                    y_axis,
+                    radius * math.cos(rad),
+                    radius * math.sin(rad),
+                )
+            )
+        return points
+
+    @staticmethod
+    def boolean_op(
+        a: "Polyline", b: "Polyline", clip_type: int, plane: Plane | None = None
+    ) -> list["Polyline"]:
+        """Vatti boolean of two closed polylines on x and y, or in plane's local frame; clip_type 0 intersection, 1 union, 2 a minus b"""
+        from .boolean_polyline import BooleanPolyline
+
+        if plane is None:
+            return BooleanPolyline.compute(a, b, clip_type)
+        pa2d = Polyline._boolean_project(a, plane)
+        pb2d = Polyline._boolean_project(b, plane)
+        Polyline._ensure_ccw(pa2d)
+        Polyline._ensure_ccw(pb2d)
+        results = BooleanPolyline.compute(pa2d, pb2d, clip_type)
+        o = plane.origin
+        x = plane.x_axis
+        y = plane.y_axis
+        for r in results:
+            for i in range(r.point_count()):
+                r.set_point(
+                    i,
+                    Polyline._unproject(o, x, y, r.coords[i * 3], r.coords[i * 3 + 1]),
+                )
+        return results
+
+    @staticmethod
+    def simplify_points(points: list[Point], tolerance: float) -> list[Point]:
+        """Ramer-Douglas-Peucker on a point list"""
+        n = len(points)
+        if n < 3:
+            return list(points)
+        keep = [False] * n
+        keep[0] = True
+        keep[n - 1] = True
+        Polyline._simplify_rdp(points, 0, n - 1, tolerance, keep)
+        result = []
+        for i in range(n):
+            if keep[i]:
+                result.append(points[i])
+        return result
+
+    @staticmethod
+    def two_rects_from_frame(
+        p: Point,
+        segment_vector: Vector,
+        zaxis: Vector,
+        middle: bool,
+        radius: float,
+        length: float,
+        flip_male: int,
+    ) -> tuple["Polyline", "Polyline"]:
+        """Male rect0 and female rect1 cross-sections of radius about p along segment_vector; flip_male rotates the corners"""
+        y_axis = zaxis.cross(segment_vector)
+        x_axis = y_axis.cross(segment_vector)
+        x_axis.normalize_self()
+        y_axis.normalize_self()
+        x_axis = x_axis * radius
+        y_axis = y_axis * radius
+        sv0 = segment_vector * (length * -0.5)
+        sv1 = segment_vector * (length * 0.5)
+        v = [-x_axis - y_axis, x_axis - y_axis, x_axis + y_axis, -x_axis + y_axis]
+        if not middle and flip_male == 1:
+            v = v[1:] + v[:1]
+        elif not middle and flip_male == -1:
+            v = v[-1:] + v[:-1]
+        rect0 = Polyline(
+            [
+                p + sv0 + v[1],
+                p + sv1 + v[1],
+                p + sv1 + v[0],
+                p + sv0 + v[0],
+                p + sv0 + v[1],
+            ]
+        )
+        rect1 = Polyline(
+            [
+                p + sv0 + v[2],
+                p + sv1 + v[2],
+                p + sv1 + v[3],
+                p + sv0 + v[3],
+                p + sv0 + v[2],
+            ]
+        )
+        return (rect0, rect1)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # JSON
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __jsondump__(self) -> dict:
+        return {
+            "coords": self.coords,
+            "dash": list(self.dash),
+            "guid": self.guid,
+            "linecolor": self.linecolor.__jsondump__(),
+            "name": self.name,
+            "type": "Polyline",
+            "width": self.width,
+        }
+
+    @classmethod
+    def __jsonload__(cls, data: dict, guid: str = None, name: str = None) -> "Polyline":
+        from .file_encoders import file_decode_node
+
+        polyline = cls()
+        polyline.guid = guid if guid is not None else data.get("guid", polyline.guid)
+        polyline.name = name if name is not None else data.get("name", polyline.name)
+        if "coords" in data:
+            polyline.coords = list(data["coords"])
+        elif "points" in data:
+            for pt_json in data["points"]:
+                polyline.add_point(file_decode_node(pt_json))
+        if "width" in data:
+            polyline.width = data["width"]
+        if "dash" in data:
+            polyline.dash = list(data["dash"])
+        if "linecolor" in data:
+            polyline.linecolor = file_decode_node(data["linecolor"])
+        polyline._recompute_plane_if_needed()
+        return polyline
+
+    def file_json_dumps(self) -> str:
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def file_json_loads(cls, json_string: str) -> "Polyline":
+        return cls.__jsonload__(json.loads(json_string))
+
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+        with open(filepath, "w") as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
+        with open(filepath) as f:
+            data = json.load(f)
+        return cls.__jsonload__(data)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def pb_dumps(self) -> bytes:
+        from .proto import polyline_pb2
+
+        proto = polyline_pb2.Polyline()
+        self.pb_fill(proto)
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> "Polyline":
+        from .proto import polyline_pb2
+
+        proto = polyline_pb2.Polyline()
+        proto.ParseFromString(data)
+        pl = cls.from_coords(list(proto.coords))
+        if proto.guid:
+            pl.guid = proto.guid
+        pl.name = proto.name
+        pl.width = proto.width
+        pl.dash = list(proto.dash)
+        if proto.HasField("linecolor"):
+            c = proto.linecolor
+            pl.linecolor = Color(c.r, c.g, c.b, c.a, c.name)
+        return pl
+
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+        data = self.pb_dumps()
+        with open(filepath, "wb") as f:
+            f.write(data)
+
+    @classmethod
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
+        with open(filepath, "rb") as f:
+            data = f.read()
+        return cls.pb_loads(data)
+
+    def pb_fill(self, proto: "polyline_pb2.Polyline") -> None:
+        """Fill the proto message; pb_dumps encodes it and Objects embeds it"""
+        if self.has_guid():
+            proto.guid = self._guid
+        proto.name = self.name
+        proto.width = self.width
+        proto.dash.extend(self.dash)
+        proto.coords.extend(self.coords)
+        proto.linecolor.r = self.linecolor.r
+        proto.linecolor.g = self.linecolor.g
+        proto.linecolor.b = self.linecolor.b
+        proto.linecolor.a = self.linecolor.a
+        proto.linecolor.name = self.linecolor.name
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __str__(self) -> str:
+        """ "[(x0, y0, z0), (x1, y1, z1), ...]" """
+        pts = []
+        for i in range(self.point_count()):
+            pts.append(
+                f"({self.coords[i * 3]}, {self.coords[i * 3 + 1]}, {self.coords[i * 3 + 2]})"
+            )
+        return "[" + ", ".join(pts) + "]"
+
+    def __repr__(self) -> str:
+        """ "Polyline(name, N points)" """
+        return f"Polyline({self.name}, {self.point_count()} points)"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Private helpers
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def _recompute_plane_if_needed(self) -> None:
+        self._plane_dirty = True
+
+    def _average_normal(self) -> Vector:
+        if self.point_count() < 3:
+            return Vector(0.0, 0.0, 1.0)
+        n = self.point_count() - 1 if self.is_closed() else self.point_count()
+        avg_normal = Vector(0.0, 0.0, 0.0)
+        for i in range(n):
+            prev = n - 1 if i == 0 else i - 1
+            next = (i + 1) % n
+            v1 = self.get_point(i) - self.get_point(prev)
+            v2 = self.get_point(next) - self.get_point(i)
+            avg_normal += v1.cross(v2)
+        avg_normal.normalize_self()
+        return avg_normal
+
+    def _point_at_length(self, distance: float) -> Point:
+        acc = 0.0
+        for i in range(self.point_count() - 1):
+            a = self.get_point(i)
+            b = self.get_point(i + 1)
+            seg_len = (b - a).magnitude()
+            if acc + seg_len >= distance:
+                t = (distance - acc) / seg_len if seg_len > 1e-14 else 0.0
+                return a + (b - a) * t
+            acc += seg_len
+        return self.get_point(0)
+
+    def _project_to_plane(
+        self, origin: Point, x_axis: Vector, y_axis: Vector
+    ) -> list[tuple[float, float]]:
+        pts2d = []
+        for i in range(self.point_count()):
+            d = self.get_point(i) - origin
+            pts2d.append((d.dot(x_axis), d.dot(y_axis)))
+        return pts2d
+
+    @staticmethod
+    def _unproject(
+        origin: Point, x_axis: Vector, y_axis: Vector, u: float, v: float
+    ) -> Point:
+        return Point(
+            origin[0] + u * x_axis[0] + v * y_axis[0],
+            origin[1] + u * x_axis[1] + v * y_axis[1],
+            origin[2] + u * x_axis[2] + v * y_axis[2],
+        )
+
+    @staticmethod
+    def _line_line_overlap_points(
+        line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point
+    ) -> tuple[bool, Point, Point]:
+        t = [0.0, 1.0, 0.0, 0.0]
+        t[2] = Polyline.closest_point_to_line(line1_start, line0_start, line0_end)
+        t[3] = Polyline.closest_point_to_line(line1_end, line0_start, line0_end)
+        do_overlap = not ((t[2] < 0 and t[3] < 0) or (t[2] > 1 and t[3] > 1))
+        t.sort()
+        do_overlap = do_overlap and abs(t[2] - t[1]) > Tolerance.ZERO_TOLERANCE
+        overlap_start = Polyline.point_at(line0_start, line0_end, t[1])
+        overlap_end = Polyline.point_at(line0_start, line0_end, t[2])
+        return (do_overlap, overlap_start, overlap_end)
+
+    @staticmethod
+    def _quick_hull_recurse(
+        pts: list[tuple[float, float]],
+        ax: float,
+        ay: float,
+        bx: float,
+        by: float,
+        hull: list[tuple[float, float]],
+    ) -> None:
+        if not pts:
+            return
+        fi = 0
+        best = float("-inf")
+        for i in range(len(pts)):
+            val = _ccw_2d(ax, ay, bx, by, pts[i][0], pts[i][1])
+            if val >= best:
+                best = val
+                fi = i
+        fx = pts[fi][0]
+        fy = pts[fi][1]
+        left = []
+        right = []
+        for p in pts:
+            if _ccw_2d(ax, ay, fx, fy, p[0], p[1]) > 0.0:
+                left.append(p)
+            if _ccw_2d(fx, fy, bx, by, p[0], p[1]) > 0.0:
+                right.append(p)
+        Polyline._quick_hull_recurse(left, ax, ay, fx, fy, hull)
+        hull.append((fx, fy))
+        Polyline._quick_hull_recurse(right, fx, fy, bx, by, hull)
+
+    @staticmethod
+    def _offset_polygon_2d(
+        poly2d: list[tuple[float, float]], offset_dist: float
+    ) -> list[tuple[float, float]]:
+        n = len(poly2d)
+        if offset_dist == 0.0 or n < 3:
+            return poly2d
+        signed_area = 0.0
+        for i in range(n):
+            a = poly2d[i]
+            b = poly2d[(i + 1) % n]
+            signed_area += a[0] * b[1] - b[0] * a[1]
+        delta = -offset_dist if signed_area < 0.0 else offset_dist
+        normals = []
+        for i in range(n):
+            a = poly2d[i]
+            b = poly2d[(i + 1) % n]
+            ex = b[0] - a[0]
+            ey = b[1] - a[1]
+            length = math.sqrt(ex * ex + ey * ey)
+            if length < 1e-12:
+                normals.append((0.0, 0.0))
+            else:
+                normals.append((ey / length, -ex / length))
+        out = []
+        for i in range(n):
+            np = normals[(i + n - 1) % n]
+            nn = normals[i]
+            cos_a = np[0] * nn[0] + np[1] * nn[1]
+            sin_a = np[0] * nn[1] - np[1] * nn[0]
+            denom = 1.0 + cos_a
+            concave = cos_a > -0.999 and sin_a * delta < 0.0 and offset_dist > 0.0
+            if concave:
+                out.append((poly2d[i][0] + np[0] * delta, poly2d[i][1] + np[1] * delta))
+                out.append((poly2d[i][0], poly2d[i][1]))
+                out.append((poly2d[i][0] + nn[0] * delta, poly2d[i][1] + nn[1] * delta))
+            elif abs(denom) < 1e-9:
+                out.append(
+                    (
+                        poly2d[i][0] + (np[0] + nn[0]) * 0.5 * delta,
+                        poly2d[i][1] + (np[1] + nn[1]) * 0.5 * delta,
+                    )
+                )
+            else:
+                out.append(
+                    (
+                        poly2d[i][0] + (np[0] + nn[0]) / denom * delta,
+                        poly2d[i][1] + (np[1] + nn[1]) / denom * delta,
+                    )
+                )
+        out_area = 0.0
+        for i in range(len(out)):
+            a = out[i]
+            b = out[(i + 1) % len(out)]
+            out_area += a[0] * b[1] - b[0] * a[1]
+        if len(out) >= 3 and abs(out_area) > 1e-4:
+            return out
+        return poly2d
+
+    @staticmethod
+    def _point_in_polygon(
+        poly2d: list[tuple[float, float]], px: float, py: float
+    ) -> bool:
+        n = len(poly2d)
+        inside = False
+        j = n - 1
+        for i in range(n):
+            xi = poly2d[i][0]
+            yi = poly2d[i][1]
+            xj = poly2d[j][0]
+            yj = poly2d[j][1]
+            if (yi > py) != (yj > py) and px < (xj - xi) * (py - yi) / (yj - yi) + xi:
+                inside = not inside
+            j = i
+        return inside
+
+    @staticmethod
+    def _closest_edge(
+        center: Point, polylines: list["Polyline"]
+    ) -> tuple[bool, int, int]:
+        edge_i = 0
+        edge_j = 0
+        best_sq = float("inf")
+        for i in range(len(polylines)):
+            for j in range(polylines[i].point_count() - 1):
+                a = polylines[i].get_point(j)
+                e = polylines[i].get_point(j + 1) - a
+                len2 = e.magnitude_squared()
+                if len2 <= 0.0:
+                    continue
+                t = (center - a).dot(e) / len2
+                if t < 0.0 or t > 1.0:
+                    continue
+                d2 = (center - (a + e * t)).magnitude_squared()
+                if d2 < best_sq:
+                    best_sq = d2
+                    edge_i = i
+                    edge_j = j
+        return (best_sq < float("inf"), edge_i, edge_j)
+
+    @staticmethod
+    def _boolean_project(pl: "Polyline", plane: Plane) -> "Polyline":
+        o = plane.origin
+        x = plane.x_axis
+        y = plane.y_axis
+        n = pl.point_count()
+        p2d = Polyline()
+        p2d.coords = [0.0] * (n * 3)
+        for i in range(n):
+            d = pl.get_point(i) - o
+            p2d.coords[i * 3] = d.dot(x)
+            p2d.coords[i * 3 + 1] = d.dot(y)
+            p2d.coords[i * 3 + 2] = 0.0
+        if n >= 4:
+            dx = p2d.coords[(n - 1) * 3] - p2d.coords[0]
+            dy = p2d.coords[(n - 1) * 3 + 1] - p2d.coords[1]
+            if dx * dx + dy * dy < 1.0:
+                p2d.coords[(n - 1) * 3] = p2d.coords[0]
+                p2d.coords[(n - 1) * 3 + 1] = p2d.coords[1]
+        return p2d
+
+    @staticmethod
+    def _ensure_ccw(p2d: "Polyline") -> None:
+        n = p2d.point_count()
+        m = n
+        if m >= 4:
+            dx = p2d.coords[(m - 1) * 3] - p2d.coords[0]
+            dy = p2d.coords[(m - 1) * 3 + 1] - p2d.coords[1]
+            if dx * dx + dy * dy < 1e-10:
+                m -= 1
+        if m < 3:
+            return
+        area = 0.0
+        for i in range(m):
+            j = (i + 1) % m
+            area += (
+                p2d.coords[i * 3] * p2d.coords[j * 3 + 1]
+                - p2d.coords[j * 3] * p2d.coords[i * 3 + 1]
+            )
+        if area < 0.0:
+            p2d.reverse()
+
+    @staticmethod
+    def _simplify_perp_dist(pt: Point, line_start: Point, line_end: Point) -> float:
+        d = line_end - line_start
+        len_sq = d.magnitude_squared()
+        if len_sq == 0.0:
+            return math.sqrt((pt - line_start).magnitude_squared())
+        t = (pt - line_start).dot(d) / len_sq
+        t = max(0.0, min(1.0, t))
+        return math.sqrt((pt - (line_start + d * t)).magnitude_squared())
+
+    @staticmethod
+    def _simplify_rdp(
+        points: list[Point], start: int, end: int, tolerance: float, keep: list[bool]
+    ) -> None:
         if end <= start + 1:
             return
         max_dist = 0.0
@@ -1594,370 +1687,8 @@ class Polyline:
             if d > max_dist:
                 max_dist = d
                 max_idx = i
-        if max_dist > tolerance:
-            keep[max_idx] = True
-            Polyline._simplify_rdp(points, start, max_idx, tolerance, keep)
-            Polyline._simplify_rdp(points, max_idx, end, tolerance, keep)
-
-    @staticmethod
-    def simplify_points(points: list[Point], tolerance: float) -> list[Point]:
-        n = len(points)
-        if n < 3:
-            return list(points)
-        keep = [False] * n
-        keep[0] = True
-        keep[n - 1] = True
-        Polyline._simplify_rdp(points, 0, n - 1, tolerance, keep)
-        return [points[i] for i in range(n) if keep[i]]
-
-    def simplify(self, tolerance: float) -> "Polyline":
-        pts = Polyline.simplify_points(self.points, tolerance)
-        return Polyline(pts)
-    def translated(self, v: Vector) -> "Polyline":
-        result = copy.deepcopy(self)
-        result.translate(v)
-        return result
-
-    def remove_consecutive_duplicates(self, tol: float = Tolerance.APPROXIMATION) -> None:
-        pts = self.get_points()
-        cleaned = []
-        tol_sq = tol * tol
-        for p in pts:
-            if not cleaned:
-                cleaned.append(p)
-                continue
-            dx = p[0] - cleaned[-1][0]
-            dy = p[1] - cleaned[-1][1]
-            dz = p[2] - cleaned[-1][2]
-            if dx*dx + dy*dy + dz*dz >= tol_sq:
-                cleaned.append(p)
-        new_poly = Polyline(cleaned)
-        self.coords = new_poly.coords
-        self._plane = None
-
-    @staticmethod
-    def two_rects_from_frame(p: Point, segment_vector: Vector, zaxis: Vector, middle: bool, radius: float, length: float, flip_male: int) -> tuple["Polyline", "Polyline"]:
-        y_axis = zaxis.cross(segment_vector)
-        x_axis = y_axis.cross(segment_vector)
-        x_axis.normalize_self()
-        y_axis.normalize_self()
-        x_axis = x_axis * radius
-        y_axis = y_axis * radius
-        sv0 = segment_vector * (length * -0.5)
-        sv1 = segment_vector * (length * 0.5)
-        v = [
-            Vector(-x_axis[0] - y_axis[0], -x_axis[1] - y_axis[1], -x_axis[2] - y_axis[2]),
-            Vector( x_axis[0] - y_axis[0],  x_axis[1] - y_axis[1],  x_axis[2] - y_axis[2]),
-            Vector( x_axis[0] + y_axis[0],  x_axis[1] + y_axis[1],  x_axis[2] + y_axis[2]),
-            Vector(-x_axis[0] + y_axis[0], -x_axis[1] + y_axis[1], -x_axis[2] + y_axis[2]),
-        ]
-        if not middle:
-            if flip_male == 1:
-                v = v[1:] + v[:1]
-            elif flip_male == -1:
-                v = v[-1:] + v[:-1]
-        def pt(sv, uv):
-            return Point(p[0]+sv[0]+uv[0], p[1]+sv[1]+uv[1], p[2]+sv[2]+uv[2])
-        rect0 = Polyline([
-            pt(sv0, v[1]),
-            pt(sv1, v[1]),
-            pt(sv1, v[0]),
-            pt(sv0, v[0]),
-            pt(sv0, v[1]),
-        ])
-        rect1 = Polyline([
-            pt(sv0, v[2]),
-            pt(sv1, v[2]),
-            pt(sv1, v[3]),
-            pt(sv0, v[3]),
-            pt(sv0, v[2]),
-        ])
-        return rect0, rect1
-
-    @staticmethod
-    def boolean_op(a: "Polyline", b: "Polyline", clip_type: int, plane: Optional["Plane"] = None) -> list["Polyline"]:
-        from .boolean_polyline import BooleanPolyline
-        if plane is None:
-            return BooleanPolyline.compute(a, b, clip_type)
-        ox, oy, oz = plane.origin[0], plane.origin[1], plane.origin[2]
-        xx, xy, xz = plane.x_axis[0], plane.x_axis[1], plane.x_axis[2]
-        yx, yy, yz = plane.y_axis[0], plane.y_axis[1], plane.y_axis[2]
-        def project(pl):
-            coords = []
-            for i in range(pl.point_count()):
-                dx = pl.coords[i*3]-ox; dy = pl.coords[i*3+1]-oy; dz = pl.coords[i*3+2]-oz
-                coords.extend([dx*xx+dy*xy+dz*xz, dx*yx+dy*yy+dz*yz, 0.0])
-            n = len(coords) // 3
-            if n >= 4:
-                dx = coords[(n-1)*3] - coords[0]; dy = coords[(n-1)*3+1] - coords[1]
-                if dx*dx+dy*dy < 1.0:
-                    coords[(n-1)*3] = coords[0]; coords[(n-1)*3+1] = coords[1]
-            p2d = Polyline.__new__(Polyline)
-            p2d._guid = None; p2d.name = ""; p2d.width = 1.0; p2d._linecolor = None; p2d._plane = None
-            p2d.coords = coords
-            return p2d
-        def ensure_ccw(p2d):
-            n = p2d.point_count()
-            m = n
-            if m >= 4:
-                dx = p2d.coords[(m-1)*3] - p2d.coords[0]
-                dy = p2d.coords[(m-1)*3+1] - p2d.coords[1]
-                if dx*dx + dy*dy < 1e-10:
-                    m -= 1
-            if m < 3:
-                return
-            area = 0.0
-            for i in range(m):
-                j = (i + 1) % m
-                area += p2d.coords[i*3] * p2d.coords[j*3+1] - p2d.coords[j*3] * p2d.coords[i*3+1]
-            if area < 0:
-                for i in range(n // 2):
-                    j = n - 1 - i
-                    p2d.coords[i*3], p2d.coords[j*3] = p2d.coords[j*3], p2d.coords[i*3]
-                    p2d.coords[i*3+1], p2d.coords[j*3+1] = p2d.coords[j*3+1], p2d.coords[i*3+1]
-                    p2d.coords[i*3+2], p2d.coords[j*3+2] = p2d.coords[j*3+2], p2d.coords[i*3+2]
-        pa2d = project(a); pb2d = project(b)
-        ensure_ccw(pa2d); ensure_ccw(pb2d)
-        results = BooleanPolyline.compute(pa2d, pb2d, clip_type)
-        for r in results:
-            n = r.point_count()
-            for i in range(n):
-                u, v = r.coords[i*3], r.coords[i*3+1]
-                r.coords[i*3] = ox + u*xx + v*yx
-                r.coords[i*3+1] = oy + u*xy + v*yy
-                r.coords[i*3+2] = oz + u*xz + v*yz
-        return results
-
-    @staticmethod
-    def polylabel(polylines: list["Polyline"], precision: float) -> tuple[Point, "Plane", float]:
-        # Largest inscribed circle via mapbox polylabel.
-        # polylines[0] is the outer boundary; polylines[1..] are holes.
-        from .plane import Plane
-        if not polylines:
-            return Point(0.0, 0.0, 0.0), Plane.xy_plane(), 0.0
-        orig, xa, ya, _za = polylines[0].get_average_plane()
-
-        def to2d(p):
-            dx = p[0] - orig[0]; dy = p[1] - orig[1]; dz = p[2] - orig[2]
-            return (dx*xa[0]+dy*xa[1]+dz*xa[2], dx*ya[0]+dy*ya[1]+dz*ya[2])
-
-        rings2d = []
-        sizes = []
-        for pl in polylines:
-            pts = pl.get_points()
-            if len(pts) > 1:
-                a = pts[0]; b = pts[-1]
-                last = len(pts) - 1 if abs(a[0]-b[0])<1e-10 and abs(a[1]-b[1])<1e-10 and abs(a[2]-b[2])<1e-10 else len(pts)
-            else:
-                last = len(pts)
-            ring = []
-            mnx = mny = float("inf")
-            mxx = mxy = float("-inf")
-            for p in pts[:last]:
-                uv = to2d(p)
-                if uv[0] < mnx: mnx = uv[0]
-                if uv[0] > mxx: mxx = uv[0]
-                if uv[1] < mny: mny = uv[1]
-                if uv[1] > mxy: mxy = uv[1]
-                ring.append(uv)
-            dx = mxx - mnx; dy = mxy - mny
-            sizes.append(dx*dx + dy*dy)
-            rings2d.append(ring)
-        ids = sorted(range(len(rings2d)), key=lambda i: -sizes[i])
-        polygon = [rings2d[i] for i in ids]
-
-        cx2d, cy2d, r = _mapbox_polylabel(polygon, precision)
-        center = Point(
-            orig[0] + cx2d*xa[0] + cy2d*ya[0],
-            orig[1] + cx2d*xa[1] + cy2d*ya[1],
-            orig[2] + cx2d*xa[2] + cy2d*ya[2],
-        )
-        plane = Plane(orig, xa, ya)
-        return center, plane, r
-
-    @staticmethod
-    def polylabel_circle_division_points(
-        division_direction_in_3d: Vector,
-        polylines: list["Polyline"],
-        division: int,
-        scale: float,
-        precision: float,
-        orient_to_closest_edge: bool,
-    ) -> list[Point]:
-        import math
-        center, plane, r = Polyline.polylabel(polylines, precision)
-        radius = r * scale
-
-        is_direction_valid = (
-            division_direction_in_3d[0] != 0.0 or
-            division_direction_in_3d[1] != 0.0 or
-            division_direction_in_3d[2] != 0.0
-        )
-
-        edge_i = 0
-        edge_j = 0
-        best_sq = float("inf")
-        if orient_to_closest_edge:
-            for i, pl in enumerate(polylines):
-                pts = pl.get_points()
-                if len(pts) < 2:
-                    continue
-                for j in range(len(pts) - 1):
-                    a = pts[j]; b = pts[j + 1]
-                    ex = b[0]-a[0]; ey = b[1]-a[1]; ez = b[2]-a[2]
-                    len2 = ex*ex + ey*ey + ez*ez
-                    if len2 <= 0.0:
-                        continue
-                    px = center[0]-a[0]; py = center[1]-a[1]; pz = center[2]-a[2]
-                    t = (px*ex + py*ey + pz*ez) / len2
-                    if t < 0.0 or t > 1.0:
-                        continue
-                    cxp = a[0]+t*ex; cyp = a[1]+t*ey; czp = a[2]+t*ez
-                    dx = center[0]-cxp; dy = center[1]-cyp; dz = center[2]-czp
-                    d2 = dx*dx + dy*dy + dz*dz
-                    if d2 < best_sq:
-                        best_sq = d2; edge_i = i; edge_j = j
-
-        z_axis_ref = plane.z_axis
-        if is_direction_valid or orient_to_closest_edge:
-            if orient_to_closest_edge and math.isfinite(best_sq):
-                pts = polylines[edge_i].get_points()
-                dir_v = Vector(
-                    pts[edge_j+1][0]-pts[edge_j][0],
-                    pts[edge_j+1][1]-pts[edge_j][1],
-                    pts[edge_j+1][2]-pts[edge_j][2],
-                )
-            else:
-                dir_v = division_direction_in_3d
-            x_axis = Vector(dir_v[0], dir_v[1], dir_v[2])
-            y_axis = Vector(
-                dir_v[1]*z_axis_ref[2] - dir_v[2]*z_axis_ref[1],
-                dir_v[2]*z_axis_ref[0] - dir_v[0]*z_axis_ref[2],
-                dir_v[0]*z_axis_ref[1] - dir_v[1]*z_axis_ref[0],
-            )
-        else:
-            x_axis = Vector(plane.x_axis[0], plane.x_axis[1], plane.x_axis[2])
-            y_axis = Vector(plane.y_axis[0], plane.y_axis[1], plane.y_axis[2])
-        z_axis = Vector(z_axis_ref[0], z_axis_ref[1], z_axis_ref[2])
-        x_axis.normalize_self(); y_axis.normalize_self(); z_axis.normalize_self()
-
-        points = []
-        pi_rad = math.pi / 180.0
-        chunk = 360.0 / division
-        for i in range(division):
-            deg = i * chunk
-            rad = (45.0 + deg) * pi_rad
-            u = radius * math.cos(rad)
-            v = radius * math.sin(rad)
-            points.append(Point(
-                center[0] + u*x_axis[0] + v*y_axis[0],
-                center[1] + u*x_axis[1] + v*y_axis[1],
-                center[2] + u*x_axis[2] + v*y_axis[2],
-            ))
-        return points
-
-
-# ========== mapbox polylabel helpers (native) ==========
-def _pl_seg_dist_sq(px, py, ax, ay, bx, by):
-    x = ax; y = ay
-    dx = bx - x; dy = by - y
-    if dx != 0.0 or dy != 0.0:
-        t = ((px - x) * dx + (py - y) * dy) / (dx*dx + dy*dy)
-        if t > 1.0:
-            x = bx; y = by
-        elif t > 0.0:
-            x += dx * t; y += dy * t
-    dx = px - x; dy = py - y
-    return dx*dx + dy*dy
-
-
-def _pl_point_to_poly_dist(px, py, polygon):
-    inside = False
-    min_sq = float("inf")
-    for ring in polygon:
-        length = len(ring)
-        if length == 0:
-            continue
-        j = length - 1
-        for i in range(length):
-            ax, ay = ring[i]
-            bx, by = ring[j]
-            if (ay > py) != (by > py) and px < (bx-ax)*(py-ay)/(by-ay) + ax:
-                inside = not inside
-            d = _pl_seg_dist_sq(px, py, ax, ay, bx, by)
-            if d < min_sq:
-                min_sq = d
-            j = i
-    return (1.0 if inside else -1.0) * (min_sq ** 0.5)
-
-
-def _pl_centroid_cell(polygon):
-    import math
-    area = 0.0
-    cx = 0.0
-    cy = 0.0
-    ring = polygon[0]
-    length = len(ring)
-    j = length - 1
-    for i in range(length):
-        ax, ay = ring[i]
-        bx, by = ring[j]
-        f = ax*by - bx*ay
-        cx += (ax+bx)*f
-        cy += (ay+by)*f
-        area += f * 3.0
-        j = i
-    if area == 0.0:
-        d = _pl_point_to_poly_dist(ring[0][0], ring[0][1], polygon)
-        return (ring[0][0], ring[0][1], 0.0, d, d)
-    ccx = cx / area; ccy = cy / area
-    d = _pl_point_to_poly_dist(ccx, ccy, polygon)
-    return (ccx, ccy, 0.0, d, d)
-
-
-def _mapbox_polylabel(polygon, precision):
-    import heapq
-    import math
-    outer = polygon[0]
-    mnx = min(p[0] for p in outer); mxx = max(p[0] for p in outer)
-    mny = min(p[1] for p in outer); mxy = max(p[1] for p in outer)
-    sx = mxx - mnx; sy = mxy - mny
-    cell_size = min(sx, sy)
-    if cell_size == 0.0:
-        return (mnx, mny, 0.0)
-    h = cell_size / 2.0
-    sqrt2 = math.sqrt(2.0)
-
-    def make_cell(cx, cy, hh):
-        d = _pl_point_to_poly_dist(cx, cy, polygon)
-        return (-(d + hh * sqrt2), cx, cy, hh, d)
-
-    queue = []
-    x = mnx
-    while x < mxx:
-        y = mny
-        while y < mxy:
-            heapq.heappush(queue, make_cell(x + h, y + h, h))
-            y += cell_size
-        x += cell_size
-
-    best = _pl_centroid_cell(polygon)
-    bbox_c = (mnx + sx/2.0, mny + sy/2.0, 0.0, _pl_point_to_poly_dist(mnx + sx/2.0, mny + sy/2.0, polygon), 0.0)
-    bbox_d = bbox_c[3]
-    best_cx, best_cy, _h, best_d, _mx = best
-    if bbox_d > best_d:
-        best_cx, best_cy, best_d = bbox_c[0], bbox_c[1], bbox_d
-
-    while queue:
-        neg_mx, cx, cy, hh, d = heapq.heappop(queue)
-        mx = -neg_mx
-        if d > best_d:
-            best_cx, best_cy, best_d = cx, cy, d
-        if mx - best_d <= precision:
-            continue
-        nh = hh / 2.0
-        heapq.heappush(queue, make_cell(cx - nh, cy - nh, nh))
-        heapq.heappush(queue, make_cell(cx + nh, cy - nh, nh))
-        heapq.heappush(queue, make_cell(cx - nh, cy + nh, nh))
-        heapq.heappush(queue, make_cell(cx + nh, cy + nh, nh))
-    return (best_cx, best_cy, best_d)
+        if max_dist <= tolerance:
+            return
+        keep[max_idx] = True
+        Polyline._simplify_rdp(points, start, max_idx, tolerance, keep)
+        Polyline._simplify_rdp(points, max_idx, end, tolerance, keep)

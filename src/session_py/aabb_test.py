@@ -10,28 +10,37 @@ def test_aabb_constructor():
     from session_py import AABB
     from session_py import Point
 
-    # AABB(0,0,0, 1,2,3) — dims 2×4×6
     a = AABB(0.0, 0.0, 0.0, 1.0, 2.0, 3.0)
+    empty = AABB()
 
+    MINI_CHECK(empty == AABB(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    MINI_CHECK(a == AABB(0.0, 0.0, 0.0, 1.0, 2.0, 3.0))
+    MINI_CHECK(a != empty)
+    MINI_CHECK(str(a) == "0.000000, 0.000000, 0.000000, 1.000000, 2.000000, 3.000000")
+    MINI_CHECK(repr(a) == "AABB(0.000000, 0.000000, 0.000000, 1.000000, 2.000000, 3.000000)")
     MINI_CHECK(TOLERANCE.is_close(a.area(), 88.0))
     MINI_CHECK(a.center() == Point(0.0, 0.0, 0.0))
     MINI_CHECK(TOLERANCE.is_close(a.diagonal(), 2.0 * math.sqrt(14.0)))
     MINI_CHECK(a.is_valid())
     MINI_CHECK(TOLERANCE.is_close(a.volume(), 48.0))
+
     MINI_CHECK(a.closest_point(Point(0.0, 0.0, 0.0)) == Point(0.0, 0.0, 0.0))
     MINI_CHECK(a.closest_point(Point(10.0, 0.0, 0.0)) == Point(1.0, 0.0, 0.0))
     MINI_CHECK(a.contains(Point(0.0, 0.0, 0.0)))
     MINI_CHECK(not a.contains(Point(10.0, 0.0, 0.0)))
+
     MINI_CHECK(a.corner(False, False, False) == Point(-1.0, -2.0, -3.0))
     MINI_CHECK(a.corner(True, True, True) == Point(1.0, 2.0, 3.0))
     MINI_CHECK(len(a.get_corners()) == 8)
     MINI_CHECK(len(a.get_edges()) == 12)
+
     MINI_CHECK(a.point_at(1.0, 0.0, 0.0) == Point(1.0, 0.0, 0.0))
     MINI_CHECK(a.point_at(0.0, 0.0, 0.0) == Point(0.0, 0.0, 0.0))
+
     MINI_CHECK(a.intersects(AABB(0.5, 0.0, 0.0, 0.5, 0.5, 0.5)))
     MINI_CHECK(not a.intersects(AABB(10.0, 0.0, 0.0, 0.5, 0.5, 0.5)))
     b = AABB(5.0, 0.0, 0.0, 1.0, 1.0, 1.0)
-    a = a.union_with(b)
+    a.union_with(b)
     MINI_CHECK(a.min_point() == Point(-1.0, -2.0, -3.0))
     MINI_CHECK(a.max_point() == Point(6.0, 2.0, 3.0))
     c = AABB.merge(AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), AABB(4.0, 0.0, 0.0, 1.0, 1.0, 1.0))
@@ -44,7 +53,6 @@ def test_aabb_from_geometry():
     from session_py import AABB
     from session_py import Color
     from session_py import Line
-    from session_py import Mesh
     from session_py import NurbsCurve
     from session_py import NurbsSurface
     from session_py import Point

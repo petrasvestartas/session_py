@@ -764,9 +764,9 @@ class Session:
             points = [tp(geometry.start()), tp(geometry.end())]
             return OBB.from_points(points, inflate)
         elif isinstance(geometry, Polyline):
-            return OBB.from_points([tp(p) for p in geometry.points], inflate)
+            return OBB.from_points([tp(p) for p in geometry.get_points()], inflate)
         elif isinstance(geometry, PointCloud):
-            return OBB.from_points([tp(p) for p in geometry.points], inflate)
+            return OBB.from_points([tp(p) for p in geometry.get_points()], inflate)
         elif isinstance(geometry, Mesh):
             # Extract vertices from mesh; the session holds the placement, so bake it
             points = [tp(v.position()) for v in geometry.vertex.values()]
@@ -804,8 +804,8 @@ class Session:
             return OBB.from_points(points, inflate)
         elif isinstance(geometry, NurbsSurface):
             points = []
-            for i in range(geometry.cv_count_dir(0)):
-                for j in range(geometry.cv_count_dir(1)):
+            for i in range(geometry.cv_count(0)):
+                for j in range(geometry.cv_count(1)):
                     p = geometry.get_cv(i, j)
                     if p is not None:
                         points.append(tp(p))
@@ -972,8 +972,8 @@ class Session:
             elif isinstance(geom, Polyline):
                 best_t = float("inf")
                 best_p: Point | None = None
-                for i in range(len(geom.points) - 1):
-                    seg = Line.from_points(geom.points[i], geom.points[i + 1])
+                for i in range(geom.point_count() - 1):
+                    seg = Line.from_points(geom.get_point(i), geom.get_point(i + 1))
                     hp = line_line(ray_line, seg, Tolerance.APPROXIMATION)
                     if hp is None:
                         continue

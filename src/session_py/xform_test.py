@@ -10,42 +10,27 @@ def test_xform_constructor():
     from session_py import Xform
     from session_py import Point
 
-    # Constructor (identity by default)
     x = Xform()
-
-    # Matrix access
     m00 = x.m[0]
     m11 = x.m[5]
     m22 = x.m[10]
     m33 = x.m[15]
-
-    # Check identity
     is_id = x.is_identity()
-
-    # From matrix constructor
     xfrom = Xform.from_matrix([
         1.0, 0.0, 0.0, 0.0,
         0.0, 1.0, 0.0, 0.0,
         0.0, 0.0, 1.0, 0.0,
         5.0, 10.0, 15.0, 1.0,
     ])
-
-    # Minimal and Full String Representation
     xstr = str(x)
     xrepr = repr(x)
-
-    # Copy (duplicates everything except guid)
     xcopy = x.duplicate()
     xother = Xform()
-
-    # Matrix multiplication (*)
     t = Xform.translation(10.0, 0.0, 0.0)
     s = Xform.scale_xyz(2.0, 1.0, 1.0)
     combined = t * s
     p = Point(1.0, 0.0, 0.0)
     result = p.transformed(combined)
-
-    # In-place multiplication (*=)
     t2 = Xform.translation(10.0, 0.0, 0.0)
     t2 *= s
     p = Point(1.0, 0.0, 0.0)
@@ -54,7 +39,7 @@ def test_xform_constructor():
     MINI_CHECK(x.name == "my_xform")
     MINI_CHECK(x.guid != "")
     MINI_CHECK(m00 == 1.0 and m11 == 1.0 and m22 == 1.0 and m33 == 1.0)
-    MINI_CHECK(is_id == True)
+    MINI_CHECK(is_id)
     MINI_CHECK(xfrom.m[12] == 5.0 and xfrom.m[13] == 10.0 and xfrom.m[14] == 15.0)
     MINI_CHECK(xstr == "[1.000000, 0.000000, 0.000000, 0.000000]\n[0.000000, 1.000000, 0.000000, 0.000000]\n[0.000000, 0.000000, 1.000000, 0.000000]\n[0.000000, 0.000000, 0.000000, 1.000000]")
     MINI_CHECK(xrepr == f"Xform(my_xform, {x.guid[:8]})")
@@ -548,26 +533,15 @@ def test_xform_transform_geometry():
     from session_py import Plane
     from session_py import Polyline
 
-    # Simple translation by (10, 20, 30)
     t = Xform.translation(10.0, 20.0, 30.0)
-
-    # Transform Point: (1,2,3) -> (11,22,33)
     pt = Point(1.0, 2.0, 3.0)
     pt_transformed = pt.transformed(t)
-
-    # Transform Vector: translation should NOT affect vectors
     v = Vector(1.0, 0.0, 0.0)
     v_transformed = v.transformed(t)
-
-    # Transform Line: (0,0,0)-(1,0,0) -> (10,20,30)-(11,20,30)
     ln = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
     ln_transformed = ln.transformed(t)
-
-    # Transform Plane: origin (0,0,0) -> (10,20,30)
     pl = Plane(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0))
     pl_transformed = pl.transformed(t)
-
-    # Transform Polyline: 3 points translated
     poly = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)])
     poly_transformed = poly.transformed(t)
     pts = poly_transformed.get_points()
@@ -589,7 +563,6 @@ def test_xform_json_roundtrip():
 
     xform = Xform.translation(1.0, 2.0, 3.0)
     xform.name = "test_xform"
-
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.json"
     xform.file_json_dump(fname)
     loaded = Xform.file_json_load(fname)
@@ -613,7 +586,6 @@ def test_xform_protobuf_roundtrip():
 
     xform = Xform.translation(1.0, 2.0, 3.0)
     xform.name = "test_xform_proto"
-
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_xform.bin"
     guid = xform.guid
     xform.pb_dump(fname)
@@ -633,9 +605,10 @@ def test_xform_protobuf_roundtrip():
 
 @MINI_TEST("Xform", "From Change Of Basis")
 def test_xform_from_change_of_basis():
+    from session_py import Xform
     from session_py import Point
     from session_py import Polyline
-    from session_py import Xform
+
     rect0 = Polyline([
         Point(0.0, 0.0, 0.0),
         Point(2.0, 0.0, 0.0),

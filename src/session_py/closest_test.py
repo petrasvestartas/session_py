@@ -2,7 +2,6 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
-from .tolerance import PI
 
 
 @MINI_TEST("Closest", "Line Point")
@@ -220,7 +219,6 @@ def test_closest_pointcloud_point_kdtree():
     from session_py import PointCloud
     from session_py import Point
 
-    # SpatialKDTree variant: same result as linear scan, O(log n) query
     pc = PointCloud([
         Point(0.0, 0.0, 0.0),
         Point(5.0, 0.0, 0.0),
@@ -244,7 +242,6 @@ def test_closest_lines_closest():
     from session_py import Closest
     from session_py import Line
 
-    # 3 lines: first two sharing an endpoint, third far away
     lines = [
         Line(0.0, 0.0, 0.0, 5.0, 0.0, 0.0),
         Line(5.0, 0.0, 0.0, 10.0, 0.0, 0.0),
@@ -301,7 +298,6 @@ def test_closest_boxes_closest():
     from session_py import AABB
     from session_py import Closest
 
-    # 3 boxes: first two touching faces (shared at x=1), third far away
     boxes = [
         AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0),
         AABB(2.0, 0.0, 0.0, 1.0, 1.0, 1.0),

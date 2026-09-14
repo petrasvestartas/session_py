@@ -1,98 +1,61 @@
 from __future__ import annotations
-from typing import List
-from typing import Optional
+from .matrix import Matrix
 from .mesh import Mesh
+from .plane import Plane
 from .point import Point
 
 
-def _offset_planes(mesh: Mesh, distance: float):
-    planes = {}
-    for fk in mesh.faces():
-        c = mesh.face_centroid(fk)
-        n = mesh.face_normal(fk)
-        if c is None or n is None:
-            continue
-        # plane as (a, b, c, d) where ax+by+cz+d=0, normal=(a,b,c), d=-(n·origin)
-        a, b, c_ = n[0], n[1], n[2]
-        ox = c[0] + distance * a
-        oy = c[1] + distance * b
-        oz = c[2] + distance * c_
-        d = -(a * ox + b * oy + c_ * oz)
-        planes[fk] = (a, b, c_, d)
-    return planes
-
-
-def _intersect_planes(planes, fallback: Point) -> Point:
-    n = len(planes)
-    if n == 0:
+def _intersect_planes(planes: list[Plane], fallback: Point) -> Point:
+    """Least-squares point on the planes, fallback fills any free direction"""
+    if len(planes) == 0:
         return fallback
-    if n == 1:
-        a, b, c, d = planes[0]
-        d_rhs = -d
-        t = d_rhs - (a * fallback[0] + b * fallback[1] + c * fallback[2])
-        return Point(fallback[0] + t * a, fallback[1] + t * b, fallback[2] + t * c)
+    if len(planes) == 1:
+        plane = planes[0]
+        t = -plane.d - (
+            plane.a * fallback[0] + plane.b * fallback[1] + plane.c * fallback[2]
+        )
+        return Point(
+            fallback[0] + t * plane.a,
+            fallback[1] + t * plane.b,
+            fallback[2] + t * plane.c,
+        )
     eps = 1e-8
-    A = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
-    rhs = [0.0, 0.0, 0.0]
-    for (a, b, c, d) in planes:
-        d_rhs = -d
-        A[0][0] += a * a
-        A[0][1] += a * b
-        A[0][2] += a * c
-        A[1][0] += b * a
-        A[1][1] += b * b
-        A[1][2] += b * c
-        A[2][0] += c * a
-        A[2][1] += c * b
-        A[2][2] += c * c
-        rhs[0] += a * d_rhs
-        rhs[1] += b * d_rhs
-        rhs[2] += c * d_rhs
-    A[0][0] += eps
-    A[1][1] += eps
-    A[2][2] += eps
-    rhs[0] += eps * fallback[0]
-    rhs[1] += eps * fallback[1]
-    rhs[2] += eps * fallback[2]
-    det = (A[0][0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1])
-           - A[0][1] * (A[1][0] * A[2][2] - A[1][2] * A[2][0])
-           + A[0][2] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]))
-    if abs(det) < 1e-20:
+    lhs = Matrix(3, 3)
+    rhs = Matrix(3, 1)
+    for plane in planes:
+        row = [plane.a, plane.b, plane.c]
+        for i in range(3):
+            for j in range(3):
+                lhs[i, j] += row[i] * row[j]
+            rhs[i, 0] -= row[i] * plane.d
+    for i in range(3):
+        lhs[i, i] += eps
+        rhs[i, 0] += eps * fallback[i]
+    solution = lhs.solve(rhs)
+    if solution is None:
         return fallback
-    inv_det = 1.0 / det
-    x = inv_det * (rhs[0] * (A[1][1] * A[2][2] - A[1][2] * A[2][1])
-                   - A[0][1] * (rhs[1] * A[2][2] - A[1][2] * rhs[2])
-                   + A[0][2] * (rhs[1] * A[2][1] - A[1][1] * rhs[2]))
-    y = inv_det * (A[0][0] * (rhs[1] * A[2][2] - A[1][2] * rhs[2])
-                   - rhs[0] * (A[1][0] * A[2][2] - A[1][2] * A[2][0])
-                   + A[0][2] * (A[1][0] * rhs[2] - rhs[1] * A[2][0]))
-    z = inv_det * (A[0][0] * (A[1][1] * rhs[2] - rhs[1] * A[2][1])
-                   - A[0][1] * (A[1][0] * rhs[2] - rhs[1] * A[2][0])
-                   + rhs[0] * (A[1][0] * A[2][1] - A[1][1] * A[2][0]))
-    return Point(x, y, z)
+    return Point(solution[0, 0], solution[1, 0], solution[2, 0])
 
 
-def _offset_vertices(mesh: Mesh, planes: dict) -> dict:
-    # one face walk for the whole mesh - per-vertex vertex_faces() is O(F), the loop would be quadratic
-    vertex_face_keys = {}
-    for fk, verts in mesh.face.items():
-        for vk in verts:
-            vertex_face_keys.setdefault(vk, set()).add(fk)
-    result = {}
-    for vk in mesh.vertices():
-        vp = mesh.vertex_point(vk)
-        if vp is None:
-            continue
-        fkeys = sorted(vertex_face_keys.get(vk, ()))
-        if len(fkeys) == 0:
-            result[vk] = vp
-            continue
-        adj = [planes[fk] for fk in fkeys if fk in planes]
-        result[vk] = _intersect_planes(adj, vp)
-    return result
+def _boundary_edges(mesh: Mesh) -> list[tuple[int, int]]:
+    """Naked edges wound the way their face walks them"""
+    directed = set()
+    for fkey in mesh.faces():
+        vertices = mesh.face[fkey]
+        for i in range(len(vertices)):
+            directed.add((vertices[i], vertices[(i + 1) % len(vertices)]))
+    edges = []
+    for u, v in mesh.naked_edges(True):
+        if (u, v) in directed:
+            edges.append((u, v))
+        else:
+            edges.append((v, u))
+    return edges
 
 
 class MeshOffset:
+    """Thick shell of a mesh: original faces, offset faces, quads on naked edges"""
+
     class Layers:
         def __init__(self, top: Mesh, bottom: Mesh, sides: Mesh):
             self.top = top
@@ -101,60 +64,90 @@ class MeshOffset:
 
     @staticmethod
     def from_mesh(mesh: Mesh, distance: float) -> Mesh:
-        planes = _offset_planes(mesh, distance)
-        off_verts = _offset_vertices(mesh, planes)
-
+        """One closed mesh: reversed bottom, offset top, one quad per naked edge"""
+        planes = MeshOffset.offset_planes(mesh, distance)
+        offsets = MeshOffset.offset_vertices(mesh, planes)
         result = Mesh()
-        bot_vmap = {}
-        top_vmap = {}
-        for vk in mesh.vertices():
-            bot_vmap[vk] = result.add_vertex(mesh.vertex_point(vk))
-            top_vmap[vk] = result.add_vertex(off_verts[vk])
-
-        for fk in mesh.faces():
-            fv = mesh.face_vertices(fk)
-            bkeys = [bot_vmap[v] for v in fv]
-            tkeys = [top_vmap[v] for v in fv]
-            result.add_face(list(reversed(bkeys)))
-            result.add_face(tkeys)
-
-        for (u, v) in mesh.naked_edges(True):
-            result.add_face([bot_vmap[u], bot_vmap[v], top_vmap[v], top_vmap[u]])
-
+        bottom = {}
+        top = {}
+        for vkey in mesh.vertices():
+            bottom[vkey] = result.add_vertex(mesh.vertex_point(vkey))
+            top[vkey] = result.add_vertex(offsets[vkey])
+        for fkey in mesh.faces():
+            vertices = mesh.face_vertices(fkey)
+            bottom_face = []
+            top_face = []
+            for vkey in vertices:
+                bottom_face.append(bottom[vkey])
+                top_face.append(top[vkey])
+            bottom_face.reverse()
+            result.add_face(bottom_face)
+            result.add_face(top_face)
+        for u, v in _boundary_edges(mesh):
+            result.add_face([bottom[u], bottom[v], top[v], top[u]])
         return result
 
     @staticmethod
-    def from_mesh_layers(mesh: Mesh, distance: float) -> "MeshOffset.Layers":
-        planes = _offset_planes(mesh, distance)
-        off_verts = _offset_vertices(mesh, planes)
+    def from_mesh_layers(mesh: Mesh, distance: float) -> MeshOffset.Layers:
+        """The same shell as three meshes: top, bottom and sides"""
+        planes = MeshOffset.offset_planes(mesh, distance)
+        offsets = MeshOffset.offset_vertices(mesh, planes)
+        layers = MeshOffset.Layers(Mesh(), Mesh(), Mesh())
+        bottom = {}
+        top = {}
+        for vkey in mesh.vertices():
+            bottom[vkey] = layers.bottom.add_vertex(mesh.vertex_point(vkey))
+            top[vkey] = layers.top.add_vertex(offsets[vkey])
+        for fkey in mesh.faces():
+            vertices = mesh.face_vertices(fkey)
+            bottom_face = []
+            top_face = []
+            for vkey in vertices:
+                bottom_face.append(bottom[vkey])
+                top_face.append(top[vkey])
+            bottom_face.reverse()
+            layers.bottom.add_face(bottom_face)
+            layers.top.add_face(top_face)
+        side_bottom = {}
+        side_top = {}
+        for u, v in _boundary_edges(mesh):
+            for vkey in (u, v):
+                if vkey not in side_bottom:
+                    side_bottom[vkey] = layers.sides.add_vertex(mesh.vertex_point(vkey))
+                if vkey not in side_top:
+                    side_top[vkey] = layers.sides.add_vertex(offsets[vkey])
+            layers.sides.add_face(
+                [side_bottom[u], side_bottom[v], side_top[v], side_top[u]]
+            )
+        return layers
 
-        bot = Mesh()
-        top = Mesh()
-        sides = Mesh()
-        bot_vmap = {}
-        top_vmap = {}
-        for vk in mesh.vertices():
-            bot_vmap[vk] = bot.add_vertex(mesh.vertex_point(vk))
-            top_vmap[vk] = top.add_vertex(off_verts[vk])
+    @staticmethod
+    def offset_planes(mesh: Mesh, distance: float) -> dict[int, Plane]:
+        """Plane of each face translated by distance along its normal, by face key"""
+        planes = {}
+        for fkey in mesh.faces():
+            centroid = mesh.face_centroid(fkey)
+            normal = mesh.face_normal(fkey)
+            if centroid is None or normal is None:
+                continue
+            planes[fkey] = Plane.from_point_normal(centroid + normal * distance, normal)
+        return planes
 
-        for fk in mesh.faces():
-            fv = mesh.face_vertices(fk)
-            bkeys = [bot_vmap[v] for v in fv]
-            tkeys = [top_vmap[v] for v in fv]
-            bot.add_face(list(reversed(bkeys)))
-            top.add_face(tkeys)
-
-        s_bot = {}
-        s_top = {}
-        for (u, v) in mesh.naked_edges(True):
-            if u not in s_bot:
-                s_bot[u] = sides.add_vertex(mesh.vertex_point(u))
-            if v not in s_bot:
-                s_bot[v] = sides.add_vertex(mesh.vertex_point(v))
-            if u not in s_top:
-                s_top[u] = sides.add_vertex(off_verts[u])
-            if v not in s_top:
-                s_top[v] = sides.add_vertex(off_verts[v])
-            sides.add_face([s_bot[u], s_bot[v], s_top[v], s_top[u]])
-
-        return MeshOffset.Layers(top, bot, sides)
+    @staticmethod
+    def offset_vertices(mesh: Mesh, planes: dict[int, Plane]) -> dict[int, Point]:
+        """Offset position of each vertex: least-squares meet of its face planes, by vertex key"""
+        vertex_faces = {}
+        for fkey in mesh.faces():
+            for vkey in mesh.face[fkey]:
+                vertex_faces.setdefault(vkey, []).append(fkey)
+        result = {}
+        for vkey in mesh.vertices():
+            point = mesh.vertex_point(vkey)
+            if point is None:
+                continue
+            adjacent = []
+            for fkey in vertex_faces.get(vkey, []):
+                if fkey in planes:
+                    adjacent.append(planes[fkey])
+            result[vkey] = _intersect_planes(adjacent, point)
+        return result

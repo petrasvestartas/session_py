@@ -1,480 +1,548 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+import copy
 import math
+import sys
 
 from .tolerance import PI
+from .point import Point
+from .vector import Vector
 
 if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .mesh import Mesh
 
-def remesh_nurbssurface_grid(surface: "NurbsSurface", max_u: int, max_v: int) -> "Mesh":
-    return RemeshNurbsSurfaceGrid.from_u_v(surface, max_u, max_v)
+MAX_SUBS = 24
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sampling
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _norm(v: Vector) -> float:
+    """Euclidean length without the zero gate of magnitude()"""
+    return math.sqrt(v.magnitude_squared())
+
+
+def _point_along(s: NurbsSurface, dir: int, t: float, fixed: float) -> Point:
+    """Surface point at t along dir with the other parameter fixed"""
+    return s.point_at(t, fixed) if dir == 0 else s.point_at(fixed, t)
+
+
+def _normal_along(s: NurbsSurface, dir: int, t: float, fixed: float) -> Vector:
+    """Surface normal at t along dir with the other parameter fixed"""
+    return s.normal_at(t, fixed) if dir == 0 else s.normal_at(fixed, t)
+
+
+def _raw_normal(s: NurbsSurface, u: float, v: float) -> Vector:
+    """Sv x Su unnormalized, zero when the surface cannot be evaluated; normal_at would give a +Z sentinel at a pole"""
+    derivatives = s.evaluate(u, v, 1)
+    if len(derivatives) < 3:
+        return Vector(0.0, 0.0, 0.0)
+    return derivatives[2].cross(derivatives[1])
+
+
+def _bbox_diagonal(s: NurbsSurface) -> float:
+    """Diagonal of the control point bounding box"""
+    lo = Point(1e30, 1e30, 1e30)
+    hi = Point(-1e30, -1e30, -1e30)
+    for i in range(s.cv_count(0)):
+        for j in range(s.cv_count(1)):
+            p = s.get_cv(i, j)
+            for k in range(3):
+                lo[k] = min(lo[k], p[k])
+                hi[k] = max(hi[k], p[k])
+    return _norm(hi - lo)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Subdivisions
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _span_angle(
+    s: NurbsSurface, dir: int, t0: float, t1: float, osp: list[float]
+) -> float:
+    """Largest turn of the unit normal in degrees over [t0, t1], sampled at the span midpoints of the other direction"""
+    max_angle = 0.0
+    for si in range(len(osp) - 1):
+        fixed = (osp[si] + osp[si + 1]) * 0.5
+        first = Vector(0.0, 0.0, 0.0)
+        last = Vector(0.0, 0.0, 0.0)
+        has_first = False
+        for k in range(5):
+            n = _normal_along(s, dir, t0 + k * (t1 - t0) / 4.0, fixed)
+            length = _norm(n)
+            if length < 1e-10:
+                continue
+            unit = n / length
+            if not has_first:
+                first = unit
+            has_first = True
+            last = unit
+        if not has_first:
+            continue
+        dot = max(-1.0, min(1.0, first.dot(last)))
+        max_angle = max(max_angle, math.acos(dot) * 180.0 / PI)
+    return max_angle
+
+
+def _span_deviation(
+    s: NurbsSurface, dir: int, t0: float, t1: float, osp: list[float]
+) -> float:
+    """Largest height of [t0, t1] over its chord, at up to four positions across the other direction"""
+    max_dev = 0.0
+    nc = min(len(osp) - 1, 3)
+    for ci in range(nc + 1):
+        fixed = osp[0] + ci * (osp[-1] - osp[0]) / max(nc, 1)
+        p0 = _point_along(s, dir, t0, fixed)
+        p1 = _point_along(s, dir, t1, fixed)
+        for k in range(1, 4):
+            frac = k / 4.0
+            pm = _point_along(s, dir, t0 + frac * (t1 - t0), fixed)
+            max_dev = max(max_dev, _norm(pm - (p0 + (p1 - p0) * frac)))
+    return max_dev
+
+
+def _span_subs(
+    s: NurbsSurface,
+    dir: int,
+    sp: list[float],
+    osp: list[float],
+    max_angle_deg: float,
+    chord_tol: float,
+) -> list[int]:
+    """Subdivisions per span along dir: the normal turn against max_angle_deg, the chord height against chord_tol, at least two on a curved span"""
+    degree = s.degree(dir)
+    subs = [1] * (len(sp) - 1)
+    for i in range(len(sp) - 1):
+        if degree > 1:
+            angle = _span_angle(s, dir, sp[i], sp[i + 1], osp)
+            subs[i] = min(max(math.ceil(angle / max_angle_deg), 1), MAX_SUBS)
+        dev = _span_deviation(s, dir, sp[i], sp[i + 1], osp)
+        if dev > chord_tol:
+            subs[i] = max(
+                subs[i],
+                min(max(math.ceil(math.sqrt(dev / chord_tol)), 2), MAX_SUBS),
+            )
+        if degree > 1:
+            subs[i] = max(subs[i], 2)
+    return subs
+
+
+def _isocurve_length(
+    s: NurbsSurface, dir: int, sp: list[float], fixed: float, n: int
+) -> float:
+    """Length of the iso-curve at fixed along dir as a polyline of n steps"""
+    length = 0.0
+    prev = _point_along(s, dir, sp[0], fixed)
+    for i in range(1, n + 1):
+        next = _point_along(s, dir, sp[0] + i * (sp[-1] - sp[0]) / n, fixed)
+        length += _norm(next - prev)
+        prev = next
+    return length
+
+
+def _balance_subs(
+    s: NurbsSurface,
+    usp: list[float],
+    vsp: list[float],
+    u_subs: list[int],
+    v_subs: list[int],
+) -> None:
+    """Scale up the curved direction whose spacing is more than twice the other's"""
+    total_u = 1
+    total_v = 1
+    for sub in u_subs:
+        total_u += sub
+    for sub in v_subs:
+        total_v += sub
+    u_len = _isocurve_length(s, 0, usp, (vsp[0] + vsp[-1]) * 0.5, max(total_u, 10))
+    v_len = _isocurve_length(s, 1, vsp, (usp[0] + usp[-1]) * 0.5, max(total_v, 10))
+    if u_len <= 1e-14 or v_len <= 1e-14:
+        return
+    ratio = (u_len / total_u) / (v_len / total_v)
+    if ratio > 2.0 and s.degree(0) > 1:
+        scale = math.sqrt(ratio)
+        for i in range(len(u_subs)):
+            u_subs[i] = min(MAX_SUBS, math.ceil(u_subs[i] * scale))
+    elif ratio < 0.5 and s.degree(1) > 1:
+        scale = math.sqrt(1.0 / ratio)
+        for i in range(len(v_subs)):
+            v_subs[i] = min(MAX_SUBS, math.ceil(v_subs[i] * scale))
+
+
+def _twist_subs(
+    s: NurbsSurface, usp: list[float], vsp: list[float], twist_tol: float
+) -> int:
+    """Subdivisions both directions of a bilinear surface need for its twist, 1 when every span centre lies within twist_tol of its diagonal midpoint"""
+    max_twist = 0.0
+    for i in range(len(usp) - 1):
+        for j in range(len(vsp) - 1):
+            pm = s.point_at((usp[i] + usp[i + 1]) * 0.5, (vsp[j] + vsp[j + 1]) * 0.5)
+            p00 = s.point_at(usp[i], vsp[j])
+            p11 = s.point_at(usp[i + 1], vsp[j + 1])
+            max_twist = max(max_twist, _norm(pm - Point.sum(p00, p11) * 0.5))
+    if max_twist <= twist_tol:
+        return 1
+    return min(max(math.ceil(2.0 * math.sqrt(max_twist / twist_tol)), 4), MAX_SUBS)
+
+
+def _make_odd(subs: list[int]) -> None:
+    """One more subdivision on the largest span when the total is even, so a closed direction triangulates seamlessly"""
+    total = 0
+    for sub in subs:
+        total += sub
+    if total % 2 == 0:
+        subs[subs.index(max(subs))] += 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Parameters
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _arclen_params(
+    s: NurbsSurface, dir: int, n: int, sp: list[float], fixed: float
+) -> list[float]:
+    """n parameters spaced evenly by arc length along the iso-curve at fixed"""
+    nsample = max(n * 20, 200)
+    st = [0.0] * (nsample + 1)
+    sl = [0.0] * (nsample + 1)
+    prev = _point_along(s, dir, sp[0], fixed)
+    for k in range(nsample + 1):
+        st[k] = sp[0] + k * (sp[-1] - sp[0]) / nsample
+        if k == 0:
+            continue
+        next = _point_along(s, dir, st[k], fixed)
+        sl[k] = sl[k - 1] + _norm(next - prev)
+        prev = next
+    params = [sp[0]]
+    j = 0
+    for i in range(1, n - 1):
+        target = sl[nsample] * i / (n - 1)
+        while j < nsample and sl[j] < target:
+            j += 1
+        a = j - 1 if j > 0 else 0
+        frac = (target - sl[a]) / (sl[j] - sl[a]) if sl[j] > sl[a] else 0.0
+        params.append(st[a] + frac * (st[j] - st[a]))
+    params.append(sp[-1])
+    return params
+
+
+def _span_params(sp: list[float], subs: list[int]) -> list[float]:
+    """Every span split into its subdivisions, ending on the last span boundary"""
+    params = []
+    for i in range(len(sp) - 1):
+        for sub in range(subs[i]):
+            params.append(sp[i] + sub * (sp[i + 1] - sp[i]) / subs[i])
+    params.append(sp[-1])
+    return params
+
+
+def _fix_closed_gap(params: list[float], domain_end: float) -> None:
+    """Closed direction: drop the duplicate end and fill a wrap gap wider than 1.5 times the largest step"""
+    if len(params) < 3:
+        return
+    params.pop()
+    wrap_gap = domain_end - params[-1]
+    max_gap = 0.0
+    for i in range(1, len(params)):
+        max_gap = max(max_gap, params[i] - params[i - 1])
+    if max_gap <= 0.0 or wrap_gap <= max_gap * 1.5:
+        return
+    extra = math.ceil(wrap_gap / max_gap) - 1
+    step = wrap_gap / (extra + 1)
+    for e in range(1, extra + 1):
+        params.append(params[-1] + step)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Vertices and faces
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _add_vertex_uv(s: NurbsSurface, mesh: Mesh, u: float, v: float) -> int:
+    """Vertex at S(u, v) tagged with its parameters"""
+    key = mesh.add_vertex(s.point_at(u, v))
+    mesh.vertex[key].attributes["u"] = u
+    mesh.vertex[key].attributes["v"] = v
+    return key
+
+
+def _add_grid(
+    s: NurbsSurface,
+    mesh: Mesh,
+    us: list[float],
+    vs: list[float],
+    j_start: int,
+    j_end: int,
+) -> list[int]:
+    """Grid vertices row by row over us and the rows j_start..j_end of vs"""
+    grid = []
+    for u in us:
+        for j in range(j_start, j_end):
+            grid.append(_add_vertex_uv(s, mesh, u, vs[j]))
+    return grid
+
+
+def _add_faces(
+    mesh: Mesh,
+    grid: list[int],
+    nu: int,
+    closed_u: bool,
+    wrap_v: bool,
+    south: int | None,
+    north: int | None,
+) -> None:
+    """Fans from the south pole, checkerboard-split quads, fans to the north pole"""
+    nv = len(grid) // nu
+    nu_faces = nu if closed_u else nu - 1
+    nv_faces = nv if wrap_v else nv - 1
+    if south is not None:
+        for i in range(nu_faces):
+            mesh.add_face([south, grid[((i + 1) % nu) * nv], grid[i * nv]])
+    for i in range(nu_faces):
+        for j in range(nv_faces):
+            i1 = (i + 1) % nu
+            j1 = (j + 1) % nv
+            v00 = grid[i * nv + j]
+            v10 = grid[i1 * nv + j]
+            v01 = grid[i * nv + j1]
+            v11 = grid[i1 * nv + j1]
+            if (i + j) % 2 == 0:
+                mesh.add_face([v00, v10, v11])
+                mesh.add_face([v00, v11, v01])
+            else:
+                mesh.add_face([v00, v10, v01])
+                mesh.add_face([v10, v11, v01])
+    if north is not None:
+        for i in range(nu_faces):
+            mesh.add_face(
+                [grid[i * nv + nv - 1], grid[((i + 1) % nu) * nv + nv - 1], north]
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Normals
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _fan_normals(mesh: Mesh) -> list[Vector]:
+    """Sum of the unnormalized face normals around each vertex key, faces taken in key order"""
+    sums = [Vector(0.0, 0.0, 0.0) for key in range(len(mesh.vertex))]
+    for key in sorted(mesh.face):
+        vertices = mesh.face[key]
+        if len(vertices) < 3:
+            continue
+        p0 = mesh.vertex[vertices[0]].position()
+        p1 = mesh.vertex[vertices[1]].position()
+        p2 = mesh.vertex[vertices[2]].position()
+        n = (p1 - p0).cross(p2 - p0)
+        for vertex in vertices:
+            sums[vertex] += n
+    return sums
+
+
+def _set_normals(
+    s: NurbsSurface, mesh: Mesh, south: int | None, north: int | None
+) -> None:
+    """Unit surface normal on the side of the fan normal; the fan normal at the poles and where the surface normal vanishes, +Z when the fan vanishes too"""
+    sums = _fan_normals(mesh)
+    for key, vd in mesh.vertex.items():
+        n = Vector(0.0, 0.0, 1.0)
+        fan_length = _norm(sums[key])
+        if math.isfinite(fan_length) and fan_length > 0.0:
+            n = sums[key] / fan_length
+        if key != south and key != north:
+            raw = _raw_normal(s, vd.attributes["u"], vd.attributes["v"])
+            length = _norm(raw)
+            if math.isfinite(length) and length > 0.0:
+                n = -raw / length if raw.dot(n) < 0.0 else raw / length
+        vd.set_normal(n[0], n[1], n[2])
+
+
+def _crease_flags(s: NurbsSurface, u: float, v: float) -> int:
+    """Bit per direction where (u, v) sits on an internal knot of full multiplicity whose one-sided normals disagree"""
+    uv = [u, v]
+    flags = 0
+    for dir in range(2):
+        start, end = s.domain(dir)
+        value = uv[dir]
+        if value <= start or value >= end:
+            continue
+        if list(s.m_nurbsknot[dir]).count(value) < s.degree(dir):
+            continue
+        lo = [u, v]
+        hi = [u, v]
+        lo[dir] = math.nextafter(value, -math.inf)
+        hi[dir] = math.nextafter(value, math.inf)
+        a = s.normal_at(lo[0], lo[1])
+        b = s.normal_at(hi[0], hi[1])
+        length = math.sqrt(a.magnitude_squared() * b.magnitude_squared())
+        if length == 0.0:
+            continue
+        dot = a.dot(b) / length
+        if math.isfinite(dot) and dot < 1.0 - 64.0 * sys.float_info.epsilon:
+            flags |= 1 << dir
+    return flags
+
+
+def _crease_side(center: list[float], uv: list[float], flags: int) -> int:
+    """Nudge uv one ulp toward center in each flagged direction; bit per direction nudged upward"""
+    side = 0
+    for dir in range(2):
+        if not flags & (1 << dir):
+            continue
+        high = center[dir] > uv[dir]
+        if high:
+            side |= 1 << dir
+        uv[dir] = math.nextafter(uv[dir], math.inf if high else -math.inf)
+    return side
+
+
+def _crease_target(mesh: Mesh, copies: dict, used: set, key: int, side: int) -> int:
+    """Vertex carrying a corner: the original the first time its key is met, then one copy per (key, side)"""
+    identity = (key, side)
+    if identity in copies:
+        return copies[identity]
+    if key not in used:
+        used.add(key)
+        copies[identity] = key
+        return key
+    target = mesh.add_vertex(mesh.vertex[key].position())
+    mesh.vertex[target] = copy.deepcopy(mesh.vertex[key])
+    copies[identity] = target
+    return target
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RemeshNurbsSurfaceGrid
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 class RemeshNurbsSurfaceGrid:
+    """Grid mesh of a NURBS surface: spans split by normal turn and chord height, poles fanned, seams closed"""
+
     @staticmethod
-    def from_u_v(s: "NurbsSurface", max_u: int, max_v: int) -> "Mesh":
+    def from_u_v(s: NurbsSurface, max_u: int, max_v: int) -> Mesh:
+        """Grid at 20 degrees and 0.5 percent of the bbox diagonal; max_u and max_v fix the parameter counts when positive"""
         return RemeshNurbsSurfaceGrid.from_u_v_q(s, max_u, max_v, 20.0, 0.005)
 
     @staticmethod
-    def from_u_v_q(s: "NurbsSurface", max_u: int, max_v: int, max_angle_deg: float, chord_factor: float) -> "Mesh":
-        """Mesh with angular tolerance in degrees and chord tolerance relative to the bbox.
-
-        Normals are finite unit surface normals aligned with winding. Singular poles use
-        area-weighted adjacent normals in face-key order; zero/non-finite estimates fall
-        back to +Z. No world-unit tolerance gates normal normalization.
-        """
+    def from_u_v_q(
+        s: NurbsSurface,
+        max_u: int,
+        max_v: int,
+        max_angle_deg: float,
+        chord_factor: float,
+    ) -> Mesh:
+        """Grid with the normal turn per subdivision capped at max_angle_deg and the chord height at chord_factor of the bbox diagonal; vertex normals are unit surface normals on the fan side, fan normals at poles"""
         from .mesh import Mesh
-        MAX_ANGLE = max_angle_deg
-        usp = list(s.get_span_vector(0))
-        vsp = list(s.get_span_vector(1))
-        ns_u = len(usp) - 1
-        ns_v = len(vsp) - 1
-        deg_u = s.degree(0)
-        deg_v = s.degree(1)
 
-        minx = miny = minz = 1e30
-        maxx = maxy = maxz = -1e30
-        for i in range(s.cv_count(0)):
-            for j in range(s.cv_count(1)):
-                p = s.get_cv(i, j)
-                if p[0] < minx: minx = p[0]
-                if p[1] < miny: miny = p[1]
-                if p[2] < minz: minz = p[2]
-                if p[0] > maxx: maxx = p[0]
-                if p[1] > maxy: maxy = p[1]
-                if p[2] > maxz: maxz = p[2]
-        dx, dy, dz = maxx - minx, maxy - miny, maxz - minz
-        bbox_diag = math.sqrt(dx*dx + dy*dy + dz*dz)
-
-        def span_subs(dir, sp, osp):
-            n = len(sp) - 1
-            subs = [1] * n
-            n_other = len(osp) - 1
-            s_positions = [(osp[k] + osp[k + 1]) * 0.5 for k in range(n_other)]
-            degree_dir = deg_u if dir == 0 else deg_v
-            for i in range(n):
-                t0, t1 = sp[i], sp[i + 1]
-                if degree_dir > 1:
-                    max_angle = 0.0
-                    for si in range(n_other):
-                        sval = s_positions[si]
-                        fn3 = [0.0, 0.0, 0.0]
-                        ln3 = [0.0, 0.0, 0.0]
-                        has_first = False
-                        for k in range(5):
-                            t = t0 + k * (t1 - t0) / 4.0
-                            nrm = s.normal_at(t, sval) if dir == 0 else s.normal_at(sval, t)
-                            nx, ny, nz = nrm[0], nrm[1], nrm[2]
-                            length = math.sqrt(nx*nx + ny*ny + nz*nz)
-                            if length < 1e-10:
-                                continue
-                            nx /= length
-                            ny /= length
-                            nz /= length
-                            if not has_first:
-                                fn3[0] = nx
-                                fn3[1] = ny
-                                fn3[2] = nz
-                                has_first = True
-                            ln3[0] = nx
-                            ln3[1] = ny
-                            ln3[2] = nz
-                        total_angle = 0.0
-                        if has_first:
-                            dot = fn3[0]*ln3[0] + fn3[1]*ln3[1] + fn3[2]*ln3[2]
-                            total_angle = math.acos(max(-1.0, min(1.0, dot))) * 180.0 / PI
-                        if total_angle > max_angle:
-                            max_angle = total_angle
-                    subs[i] = max(1, min(int(math.ceil(max_angle / MAX_ANGLE)), 24))
-                chord_tol = bbox_diag * chord_factor
-                max_dev = 0.0
-                nc = min(n_other, 3)
-                for ci in range(nc + 1):
-                    sv = osp[0] + ci * (osp[-1] - osp[0]) / max(nc, 1)
-                    if dir == 0:
-                        p0 = s.point_at(t0, sv)
-                        p1 = s.point_at(t1, sv)
-                    else:
-                        p0 = s.point_at(sv, t0)
-                        p1 = s.point_at(sv, t1)
-                    px0, py0, pz0 = p0[0], p0[1], p0[2]
-                    px1, py1, pz1 = p1[0], p1[1], p1[2]
-                    for k in range(1, 4):
-                        frac = k / 4.0
-                        tm = t0 + frac * (t1 - t0)
-                        if dir == 0:
-                            pm = s.point_at(tm, sv)
-                        else:
-                            pm = s.point_at(sv, tm)
-                        pmx, pmy, pmz = pm[0], pm[1], pm[2]
-                        lx = px0 + frac * (px1 - px0)
-                        ly = py0 + frac * (py1 - py0)
-                        lz = pz0 + frac * (pz1 - pz0)
-                        ddx = pmx - lx
-                        ddy = pmy - ly
-                        ddz = pmz - lz
-                        dev = math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz)
-                        if dev > max_dev:
-                            max_dev = dev
-                if max_dev > chord_tol:
-                    chord_subs = max(2, int(math.ceil(math.sqrt(max_dev / chord_tol))))
-                    subs[i] = max(subs[i], min(chord_subs, 24))
-                if degree_dir > 1:
-                    subs[i] = max(subs[i], 2)
-            return subs
-
-        u_subs = span_subs(0, usp, vsp)
-        v_subs = span_subs(1, vsp, usp)
-
-        # Arc-length aspect ratio balancing
-        total_u = sum(u_subs) + 1
-        total_v = sum(v_subs) + 1
-        v_mid = (vsp[0] + vsp[-1]) * 0.5
-        u_mid = (usp[0] + usp[-1]) * 0.5
-        u_len = 0.0
-        p0 = s.point_at(usp[0], v_mid)
-        px0, py0, pz0 = p0[0], p0[1], p0[2]
-        n_sample = max(total_u, 10)
-        for i in range(1, n_sample + 1):
-            u = usp[0] + i * (usp[-1] - usp[0]) / n_sample
-            p1 = s.point_at(u, v_mid)
-            px1, py1, pz1 = p1[0], p1[1], p1[2]
-            u_len += math.sqrt((px1-px0)**2 + (py1-py0)**2 + (pz1-pz0)**2)
-            px0, py0, pz0 = px1, py1, pz1
-        v_len = 0.0
-        p0 = s.point_at(u_mid, vsp[0])
-        px0, py0, pz0 = p0[0], p0[1], p0[2]
-        n_sample = max(total_v, 10)
-        for i in range(1, n_sample + 1):
-            v = vsp[0] + i * (vsp[-1] - vsp[0]) / n_sample
-            p1 = s.point_at(u_mid, v)
-            px1, py1, pz1 = p1[0], p1[1], p1[2]
-            v_len += math.sqrt((px1-px0)**2 + (py1-py0)**2 + (pz1-pz0)**2)
-            px0, py0, pz0 = px1, py1, pz1
-        if u_len > 1e-14 and v_len > 1e-14 and total_u > 0 and total_v > 0:
-            spacing_u = u_len / total_u
-            spacing_v = v_len / total_v
-            ratio = spacing_u / spacing_v
-            if ratio > 2.0 and deg_u > 1:
-                scale = math.sqrt(ratio)
-                u_subs = [min(int(math.ceil(sub * scale)), 24) for sub in u_subs]
-            elif ratio < 0.5 and deg_v > 1:
-                scale = math.sqrt(1.0 / ratio)
-                v_subs = [min(int(math.ceil(sub * scale)), 24) for sub in v_subs]
-
-        # Bilinear twist check (skip for singular surfaces — fan triangulation handles those)
-        if deg_u == 1 and deg_v == 1 and not s.is_singular(0) and not s.is_singular(2):
-            import numpy as _np
-            chord_tol = bbox_diag * chord_factor if bbox_diag > 0 else 1e-6
-            u0_a = _np.array(usp[:-1], dtype=_np.float64)
-            u1_a = _np.array(usp[1:], dtype=_np.float64)
-            v0_a = _np.array(vsp[:-1], dtype=_np.float64)
-            v1_a = _np.array(vsp[1:], dtype=_np.float64)
-            um = ((u0_a + u1_a) * 0.5)
-            vm = ((v0_a + v1_a) * 0.5)
-            um_g = _np.repeat(um, ns_v)
-            vm_g = _np.tile(vm, ns_u)
-            u0_g = _np.repeat(u0_a, ns_v)
-            v0_g = _np.tile(v0_a, ns_u)
-            u1_g = _np.repeat(u1_a, ns_v)
-            v1_g = _np.tile(v1_a, ns_u)
-            all_u = _np.concatenate([um_g, u0_g, u1_g])
-            all_v = _np.concatenate([vm_g, v0_g, v1_g])
-            xyz_twist = s.batch_point_at(all_u, all_v)
-            k_tw = ns_u * ns_v
-            pm_arr = xyz_twist[:k_tw]
-            p00_arr = xyz_twist[k_tw:2 * k_tw]
-            p11_arr = xyz_twist[2 * k_tw:]
-            mid = (p00_arr + p11_arr) * 0.5
-            twist = _np.linalg.norm(pm_arr - mid, axis=1)
-            max_twist = float(twist.max()) if twist.size else 0.0
-            if max_twist > chord_tol:
-                twist_subs = max(4, min(int(math.ceil(2.0 * math.sqrt(max_twist / chord_tol))), 24))
-                u_subs = [max(sub, twist_subs) for sub in u_subs]
-                v_subs = [max(sub, twist_subs) for sub in v_subs]
-
-        closed_u = s.is_closed(0)
-        closed_v = s.is_closed(1)
-
-        # Ensure odd total subdivisions for closed directions (seamless checkerboard triangulation)
-        if closed_u and max_u == 0:
-            if sum(u_subs) % 2 == 0:
-                u_subs[u_subs.index(max(u_subs))] += 1
-        if closed_v and max_v == 0:
-            if sum(v_subs) % 2 == 0:
-                v_subs[v_subs.index(max(v_subs))] += 1
-
-        def arclen_params(n, sp, fixed, is_u):
-            nsample = max(n * 20, 200)
-            st = [sp[0] + k * (sp[-1] - sp[0]) / nsample for k in range(nsample + 1)]
-            sl = [0.0] * (nsample + 1)
-            if is_u:
-                p0 = s.point_at(sp[0], fixed)
-            else:
-                p0 = s.point_at(fixed, sp[0])
-            px0, py0, pz0 = p0[0], p0[1], p0[2]
-            for k in range(1, nsample + 1):
-                if is_u:
-                    p1 = s.point_at(st[k], fixed)
-                else:
-                    p1 = s.point_at(fixed, st[k])
-                px1, py1, pz1 = p1[0], p1[1], p1[2]
-                d = math.sqrt((px1-px0)**2 + (py1-py0)**2 + (pz1-pz0)**2)
-                sl[k] = sl[k-1] + d
-                px0, py0, pz0 = px1, py1, pz1
-            total_len = sl[nsample]
-            params = [sp[0]]
-            j = 0
-            for i in range(1, n - 1):
-                target = total_len * i / (n - 1)
-                while j < nsample and sl[j] < target:
-                    j += 1
-                ta = st[j-1] if j > 0 else st[0]
-                tb = st[j]
-                la = sl[j-1] if j > 0 else sl[0]
-                lb = sl[j]
-                frac = (target - la) / (lb - la) if lb > la else 0.0
-                params.append(ta + frac * (tb - ta))
-            params.append(sp[-1])
-            return params
-
-        # Build parameter arrays
-        if max_u > 0:
-            us = arclen_params(max(max_u, 2), usp, v_mid, True)
-        else:
-            us = []
-            for i in range(ns_u):
-                for sv in range(u_subs[i]):
-                    us.append(usp[i] + sv * (usp[i + 1] - usp[i]) / u_subs[i])
-            us.append(usp[-1])
-        if max_v > 0:
-            vs = arclen_params(max(max_v, 2), vsp, u_mid, False)
-        else:
-            vs = []
-            for i in range(ns_v):
-                for sv in range(v_subs[i]):
-                    vs.append(vsp[i] + sv * (vsp[i + 1] - vsp[i]) / v_subs[i])
-            vs.append(vsp[-1])
-
-        def fix_closed_gap(params, spans, closed):
-            if not closed or len(params) < 3:
-                return params
-            params = params[:-1]
-            domain_end = spans[-1]
-            wrap_gap = domain_end - params[-1]
-            max_gap = 0.0
-            for i in range(1, len(params)):
-                g = params[i] - params[i - 1]
-                if g > max_gap:
-                    max_gap = g
-            if max_gap > 0 and wrap_gap > max_gap * 1.5:
-                extra = int(math.ceil(wrap_gap / max_gap)) - 1
-                step = wrap_gap / (extra + 1)
-                for e in range(1, extra + 1):
-                    params.append(params[-1] + step)
-            return params
-
-        us = fix_closed_gap(us, usp, closed_u)
-        vs = fix_closed_gap(vs, vsp, closed_v)
-        nu = len(us)
-        nv_count = len(vs)
-
+        usp = s.get_span_vector(0)
+        vsp = s.get_span_vector(1)
+        bbox_diag = _bbox_diagonal(s)
+        chord_tol = bbox_diag * chord_factor
+        u_subs = _span_subs(s, 0, usp, vsp, max_angle_deg, chord_tol)
+        v_subs = _span_subs(s, 1, vsp, usp, max_angle_deg, chord_tol)
+        _balance_subs(s, usp, vsp, u_subs, v_subs)
         sing_v0 = s.is_singular(0)
         sing_v1 = s.is_singular(2)
-        j_start = 1 if sing_v0 else 0
-        j_end = nv_count - 1 if sing_v1 else nv_count
-        nv_grid = j_end - j_start
-
-        result = Mesh()
-        south_pole = 0
-        north_pole = 0
+        if s.degree(0) == 1 and s.degree(1) == 1 and not sing_v0 and not sing_v1:
+            twist = _twist_subs(s, usp, vsp, chord_tol if bbox_diag > 0.0 else 1e-6)
+            for i in range(len(u_subs)):
+                u_subs[i] = max(u_subs[i], twist)
+            for i in range(len(v_subs)):
+                v_subs[i] = max(v_subs[i], twist)
+        closed_u = s.is_closed(0)
+        closed_v = s.is_closed(1)
+        if closed_u and max_u == 0:
+            _make_odd(u_subs)
+        if closed_v and max_v == 0:
+            _make_odd(v_subs)
+        u_mid = (usp[0] + usp[-1]) * 0.5
+        v_mid = (vsp[0] + vsp[-1]) * 0.5
+        us = (
+            _arclen_params(s, 0, max(max_u, 2), usp, v_mid)
+            if max_u > 0
+            else _span_params(usp, u_subs)
+        )
+        vs = (
+            _arclen_params(s, 1, max(max_v, 2), vsp, u_mid)
+            if max_v > 0
+            else _span_params(vsp, v_subs)
+        )
+        if closed_u:
+            _fix_closed_gap(us, usp[-1])
+        if closed_v:
+            _fix_closed_gap(vs, vsp[-1])
+        nv = len(vs)
+        mesh = Mesh()
+        south = None
+        north = None
         if sing_v0:
-            p = s.point_at(us[0], vs[0])
-            south_pole = result.add_vertex(p)
-            result.vertex[south_pole].attributes["u"] = us[0]
-            result.vertex[south_pole].attributes["v"] = vs[0]
+            south = _add_vertex_uv(s, mesh, us[0], vs[0])
         if sing_v1:
-            p = s.point_at(us[0], vs[nv_count - 1])
-            north_pole = result.add_vertex(p)
-            result.vertex[north_pole].attributes["u"] = us[0]
-            result.vertex[north_pole].attributes["v"] = vs[nv_count - 1]
-        grid_base = len(result.vertex)
-        import numpy as _np
-        _us_a = _np.asarray(us, dtype=_np.float64)
-        _vs_a = _np.asarray(vs[j_start:j_end], dtype=_np.float64)
-        _grid_us = _np.repeat(_us_a, len(_vs_a))
-        _grid_vs = _np.tile(_vs_a, len(_us_a))
-        _pts_arr = s.batch_point_at(_grid_us, _grid_vs)
-        from .point import Point as _Pt
-        for idx in range(len(_grid_us)):
-            vk = result.add_vertex(_Pt(_pts_arr[idx, 0], _pts_arr[idx, 1], _pts_arr[idx, 2]))
-            result.vertex[vk].attributes["u"] = float(_grid_us[idx])
-            result.vertex[vk].attributes["v"] = float(_grid_vs[idx])
-
-        def grid_idx(i, j):
-            return grid_base + i * nv_grid + (j - j_start)
-
-        nu_faces = nu if closed_u else nu - 1
-
-        # South pole fan
-        if sing_v0:
-            for i in range(nu_faces):
-                i1 = (i + 1) % nu
-                result.add_face([south_pole, grid_idx(i1, j_start), grid_idx(i, j_start)])
-
-        # Interior grid faces
-        nv_interior = nv_grid - 1
-        if closed_v and not sing_v0 and not sing_v1:
-            nv_interior = nv_grid
-        for i in range(nu_faces):
-            for jj in range(nv_interior):
-                j = jj + j_start
-                i1 = (i + 1) % nu
-                if closed_v and not sing_v0 and not sing_v1:
-                    j1 = (jj + 1) % nv_grid + j_start
-                else:
-                    j1 = j + 1
-                v00 = grid_idx(i, j)
-                v10 = grid_idx(i1, j)
-                v01 = grid_idx(i, j1)
-                v11 = grid_idx(i1, j1)
-                if (i + jj) % 2 == 0:
-                    result.add_face([v00, v10, v11])
-                    result.add_face([v00, v11, v01])
-                else:
-                    result.add_face([v00, v10, v01])
-                    result.add_face([v10, v11, v01])
-
-        # North pole fan
-        if sing_v1:
-            j_last = j_end - 1
-            for i in range(nu_faces):
-                i1 = (i + 1) % nu
-                result.add_face([grid_idx(i, j_last), grid_idx(i1, j_last), north_pole])
-
-        # Compute vertex normals from face normals
-        if result.vertex:
-            max_vkey = max(result.vertex.keys())
-            vnx = [0.0] * (max_vkey + 1)
-            vny = [0.0] * (max_vkey + 1)
-            vnz = [0.0] * (max_vkey + 1)
-            for fi in sorted(result.face):
-                vids = result.face[fi]
-                if len(vids) < 3:
-                    continue
-                pos0 = result.vertex[vids[0]].position()
-                pos1 = result.vertex[vids[1]].position()
-                pos2 = result.vertex[vids[2]].position()
-                e1x, e1y, e1z = pos1[0]-pos0[0], pos1[1]-pos0[1], pos1[2]-pos0[2]
-                e2x, e2y, e2z = pos2[0]-pos0[0], pos2[1]-pos0[1], pos2[2]-pos0[2]
-                fnx = e1y*e2z - e1z*e2y
-                fny = e1z*e2x - e1x*e2z
-                fnz = e1x*e2y - e1y*e2x
-                for vi in vids:
-                    vnx[vi] += fnx
-                    vny[vi] += fny
-                    vnz[vi] += fnz
-            for vk in result.vertex:
-                ln = math.sqrt(vnx[vk]**2 + vny[vk]**2 + vnz[vk]**2)
-                fx, fy, fz = 0.0, 0.0, 1.0
-                if math.isfinite(ln) and ln > 0.0:
-                    fx, fy, fz = vnx[vk] / ln, vny[vk] / ln, vnz[vk] / ln
-                nx, ny, nz = fx, fy, fz
-                vd = result.vertex[vk]
-                u, v = vd.attributes.get("u"), vd.attributes.get("v")
-                is_pole = (sing_v0 and vk == south_pole) or (sing_v1 and vk == north_pole)
-                # Surface normals preserve smooth interiors; singular poles use adjacent facets.
-                if not is_pole and u is not None and v is not None:
-                    # Reject normal_at's singular +Z sentinel, including U-collapsed corners.
-                    derivatives = s.evaluate(u, v, 1)
-                    na = [0.0, 0.0, 0.0]
-                    if len(derivatives) >= 3:
-                        normal = derivatives[2].cross(derivatives[1])
-                        na = [normal[0], normal[1], normal[2]]
-                    nl = math.sqrt(na[0]*na[0] + na[1]*na[1] + na[2]*na[2])
-                    if math.isfinite(nl) and nl > 0.0:
-                        nx, ny, nz = na[0] / nl, na[1] / nl, na[2] / nl
-                        if nx * fx + ny * fy + nz * fz < 0.0:
-                            nx, ny, nz = -nx, -ny, -nz
-                vd.set_normal(nx, ny, nz)
-
-        RemeshNurbsSurfaceGrid._split_crease_normals(s, result)
-        return result
-
+            north = _add_vertex_uv(s, mesh, us[0], vs[nv - 1])
+        grid = _add_grid(
+            s, mesh, us, vs, 1 if sing_v0 else 0, nv - 1 if sing_v1 else nv
+        )
+        _add_faces(
+            mesh,
+            grid,
+            len(us),
+            closed_u,
+            closed_v and not sing_v0 and not sing_v1,
+            south,
+            north,
+        )
+        _set_normals(s, mesh, south, north)
+        RemeshNurbsSurfaceGrid._split_crease_normals(s, mesh)
+        return mesh
 
     @staticmethod
-    def _split_crease_normals(s: "NurbsSurface", mesh: "Mesh") -> None:
-        """Split shading vertices at internal C0 knots with different one-sided normals."""
-        import copy
-        import sys
+    def _split_crease_normals(s: NurbsSurface, mesh: Mesh) -> None:
+        """Split shading vertices at internal C0 knots whose one-sided normals disagree"""
         candidates = {}
         for key, vd in mesh.vertex.items():
             if "u" not in vd.attributes or "v" not in vd.attributes:
                 continue
-            uv = [vd.attributes["u"], vd.attributes["v"]]
-            flags = 0
-            for direction in range(2):
-                start, end = s.domain(direction)
-                value = uv[direction]
-                if value <= start or value >= end:
-                    continue
-                multiplicity = sum(knot == value for knot in s.m_nurbsknot[direction])
-                if multiplicity < s.degree(direction):
-                    continue
-                lo, hi = list(uv), list(uv)
-                lo[direction] = math.nextafter(value, -math.inf)
-                hi[direction] = math.nextafter(value, math.inf)
-                a, b = s.normal_at(*lo), s.normal_at(*hi)
-                aa = a[0]*a[0]+a[1]*a[1]+a[2]*a[2]
-                bb = b[0]*b[0]+b[1]*b[1]+b[2]*b[2]
-                if aa <= 0.0 or bb <= 0.0:
-                    continue
-                dot = (a[0]*b[0]+a[1]*b[1]+a[2]*b[2]) / math.sqrt(aa*bb)
-                if math.isfinite(dot) and dot < 1.0 - 64.0*sys.float_info.epsilon:
-                    flags |= 1 << direction
+            flags = _crease_flags(s, vd.attributes["u"], vd.attributes["v"])
             if flags:
                 candidates[key] = flags
         if not candidates:
             return
-        copies, used = {}, set()
-        for face_key in sorted(mesh.face):
-            vertices = mesh.face[face_key]
-            center = [sum(mesh.vertex[key].attributes[name] for key in vertices) / len(vertices) for name in ("u", "v")]
+        copies = {}
+        used = set()
+        for face_key, vertices in mesh.face.items():
+            center = [0.0, 0.0]
+            for key in vertices:
+                center[0] += mesh.vertex[key].attributes["u"]
+                center[1] += mesh.vertex[key].attributes["v"]
+            center[0] /= len(vertices)
+            center[1] /= len(vertices)
             face_normal = mesh.face_normal(face_key)
-            split = list(vertices)
-            for corner, key in enumerate(vertices):
+            for corner in range(len(vertices)):
+                key = vertices[corner]
                 if key not in candidates:
                     continue
-                flags, side = candidates[key], 0
-                original = copy.deepcopy(mesh.vertex[key])
-                uv = [original.attributes["u"], original.attributes["v"]]
-                for direction in range(2):
-                    if not flags & (1 << direction):
-                        continue
-                    high = center[direction] > uv[direction]
-                    if high:
-                        side |= 1 << direction
-                    uv[direction] = math.nextafter(uv[direction], math.inf if high else -math.inf)
-                identity = (key, side)
-                if identity in copies:
-                    target = copies[identity]
-                else:
-                    if key not in used:
-                        target = key
-                        used.add(key)
-                    else:
-                        target = mesh.add_vertex(original.position())
-                        mesh.vertex[target] = original
-                    copies[identity] = target
-                n = s.normal_at(*uv)
-                length = math.sqrt(n[0]*n[0]+n[1]*n[1]+n[2]*n[2])
+                uv = [
+                    mesh.vertex[key].attributes["u"],
+                    mesh.vertex[key].attributes["v"],
+                ]
+                side = _crease_side(center, uv, candidates[key])
+                target = _crease_target(mesh, copies, used, key, side)
+                n = s.normal_at(uv[0], uv[1])
+                length = _norm(n)
                 if math.isfinite(length) and length > 0.0:
-                    sign = 1.0
-                    if face_normal is not None and sum(n[k]*face_normal[k] for k in range(3)) < 0.0:
-                        sign = -1.0
-                    mesh.vertex[target].set_normal(sign*n[0]/length, sign*n[1]/length, sign*n[2]/length)
-                split[corner] = target
-            mesh.face[face_key] = split
+                    sign = (
+                        -1.0
+                        if face_normal is not None and n.dot(face_normal) < 0.0
+                        else 1.0
+                    )
+                    mesh.vertex[target].set_normal(
+                        sign * n[0] / length, sign * n[1] / length, sign * n[2] / length
+                    )
+                vertices[corner] = target
         mesh.rebuild_halfedges()

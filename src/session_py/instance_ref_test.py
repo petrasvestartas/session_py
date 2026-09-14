@@ -9,37 +9,32 @@ def test_instance_ref_constructor():
     from session_py import InstanceRef
     from session_py import Xform
 
-    # Constructor from a definition guid and a placement transform
     x = Xform.translation(10.0, 20.0, 30.0)
-    r = InstanceRef("def-123", x.duplicate())
+    inst = InstanceRef("def-123", x)
 
-    # Setter on a copy (keep r pristine for the == check below)
-    rset = r.duplicate()
-    rset[0] = 2.0
-    m0 = rset[0]
+    instset = inst.duplicate()
+    instset[0] = 2.0
+    m0 = instset[0]
 
-    # Minimal and Full String Representation
-    rstr = str(r)
-    rrepr = repr(r)
+    istr = str(inst)
+    irepr = repr(inst)
 
-    # Copy (duplicate everything but guid)
-    rcopy = r.duplicate()
-    rother = InstanceRef("def-123", x.duplicate())
+    instcopy = inst.duplicate()
+    instother = InstanceRef("def-123", x)
+    named = InstanceRef.with_name("custom", "def-9", Xform.identity())
 
-    # with_name constructor
-    rwn = InstanceRef.with_name("custom", "def-9", Xform.identity())
-
-    MINI_CHECK(r.name == "my_instance_ref")
-    MINI_CHECK(r.definition_guid == "def-123")
-    MINI_CHECK(len(r.guid) > 0)
+    MINI_CHECK(inst.name == "my_instance_ref")
+    MINI_CHECK(inst.definition_guid == "def-123")
+    MINI_CHECK(len(inst.guid) > 0)
     MINI_CHECK(m0 == 2.0)
-    MINI_CHECK(r[12] == 10.0 and r[13] == 20.0 and r[14] == 30.0)
-    MINI_CHECK("def-123" in rstr)
-    MINI_CHECK("InstanceRef" in rrepr and "my_instance_ref" in rrepr)
-    MINI_CHECK(rcopy.guid != r.guid)
-    MINI_CHECK(r == rother)
-    MINI_CHECK(r != rwn)
-    MINI_CHECK(rwn.name == "custom" and rwn.definition_guid == "def-9")
+    MINI_CHECK(inst[12] == 10.0 and inst[13] == 20.0 and inst[14] == 30.0)
+    MINI_CHECK("def-123" in istr)
+    MINI_CHECK("InstanceRef" in irepr)
+    MINI_CHECK("my_instance_ref" in irepr)
+    MINI_CHECK(instcopy.guid != inst.guid)
+    MINI_CHECK(inst == instother)
+    MINI_CHECK(inst != named)
+    MINI_CHECK(named.name == "custom" and named.definition_guid == "def-9")
 
 
 @MINI_TEST("InstanceRef", "Transformation")
@@ -47,13 +42,12 @@ def test_instance_ref_transformation():
     from session_py import InstanceRef
     from session_py import Xform
 
-    r = InstanceRef("def", Xform.translation(1.0, 0.0, 0.0))
-    moved = r.transformed(Xform.translation(5.0, 0.0, 0.0))  # Make a copy
-    r.transform(Xform.translation(5.0, 0.0, 0.0))  # compose in place
+    inst = InstanceRef("def", Xform.translation(1.0, 0.0, 0.0))
+    moved = inst.transformed(Xform.translation(5.0, 0.0, 0.0))
+    inst.transform(Xform.translation(5.0, 0.0, 0.0))
 
-    # translation(5) * translation(1) => translation(6)
     MINI_CHECK(TOLERANCE.is_close(moved[12], 6.0))
-    MINI_CHECK(TOLERANCE.is_close(r[12], 6.0))
+    MINI_CHECK(TOLERANCE.is_close(inst[12], 6.0))
 
 
 @MINI_TEST("InstanceRef", "Json Roundtrip")
@@ -61,12 +55,11 @@ def test_instance_ref_json_roundtrip():
     from session_py import InstanceRef
     from session_py import Xform
 
-    r = InstanceRef("def-abc", Xform.translation(1.0, 2.0, 3.0))
-    r.name = "test_ref"
-    r.flags = 7
+    inst = InstanceRef("def-abc", Xform.translation(1.0, 2.0, 3.0))
+    inst.name = "test_ref"
+    inst.flags = 7
 
-    # JSON object
-    j = r.__jsondump__()
+    j = inst.__jsondump__()
     loaded_j = InstanceRef.__jsonload__(j)
 
     MINI_CHECK(loaded_j.name == "test_ref")
@@ -74,16 +67,16 @@ def test_instance_ref_json_roundtrip():
     MINI_CHECK(loaded_j.flags == 7)
     MINI_CHECK(TOLERANCE.is_close(loaded_j[12], 1.0))
 
-    # String
-    s = r.file_json_dumps()
+    s = inst.file_json_dumps()
     loaded_s = InstanceRef.file_json_loads(s)
+
     MINI_CHECK(loaded_s.name == "test_ref")
     MINI_CHECK(loaded_s.definition_guid == "def-abc")
 
-    # File
-    fname = "serialization/test_instance_ref.json"
-    r.file_json_dump(fname)
-    loaded = InstanceRef.file_json_load(fname)
+    filename = "serialization/test_instance_ref.json"
+    inst.file_json_dump(filename)
+    loaded = InstanceRef.file_json_load(filename)
+
     MINI_CHECK(loaded.name == "test_ref")
     MINI_CHECK(loaded.definition_guid == "def-abc")
     MINI_CHECK(loaded.flags == 7)
@@ -97,28 +90,27 @@ def test_instance_ref_protobuf_roundtrip():
     from session_py import InstanceRef
     from session_py import Xform
 
-    r = InstanceRef("def-xyz", Xform.translation(1.0, 2.0, 3.0))
-    r.name = "test_ref"
-    r.flags = 5
+    inst = InstanceRef("def-xyz", Xform.translation(1.0, 2.0, 3.0))
+    inst.name = "test_ref"
+    inst.flags = 5
 
-    # Bytes
-    guid = r.guid
-    b = r.pb_dumps()
-    loaded_s = InstanceRef.pb_loads(b)
+    guid = inst.guid
+    b = inst.pb_dumps()
+    loaded_b = InstanceRef.pb_loads(b)
 
-    MINI_CHECK(loaded_s.name == "test_ref")
-    MINI_CHECK(loaded_s.definition_guid == "def-xyz")
-    MINI_CHECK(loaded_s.flags == 5)
-    MINI_CHECK(loaded_s.guid == guid)
-    MINI_CHECK(TOLERANCE.is_close(loaded_s[14], 3.0))
+    MINI_CHECK(loaded_b.name == "test_ref")
+    MINI_CHECK(loaded_b.definition_guid == "def-xyz")
+    MINI_CHECK(loaded_b.flags == 5)
+    MINI_CHECK(loaded_b.guid == guid)
+    MINI_CHECK(TOLERANCE.is_close(loaded_b[14], 3.0))
 
-    # File
-    fname = "serialization/test_instance_ref.bin"
-    r.pb_dump(fname)
-    loaded = InstanceRef.pb_load(fname)
+    filename = "serialization/test_instance_ref.bin"
+    inst.pb_dump(filename)
+    loaded = InstanceRef.pb_load(filename)
+
     MINI_CHECK(loaded.name == "test_ref")
     MINI_CHECK(loaded.definition_guid == "def-xyz")
-    MINI_CHECK(loaded.guid == r.guid)
+    MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded[12], 1.0))
     MINI_CHECK(TOLERANCE.is_close(loaded[13], 2.0))
     MINI_CHECK(TOLERANCE.is_close(loaded[14], 3.0))

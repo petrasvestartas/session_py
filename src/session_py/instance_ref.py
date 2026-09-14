@@ -1,9 +1,12 @@
 from __future__ import annotations
-from typing import Union
-from typing import Optional
 from typing import TYPE_CHECKING
+from typing import Union
+import copy
+import json
 import uuid
 from .color import Color
+from .tolerance import Tolerance
+from .tolerance import TOLERANCE
 from .xform import Xform
 
 if TYPE_CHECKING:
@@ -11,49 +14,37 @@ if TYPE_CHECKING:
 
 
 class InstanceRef:
-    """A block reference: places a definition (by guid) at a transform.
+    """A block reference: places a definition (by guid) at a transform"""
 
-    The only per-instance data is the placement ``xform``; the geometry lives
-    once in the definition the ``definition_guid`` points to. Mirrors the Rhino
-    block model.
+    __slots__ = ("_guid", "name", "definition_guid", "xform", "color", "flags")
 
-    Parameters
-    ----------
-    definition_guid : str, optional
-        Guid of the definition this instance places. Defaults to "".
-    xform : Xform, optional
-        Placement transform. Defaults to identity.
-
-    Attributes
-    ----------
-    guid : str
-        Unique identifier of the instance.
-    name : str
-        Name of the instance.
-    definition_guid : str
-        Guid of the definition this instance places.
-    xform : Xform
-        Placement transform (the only per-instance data).
-    color : Color
-        Per-instance color override.
-    flags : int
-        Reserved: selection / cull / visibility.
-    """
-
-    def __init__(self, definition_guid: str = "", xform: Optional["Xform"] = None):
+    def __init__(self, definition_guid: str = "", xform: Xform | None = None):
         self._guid = None
         self.name = "my_instance_ref"
         self.definition_guid = definition_guid
-        self._xform = xform
-        self._color = None
+        self.xform = Xform.identity() if xform is None else xform.duplicate()
+        self.color = Color.white()
         self.flags = 0
 
+    def __deepcopy__(self, memo):
+        """Copy (new guid, same data)"""
+        result = InstanceRef(self.definition_guid, self.xform)
+        result.name = self.name
+        result.color = copy.deepcopy(self.color, memo)
+        result.flags = self.flags
+        memo[id(self)] = result
+        return result
+
+    def duplicate(self) -> "InstanceRef":
+        """Copy (new guid, same data)"""
+        return copy.deepcopy(self)
+
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
 
@@ -61,82 +52,35 @@ class InstanceRef:
     def guid(self, value: str) -> None:
         self._guid = value
 
-    @property
-    def xform(self) -> "Xform":
-        if getattr(self, '_xform', None) is None:
-            self._xform = Xform.identity()
-        return self._xform
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Static constructors
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    @xform.setter
-    def xform(self, value: "Xform") -> None:
-        self._xform = value
-
-    @property
-    def color(self) -> "Color":
-        if self._color is None:
-            self._color = Color.white()
-        return self._color
-
-    @color.setter
-    def color(self, value: "Color") -> None:
-        self._color = value
-
-    @classmethod
-    def with_name(cls, name: str, definition_guid: str, xform: "Xform") -> "InstanceRef":
-        """Create an instance reference with a specific name.
-
-        Returns
-        -------
-        InstanceRef
-            New named instance reference.
-        """
-        ref = cls(definition_guid, xform)
+    @staticmethod
+    def with_name(name: str, definition_guid: str, xform: Xform) -> "InstanceRef":
+        """Instance with a name, a definition guid and a placement"""
+        ref = InstanceRef(definition_guid, xform)
         ref.name = name
         return ref
 
-    def duplicate(self) -> "InstanceRef":
-        """Create a deep copy of this instance with a new GUID.
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Operators
+    # ═══════════════════════════════════════════════════════════════════════════
 
-        Returns
-        -------
-        :class:`InstanceRef`
-            A new InstanceRef with identical values but a different GUID.
-        """
-        import copy
-        result = copy.deepcopy(self)
-        result.guid = str(uuid.uuid4())
-        return result
-
-    def transform(self, t: "Xform") -> None:
-        """Compose an extra transform onto the placement (in-place): xform = t * xform."""
-        self.xform = t * self.xform
-
-    def transformed(self, t: "Xform") -> "InstanceRef":
-        """Return a copy with an extra transform composed onto the placement.
-
-        Returns
-        -------
-        :class:`InstanceRef`
-            A new InstanceRef with the transform composed.
-        """
-        import copy
-        result = copy.deepcopy(self)
-        result.transform(t)
-        return result
-
-    def __getitem__(self, index):
-        """Get placement matrix element by index (0-15, column-major)."""
+    def __getitem__(self, index: int) -> float:
+        """Placement matrix entry by index (0..15, column-major)"""
+        if index < 0 or index >= 16:
+            raise IndexError("Index out of bounds")
         return self.xform.m[index]
 
-    def __setitem__(self, index, value):
-        """Set placement matrix element by index (0-15, column-major)."""
+    def __setitem__(self, index: int, value: float) -> None:
         if index < 0 or index >= 16:
             raise IndexError("Index out of bounds")
         self.xform.m[index] = value
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if not isinstance(other, InstanceRef):
-            return NotImplemented
+            return False
         return (
             self.definition_guid == other.definition_guid
             and self.xform == other.xform
@@ -144,76 +88,72 @@ class InstanceRef:
             and self.flags == other.flags
         )
 
-    def __ne__(self, other):
-        result = self.__eq__(other)
-        if result is NotImplemented:
-            return result
-        return not result
+    def __ne__(self, other) -> bool:
+        return not self.__eq__(other)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Polymorphic JSON Serialization
+    # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
 
-    def __jsondump__(self):
-        """Serialize to polymorphic JSON format with type field."""
-        # Alphabetical order to match Rust's serde_json
+    def transform(self, t: Xform) -> None:
+        """Compose in place: xform = t * xform"""
+        self.xform = t * self.xform
+
+    def transformed(self, t: Xform) -> "InstanceRef":
+        """Composed copy"""
+        result = self.duplicate()
+        result.transform(t)
+        return result
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # JSON
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __jsondump__(self) -> dict:
         return {
             "color": self.color.__jsondump__(),
             "definition_guid": self.definition_guid,
             "flags": self.flags,
             "guid": self.guid,
             "name": self.name,
-            "type": f"{self.__class__.__name__}",
+            "type": "InstanceRef",
             "xform": self.xform.__jsondump__(),
         }
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write JSON to file."""
-        import json
-        with open(filepath, 'w') as f:
-            json.dump(self.__jsondump__(), f, indent=2)
-
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "InstanceRef":
-        """Read JSON from file."""
-        import json
-        with open(filepath) as f:
-            data = json.load(f)
-        return cls.__jsonload__(data)
+    def __jsonload__(
+        cls, data: dict, guid: str = None, name: str = None
+    ) -> "InstanceRef":
+        from .file_encoders import file_decode_node
+
+        ref = cls(data["definition_guid"], file_decode_node(data["xform"]))
+        ref.color = file_decode_node(data["color"])
+        ref.flags = data["flags"]
+        ref.guid = guid if guid is not None else data["guid"]
+        ref.name = name if name is not None else data["name"]
+        return ref
 
     def file_json_dumps(self) -> str:
-        """Convert to JSON string."""
-        import json
         return json.dumps(self.__jsondump__())
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> "InstanceRef":
-        """Load from JSON string."""
-        import json
         return cls.__jsonload__(json.loads(json_string))
 
-    @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
-        """Deserialize from polymorphic JSON format."""
-        from .file_encoders import file_decode_node
+    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+        with open(filepath, "w") as file:
+            json.dump(self.__jsondump__(), file, indent=2)
 
-        ref = cls(data.get("definition_guid", ""))
-        ref.guid = guid if guid is not None else data.get("guid", ref.guid)
-        ref.name = name if name is not None else data.get("name", ref.name)
-        if "xform" in data:
-            ref.xform = file_decode_node(data["xform"])
-        if "color" in data:
-            ref.color = file_decode_node(data["color"])
-        if "flags" in data:
-            ref.flags = data["flags"]
-        return ref
+    @classmethod
+    def file_json_load(cls, filepath: Union[str, "Path"]) -> "InstanceRef":
+        with open(filepath) as file:
+            return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Protobuf Serialization
+    # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
 
     def pb_dumps(self) -> bytes:
-        """Convert to protobuf binary format."""
         from .proto import instance_ref_pb2
 
         proto = instance_ref_pb2.InstanceRef()
@@ -222,7 +162,9 @@ class InstanceRef:
         proto.name = self.name
         proto.definition_guid = self.definition_guid
         proto.xform.name = self.xform.name
-        proto.xform.matrix.extend(self.xform.m)
+        for i in range(16):
+            proto.xform.matrix.append(self.xform.m[i])
+        proto.color.name = self.color.name
         proto.color.r = self.color.r
         proto.color.g = self.color.g
         proto.color.b = self.color.b
@@ -232,42 +174,44 @@ class InstanceRef:
 
     @classmethod
     def pb_loads(cls, data: bytes) -> "InstanceRef":
-        """Create InstanceRef from protobuf binary data."""
         from .proto import instance_ref_pb2
 
         proto = instance_ref_pb2.InstanceRef()
         proto.ParseFromString(data)
-
-        ref = cls(proto.definition_guid)
+        ref = cls()
         if proto.guid:
             ref.guid = proto.guid
         ref.name = proto.name
-        if proto.HasField('xform'):
-            ref.xform = Xform()
-            ref.xform.name = proto.xform.name
-            ref.xform.m = list(proto.xform.matrix)
-        if proto.HasField('color'):
-            ref.color = Color(proto.color.r, proto.color.g, proto.color.b, proto.color.a)
+        ref.definition_guid = proto.definition_guid
+        ref.xform.name = proto.xform.name
+        for i in range(min(len(proto.xform.matrix), 16)):
+            ref.xform.m[i] = proto.xform.matrix[i]
+        ref.color.name = proto.color.name
+        ref.color.r = proto.color.r
+        ref.color.g = proto.color.g
+        ref.color.b = proto.color.b
+        ref.color.a = proto.color.a
         ref.flags = proto.flags
         return ref
 
     def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write protobuf to file."""
-        data = self.pb_dumps()
-        with open(filepath, 'wb') as f:
-            f.write(data)
+        with open(filepath, "wb") as file:
+            file.write(self.pb_dumps())
 
     @classmethod
     def pb_load(cls, filepath: Union[str, "Path"]) -> "InstanceRef":
-        """Read protobuf from file."""
-        with open(filepath, 'rb') as f:
-            data = f.read()
-        return cls.pb_loads(data)
+        with open(filepath, "rb") as file:
+            return cls.pb_loads(file.read())
 
-    def __str__(self):
-        """String representation (definition + placement translation)."""
-        return f"{self.definition_guid} @ [{self.xform.m[12]}, {self.xform.m[13]}, {self.xform.m[14]}]"
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    def __repr__(self):
-        """Detailed representation."""
+    def __str__(self) -> str:
+        """definition_guid @ [tx, ty, tz]"""
+        prec = Tolerance.ROUNDING
+        return f"{self.definition_guid} @ [{TOLERANCE.format_number(self.xform.m[12], prec)}, {TOLERANCE.format_number(self.xform.m[13], prec)}, {TOLERANCE.format_number(self.xform.m[14], prec)}]"
+
+    def __repr__(self) -> str:
+        """InstanceRef(name, definition_guid, Color(...), flags)"""
         return f"InstanceRef({self.name}, {self.definition_guid}, {repr(self.color)}, {self.flags})"

@@ -6,7 +6,7 @@ from .pointcloud import PointCloud
 def write_xyz_to_string(cloud: PointCloud) -> str:
     s = ""
     for p in cloud.get_points():
-        s += f"{p.x} {p.y} {p.z}\n"
+        s += f"{p[0]} {p[1]} {p[2]}\n"
     return s
 
 
@@ -15,17 +15,10 @@ def write_xyz(cloud: PointCloud, filepath: str) -> None:
         f.write(write_xyz_to_string(cloud))
 
 
-def read_xyz(filepath: str) -> PointCloud:
-    with open(filepath) as f:
-        content = f.read()
-    return read_xyz_from_str(content)
-
-
 def read_xyz_from_str(content: str) -> PointCloud:
     cloud = PointCloud()
-    for raw in content.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
+    for line in content.splitlines():
+        if not line or line[0] == "#":
             continue
         parts = line.split()
         if len(parts) < 3:
@@ -38,5 +31,7 @@ def read_xyz_from_str(content: str) -> PointCloud:
     return cloud
 
 
-save_xyz = write_xyz
-load_xyz = read_xyz
+def read_xyz(filepath: str) -> PointCloud:
+    with open(filepath) as f:
+        content = f.read()
+    return read_xyz_from_str(content)

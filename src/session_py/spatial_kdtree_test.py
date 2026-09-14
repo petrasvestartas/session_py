@@ -1,4 +1,3 @@
-import math
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
@@ -7,10 +6,8 @@ from .tolerance import TOLERANCE
 
 @MINI_TEST("SpatialKDTree", "Constructor")
 def test_kdtree_constructor():
-    from session_py import SpatialKDTree
     from session_py import Point
-
-    # SpatialKDTree: O(n log n) build, O(log n) nearest — static point set closest search
+    from session_py import SpatialKDTree
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(3.0, 0.0, 0.0),
@@ -25,11 +22,8 @@ def test_kdtree_constructor():
 
 @MINI_TEST("SpatialKDTree", "Nearest")
 def test_kdtree_nearest():
-    from session_py import SpatialKDTree
     from session_py import Point
-
-    # 5 known points on a line: 0, 1, 2, 3, 4
-    # Query at 1.1 — nearest should be index 1 (point at x=1), distance 0.1
+    from session_py import SpatialKDTree
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -47,11 +41,8 @@ def test_kdtree_nearest():
 
 @MINI_TEST("SpatialKDTree", "Nearest K")
 def test_kdtree_nearest_k():
-    from session_py import SpatialKDTree
     from session_py import Point
-
-    # 5 points on X axis: 0, 1, 2, 3, 4
-    # Query at 1.5 — 3 nearest are: x=1 (d=0.5), x=2 (d=0.5), x=3 (d=1.5)
+    from session_py import SpatialKDTree
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -71,11 +62,8 @@ def test_kdtree_nearest_k():
 
 @MINI_TEST("SpatialKDTree", "Radius Search")
 def test_kdtree_radius_search():
-    from session_py import SpatialKDTree
     from session_py import Point
-
-    # 4 points: 0, 1, 2, 5 on X axis
-    # Query at 0.5, radius 1.1 — finds x=0 (d=0.5) and x=1 (d=0.5)
+    from session_py import SpatialKDTree
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),

@@ -8,12 +8,11 @@ from pathlib import Path
 
 @MINI_TEST("FileObj", "Read Bunny")
 def test_read_bunny():
-    # load Stanford Bunny (real-world OBJ: 2503 vertices, 4968 faces)
+    from session_py import read_file_obj
+
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.obj"
     if not bunny_path.exists():
         return
-    from session_py import Mesh
-    from session_py.file_obj import read_file_obj
     mesh = read_file_obj(str(bunny_path))
 
     MINI_CHECK(mesh.number_of_vertices() == 2503)
@@ -21,18 +20,26 @@ def test_read_bunny():
     vertices, faces = mesh.to_vertices_and_faces()
     MINI_CHECK(len(vertices) == 2503)
     MINI_CHECK(len(faces) == 4968)
-    has_non_zero = any(v[0] != 0.0 or v[1] != 0.0 or v[2] != 0.0 for v in vertices)
+    has_non_zero = False
+    for v in vertices:
+        if v[0] != 0.0 or v[1] != 0.0 or v[2] != 0.0:
+            has_non_zero = True
     MINI_CHECK(has_non_zero)
-    MINI_CHECK(all(len(f) >= 3 for f in faces))
+    all_polygons = True
+    for f in faces:
+        if len(f) < 3:
+            all_polygons = False
+    MINI_CHECK(all_polygons)
 
 
 @MINI_TEST("FileObj", "Write Read Roundtrip")
 def test_write_read_roundtrip():
-    # build a small mesh (4 verts, 2 faces), write to OBJ, read back, compare counts
     from session_py import Mesh
     from session_py import Point
-    from session_py.file_obj import read_file_obj
-    from session_py.file_obj import write_file_obj
+    from session_py import read_file_obj
+    from session_py import write_file_obj
+
+    os.makedirs(Path(__file__).resolve().parents[2] / "serialization", exist_ok=True)
     original_mesh = Mesh()
     v0 = original_mesh.add_vertex(Point(0.0, 0.0, 0.0))
     v1 = original_mesh.add_vertex(Point(1.0, 0.0, 0.0))
@@ -43,7 +50,11 @@ def test_write_read_roundtrip():
 
     MINI_CHECK(original_mesh.number_of_vertices() == 4)
     MINI_CHECK(original_mesh.number_of_faces() == 2)
-    temp_file = str(Path(__file__).resolve().parents[2] / "serialization" / "test_temp_roundtrip.obj")
+    temp_file = str(
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_temp_roundtrip.obj"
+    )
     write_file_obj(original_mesh, temp_file)
     MINI_CHECK(os.path.exists(temp_file))
     loaded_mesh = read_file_obj(temp_file)
@@ -56,8 +67,9 @@ def test_write_read_roundtrip():
 def test_string_roundtrip():
     from session_py import Mesh
     from session_py import Point
-    from session_py.file_obj import read_file_obj_from_str
-    from session_py.file_obj import write_file_obj_to_string
+    from session_py import read_file_obj_from_str
+    from session_py import write_file_obj_to_string
+
     original_mesh = Mesh()
     v0 = original_mesh.add_vertex(Point(0.0, 0.0, 0.0))
     v1 = original_mesh.add_vertex(Point(1.0, 0.0, 0.0))

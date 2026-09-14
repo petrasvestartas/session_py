@@ -1,42 +1,42 @@
 from __future__ import annotations
-from collections.abc import Iterator
-from typing import Optional
-from typing import Union
 from typing import TYPE_CHECKING
+import json
 import uuid
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+try:
+    from .proto import graph_pb2
+
+    _HAS_PROTOBUF = True
+except ImportError:
+    _HAS_PROTOBUF = False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Vertex
+# ═══════════════════════════════════════════════════════════════════════════
+
 
 class Vertex:
-    """A graph vertex with a unique identifier and attribute string."""
+    """A graph vertex with a name, attribute string and integer index"""
 
     def __init__(self, name: str = "my_vertex", attribute: str = ""):
+        """Construct from name and attribute"""
         self._guid = None
-        self.name = str(name)
-        self.attribute = str(attribute)
-        self.index = None
+        self.name = name
+        self.attribute = attribute
+        self.index = -1
 
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
-
-    def has_guid(self) -> bool:
-        """Whether this identity has actually been minted.
-
-        A serializer that reads ``guid`` MINTS one for everything it writes, which defeats the
-        lazy scheme everywhere it is used on a bulk collection: a drawing sheet with 34,592
-        graph vertices generated 34,592 UUIDs at write time and put ~1.3 MB of them in the file
-        for a ``Session.pb_loads`` that discards every one. Ask this first, and write nothing
-        when the answer is no.
-        """
-        return getattr(self, "_guid", None) is not None
 
     @guid.setter
     def guid(self, value: str) -> None:
@@ -44,819 +44,315 @@ class Vertex:
 
     def __jsondump__(self):
         return {
-            "type": f"{self.__class__.__name__}",
-            "guid": self.guid,
-            "name": self.name,
             "attribute": self.attribute,
+            "guid": self.guid,
             "index": self.index,
+            "name": self.name,
+            "type": "Vertex",
         }
 
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
-        vertex = cls(data["name"], data.get("attribute", ""))
-        vertex.index = data.get("index")
-        vertex.guid = guid if guid is not None else data.get("guid", vertex.guid)
+        vertex = cls(name or data["name"], data["attribute"])
+        vertex.guid = guid or data["guid"]
+        vertex.index = data["index"]
         return vertex
+
+    def __str__(self) -> str:
+        return f"Vertex({self.guid}, {self.name}, {self.attribute}, {self.index})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Edge
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 class Edge:
-    """A graph edge connecting two vertices with an attribute string."""
+    """A graph edge connecting two vertices by name"""
 
-    def __init__(self, v0: str | int, v1: str | int, attribute: str = ""):
+    def __init__(self, v0: str = "", v1: str = "", attribute: str = ""):
+        """Construct from endpoints and attribute"""
         self._guid = None
         self.name = "my_edge"
-        self.v0 = str(v0)
-        self.v1 = str(v1)
-        self.attribute = str(attribute)
-        self.index = None
+        self.v0 = v0
+        self.v1 = v1
+        self.attribute = attribute
+        self.index = -1
 
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
-
-    def has_guid(self) -> bool:
-        """Whether this identity has actually been minted.
-
-        A serializer that reads ``guid`` MINTS one for everything it writes, which defeats the
-        lazy scheme everywhere it is used on a bulk collection: a drawing sheet with 34,592
-        graph vertices generated 34,592 UUIDs at write time and put ~1.3 MB of them in the file
-        for a ``Session.pb_loads`` that discards every one. Ask this first, and write nothing
-        when the answer is no.
-        """
-        return getattr(self, "_guid", None) is not None
 
     @guid.setter
     def guid(self, value: str) -> None:
         self._guid = value
 
+    def vertices(self) -> tuple[str, str]:
+        """The (v0, v1) tuple"""
+        return (self.v0, self.v1)
+
+    def connects(self, vertex_id: str) -> bool:
+        """True if this edge touches the given vertex"""
+        return self.v0 == vertex_id or self.v1 == vertex_id
+
+    def other_vertex(self, vertex_id: str) -> str:
+        """The other endpoint given one endpoint, empty if not connected"""
+        if self.v0 == vertex_id:
+            return self.v1
+        if self.v1 == vertex_id:
+            return self.v0
+        return ""
+
     def __jsondump__(self):
         return {
-            "type": f"{self.__class__.__name__}",
+            "attribute": self.attribute,
             "guid": self.guid,
+            "index": self.index,
             "name": self.name,
+            "type": "Edge",
             "v0": self.v0,
             "v1": self.v1,
-            "attribute": self.attribute,
-            "index": self.index,
         }
 
     @classmethod
     def __jsonload__(cls, data, guid=None, name=None):
-        edge = cls(data["v0"], data["v1"], data.get("attribute", ""))
-        edge.index = data.get("index")
-        edge.guid = guid if guid is not None else data.get("guid", edge.guid)
-        edge.name = name if name is not None else data.get("name", edge.name)
+        edge = cls(data["v0"], data["v1"], data["attribute"])
+        edge.name = name or data["name"]
+        edge.guid = guid or data["guid"]
+        edge.index = data["index"]
         return edge
 
-    @property
-    def vertices(self) -> tuple[str, str]:
-        return (self.v0, self.v1)
+    def __str__(self) -> str:
+        return f"Edge({self.guid}, {self.name}, {self.v0}, {self.v1}, {self.attribute})"
 
-    def connects(self, vertex_id: str | int) -> bool:
-        return str(vertex_id) in self.vertices
+    def __repr__(self) -> str:
+        return self.__str__()
 
-    def other_vertex(self, vertex_id: str | int) -> str:
-        vertex_id = str(vertex_id)
-        if vertex_id == self.v0:
-            return self.v1
-        elif vertex_id == self.v1:
-            return self.v0
-        else:
-            raise ValueError(f"Vertex {vertex_id} is not connected by this edge")
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Graph
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 class Graph:
-    """A graph data structure with string-only vertices and attributes.
-
-    Parameters
-    ----------
-    name : str, optional
-        Name of the graph.
-    default_node_attributes : dict, optional
-        Default attributes for new vertices.
-    default_edge_attributes : dict, optional
-        Default attributes for new edges.
-
-    """
+    """An undirected graph with string vertices and string attributes"""
 
     def __init__(self, name: str = "my_graph"):
-        """Initialize a new Graph."""
-        self.name = name
+        """Construct from name"""
         self._guid = None
-        self.vertices = {}  # node_name -> Vertex object
-        self.edges = {}  # node_name -> {neighbor_name -> Edge object}
-        self.vertex_count = 0  # Track next available vertex index
-        self.edge_count = 0  # Track next available edge index
+        self.name = name
+        self.vertices = {}
+        self.edges = {}
+        self.vertex_count = 0
+        self.edge_count = 0
 
     def has_guid(self) -> bool:
-        return getattr(self, '_guid', None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
-        if getattr(self, '_guid', None) is None:
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
         return self._guid
-
-    def has_guid(self) -> bool:
-        """Whether this identity has actually been minted.
-
-        A serializer that reads ``guid`` MINTS one for everything it writes, which defeats the
-        lazy scheme everywhere it is used on a bulk collection: a drawing sheet with 34,592
-        graph vertices generated 34,592 UUIDs at write time and put ~1.3 MB of them in the file
-        for a ``Session.pb_loads`` that discards every one. Ask this first, and write nothing
-        when the answer is no.
-        """
-        return getattr(self, "_guid", None) is not None
 
     @guid.setter
     def guid(self, value: str) -> None:
         self._guid = value
 
-    def __str__(self):
-        """String representation."""
-        return f"Graph({self.name}, {len(self.vertices)} vertices, {len(self.edges)} edges)"
-
-    def __repr__(self):
-        return f"Graph({self.name}, {len(self.vertices)} vertices, {len(self.edges)} edges)"
-
     # ═══════════════════════════════════════════════════════════════════════════
-    # JSON (polymorphic)
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def __jsondump__(self):
-        """Serialize to polymorphic JSON format with type field."""
-        # Only store each undirected edge once (u < v)
-        seen = set()
-        edges_list = []
-        for u, neighbors in self.edges.items():
-            for v, edge in neighbors.items():
-                key = (u, v) if u < v else (v, u)
-                if key in seen:
-                    continue
-                seen.add(key)
-                edges_list.append(edge.__jsondump__())
-
-        return {
-            "type": f"{self.__class__.__name__}",
-            "guid": self.guid,
-            "name": self.name,
-            "vertices": [vertex.__jsondump__() for vertex in self.vertices.values()],
-            "edges": edges_list,
-            "vertex_count": self.vertex_count,
-            "edge_count": self.edge_count,
-        }
-
-    @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
-        """Deserialize from polymorphic JSON format."""
-        graph = cls(name=data.get("name", "my_graph"))
-        graph.guid = guid if guid is not None else data.get("guid", graph.guid)
-        graph.vertex_count = data.get("vertex_count", 0)
-        graph.edge_count = data.get("edge_count", 0)
-
-        # Restore vertices
-        for vertex_data in data.get("vertices", []):
-            # When decoding, nested vertices may already be reconstructed objects
-            if isinstance(vertex_data, Vertex):
-                vtx = vertex_data
-            elif isinstance(vertex_data, dict):
-                vtx = Vertex.__jsonload__(
-                    vertex_data,
-                    vertex_data.get("guid"),
-                    vertex_data.get("name"),
-                )
-            else:
-                continue
-            graph.vertices[str(vtx.name)] = vtx
-
-        # Restore edges
-        for edge_data in data.get("edges", []):
-            if isinstance(edge_data, Edge):
-                e = edge_data
-            elif isinstance(edge_data, dict):
-                e = Edge.__jsonload__(
-                    edge_data,
-                    edge_data.get("guid"),
-                    edge_data.get("name"),
-                )
-            else:
-                continue
-            u, v = str(e.v0), str(e.v1)
-            if u not in graph.edges:
-                graph.edges[u] = {}
-            if v not in graph.edges:
-                graph.edges[v] = {}
-            graph.edges[u][v] = e
-            graph.edges[v][u] = e
-
-        return graph
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization: file_json_dumps, file_json_loads, file_json_dump, file_json_load
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def file_json_dumps(self) -> str:
-        import json
-        return json.dumps(self.__jsondump__())
-
-    @classmethod
-    def file_json_loads(cls, s: str) -> "Graph":
-        import json
-        return cls.__jsonload__(json.loads(s))
-
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        import json
-        with open(filepath, 'w') as f:
-            json.dump(self.__jsondump__(), f, indent=2)
-
-    @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Graph":
-        import json
-        with open(filepath) as f:
-            return cls.__jsonload__(json.load(f))
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization: pb_dumps, pb_loads, pb_dump, pb_load
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        from .proto import graph_pb2
-
-        proto = graph_pb2.Graph()
-        proto.name = self.name
-        if self.has_guid():
-            proto.guid = self._guid
-        proto.vertex_count = self.vertex_count
-        proto.edge_count = self.edge_count
-
-        for name, vertex in self.vertices.items():
-            v = proto.vertices[name]
-            v.name = vertex.name
-            if vertex.has_guid():
-                v.guid = vertex.guid
-            v.attribute = vertex.attribute
-            v.index = vertex.index
-
-        seen = set()
-        for u, neighbors in self.edges.items():
-            for v, edge in neighbors.items():
-                key = (u, v) if u < v else (v, u)
-                if key in seen:
-                    continue
-                seen.add(key)
-                e = proto.edges.add()
-                if edge.has_guid():
-                    e.guid = edge.guid
-                e.name = edge.name
-                e.v0 = edge.v0
-                e.v1 = edge.v1
-                e.attribute = edge.attribute
-                e.index = edge.index
-
-        return proto.SerializeToString()
-
-    @classmethod
-    def pb_loads(cls, data: bytes) -> "Graph":
-        from .proto import graph_pb2
-
-        proto = graph_pb2.Graph()
-        proto.ParseFromString(data)
-
-        graph = cls(name=proto.name)
-        if proto.guid:
-            graph.guid = proto.guid
-        graph.vertex_count = proto.vertex_count
-        graph.edge_count = proto.edge_count
-
-        for name, v in proto.vertices.items():
-            vertex = Vertex(v.name, v.attribute)
-            vertex.guid = v.guid
-            vertex.index = v.index
-            graph.vertices[name] = vertex
-
-        for e in proto.edges:
-            edge = Edge(e.v0, e.v1, e.attribute)
-            edge.guid = e.guid
-            edge.name = e.name
-            edge.index = e.index
-            if e.v0 not in graph.edges:
-                graph.edges[e.v0] = {}
-            if e.v1 not in graph.edges:
-                graph.edges[e.v1] = {}
-            graph.edges[e.v0][e.v1] = edge
-            graph.edges[e.v1][e.v0] = edge
-
-        return graph
-
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        with open(filepath, 'wb') as f:
-            f.write(self.pb_dumps())
-
-    @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Graph":
-        with open(filepath, 'rb') as f:
-            return cls.pb_loads(f.read())
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Details: Essential Graph Methods
+    # Details
     # ═══════════════════════════════════════════════════════════════════════════
 
     def has_node(self, key: str) -> bool:
-        """Check if a node exists in the graph.
-
-        Parameters
-        ----------
-        key : str
-            The node to check for.
-
-        Returns
-        -------
-        bool
-            True if the node exists.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_node("node1")
-        'node1'
-        >>> graph.has_node("node1")
-        True
-        >>> graph.has_node("node2")
-        False
-        """
+        """True if a node with the given key exists"""
         return key in self.vertices
 
-    def has_edge(self, edge: tuple | str) -> bool:
-        """Check if an edge exists in the graph.
-
-        Parameters
-        ----------
-        edge : tuple or str
-            Either a tuple (u, v) or two separate arguments u, v.
-
-        Returns
-        -------
-        bool
-            True if the edge exists, False otherwise.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_edge("A", "B", "edge_attr")
-        ('A', 'B')
-        >>> graph.has_edge(("A", "B"))
-        True
-        >>> graph.has_edge(("C", "D"))
-        False
-        """
-        if isinstance(edge, tuple):
-            u, v = edge
-        else:
-            raise ValueError("Edge must be a tuple (u, v)")
-
-        return u in self.edges and v in self.edges[u]
+    def has_edge(self, key: tuple[str, str]) -> bool:
+        """True if an edge between the given endpoints exists"""
+        if key[0] not in self.edges:
+            return False
+        return key[1] in self.edges[key[0]]
 
     def add_node(self, key: str, attribute: str = "") -> str:
-        """Add a node to the graph.
-
-        Parameters
-        ----------
-        key : str
-            The node identifier.
-        attribute : str, optional
-            Node attribute data.
-
-        Returns
-        -------
-        str
-            The node key that was added.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_node("node1", "attribute_data")
-        'node1'
-        >>> graph.has_node("node1")
-        True
-        """
-        if not isinstance(key, str):
-            raise TypeError(f"Node keys must be strings, got {type(key)}")
-
+        """Add a node and return its key"""
         if self.has_node(key):
-            return self.vertices[key]
-        else:
-            vertex = Vertex(key, attribute)
-            vertex.index = self.vertex_count  # Set index internally
-            self.vertices[key] = vertex
-            self.vertex_count += 1
-            return vertex.name
+            return self.vertices[key].name
+        vertex = Vertex(key, attribute)
+        vertex.index = self.vertex_count
+        self.vertices[key] = vertex
+        self.vertex_count += 1
+        return vertex.name
 
-    def add_edge(self, u: str, v: str, attribute: str = "") -> tuple:
-        """Add an edge between u and v.
-
-        Parameters
-        ----------
-        u : str
-            First node (must be string).
-        v : str
-            Second node (must be string).
-        attribute : str, optional
-            Single string attribute for the edge.
-
-        Returns
-        -------
-        tuple
-            The edge tuple (u, v).
-
-        Raises
-        ------
-        TypeError
-            If u or v are not strings.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_edge("node1", "node2", "edge_data")
-        ('node1', 'node2')
-        >>> graph.has_edge(("node1", "node2"))
-        True
-        """
-        if not isinstance(u, str) or not isinstance(v, str):
-            raise TypeError(f"Node keys must be strings, got {type(u)} and {type(v)}")
-
-        # Add vertices if they don't exist
+    def add_edge(self, u: str, v: str, attribute: str = "") -> tuple[str, str]:
+        """Add an edge between u and v, creating missing nodes, and return (u, v)"""
         if not self.has_node(u):
             self.add_node(u)
         if not self.has_node(v):
             self.add_node(v)
-
-        # Add edge (store in both directions for undirected graph)
         edge = Edge(u, v, attribute)
-        edge.index = self.edge_count  # Set index internally
-        if u not in self.edges:
-            self.edges[u] = {}
-        if v not in self.edges:
-            self.edges[v] = {}
-        self.edges[u][v] = edge
-        self.edges[v][u] = edge
+        edge.index = self.edge_count
+        self.edges.setdefault(u, {})[v] = edge
+        self.edges.setdefault(v, {})[u] = edge
         self.edge_count += 1
-
         return (u, v)
 
     def remove_node(self, key: str) -> None:
-        """Remove a node and all its edges from the graph.
-
-        Parameters
-        ----------
-        key : str
-            The node to remove.
-
-        Raises
-        ------
-        KeyError
-            If the node is not in the graph.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_node("node1")
-        'node1'
-        >>> graph.remove_node("node1")
-        >>> graph.has_node("node1")
-        False
-        """
+        """Remove a node and all its edges"""
         if not self.has_node(key):
             raise KeyError(f"Node {key} not in graph")
-
-        # Remove all edges connected to this node
         if key in self.edges:
-            for neighbor in list(self.edges[key].keys()):
-                if neighbor in self.edges:
-                    self.edges[neighbor].pop(key, None)
+            for neighbor in self.edges[key]:
+                self.edges[neighbor].pop(key, None)
             del self.edges[key]
-
-        # Remove the node itself
         del self.vertices[key]
-
-        # Reassign indices to maintain contiguous sequence
         self._reassign_indices()
 
-    def remove_edge(self, edge: tuple) -> None:
-        """Remove an edge from the graph.
+    def remove_edge(self, edge: tuple[str, str]) -> None:
+        """Remove an edge, keeping its nodes"""
+        if not self.has_edge(edge):
+            return
+        u = edge[0]
+        v = edge[1]
+        del self.edges[u][v]
+        del self.edges[v][u]
+        self._reassign_edge_indices()
 
-        Parameters
-        ----------
-        edge : tuple
-            A tuple (u, v) representing the edge to remove.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_edge("A", "B", "edge_attr")
-        ('A', 'B')
-        >>> graph.remove_edge(("A", "B"))
-        >>> graph.has_edge(("A", "B"))
-        False
-        """
-        u, v = edge
-        if self.has_edge((u, v)):
-            if u in self.edges and v in self.edges[u]:
-                del self.edges[u][v]
-            if v in self.edges and u in self.edges[v]:
-                del self.edges[v][u]
-
-            # Reassign edge indices to maintain contiguous sequence
-            self._reassign_edge_indices()
-
-    def _reassign_indices(self):
-        """Reassign vertex indices to maintain contiguous sequence 0, 1, 2, ..."""
+    def _reassign_indices(self) -> None:
+        """Renumber vertex indices 0, 1, 2, ... keeping their relative order"""
         vertices = list(self.vertices.values())
-        # Sort by current index to maintain relative order
-        vertices.sort(key=lambda v: v.index if v.index is not None else float("inf"))
-
-        for i, vertex in enumerate(vertices):
-            vertex.index = i
-
+        vertices.sort(key=lambda vertex: vertex.index)
+        for i in range(len(vertices)):
+            vertices[i].index = i
         self.vertex_count = len(vertices)
 
-    def _reassign_edge_indices(self):
-        """Reassign edge indices to maintain contiguous sequence 0, 1, 2, ..."""
+    def _reassign_edge_indices(self) -> None:
+        """Renumber edge indices 0, 1, 2, ... keeping their relative order"""
         edges = []
-        seen = set()
-
-        # Collect all unique edges
-        for u, neighbors in self.edges.items():
-            for v, edge in neighbors.items():
-                edge_tuple = (u, v) if u < v else (v, u)
-                if edge_tuple not in seen:
-                    seen.add(edge_tuple)
-                    edges.append(edge)
-
-        # Sort by current index to maintain relative order
-        edges.sort(key=lambda e: e.index if e.index is not None else float("inf"))
-
-        # Reassign indices
-        for i, edge in enumerate(edges):
-            edge.index = i
-
+        for u in self.edges:
+            for v in self.edges[u]:
+                if u < v:
+                    edges.append((self.edges[u][v].index, u, v))
+        edges.sort()
+        for i in range(len(edges)):
+            u = edges[i][1]
+            v = edges[i][2]
+            self.edges[u][v].index = i
+            self.edges[v][u].index = i
         self.edge_count = len(edges)
 
-    def get_vertices(self) -> list["Vertex"]:
-        """Return a list of all vertices in the graph.
+    def get_vertices(self) -> list[Vertex]:
+        """All vertices in the graph"""
+        result = []
+        for vertex_name in sorted(self.vertices):
+            result.append(self.vertices[vertex_name])
+        return result
 
-        Returns
-        -------
-        list[:class:`Vertex`]
-            A list of all vertex objects in the graph.
-        """
-        return list(self.vertices.values())
+    def get_edges(self) -> list[tuple[str, str]]:
+        """All edges in the graph as (u, v) tuples, each once"""
+        result = []
+        for u in sorted(self.edges):
+            for v in sorted(self.edges[u]):
+                if u < v:
+                    result.append((u, v))
+        return result
 
-    def get_edges(self) -> Iterator[tuple[str, str]]:
-        """Iterate over all edges in the graph.
-
-        Yields
-        ------
-        tuple
-            Edge identifier (u, v)
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_edge("node1", "node2", "edge_data")
-        ('node1', 'node2')
-        >>> edges = list(graph.edges())
-        >>> assert ("node1", "node2") in edges
-        >>> assert len(edges) == 1
-        """
-        seen = set()
-        for u, neighbors in self.edges.items():
-            for v, edge in neighbors.items():
-                edge_tuple = (u, v) if u < v else (v, u)
-                if edge_tuple not in seen:
-                    seen.add(edge_tuple)
-                    yield edge_tuple
-
-    def neighbors(self, node: str) -> Iterator[str]:
-        """Get all neighbors of a node.
-
-        Parameters
-        ----------
-        node : str
-            The node to get neighbors for.
-
-        Returns
-        -------
-        iterator
-            Iterator over neighbor vertices.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_edge("A", "B", "edge1")
-        ('A', 'B')
-        >>> graph.add_edge("A", "C", "edge2")
-        ('A', 'C')
-        >>> sorted(list(graph.neighbors("A")))
-        ['B', 'C']
-        """
-        return iter(self.edges.get(node, {}).keys())
+    def neighbors(self, node: str) -> list[str]:
+        """All neighbors of a node"""
+        if not self.has_node(node):
+            raise KeyError(f"Node {node} not in graph")
+        if node not in self.edges:
+            return []
+        return sorted(self.edges[node])
 
     def get_neighbors(self, node: str) -> list[str]:
-        return list(self.neighbors(node))
+        """Alias for neighbors()"""
+        return self.neighbors(node)
 
     def edges_of(self, node: str) -> list[tuple[str, str, bool]]:
-        """The edges incident to a node, with what it takes to add each one back.
-
-        Parameters
-        ----------
-        node : str
-            The node identifier.
-
-        Returns
-        -------
-        list[tuple[str, str, bool]]
-            One (other, attribute, forward) per edge; forward is True when ``node`` is the
-            edge's v0, so ``add_edge`` can be replayed with the vertices in their original
-            order. An unknown node has no edges.
-        """
-        out = []
-        for other, edge in self.edges.get(node, {}).items():
-            out.append((other, edge.attribute, edge.v0 == node))
-        return out
+        """Incident edges as (other, attribute, forward); forward when node is the edge's v0"""
+        result = []
+        if node not in self.edges:
+            return result
+        for other in sorted(self.edges[node]):
+            edge = self.edges[node][other]
+            result.append((other, edge.attribute, edge.v0 == node))
+        return result
 
     def number_of_vertices(self) -> int:
-        """Get the number of vertices in the graph.
-
-        Returns
-        -------
-        int
-            Number of vertices.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_node("node1")
-        'node1'
-        >>> graph.number_of_vertices()
-        1
-        """
+        """Number of vertices in the graph"""
         return len(self.vertices)
 
     def number_of_edges(self) -> int:
-        """Get the number of edges in the graph.
-
-        Returns
-        -------
-        int
-            Number of edges.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_edge("node1", "node2")
-        ('node1', 'node2')
-        >>> graph.number_of_edges()
-        1
-        """
-        return sum(len(neighbors) for neighbors in self.edges.values()) // 2
+        """Number of edges in the graph"""
+        count = 0
+        for u in self.edges:
+            for v in self.edges[u]:
+                if u < v:
+                    count += 1
+        return count
 
     def clear(self) -> None:
-        """Remove all vertices and edges from the graph.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_node("node1")
-        'node1'
-        >>> graph.clear()
-        >>> graph.number_of_vertices()
-        0
-        """
+        """Remove all vertices and edges"""
         self.vertices.clear()
         self.edges.clear()
         self.vertex_count = 0
         self.edge_count = 0
 
-    def node_attribute(self, node: str, value: str | None = None) -> str:
-        """Get or set node attribute.
-
-        Parameters
-        ----------
-        node : str
-            The node identifier.
-        value : str, optional
-            If provided, set the attribute to this value.
-
-        Returns
-        -------
-        str
-            The attribute value as string.
-
-        Raises
-        ------
-        KeyError
-            If the node does not exist.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_node("node1", "initial_data")
-        'node1'
-        >>> assert graph.node_attribute("node1") == "initial_data"
-        >>> graph.node_attribute("node1", "new_data")
-        >>> assert graph.node_attribute("node1") == "new_data"
-        """
+    def node_attribute(self, node: str, value: str = "") -> str:
+        """Get or set node attribute (sets if value is non-empty)"""
         if not self.has_node(node):
             raise KeyError(f"Node {node} not in graph")
+        if value == "":
+            return self.vertices[node].attribute
+        self.vertices[node].attribute = value
+        return value
 
-        node_obj = self.vertices[node]
-        if value is not None:
-            node_obj.attribute = str(value)
-            return value
-        else:
-            return node_obj.attribute
-
-    def edge_attribute(self, u: str, v: str, value: str | None = None) -> str:
-        """Get or set edge attribute.
-
-        Parameters
-        ----------
-        u : hashable
-            First vertex of the edge.
-        v : hashable
-            Second vertex of the edge.
-        value : str, optional
-            If provided, set the attribute to this value.
-
-        Returns
-        -------
-        str
-            The attribute value as string.
-
-        Raises
-        ------
-        KeyError
-            If the edge does not exist.
-
-        Examples
-        --------
-        >>> graph = Graph()
-        >>> graph.add_edge("node1", "node2", "edge_data")
-        ('node1', 'node2')
-        >>> graph.edge_attribute("node1", "node2")
-        'edge_data'
-        >>> graph.edge_attribute("node1", "node2", "new_data")
-        'new_data'
-        >>> graph.edge_attribute("node1", "node2")
-        'new_data'
-        """
+    def edge_attribute(self, u: str, v: str, value: str = "") -> str:
+        """Get or set edge attribute (sets if value is non-empty)"""
         if not self.has_edge((u, v)):
-            raise KeyError(f"Edge {(u, v)} not in graph")
-
-        if u in self.edges and v in self.edges[u]:
-            edge_obj = self.edges[u][v]
-        else:
-            raise KeyError(f"Edge {(u, v)} not in graph")
-
-        if value is not None:
-            edge_obj.attribute = str(value)
-            # Update both directions
-            if v in self.edges and u in self.edges[v]:
-                self.edges[v][u].attribute = str(value)
-            return str(value)
-        else:
-            return edge_obj.attribute
+            raise KeyError(f"Edge ({u}, {v}) not in graph")
+        if value == "":
+            return self.edges[u][v].attribute
+        self.edges[u][v].attribute = value
+        self.edges[v][u].attribute = value
+        return value
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Algorithms
     # ═══════════════════════════════════════════════════════════════════════════
 
     def bfs(self, start: str) -> list[str]:
+        """Breadth-first order from start"""
+        result = []
         if not self.has_node(start):
-            return []
+            return result
         visited = set()
         queue = [start]
         visited.add(start)
-        result = []
         while queue:
             node = queue.pop(0)
             result.append(node)
-            for neighbor in sorted(self.edges.get(node, {}).keys()):
-                if neighbor not in visited:
-                    visited.add(neighbor)
-                    queue.append(neighbor)
+            for neighbor in self.neighbors(node):
+                if neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                queue.append(neighbor)
         return result
 
     def dfs(self, start: str) -> list[str]:
-        if not self.has_node(start):
-            return []
-        visited = set()
+        """Depth-first order from start"""
         result = []
+        if not self.has_node(start):
+            return result
+        visited = set()
         stack = [start]
         while stack:
             node = stack.pop()
@@ -864,67 +360,79 @@ class Graph:
                 continue
             visited.add(node)
             result.append(node)
-            for neighbor in reversed(sorted(self.edges.get(node, {}).keys())):
-                if neighbor not in visited:
-                    stack.append(neighbor)
+            nbrs = self.neighbors(node)
+            for i in range(len(nbrs) - 1, -1, -1):
+                if nbrs[i] not in visited:
+                    stack.append(nbrs[i])
         return result
 
     def connected_components(self) -> list[list[str]]:
+        """Connected components as sorted node name lists"""
         visited = set()
         components = []
-        for start in sorted(self.vertices.keys()):
-            if start in visited:
+        for vertex_name in sorted(self.vertices):
+            if vertex_name in visited:
                 continue
-            comp = self.bfs(start)
-            visited.update(comp)
-            components.append(sorted(comp))
+            component = self.bfs(vertex_name)
+            for node in component:
+                visited.add(node)
+            component.sort()
+            components.append(component)
         return components
 
     def is_connected(self) -> bool:
+        """True if the graph has at most one connected component"""
         return len(self.connected_components()) <= 1
 
     def number_connected_components(self) -> int:
+        """Number of connected components"""
         return len(self.connected_components())
 
     def shortest_path(self, u: str, v: str) -> list[str]:
+        """Shortest path between u and v, empty if disconnected"""
+        path = []
         if not self.has_node(u) or not self.has_node(v):
-            return []
+            return path
         if u == v:
             return [u]
-        parent = {u: None}
+        parent = {u: ""}
         queue = [u]
         while queue:
             node = queue.pop(0)
-            for neighbor in sorted(self.edges.get(node, {}).keys()):
-                if neighbor not in parent:
-                    parent[neighbor] = node
-                    if neighbor == v:
-                        path = []
-                        cur = v
-                        while cur is not None:
-                            path.append(cur)
-                            cur = parent[cur]
-                        return list(reversed(path))
-                    queue.append(neighbor)
-        return []
+            for neighbor in self.neighbors(node):
+                if neighbor in parent:
+                    continue
+                parent[neighbor] = node
+                if neighbor == v:
+                    current = v
+                    while current != u:
+                        path.append(current)
+                        current = parent[current]
+                    path.append(u)
+                    path.reverse()
+                    return path
+                queue.append(neighbor)
+        return path
 
     def shortest_path_length(self, u: str, v: str) -> int:
+        """Length of the shortest path between u and v, -1 if disconnected"""
         path = self.shortest_path(u, v)
         if not path:
             return -1
         return len(path) - 1
 
     def has_cycle(self) -> bool:
+        """True if the graph contains a cycle"""
         visited = set()
-        for start in sorted(self.vertices.keys()):
-            if start in visited:
+        for vertex_name in sorted(self.vertices):
+            if vertex_name in visited:
                 continue
-            parent = {start: None}
-            queue = [start]
-            visited.add(start)
+            parent = {vertex_name: ""}
+            queue = [vertex_name]
+            visited.add(vertex_name)
             while queue:
                 node = queue.pop(0)
-                for neighbor in self.edges.get(node, {}).keys():
+                for neighbor in self.neighbors(node):
                     if neighbor not in visited:
                         visited.add(neighbor)
                         parent[neighbor] = node
@@ -934,37 +442,176 @@ class Graph:
         return False
 
     def cycle_basis(self) -> list[list[str]]:
+        """A basis of fundamental cycles"""
         result = []
-        disc = {}
-        par = {}
-        timer = [0]
-        for start in sorted(self.vertices.keys()):
-            if start in disc:
+        order = {}
+        parent = {}
+        timer = 0
+        for vertex_name in sorted(self.vertices):
+            if vertex_name in order:
                 continue
-            par[start] = None
-            disc[start] = timer[0]
-            timer[0] += 1
-            nbrs = sorted(self.edges.get(start, {}).keys())
-            stk = [(start, None, nbrs, 0)]
-            while stk:
-                u, p, nbrs_u, idx = stk[-1]
-                if idx < len(nbrs_u):
-                    v = nbrs_u[idx]
-                    stk[-1] = (u, p, nbrs_u, idx + 1)
-                    if v not in disc:
-                        par[v] = u
-                        disc[v] = timer[0]
-                        timer[0] += 1
-                        v_nbrs = sorted(self.edges.get(v, {}).keys())
-                        stk.append((v, u, v_nbrs, 0))
-                    elif v != p and disc[v] < disc[u]:
-                        cycle = []
-                        node = u
-                        while node != v:
-                            cycle.append(node)
-                            node = par[node]
-                        cycle.append(v)
-                        result.append(cycle)
-                else:
-                    stk.pop()
+            parent[vertex_name] = ""
+            order[vertex_name] = timer
+            timer += 1
+            stack = [[vertex_name, "", self.neighbors(vertex_name), 0]]
+            while stack:
+                u = stack[-1][0]
+                p = stack[-1][1]
+                nbrs = stack[-1][2]
+                if stack[-1][3] >= len(nbrs):
+                    stack.pop()
+                    continue
+                v = nbrs[stack[-1][3]]
+                stack[-1][3] += 1
+                if v not in order:
+                    parent[v] = u
+                    order[v] = timer
+                    timer += 1
+                    stack.append([v, u, self.neighbors(v), 0])
+                elif v != p and order[v] < order[u]:
+                    cycle = []
+                    node = u
+                    while node != v:
+                        cycle.append(node)
+                        node = parent[node]
+                    cycle.append(v)
+                    result.append(cycle)
         return result
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # JSON
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def __jsondump__(self):
+        vertices_json = []
+        for vertex_name in sorted(self.vertices):
+            vertices_json.append(self.vertices[vertex_name].__jsondump__())
+        edges_json = []
+        for u in sorted(self.edges):
+            for v in sorted(self.edges[u]):
+                if u < v:
+                    edges_json.append(self.edges[u][v].__jsondump__())
+        return {
+            "edge_count": self.edge_count,
+            "edges": edges_json,
+            "guid": self.guid,
+            "name": self.name,
+            "type": "Graph",
+            "vertex_count": self.vertex_count,
+            "vertices": vertices_json,
+        }
+
+    @classmethod
+    def __jsonload__(cls, data, guid=None, name=None):
+        graph = cls(name or data["name"])
+        graph.guid = guid or data["guid"]
+        graph.vertex_count = data["vertex_count"]
+        graph.edge_count = data["edge_count"]
+        for vertex_data in data["vertices"]:
+            vertex = vertex_data
+            if isinstance(vertex_data, dict):
+                vertex = Vertex.__jsonload__(vertex_data)
+            graph.vertices[vertex.name] = vertex
+        for edge_data in data["edges"]:
+            edge = edge_data
+            if isinstance(edge_data, dict):
+                edge = Edge.__jsonload__(edge_data)
+            graph.edges.setdefault(edge.v0, {})[edge.v1] = edge
+            graph.edges.setdefault(edge.v1, {})[edge.v0] = edge
+        return graph
+
+    def file_json_dumps(self) -> str:
+        return json.dumps(self.__jsondump__())
+
+    @classmethod
+    def file_json_loads(cls, json_string: str) -> "Graph":
+        return cls.__jsonload__(json.loads(json_string))
+
+    def file_json_dump(self, filepath: str | Path) -> None:
+        with open(filepath, "w") as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def file_json_load(cls, filepath: str | Path) -> "Graph":
+        with open(filepath) as f:
+            return cls.__jsonload__(json.load(f))
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def pb_dumps(self) -> bytes:
+        if not _HAS_PROTOBUF:
+            raise ImportError("protobuf not available")
+        proto = graph_pb2.Graph()
+        proto.name = self.name
+        if self.has_guid():
+            proto.guid = self.guid
+        proto.vertex_count = self.vertex_count
+        proto.edge_count = self.edge_count
+        for vertex_name in sorted(self.vertices):
+            vertex = self.vertices[vertex_name]
+            v = proto.vertices[vertex_name]
+            v.name = vertex.name
+            if vertex.has_guid():
+                v.guid = vertex.guid
+            v.attribute = vertex.attribute
+            v.index = vertex.index
+        for u in sorted(self.edges):
+            for v in sorted(self.edges[u]):
+                if u > v:
+                    continue
+                edge = self.edges[u][v]
+                e = proto.edges.add()
+                if edge.has_guid():
+                    e.guid = edge.guid
+                e.name = edge.name
+                e.v0 = edge.v0
+                e.v1 = edge.v1
+                e.attribute = edge.attribute
+                e.index = edge.index
+        return proto.SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> "Graph":
+        if not _HAS_PROTOBUF:
+            raise ImportError("protobuf not available")
+        proto = graph_pb2.Graph()
+        proto.ParseFromString(data)
+        graph = cls(proto.name)
+        if proto.guid:
+            graph.guid = proto.guid
+        graph.vertex_count = proto.vertex_count
+        graph.edge_count = proto.edge_count
+        for vertex_name in proto.vertices:
+            v = proto.vertices[vertex_name]
+            vertex = Vertex(v.name, v.attribute)
+            vertex.guid = v.guid
+            vertex.index = v.index
+            graph.vertices[vertex_name] = vertex
+        for e in proto.edges:
+            edge = Edge(e.v0, e.v1, e.attribute)
+            edge.name = e.name
+            edge.guid = e.guid
+            edge.index = e.index
+            graph.edges.setdefault(e.v0, {})[e.v1] = edge
+            graph.edges.setdefault(e.v1, {})[e.v0] = edge
+        return graph
+
+    def pb_dump(self, filepath: str | Path) -> None:
+        data = self.pb_dumps()
+        with open(filepath, "wb") as f:
+            f.write(data)
+
+    @classmethod
+    def pb_load(cls, filepath: str | Path) -> "Graph":
+        with open(filepath, "rb") as f:
+            return cls.pb_loads(f.read())
+
+    def __str__(self) -> str:
+        return (
+            f"Graph({self.guid}, {self.name}, {self.vertex_count}, {self.edge_count})"
+        )
+
+    def __repr__(self) -> str:
+        return self.__str__()
