@@ -110,8 +110,8 @@ class SpatialRTree:
     def _make_rect(self, a_min: list[float], a_max: list[float]) -> _Rect:
         rect = _Rect()
         for i in range(3):
-            rect.m_min[i] = a_min[i]
-            rect.m_max[i] = a_max[i]
+            rect.m_min[i] = min(a_min[i], a_max[i])
+            rect.m_max[i] = max(a_min[i], a_max[i])
         return rect
 
     def _calc_rect_volume(self, rect: _Rect) -> float:

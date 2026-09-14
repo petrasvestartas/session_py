@@ -120,6 +120,20 @@ def test_rtree_search_stop():
     MINI_CHECK(hits == 1)
 
 
+@MINI_TEST("SpatialRTree", "Normalizes Reversed Bounds")
+def test_rtree_normalizes_reversed_bounds():
+    from session_py import SpatialRTree
+    t = SpatialRTree()
+    t.insert([1.0, 2.0, 3.0], [-1.0, -2.0, -3.0], 9)
+    found = []
+    hits = t.search([2.0, 3.0, 4.0], [-2.0, -3.0, -4.0], found.append)
+
+    MINI_CHECK(hits == 1)
+    MINI_CHECK(found == [9])
+    MINI_CHECK(t.remove([2.0, 3.0, 4.0], [-2.0, -3.0, -4.0], 9))
+    MINI_CHECK(t.count() == 0)
+
+
 @MINI_TEST("SpatialRTree", "Search 100 Boxes")
 def test_rtree_search_100_boxes():
     from session_py import SpatialRTree
