@@ -1432,6 +1432,24 @@ def _v_select(a: Polyline, b: Polyline, a_in_b: bool, b_in_a: bool, clip_type: i
     return [a]
 
 
+def _v_select_count(a_count: int, b_count: int, a_in_b: bool, b_in_a: bool, clip_type: int) -> int:
+    if clip_type == 0:
+        if a_in_b:
+            return a_count
+        if b_in_a:
+            return b_count
+        return 0
+    if clip_type == 1:
+        if a_in_b:
+            return b_count
+        if b_in_a:
+            return a_count
+        return a_count + b_count
+    if a_in_b:
+        return 0
+    return a_count
+
+
 def _v_bounds(v: list[_BIVec2]) -> tuple[int, int, int, int]:
     minX = maxX = v[0].x
     minY = maxY = v[0].y
@@ -1651,7 +1669,7 @@ class BooleanPolyline:
         if va_head is None or vb_head is None:
             return 0
         if aMaxX < bMinX or bMaxX < aMinX or aMaxY < bMinY or bMaxY < aMinY:
-            return 0
+            return _v_select_count(len(ca) // 3, len(cb) // 3, _pip_vertex(va_head.pt, vb_head), _pip_vertex(vb_head.pt, va_head), clip_type)
         if not _v_execute_internal(sc, clip_type):
             return 0
         total = 0

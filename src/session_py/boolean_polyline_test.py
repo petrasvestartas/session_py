@@ -8,6 +8,7 @@ PI2 = 6.283185307179586476
 
 @MINI_TEST("Boolean Polyline", "Overlapping Squares")
 def test_boolean_polyline_overlapping_squares():
+    from session_py import BooleanPolyline
     from session_py import Polyline
     from session_py import Point
 
@@ -22,6 +23,12 @@ def test_boolean_polyline_overlapping_squares():
     MINI_CHECK(uni[0].point_count() > 0)
     MINI_CHECK(len(diff) >= 1)
     MINI_CHECK(diff[0].point_count() > 0)
+
+    far_a = Polyline([Point(10,-1,0), Point(12,-1,0), Point(12,1,0), Point(10,1,0), Point(10,-1,0)])
+    far_b = Polyline([Point(14,-1,0), Point(16,-1,0), Point(16,1,0), Point(14,1,0), Point(14,-1,0)])
+    MINI_CHECK(BooleanPolyline.compute_count(far_a, far_b, 0) == 0)
+    MINI_CHECK(BooleanPolyline.compute_count(far_a, far_b, 1) == far_a.point_count() + far_b.point_count())
+    MINI_CHECK(BooleanPolyline.compute_count(far_a, far_b, 2) == far_a.point_count())
 
 
 @MINI_TEST("Boolean Polyline", "Circle Vs Rectangle")
