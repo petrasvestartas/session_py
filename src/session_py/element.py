@@ -281,48 +281,56 @@ class Element:
     def aabb(self) -> OBB:
         if self._is_dirty or self._aabb is None:
             self._aabb = self._compute_aabb()
+            self._is_dirty = False
         return self._aabb
 
     @property
     def obb(self) -> OBB:
         if self._is_dirty or self._obb is None:
             self._obb = self._compute_obb()
+            self._is_dirty = False
         return self._obb
 
     @property
     def collision_mesh(self) -> Mesh:
         if self._is_dirty or self._collision_mesh is None:
             self._collision_mesh = self._compute_collision_mesh()
+            self._is_dirty = False
         return self._collision_mesh
 
     @property
     def point(self) -> Point:
         if self._is_dirty or self._point is None:
             self._point = self._compute_point()
+            self._is_dirty = False
         return self._point
 
     @property
     def polylines(self) -> list[Polyline]:
         if self._is_dirty or self._polylines is None:
             self._polylines = self._compute_polylines()
+            self._is_dirty = False
         return self._polylines
 
     @property
     def planes(self) -> list[Plane]:
         if self._is_dirty or self._planes is None:
             self._planes = self._compute_planes()
+            self._is_dirty = False
         return self._planes
 
     @property
     def edge_vectors(self) -> list[Vector]:
         if self._is_dirty or self._edge_vectors is None:
             self._edge_vectors = self._compute_edge_vectors()
+            self._is_dirty = False
         return self._edge_vectors
 
     @property
     def axis(self) -> Line | None:
         if self._is_dirty or self._axis is None:
             self._axis = self._compute_axis()
+            self._is_dirty = False
         return self._axis
 
     @property
@@ -394,7 +402,7 @@ class Element:
 
     def add_geometry_op(self, op: Callable) -> None:
         self._geometry_ops.append(op)
-        self._is_dirty = True
+        self.reset()
 
     def add_feature(self, feature: ElementFeature) -> None:
         self._features.append(feature)
@@ -402,11 +410,11 @@ class Element:
     def place(self, xform: Xform) -> None:
         """Bake a placement into the element's own geometry, invalidating the cached boxes."""
         self._geometry = self.session_geometry(xform)
-        self._is_dirty = True
+        self.reset()
 
     def set_geometry(self, geometry: Mesh | BRep | None) -> None:
         self._geometry = geometry
-        self._is_dirty = True
+        self.reset()
 
     def set_polylines(self, polylines: list[Polyline]) -> None:
         self._polylines = polylines

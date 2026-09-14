@@ -108,6 +108,11 @@ def test_aabb():
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[0], 0.5))
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[1], 0.5))
     MINI_CHECK(TOLERANCE.is_close(aabb.half_size[2], 0.0))
+    MINI_CHECK(not e.is_dirty)
+
+    e.add_geometry_op(lambda geo: geo)
+    MINI_CHECK(e.is_dirty)
+    MINI_CHECK(e.cached_aabb is None)
 
 
 @MINI_TEST("Element", "OBB")
