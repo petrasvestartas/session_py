@@ -425,9 +425,11 @@ def test_vector_average_normal():
         Point(0.0, 0.0, 0.0),
     ]
     n = Vector.average_normal(square)
+    empty = Vector.average_normal([])
 
     MINI_CHECK(TOLERANCE.is_close(abs(n[2]), 1.0))
     MINI_CHECK(TOLERANCE.is_close(n[0], 0.0) and TOLERANCE.is_close(n[1], 0.0))
+    MINI_CHECK(empty.is_zero)
 
 
 @MINI_TEST("Vector", "Json Roundtrip")

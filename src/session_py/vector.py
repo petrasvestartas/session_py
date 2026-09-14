@@ -444,6 +444,8 @@ class Vector:
     @staticmethod
     def average_normal(points: list["Point"]) -> "Vector":
         """Unit area-weighted normal of a polygon by Newell's method"""
+        if not points:
+            return Vector.zero()
         dx = points[-1][0] - points[0][0]
         dy = points[-1][1] - points[0][1]
         dz = points[-1][2] - points[0][2]
