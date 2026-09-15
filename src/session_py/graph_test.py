@@ -222,9 +222,12 @@ def test_graph_add_edge():
     g = Graph("g")
     edge = g.add_edge("a", "b")
     u, v = edge
+    g.add_edge("b", "a", "updated")
 
     MINI_CHECK(u == "a" and v == "b")
     MINI_CHECK(g.number_of_edges() == 1)
+    MINI_CHECK(g.edge_count == 1)
+    MINI_CHECK(g.edge_attribute("a", "b") == "updated")
 
 
 @MINI_TEST("Graph", "Remove Node")
@@ -237,6 +240,7 @@ def test_graph_remove_node():
 
     MINI_CHECK(not g.has_node("a"))
     MINI_CHECK(g.number_of_edges() == 0)
+    MINI_CHECK(g.edge_count == 0)
 
 
 @MINI_TEST("Graph", "Remove Edge")

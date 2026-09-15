@@ -120,6 +120,12 @@ class Line:
         vx = 1.0
         vy = 0.0
         vz = 0.0
+        if cyy > cxx and cyy >= czz:
+            vx = 0.0
+            vy = 1.0
+        elif czz > cxx and czz > cyy:
+            vx = 0.0
+            vz = 1.0
         for _ in range(100):
             nx = cxx * vx + cxy * vy + cxz * vz
             ny = cxy * vx + cyy * vy + cyz * vz

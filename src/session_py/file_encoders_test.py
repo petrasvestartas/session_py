@@ -370,5 +370,18 @@ def test_dict_of_dicts():
     MINI_CHECK(TOLERANCE.is_close(loaded_vec[2], 1.0))
 
 
+@MINI_TEST("FileEncoders", "Write Error")
+def test_write_error():
+    from session_py import Point
+    from session_py.file_encoders import file_json_dump
+
+    threw = False
+    try:
+        file_json_dump(Point(1.0, 2.0, 3.0), "/definitely/missing-directory/test.json")
+    except OSError:
+        threw = True
+    MINI_CHECK(threw)
+
+
 if __name__ == "__main__":
     run_all(language="python")

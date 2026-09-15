@@ -197,6 +197,10 @@ class Graph:
             self.add_node(u)
         if not self.has_node(v):
             self.add_node(v)
+        if self.has_edge((u, v)):
+            self.edges[u][v].attribute = attribute
+            self.edges[v][u] = self.edges[u][v]
+            return (u, v)
         edge = Edge(u, v, attribute)
         edge.index = self.edge_count
         self.edges.setdefault(u, {})[v] = edge
@@ -214,6 +218,7 @@ class Graph:
             del self.edges[key]
         del self.vertices[key]
         self._reassign_indices()
+        self._reassign_edge_indices()
 
     def remove_edge(self, edge: tuple[str, str]) -> None:
         """Remove an edge, keeping its nodes"""
