@@ -9,18 +9,23 @@ from pathlib import Path
 @MINI_TEST("IoXyz", "Read Bunny")
 def test_read_bunny():
     from session_py import read_xyz
+
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.xyz"
+
     if not bunny_path.exists():
         return
+
     cloud = read_xyz(str(bunny_path))
 
     MINI_CHECK(cloud.point_count() == 397)
     points = cloud.get_points()
     MINI_CHECK(len(points) == 397)
     has_non_zero = False
+
     for p in points:
         if p[0] != 0.0 or p[1] != 0.0 or p[2] != 0.0:
             has_non_zero = True
+
     MINI_CHECK(has_non_zero)
 
 
@@ -30,6 +35,7 @@ def test_write_read_roundtrip():
     from session_py import PointCloud
     from session_py import read_xyz
     from session_py import write_xyz
+
     os.makedirs(Path(__file__).resolve().parents[2] / "serialization", exist_ok=True)
     original = PointCloud()
     original.add_point(Point(0.0, 0.0, 0.0))
@@ -38,7 +44,11 @@ def test_write_read_roundtrip():
     original.add_point(Point(0.0, 0.0, 1.0))
 
     MINI_CHECK(original.point_count() == 4)
-    temp_file = str(Path(__file__).resolve().parents[2] / "serialization" / "test_temp_roundtrip.xyz")
+    temp_file = str(
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_temp_roundtrip.xyz"
+    )
     write_xyz(original, temp_file)
     MINI_CHECK(os.path.exists(temp_file))
     loaded = read_xyz(temp_file)
@@ -52,6 +62,7 @@ def test_string_roundtrip():
     from session_py import PointCloud
     from session_py import read_xyz_from_str
     from session_py import write_xyz_to_string
+
     original = PointCloud()
     original.add_point(Point(0.0, 0.0, 0.0))
     original.add_point(Point(1.0, 0.0, 0.0))
