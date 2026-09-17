@@ -46,10 +46,10 @@ from .file_obj import read_file_obj_from_str
 from .file_obj import write_file_obj_to_string
 from .file_obj import read_file_obj_polylines
 from . import file_step
-from .io import read_xyz
-from .io import write_xyz
-from .io import read_xyz_from_str
-from .io import write_xyz_to_string
+from .io_xyz import read_xyz
+from .io_xyz import write_xyz
+from .io_xyz import read_xyz_from_str
+from .io_xyz import write_xyz_to_string
 from . import intersection
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface

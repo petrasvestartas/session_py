@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-@MINI_TEST("Io", "Read Bunny")
+@MINI_TEST("IoXyz", "Read Bunny")
 def test_read_bunny():
     from session_py import read_xyz
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.xyz"
@@ -24,7 +24,7 @@ def test_read_bunny():
     MINI_CHECK(has_non_zero)
 
 
-@MINI_TEST("Io", "Write Read Roundtrip")
+@MINI_TEST("IoXyz", "Write Read Roundtrip")
 def test_write_read_roundtrip():
     from session_py import Point
     from session_py import PointCloud
@@ -46,7 +46,7 @@ def test_write_read_roundtrip():
     os.remove(temp_file)
 
 
-@MINI_TEST("Io", "String Roundtrip")
+@MINI_TEST("IoXyz", "String Roundtrip")
 def test_string_roundtrip():
     from session_py import Point
     from session_py import PointCloud
