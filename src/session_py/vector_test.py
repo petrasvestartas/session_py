@@ -432,6 +432,27 @@ def test_vector_average_normal():
     MINI_CHECK(empty.is_zero)
 
 
+@MINI_TEST("Vector", "Average Normal Polyline")
+def test_vector_average_normal_polyline():
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    square = Polyline([
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(0.0, 1.0, 0.0),
+        Point(0.0, 0.0, 0.0),
+    ])
+    n = Vector.average_normal_polyline(square)
+    empty = Vector.average_normal_polyline(Polyline())
+
+    MINI_CHECK(TOLERANCE.is_close(abs(n[2]), 1.0))
+    MINI_CHECK(TOLERANCE.is_close(n[0], 0.0) and TOLERANCE.is_close(n[1], 0.0))
+    MINI_CHECK(empty.is_zero)
+
+
 @MINI_TEST("Vector", "Json Roundtrip")
 def test_vector_json_roundtrip():
     from session_py import Vector

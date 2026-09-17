@@ -14,6 +14,7 @@ from .tolerance import TO_RADIANS
 if TYPE_CHECKING:
     from pathlib import Path
     from .point import Point
+    from .polyline import Polyline
     from .xform import Xform
 
 
@@ -465,6 +466,11 @@ class Vector:
             normal[2] += ax * by - ay * bx
         normal.normalize_self()
         return normal
+
+    @staticmethod
+    def average_normal_polyline(polyline: "Polyline") -> "Vector":
+        """Unit area-weighted normal of a polygon by Newell's method"""
+        return Vector.average_normal(polyline.get_points())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Triangle laws

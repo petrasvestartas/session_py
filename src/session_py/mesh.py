@@ -1355,6 +1355,14 @@ class Mesh:
         return mesh
 
     @staticmethod
+    def from_polylines_polyline(polylines: list[Polyline], precision: float | None = None) -> "Mesh":
+        """Mesh from a list of polylines, merging vertices within precision when given"""
+        polygons = []
+        for polyline in polylines:
+            polygons.append(polyline.get_points())
+        return Mesh.from_polylines(polygons, precision)
+
+    @staticmethod
     def _lines_precision(pts: list[Point], precision: float | None) -> float:
         """Grid spacing for merging line endpoints: the given precision or a millionth of the bbox diagonal"""
         eps = precision if precision is not None else 0.0
