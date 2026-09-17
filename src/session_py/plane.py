@@ -499,6 +499,12 @@ class Plane:
         """True when a*p[0] + b*p[1] + c*p[2] + d < 0"""
         return self._a * p[0] + self._b * p[1] + self._c * p[2] + self._d < 0.0
 
+    def squared_distance(self, p: Point) -> float:
+        """Squared distance from p to the plane"""
+        value = self._a * p[0] + self._b * p[1] + self._c * p[2] + self._d
+        normal_sq = self._a * self._a + self._b * self._b + self._c * self._c
+        return value * value / normal_sq if normal_sq > 1e-20 else value * value
+
     def base1(self) -> Vector:
         """Canonical in-plane axis from the normal alone: zero the smallest normal coordinate, negate-swap the other two"""
         nx = self._z_axis[0]

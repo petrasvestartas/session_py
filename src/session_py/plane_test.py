@@ -266,5 +266,18 @@ def test_plane_has_on_negative_side():
     MINI_CHECK(not pl.has_on_negative_side(above))
 
 
+@MINI_TEST("Plane", "Squared Distance")
+def test_plane_squared_distance():
+    from session_py import Plane
+    from session_py import Point
+
+    pl = Plane.xy_plane()
+    above = Point(1.0, 2.0, 3.0)
+    on = Point(4.0, 5.0, 0.0)
+
+    MINI_CHECK(TOLERANCE.is_close(pl.squared_distance(above), 9.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.squared_distance(on), 0.0))
+
+
 if __name__ == "__main__":
     run_all("python")
