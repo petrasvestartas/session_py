@@ -19,6 +19,7 @@ from .nurbssurface_trimmed import TrimLoops
 from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
 from .primitives import Primitives
 from .tolerance import PI
+from .tolerance import Tolerance
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -260,7 +261,7 @@ class _PolyFaceBuilder:
         self.b = b
         self.edge_map: dict[tuple[int, int], int] = {}
 
-    def edge(self, v0: int, v1: int) -> int:
+    def _edge(self, v0: int, v1: int) -> int:
         lo = min(v0, v1)
         hi = max(v0, v1)
         if (lo, hi) in self.edge_map:
@@ -272,7 +273,7 @@ class _PolyFaceBuilder:
         self.edge_map[(lo, hi)] = ei
         return ei
 
-    def wire_refs(self, si: int, vi: list[int]) -> list[BRepRef]:
+    def _wire_refs(self, si: int, vi: list[int]) -> list[BRepRef]:
         """Oriented edge references of the vertex cycle `vi`, each with its pcurve on surface `si`"""
         b = self.b
         srf = b.m_surfaces[si]
@@ -281,7 +282,7 @@ class _PolyFaceBuilder:
         for i in range(n):
             va = vi[i]
             vb = vi[(i + 1) % n]
-            ei = self.edge(va, vb)
+            ei = self._edge(va, vb)
             b.add_pcurve(
                 ei,
                 si,
@@ -292,12 +293,15 @@ class _PolyFaceBuilder:
             refs.append(BRepRef(ei, F if b.m_edges[ei].start_vertex == va else R))
         return refs
 
-    def face(self, srf: NurbsSurface, vi: list[int]) -> int:
-        """Face on `srf` bounded by the vertex cycle `vi`; returns the face index"""
+    def _face(
+        self, srf: NurbsSurface, vi: list[int], holes: list[list[int]] | None = None
+    ) -> int:
+        """Face on `srf` bounded by the vertex cycle `vi`, with one inner wire per hole cycle; returns the face index"""
         si = self.b.add_surface(srf)
-        return self.b.add_face(
-            si, [BRepRef(self.b.add_wire(self.wire_refs(si, vi)), F)]
-        )
+        wires = [BRepRef(self.b.add_wire(self._wire_refs(si, vi)), F)]
+        for hole in holes or []:
+            wires.append(BRepRef(self.b.add_wire(self._wire_refs(si, hole)), F))
+        return self.b.add_face(si, wires)
 
 
 _BOX_FACES = [
@@ -422,6 +426,28 @@ def _planar_patch_through(
         _plane_point(org, xa, ya, umin, vmax),
         _plane_point(org, xa, ya, umax, vmax),
     )
+
+
+def _signed_area_in_plane(pts: list[Point], org: Point, xa: Vector, ya: Vector) -> float:
+    """Signed area of a closed cycle of points seen in the plane (org, xa, ya): positive when it runs counter-clockwise"""
+    area = 0.0
+    n = len(pts)
+    for i in range(n):
+        a = pts[i]
+        b = pts[(i + 1) % n]
+        au = (a[0] - org[0]) * xa[0] + (a[1] - org[1]) * xa[1] + (a[2] - org[2]) * xa[2]
+        av = (a[0] - org[0]) * ya[0] + (a[1] - org[1]) * ya[1] + (a[2] - org[2]) * ya[2]
+        bu = (b[0] - org[0]) * xa[0] + (b[1] - org[1]) * xa[1] + (b[2] - org[2]) * xa[2]
+        bv = (b[0] - org[0]) * ya[0] + (b[1] - org[1]) * ya[1] + (b[2] - org[2]) * ya[2]
+        area += au * bv - bu * av
+    return area * 0.5
+
+
+def _open_points(pl: Polyline) -> list[Point]:
+    """The vertices of a polyline without the closing duplicate"""
+    pts = pl.get_points()
+    n = len(pts) - 1 if pl.is_closed() else len(pts)
+    return pts[:n]
 
 
 def _find_or_add_vertex(b: BRep, p: Point, tol: float) -> int:
@@ -819,13 +845,11 @@ def _direct_face(b: BRep, fi: int) -> bool:
     srf = b.m_surfaces[face.surface_index]
     u0, u1 = srf.domain(0)
     v0, v1 = srf.domain(1)
-    # Topological edge ends must be domain corners; internal polyline controls are not new vertices.
-    mesh_brep = b
-    for er in mesh_brep.wire_edges(face.wires[0]):
-        ci = mesh_brep.pcurve_index(er.index, fi, er.orientation)
+    for er in b.wire_edges(face.wires[0]):
+        ci = b.pcurve_index(er.index, fi, er.orientation)
         if ci < 0:
             continue
-        curve = mesh_brep.m_curves_2d[ci]
+        curve = b.m_curves_2d[ci]
         for k in (0, max(0, curve.cv_count() - 1)):
             p = curve.get_cv(k)
             corner_u = min(abs(p[0] - u0), abs(p[0] - u1)) <= (u1 - u0) * 1e-9
@@ -991,6 +1015,65 @@ def _grid_interior_uv(srf: NurbsSurface, grid: Mesh) -> list[Point]:
     return seeds
 
 
+def _planar_patch_tolerance(srf: NurbsSurface) -> float:
+    """Planarity tolerance for a surface of any size: 1e-9 of its control-point bounding box diagonal, never below the zero tolerance"""
+    lo = [1e300, 1e300, 1e300]
+    hi = [-1e300, -1e300, -1e300]
+    for i in range(srf.cv_count(0)):
+        for j in range(srf.cv_count(1)):
+            p = srf.get_cv(i, j)
+            for k in range(3):
+                lo[k] = min(lo[k], p[k])
+                hi[k] = max(hi[k], p[k])
+    diagonal = math.sqrt((hi[0] - lo[0]) ** 2 + (hi[1] - lo[1]) ** 2 + (hi[2] - lo[2]) ** 2)
+    return max(1e-9 * diagonal, Tolerance.ZERO_TOLERANCE)
+
+
+def _is_planar_patch(srf: NurbsSurface) -> bool:
+    """True for a surface flat within _planar_patch_tolerance, whatever its coordinates"""
+    return srf.is_planar(None, _planar_patch_tolerance(srf))
+
+
+def _planar_patch_uv(srf: NurbsSurface, p: Point) -> tuple[float, float] | None:
+    """Surface parameters of a point on a degree-1 parallelogram patch by two dot products; None when the patch is not that shape"""
+    if srf.degree(0) != 1 or srf.degree(1) != 1 or srf.cv_count(0) != 2 or srf.cv_count(1) != 2:
+        return None
+    p00 = srf.get_cv(0, 0)
+    p10 = srf.get_cv(1, 0)
+    p01 = srf.get_cv(0, 1)
+    p11 = srf.get_cv(1, 1)
+    eu = p10 - p00
+    ev = p01 - p00
+    skew = (p11 - p10) - ev
+    if skew.magnitude() > _planar_patch_tolerance(srf):
+        return None
+    eu2 = eu.dot(eu)
+    ev2 = ev.dot(ev)
+    if eu2 <= 0.0 or ev2 <= 0.0:
+        return None
+    d = p - p00
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    return (u0 + d.dot(eu) / eu2 * (u1 - u0), v0 + d.dot(ev) / ev2 * (v1 - v0))
+
+
+def _linear_pcurve_parameter(crv: NurbsCurve, uv: tuple[float, float]) -> float | None:
+    """Parameter of the closest point on a two-point degree-1 pcurve by one projection; None for any other curve"""
+    if crv.degree() != 1 or crv.is_rational() or crv.cv_count() != 2:
+        return None
+    c0 = crv.get_cv(0)
+    c1 = crv.get_cv(1)
+    dx = c1[0] - c0[0]
+    dy = c1[1] - c0[1]
+    length_squared = dx * dx + dy * dy
+    if length_squared <= 0.0:
+        return None
+    fraction = ((uv[0] - c0[0]) * dx + (uv[1] - c0[1]) * dy) / length_squared
+    fraction = min(max(fraction, 0.0), 1.0)
+    t0, t1 = crv.domain()
+    return t0 + fraction * (t1 - t0)
+
+
 def _lift_canonical(
     b: BRep,
     fi: int,
@@ -1011,13 +1094,17 @@ def _lift_canonical(
         and ei in boundary.samples
     )
     points = boundary.points[ei]
+    planar = _is_planar_patch(srf)
     for index in range(len(points)):
         p = points[index]
         if cached:
             t, q = boundary.samples[ei][index]
         else:
-            u, v = srf.closest_parameters(p)
-            t = crv.closest_parameter(Point(u, v, 0.0))
+            uv = _planar_patch_uv(srf, p) if planar else None
+            u, v = uv if uv is not None else srf.closest_parameters(p)
+            t = _linear_pcurve_parameter(crv, (u, v)) if uv is not None else None
+            if t is None:
+                t = crv.closest_parameter(Point(u, v, 0.0))
             q = crv.point_at(t)
         scale = max(abs(p[0]), abs(p[1]), abs(p[2]), 1.0)
         tolerance = max(
@@ -1045,7 +1132,7 @@ def _fresh_samples(
     count = min(max(crv.cv_count() * 4, math.ceil(360.0 / max(angle, 0.1))), 4096)
     points = []
     parameters = []
-    if crv.degree() <= 1 and not crv.is_rational() and srf.is_planar(None, 0.0):
+    if crv.degree() <= 1 and not crv.is_rational() and _is_planar_patch(srf):
         for k in range(crv.cv_count()):
             points.append(crv.get_cv(k))
             parameters.append(crv.greville_abcissa(k))
@@ -1119,6 +1206,68 @@ def _trim_loops(
         loops.uv.append(uv)
         loops.xyz.append(xyz)
     return True
+
+
+def _planar_loops_mesh(srf: NurbsSurface, loops: TrimLoops) -> Mesh:
+    """Phase 3 for a planar face: the sampled loops triangulated as one polygon with holes, wound to the surface normal, every loop vertex tagged boundary/{loop}/{sample} as mesh_loops does; no grid, no surface evaluation"""
+    from .remesh_cdt import _cdt_triangulate
+    from .remesh_cdt import _project_2d
+    from .remesh_cdt import _signed_area
+
+    mesh = Mesh()
+    if not loops.xyz or len(loops.xyz[0]) < 3:
+        return mesh
+    all_pts = []
+    for loop in loops.xyz:
+        all_pts.extend(loop)
+    origin, xaxis, yaxis, _zaxis = Polyline(all_pts).get_average_plane()
+    border = list(loops.xyz[0])
+    border_2d = _project_2d(border, origin, xaxis, yaxis)
+    if _signed_area(border_2d) < 0.0:
+        border.reverse()
+        border_2d.reverse()
+    holes = []
+    holes_2d = []
+    for li in range(1, len(loops.xyz)):
+        hole = list(loops.xyz[li])
+        if len(hole) < 3:
+            continue
+        hole_2d = _project_2d(hole, origin, xaxis, yaxis)
+        if _signed_area(hole_2d) > 0.0:
+            hole.reverse()
+            hole_2d.reverse()
+        holes.append(hole)
+        holes_2d.append(hole_2d)
+    vkeys = []
+    for p in border:
+        vkeys.append(mesh.add_vertex(p))
+    for hole in holes:
+        for p in hole:
+            vkeys.append(mesh.add_vertex(p))
+    for t in _cdt_triangulate(border_2d, holes_2d):
+        if t[0] != t[1] and t[1] != t[2] and t[2] != t[0]:
+            mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    normal = srf.normal_at(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+    for fverts in mesh.face.values():
+        a = mesh.vertex[fverts[0]].position()
+        b = mesh.vertex[fverts[1]].position()
+        c = mesh.vertex[fverts[2]].position()
+        if (b - a).cross(c - a).dot(normal) < 0.0:
+            mesh.flip()
+        break
+    lookup = {}
+    for li in range(len(loops.xyz)):
+        for k in range(len(loops.xyz[li])):
+            p = loops.xyz[li][k]
+            lookup.setdefault((p[0], p[1], p[2]), (li, k))
+    for vd in mesh.vertex.values():
+        vd.set_normal(normal[0], normal[1], normal[2])
+        hit = lookup.get((vd.x, vd.y, vd.z))
+        if hit is not None:
+            vd.attributes[f"boundary/{hit[0]}/{hit[1]}"] = 1.0
+    return mesh
 
 
 def _tag_edge_uses(
@@ -1234,7 +1383,7 @@ class BRep:
         pb = _PolyFaceBuilder(b)
         faces = []
         for fv in _BOX_FACES:
-            faces.append(BRepRef(pb.face(_quad_patch(b, fv), fv), F))
+            faces.append(BRepRef(pb._face(_quad_patch(b, fv), fv), F))
         b.add_solid([BRepRef(b.add_shell(faces), F)])
         return b
 
@@ -1350,7 +1499,7 @@ class BRep:
         v_apex = b.add_vertex(Point(0.0, 0.0, height))
         pb = _PolyFaceBuilder(b)
         fv = [0, 3, 2, 1]
-        faces = [BRepRef(pb.face(_quad_patch(b, fv), fv), F)]
+        faces = [BRepRef(pb._face(_quad_patch(b, fv), fv), F)]
         for i in range(4):
             a = i
             c = (i + 1) % 4
@@ -1361,9 +1510,9 @@ class BRep:
                 b.m_vertices[v_apex].point,
             )
             si = b.add_surface(srf)
-            e_ac = pb.edge(a, c)
-            e_c = pb.edge(c, v_apex)
-            e_a = pb.edge(a, v_apex)
+            e_ac = pb._edge(a, c)
+            e_c = pb._edge(c, v_apex)
+            e_a = pb._edge(a, v_apex)
             e_deg = b.add_edge(-1, v_apex, v_apex)
             ac_fwd = b.m_edges[e_ac].start_vertex == a
             b.add_pcurve(
@@ -1444,7 +1593,7 @@ class BRep:
         faces = []
         for fi in range(2, 6):
             faces.append(
-                BRepRef(pb.face(_quad_patch(b, _BOX_FACES[fi]), _BOX_FACES[fi]), F)
+                BRepRef(pb._face(_quad_patch(b, _BOX_FACES[fi]), _BOX_FACES[fi]), F)
             )
         p_bot = Point(hole_radius, 0.0, -hz)
         p_top = Point(hole_radius, 0.0, hz)
@@ -1467,7 +1616,7 @@ class BRep:
             fv = _BOX_FACES[fi]
             cap = _quad_patch(b, fv)
             si = b.add_surface(cap)
-            outer = pb.wire_refs(si, fv)
+            outer = pb._wire_refs(si, fv)
             e_hole = e_bot if fi == 0 else e_top
             c2d = _project_to_patch(
                 b.m_curves_3d[b.m_edges[e_hole].curve_3d_index], cap
@@ -1490,25 +1639,43 @@ class BRep:
         return b
 
     @staticmethod
-    def from_polylines(polylines: list[Polyline]) -> BRep:
-        """One planar face per closed polyline; coincident vertices and edges are shared, closed sheets become solids"""
+    def from_polylines(
+        polylines: list[Polyline], holes: list[list[Polyline]] | None = None
+    ) -> BRep:
+        """One planar face per closed polyline, holes[i] the closed polylines bounding the holes of face i; coincident vertices and edges are shared, closed sheets become solids"""
         b = BRep()
         b.name = "polysurface"
         tol = 1e-6
+        holes = holes if holes is not None else []
         pb = _PolyFaceBuilder(b)
-        for pl in polylines:
-            pts = pl.get_points()
-            n = len(pts) - 1 if pl.is_closed() else len(pts)
-            if n < 3:
+        for pi in range(len(polylines)):
+            pts = _open_points(polylines[pi])
+            if len(pts) < 3:
                 continue
-            org, plane = pl.get_fast_plane()
+            org, plane = polylines[pi].get_fast_plane()
             if not plane.is_valid():
                 continue
+            xa = plane.x_axis
+            ya = plane.y_axis
+            outer_area = _signed_area_in_plane(pts, org, xa, ya)
             vi = []
-            for i in range(n):
-                vi.append(_find_or_add_vertex(b, pts[i], tol))
-            pts = pts[:n]
-            pb.face(_planar_patch_through(pts, org, plane.x_axis, plane.y_axis), vi)
+            for p in pts:
+                vi.append(_find_or_add_vertex(b, p, tol))
+            all_pts = list(pts)
+            hole_cycles = []
+            if pi < len(holes):
+                for h in holes[pi]:
+                    hp = _open_points(h)
+                    if len(hp) < 3:
+                        continue
+                    if _signed_area_in_plane(hp, org, xa, ya) * outer_area > 0.0:
+                        hp.reverse()
+                    cycle = []
+                    for p in hp:
+                        cycle.append(_find_or_add_vertex(b, p, tol))
+                    hole_cycles.append(cycle)
+                    all_pts.extend(hp)
+            pb._face(_planar_patch_through(all_pts, org, xa, ya), vi, hole_cycles)
         _close_free_faces(b)
         return b
 
@@ -1892,9 +2059,12 @@ class BRep:
             uses: list[tuple[int, int, int, int]] = []
             if not _trim_loops(self, fi, boundary, angle, chord, loops, uses):
                 continue
-            ts = NurbsSurfaceTrimmed()
-            ts.m_surface = srf
-            fmesh[fi] = ts.mesh_loops(loops, angle, chord)
+            if not loops.interior_uv and _is_planar_patch(srf):
+                fmesh[fi] = _planar_loops_mesh(srf, loops)
+            else:
+                ts = NurbsSurfaceTrimmed()
+                ts.m_surface = srf
+                fmesh[fi] = ts.mesh_loops(loops, angle, chord)
             _tag_edge_uses(fmesh[fi], loops, uses)
         for fi in range(nf):
             if self.face_orientation(fi) != BRepOrientation.Reversed:

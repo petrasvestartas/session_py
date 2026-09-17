@@ -823,6 +823,62 @@ def test_brep_from_nurbscurves_holes():
     MINI_CHECK(abs(m.area() - (100.0 - PI * 4.0)) < 0.5)
 
 
+def _box_with_square_hole():
+    """4 x 4 x 2 box with a 1 x 1 through-hole along z: bottom and top with a hole, four outer and four inner side quads"""
+    from session_py import Point
+    from session_py import Polyline
+
+    def ring(pts, z):
+        return Polyline([Point(x, y, z) for x, y in pts] + [Point(pts[0][0], pts[0][1], z)])
+
+    outer = [(-2, -2), (2, -2), (2, 2), (-2, 2)]
+    inner = [(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]
+    faces = [ring(outer, 0.0), ring(outer, 2.0)]
+    holes = [[ring(inner, 0.0)], [ring(inner, 2.0)]]
+    for loop in (outer, inner):
+        for i in range(4):
+            a = loop[i]
+            b = loop[(i + 1) % 4]
+            faces.append(Polyline([Point(a[0], a[1], 0.0), Point(b[0], b[1], 0.0), Point(b[0], b[1], 2.0), Point(a[0], a[1], 2.0), Point(a[0], a[1], 0.0)]))
+            holes.append([])
+    return faces, holes
+
+
+@MINI_TEST("BRep", "From Polylines Holes")
+def test_brep_from_polylines_holes():
+    from session_py import BRep
+
+    faces, holes = _box_with_square_hole()
+    b = BRep.from_polylines(faces, holes)
+    MINI_CHECK(b.face_count() == 10)
+    MINI_CHECK(len(b.m_faces[0].wires) == 2)
+    MINI_CHECK(b.is_solid())
+    MINI_CHECK(abs(b.mesh().volume() - 30.0) < 1e-6)
+
+
+@MINI_TEST("BRep", "Planar Fast Path")
+def test_brep_planar_fast_path():
+    from session_py import BRep
+
+    faces, holes = _box_with_square_hole()
+    b = BRep.from_polylines(faces, holes)
+    fm = b.face_meshes()
+    MINI_CHECK(len(fm) == 10)
+    MINI_CHECK(len(fm[0].vertex) == 8 and len(fm[0].face) == 8)
+    MINI_CHECK(len(fm[2].vertex) == 4 and len(fm[2].face) == 2)
+    total = 0.0
+    for m in fm:
+        total += m.area()
+    MINI_CHECK(abs(total - 70.0) < 1e-6)
+    tagged = 0
+    for vd in fm[0].vertex.values():
+        for key in vd.attributes.keys():
+            if str(key).startswith("brep_edge/"):
+                tagged += 1
+                break
+    MINI_CHECK(tagged == 8)
+
+
 @MINI_TEST("BRep", "Mesh Orientation")
 def test_brep_mesh_orientation():
     from session_py import BRep
