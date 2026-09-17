@@ -61,8 +61,10 @@ def test_place():
 
     MINI_CHECK(e.is_dirty)
     min_x = float("inf")
+
     for v in e.geometry.vertex.values():
         min_x = min(min_x, v.x)
+
     MINI_CHECK(min_x > 9.0)
 
 
@@ -292,6 +294,7 @@ def test_polylines_empty_without_mesh():
 
 def _test_plate_class():
     """Stand-in for a domain element: carries state the kernel knows nothing about."""
+
     from session_py import Element
 
     class TestPlate(Element):
@@ -305,8 +308,10 @@ def _test_plate_class():
 
         def element_data_dumps(self):
             out = str(self.thickness)
+
             for c in self.codes:
                 out += "," + str(c)
+
             return out.encode()
 
         @staticmethod
@@ -323,8 +328,10 @@ def _test_plate_class():
 
                 parts = proto.element_data.decode().split(",")
                 plate.thickness = float(parts[0])
+
                 for c in parts[1:]:
                     plate.codes.append(int(c))
+
                 return plate
 
             Element.register_type("TestPlate", factory)
@@ -395,8 +402,8 @@ def test_features_round_trip():
     from session_py import Vector
 
     e = Element(_unit_quad(), "plate_0")
-    e.insertion_vectors = [Vector(0, 0, 1), Vector(1, 0, 0)]
-    e.dimensions = Vector(120.0, 80.0, 12.5)
+    e.set_insertion_vectors([Vector(0, 0, 1), Vector(1, 0, 0)])
+    e.set_dimensions(Vector(120.0, 80.0, 12.5))
     e.add_feature(
         ElementFeature(
             "cut",
@@ -433,7 +440,7 @@ def test_dimensions_are_nominal_not_measured():
     e = Element(_unit_quad(), "plate")
     MINI_CHECK(e.dimensions is None)
 
-    e.dimensions = Vector(120.0, 80.0, 12.5)
+    e.set_dimensions(Vector(120.0, 80.0, 12.5))
     measured = e.obb
 
     MINI_CHECK(abs(e.dimensions[0] - 120.0) < 1e-9)
@@ -521,8 +528,8 @@ def test_duplicate_keeps_every_field():
     from session_py import Vector
 
     e = Element(_unit_quad(), "original")
-    e.insertion_vectors = [Vector(0, 0, 1)]
-    e.dimensions = Vector(120.0, 80.0, 12.5)
+    e.set_insertion_vectors([Vector(0, 0, 1)])
+    e.set_dimensions(Vector(120.0, 80.0, 12.5))
     e.add_feature(ElementFeature("cut", 2, [], "notch"))
 
     copy = e.duplicate()
@@ -543,7 +550,7 @@ def test_equality_compares_carried_fields():
     b = Element(_unit_quad(), "same")
     MINI_CHECK(a == b)
 
-    b.dimensions = Vector(1, 2, 3)
+    b.set_dimensions(Vector(1, 2, 3))
     MINI_CHECK(a != b)
 
 
@@ -558,12 +565,14 @@ def test_element_feature_constructor():
     from session_py import Point
     from session_py import Polyline
 
-    outline = Polyline([
-        Point(0, 0, 0),
-        Point(1, 0, 0),
-        Point(1, 1, 0),
-        Point(0, 0, 0),
-    ])
+    outline = Polyline(
+        [
+            Point(0, 0, 0),
+            Point(1, 0, 0),
+            Point(1, 1, 0),
+            Point(0, 0, 0),
+        ]
+    )
     f = ElementFeature("cut", 2, [outline], "notch")
 
     MINI_CHECK(f.feature_type == "cut")

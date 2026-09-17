@@ -12,11 +12,22 @@ def test_boolean_polyline_overlapping_squares():
     from session_py import Polyline
     from session_py import Point
 
-    a = Polyline([Point(-1,-1,0), Point(1,-1,0), Point(1,1,0), Point(-1,1,0), Point(-1,-1,0)])
-    b = Polyline([Point(0,0,0), Point(2,0,0), Point(2,2,0), Point(0,2,0), Point(0,0,0)])
+    a = Polyline(
+        [
+            Point(-1, -1, 0),
+            Point(1, -1, 0),
+            Point(1, 1, 0),
+            Point(-1, 1, 0),
+            Point(-1, -1, 0),
+        ]
+    )
+    b = Polyline(
+        [Point(0, 0, 0), Point(2, 0, 0), Point(2, 2, 0), Point(0, 2, 0), Point(0, 0, 0)]
+    )
     isect = Polyline.boolean_op(a, b, 0)
     uni = Polyline.boolean_op(a, b, 1)
     diff = Polyline.boolean_op(a, b, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -24,10 +35,30 @@ def test_boolean_polyline_overlapping_squares():
     MINI_CHECK(len(diff) >= 1)
     MINI_CHECK(diff[0].point_count() > 0)
 
-    far_a = Polyline([Point(10,-1,0), Point(12,-1,0), Point(12,1,0), Point(10,1,0), Point(10,-1,0)])
-    far_b = Polyline([Point(14,-1,0), Point(16,-1,0), Point(16,1,0), Point(14,1,0), Point(14,-1,0)])
+    far_a = Polyline(
+        [
+            Point(10, -1, 0),
+            Point(12, -1, 0),
+            Point(12, 1, 0),
+            Point(10, 1, 0),
+            Point(10, -1, 0),
+        ]
+    )
+    far_b = Polyline(
+        [
+            Point(14, -1, 0),
+            Point(16, -1, 0),
+            Point(16, 1, 0),
+            Point(14, 1, 0),
+            Point(14, -1, 0),
+        ]
+    )
+
     MINI_CHECK(BooleanPolyline.compute_count(far_a, far_b, 0) == 0)
-    MINI_CHECK(BooleanPolyline.compute_count(far_a, far_b, 1) == far_a.point_count() + far_b.point_count())
+    MINI_CHECK(
+        BooleanPolyline.compute_count(far_a, far_b, 1)
+        == far_a.point_count() + far_b.point_count()
+    )
     MINI_CHECK(BooleanPolyline.compute_count(far_a, far_b, 2) == far_a.point_count())
 
 
@@ -37,15 +68,26 @@ def test_boolean_polyline_circle_vs_rectangle():
     from session_py import Point
 
     pts = []
+
     for i in range(64):
         a = PI2 * i / 64
         pts.append(Point(5.0 + 1.5 * math.cos(a), 1.5 * math.sin(a), 0.0))
+
     pts.append(pts[0])
     circle = Polyline(pts)
-    rect = Polyline([Point(4,-0.5,0), Point(7,-0.5,0), Point(7,0.5,0), Point(4,0.5,0), Point(4,-0.5,0)])
+    rect = Polyline(
+        [
+            Point(4, -0.5, 0),
+            Point(7, -0.5, 0),
+            Point(7, 0.5, 0),
+            Point(4, 0.5, 0),
+            Point(4, -0.5, 0),
+        ]
+    )
     isect = Polyline.boolean_op(circle, rect, 0)
     uni = Polyline.boolean_op(circle, rect, 1)
     diff = Polyline.boolean_op(circle, rect, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -60,21 +102,26 @@ def test_boolean_polyline_star_vs_circle():
     from session_py import Point
 
     star_pts = []
+
     for i in range(10):
         a = PI2 * i / 10
         r = 2.0 if i % 2 == 0 else 0.8
         star_pts.append(Point(10.0 + r * math.cos(a), r * math.sin(a), 0.0))
+
     star_pts.append(star_pts[0])
     star = Polyline(star_pts)
     circ_pts = []
+
     for i in range(32):
         a = PI2 * i / 32
         circ_pts.append(Point(10.5 + 1.2 * math.cos(a), 0.5 + 1.2 * math.sin(a), 0.0))
+
     circ_pts.append(circ_pts[0])
     circle = Polyline(circ_pts)
     isect = Polyline.boolean_op(star, circle, 0)
     uni = Polyline.boolean_op(star, circle, 1)
     diff = Polyline.boolean_op(star, circle, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -88,14 +135,30 @@ def test_boolean_polyline_l_shape_vs_rectangle():
     from session_py import Polyline
     from session_py import Point
 
-    l_shape = Polyline([
-        Point(15,-1,0), Point(18,-1,0), Point(18,0,0),
-        Point(16,0,0), Point(16,2,0), Point(15,2,0), Point(15,-1,0)
-    ])
-    rect = Polyline([Point(15.5,-0.5,0), Point(18.5,-0.5,0), Point(18.5,1.5,0), Point(15.5,1.5,0), Point(15.5,-0.5,0)])
+    l_shape = Polyline(
+        [
+            Point(15, -1, 0),
+            Point(18, -1, 0),
+            Point(18, 0, 0),
+            Point(16, 0, 0),
+            Point(16, 2, 0),
+            Point(15, 2, 0),
+            Point(15, -1, 0),
+        ]
+    )
+    rect = Polyline(
+        [
+            Point(15.5, -0.5, 0),
+            Point(18.5, -0.5, 0),
+            Point(18.5, 1.5, 0),
+            Point(15.5, 1.5, 0),
+            Point(15.5, -0.5, 0),
+        ]
+    )
     isect = Polyline.boolean_op(l_shape, rect, 0)
     uni = Polyline.boolean_op(l_shape, rect, 1)
     diff = Polyline.boolean_op(l_shape, rect, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -111,10 +174,12 @@ def test_boolean_polyline_two_large_circles():
 
     pts_a = []
     pts_b = []
+
     for i in range(256):
         a = PI2 * i / 256
         pts_a.append(Point(22.0 + 2.0 * math.cos(a), 2.0 * math.sin(a), 0.0))
         pts_b.append(Point(23.0 + 2.0 * math.cos(a), 0.5 + 2.0 * math.sin(a), 0.0))
+
     pts_a.append(pts_a[0])
     pts_b.append(pts_b[0])
     ca = Polyline(pts_a)
@@ -122,6 +187,7 @@ def test_boolean_polyline_two_large_circles():
     isect = Polyline.boolean_op(ca, cb, 0)
     uni = Polyline.boolean_op(ca, cb, 1)
     diff = Polyline.boolean_op(ca, cb, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -135,11 +201,22 @@ def test_boolean_polyline_diamond_vs_triangle():
     from session_py import Polyline
     from session_py import Point
 
-    diamond = Polyline([Point(28,0,0), Point(30,-2,0), Point(32,0,0), Point(30,2,0), Point(28,0,0)])
-    tri = Polyline([Point(29,-2,0), Point(33,0,0), Point(29,2,0), Point(29,-2,0)])
+    diamond = Polyline(
+        [
+            Point(28, 0, 0),
+            Point(30, -2, 0),
+            Point(32, 0, 0),
+            Point(30, 2, 0),
+            Point(28, 0, 0),
+        ]
+    )
+    tri = Polyline(
+        [Point(29, -2, 0), Point(33, 0, 0), Point(29, 2, 0), Point(29, -2, 0)]
+    )
     isect = Polyline.boolean_op(diamond, tri, 0)
     uni = Polyline.boolean_op(diamond, tri, 1)
     diff = Polyline.boolean_op(diamond, tri, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -154,22 +231,27 @@ def test_boolean_polyline_star_vs_star():
     from session_py import Point
 
     pts_a = []
+
     for i in range(12):
         a = PI2 * i / 12
         r = 2.5 if i % 2 == 0 else 1.0
         pts_a.append(Point(36.0 + r * math.cos(a), r * math.sin(a), 0.0))
+
     pts_a.append(pts_a[0])
     pts_b = []
+
     for i in range(10):
         a = PI2 * i / 10
         r = 2.0 if i % 2 == 0 else 0.8
         pts_b.append(Point(37.0 + r * math.cos(a), 0.5 + r * math.sin(a), 0.0))
+
     pts_b.append(pts_b[0])
     sa = Polyline(pts_a)
     sb = Polyline(pts_b)
     isect = Polyline.boolean_op(sa, sb, 0)
     uni = Polyline.boolean_op(sa, sb, 1)
     diff = Polyline.boolean_op(sa, sb, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -183,11 +265,28 @@ def test_boolean_polyline_cross_shape():
     from session_py import Polyline
     from session_py import Point
 
-    narrow = Polyline([Point(42,-2,0), Point(44,-2,0), Point(44,2,0), Point(42,2,0), Point(42,-2,0)])
-    wide = Polyline([Point(40,-0.5,0), Point(46,-0.5,0), Point(46,0.5,0), Point(40,0.5,0), Point(40,-0.5,0)])
+    narrow = Polyline(
+        [
+            Point(42, -2, 0),
+            Point(44, -2, 0),
+            Point(44, 2, 0),
+            Point(42, 2, 0),
+            Point(42, -2, 0),
+        ]
+    )
+    wide = Polyline(
+        [
+            Point(40, -0.5, 0),
+            Point(46, -0.5, 0),
+            Point(46, 0.5, 0),
+            Point(40, 0.5, 0),
+            Point(40, -0.5, 0),
+        ]
+    )
     isect = Polyline.boolean_op(narrow, wide, 0)
     uni = Polyline.boolean_op(narrow, wide, 1)
     diff = Polyline.boolean_op(narrow, wide, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -201,19 +300,30 @@ def test_boolean_polyline_concave_arrow_vs_circle():
     from session_py import Polyline
     from session_py import Point
 
-    arrow = Polyline([
-        Point(49,0,0), Point(52,2,0), Point(51,0.5,0), Point(53,0.5,0),
-        Point(53,-0.5,0), Point(51,-0.5,0), Point(52,-2,0), Point(49,0,0)
-    ])
+    arrow = Polyline(
+        [
+            Point(49, 0, 0),
+            Point(52, 2, 0),
+            Point(51, 0.5, 0),
+            Point(53, 0.5, 0),
+            Point(53, -0.5, 0),
+            Point(51, -0.5, 0),
+            Point(52, -2, 0),
+            Point(49, 0, 0),
+        ]
+    )
     pts = []
+
     for i in range(48):
         a = PI2 * i / 48
         pts.append(Point(51.5 + 1.5 * math.cos(a), 1.5 * math.sin(a), 0.0))
+
     pts.append(pts[0])
     circle = Polyline(pts)
     isect = Polyline.boolean_op(arrow, circle, 0)
     uni = Polyline.boolean_op(arrow, circle, 1)
     diff = Polyline.boolean_op(arrow, circle, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -229,10 +339,12 @@ def test_boolean_polyline_two_large_circles_1000():
 
     pts_a = []
     pts_b = []
+
     for i in range(1000):
         a = PI2 * i / 1000
         pts_a.append(Point(58.0 + 3.0 * math.cos(a), 3.0 * math.sin(a), 0.0))
         pts_b.append(Point(59.5 + 3.0 * math.cos(a), 3.0 * math.sin(a), 0.0))
+
     pts_a.append(pts_a[0])
     pts_b.append(pts_b[0])
     ca = Polyline(pts_a)
@@ -240,6 +352,7 @@ def test_boolean_polyline_two_large_circles_1000():
     isect = Polyline.boolean_op(ca, cb, 0)
     uni = Polyline.boolean_op(ca, cb, 1)
     diff = Polyline.boolean_op(ca, cb, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -253,11 +366,28 @@ def test_boolean_polyline_large_coords_auto_scale():
     from session_py import Polyline
     from session_py import Point
 
-    a = Polyline([Point(64e6,1e6,0), Point(64e6+2e6,1e6,0), Point(64e6+2e6,1e6+2e6,0), Point(64e6,1e6+2e6,0), Point(64e6,1e6,0)])
-    b = Polyline([Point(64e6+1e6,1e6+1e6,0), Point(64e6+3e6,1e6+1e6,0), Point(64e6+3e6,1e6+3e6,0), Point(64e6+1e6,1e6+3e6,0), Point(64e6+1e6,1e6+1e6,0)])
+    a = Polyline(
+        [
+            Point(64e6, 1e6, 0),
+            Point(64e6 + 2e6, 1e6, 0),
+            Point(64e6 + 2e6, 1e6 + 2e6, 0),
+            Point(64e6, 1e6 + 2e6, 0),
+            Point(64e6, 1e6, 0),
+        ]
+    )
+    b = Polyline(
+        [
+            Point(64e6 + 1e6, 1e6 + 1e6, 0),
+            Point(64e6 + 3e6, 1e6 + 1e6, 0),
+            Point(64e6 + 3e6, 1e6 + 3e6, 0),
+            Point(64e6 + 1e6, 1e6 + 3e6, 0),
+            Point(64e6 + 1e6, 1e6 + 1e6, 0),
+        ]
+    )
     isect = Polyline.boolean_op(a, b, 0)
     uni = Polyline.boolean_op(a, b, 1)
     diff = Polyline.boolean_op(a, b, 2)
+
     MINI_CHECK(len(isect) >= 1)
     MINI_CHECK(isect[0].point_count() > 0)
     MINI_CHECK(len(uni) >= 1)
@@ -273,12 +403,22 @@ def test_boolean_polyline_open_horizontal_line_vs_unit_square():
     from session_py import Point
 
     open_line = Polyline([Point(-2, 0, 0), Point(2, 0, 0)])
-    sq = Polyline([Point(-1,-1,0), Point(1,-1,0), Point(1,1,0), Point(-1,1,0), Point(-1,-1,0)])
+    sq = Polyline(
+        [
+            Point(-1, -1, 0),
+            Point(1, -1, 0),
+            Point(1, 1, 0),
+            Point(-1, 1, 0),
+            Point(-1, -1, 0),
+        ]
+    )
     out = BooleanPolyline.clip_open_against_closed(open_line, sq)
+
     MINI_CHECK(len(out) == 1)
     MINI_CHECK(out[0].point_count() == 2)
     p0 = out[0].get_point(0)
     p1 = out[0].get_point(1)
+
     MINI_CHECK(abs(abs(p0[0]) - 1.0) < 1e-6)
     MINI_CHECK(abs(abs(p1[0]) - 1.0) < 1e-6)
     MINI_CHECK(abs(p0[1]) < 1e-6)
@@ -292,12 +432,22 @@ def test_boolean_polyline_open_diagonal_line_vs_unit_square():
     from session_py import Point
 
     open_line = Polyline([Point(-2, -2, 0), Point(2, 2, 0)])
-    sq = Polyline([Point(-1,-1,0), Point(1,-1,0), Point(1,1,0), Point(-1,1,0), Point(-1,-1,0)])
+    sq = Polyline(
+        [
+            Point(-1, -1, 0),
+            Point(1, -1, 0),
+            Point(1, 1, 0),
+            Point(-1, 1, 0),
+            Point(-1, -1, 0),
+        ]
+    )
     out = BooleanPolyline.clip_open_against_closed(open_line, sq)
+
     MINI_CHECK(len(out) == 1)
     MINI_CHECK(out[0].point_count() == 2)
     p0 = out[0].get_point(0)
     p1 = out[0].get_point(1)
+
     MINI_CHECK(abs(abs(p0[0]) - 1.0) < 1e-6)
     MINI_CHECK(abs(abs(p1[0]) - 1.0) < 1e-6)
 
@@ -309,8 +459,17 @@ def test_boolean_polyline_open_interior_open_path_passes_through():
     from session_py import Point
 
     open_path = Polyline([Point(-2, 0, 0), Point(0, 0.2, 0), Point(2, 0, 0)])
-    sq = Polyline([Point(-1,-1,0), Point(1,-1,0), Point(1,1,0), Point(-1,1,0), Point(-1,-1,0)])
+    sq = Polyline(
+        [
+            Point(-1, -1, 0),
+            Point(1, -1, 0),
+            Point(1, 1, 0),
+            Point(-1, 1, 0),
+            Point(-1, -1, 0),
+        ]
+    )
     out = BooleanPolyline.clip_open_against_closed(open_path, sq)
+
     MINI_CHECK(len(out) == 1)
     MINI_CHECK(out[0].point_count() >= 3)
 

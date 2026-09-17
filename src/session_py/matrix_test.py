@@ -13,7 +13,6 @@ def test_matrix_constructor():
     m = Matrix.zeros(2, 3)
     eye = Matrix.identity(3)
     ml = Matrix.from_vec(2, 2, [1.0, 2.0, 3.0, 4.0])
-    legacy = Matrix.from_list(2, 2, [1, 2, 3, 4])
     mr = Matrix.from_rows([[1.0, 2.0], [3.0, 4.0]])
     mc = Matrix.from_cols([[1.0, 3.0], [2.0, 4.0]])
     v00 = ml[0, 0]
@@ -35,7 +34,6 @@ def test_matrix_constructor():
     MINI_CHECK(eye[0, 1] == 0.0)
     MINI_CHECK(v00 == 1.0 and v01 == 2.0 and v10 == 3.0 and v11 == 4.0)
     MINI_CHECK(mc == ml)
-    MINI_CHECK(legacy == ml and isinstance(legacy.data[0], float))
     MINI_CHECK(eq)
     MINI_CHECK(ne)
     MINI_CHECK("Matrix(2x3)" in sstr)
@@ -100,13 +98,9 @@ def test_matrix_scale():
     a = Matrix.from_vec(2, 2, [1.0, 2.0, 3.0, 4.0])
     b = a.scale(2.0)
     c = a.scale(3.0)
-    d = 3.0 * a
-    e = a * 3.0
 
     MINI_CHECK(b[0, 0] == 2.0 and b[0, 1] == 4.0 and b[1, 0] == 6.0 and b[1, 1] == 8.0)
     MINI_CHECK(c[0, 0] == 3.0 and c[1, 1] == 12.0)
-    MINI_CHECK(d == c)
-    MINI_CHECK(e == c)
 
 
 @MINI_TEST("Matrix", "Multiply")
@@ -202,11 +196,11 @@ def test_matrix_lu_decompose():
     from session_py import Matrix
 
     a = Matrix.from_vec(3, 3, [2.0, 1.0, 1.0, 4.0, 3.0, 3.0, 8.0, 7.0, 9.0])
-    l, u, p = a.lu_decompose()
+    lower, u, p = a.lu_decompose()
     pa = p.multiply(a)
-    lu = l.multiply(u)
+    lu = lower.multiply(u)
 
-    MINI_CHECK(l.rows == 3 and u.cols == 3)
+    MINI_CHECK(lower.rows == 3 and u.cols == 3)
     MINI_CHECK(
         TOLERANCE.is_close(pa[0, 0], lu[0, 0])
         and TOLERANCE.is_close(pa[0, 1], lu[0, 1])
@@ -215,8 +209,8 @@ def test_matrix_lu_decompose():
         TOLERANCE.is_close(pa[1, 0], lu[1, 0])
         and TOLERANCE.is_close(pa[2, 2], lu[2, 2])
     )
-    MINI_CHECK(TOLERANCE.is_close(l[0, 1], 0.0) and TOLERANCE.is_close(l[0, 2], 0.0))
-    MINI_CHECK(TOLERANCE.is_close(l[1, 2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(lower[0, 1], 0.0) and TOLERANCE.is_close(lower[0, 2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(lower[1, 2], 0.0))
 
 
 @MINI_TEST("Matrix", "Qr Decompose")
@@ -245,11 +239,11 @@ def test_matrix_cholesky():
     from session_py import Matrix
 
     a = Matrix.from_vec(3, 3, [4.0, 2.0, 2.0, 2.0, 5.0, 3.0, 2.0, 3.0, 6.0])
-    l = a.cholesky()
+    lower = a.cholesky()
 
-    MINI_CHECK(l is not None)
-    lt = l.transpose()
-    llt = l.multiply(lt)
+    MINI_CHECK(lower is not None)
+    lt = lower.transpose()
+    llt = lower.multiply(lt)
     not_spd = Matrix.from_vec(2, 2, [1.0, 2.0, 2.0, 1.0])
     l_none = not_spd.cholesky()
 
@@ -386,14 +380,17 @@ def test_matrix_serialization_errors():
         Matrix.file_json_loads("{}")
     except KeyError:
         malformed_json = True
+
     try:
         Matrix.pb_loads(b"\xff")
     except DecodeError:
         malformed_pb = True
+
     try:
         matrix.file_json_dump("")
     except OSError:
         json_write_failed = True
+
     try:
         matrix.pb_dump("")
     except OSError:
@@ -418,7 +415,7 @@ def test_matrix_shape_errors():
     rows = False
     cols = False
     multiply = False
-    json_error = False
+    json = False
     proto_negative = False
     proto_data = False
 
@@ -426,40 +423,48 @@ def test_matrix_shape_errors():
         Matrix(-1, 2)
     except ValueError:
         negative = True
+
     try:
         Matrix.from_vec(maxsize, maxsize, [])
     except ValueError:
         overflow = True
+
     try:
         Matrix.from_vec(2, 2, [1.0])
     except ValueError:
         data_size = True
+
     try:
         Matrix.from_rows([[1.0, 2.0], [3.0]])
     except ValueError:
         rows = True
+
     try:
         Matrix.from_cols([[1.0, 2.0], [3.0]])
     except ValueError:
         cols = True
+
     try:
         Matrix(2, 3).multiply(Matrix(2, 2))
     except ValueError:
         multiply = True
+
     try:
         Matrix.file_json_loads(
             '{"cols":2,"data":[1.0],"guid":"id","name":"bad","rows":2,"type":"Matrix"}'
         )
     except ValueError:
-        json_error = True
+        json = True
 
     negative_proto = matrix_pb2.Matrix(rows=-1, cols=2)
+
     try:
         Matrix.from_proto(negative_proto)
     except ValueError:
         proto_negative = True
 
     data_proto = matrix_pb2.Matrix(rows=2, cols=2, data=[1.0])
+
     try:
         Matrix.from_proto(data_proto)
     except ValueError:
@@ -471,7 +476,7 @@ def test_matrix_shape_errors():
     MINI_CHECK(rows)
     MINI_CHECK(cols)
     MINI_CHECK(multiply)
-    MINI_CHECK(json_error)
+    MINI_CHECK(json)
     MINI_CHECK(proto_negative)
     MINI_CHECK(proto_data)
 

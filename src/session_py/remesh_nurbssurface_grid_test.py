@@ -22,18 +22,22 @@ def test_remesh_nurbssurface_grid_singular_planar_normal():
     )
     mesh = RemeshNurbsSurfaceGrid.from_u_v_q(surface, 0, 0, 5.0, 0.001)
     apex = False
+
     for face in mesh.face.values():
         a = mesh.vertex[face[0]]
         b = mesh.vertex[face[1]]
         c = mesh.vertex[face[2]]
+
         if abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) <= 1e-14:
             continue
+
         for vertex_key in face:
             vertex = mesh.vertex[vertex_key]
             normal = vertex.normal()
             MINI_CHECK(abs(normal[0]) < 1e-12 and abs(normal[2]) < 1e-12)
             MINI_CHECK(abs(abs(normal[1]) - 1.0) < 1e-12)
             apex = apex or vertex.z == 1.0
+
     MINI_CHECK(apex)
 
 
@@ -64,14 +68,19 @@ def test_remesh_nurbssurface_grid_crease_normals():
     MINI_CHECK(len(m.face) == 4)
     flat = 0
     tilted = 0
+
     for vd in m.vertex.values():
         if vd.x != 1.0:
             continue
+
         n = vd.normal()
+
         if abs(n[0]) < Tolerance.ZERO_TOLERANCE:
             flat += 1
+
         if abs(n[0] + math.sqrt(0.5)) < Tolerance.ZERO_TOLERANCE:
             tilted += 1
+
     MINI_CHECK(flat == 2 and tilted == 2)
 
 
@@ -85,13 +94,16 @@ def test_remesh_nurbssurface_grid_analytic_normals():
         Primitives.cylinder_surface(0.0, 0.0, 0.0, 1.0, 5.0),
         Primitives.cone_surface(0.0, 0.0, 0.0, 1.0, 5.0),
     ]
+
     for index in range(len(surfaces)):
         s = surfaces[index]
         m = RemeshNurbsSurfaceGrid.from_u_v_q(s, 0, 0, 30.0, 0.01)
+
         for vd in m.vertex.values():
             n = vd.normal()
             length = n[0] * n[0] + n[1] * n[1] + n[2] * n[2]
             MINI_CHECK(abs(length - 1.0) < Tolerance.ZERO_TOLERANCE)
+
             if index < 2:
                 z = vd.z if index == 0 else 0.0
                 dot = vd.x * n[0] + vd.y * n[1] + z * n[2]

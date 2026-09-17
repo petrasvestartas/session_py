@@ -9,6 +9,7 @@ from pathlib import Path
 def _serialization_path(name: str) -> str:
     d = Path(__file__).resolve().parents[2] / "serialization"
     d.mkdir(parents=True, exist_ok=True)
+
     return str(d / name)
 
 
@@ -40,6 +41,7 @@ def test_nurbscurve_round_trip():
     kn_orig = nc.get_nurbsknots()
     kn_back = back.get_nurbsknots()
     MINI_CHECK(len(kn_orig) == len(kn_back))
+
     for i in range(min(len(kn_orig), len(kn_back))):
         MINI_CHECK(abs(kn_orig[i] - kn_back[i]) < 1e-10)
 
@@ -49,6 +51,7 @@ def test_nurbscurve_round_trip():
         MINI_CHECK(abs(p_orig[0] - p_back[0]) < 1e-10)
         MINI_CHECK(abs(p_orig[1] - p_back[1]) < 1e-10)
         MINI_CHECK(abs(p_orig[2] - p_back[2]) < 1e-10)
+
     os.remove(path)
 
 
@@ -95,10 +98,12 @@ def test_nurbscurve_rational_round_trip():
 
     cv_back = back.m_cv
     s = back.m_cv_stride
+
     for i in range(3):
         w_orig = cv[i * 4 + 3]
         w_back = cv_back[i * s + 3]
         MINI_CHECK(abs(w_orig - w_back) < 1e-10)
+
         if abs(w_orig) > 1e-12 and abs(w_back) > 1e-12:
             MINI_CHECK(
                 abs(cv[i * 4 + 0] / w_orig - cv_back[i * s + 0] / w_back) < 1e-10
@@ -106,6 +111,7 @@ def test_nurbscurve_rational_round_trip():
             MINI_CHECK(
                 abs(cv[i * 4 + 1] / w_orig - cv_back[i * s + 1] / w_back) < 1e-10
             )
+
     os.remove(path)
 
 
@@ -118,9 +124,11 @@ def test_nurbssurface_round_trip():
     path = _serialization_path("test_step_nurbssurface.step")
 
     pts = []
+
     for u in range(4):
         for v in range(4):
             pts.append(Point(float(u), float(v), math.sin(u + v) * 0.5))
+
     srf = NurbsSurface.create(False, False, 3, 3, 4, 4, pts)
     MINI_CHECK(srf.is_valid())
     MINI_CHECK(srf.degree(0) == 3)
@@ -147,6 +155,7 @@ def test_nurbssurface_round_trip():
     kv_back = back.m_nurbsknot[1]
     MINI_CHECK(len(ku_orig) == len(ku_back))
     MINI_CHECK(len(kv_orig) == len(kv_back))
+
     for i in range(min(len(ku_orig), len(ku_back))):
         MINI_CHECK(abs(ku_orig[i] - ku_back[i]) < 1e-10)
 
@@ -157,6 +166,7 @@ def test_nurbssurface_round_trip():
             MINI_CHECK(abs(p_orig[0] - p_back[0]) < 1e-10)
             MINI_CHECK(abs(p_orig[1] - p_back[1]) < 1e-10)
             MINI_CHECK(abs(p_orig[2] - p_back[2]) < 1e-10)
+
     os.remove(path)
 
 
@@ -172,12 +182,14 @@ def test_nurbssurface_rational_round_trip():
     srf.m_nurbsknot[0] = np.array([0.0, 0.0, 1.0, 1.0])
     srf.m_nurbsknot[1] = np.array([0.0, 0.0, 1.0, 1.0])
     w = 0.8
+
     for u in range(3):
         for v in range(3):
             x = float(u)
             y = float(v)
             z = math.sin(u + v) * 0.3
             srf.set_cv_4d(u, v, w * x, w * y, w * z, w)
+
     MINI_CHECK(srf.is_valid())
     MINI_CHECK(srf.m_is_rat == 1)
 
@@ -199,9 +211,11 @@ def test_nurbssurface_rational_round_trip():
             _, x1, y1, z1, w1 = srf.get_cv_4d(u, v)
             _, x2, y2, z2, w2 = back.get_cv_4d(u, v)
             MINI_CHECK(abs(w1 - w2) < 1e-10)
+
             if abs(w1) > 1e-12 and abs(w2) > 1e-12:
                 MINI_CHECK(abs(x1 / w1 - x2 / w2) < 1e-10)
                 MINI_CHECK(abs(y1 / w1 - y2 / w2) < 1e-10)
+
     os.remove(path)
 
 
@@ -217,9 +231,11 @@ def test_nurbssurface_trimmed_round_trip():
     path = _serialization_path("test_step_nurbssurface_trimmed.step")
 
     pts = []
+
     for u in range(4):
         for v in range(4):
             pts.append(Point(float(u), float(v), 0.0))
+
     srf = NurbsSurface.create(False, False, 3, 3, 4, 4, pts)
 
     loop_pts = [
@@ -232,9 +248,11 @@ def test_nurbssurface_trimmed_round_trip():
     outer = NurbsCurve(2, False, 2, 5)
     outer.m_nurbsknot = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
     cv = outer.m_cv
+
     for i in range(5):
         cv[i * 2 + 0] = loop_pts[i][0]
         cv[i * 2 + 1] = loop_pts[i][1]
+
     MINI_CHECK(outer.is_valid())
 
     trimmed = NurbsSurfaceTrimmed.create(srf, outer)
@@ -268,6 +286,7 @@ def test_brep_read_schoring():
         / "elements"
         / "schoring_foot_0.step"
     )
+
     if not step_path.exists():
         return
 
@@ -277,10 +296,12 @@ def test_brep_read_schoring():
     total_faces = 0
     total_edges = 0
     total_verts = 0
+
     for b in breps:
         total_faces += b.face_count()
         total_edges += b.edge_count()
         total_verts += b.vertex_count()
+
     MINI_CHECK(total_faces == 38)
     MINI_CHECK(total_edges == 103)
     MINI_CHECK(total_verts == 74)
@@ -290,6 +311,7 @@ def test_brep_read_schoring():
         MINI_CHECK(len(b.m_surfaces) == b.face_count())
         MINI_CHECK(len(b.m_curves_3d) == b.edge_count())
         MINI_CHECK(b.shell_count() == 1 and b.solid_count() == 1)
+
         for e in b.m_edges:
             MINI_CHECK(len(e.pcurves) > 0)
 

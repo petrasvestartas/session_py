@@ -834,6 +834,7 @@ def test_polyline_grid_of_points():
     pts = Polyline.grid_of_points_in_polygon(poly, 0.0, 1.0, 100)
 
     MINI_CHECK(len(pts) > 0)
+
     for p in pts:
         MINI_CHECK(p[0] >= 0.0 and p[0] <= 4.0)
         MINI_CHECK(p[1] >= 0.0 and p[1] <= 4.0)
@@ -879,6 +880,7 @@ def test_polyline_polylabel_circle_division_points():
     pts = Polyline.polylabel_circle_division_points(dir, polys, 4, 0.5, 1.0, True)
 
     MINI_CHECK(len(pts) == 4)
+
     for p in pts:
         MINI_CHECK(abs(p[2]) < 1e-6)
 
@@ -980,10 +982,13 @@ def test_polyline_boolean_op_plane():
     MINI_CHECK(len(isect) == 1)
     MINI_CHECK(len(uni) == 1)
     MINI_CHECK(len(diff) == 1)
+
     for p in isect[0].get_points():
         MINI_CHECK(TOLERANCE.is_close(p[2], 5.0))
+
     for p in uni[0].get_points():
         MINI_CHECK(TOLERANCE.is_close(p[2], 5.0))
+
     for p in diff[0].get_points():
         MINI_CHECK(TOLERANCE.is_close(p[2], 5.0))
 
@@ -1015,11 +1020,13 @@ def test_polyline_simplify_points():
     from session_py import Point
 
     pts = []
+
     for i in range(100):
         x = float(i)
         y = math.sin(float(i) * 0.1) * 0.001
         z = 0.0
         pts.append(Point(x, y, z))
+
     result_tight = Polyline.simplify_points(pts, 0.0001)
     result_loose = Polyline.simplify_points(pts, 0.01)
     result_very_loose = Polyline.simplify_points(pts, 1.0)
@@ -1037,11 +1044,13 @@ def test_polyline_simplify():
     from session_py import Point
 
     pts = []
+
     for i in range(20):
         x = float(i)
         y = 0.0
         z = 0.0
         pts.append(Point(x, y, z))
+
     pl = Polyline(pts)
     result = pl.simplify(0.001)
 
@@ -1075,11 +1084,13 @@ def test_polyline_simplify_zigzag():
     from session_py import Point
 
     pts = []
+
     for i in range(10):
         x = float(i)
         y = 1.0 if (i % 2 == 1) else 0.0
         z = 0.0
         pts.append(Point(x, y, z))
+
     result_tight = Polyline.simplify_points(pts, 0.1)
     result_loose = Polyline.simplify_points(pts, 2.0)
 

@@ -136,7 +136,7 @@ def test_treenode_descendants():
     root.add(mid)
     mid.add(leaf)
 
-    desc = list(root.descendants)
+    desc = root.descendants()
 
     MINI_CHECK(len(desc) == 2)
     MINI_CHECK(desc[0].name == "mid")

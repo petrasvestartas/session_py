@@ -11,8 +11,10 @@ def test_read_bunny():
     from session_py import read_file_obj
 
     bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.obj"
+
     if not bunny_path.exists():
         return
+
     mesh = read_file_obj(str(bunny_path))
 
     MINI_CHECK(mesh.number_of_vertices() == 2503)
@@ -21,14 +23,18 @@ def test_read_bunny():
     MINI_CHECK(len(vertices) == 2503)
     MINI_CHECK(len(faces) == 4968)
     has_non_zero = False
+
     for v in vertices:
         if v[0] != 0.0 or v[1] != 0.0 or v[2] != 0.0:
             has_non_zero = True
+
     MINI_CHECK(has_non_zero)
     all_polygons = True
+
     for f in faces:
         if len(f) < 3:
             all_polygons = False
+
     MINI_CHECK(all_polygons)
 
 

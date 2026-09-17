@@ -75,8 +75,10 @@ def test_spatial_aabbtree_node_count():
     from session_py import SpatialAABBTree
 
     aabbs = []
+
     for i in range(100):
         aabbs.append(AABB(float(i), 0.0, 0.0, 0.5, 0.5, 0.5))
+
     tree = SpatialAABBTree()
     tree.build(aabbs)
 

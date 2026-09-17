@@ -13,7 +13,9 @@ def test_rtree_constructor():
     found = [-1]
     def cb(id):
         found[0] = id
+
         return True
+
     t.search([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], cb)
 
     MINI_CHECK(found[0] == 0)
@@ -55,7 +57,9 @@ def test_rtree_search_hit():
     found = [-1]
     def cb(data):
         found[0] = data
+
         return True
+
     hits = t.search([1.0, 1.0, 1.0], [3.0, 3.0, 3.0], cb)
 
     MINI_CHECK(hits == 1)
@@ -143,6 +147,7 @@ def test_rtree_search_100_boxes():
         nonlocal id
         t.insert([x0, y0, z0], [x1, y1, z1], id)
         id += 1
+
     add(-53.1254, -0.98185, 20.5516, -46.8089, 5.89927, 26.5331)
     add(44.4446, -1.5359, -1.49382, 50.7301, 3.99953, 7.58362)
     add(36.9359, -7.76782, -28.7694, 43.173, -1.82645, -22.1528)
@@ -246,11 +251,14 @@ def test_rtree_search_100_boxes():
     found = []
     def cb(data):
         found.append(data)
+
         return True
+
     hits = t.search([-60.0, -60.0, -60.0], [60.0, 60.0, 60.0], cb)
 
     MINI_CHECK(hits > 0)
     MINI_CHECK(hits <= 100)
+
     for d in found:
         MINI_CHECK(d >= 0)
         MINI_CHECK(d < 100)

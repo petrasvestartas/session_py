@@ -134,6 +134,7 @@ def test_mesh_offset_offset_vertices():
     offsets = MeshOffset.offset_vertices(mesh, planes)
     MINI_CHECK(len(planes) == 4)
     MINI_CHECK(len(offsets) == 9)
+
     for vkey in range(9):
         MINI_CHECK(TOLERANCE.is_close(offsets[vkey][0], points[vkey][0]))
         MINI_CHECK(TOLERANCE.is_close(offsets[vkey][1], points[vkey][1]))

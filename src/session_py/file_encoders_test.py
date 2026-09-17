@@ -376,10 +376,12 @@ def test_write_error():
     from session_py.file_encoders import file_json_dump
 
     threw = False
+
     try:
         file_json_dump(Point(1.0, 2.0, 3.0), "/definitely/missing-directory/test.json")
     except OSError:
         threw = True
+
     MINI_CHECK(threw)
 
 

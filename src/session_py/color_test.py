@@ -195,14 +195,17 @@ def test_color_serialization_errors():
         Color.file_json_loads("{}")
     except KeyError:
         malformed_json = True
+
     try:
         Color.pb_loads(b"\xff")
     except DecodeError:
         malformed_pb = True
+
     try:
         color.file_json_dump("")
     except OSError:
         json_write_failed = True
+
     try:
         color.pb_dump("")
     except OSError:

@@ -2,6 +2,71 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
+import math
+
+
+def lies_on_curve(curve3d, pcurve, surface):
+    """Worst 3D distance from the pcurve lifted onto the surface to the section curve."""
+
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    dense = []
+
+    for j in range(129):
+        dense.append(curve3d.point_at(j / 128.0))
+
+    worst = 0.0
+
+    for i in range(33):
+        q = pcurve.point_at(i / 32.0)
+        s = surface.point_at(min(max(q[0], u0), u1), min(max(q[1], v0), v1))
+        best = dense[0].distance(s)
+
+        for p in dense:
+            best = min(best, p.distance(s))
+
+        worst = max(worst, best)
+
+    return worst
+
+
+def on_both(c3, da, db):
+    """Worst distance of the section curve from either analytic surface."""
+
+    worst = 0.0
+
+    for i in range(65):
+        p = c3.point_at(i / 64.0)
+        worst = max(worst, max(da(p), db(p)))
+
+    return worst
+
+
+def distance_sphere(p):
+    """Distance from the unit-radius-2 sphere at the origin."""
+    return abs(math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]) - 2.0)
+
+
+def distance_cylinder(p):
+    """Distance from the radius-0.3 cylinder on the z axis at x = 1.3."""
+    return abs(math.sqrt((p[0] - 1.3) * (p[0] - 1.3) + p[1] * p[1]) - 0.3)
+
+
+def distance_sphere2(p):
+    """Distance from the radius-2 sphere at x = 2."""
+    return abs(math.sqrt((p[0] - 2.0) * (p[0] - 2.0) + p[1] * p[1] + p[2] * p[2]) - 2.0)
+
+
+def distance_torus(p):
+    """Distance from the torus of radii 2 and 0.5 at the origin."""
+    ring = math.sqrt(p[0] * p[0] + p[1] * p[1]) - 2.0
+
+    return abs(math.sqrt(ring * ring + p[2] * p[2]) - 0.5)
+
+
+def distance_flat(p):
+    """Distance from the xy plane."""
+    return abs(p[2])
 
 
 @MINI_TEST("Intersection", "Line Line")
@@ -73,7 +138,9 @@ def test_intersection_line_line_parameters_infinite():
 
     line0 = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
     line1 = Line(2.0, -1.0, 0.0, 2.0, 1.0, 0.0)
-    result = intersection.line_line_parameters(line0, line1, Tolerance.APPROXIMATION, False)
+    result = intersection.line_line_parameters(
+        line0, line1, Tolerance.APPROXIMATION, False
+    )
 
     MINI_CHECK(result is not None)
     t0, t1 = result
@@ -262,10 +329,12 @@ def test_intersection_ray_box():
     from session_py import Line
     from session_py import Point
 
-    box = OBB.from_points([
-        Point(-1.0, -1.0, -1.0),
-        Point(1.0, 1.0, 1.0),
-    ])
+    box = OBB.from_points(
+        [
+            Point(-1.0, -1.0, -1.0),
+            Point(1.0, 1.0, 1.0),
+        ]
+    )
     line = Line(-5.0, 0.0, 0.0, -4.0, 0.0, 0.0)
     points = intersection.ray_box(line, box, 0.0, 100.0)
 
@@ -281,10 +350,12 @@ def test_intersection_ray_box_miss():
     from session_py import Line
     from session_py import Point
 
-    box = OBB.from_points([
-        Point(-1.0, -1.0, -1.0),
-        Point(1.0, 1.0, 1.0),
-    ])
+    box = OBB.from_points(
+        [
+            Point(-1.0, -1.0, -1.0),
+            Point(1.0, 1.0, 1.0),
+        ]
+    )
     line = Line(-5.0, 5.0, 0.0, -4.0, 5.0, 0.0)
     points = intersection.ray_box(line, box, 0.0, 100.0)
 
@@ -554,16 +625,20 @@ def test_intersection_ray_mesh_bvh_vs_naive():
     from session_py import Point
 
     polygons = []
+
     for i in range(10):
         for j in range(10):
             x = float(i)
             y = float(j)
-            polygons.append([
-                Point(x, y, 0.0),
-                Point(x + 1.0, y, 0.0),
-                Point(x + 1.0, y + 1.0, 0.0),
-                Point(x, y + 1.0, 0.0),
-            ])
+            polygons.append(
+                [
+                    Point(x, y, 0.0),
+                    Point(x + 1.0, y, 0.0),
+                    Point(x + 1.0, y + 1.0, 0.0),
+                    Point(x, y + 1.0, 0.0),
+                ]
+            )
+
     mesh = Mesh.from_polylines(polygons)
     line = Line(5.5, 5.5, -1.0, 5.5, 5.5, 0.0)
     hits_naive = intersection.ray_mesh(line, mesh, 1e-6, True)
@@ -576,6 +651,7 @@ def test_intersection_ray_mesh_bvh_vs_naive():
     bvh_count = len(hits_bvh) if hits_bvh else 0
 
     MINI_CHECK(naive_count == bvh_count)
+
     if hits_naive and hits_bvh:
         MINI_CHECK(abs(hits_naive[0][2] - hits_bvh[0][2]) < 1e-4)
 
@@ -664,6 +740,7 @@ def test_intersection_surface_plane():
     MINI_CHECK(len(curves) == 1)
     MINI_CHECK(curves[0].is_valid())
     t0, t1 = curves[0].domain()
+
     for i in range(11):
         t = t0 + (t1 - t0) * i / 10.0
         p = curves[0].point_at(t)
@@ -680,12 +757,14 @@ def test_intersection_surface_plane_curved():
     from session_py import Vector
 
     pts = []
+
     for i in range(4):
         for j in range(4):
             x = i * 10.0
             y = j * 10.0
             z = 10.0 if (i == 1 or i == 2) and (j == 1 or j == 2) else 0.0
             pts.append(Point(x, y, z))
+
     srf = NurbsSurface.create(False, False, 3, 3, 4, 4, pts)
     plane = Plane.from_point_normal(Point(0.0, 0.0, 3.0), Vector(0.0, 0.0, 1.0))
     curves = intersection.surface_plane(srf, plane)
@@ -694,6 +773,7 @@ def test_intersection_surface_plane_curved():
     MINI_CHECK(curves[0].is_valid())
     MINI_CHECK(curves[0].degree() == 3)
     t0, t1 = curves[0].domain()
+
     for i in range(11):
         t = t0 + (t1 - t0) * i / 10.0
         p = curves[0].point_at(t)
@@ -740,16 +820,26 @@ def test_intersection_surface_plane_uv():
     MINI_CHECK(pcurve.is_valid())
     MINI_CHECK(curve3.is_closed())
     u0, u1 = cyl.domain(0)
-    MINI_CHECK(abs(pcurve.point_at(0.0)[0] - u1) < 1e-9 or abs(pcurve.point_at(0.0)[0] - u0) < 1e-9)
-    MINI_CHECK(abs(pcurve.point_at(1.0)[0] - u1) < 1e-9 or abs(pcurve.point_at(1.0)[0] - u0) < 1e-9)
+    MINI_CHECK(
+        abs(pcurve.point_at(0.0)[0] - u1) < 1e-9
+        or abs(pcurve.point_at(0.0)[0] - u0) < 1e-9
+    )
+    MINI_CHECK(
+        abs(pcurve.point_at(1.0)[0] - u1) < 1e-9
+        or abs(pcurve.point_at(1.0)[0] - u0) < 1e-9
+    )
     pn = plane.z_axis
     po = plane.origin
     max_off = 0.0
+
     for i in range(17):
         p2 = pcurve.point_at(i / 16.0)
         s = cyl.point_at(p2[0], p2[1])
-        off = abs((s[0]-po[0])*pn[0] + (s[1]-po[1])*pn[1] + (s[2]-po[2])*pn[2])
+        off = abs(
+            (s[0] - po[0]) * pn[0] + (s[1] - po[1]) * pn[1] + (s[2] - po[2]) * pn[2]
+        )
         max_off = max(max_off, off)
+
     MINI_CHECK(max_off < 0.05)
 
     torus = Primitives.torus_surface(0.0, 0.0, 0.0, 2.0, 0.5)
@@ -760,11 +850,19 @@ def test_intersection_surface_plane_uv():
     tu0, tu1 = torus.domain(0)
     tv0, tv1 = torus.domain(1)
     inside = True
+
     for pair in pairs2:
         for i in range(17):
             p2 = pair[1].point_at(i / 16.0)
-            if p2[0] < tu0 - 1e-6 or p2[0] > tu1 + 1e-6 or p2[1] < tv0 - 1e-6 or p2[1] > tv1 + 1e-6:
+
+            if (
+                p2[0] < tu0 - 1e-6
+                or p2[0] > tu1 + 1e-6
+                or p2[1] < tv0 - 1e-6
+                or p2[1] > tv1 + 1e-6
+            ):
                 inside = False
+
     MINI_CHECK(inside)
 
 
@@ -775,30 +873,20 @@ def test_intersection_surface_surface():
     from session_py import Point
     from session_py import Primitives
 
-    def lies_on_curve(curve3d, pcurve, surface):
-        u0, u1 = surface.domain(0)
-        v0, v1 = surface.domain(1)
-        dense = [curve3d.point_at(j / 128.0) for j in range(129)]
-        worst = 0.0
-        for i in range(33):
-            q = pcurve.point_at(i / 32.0)
-            s = surface.point_at(min(max(q[0], u0), u1), min(max(q[1], v0), v1))
-            best = dense[0].distance(s)
-            for p in dense:
-                d = p.distance(s)
-                if d < best:
-                    best = d
-            if best > worst:
-                worst = best
-        return worst
-
-    # Planar dispatch path: flat NURBS patch x cylinder -> one closed circle
-    flat = NurbsSurface.create(False, False, 1, 1, 2, 2, [
-        Point(-3.0, -3.0, 0.5),
-        Point(-3.0, 3.0, 0.5),
-        Point(3.0, -3.0, 0.5),
-        Point(3.0, 3.0, 0.5),
-    ])
+    flat = NurbsSurface.create(
+        False,
+        False,
+        1,
+        1,
+        2,
+        2,
+        [
+            Point(-3.0, -3.0, 0.5),
+            Point(-3.0, 3.0, 0.5),
+            Point(3.0, -3.0, 0.5),
+            Point(3.0, 3.0, 0.5),
+        ],
+    )
     cyl = Primitives.cylinder_surface(0.0, 0.0, -2.0, 1.0, 4.0)
     flat_triples = intersection.surface_surface(flat, cyl)
 
@@ -809,73 +897,64 @@ def test_intersection_surface_surface():
     MINI_CHECK(lies_on_curve(c3, pa, flat) < 0.05)
     MINI_CHECK(lies_on_curve(c3, pb, cyl) < 0.05)
 
-    # Marching path: sphere x cylinder is a QUARTIC (not a conic). The marcher
-    # finds the intersection branches and most of each branch lies on both
-    # surfaces; precise pcurves on seam-crossing branches are still WIP (need a
-    # whole-loop-c3 + pcurve-piece return type — tracked in task #12). So assert
-    # the branches are found and at least two clean arcs lie on both surfaces.
     sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
     cyl2 = Primitives.cylinder_surface(1.3, 0.0, -3.0, 0.3, 6.0)
     triples = intersection.surface_surface(sphere, cyl2)
 
     MINI_CHECK(len(triples) >= 2)
     clean = 0
+
     for c3, pa, pb in triples:
         MINI_CHECK(c3.is_valid() and pa.is_valid() and pb.is_valid())
+
         if lies_on_curve(c3, pa, sphere) < 0.05 and lies_on_curve(c3, pb, cyl2) < 0.05:
             clean += 1
+
     MINI_CHECK(clean >= 2)
 
 
 @MINI_TEST("Intersection", "Surface Surface Accuracy")
 def test_intersection_surface_surface_accuracy():
-    import math
     from session_py import intersection
     from session_py import NurbsSurface
     from session_py import Point
     from session_py import Primitives
 
-    # Every intersection point must lie on BOTH analytic surfaces to ~1e-6.
-    # Measured exactly (closed-form distance), independent of OCCT/parameterization.
-    def on_both(c3, dist_a, dist_b):
-        worst = 0.0
-        for i in range(65):
-            p = c3.point_at(i / 64.0)
-            worst = max(worst, dist_a(p), dist_b(p))
-        return worst
-
-    # Quartic: sphere x cylinder (axis Z at x=1.3) -> exact 1e-6.
     sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
     cyl = Primitives.cylinder_surface(1.3, 0.0, -3.0, 0.3, 6.0)
-    d_sph = lambda p: abs(math.sqrt(p[0]*p[0]+p[1]*p[1]+p[2]*p[2]) - 2.0)
-    d_cyl = lambda p: abs(math.sqrt((p[0]-1.3)**2 + p[1]*p[1]) - 0.3)
     tr = intersection.surface_surface(sphere, cyl)
     MINI_CHECK(len(tr) >= 2)
-    for c3, pa, pb in tr:
-        MINI_CHECK(on_both(c3, d_sph, d_cyl) < 1e-5)
 
-    # Conic: sphere x sphere -> exact circle (machine precision).
+    for c3, pa, pb in tr:
+        MINI_CHECK(on_both(c3, distance_sphere, distance_cylinder) < 1e-5)
+
     sphere2 = Primitives.sphere_surface(2.0, 0.0, 0.0, 2.0)
-    d_sph2 = lambda p: abs(math.sqrt((p[0]-2.0)**2 + p[1]*p[1] + p[2]*p[2]) - 2.0)
     tr2 = intersection.surface_surface(sphere, sphere2)
     MINI_CHECK(len(tr2) >= 1)
-    for c3, pa, pb in tr2:
-        MINI_CHECK(on_both(c3, d_sph, d_sph2) < 1e-6)
 
-    # Torus x perpendicular plane -> two exact circles.
+    for c3, pa, pb in tr2:
+        MINI_CHECK(on_both(c3, distance_sphere, distance_sphere2) < 1e-6)
+
     torus = Primitives.torus_surface(0.0, 0.0, 0.0, 2.0, 0.5)
-    flat = NurbsSurface.create(False, False, 1, 1, 2, 2, [
-        Point(-9.0, -9.0, 0.0),
-        Point(-9.0, 9.0, 0.0),
-        Point(9.0, -9.0, 0.0),
-        Point(9.0, 9.0, 0.0),
-    ])
-    d_tor = lambda p: abs(math.sqrt((math.sqrt(p[0]*p[0]+p[1]*p[1]) - 2.0)**2 + p[2]*p[2]) - 0.5)
-    d_flat = lambda p: abs(p[2])
+    flat = NurbsSurface.create(
+        False,
+        False,
+        1,
+        1,
+        2,
+        2,
+        [
+            Point(-9.0, -9.0, 0.0),
+            Point(-9.0, 9.0, 0.0),
+            Point(9.0, -9.0, 0.0),
+            Point(9.0, 9.0, 0.0),
+        ],
+    )
     tr3 = intersection.surface_surface(torus, flat)
     MINI_CHECK(len(tr3) == 2)
+
     for c3, pa, pb in tr3:
-        MINI_CHECK(on_both(c3, d_tor, d_flat) < 1e-6)
+        MINI_CHECK(on_both(c3, distance_torus, distance_flat) < 1e-6)
 
 
 @MINI_TEST("Intersection", "Remap")
@@ -915,18 +994,16 @@ def test_intersection_plane_plane_plane_check():
     from session_py import Point
     from session_py import Vector
 
-    # Three parallel planes → None
     p0 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
     p1 = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
     p2 = Plane.from_point_normal(Point(0.0, 0.0, 2.0), Vector(0.0, 0.0, 1.0))
 
-    MINI_CHECK(intersection.plane_plane_plane_check(p0, p1, p2) is None)
+    MINI_CHECK(intersection.plane_plane_plane_check(p0, p1, p2, 0.1) is None)
 
-    # Three valid planes
     px = Plane.from_point_normal(Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
     py = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
     pz = Plane.from_point_normal(Point(0.0, 0.0, 3.0), Vector(0.0, 0.0, 1.0))
-    pt = intersection.plane_plane_plane_check(px, py, pz)
+    pt = intersection.plane_plane_plane_check(px, py, pz, 0.1)
 
     MINI_CHECK(pt is not None)
     MINI_CHECK(abs(pt[0] - 1.0) < 1e-6)
@@ -942,21 +1019,21 @@ def test_intersection_plane_4planes():
     from session_py import Vector
 
     main = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
-    # Cycle left→bottom→right→top so adjacent pairs are non-parallel
     planes = [
-        Plane.from_point_normal(Point(-1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0)),  # x=-1
-        Plane.from_point_normal(Point(0.0, -1.0, 0.0), Vector(0.0, 1.0, 0.0)),  # y=-1
-        Plane.from_point_normal(Point(1.0, 0.0, 0.0),  Vector(1.0, 0.0, 0.0)),  # x= 1
-        Plane.from_point_normal(Point(0.0, 1.0, 0.0),  Vector(0.0, 1.0, 0.0)),  # y= 1
+        Plane.from_point_normal(Point(-1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0)),
+        Plane.from_point_normal(Point(0.0, -1.0, 0.0), Vector(0.0, 1.0, 0.0)),
+        Plane.from_point_normal(Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0)),
+        Plane.from_point_normal(Point(0.0, 1.0, 0.0), Vector(0.0, 1.0, 0.0)),
     ]
     result = intersection.plane_4planes(main, planes)
 
     MINI_CHECK(result is not None)
     MINI_CHECK(result.point_count() == 5)
+
     for i in range(result.point_count()):
         p = result.get_point(i)
         MINI_CHECK(abs(p[2]) < 1e-6)
-    # First == last (closed)
+
     first = result.get_point(0)
     last = result.get_point(4)
     MINI_CHECK(abs(first[0] - last[0]) < 1e-6)
@@ -974,8 +1051,8 @@ def test_intersection_plane_4planes_open():
     planes = [
         Plane.from_point_normal(Point(-1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0)),
         Plane.from_point_normal(Point(0.0, -1.0, 0.0), Vector(0.0, 1.0, 0.0)),
-        Plane.from_point_normal(Point(1.0, 0.0, 0.0),  Vector(1.0, 0.0, 0.0)),
-        Plane.from_point_normal(Point(0.0, 1.0, 0.0),  Vector(0.0, 1.0, 0.0)),
+        Plane.from_point_normal(Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0)),
+        Plane.from_point_normal(Point(0.0, 1.0, 0.0), Vector(0.0, 1.0, 0.0)),
     ]
     result = intersection.plane_4planes_open(main, planes)
 
@@ -992,14 +1069,15 @@ def test_intersection_plane_4lines():
     from session_py import Vector
 
     plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
-    l0 = Line(-1.0, -1.0, -1.0, -1.0,  1.0, 1.0)
-    l1 = Line( 1.0, -1.0, -1.0,  1.0,  1.0, 1.0)
-    l2 = Line(-1.0, -1.0, -1.0,  1.0, -1.0, 1.0)
-    l3 = Line(-1.0,  1.0, -1.0,  1.0,  1.0, 1.0)
+    l0 = Line(-1.0, -1.0, -1.0, -1.0, 1.0, 1.0)
+    l1 = Line(1.0, -1.0, -1.0, 1.0, 1.0, 1.0)
+    l2 = Line(-1.0, -1.0, -1.0, 1.0, -1.0, 1.0)
+    l3 = Line(-1.0, 1.0, -1.0, 1.0, 1.0, 1.0)
     result = intersection.plane_4lines(plane, l0, l1, l2, l3)
 
     MINI_CHECK(result is not None)
     MINI_CHECK(result.point_count() == 5)
+
     for i in range(result.point_count()):
         p = result.get_point(i)
         MINI_CHECK(abs(p[2]) < 1e-6)
@@ -1029,19 +1107,22 @@ def test_intersection_polyline_plane():
     from session_py import Polyline
     from session_py import Vector
 
-    poly = Polyline([
-        Point(-1.0, -1.0, 0.0),
-        Point(1.0,  -1.0, 0.0),
-        Point(1.0,   1.0, 0.0),
-        Point(-1.0,  1.0, 0.0),
-        Point(-1.0, -1.0, 0.0),  # closed
-    ])
+    poly = Polyline(
+        [
+            Point(-1.0, -1.0, 0.0),
+            Point(1.0, -1.0, 0.0),
+            Point(1.0, 1.0, 0.0),
+            Point(-1.0, 1.0, 0.0),
+            Point(-1.0, -1.0, 0.0),
+        ]
+    )
     plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
     result = intersection.polyline_plane(poly, plane)
 
     MINI_CHECK(result is not None)
     pts, indices = result
     MINI_CHECK(len(pts) == 2)
+
     for p in pts:
         MINI_CHECK(abs(p[0]) < 1e-9)
 
@@ -1050,11 +1131,9 @@ def test_intersection_polyline_plane():
 def test_intersection_line_line_3d():
     from session_py import intersection
     from session_py import Line
-    from session_py import Point
 
-    # Two lines that cross at (1, 1, 0)
     cutter = Line(0.0, 1.0, 0.0, 2.0, 1.0, 0.0)
-    seg    = Line(1.0, 0.0, 0.0, 1.0, 2.0, 0.0)
+    seg = Line(1.0, 0.0, 0.0, 1.0, 2.0, 0.0)
     result = intersection.line_line_3d(cutter, seg)
 
     MINI_CHECK(result is not None)
@@ -1062,7 +1141,6 @@ def test_intersection_line_line_3d():
     MINI_CHECK(abs(result[1] - 1.0) < 1e-6)
     MINI_CHECK(abs(result[2] - 0.0) < 1e-6)
 
-    # Parallel lines → None
     par0 = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
     par1 = Line(0.0, 1.0, 0.0, 1.0, 1.0, 0.0)
 
@@ -1076,13 +1154,16 @@ def test_intersection_polyline_plane_to_line():
     from session_py import Polyline
     from session_py import Vector
     from session_py.intersection import polyline_plane_to_line
-    poly = Polyline([
-        Point(0.0, 0.0, 0.0),
-        Point(4.0, 0.0, 0.0),
-        Point(4.0, 4.0, 0.0),
-        Point(0.0, 4.0, 0.0),
-        Point(0.0, 0.0, 0.0),
-    ])
+
+    poly = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(4.0, 0.0, 0.0),
+            Point(4.0, 4.0, 0.0),
+            Point(0.0, 4.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
     pln = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
     out = polyline_plane_to_line(poly, pln, Point(0.0, 0.0, 0.0))
     MINI_CHECK(out is not None)
@@ -1097,10 +1178,11 @@ def test_intersection_quad_from_line_top_bottom_planes():
     from session_py import Point
     from session_py import Vector
     from session_py.intersection import quad_from_line_top_bottom_planes
+
     face = Plane.xy_plane()
     line = Line(0.0, 0.0, 0.0, 10.0, 0.0, 0.0)
     plane0 = Plane.from_point_normal(Point(0.0, -2.0, 0.0), Vector(0.0, 1.0, 0.0))
-    plane1 = Plane.from_point_normal(Point(0.0,  2.0, 0.0), Vector(0.0, 1.0, 0.0))
+    plane1 = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
     out = quad_from_line_top_bottom_planes(face, line, plane0, plane1)
     MINI_CHECK(out is not None)
     MINI_CHECK(out.point_count() == 5)
@@ -1115,12 +1197,13 @@ def test_intersection_orthogonal_vector_between_two_plane_pairs():
     from session_py import Point
     from session_py import Vector
     from session_py.intersection import orthogonal_vector_between_two_plane_pairs
+
     pp00 = Plane.xy_plane()
     pp10 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
     pp11 = Plane.from_point_normal(Point(4.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
     out = orthogonal_vector_between_two_plane_pairs(pp00, pp10, pp11)
     MINI_CHECK(out is not None)
-    mag = (out[0]*out[0] + out[1]*out[1] + out[2]*out[2]) ** 0.5
+    mag = (out[0] * out[0] + out[1] * out[1] + out[2] * out[2]) ** 0.5
     MINI_CHECK(TOLERANCE.is_close(mag, 4.0))
     MINI_CHECK(TOLERANCE.is_close(out[1], 0.0))
     MINI_CHECK(TOLERANCE.is_close(out[2], 0.0))
@@ -1132,17 +1215,22 @@ def test_intersection_closed_and_open_paths_2d():
     from session_py import Point
     from session_py import Polyline
     from session_py.intersection import closed_and_open_paths_2d
-    plate = Polyline([
-        Point(0.0, 0.0, 0.0),
-        Point(10.0, 0.0, 0.0),
-        Point(10.0, 10.0, 0.0),
-        Point(0.0, 10.0, 0.0),
-        Point(0.0, 0.0, 0.0),
-    ])
-    joint = Polyline([
-        Point(-2.0, 5.0, 0.0),
-        Point(12.0, 5.0, 0.0),
-    ])
+
+    plate = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(10.0, 0.0, 0.0),
+            Point(10.0, 10.0, 0.0),
+            Point(0.0, 10.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    joint = Polyline(
+        [
+            Point(-2.0, 5.0, 0.0),
+            Point(12.0, 5.0, 0.0),
+        ]
+    )
     pln = Plane.xy_plane()
     result = closed_and_open_paths_2d(plate, joint, pln)
     MINI_CHECK(result is not None)
@@ -1154,6 +1242,46 @@ def test_intersection_closed_and_open_paths_2d():
     t_hi = max(t0, t1)
     MINI_CHECK(TOLERANCE.is_close(t_lo, 1.5))
     MINI_CHECK(TOLERANCE.is_close(t_hi, 3.5))
+
+
+@MINI_TEST("Intersection", "Line Line Classified")
+def test_intersection_line_line_classified():
+    from session_py import Line
+    from session_py.intersection import line_line_classified
+
+    s0 = Line(-1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    s1 = Line(0.0, -1.0, 0.0, 0.0, 1.0, 0.0)
+    result = line_line_classified(s0, s1, 1, 1, 0, 0, 0.5)
+
+    MINI_CHECK(result is not None)
+    p0, p1, v0, v1, normal, type0, type1, is_parallel = result
+    MINI_CHECK(not is_parallel)
+    MINI_CHECK(abs(p0[0]) < 1e-6)
+    MINI_CHECK(abs(p0[1]) < 1e-6)
+    MINI_CHECK(abs(p1[0]) < 1e-6)
+    MINI_CHECK(abs(p1[1]) < 1e-6)
+    MINI_CHECK(abs(abs(normal[2]) - 1.0) < 1e-6)
+
+    e0 = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    e1 = Line(0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+    result2 = line_line_classified(e0, e1, 1, 1, 0, 0, 0.5)
+
+    MINI_CHECK(result2 is not None)
+    p0, p1, v0, v1, normal, type0, type1, is_parallel = result2
+    MINI_CHECK(not type0)
+    MINI_CHECK(not type1)
+    MINI_CHECK(abs(p0[0]) < 1e-6)
+    MINI_CHECK(abs(p0[1]) < 1e-6)
+
+    q0 = Line(0.0, 0.0, 0.0, 2.0, 0.0, 0.0)
+    q1 = Line(0.0, 1.0, 0.0, 2.0, 1.0, 0.0)
+    result3 = line_line_classified(q0, q1, 1, 1, 0, 0, 0.5)
+
+    MINI_CHECK(result3 is not None)
+    p0, p1, v0, v1, normal, type0, type1, is_parallel = result3
+    MINI_CHECK(is_parallel)
+    MINI_CHECK(not type0)
+    MINI_CHECK(not type1)
 
 
 if __name__ == "__main__":

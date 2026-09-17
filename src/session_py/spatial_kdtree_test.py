@@ -8,6 +8,7 @@ from .tolerance import TOLERANCE
 def test_kdtree_constructor():
     from session_py import Point
     from session_py import SpatialKDTree
+
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(3.0, 0.0, 0.0),
@@ -24,6 +25,7 @@ def test_kdtree_constructor():
 def test_kdtree_nearest():
     from session_py import Point
     from session_py import SpatialKDTree
+
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -43,6 +45,7 @@ def test_kdtree_nearest():
 def test_kdtree_nearest_k():
     from session_py import Point
     from session_py import SpatialKDTree
+
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),
@@ -64,6 +67,7 @@ def test_kdtree_nearest_k():
 def test_kdtree_radius_search():
     from session_py import Point
     from session_py import SpatialKDTree
+
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(1.0, 0.0, 0.0),

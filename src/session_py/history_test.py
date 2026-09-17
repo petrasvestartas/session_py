@@ -21,14 +21,11 @@ def test_history_constructor():
 
 @MINI_TEST("History", "Begin Commit")
 def test_history_begin_commit():
-    from session_py import History
-    from session_py import Session
-    from session_py import Point
+    from session_py import Point, Session
 
     session = Session()
     history = session.history
 
-    # An empty transaction is dropped, and nothing is recorded while none is open.
     history.begin("empty")
     history.commit()
     session.add_point(Point(0.0, 0.0, 0.0))
@@ -46,8 +43,7 @@ def test_history_begin_commit():
 
 @MINI_TEST("History", "Undo Redo")
 def test_history_undo_redo():
-    from session_py import Session
-    from session_py import Point
+    from session_py import Point, Session
 
     session = Session()
     point = Point(1.0, 2.0, 3.0)
@@ -71,8 +67,7 @@ def test_history_undo_redo():
 
 @MINI_TEST("History", "Clear")
 def test_history_clear():
-    from session_py import Session
-    from session_py import Point
+    from session_py import Point, Session
 
     session = Session()
 

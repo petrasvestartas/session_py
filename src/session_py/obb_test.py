@@ -10,13 +10,11 @@ def test_obb_constructor():
     from session_py import Point
     from session_py import Vector
 
-    # from_point
     bb1 = OBB.from_point(Point(5.0, 5.0, 5.0), 2.0)
 
     MINI_CHECK(TOLERANCE.is_close(bb1.center[0], 5.0))
     MINI_CHECK(TOLERANCE.is_close(bb1.half_size[0], 2.0))
 
-    # from_points (AABB)
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(2.0, 3.0, 4.0),
@@ -28,58 +26,63 @@ def test_obb_constructor():
     MINI_CHECK(TOLERANCE.is_close(mn[0], 0.0) and TOLERANCE.is_close(mn[2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(mx[0], 2.0) and TOLERANCE.is_close(mx[2], 4.0))
 
-    # OBB constructor
     box = OBB(
         center=Point(0.0, 0.0, 0.0),
         x_axis=Vector(1.0, 0.0, 0.0),
         y_axis=Vector(0.0, 1.0, 0.0),
         z_axis=Vector(0.0, 0.0, 1.0),
-        half_size=Vector(1.0, 2.0, 3.0)
+        half_size=Vector(1.0, 2.0, 3.0),
     )
 
     MINI_CHECK(TOLERANCE.is_close(box.half_size[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(box.half_size[1], 2.0))
     MINI_CHECK(TOLERANCE.is_close(box.half_size[2], 3.0))
 
-    # operators
     same = box.duplicate()
 
     MINI_CHECK(box == same)
     MINI_CHECK(box != bb1)
     MINI_CHECK(box.guid != same.guid)
-    MINI_CHECK(str(box) == "0.000000, 0.000000, 0.000000\n1.000000, 0.000000, 0.000000\n0.000000, 1.000000, 0.000000\n0.000000, 0.000000, 1.000000\n1.000000, 2.000000, 3.000000")
-    MINI_CHECK(repr(box) == "OBB(my_obb, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 2.000000, 3.000000)")
+    MINI_CHECK(
+        str(box)
+        == "0.000000, 0.000000, 0.000000\n1.000000, 0.000000, 0.000000\n0.000000, 1.000000, 0.000000\n0.000000, 0.000000, 1.000000\n1.000000, 2.000000, 3.000000"
+    )
+    MINI_CHECK(
+        repr(box)
+        == "OBB(my_obb, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 0.000000, 0.000000, 0.000000, 1.000000, 1.000000, 2.000000, 3.000000)"
+    )
 
-    # aabb
     bb_aabb = bb2.aabb()
 
     MINI_CHECK(TOLERANCE.is_close(bb_aabb.min_point()[0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(bb_aabb.max_point()[2], 4.0))
 
-    # corners
     corners = bb2.corners()
 
     MINI_CHECK(len(corners) == 8)
 
-    # point_at: center + x*x_axis + y*y_axis + z*z_axis (raw OBB offsets)
     p_center = bb2.point_at(0.0, 0.0, 0.0)
     hx, hy, hz = bb2.half_size[0], bb2.half_size[1], bb2.half_size[2]
     p_max_pt = bb2.point_at(hx, hy, hz)
 
-    MINI_CHECK(TOLERANCE.is_close(p_center[0], 1.0) and TOLERANCE.is_close(p_center[2], 2.0))
-    MINI_CHECK(TOLERANCE.is_close(p_max_pt[0], 2.0) and TOLERANCE.is_close(p_max_pt[2], 4.0))
+    MINI_CHECK(
+        TOLERANCE.is_close(p_center[0], 1.0) and TOLERANCE.is_close(p_center[2], 2.0)
+    )
+    MINI_CHECK(
+        TOLERANCE.is_close(p_max_pt[0], 2.0) and TOLERANCE.is_close(p_max_pt[2], 4.0)
+    )
 
-    # inflate
-    bb3 = OBB.from_points([
-        Point(0.0, 0.0, 0.0),
-        Point(2.0, 2.0, 2.0),
-    ])
+    bb3 = OBB.from_points(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 2.0, 2.0),
+        ]
+    )
     bb3.inflate(1.0)
 
     MINI_CHECK(TOLERANCE.is_close(bb3.min_point()[0], -1.0))
     MINI_CHECK(TOLERANCE.is_close(bb3.max_point()[0], 3.0))
 
-    # guid and name
     MINI_CHECK(bb1.guid != "")
     bb1.name = "test_bbox"
 
@@ -136,21 +139,18 @@ def test_obb_json_roundtrip():
     bb = OBB.from_point(Point(1.0, 2.0, 3.0), 5.0)
     bb.name = "test_bbox"
 
-    # JSON object
     d = bb.__jsondump__()
     loaded_j = OBB.__jsonload__(d)
 
     MINI_CHECK(loaded_j.name == "test_bbox")
     MINI_CHECK(TOLERANCE.is_close(loaded_j.center[0], 1.0))
 
-    # String
     s = bb.file_json_dumps()
     loaded_s = OBB.file_json_loads(s)
 
     MINI_CHECK(loaded_s.name == "test_bbox")
     MINI_CHECK(TOLERANCE.is_close(loaded_s.half_size[0], 5.0))
 
-    # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_obb.json"
     bb.file_json_dump(fname)
     loaded = OBB.file_json_load(fname)
@@ -169,7 +169,6 @@ def test_obb_protobuf_roundtrip():
     bb = OBB.from_point(Point(1.0, 2.0, 3.0), 5.0)
     bb.name = "test_bbox_proto"
 
-    # Bytes
     guid = bb.guid
     b = bb.pb_dumps()
     loaded_s = OBB.pb_loads(b)
@@ -178,7 +177,6 @@ def test_obb_protobuf_roundtrip():
     MINI_CHECK(loaded_s.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded_s.center[0], 1.0))
 
-    # File
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_obb.bin"
     bb.pb_dump(fname)
     loaded = OBB.pb_load(fname)
@@ -195,7 +193,6 @@ def test_obb_accessors():
     from session_py import OBB
     from session_py import Point
 
-    # axis-aligned OBB: center=(1,2,3), half_size=(1,2,3), dims 2×4×6
     pts = [
         Point(0.0, 0.0, 0.0),
         Point(2.0, 0.0, 0.0),
@@ -242,11 +239,16 @@ def test_obb_from_geometry():
     MINI_CHECK(bb_line.is_valid())
     MINI_CHECK(TOLERANCE.is_close(bb_line.center[0], 2.0))
 
-    bb_pl = OBB.from_polyline(Polyline([
-        Point(0.0, 0.0, 0.0),
-        Point(4.0, 0.0, 0.0),
-        Point(4.0, 4.0, 4.0),
-    ]), 0.0)
+    bb_pl = OBB.from_polyline(
+        Polyline(
+            [
+                Point(0.0, 0.0, 0.0),
+                Point(4.0, 0.0, 0.0),
+                Point(4.0, 4.0, 4.0),
+            ]
+        ),
+        0.0,
+    )
 
     MINI_CHECK(bb_pl.is_valid())
     MINI_CHECK(bb_pl.volume() > 0.0)
@@ -257,45 +259,67 @@ def test_obb_from_geometry():
     MINI_CHECK(TOLERANCE.is_close(bb_mesh.center[0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(bb_mesh.volume(), 8.0))
 
-    bb_pc = OBB.from_pointcloud(PointCloud(
-        [
-            Point(0.0, 0.0, 0.0),
-            Point(2.0, 0.0, 0.0),
-            Point(0.0, 2.0, 0.0),
-            Point(0.0, 0.0, 2.0),
-        ],
-        [
-            Vector(0.0, 0.0, 1.0),
-            Vector(0.0, 0.0, 1.0),
-            Vector(0.0, 0.0, 1.0),
-            Vector(0.0, 0.0, 1.0),
-        ],
-        [
-            Color(255, 0, 0, 255),
-            Color(0, 255, 0, 255),
-            Color(0, 0, 255, 255),
-            Color(255, 255, 0, 255),
-        ]
-    ), 0.0)
+    bb_pc = OBB.from_pointcloud(
+        PointCloud(
+            [
+                Point(0.0, 0.0, 0.0),
+                Point(2.0, 0.0, 0.0),
+                Point(0.0, 2.0, 0.0),
+                Point(0.0, 0.0, 2.0),
+            ],
+            [
+                Vector(0.0, 0.0, 1.0),
+                Vector(0.0, 0.0, 1.0),
+                Vector(0.0, 0.0, 1.0),
+                Vector(0.0, 0.0, 1.0),
+            ],
+            [
+                Color(255, 0, 0, 255),
+                Color(0, 255, 0, 255),
+                Color(0, 0, 255, 255),
+                Color(255, 255, 0, 255),
+            ],
+        ),
+        0.0,
+    )
 
     MINI_CHECK(bb_pc.is_valid())
     MINI_CHECK(bb_pc.volume() > 0.0)
 
-    bb_nc = OBB.from_nurbscurve(NurbsCurve.create(False, 2, [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(2.0, 0.0, 0.0),
-        Point(3.0, 0.0, 0.0),
-    ]), 0.5, False)
+    bb_nc = OBB.from_nurbscurve(
+        NurbsCurve.create(
+            False,
+            2,
+            [
+                Point(0.0, 0.0, 0.0),
+                Point(1.0, 0.0, 0.0),
+                Point(2.0, 0.0, 0.0),
+                Point(3.0, 0.0, 0.0),
+            ],
+        ),
+        0.5,
+        False,
+    )
 
     MINI_CHECK(bb_nc.is_valid())
 
-    bb_ns = OBB.from_nurbssurface(NurbsSurface.create(False, False, 1, 1, 2, 2, [
-        Point(0.0, 0.0, 0.0),
-        Point(2.0, 0.0, 0.0),
-        Point(0.0, 2.0, 0.0),
-        Point(2.0, 2.0, 2.0),
-    ]), 0.0)
+    bb_ns = OBB.from_nurbssurface(
+        NurbsSurface.create(
+            False,
+            False,
+            1,
+            1,
+            2,
+            2,
+            [
+                Point(0.0, 0.0, 0.0),
+                Point(2.0, 0.0, 0.0),
+                Point(0.0, 2.0, 0.0),
+                Point(2.0, 2.0, 2.0),
+            ],
+        ),
+        0.0,
+    )
 
     MINI_CHECK(bb_ns.is_valid())
 
@@ -338,11 +362,10 @@ def test_obb_two_rectangles():
         x_axis=Vector(1.0, 0.0, 0.0),
         y_axis=Vector(0.0, 1.0, 0.0),
         z_axis=Vector(0.0, 0.0, 1.0),
-        half_size=Vector(2.0, 3.0, 4.0)
+        half_size=Vector(2.0, 3.0, 4.0),
     )
     rects = bb.two_rectangles()
 
-    # bottom rect (z=-4 offset): corners at z=-1; top rect (z=+4 offset): corners at z=7
     MINI_CHECK(len(rects) == 10)
     MINI_CHECK(rects[0] == Point(3.0, 5.0, -1.0))
     MINI_CHECK(rects[2] == Point(-1.0, -1.0, -1.0))

@@ -24,10 +24,9 @@ def test_remesh_nurbssurface_adaptive_parameters():
 
     s = Primitives.sphere_surface(0, 0, 0, 1.0)
     ta = RemeshNurbsSurfaceAdaptive(s)
-    ta.set_max_angle(15.0) \
-      .set_max_edge_length(2.0) \
-      .set_min_edge_length(0.1) \
-      .set_max_chord_height(0.05)
+    ta.set_max_angle(15.0).set_max_edge_length(2.0).set_min_edge_length(
+        0.1
+    ).set_max_chord_height(0.05)
 
     MINI_CHECK(ta.get_max_angle() == 15.0)
     MINI_CHECK(ta.get_max_edge_length() == 2.0)
@@ -114,14 +113,22 @@ def test_remesh_nurbssurface_adaptive_singular_triangle():
     from session_py import NurbsSurface
     from session_py import Point
 
-    s = NurbsSurface.create(False, False, 2, 1, 3, 2, [
-        Point(0, 0, 0),
-        Point(2, 0, 3),
-        Point(4, 0, 0),
-        Point(2, 4, 0),
-        Point(2, 4, 0),
-        Point(2, 4, 0),
-    ])
+    s = NurbsSurface.create(
+        False,
+        False,
+        2,
+        1,
+        3,
+        2,
+        [
+            Point(0, 0, 0),
+            Point(2, 0, 3),
+            Point(4, 0, 0),
+            Point(2, 4, 0),
+            Point(2, 4, 0),
+            Point(2, 4, 0),
+        ],
+    )
     m = RemeshNurbsSurfaceAdaptive(s).mesh()
 
     MINI_CHECK(m.is_valid())
@@ -134,17 +141,25 @@ def test_remesh_nurbssurface_adaptive_double_curved_triangle():
     from session_py import NurbsSurface
     from session_py import Point
 
-    s = NurbsSurface.create(False, False, 2, 2, 3, 3, [
-        Point(0, 0, 0),
-        Point(2, 0, 3),
-        Point(4, 0, 0),
-        Point(0, 2, 2),
-        Point(2, 2, 5),
-        Point(4, 2, 2),
-        Point(2, 4, 0),
-        Point(2, 4, 0),
-        Point(2, 4, 0),
-    ])
+    s = NurbsSurface.create(
+        False,
+        False,
+        2,
+        2,
+        3,
+        3,
+        [
+            Point(0, 0, 0),
+            Point(2, 0, 3),
+            Point(4, 0, 0),
+            Point(0, 2, 2),
+            Point(2, 2, 5),
+            Point(4, 2, 2),
+            Point(2, 4, 0),
+            Point(2, 4, 0),
+            Point(2, 4, 0),
+        ],
+    )
     m = RemeshNurbsSurfaceAdaptive(s).mesh()
 
     MINI_CHECK(m.is_valid())

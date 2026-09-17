@@ -28,14 +28,19 @@ def test_remesh_cdt_triangulate():
     )
     tris = RemeshCDT.triangulate([border, hole])
     flat = []
+
     for p in border.get_points():
         flat.append(p)
+
     for p in hole.get_points():
         flat.append(p)
+
     m = Mesh()
     vkeys = []
+
     for p in flat:
         vkeys.append(m.add_vertex(p))
+
     for t in tris:
         m.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
 
@@ -423,6 +428,7 @@ def test_remesh_cdt_degenerate_hole_keeps_flat_indices():
     )
     tris = RemeshCDT.triangulate([border, degen, hole])
     mx = 0
+
     for t in tris:
         for k in range(3):
             if t[k] > mx:

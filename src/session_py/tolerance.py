@@ -45,6 +45,7 @@ class Tolerance:
 
     def __init__(self, unit: str = "M"):
         """Construct tolerance with a unit system ("M" or "MM")"""
+
         self._unit = unit
         self._absolute = None
         self._relative = None
@@ -56,6 +57,7 @@ class Tolerance:
 
     def reset(self) -> None:
         """Reset all overrides to default constants"""
+
         self._absolute = None
         self._relative = None
         self._angular = None
@@ -67,16 +69,6 @@ class Tolerance:
     def unit(self) -> str:
         """Current unit system"""
         return self._unit
-
-    @property
-    def units(self) -> str:
-        """Compatibility alias for the current unit system."""
-        return self.unit()
-
-    @units.setter
-    def units(self, value: str) -> None:
-        """Set the current unit system through the compatibility alias."""
-        self.set_unit(value)
 
     def absolute(self) -> float:
         """Absolute tolerance value (or default ABSOLUTE)"""
@@ -92,6 +84,7 @@ class Tolerance:
 
     def approximation(self) -> float:
         """Approximation tolerance (or default APPROXIMATION)"""
+
         return (
             self._approximation
             if self._approximation is not None
@@ -104,6 +97,7 @@ class Tolerance:
 
     def lineardeflection(self) -> float:
         """Linear deflection value (or default LINEARDEFLECTION)"""
+
         return (
             self._lineardeflection
             if self._lineardeflection is not None
@@ -112,6 +106,7 @@ class Tolerance:
 
     def angulardeflection(self) -> float:
         """Angular deflection value (or default ANGULARDEFLECTION)"""
+
         return (
             self._angulardeflection
             if self._angulardeflection is not None
@@ -122,6 +117,7 @@ class Tolerance:
         """Set current unit system"""
         if value != "M" and value != "MM":
             raise ValueError(f"Invalid unit: {value}")
+
         self._unit = value
 
     def set_absolute(self, value: float) -> None:
@@ -144,6 +140,7 @@ class Tolerance:
         """Override decimal precision for formatting"""
         if value == 0:
             raise ValueError("Precision cannot be zero.")
+
         self._precision = value
 
     def set_lineardeflection(self, value: float) -> None:
@@ -177,6 +174,7 @@ class Tolerance:
     def is_between(self, value: float, minval: float, maxval: float) -> bool:
         """Check if value is within a range with absolute tolerance"""
         atol = self.absolute()
+
         return minval - atol <= value and value <= maxval + atol
 
     def is_close(self, a: float, b: float) -> bool:
@@ -193,33 +191,43 @@ class Tolerance:
 
     def is_point_close(self, a: Point, b: Point) -> bool:
         """Check if two 3D points are equal within absolute tolerance"""
+
         dx = b[0] - a[0]
         dy = b[1] - a[1]
         dz = b[2] - a[2]
+
         return dx * dx + dy * dy + dz * dz <= self.absolute() * self.absolute()
 
     def is_vector_close(self, a: Vector, b: Vector) -> bool:
         """Check if two 3D vectors are equal within absolute tolerance"""
+
         dx = b[0] - a[0]
         dy = b[1] - a[1]
         dz = b[2] - a[2]
+
         return dx * dx + dy * dy + dz * dz <= self.absolute() * self.absolute()
 
     def is_allclose(self, a: Sequence[float], b: Sequence[float]) -> bool:
         """Check if two lists of values are element-wise close"""
+
         if len(a) != len(b):
             return False
+
         rtol = self.relative()
         atol = self.absolute()
+
         for i in range(len(a)):
             if not self.compare(a[i], b[i], rtol, atol):
                 return False
+
         return True
 
     @contextmanager
     def temporary(self) -> Iterator[Tolerance]:
         """Context manager that restores tolerance on exit"""
+
         saved = dict(self.__dict__)
+
         try:
             yield self
         finally:
@@ -227,65 +235,96 @@ class Tolerance:
 
     def key(self, x: float, y: float, z: float, precision: int = -999) -> str:
         """Create a geometric key string for 3D point with optional precision"""
+
         prec = precision if precision != -999 else self.precision()
+
         if prec == 0:
             raise ValueError("Precision cannot be zero.")
+
         if prec == -1:
             return f"{int(x)},{int(y)},{int(z)}"
+
         if prec < -1:
             factor = 10.0 ** (-prec - 1)
+
             return f"{int(Tolerance.round_to(x / factor, 0) * factor)},{int(Tolerance.round_to(y / factor, 0) * factor)},{int(Tolerance.round_to(z / factor, 0) * factor)}"
+
         threshold = 10.0**-prec * 0.5
+
         if abs(x) < threshold:
             x = 0.0
+
         if abs(y) < threshold:
             y = 0.0
+
         if abs(z) < threshold:
             z = 0.0
+
         return f"{x:.{prec}f},{y:.{prec}f},{z:.{prec}f}"
 
     def key_xy(self, x: float, y: float, precision: int = -999) -> str:
         """Create a geometric key string for 2D point with optional precision"""
+
         prec = precision if precision != -999 else self.precision()
+
         if prec == 0:
             raise ValueError("Precision cannot be zero.")
+
         if prec == -1:
             return f"{int(x)},{int(y)}"
+
         if prec < -1:
             factor = 10.0 ** (-prec - 1)
+
             return f"{int(Tolerance.round_to(x / factor, 0) * factor)},{int(Tolerance.round_to(y / factor, 0) * factor)}"
+
         threshold = 10.0**-prec * 0.5
+
         if abs(x) < threshold:
             x = 0.0
+
         if abs(y) < threshold:
             y = 0.0
+
         return f"{x:.{prec}f},{y:.{prec}f}"
 
     def format_number(self, number: float, precision: int = -999) -> str:
         """Format a number with optional precision override"""
+
         prec = precision if precision != -999 else self.precision()
+
         if prec == 0:
             raise ValueError("Precision cannot be zero.")
+
         if prec == -1:
             return f"{int(Tolerance.round_to(number, 0))}"
+
         if prec < -1:
             factor = 10.0 ** (-prec - 1)
+
             return f"{int(Tolerance.round_to(number / factor, 0) * factor)}"
+
         return f"{number:.{prec}f}"
 
     def precision_from_tolerance(self, tol: float = -1) -> int:
         """Determine decimal precision from a tolerance value"""
+
         value = tol if tol >= 0 else self.absolute()
+
         if value >= 1.0:
             return 0
+
         text = f"{value:e}"
         pos = text.find("e-")
+
         if pos == -1:
             return 0
+
         return int(text[pos + 2 :])
 
     def __jsondump__(self) -> dict:
         """Serialize to a JSON-compatible dictionary."""
+
         return {
             "absolute": self.absolute(),
             "angular": self.angular(),
@@ -301,6 +340,7 @@ class Tolerance:
     @classmethod
     def __jsonload__(cls, data: dict) -> "Tolerance":
         """Deserialize from a JSON-compatible dictionary."""
+
         tolerance = cls(data["unit"])
         tolerance.set_absolute(data["absolute"])
         tolerance.set_angular(data["angular"])
@@ -309,6 +349,7 @@ class Tolerance:
         tolerance.set_lineardeflection(data["lineardeflection"])
         tolerance.set_precision(data["precision"])
         tolerance.set_relative(data["relative"])
+
         return tolerance
 
     def file_json_dumps(self) -> str:
@@ -333,6 +374,7 @@ class Tolerance:
 
     def to_proto(self) -> tolerance_pb2.Tolerance:
         """Convert to the protobuf message."""
+
         from .proto import tolerance_pb2
 
         proto = tolerance_pb2.Tolerance()
@@ -344,11 +386,13 @@ class Tolerance:
         proto.precision = self.precision()
         proto.lineardeflection = self.lineardeflection()
         proto.angulardeflection = self.angulardeflection()
+
         return proto
 
     @classmethod
     def from_proto(cls, proto: tolerance_pb2.Tolerance) -> "Tolerance":
         """Construct from the protobuf message."""
+
         tolerance = cls(proto.unit)
         tolerance.set_absolute(proto.absolute)
         tolerance.set_relative(proto.relative)
@@ -357,6 +401,7 @@ class Tolerance:
         tolerance.set_precision(proto.precision)
         tolerance.set_lineardeflection(proto.lineardeflection)
         tolerance.set_angulardeflection(proto.angulardeflection)
+
         return tolerance
 
     def pb_dumps(self) -> bytes:
@@ -366,19 +411,25 @@ class Tolerance:
     @classmethod
     def pb_loads(cls, data: bytes) -> "Tolerance":
         """Deserialize from protobuf bytes."""
+
         from .proto import tolerance_pb2
 
         proto = tolerance_pb2.Tolerance()
         consumed = proto.ParseFromString(data)
+
         if consumed != len(data):
             raise ValueError("Failed to parse Tolerance protobuf data")
+
         return cls.from_proto(proto)
 
     def pb_dump(self, filename: Union[str, Path]) -> None:
         """Write protobuf bytes to a file."""
+
         data = self.pb_dumps()
+
         with open(filename, "wb") as file:
             written = file.write(data)
+
             if written != len(data):
                 raise OSError(f"Failed to write protobuf file: {filename}")
 
@@ -402,58 +453,55 @@ class Tolerance:
     def round_to(value: float, ndigits: int) -> float:
         """Round a value to a given number of decimal places"""
         factor = 10.0**ndigits
+
         return math.copysign(math.floor(abs(value) * factor + 0.5), value) / factor
 
     def __repr__(self) -> str:
         """Return a constructor-style representation."""
         return f"Tolerance(unit='{self.unit()}', absolute={self.absolute()}, relative={self.relative()}, angular={self.angular()}, approximation={self.approximation()}, precision={self.precision()}, lineardeflection={self.lineardeflection()}, angulardeflection={self.angulardeflection()})"
 
-
 TOLERANCE = Tolerance()
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Utilities
 # ═══════════════════════════════════════════════════════════════════════════
 
-
 def is_finite(x: float) -> bool:
     """Check if a number is finite"""
     return math.isfinite(x)
-
 
 def unique_from_two_int(a: int, b: int) -> int:
     """Order-independent key from two ints: larger in the high 32 bits"""
     lo = min(a, b)
     hi = max(a, b)
-    return (hi << 32) | lo
 
+    return (hi << 32) | lo
 
 def wrap_index(index: int, n: int) -> int:
     """Signed modulo into [0, n-1]; 0 when n == 0"""
     if n == 0:
         return 0
-    return ((index % n) + n) % n
 
+    return ((index % n) + n) % n
 
 def triangle_edge_by_angle(edge_length: float, angle_deg: float) -> float:
     """Opposite side of a right triangle: edge_length * tan(angle_deg)"""
     return edge_length * math.tan(Tolerance.to_radians(angle_deg))
 
-
 def rad_to_deg(radians: float) -> float:
     """Convert radians to degrees"""
     return radians * Tolerance.TO_DEGREES
-
 
 def deg_to_rad(degrees: float) -> float:
     """Convert degrees to radians"""
     return degrees * Tolerance.TO_RADIANS
 
-
 def count_digits(n: float) -> int:
     """Number of decimal digits of the integer part of |n|; 0 when |n| < 1"""
+
     value = abs(n)
+
     if value < 1.0:
         return 0
+
     return int(math.log10(value)) + 1

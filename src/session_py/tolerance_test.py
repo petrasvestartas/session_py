@@ -2,7 +2,6 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 
-
 @MINI_TEST("Tolerance", "Is Zero")
 def test_tolerance_is_zero():
     from session_py.tolerance import TOLERANCE
@@ -10,7 +9,6 @@ def test_tolerance_is_zero():
     result = TOLERANCE.is_zero(1e-10)
 
     MINI_CHECK(result)
-
 
 @MINI_TEST("Tolerance", "Is Close")
 def test_tolerance_is_close():
@@ -20,7 +18,6 @@ def test_tolerance_is_close():
 
     MINI_CHECK(result)
 
-
 @MINI_TEST("Tolerance", "Is Positive")
 def test_tolerance_is_positive():
     from session_py.tolerance import TOLERANCE
@@ -28,7 +25,6 @@ def test_tolerance_is_positive():
     result = TOLERANCE.is_positive(1.0)
 
     MINI_CHECK(result)
-
 
 @MINI_TEST("Tolerance", "Is Negative")
 def test_tolerance_is_negative():
@@ -38,7 +34,6 @@ def test_tolerance_is_negative():
 
     MINI_CHECK(result)
 
-
 @MINI_TEST("Tolerance", "Is Between")
 def test_tolerance_is_between():
     from session_py.tolerance import TOLERANCE
@@ -46,7 +41,6 @@ def test_tolerance_is_between():
     result = TOLERANCE.is_between(0.5, 0.0, 1.0)
 
     MINI_CHECK(result)
-
 
 @MINI_TEST("Tolerance", "Format Number")
 def test_tolerance_format_number():
@@ -56,7 +50,6 @@ def test_tolerance_format_number():
 
     MINI_CHECK(result == "3.14")
 
-
 @MINI_TEST("Tolerance", "Key")
 def test_tolerance_key():
     from session_py.tolerance import TOLERANCE
@@ -64,7 +57,6 @@ def test_tolerance_key():
     result = TOLERANCE.key(1.0, 2.0, 3.0)
 
     MINI_CHECK(result == "1.000,2.000,3.000")
-
 
 @MINI_TEST("Tolerance", "To Radians")
 def test_tolerance_to_radians():
@@ -78,7 +70,6 @@ def test_tolerance_to_radians():
     MINI_CHECK(abs(r1 - Tolerance.PI / 2.0) < 1e-9)
     MINI_CHECK(abs(r2) < 1e-9)
 
-
 @MINI_TEST("Tolerance", "To Degrees")
 def test_tolerance_to_degrees():
     from session_py.tolerance import Tolerance
@@ -91,16 +82,11 @@ def test_tolerance_to_degrees():
     MINI_CHECK(abs(d1 - 90.0) < 1e-9)
     MINI_CHECK(abs(d2) < 1e-9)
 
-
 @MINI_TEST("Tolerance", "Runtime Modification")
 def test_tolerance_runtime_modification():
     from session_py.tolerance import Tolerance
 
     tolerance = Tolerance()
-    MINI_CHECK(tolerance.units == "M")
-    tolerance.units = "MM"
-    MINI_CHECK(tolerance.unit() == "MM")
-    tolerance.units = "M"
     original_absolute = tolerance.absolute()
     original_relative = tolerance.relative()
 
@@ -121,7 +107,6 @@ def test_tolerance_runtime_modification():
 
     close_with_default = tolerance.is_close(1.0, 1.0 + 1e-11)
     MINI_CHECK(close_with_default)
-
 
 @MINI_TEST("Tolerance", "Json Roundtrip")
 def test_tolerance_json_roundtrip():
@@ -153,7 +138,6 @@ def test_tolerance_json_roundtrip():
     MINI_CHECK(loaded.precision() == 4)
     MINI_CHECK(loaded.relative() == 3e-6)
     MINI_CHECK(parsed.relative() == 3e-6)
-
 
 @MINI_TEST("Tolerance", "Protobuf Roundtrip")
 def test_tolerance_protobuf_roundtrip():
@@ -188,7 +172,6 @@ def test_tolerance_protobuf_roundtrip():
     MINI_CHECK(parsed.relative() == 3e-6)
     MINI_CHECK(converted.relative() == 3e-6)
 
-
 @MINI_TEST("Tolerance", "Serialization Errors")
 def test_tolerance_serialization_errors():
     from google.protobuf.message import DecodeError
@@ -203,10 +186,12 @@ def test_tolerance_serialization_errors():
         Tolerance.pb_loads(b"\xff")
     except DecodeError:
         malformed = True
+
     try:
         tolerance.file_json_dump("")
     except OSError:
         json_write_failed = True
+
     try:
         tolerance.pb_dump("")
     except OSError:
@@ -215,7 +200,6 @@ def test_tolerance_serialization_errors():
     MINI_CHECK(malformed)
     MINI_CHECK(json_write_failed)
     MINI_CHECK(pb_write_failed)
-
 
 @MINI_TEST("Tolerance", "Unique From Two Int")
 def test_tolerance_unique_from_two_int():
@@ -226,7 +210,6 @@ def test_tolerance_unique_from_two_int():
 
     MINI_CHECK(r0 == r1)
     MINI_CHECK(r0 == (7 << 32) | 3)
-
 
 @MINI_TEST("Tolerance", "Wrap Index")
 def test_tolerance_wrap_index():
@@ -244,7 +227,6 @@ def test_tolerance_wrap_index():
     MINI_CHECK(r3 == 3)
     MINI_CHECK(r4 == 0)
 
-
 @MINI_TEST("Tolerance", "Triangle Edge By Angle")
 def test_tolerance_triangle_edge_by_angle():
     from session_py.tolerance import triangle_edge_by_angle
@@ -254,7 +236,6 @@ def test_tolerance_triangle_edge_by_angle():
     MINI_CHECK(abs(r - 1.0) < 1e-9)
     r2 = triangle_edge_by_angle(5.0, 0.0)
     MINI_CHECK(abs(r2) < 1e-9)
-
 
 @MINI_TEST("Tolerance", "Rad Deg Conversion")
 def test_tolerance_rad_deg():
@@ -269,7 +250,6 @@ def test_tolerance_rad_deg():
     MINI_CHECK(abs(r0 - 180.0) < 1e-9)
     MINI_CHECK(abs(r1 - Tolerance.PI) < 1e-9)
     MINI_CHECK(abs(r2 - 1.234) < 1e-9)
-
 
 @MINI_TEST("Tolerance", "Count Digits")
 def test_tolerance_count_digits():
@@ -289,7 +269,6 @@ def test_tolerance_count_digits():
     MINI_CHECK(r4 == 3)
     MINI_CHECK(r5 == 2)
 
-
 @MINI_TEST("Tolerance", "Is Angle Zero")
 def test_tolerance_is_angle_zero():
     from session_py.tolerance import TOLERANCE
@@ -300,7 +279,6 @@ def test_tolerance_is_angle_zero():
     MINI_CHECK(r0)
     MINI_CHECK(not r1)
 
-
 @MINI_TEST("Tolerance", "Is Angles Close")
 def test_tolerance_is_angles_close():
     from session_py.tolerance import TOLERANCE
@@ -310,7 +288,6 @@ def test_tolerance_is_angles_close():
 
     MINI_CHECK(r0)
     MINI_CHECK(not r1)
-
 
 @MINI_TEST("Tolerance", "Is Point Close")
 def test_tolerance_is_point_close():
@@ -324,7 +301,6 @@ def test_tolerance_is_point_close():
     MINI_CHECK(TOLERANCE.is_point_close(a, b))
     MINI_CHECK(not TOLERANCE.is_point_close(a, c))
 
-
 @MINI_TEST("Tolerance", "Is Allclose")
 def test_tolerance_is_allclose():
     from session_py.tolerance import TOLERANCE
@@ -336,7 +312,6 @@ def test_tolerance_is_allclose():
     MINI_CHECK(TOLERANCE.is_allclose(a, b))
     MINI_CHECK(not TOLERANCE.is_allclose(a, c))
 
-
 @MINI_TEST("Tolerance", "Key Xy")
 def test_tolerance_key_xy():
     from session_py.tolerance import TOLERANCE
@@ -344,7 +319,6 @@ def test_tolerance_key_xy():
     result = TOLERANCE.key_xy(1.0, 2.0)
 
     MINI_CHECK(result == "1.000,2.000")
-
 
 @MINI_TEST("Tolerance", "Round To")
 def test_tolerance_round_to():
@@ -356,7 +330,6 @@ def test_tolerance_round_to():
     MINI_CHECK(abs(r0 - 3.14) < 1e-9)
     MINI_CHECK(abs(r1 - 3.0) < 1e-9)
 
-
 @MINI_TEST("Tolerance", "Precision From Tolerance")
 def test_tolerance_precision_from_tolerance():
     from session_py.tolerance import TOLERANCE
@@ -365,7 +338,6 @@ def test_tolerance_precision_from_tolerance():
 
     MINI_CHECK(prec == 9)
 
-
 @MINI_TEST("Tolerance", "Tolerance")
 def test_tolerance_tolerance():
     from session_py.tolerance import TOLERANCE
@@ -373,7 +345,6 @@ def test_tolerance_tolerance():
     result = TOLERANCE.tolerance(1.0, 1e-6, 1e-9)
 
     MINI_CHECK(abs(result - (1e-6 + 1e-9)) < 1e-18)
-
 
 @MINI_TEST("Tolerance", "Compare")
 def test_tolerance_compare():
@@ -385,7 +356,6 @@ def test_tolerance_compare():
     MINI_CHECK(r0)
     MINI_CHECK(not r1)
 
-
 @MINI_TEST("Tolerance", "Is Finite")
 def test_tolerance_is_finite():
     from session_py.tolerance import is_finite
@@ -395,7 +365,6 @@ def test_tolerance_is_finite():
 
     MINI_CHECK(r0)
     MINI_CHECK(not r1)
-
 
 @MINI_TEST("Tolerance", "Is Vector Close")
 def test_tolerance_is_vector_close():
@@ -409,7 +378,6 @@ def test_tolerance_is_vector_close():
     MINI_CHECK(TOLERANCE.is_vector_close(a, b))
     MINI_CHECK(not TOLERANCE.is_vector_close(a, c))
 
-
 @MINI_TEST("Tolerance", "Temporary")
 def test_tolerance_temporary():
     from session_py.tolerance import Tolerance
@@ -417,25 +385,29 @@ def test_tolerance_temporary():
     tolerance = Tolerance()
     original = tolerance.absolute()
     inside = False
+
     with tolerance.temporary() as guard:
         guard.set_absolute(1e-12)
         inside = guard.absolute() == 1e-12
+
     restored = tolerance.absolute() == original
 
     threw = False
+
     try:
         with tolerance.temporary() as guard:
             guard.set_absolute(1e-12)
+
             raise RuntimeError("test")
     except RuntimeError:
         threw = True
+
     restored_after_error = tolerance.absolute() == original
 
     MINI_CHECK(inside)
     MINI_CHECK(restored)
     MINI_CHECK(threw)
     MINI_CHECK(restored_after_error)
-
 
 if __name__ == "__main__":
     run_all("python")

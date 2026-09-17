@@ -392,6 +392,7 @@ def test_xform_project_to_plane():
     xf = proj * move
     def tp(x, y, z):
         return Point(x, y, z).transformed(xf)
+
     outline = Polyline([
         tp(-1, -1, -1),
         tp(1, -1, -1),
@@ -423,6 +424,7 @@ def test_xform_project_to_plane_by_axis():
     xf = proj * move
     def tp(x, y, z):
         return Point(x, y, z).transformed(xf)
+
     outline = Polyline([
         tp(-1, -1, 1),
         tp(1, -1, -1),

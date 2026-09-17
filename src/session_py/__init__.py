@@ -25,6 +25,7 @@ from .graph import Graph
 from .graph import Vertex
 from .graph import Edge
 from .objects import Objects
+from .objects import Component
 from .history import History
 from .session import Session
 from .mesh import Mesh
@@ -88,6 +89,7 @@ __all__ = [
     "Vertex",
     "Edge",
     "Objects",
+    "Component",
     "History",
     "Session",
     "Mesh",

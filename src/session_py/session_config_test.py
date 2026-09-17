@@ -14,22 +14,30 @@ def test_session_config_runtime_modification():
 
     MINI_CHECK(not config.explode_mesh_faces)
     MINI_CHECK(config.scale_factor == 1.0)
+
     config.explode_mesh_faces = True
     config.scale_factor = 0.001
+
     MINI_CHECK(config.explode_mesh_faces)
     MINI_CHECK(config.scale_factor == 0.001)
     MINI_CHECK(not other.explode_mesh_faces)
     MINI_CHECK(other.scale_factor == 1.0)
     MINI_CHECK(not SESSION_CONFIG.explode_mesh_faces)
     MINI_CHECK(SESSION_CONFIG.scale_factor == 1.0)
+
     SESSION_CONFIG.explode_mesh_faces = True
     SESSION_CONFIG.scale_factor = 0.001
+
     MINI_CHECK(SESSION_CONFIG.explode_mesh_faces)
     MINI_CHECK(SESSION_CONFIG.scale_factor == 0.001)
+
     SESSION_CONFIG.reset()
+
     MINI_CHECK(not SESSION_CONFIG.explode_mesh_faces)
     MINI_CHECK(SESSION_CONFIG.scale_factor == 1.0)
+
     config.reset()
+
     MINI_CHECK(not config.explode_mesh_faces)
     MINI_CHECK(config.scale_factor == 1.0)
 

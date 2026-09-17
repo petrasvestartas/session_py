@@ -17,7 +17,9 @@ def test_aabb_constructor():
     MINI_CHECK(a == AABB(0.0, 0.0, 0.0, 1.0, 2.0, 3.0))
     MINI_CHECK(a != empty)
     MINI_CHECK(str(a) == "0.000000, 0.000000, 0.000000, 1.000000, 2.000000, 3.000000")
-    MINI_CHECK(repr(a) == "AABB(0.000000, 0.000000, 0.000000, 1.000000, 2.000000, 3.000000)")
+    MINI_CHECK(
+        repr(a) == "AABB(0.000000, 0.000000, 0.000000, 1.000000, 2.000000, 3.000000)"
+    )
     MINI_CHECK(TOLERANCE.is_close(a.area(), 88.0))
     MINI_CHECK(a.center() == Point(0.0, 0.0, 0.0))
     MINI_CHECK(TOLERANCE.is_close(a.diagonal(), 2.0 * math.sqrt(14.0)))
@@ -43,7 +45,9 @@ def test_aabb_constructor():
     a.union_with(b)
     MINI_CHECK(a.min_point() == Point(-1.0, -2.0, -3.0))
     MINI_CHECK(a.max_point() == Point(6.0, 2.0, 3.0))
-    c = AABB.merge(AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), AABB(4.0, 0.0, 0.0, 1.0, 1.0, 1.0))
+    c = AABB.merge(
+        AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0), AABB(4.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+    )
     MINI_CHECK(c.min_point() == Point(-1.0, -1.0, -1.0))
     MINI_CHECK(c.max_point() == Point(5.0, 1.0, 1.0))
 
@@ -66,10 +70,13 @@ def test_aabb_from_geometry():
     MINI_CHECK(a_pt.center() == Point(1.0, 2.0, 3.0))
     MINI_CHECK(TOLERANCE.is_close(a_pt.hx, 0.5))
 
-    a_pts = AABB.from_points([
-        Point(0.0, 0.0, 0.0),
-        Point(3.0, 4.0, 5.0),
-    ], 0.0)
+    a_pts = AABB.from_points(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(3.0, 4.0, 5.0),
+        ],
+        0.0,
+    )
 
     MINI_CHECK(a_pts.min_point() == Point(0.0, 0.0, 0.0))
     MINI_CHECK(a_pts.max_point() == Point(3.0, 4.0, 5.0))
@@ -84,11 +91,13 @@ def test_aabb_from_geometry():
     MINI_CHECK(a_line.min_point() == Point(-1.0, -1.0, -1.0))
     MINI_CHECK(a_line.max_point() == Point(5.0, 1.0, 1.0))
 
-    pl = Polyline([
-        Point(0.0, 0.0, 0.0),
-        Point(2.0, 0.0, 0.0),
-        Point(2.0, 2.0, 0.0),
-    ])
+    pl = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 2.0, 0.0),
+        ]
+    )
     a_pl = AABB.from_polyline(pl, 0.0)
 
     MINI_CHECK(a_pl.min_point() == Point(0.0, 0.0, 0.0))
@@ -112,30 +121,42 @@ def test_aabb_from_geometry():
         [
             Color(255, 0, 0, 255),
             Color(0, 255, 0, 255),
-        ]
+        ],
     )
     a_pc = AABB.from_pointcloud(pc, 0.0)
 
     MINI_CHECK(a_pc.min_point() == Point(0.0, 0.0, 0.0))
     MINI_CHECK(a_pc.max_point() == Point(4.0, 2.0, 6.0))
 
-    curve = NurbsCurve.create(False, 2, [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 0.0, 0.0),
-        Point(2.0, 0.0, 0.0),
-        Point(3.0, 0.0, 0.0),
-    ])
+    curve = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(3.0, 0.0, 0.0),
+        ],
+    )
     a_nc = AABB.from_nurbscurve(curve, 0.5, False)
 
     MINI_CHECK(a_nc.is_valid())
     MINI_CHECK(a_nc.contains(Point(1.5, 0.0, 0.0)))
 
-    surf = NurbsSurface.create(False, False, 1, 1, 2, 2, [
-        Point(0.0, 0.0, 0.0),
-        Point(2.0, 0.0, 0.0),
-        Point(0.0, 2.0, 0.0),
-        Point(2.0, 2.0, 2.0),
-    ])
+    surf = NurbsSurface.create(
+        False,
+        False,
+        1,
+        1,
+        2,
+        2,
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(2.0, 2.0, 2.0),
+        ],
+    )
     a_ns = AABB.from_nurbssurface(surf, 0.0)
 
     MINI_CHECK(a_ns.is_valid())

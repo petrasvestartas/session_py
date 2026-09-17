@@ -68,16 +68,33 @@ def test_line_constructor():
 
     lwn = Line.with_name("custom", 0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 
-    ms, me = Line.get_middle_line(Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(0.0, 2.0, 0.0), Point(2.0, 2.0, 0.0))
+    ms, me = Line.get_middle_line(
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(2.0, 2.0, 0.0),
+    )
 
     MINI_CHECK(l.name == "my_line")
     MINI_CHECK(l[0] == 10.0 and l[1] == 20.0 and l[2] == 30.0)
     MINI_CHECK(l.width == 1.0)
     MINI_CHECK(l.linecolor == Color.black())
     MINI_CHECK(l.guid != "")
-    MINI_CHECK(x0 == 10.0 and y0 == 20.0 and z0 == 30.0 and x1 == 40.0 and y1 == 50.0 and z1 == 60.0)
-    MINI_CHECK(lstr == "10.000000, 20.000000, 30.000000, 40.000000, 50.000000, 60.000000")
-    MINI_CHECK(lrepr == "Line(my_line, 10.000000, 20.000000, 30.000000, 40.000000, 50.000000, 60.000000, Color(black, 0.0, 0.0, 0.0, 1.0), 1.000000)")
+    MINI_CHECK(
+        x0 == 10.0
+        and y0 == 20.0
+        and z0 == 30.0
+        and x1 == 40.0
+        and y1 == 50.0
+        and z1 == 60.0
+    )
+    MINI_CHECK(
+        lstr == "10.000000, 20.000000, 30.000000, 40.000000, 50.000000, 60.000000"
+    )
+    MINI_CHECK(
+        lrepr
+        == "Line(my_line, 10.000000, 20.000000, 30.000000, 40.000000, 50.000000, 60.000000, Color(black, 0.0, 0.0, 0.0, 1.0), 1.000000)"
+    )
     MINI_CHECK(lcopy == l and lcopy.guid != l.guid)
     MINI_CHECK(lother == l and lneg != l)
     MINI_CHECK(lmult[0] == 20.0 and lmult[3] == 80.0)

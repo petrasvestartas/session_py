@@ -1,10 +1,14 @@
-from session_py.mini_test import MINI_TEST, MINI_CHECK, run_all
+from .mini_test import MINI_TEST
+from .mini_test import MINI_CHECK
+from .mini_test import run_all
 import math
 
 
 @MINI_TEST("SimpleSplit", "Split Curve By Curves")
 def test_split_curve_by_curves():
-    from session_py import NurbsCurve, Point, Primitives
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import Primitives
     from session_py.simple_split import split_curve_by_curves
 
     curve = NurbsCurve.create(
@@ -80,7 +84,10 @@ def test_split_curve_by_curves():
 
 @MINI_TEST("SimpleSplit", "Split BRep Face By Curves")
 def test_split_brep_face_by_curves():
-    from session_py import BRep, NurbsCurve, Point, Primitives
+    from session_py import BRep
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import Primitives
     from session_py.simple_split import split_brep_face_by_curves
 
     box = BRep.create_box(10, 10, 10)
@@ -111,7 +118,9 @@ def test_split_brep_face_by_curves():
     meshes = split.face_meshes_q(True, 20.0, 0.005)
     MINI_CHECK(abs(meshes[0].area() - 50.0) < 1e-6)
     MINI_CHECK(abs(meshes[6].area() - 50.0) < 1e-6)
-    neighbor_area = sum(meshes[i].area() for i in range(1, 6))
+    neighbor_area = 0.0
+    for i in range(1, 6):
+        neighbor_area += meshes[i].area()
     MINI_CHECK(abs(neighbor_area - 500.0) < 1e-6)
     closed = NurbsCurve.create(
         False,
@@ -219,7 +228,10 @@ def test_split_brep_face_by_curves():
 
 @MINI_TEST("SimpleSplit", "Split Surface By Curves")
 def test_split_surface_by_curves():
-    from session_py import BRep, NurbsCurve, Point
+    import copy
+    from session_py import BRep
+    from session_py import NurbsCurve
+    from session_py import Point
     from session_py.simple_split import split_surface_by_curves
 
     surface = BRep.create_box(10, 10, 10).m_surfaces[0]
@@ -256,8 +268,6 @@ def test_split_surface_by_curves():
     untouched = split_surface_by_curves(surface, [outside], 1e-6)
     MINI_CHECK(untouched.face_count() == 1)
     MINI_CHECK(surface.is_valid())
-    import copy
-
     invalid = copy.deepcopy(surface)
     invalid.set_cv(0, 0, Point(math.nan, 0, 0))
     rejected = False
@@ -270,7 +280,9 @@ def test_split_surface_by_curves():
 
 @MINI_TEST("SimpleSplit", "Split Line By Curves")
 def test_split_line_by_curves():
-    from session_py import Line, Point, NurbsCurve
+    from session_py import Line
+    from session_py import NurbsCurve
+    from session_py import Point
     from session_py.simple_split import split_line_by_curves
 
     line = Line.from_points(Point(-2, 0, 0), Point(2, 0, 0))
@@ -292,7 +304,9 @@ def test_split_line_by_curves():
 
 @MINI_TEST("SimpleSplit", "Split Polyline By Curves")
 def test_split_polyline_by_curves():
-    from session_py import Polyline, Point, NurbsCurve
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import Polyline
     from session_py.simple_split import split_polyline_by_curves
 
     polyline = Polyline([Point(-2, 0, 0), Point(2, 0, 0), Point(2, 3, 0)])

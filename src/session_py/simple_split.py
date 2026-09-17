@@ -1,22 +1,23 @@
-"""Intersection splits retaining original curve geometry and shared BRep topology."""
-
+from __future__ import annotations
 import copy
 import math
 from dataclasses import dataclass
-
-from .brep import BRep, BRepOrientation, BRepRef
+from .brep import BRep
+from .brep import BRepOrientation
+from .brep import BRepRef
 from .closest import Closest
+from .line import Line
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .point import Point
-from .line import Line
 from .polyline import Polyline
 from .tolerance import Tolerance
+from .vector import Vector
 
-_EPS = Tolerance.ZERO_TOLERANCE
-_WORK_LIMIT = 200000
+_EPSILON = Tolerance.ZERO_TOLERANCE
 _FORWARD = BRepOrientation.Forward
 _REVERSED = BRepOrientation.Reversed
+_WORK_LIMIT = 200000
 
 
 def _require(condition: bool, message: str) -> None:
@@ -36,7 +37,9 @@ def _check_curve(curve: NurbsCurve) -> None:
     for i in range(curve.cv_count()):
         p = curve.get_cv(i)
         _require(
-            all(math.isfinite(p[d]) for d in range(3))
+            math.isfinite(p[0])
+            and math.isfinite(p[1])
+            and math.isfinite(p[2])
             and math.isfinite(curve.weight(i))
             and curve.weight(i) > 0.0,
             "Split requires finite controls and positive rational weights",
@@ -47,11 +50,14 @@ def _check_surface(surface: NurbsSurface) -> None:
     _require(surface.is_valid(), "Split requires a valid NURBS surface")
     for i in range(surface.cv_count(0)):
         for j in range(surface.cv_count(1)):
-            p, w = surface.get_cv(i, j), surface.weight(i, j)
+            p = surface.get_cv(i, j)
+            w = surface.weight(i, j)
             _require(
-                all(math.isfinite(p[d]) for d in range(3))
+                math.isfinite(p[0])
+                and math.isfinite(p[1])
+                and math.isfinite(p[2])
                 and math.isfinite(w)
-                and w > 0,
+                and w > 0.0,
                 "Split requires finite surface controls and positive rational weights",
             )
 
@@ -63,94 +69,100 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 def _interval(curve: NurbsCurve, a: float, b: float) -> NurbsCurve:
     result = curve.duplicate()
     lo, hi = curve.domain()
-    a, b = _clamp(a, lo, hi), _clamp(b, lo, hi)
+    a = _clamp(a, lo, hi)
+    b = _clamp(b, lo, hi)
     _require(b > a, "Split produced an empty curve interval")
     if a > lo or b < hi:
         _require(result.trim(a, b), "Kernel refused a split interval")
     return result
 
 
-def _dot(a: Point, b: Point) -> float:
-    return sum(a[d] * b[d] for d in range(3))
-
-
-def _subtract(a: Point, b: Point) -> Point:
-    return Point(*(a[d] - b[d] for d in range(3)))
-
-
 def _closest(curve: NurbsCurve, point: Point) -> tuple[float, float]:
-    t, _ = Closest.curve_point(curve, point)
+    t, gap = Closest.curve_point(curve, point)
     lo, hi = curve.domain()
     if curve.degree() == 1:
         spans = curve.get_span_vector()
         best = math.inf
         for i in range(1, len(spans)):
-            a, b = curve.point_at(spans[i - 1]), curve.point_at(spans[i])
-            v = _subtract(b, a)
-            length2 = _dot(v, v)
-            if length2 <= _EPS * _EPS:
+            a = curve.point_at(spans[i - 1])
+            b = curve.point_at(spans[i])
+            v = b - a
+            length2 = v.dot(v)
+            if length2 <= _EPSILON * _EPSILON:
                 continue
-            fraction = _clamp(_dot(_subtract(point, a), v) / length2, 0.0, 1.0)
+            fraction = _clamp((point - a).dot(v) / length2, 0.0, 1.0)
             segment = _interval(curve, spans[i - 1], spans[i])
-            w0, w1 = segment.weight(0), segment.weight(segment.cv_count() - 1)
+            w0 = segment.weight(0)
+            w1 = segment.weight(segment.cv_count() - 1)
             normalized = fraction * w0 / (w1 * (1.0 - fraction) + fraction * w0)
             candidate = spans[i - 1] + normalized * (spans[i] - spans[i - 1])
             gap = curve.point_at(candidate).distance(point)
             if gap < best:
-                best, t = gap, candidate
+                best = gap
+                t = candidate
         return t, curve.point_at(t).distance(point)
-    for _ in range(24):
-        value = curve.evaluate(t, 1)
-        derivative = Point(*(value[1][d] for d in range(3)))
-        residual = Point(*(value[0][d] - point[d] for d in range(3)))
-        dd = _dot(derivative, derivative)
-        if dd <= _EPS * _EPS:
+    for i in range(24):
+        eval = curve.evaluate(t, 1)
+        d = eval[1]
+        r = eval[0] - Vector(point[0], point[1], point[2])
+        dd = d.dot(d)
+        if dd <= _EPSILON * _EPSILON:
             break
-        next_t = _clamp(t - _dot(derivative, residual) / dd, lo, hi)
-        if abs(next_t - t) <= _EPS * (hi - lo):
-            t = next_t
+        next = _clamp(t - d.dot(r) / dd, lo, hi)
+        if abs(next - t) <= _EPSILON * (hi - lo):
+            t = next
             break
-        t = next_t
+        t = next
     return t, curve.point_at(t).distance(point)
 
 
 def _unique_parameters(values: list[float], lo: float, hi: float) -> list[float]:
+    values = sorted(values)
     result = []
-    for value in sorted(values):
+    for value in values:
         value = _clamp(value, lo, hi)
-        if not result or value - result[-1] > (hi - lo) * _EPS * 16.0:
+        if not result or value - result[-1] > (hi - lo) * _EPSILON * 16.0:
             result.append(value)
     return result
 
 
 class _Box:
     def __init__(self, curve: NurbsCurve):
-        points = [curve.get_cv(i) for i in range(curve.cv_count())]
-        self.lo = [min(p[d] for p in points) for d in range(3)]
-        self.hi = [max(p[d] for p in points) for d in range(3)]
+        p = curve.get_cv(0)
+        self.lo = [p[0], p[1], p[2]]
+        self.hi = [p[0], p[1], p[2]]
+        for i in range(1, curve.cv_count()):
+            p = curve.get_cv(i)
+            for d in range(3):
+                self.lo[d] = min(self.lo[d], p[d])
+                self.hi[d] = max(self.hi[d], p[d])
 
     def diagonal(self) -> float:
-        return math.sqrt(sum((self.hi[d] - self.lo[d]) ** 2 for d in range(3)))
-
-    def overlaps(self, other: "_Box", tolerance: float) -> bool:
-        return all(
-            self.hi[d] + tolerance >= other.lo[d]
-            and other.hi[d] + tolerance >= self.lo[d]
-            for d in range(3)
+        return math.hypot(
+            self.hi[0] - self.lo[0], self.hi[1] - self.lo[1], self.hi[2] - self.lo[2]
         )
+
+    def overlaps(self, other: _Box, tolerance: float) -> bool:
+        for d in range(3):
+            if (
+                self.hi[d] + tolerance < other.lo[d]
+                or other.hi[d] + tolerance < self.lo[d]
+            ):
+                return False
+        return True
 
 
 def _flat(curve: NurbsCurve, tolerance: float) -> bool:
-    a, b = curve.point_at_start(), curve.point_at_end()
-    v = _subtract(b, a)
-    length2 = _dot(v, v)
+    a = curve.point_at_start()
+    b = curve.point_at_end()
+    v = b - a
+    length2 = v.dot(v)
     if length2 <= tolerance * tolerance:
         return _Box(curve).diagonal() <= tolerance
     for i in range(curve.cv_count()):
         p = curve.get_cv(i)
-        t = _dot(_subtract(p, a), v) / length2
-        q = Point(*(a[d] + v[d] * t for d in range(3)))
-        if t < -_EPS or t > 1.0 + _EPS or p.distance(q) > tolerance:
+        t = (p - a).dot(v) / length2
+        if t < -_EPSILON or t > 1.0 + _EPSILON or p.distance(a + v * t) > tolerance:
             return False
     return True
 
@@ -158,198 +170,148 @@ def _flat(curve: NurbsCurve, tolerance: float) -> bool:
 def _refine(a: NurbsCurve, b: NurbsCurve, ta: float, tb: float) -> tuple[float, float]:
     a0, a1 = a.domain()
     b0, b1 = b.domain()
-    for _ in range(40):
-        da, db = a.evaluate(ta, 1), b.evaluate(tb, 1)
-        residual = Point(*(da[0][d] - db[0][d] for d in range(3)))
-        u, v = (
-            Point(*(da[1][d] for d in range(3))),
-            Point(*(db[1][d] for d in range(3))),
-        )
-        aa, ab, bb = _dot(u, u), _dot(u, v), _dot(v, v)
-        determinant = aa * bb - ab * ab
-        if determinant <= _EPS * _EPS * aa * bb:
+    for k in range(40):
+        da = a.evaluate(ta, 1)
+        db = b.evaluate(tb, 1)
+        r = da[0] - db[0]
+        u = da[1]
+        v = db[1]
+        aa = u.dot(u)
+        ab = u.dot(v)
+        bb = v.dot(v)
+        det = aa * bb - ab * ab
+        if det <= _EPSILON * _EPSILON * aa * bb:
             break
-        ar, br = _dot(u, residual), _dot(v, residual)
-        na = _clamp(ta + (-bb * ar + ab * br) / determinant, a0, a1)
-        nb = _clamp(tb + (-ab * ar + aa * br) / determinant, b0, b1)
-        if abs(na - ta) < _EPS * (a1 - a0) and abs(nb - tb) < _EPS * (b1 - b0):
-            ta, tb = na, nb
+        ar = u.dot(r)
+        br = v.dot(r)
+        na = _clamp(ta + (-bb * ar + ab * br) / det, a0, a1)
+        nb = _clamp(tb + (-ab * ar + aa * br) / det, b0, b1)
+        if abs(na - ta) < _EPSILON * (a1 - a0) and abs(nb - tb) < _EPSILON * (b1 - b0):
+            ta = na
+            tb = nb
             break
-        ta, tb = na, nb
+        ta = na
+        tb = nb
     return ta, tb
 
 
 def _intersections(
     a: NurbsCurve, b: NurbsCurve, tolerance: float, budget: list[int]
 ) -> list[tuple[float, float]]:
-    av, bv = a.get_span_vector(), b.get_span_vector()
+    work = []
+    av = a.get_span_vector()
+    bv = b.get_span_vector()
     _require(len(av) > 1 and len(bv) > 1, "Split requires nonempty curve spans")
     _require(
         len(av) - 1 <= budget[0] // (len(bv) - 1),
         "Curve intersection exceeds the bounded split workload",
     )
-    work = [
-        (_interval(a, av[i - 1], av[i]), _interval(b, bv[j - 1], bv[j]), 0)
-        for i in range(1, len(av))
-        for j in range(1, len(bv))
-    ]
+    for i in range(1, len(av)):
+        for j in range(1, len(bv)):
+            work.append(
+                (_interval(a, av[i - 1], av[i]), _interval(b, bv[j - 1], bv[j]), 0)
+            )
     hits = []
     while work:
+        _require(budget[0] > 0, "Curve intersection exceeds the bounded split workload")
         budget[0] -= 1
-        _require(
-            budget[0] >= 0,
-            "Curve intersection exceeds the bounded split workload",
-        )
         ca, cb, depth = work.pop()
-        ba, bb = _Box(ca), _Box(cb)
+        ba = _Box(ca)
+        bb = _Box(cb)
         if not ba.overlaps(bb, tolerance):
             continue
         if (_flat(ca, tolerance * 0.1) and _flat(cb, tolerance * 0.1)) or depth >= 48:
-            ap, aq, bp, bq = (
-                ca.point_at_start(),
-                ca.point_at_end(),
-                cb.point_at_start(),
-                cb.point_at_end(),
-            )
-            u, v = _subtract(aq, ap), _subtract(bq, bp)
-            aa, ab, vv = _dot(u, u), _dot(u, v), _dot(v, v)
+            ap = ca.point_at_start()
+            aq = ca.point_at_end()
+            bp = cb.point_at_start()
+            bq = cb.point_at_end()
+            u = aq - ap
+            v = bq - bp
+            aa = u.dot(u)
+            ab = u.dot(v)
+            vv = v.dot(v)
             if (
-                aa > tolerance**2
-                and vv > tolerance**2
-                and aa * vv - ab * ab < _EPS**2 * aa * vv
+                aa > tolerance * tolerance
+                and vv > tolerance * tolerance
+                and aa * vv - ab * ab < _EPSILON * _EPSILON * aa * vv
             ):
-                t0, t1 = (
-                    _dot(_subtract(bp, ap), u) / aa,
-                    _dot(_subtract(bq, ap), u) / aa,
-                )
-                q = Point(*(ap[d] + u[d] * t0 for d in range(3)))
-                if bp.distance(q) <= tolerance and min(1.0, max(t0, t1)) - max(
+                t0 = (bp - ap).dot(u) / aa
+                t1 = (bq - ap).dot(u) / aa
+                gap = bp.distance(ap + u * t0)
+                if gap <= tolerance and min(1.0, max(t0, t1)) - max(
                     0.0, min(t0, t1)
                 ) > tolerance / math.sqrt(aa):
                     raise ValueError(
                         "Overlapping curves do not define isolated split points"
                     )
-            ta, tb, distance = Closest.curve_curve(ca, cb)
-            if distance > tolerance * 2.0:
+            ta, tb, d = Closest.curve_curve(ca, cb)
+            if d > tolerance * 2.0:
                 continue
             ta, tb = _refine(ca, cb, ta, tb)
             if a.point_at(ta).distance(b.point_at(tb)) > tolerance:
                 continue
-            if not any(
-                a.point_at(hit[0]).distance(a.point_at(ta)) <= tolerance * 2.0
-                and a.point_at((hit[0] + ta) * 0.5).distance(a.point_at(ta))
-                <= tolerance * 2.0
-                and b.point_at(hit[1]).distance(b.point_at(tb)) <= tolerance * 2.0
-                and b.point_at((hit[1] + tb) * 0.5).distance(b.point_at(tb))
-                <= tolerance * 2.0
-                for hit in hits
-            ):
+            duplicate = False
+            for hit in hits:
+                if (
+                    a.point_at(hit[0]).distance(a.point_at(ta)) <= tolerance * 2.0
+                    and a.point_at((hit[0] + ta) * 0.5).distance(a.point_at(ta))
+                    <= tolerance * 2.0
+                    and b.point_at(hit[1]).distance(b.point_at(tb)) <= tolerance * 2.0
+                    and b.point_at((hit[1] + tb) * 0.5).distance(b.point_at(tb))
+                    <= tolerance * 2.0
+                ):
+                    duplicate = True
+                    break
+            if not duplicate:
                 hits.append((ta, tb))
-        elif ba.diagonal() >= bb.diagonal():
+            continue
+        if ba.diagonal() >= bb.diagonal():
             lo, hi = ca.domain()
             mid = (lo + hi) * 0.5
-            work.extend(
-                [
-                    (_interval(ca, lo, mid), cb, depth + 1),
-                    (_interval(ca, mid, hi), cb, depth + 1),
-                ]
-            )
+            work.append((_interval(ca, lo, mid), cb, depth + 1))
+            work.append((_interval(ca, mid, hi), cb, depth + 1))
         else:
             lo, hi = cb.domain()
             mid = (lo + hi) * 0.5
-            work.extend(
-                [
-                    (ca, _interval(cb, lo, mid), depth + 1),
-                    (ca, _interval(cb, mid, hi), depth + 1),
-                ]
-            )
-    return sorted(hits)
-
-
-def split_curve_by_curves(
-    curve: NurbsCurve, cutters: list[NurbsCurve], tolerance: float
-) -> list[NurbsCurve]:
-    """Split at isolated 3D intersections, retaining every original curve interval.
-
-    Parameters
-    ----------
-    curve : NurbsCurve
-        Individual source curve; never modified.
-    cutters : list[NurbsCurve]
-        Curves intersecting the source in 3D, without projection.
-    tolerance : float
-        Positive finite distance tolerance in model units.
-
-    Returns
-    -------
-    list[NurbsCurve]
-        All pieces; one unchanged copy for a valid no-op.
-
-    Raises
-    ------
-    ValueError
-        Invalid input, overlapping curves, or excessive intersection workload.
-    """
-    _check_tolerance(tolerance)
-    _check_curve(curve)
-    _require(bool(cutters), "Select at least one cutter")
-    lo, hi = curve.domain()
-    cuts = [lo, hi]
-    cut_at_seam = False
-    budget = [_WORK_LIMIT]
-    for cutter in cutters:
-        _check_curve(cutter)
-        for a, _ in _intersections(curve, cutter, tolerance, budget):
-            if (
-                abs(a - lo) <= (hi - lo) * _EPS * 16.0
-                or abs(a - hi) <= (hi - lo) * _EPS * 16.0
-            ):
-                cut_at_seam = True
-            cuts.append(a)
-    cuts = _unique_parameters(cuts, lo, hi)
-    if len(cuts) == 2:
-        return [copy.deepcopy(curve)]
-    result = [_interval(curve, cuts[i - 1], cuts[i]) for i in range(1, len(cuts))]
-    # A closed curve's arbitrary storage seam is not an additional cut.
-    if curve.is_closed() and len(result) > 1 and not cut_at_seam:
-        joined = NurbsCurve.join([result[-1], result[0]], tolerance)
-        _require(len(joined) == 1, "Cannot join the uncut seam of a closed curve")
-        result[0] = joined[0]
-        result.pop()
-    return result
+            work.append((ca, _interval(cb, lo, mid), depth + 1))
+            work.append((ca, _interval(cb, mid, hi), depth + 1))
+    hits.sort()
+    return hits
 
 
 def _pullback(
     surface: NurbsSurface, curve: NurbsCurve, tolerance: float
 ) -> list[NurbsCurve]:
-    # Affine patches preserve the exact rational controls and parameterization.
     if (
-        list(surface.m_cv_count) == [2, 2]
-        and list(surface.m_order) == [2, 2]
+        surface.m_cv_count[0] == 2
+        and surface.m_cv_count[1] == 2
+        and surface.m_order[0] == 2
+        and surface.m_order[1] == 2
         and not surface.m_is_rat
     ):
         p = surface.get_cv(0, 0)
-        u, v = _subtract(surface.get_cv(1, 0), p), _subtract(surface.get_cv(0, 1), p)
-        uu, uv, vv = _dot(u, u), _dot(u, v), _dot(v, v)
-        determinant = uu * vv - uv * uv
-        last = Point(*(p[d] + u[d] + v[d] for d in range(3)))
+        u = surface.get_cv(1, 0) - p
+        v = surface.get_cv(0, 1) - p
+        last = surface.get_cv(1, 1)
+        uu = u.dot(u)
+        uv = u.dot(v)
+        vv = v.dot(v)
+        det = uu * vv - uv * uv
         if (
-            determinant > _EPS**2 * uu * vv
-            and surface.get_cv(1, 1).distance(last) <= tolerance
+            det > _EPSILON * _EPSILON * uu * vv
+            and last.distance(p + u + v) <= tolerance
         ):
             result = curve.duplicate()
             u0, u1 = surface.domain(0)
             v0, v1 = surface.domain(1)
             for i in range(curve.cv_count()):
                 q = curve.get_cv(i)
-                delta = _subtract(q, p)
-                du, dv = _dot(delta, u), _dot(delta, v)
-                a, b = (
-                    (du * vv - dv * uv) / determinant,
-                    (dv * uu - du * uv) / determinant,
-                )
-                projected = Point(*(p[d] + a * u[d] + b * v[d] for d in range(3)))
-                if q.distance(projected) > tolerance:
+                d = q - p
+                du = d.dot(u)
+                dv = d.dot(v)
+                a = (du * vv - dv * uv) / det
+                b = (dv * uu - du * uv) / det
+                if q.distance(p + u * a + v * b) > tolerance:
                     return []
                 w = curve.weight(i)
                 result.set_cv_4d(
@@ -360,12 +322,12 @@ def _pullback(
 
 
 def _polygon(curve: NurbsCurve, tolerance: float) -> list[Point]:
+    work = []
     spans = curve.get_span_vector()
-    work = [
-        (_interval(curve, spans[i - 1], spans[i]), 0)
-        for i in range(len(spans) - 1, 0, -1)
-    ]
-    result, visited = [], 0
+    for i in range(len(spans), 1, -1):
+        work.append((_interval(curve, spans[i - 2], spans[i - 1]), 0))
+    result = []
+    visited = 0
     while work:
         visited += 1
         _require(visited <= _WORK_LIMIT, "Trim sampling exceeds the bounded workload")
@@ -376,32 +338,32 @@ def _polygon(curve: NurbsCurve, tolerance: float) -> list[Point]:
         _require(depth < 40, "Trim sampling exceeds parameter precision")
         lo, hi = part.domain()
         mid = (lo + hi) * 0.5
-        work.extend(
-            [
-                (_interval(part, mid, hi), depth + 1),
-                (_interval(part, lo, mid), depth + 1),
-            ]
-        )
+        work.append((_interval(part, mid, hi), depth + 1))
+        work.append((_interval(part, lo, mid), depth + 1))
     return result
 
 
 def _inside(p: Point, polygon: list[Point]) -> bool:
     result = False
-    for i, a in enumerate(polygon):
-        b = polygon[i - 1]
+    j = len(polygon) - 1
+    for i in range(len(polygon)):
+        a = polygon[i]
+        b = polygon[j]
         if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (
             b[1] - a[1]
         ) + a[0]:
             result = not result
+        j = i
     return result
 
 
 def _inside_loops(p: Point, loops: list[list[Point]]) -> bool:
-    return (
-        bool(loops)
-        and _inside(p, loops[0])
-        and not any(_inside(p, hole) for hole in loops[1:])
-    )
+    if not loops or not _inside(p, loops[0]):
+        return False
+    for i in range(1, len(loops)):
+        if _inside(p, loops[i]):
+            return False
+    return True
 
 
 @dataclass
@@ -418,81 +380,124 @@ class _Run:
     b: float
 
 
+@dataclass
+class _Span:
+    source: int
+    a: float
+    b: float
+    cuts: list[float]
+    curve: NurbsCurve
+
+
+@dataclass
+class _Directed:
+    a: int
+    b: int
+    run: _Run
+
+
+@dataclass
+class _Cycle:
+    area: float
+    loop: list[_Run]
+    points: list[Point]
+
+
 def _arrange(
     sources: list[_Source], original_loops: list[list[Point]], tolerance: float
 ) -> list[list[list[_Run]]]:
     spans = []
-    for si, source in enumerate(sources):
-        knots = source.uv.get_span_vector()
-        # A closed Bezier span needs distinct graph nodes on its interior.
-        if len(knots) == 2 and source.uv.is_closed():
-            lo, hi = knots
-            knots = [lo + (hi - lo) * i / 4 for i in range(5)]
-        for a, b in zip(knots, knots[1:]):
-            spans.append([si, a, b, [a, b], _interval(source.uv, a, b)])
-    _require(len(spans) ** 2 <= _WORK_LIMIT, "Face split exceeds bounded workload")
+    for si in range(len(sources)):
+        knots = sources[si].uv.get_span_vector()
+        if len(knots) == 2 and sources[si].uv.is_closed():
+            lo = knots[0]
+            hi = knots[-1]
+            knots = [
+                lo,
+                lo + (hi - lo) * 0.25,
+                (lo + hi) * 0.5,
+                lo + (hi - lo) * 0.75,
+                hi,
+            ]
+        for i in range(1, len(knots)):
+            spans.append(
+                _Span(
+                    si,
+                    knots[i - 1],
+                    knots[i],
+                    [knots[i - 1], knots[i]],
+                    _interval(sources[si].uv, knots[i - 1], knots[i]),
+                )
+            )
+    _require(
+        len(spans) > 0 and len(spans) <= _WORK_LIMIT // len(spans),
+        "Face split exceeds the bounded workload",
+    )
     budget = [_WORK_LIMIT]
-    for i, left in enumerate(spans):
-        for right in spans[i + 1 :]:
-            for a, b in _intersections(left[4], right[4], tolerance, budget):
-                left[3].append(a)
-                right[3].append(b)
+    for i in range(len(spans)):
+        for j in range(i + 1, len(spans)):
+            for a, b in _intersections(
+                spans[i].curve, spans[j].curve, tolerance, budget
+            ):
+                spans[i].cuts.append(a)
+                spans[j].cuts.append(b)
     vertices = []
     edges = []
     outgoing = []
 
-    def vertex(p):
-        for i, q in enumerate(vertices):
-            if p.distance(q) <= tolerance * 4:
+    def node(p: Point) -> int:
+        for i in range(len(vertices)):
+            if p.distance(vertices[i]) <= tolerance * 4.0:
                 return i
         vertices.append(p)
         outgoing.append([])
         return len(vertices) - 1
 
-    def angle(run):
-        curve = sources[run.source].uv
-        derivative = curve.evaluate(run.a, 1)[1]
-        sign = 1 if run.b > run.a else -1
-        return math.atan2(sign * derivative[1], sign * derivative[0])
+    def angle(edge: int) -> float:
+        run = edges[edge].run
+        d = sources[run.source].uv.evaluate(run.a, 1)[1]
+        sign = 1.0 if run.b > run.a else -1.0
+        return math.atan2(sign * d[1], sign * d[0])
 
-    for si, a, b, cuts, curve in spans:
-        cuts = [
-            a
-            if curve.point_at(t).distance(curve.point_at(a)) <= tolerance
-            else b
-            if curve.point_at(t).distance(curve.point_at(b)) <= tolerance
-            else t
-            for t in cuts
-        ]
-        cuts = _unique_parameters(cuts, a, b)
-        for lo, hi in zip(cuts, cuts[1:]):
-            uv = sources[si].uv
-            if sources[si].edge < 0 and not _inside_loops(
-                uv.point_at((lo + hi) * 0.5), original_loops
+    for span in spans:
+        for k in range(len(span.cuts)):
+            p = span.curve.point_at(span.cuts[k])
+            if p.distance(span.curve.point_at(span.a)) <= tolerance:
+                span.cuts[k] = span.a
+            elif p.distance(span.curve.point_at(span.b)) <= tolerance:
+                span.cuts[k] = span.b
+        cuts = _unique_parameters(span.cuts, span.a, span.b)
+        for i in range(1, len(cuts)):
+            lo = cuts[i - 1]
+            hi = cuts[i]
+            source = sources[span.source]
+            if source.edge < 0 and not _inside_loops(
+                source.uv.point_at((lo + hi) * 0.5), original_loops
             ):
                 continue
-            start, end = vertex(uv.point_at(lo)), vertex(uv.point_at(hi))
-            if start == end:
+            a = node(source.uv.point_at(lo))
+            b = node(source.uv.point_at(hi))
+            if a == b:
                 continue
-            forward = _Run(si, lo, hi)
-            back = _Run(si, hi, lo)
             index = len(edges)
-            edges.extend([(start, end, forward), (end, start, back)])
-            outgoing[start].append(index)
-            outgoing[end].append(index + 1)
+            edges.append(_Directed(a, b, _Run(span.source, lo, hi)))
+            edges.append(_Directed(b, a, _Run(span.source, hi, lo)))
+            outgoing[a].append(index)
+            outgoing[b].append(index + 1)
     for choices in outgoing:
-        choices.sort(key=lambda i: angle(edges[i][2]))
+        choices.sort(key=angle)
     cycles = []
-    used = set()
+    used = [False] * len(edges)
     for initial in range(len(edges)):
-        if initial in used:
+        if used[initial]:
             continue
         loop = []
         points = []
         edge = initial
-        while edge not in used:
-            used.add(edge)
-            a, b, run = edges[edge]
+        while not used[edge]:
+            used[edge] = True
+            item = edges[edge]
+            run = item.run
             loop.append(run)
             part = _interval(
                 sources[run.source].uv, min(run.a, run.b), max(run.a, run.b)
@@ -500,16 +505,16 @@ def _arrange(
             if run.b < run.a:
                 part.reverse()
             points.extend(_polygon(part, tolerance))
-            options = outgoing[b]
-            edge = options[(options.index(edge ^ 1) - 1) % len(options)]
+            options = outgoing[item.b]
+            _require((edge ^ 1) in options, "Invalid trim graph adjacency")
+            slot = options.index(edge ^ 1)
+            edge = options[(slot + len(options) - 1) % len(options)]
         _require(edge == initial, "Invalid trim graph cycle")
-        area = (
-            sum(
-                a[0] * b[1] - b[0] * a[1]
-                for a, b in zip(points, points[1:] + points[:1])
-            )
-            * 0.5
-        )
+        area = 0.0
+        for i in range(len(points)):
+            a = points[i]
+            b = points[(i + 1) % len(points)]
+            area += (a[0] * b[1] - b[0] * a[1]) * 0.5
         if abs(area) <= tolerance * tolerance:
             continue
         run = loop[0]
@@ -517,72 +522,81 @@ def _arrange(
         t = (run.a + run.b) * 0.5
         p = curve.point_at(t)
         d = curve.evaluate(t, 1)[1]
-        sign = 1 if run.b > run.a else -1
+        sign = 1.0 if run.b > run.a else -1.0
         length = math.hypot(d[0], d[1])
+        _require(length > _EPSILON, "Cannot orient a degenerate trim fragment")
         left = Point(
-            p[0] - sign * d[1] / length * tolerance * 8,
-            p[1] + sign * d[0] / length * tolerance * 8,
-            0,
+            p[0] - sign * d[1] / length * tolerance * 8.0,
+            p[1] + sign * d[0] / length * tolerance * 8.0,
+            0.0,
         )
         if not _inside_loops(left, original_loops):
             continue
-        cycles.append((area, loop, points))
-    result = [[loop] for area, loop, pts in cycles if area > 0]
-    positives = [(area, pts) for area, loop, pts in cycles if area > 0]
-    for area, loop, pts in cycles:
-        if area >= 0:
+        cycles.append(_Cycle(area, loop, points))
+    result = []
+    positive = []
+    for i in range(len(cycles)):
+        if cycles[i].area > 0.0:
+            positive.append(i)
+            result.append([cycles[i].loop])
+    for cycle in cycles:
+        if cycle.area >= 0.0:
             continue
-        candidates = [
-            i
-            for i, (outer, poly) in enumerate(positives)
-            if outer > abs(area) + tolerance * tolerance and _inside(pts[0], poly)
-        ]
-        _require(bool(candidates), "Unowned interior trim loop")
-        parent = min(candidates, key=lambda i: positives[i][0])
-        result[parent].append(loop)
+        parent = len(result)
+        smallest = math.inf
+        for i in range(len(positive)):
+            outer = cycles[positive[i]]
+            if (
+                outer.area > abs(cycle.area) + tolerance * tolerance
+                and outer.area < smallest
+                and _inside(cycle.points[0], outer.points)
+            ):
+                parent = i
+                smallest = outer.area
+        _require(parent < len(result), "Unowned interior trim loop")
+        result[parent].append(cycle.loop)
     return result
 
 
-def _vertex(result: BRep, point: Point, tolerance: float) -> int:
-    for i, vertex in enumerate(result.m_vertices):
-        if vertex.point.distance(point) <= tolerance:
+def _vertex(result: BRep, p: Point, tolerance: float) -> int:
+    for i in range(len(result.m_vertices)):
+        if result.m_vertices[i].point.distance(p) <= tolerance:
             return i
-    return result.add_vertex(point, tolerance)
+    return result.add_vertex(p, tolerance)
 
 
 def _lifted_parameter(
-    surface: NurbsSurface,
-    uv: NurbsCurve,
-    point: Point,
-    expected: float,
-    tolerance: float,
+    surface: NurbsSurface, uv: NurbsCurve, p: Point, expected: float, tolerance: float
 ) -> float:
     lo, hi = uv.domain()
 
     def gap(t: float) -> float:
         q = uv.point_at(t)
-        return surface.point_at(q[0], q[1]).distance(point)
+        return surface.point_at(q[0], q[1]).distance(p)
 
     if gap(expected) <= tolerance:
         return expected
-    best, distance, index = expected, gap(expected), 0
+    best = expected
+    d = gap(best)
+    index = 0
     for i in range(129):
         t = lo + (hi - lo) * i / 128.0
         value = gap(t)
-        if value < distance:
-            distance, best, index = value, t, i
-    a, b = (
-        lo + (hi - lo) * max(0, index - 1) / 128.0,
-        lo + (hi - lo) * min(128, index + 1) / 128.0,
-    )
-    for _ in range(60):
-        x, y = a + (b - a) / 3.0, b - (b - a) / 3.0
+        if value < d:
+            d = value
+            best = t
+            index = i
+    a = lo + (hi - lo) * max(0, index - 1) / 128.0
+    b = lo + (hi - lo) * min(128, index + 1) / 128.0
+    for k in range(60):
+        x = a + (b - a) / 3.0
+        y = b - (b - a) / 3.0
         if gap(x) < gap(y):
             b = y
         else:
             a = x
     mid = (a + b) * 0.5
-    if gap(mid) < distance:
+    if gap(mid) < d:
         best = mid
     _require(
         gap(best) <= tolerance * 4.0,
@@ -597,17 +611,18 @@ def _validate(result: BRep, original: BRep, tolerance: float) -> None:
         if original.is_closed(s):
             _require(result.is_closed(s), "Split would open a joined shell")
     for face in result.m_faces:
-        for wire in face.wires:
-            edges = result.wire_edges(wire)
-            for i, edge in enumerate(edges):
-                next_edge = edges[(i + 1) % len(edges)]
-                a, b = result.m_edges[edge.index], result.m_edges[next_edge.index]
-                tail = a.start_vertex if edge.orientation == _REVERSED else a.end_vertex
-                head = (
-                    b.end_vertex
-                    if next_edge.orientation == _REVERSED
-                    else b.start_vertex
+        for wr in face.wires:
+            edges = result.wire_edges(wr)
+            for i in range(len(edges)):
+                a = result.m_edges[edges[i].index]
+                next = edges[(i + 1) % len(edges)]
+                b = result.m_edges[next.index]
+                tail = (
+                    a.start_vertex
+                    if edges[i].orientation == _REVERSED
+                    else a.end_vertex
                 )
+                head = b.end_vertex if next.orientation == _REVERSED else b.start_vertex
                 _require(tail == head, "Split produced an open face boundary")
     for edge in result.m_edges:
         if edge.degenerated:
@@ -635,86 +650,106 @@ def _validate(result: BRep, original: BRep, tolerance: float) -> None:
                     )
 
 
+def split_curve_by_curves(
+    curve: NurbsCurve, cutters: list[NurbsCurve], tolerance: float
+) -> list[NurbsCurve]:
+    """Split a curve at isolated 3D intersections, retaining every piece and rejecting overlapping cutters."""
+    _check_tolerance(tolerance)
+    _check_curve(curve)
+    _require(len(cutters) > 0, "Select at least one cutter")
+    lo, hi = curve.domain()
+    cuts = [lo, hi]
+    cut_at_seam = False
+    budget = [_WORK_LIMIT]
+    for cutter in cutters:
+        _check_curve(cutter)
+        for hit in _intersections(curve, cutter, tolerance, budget):
+            a = hit[0]
+            if (
+                abs(a - lo) <= (hi - lo) * _EPSILON * 16.0
+                or abs(a - hi) <= (hi - lo) * _EPSILON * 16.0
+            ):
+                cut_at_seam = True
+            cuts.append(a)
+    cuts = _unique_parameters(cuts, lo, hi)
+    result = []
+    if len(cuts) == 2:
+        return [copy.deepcopy(curve)]
+    for i in range(1, len(cuts)):
+        result.append(_interval(curve, cuts[i - 1], cuts[i]))
+    if curve.is_closed() and len(result) > 1 and not cut_at_seam:
+        joined = NurbsCurve.join([result[-1], result[0]], tolerance)
+        _require(len(joined) == 1, "Cannot join the uncut seam of a closed curve")
+        result[0] = joined[0]
+        result.pop()
+    return result
+
+
 def split_brep_face_by_curves(
     brep: BRep, face_index: int, cutters: list[NurbsCurve], tolerance: float
 ) -> BRep:
-    """Partition a face, retaining every region and propagating shared edge splits.
-
-    Parameters
-    ----------
-    brep : BRep
-        Owning BRep, never modified.
-    face_index : int
-        Index of the selected face in the owning BRep.
-    cutters : list[NurbsCurve]
-        On-surface cutting curves; no implicit projection is performed.
-    tolerance : float
-        Positive finite distance tolerance in model units.
-
-    Returns
-    -------
-    BRep
-        Updated owning BRep, or an unchanged copy when no region is divided.
-
-    Raises
-    ------
-    ValueError
-        Invalid input or a split whose shared topology cannot be preserved.
-    """
+    """Partition one face inside its owning BRep, retaining all regions and shared shell topology."""
     _check_tolerance(tolerance)
     _require(brep.is_valid(), "Split requires a valid BRep")
-    _require(0 <= face_index < brep.face_count(), "Select one BRep face to split")
-    _require(bool(cutters), "Select at least one cutter")
+    _require(
+        face_index >= 0 and face_index < brep.face_count(),
+        "Select one BRep face to split",
+    )
+    _require(len(cutters) > 0, "Select at least one cutter")
     face = brep.m_faces[face_index]
     surface = brep.m_surfaces[face.surface_index]
     _check_surface(surface)
     u0, u1 = surface.domain(0)
     v0, v1 = surface.domain(1)
+    origin = surface.point_at(u0, v0)
     scale = max(
-        surface.point_at(u0, v0).distance(surface.point_at(u1, v0)) / (u1 - u0),
-        surface.point_at(u0, v0).distance(surface.point_at(u0, v1)) / (v1 - v0),
+        origin.distance(surface.point_at(u1, v0)) / (u1 - u0),
+        origin.distance(surface.point_at(u0, v1)) / (v1 - v0),
     )
-    _require(scale > _EPS, "Cannot split a degenerate surface domain")
+    _require(scale > _EPSILON, "Cannot split a degenerate surface domain")
     uv_tolerance = tolerance / scale
-    sources, original_loops = [], []
-    for wire in face.wires:
+    sources = []
+    original_loops = []
+    for wr in face.wires:
         points = []
-        for ref in brep.wire_edges(wire):
-            edge = brep.m_edges[ref.index]
+        for er in brep.wire_edges(wr):
+            edge = brep.m_edges[er.index]
             _require(not edge.degenerated, "Pole-edge splitting is not supported")
-            ci = brep.pcurve_index(ref.index, face_index, ref.orientation)
+            ci = brep.pcurve_index(er.index, face_index, er.orientation)
             _require(ci >= 0, "Face has no source UV boundary")
             uv = copy.deepcopy(brep.m_curves_2d[ci])
             _check_curve(uv)
             _check_curve(brep.m_curves_3d[edge.curve_3d_index])
             sources.append(
                 _Source(
-                    ref.index, brep.m_curves_3d[edge.curve_3d_index], copy.deepcopy(uv)
+                    er.index, brep.m_curves_3d[edge.curve_3d_index], copy.deepcopy(uv)
                 )
             )
-            if ref.orientation == _REVERSED:
+            if er.orientation == _REVERSED:
                 uv.reverse()
             points.extend(_polygon(uv, uv_tolerance))
         _require(len(points) >= 3, "Face has an invalid boundary")
         original_loops.append(points)
     for cutter in cutters:
         _check_curve(cutter)
-        sources.extend(
-            _Source(-1, cutter, uv) for uv in _pullback(surface, cutter, tolerance)
-        )
+        for uv in _pullback(surface, cutter, tolerance):
+            sources.append(_Source(-1, cutter, uv))
     regions = _arrange(sources, original_loops, uv_tolerance)
     if len(regions) < 2:
         return copy.deepcopy(brep)
     result = copy.deepcopy(brep)
-    pieces, replacements = [], {}
+    pieces = []
+    replacements = {}
 
     def make_edge(run: _Run) -> BRepRef:
         source = sources[run.source]
         uv = source.uv
-        qa, qb = uv.point_at(run.a), uv.point_at(run.b)
-        pa, pb = surface.point_at(qa[0], qa[1]), surface.point_at(qb[0], qb[1])
+        qa = uv.point_at(run.a)
+        qb = uv.point_at(run.b)
+        pa = surface.point_at(qa[0], qa[1])
+        pb = surface.point_at(qb[0], qb[1])
 
-        def parameter(t, p):
+        def parameter(t: float, p: Point) -> tuple[float, float]:
             lo, hi = source.world.domain()
             a, b = uv.domain()
             expected = lo + (t - a) / (b - a) * (hi - lo)
@@ -730,26 +765,28 @@ def split_brep_face_by_curves(
         w0, w1 = source.world.domain()
         c0, c1 = uv.domain()
         if source.world.is_closed():
-            if abs(wa - w0) < (w1 - w0) * _EPS and run.a > (c0 + c1) * 0.5:
+            if abs(wa - w0) < (w1 - w0) * _EPSILON and run.a > (c0 + c1) * 0.5:
                 wa = w1
-            if abs(wb - w0) < (w1 - w0) * _EPS and run.b > (c0 + c1) * 0.5:
+            if abs(wb - w0) < (w1 - w0) * _EPSILON and run.b > (c0 + c1) * 0.5:
                 wb = w1
-        lo, hi = min(wa, wb), max(wa, wb)
-        _require(hi - lo > (w1 - w0) * _EPS, "Split would create a collapsed edge")
-        for source_index, piece_lo, piece_hi, edge_index in pieces:
+        lo = min(wa, wb)
+        hi = max(wa, wb)
+        _require(hi - lo > (w1 - w0) * _EPSILON, "Split would create a collapsed edge")
+        orientation = _FORWARD if wa < wb else _REVERSED
+        for piece in pieces:
             same = (
-                sources[source_index].edge == source.edge
+                sources[piece[0]].edge == source.edge
                 if source.edge >= 0
-                else source_index == run.source
+                else piece[0] == run.source
             )
             if (
                 same
-                and source.world.point_at(lo).distance(source.world.point_at(piece_lo))
+                and source.world.point_at(lo).distance(source.world.point_at(piece[1]))
                 <= tolerance * 4.0
-                and source.world.point_at(hi).distance(source.world.point_at(piece_hi))
+                and source.world.point_at(hi).distance(source.world.point_at(piece[2]))
                 <= tolerance * 4.0
             ):
-                return BRepRef(edge_index, _FORWARD if wa < wb else _REVERSED)
+                return BRepRef(piece[3], orientation)
         world = _interval(source.world, lo, hi)
         a = _vertex(result, world.point_at_start(), tolerance * 4.0)
         b = _vertex(result, world.point_at_end(), tolerance * 4.0)
@@ -788,41 +825,45 @@ def split_brep_face_by_curves(
                 pc.reverse()
             result.add_pcurve(ei, face.surface_index, result.add_curve_2d(pc))
         pieces.append((run.source, lo, hi, ei))
-        return BRepRef(ei, _FORWARD if wa < wb else _REVERSED)
+        return BRepRef(ei, orientation)
 
-    new_wires = [
-        [
-            BRepRef(result.add_wire([make_edge(run) for run in loop]), _FORWARD)
-            for loop in region
-        ]
-        for region in regions
-    ]
-    replacements = {edge: sorted(set(items)) for edge, items in replacements.items()}
-    # Every old wire receives the same ordered fragments of a shared edge.
-    for wi, wire in enumerate(brep.m_wires):
+    new_wires = []
+    for region in regions:
+        wires = []
+        for loop in region:
+            refs = []
+            for run in loop:
+                refs.append(make_edge(run))
+            wires.append(BRepRef(result.add_wire(refs), _FORWARD))
+        new_wires.append(wires)
+    for edge, items in replacements.items():
+        replacements[edge] = sorted(set(items))
+    for wi in range(len(brep.m_wires)):
         refs = []
-        for ref in wire.edges:
-            if ref.index not in replacements:
-                refs.append(copy.deepcopy(ref))
+        for er in brep.m_wires[wi].edges:
+            if er.index not in replacements:
+                refs.append(copy.deepcopy(er))
                 continue
-            items = replacements[ref.index]
-            if ref.orientation == _REVERSED:
-                items = list(reversed(items))
-            refs.extend(BRepRef(edge, ref.orientation) for _, edge in items)
+            items = list(replacements[er.index])
+            if er.orientation == _REVERSED:
+                items.reverse()
+            for item in items:
+                refs.append(BRepRef(item[1], er.orientation))
         result.m_wires[wi].edges = refs
     result.m_faces[face_index].wires = new_wires[0]
     added = []
-    for wires in new_wires[1:]:
-        next_face = copy.deepcopy(face)
-        next_face.wires = wires
+    for i in range(1, len(new_wires)):
+        next = copy.deepcopy(face)
+        next.wires = new_wires[i]
         added.append(result.face_count())
-        result.m_faces.append(next_face)
+        result.m_faces.append(next)
     for shell in result.m_shells:
         refs = []
-        for ref in shell.faces:
-            refs.append(ref)
-            if ref.index == face_index:
-                refs.extend(BRepRef(index, ref.orientation) for index in added)
+        for fr in shell.faces:
+            refs.append(fr)
+            if fr.index == face_index:
+                for index in added:
+                    refs.append(BRepRef(index, fr.orientation))
         shell.faces = refs
     _validate(result, brep, tolerance)
     return result
@@ -831,27 +872,7 @@ def split_brep_face_by_curves(
 def split_surface_by_curves(
     surface: NurbsSurface, cutters: list[NurbsCurve], tolerance: float
 ) -> BRep:
-    """Wrap a surface's natural boundary in a BRep and retain every split region.
-
-    Parameters
-    ----------
-    surface : NurbsSurface
-        Individual source surface; never modified.
-    cutters : list[NurbsCurve]
-        Curves on the source surface, without projection.
-    tolerance : float
-        Positive finite distance tolerance in model units.
-
-    Returns
-    -------
-    BRep
-        Trimmed regions on the original surface.
-
-    Raises
-    ------
-    ValueError
-        Invalid input, unsupported natural seam/pole, or invalid split topology.
-    """
+    """Wrap a surface's natural boundary in a BRep and partition it with on-surface curves."""
     _check_tolerance(tolerance)
     _check_surface(surface)
     result = BRep()
@@ -859,9 +880,10 @@ def split_surface_by_curves(
     u0, u1 = surface.domain(0)
     v0, v1 = surface.domain(1)
     uv = [Point(u0, v0, 0), Point(u1, v0, 0), Point(u1, v1, 0), Point(u0, v1, 0)]
+    at = [v0, u1, v1, u0]
     edges = []
     for i in range(4):
-        curve = surface.iso_curve(0 if i % 2 == 0 else 1, [v0, u1, v1, u0][i])
+        curve = surface.iso_curve(i % 2, at[i])
         if i >= 2:
             curve.reverse()
         a = _vertex(result, curve.point_at_start(), tolerance)
@@ -880,31 +902,15 @@ def split_surface_by_curves(
 def split_line_by_curves(
     line: Line, cutters: list[NurbsCurve], tolerance: float
 ) -> list[Line]:
-    """Split a line at isolated 3D intersections, retaining line types and display attributes.
-
-    Parameters
-    ----------
-    line : Line
-        Source segment; never modified.
-    cutters : list[NurbsCurve]
-        Finite 3D cutters, without projection.
-    tolerance : float
-        Positive finite distance tolerance in model units.
-
-    Returns
-    -------
-    list[Line]
-        Ordered line pieces with copied display attributes.
-    """
+    """Split a line at isolated 3D intersections, retaining line types and display attributes."""
     curve = NurbsCurve.create(False, 1, [line.point_at(0), line.point_at(1)])
     result = []
     for piece in split_curve_by_curves(curve, cutters, tolerance):
         next = Line.from_points(piece.point_at_start(), piece.point_at_end())
-        next.name, next.width = line.name, line.width
-        next.dash, next.linecolor = (
-            copy.deepcopy(line.dash),
-            copy.deepcopy(line.linecolor),
-        )
+        next.name = line.name
+        next.width = line.width
+        next.dash = copy.deepcopy(line.dash)
+        next.linecolor = copy.deepcopy(line.linecolor)
         result.append(next)
     return result
 
@@ -912,30 +918,17 @@ def split_line_by_curves(
 def split_polyline_by_curves(
     polyline: Polyline, cutters: list[NurbsCurve], tolerance: float
 ) -> list[Polyline]:
-    """Split a polyline, retaining each original corner, piece order and display attributes.
-
-    Parameters
-    ----------
-    polyline : Polyline
-        Source polyline; never modified.
-    cutters : list[NurbsCurve]
-        Finite 3D cutters, without projection.
-    tolerance : float
-        Positive finite distance tolerance in model units.
-
-    Returns
-    -------
-    list[Polyline]
-        Ordered polyline pieces with copied display attributes.
-    """
+    """Split a polyline, retaining each original corner, piece order and display attributes."""
     curve = NurbsCurve.create(False, 1, polyline.get_points())
     result = []
     for piece in split_curve_by_curves(curve, cutters, tolerance):
-        next = Polyline([piece.point_at(t) for t in piece.get_span_vector()])
-        next.name, next.width = polyline.name, polyline.width
-        next.dash, next.linecolor = (
-            copy.deepcopy(polyline.dash),
-            copy.deepcopy(polyline.linecolor),
-        )
+        points = []
+        for t in piece.get_span_vector():
+            points.append(piece.point_at(t))
+        next = Polyline(points)
+        next.name = polyline.name
+        next.width = polyline.width
+        next.dash = copy.deepcopy(polyline.dash)
+        next.linecolor = copy.deepcopy(polyline.linecolor)
         result.append(next)
     return result

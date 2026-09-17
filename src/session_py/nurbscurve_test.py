@@ -161,6 +161,7 @@ def test_nurbscurve_create_from_parameters():
     MINI_CHECK(circle.is_rational())
     MINI_CHECK(TOLERANCE.is_point_close(circle.point_at(0.5), Point(0, 1, 0)))
     MINI_CHECK(TOLERANCE.is_point_close(circle.point_at(0.125), Point(-w, -w, 0)))
+
     for k in range(17):
         pp = circle.point_at(k / 16.0)
         MINI_CHECK(abs(math.sqrt(pp[0] * pp[0] + pp[1] * pp[1]) - 1.0) < 1e-9)
@@ -172,6 +173,7 @@ def test_nurbscurve_create_fitted():
     from session_py import Point
 
     pts = []
+
     for i in range(21):
         t = i * 2.0 * PI / 20.0
         pts.append(Point(t, 3.0 * math.sin(t), 0.0))
@@ -186,6 +188,7 @@ def test_nurbscurve_create_fitted():
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), pts[20]))
 
     cpts = []
+
     for i in range(24):
         a = i * 2.0 * PI / 24.0
         cpts.append(Point(math.cos(a), math.sin(a), 0.0))
@@ -879,9 +882,11 @@ def test_nurbscurve_curvature():
     R = 2.0
     circle = Primitives.circle(0, 0, 0, R)
     t0, t1 = circle.domain()
+
     for i in range(9):
         t = t0 + (t1 - t0) * i / 8.0
         MINI_CHECK(abs(circle.curvature_at(t) - 1.0 / R) < 1e-6)
+
     line_pts = [Point(0, 0, 0), Point(1, 0, 0), Point(2, 0, 0), Point(3, 0, 0)]
     line = NurbsCurve.create(False, 1, line_pts)
     MINI_CHECK(line.curvature_at(line.domain_middle()) < 1e-9)

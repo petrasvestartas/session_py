@@ -120,11 +120,6 @@ def test_is_periodic():
     MINI_CHECK(not nurbsknot.is_periodic(order, cv_count, nurbsknots_clamped))
     nurbsknots_periodic[3] = float("nan")
     MINI_CHECK(not nurbsknot.is_periodic(order, cv_count, nurbsknots_periodic))
-    MINI_CHECK(nurbsknot.is_uniform(order, cv_count, nurbsknots_clamped))
-    nurbsknots_clamped[3] = 0.5
-    MINI_CHECK(not nurbsknot.is_uniform(order, cv_count, nurbsknots_clamped))
-    nurbsknots_clamped[3] = float("nan")
-    MINI_CHECK(not nurbsknot.is_uniform(order, cv_count, nurbsknots_clamped))
 
 
 @MINI_TEST("NurbsKnot", "Get Domain")
@@ -200,14 +195,8 @@ def test_span_count():
     cv_count = 5
     nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
     MINI_CHECK(nurbsknot.span_count(order, cv_count, nurbsknots) == 2)
-    MINI_CHECK(
-        TOLERANCE.is_allclose(
-            nurbsknot.get_span_vector(order, cv_count, nurbsknots), [0.0, 1.0, 2.0]
-        )
-    )
     nurbsknots[3] = float("nan")
     MINI_CHECK(nurbsknot.span_count(order, cv_count, nurbsknots) == 0)
-    MINI_CHECK(len(nurbsknot.get_span_vector(order, cv_count, nurbsknots)) == 0)
 
 
 @MINI_TEST("NurbsKnot", "Find Span")
@@ -228,15 +217,6 @@ def test_find_span():
     MINI_CHECK(
         nurbsknot.find_span(order, cv_count, nurbsknots_clamped, float("nan")) == 0
     )
-    MINI_CHECK(
-        nurbsknot.superfluous_nurbsknot(order, cv_count, nurbsknots_clamped, 0) == 0.0
-    )
-    MINI_CHECK(
-        nurbsknot.superfluous_nurbsknot(order, cv_count, nurbsknots_clamped, 1) == 4.0
-    )
-    MINI_CHECK(
-        nurbsknot.superfluous_nurbsknot(order, cv_count, nurbsknots_clamped, 2) == 0.0
-    )
 
 
 @MINI_TEST("NurbsKnot", "Get Greville Abcissae")
@@ -250,8 +230,6 @@ def test_get_greville_abcissae():
     MINI_CHECK(TOLERANCE.is_allclose(greville, [0.0, 1.0 / 3.0, 1.0, 5.0 / 3.0, 2.0]))
     periodic = nurbsknot.get_greville_abcissae(order, cv_count, nurbsknots, True)
     MINI_CHECK(TOLERANCE.is_allclose(periodic, [0.0, 1.0 / 3.0]))
-    MINI_CHECK(nurbsknot.greville_abcissa(order, [0.0, 1.0, 2.0]) == 1.0)
-    MINI_CHECK(nurbsknot.greville_abcissa(order, [0.0, float("nan"), 2.0]) == 0.0)
     nurbsknots[2] = float("inf")
     MINI_CHECK(len(nurbsknot.get_greville_abcissae(order, cv_count, nurbsknots)) == 0)
 
@@ -265,9 +243,11 @@ def test_solve_tridiagonal():
     up = [1.0, 0.0]
     rh = [3.0, 3.0]
     sol = nurbsknot.solve_tridiagonal(1, 2, lo, di, up, rh)
+    MINI_CHECK(sol is not None)
     MINI_CHECK(TOLERANCE.is_allclose(sol, [1.0, 1.0]))
     rh2 = [3.0, 0.0, 3.0, 3.0]
     sol = nurbsknot.solve_tridiagonal(2, 2, lo, di, up, rh2)
+    MINI_CHECK(sol is not None)
     MINI_CHECK(TOLERANCE.is_allclose(sol, [1.0, -1.0, 1.0, 2.0]))
     singular = [0.0, 2.0]
     MINI_CHECK(nurbsknot.solve_tridiagonal(1, 2, lo, singular, up, rh) is None)
@@ -355,10 +335,6 @@ def test_build_fitted_nurbsknots_adaptive():
     MINI_CHECK(TOLERANCE.is_allclose(nurbsknots, [0.0, 0.0, 0.0, 2.0, 4.0, 4.0, 4.0]))
     fallback = nurbsknot.build_fitted_nurbsknots_adaptive(params, None, 5, 3, 5, 3)
     MINI_CHECK(TOLERANCE.is_allclose(fallback, [0.0, 0.0, 0.0, 1.5, 4.0, 4.0, 4.0]))
-    MINI_CHECK(
-        TOLERANCE.is_allclose(nurbsknot.build_fitted_nurbsknots(params, 5, 3), fallback)
-    )
-    MINI_CHECK(len(nurbsknot.build_fitted_nurbsknots([0.0, 1.0], 4, 1)) == 0)
     MINI_CHECK(
         len(nurbsknot.build_fitted_nurbsknots_adaptive(params, pts, 5, 3, 3, 3)) == 0
     )

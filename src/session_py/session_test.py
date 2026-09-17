@@ -17,6 +17,55 @@ def test_session_constructor():
     MINI_CHECK(named.name == "my_named_session")
 
 
+@MINI_TEST("Session", "Copy")
+def test_session_copy():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Element
+    from session_py import Xform
+    from copy import deepcopy
+
+    session = Session("original")
+    point = Point(1.0, 2.0, 3.0)
+    element = Element("plate")
+    group = session.add_group("Group")
+    session.add_point(point, group)
+    session.add_element(element, group)
+    session.add_edge(point.guid, element.guid, "touching")
+    session.set_xform(point.guid, Xform.translation(1.0, 0.0, 0.0))
+    guid = session.guid
+
+    copy = deepcopy(session)
+
+    MINI_CHECK(copy.name == session.name)
+    MINI_CHECK(copy.guid == guid)
+    MINI_CHECK(len(copy.objects.points) == 1)
+    MINI_CHECK(len(copy.objects.elements) == 1)
+    MINI_CHECK(len(copy.lookup) == len(session.lookup))
+    MINI_CHECK(copy.graph.number_of_edges() == 1)
+    MINI_CHECK(len(copy.xforms) == 1)
+    MINI_CHECK(
+        len(copy.tree.root.descendants()) == len(session.tree.root.descendants())
+    )
+
+    MINI_CHECK(copy.objects.points is not session.objects.points)
+    MINI_CHECK(copy.objects.elements is not session.objects.elements)
+    MINI_CHECK(copy.tree.root is not session.tree.root)
+    MINI_CHECK(copy.objects.points[0] is not session.objects.points[0])
+    MINI_CHECK(copy.objects.points[0].guid == point.guid)
+    MINI_CHECK(copy.objects.elements[0].guid == element.guid)
+    MINI_CHECK(point.guid in copy.lookup)
+
+    copy.objects.points.clear()
+    copied_nodes = copy.tree.nodes
+    MINI_CHECK(len(copied_nodes) > 1)
+    copy.tree.remove(copied_nodes[1])
+    MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(len(copy.objects.points) == 0)
+    MINI_CHECK(len(session.tree.root.descendants()) > 0)
+    MINI_CHECK(len(copy.tree.root.descendants()) == 0)
+
+
 @MINI_TEST("Session", "Add Point")
 def test_session_add_point():
     from session_py import Session
@@ -38,7 +87,7 @@ def test_session_add_line():
     from session_py import Point
 
     session = Session()
-    line = Line(Point(0,0,0), Point(1,0,0))
+    line = Line(Point(0, 0, 0), Point(1, 0, 0))
     session.add_line(line)
 
     MINI_CHECK(len(session.objects.lines) == 1)
@@ -71,7 +120,7 @@ def test_session_add_obb():
         x_axis=Vector(1.0, 0.0, 0.0),
         y_axis=Vector(0.0, 1.0, 0.0),
         z_axis=Vector(0.0, 0.0, 1.0),
-        half_size=Vector(1.0, 1.0, 1.0)
+        half_size=Vector(1.0, 1.0, 1.0),
     )
     session.add_obb(obb)
 
@@ -86,7 +135,7 @@ def test_session_add_polyline():
     from session_py import Point
 
     session = Session()
-    pl = Polyline([Point(0,0,0), Point(1,0,0), Point(1,1,0)])
+    pl = Polyline([Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0)])
     session.add_polyline(pl)
 
     MINI_CHECK(len(session.objects.polylines) == 1)
@@ -105,9 +154,9 @@ def test_session_select_by_type():
     g1 = session.add_group("g1")
     g2 = session.add_group("g2")
 
-    session.add_polyline(Polyline([Point(0,0,0), Point(1,0,0)]), g0)
-    session.add_polyline(Polyline([Point(0,1,0), Point(1,1,0)]), g0)
-    session.add_polyline(Polyline([Point(0,2,0), Point(1,2,0)]), g1)
+    session.add_polyline(Polyline([Point(0, 0, 0), Point(1, 0, 0)]), g0)
+    session.add_polyline(Polyline([Point(0, 1, 0), Point(1, 1, 0)]), g0)
+    session.add_polyline(Polyline([Point(0, 2, 0), Point(1, 2, 0)]), g1)
     session.add_point(Point(9, 9, 9), g2)
 
     groups = session.select_by_type(Polyline)
@@ -127,7 +176,7 @@ def test_session_add_pointcloud():
     from session_py import Point
 
     session = Session()
-    pc = PointCloud([Point(0,0,0), Point(1,0,0)])
+    pc = PointCloud([Point(0, 0, 0), Point(1, 0, 0)])
     session.add_pointcloud(pc)
 
     MINI_CHECK(len(session.objects.pointclouds) == 1)
@@ -142,9 +191,9 @@ def test_session_add_mesh():
 
     session = Session()
     mesh = Mesh()
-    mesh.add_vertex(Point(0,0,0), 0)
-    mesh.add_vertex(Point(1,0,0), 1)
-    mesh.add_vertex(Point(0,1,0), 2)
+    mesh.add_vertex(Point(0, 0, 0), 0)
+    mesh.add_vertex(Point(1, 0, 0), 1)
+    mesh.add_vertex(Point(0, 1, 0), 2)
     mesh.add_face([0, 1, 2])
     session.add_mesh(mesh)
 
@@ -159,7 +208,7 @@ def test_session_add_nurbscurve():
     from session_py import Point
 
     session = Session()
-    pts = [Point(0,0,0), Point(1,1,0), Point(2,0,0), Point(3,1,0)]
+    pts = [Point(0, 0, 0), Point(1, 1, 0), Point(2, 0, 0), Point(3, 1, 0)]
     nc = NurbsCurve.create(False, 2, pts)
     session.add_nurbscurve(nc)
 
@@ -175,10 +224,22 @@ def test_session_add_nurbssurface():
 
     session = Session()
     pts = [
-        Point(0,0,0), Point(0,1,0), Point(0,2,0), Point(0,3,0),
-        Point(1,0,0), Point(1,1,0), Point(1,2,0), Point(1,3,0),
-        Point(2,0,0), Point(2,1,0), Point(2,2,0), Point(2,3,0),
-        Point(3,0,0), Point(3,1,0), Point(3,2,0), Point(3,3,0),
+        Point(0, 0, 0),
+        Point(0, 1, 0),
+        Point(0, 2, 0),
+        Point(0, 3, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(1, 2, 0),
+        Point(1, 3, 0),
+        Point(2, 0, 0),
+        Point(2, 1, 0),
+        Point(2, 2, 0),
+        Point(2, 3, 0),
+        Point(3, 0, 0),
+        Point(3, 1, 0),
+        Point(3, 2, 0),
+        Point(3, 3, 0),
     ]
     ns = NurbsSurface.create(False, False, 3, 3, 4, 4, pts)
     session.add_nurbssurface(ns)
@@ -203,10 +264,10 @@ def test_session_add_brep():
 @MINI_TEST("Session", "Add Element")
 def test_session_add_element():
     from session_py import Session
-    from session_py import Point
 
     session = Session()
     from session_py import Element
+
     plate = Element("p1")
     session.add_element(plate)
 
@@ -226,7 +287,6 @@ def test_session_add_empty_geometry():
     from session_py import NurbsSurface
     from session_py import BRep
 
-    # Nothing to draw is never added: the caller does not test its geometry first.
     session = Session()
     group = session.add_group("empty")
 
@@ -238,12 +298,10 @@ def test_session_add_empty_geometry():
     MINI_CHECK(session.add_nurbssurface(NurbsSurface(), group) is None)
     MINI_CHECK(session.add_brep(BRep(), group) is None)
 
-    # A mesh with vertices but no faces draws nothing either.
     vertices_only = Mesh()
     vertices_only.add_vertex(Point(0, 0, 0), 0)
     MINI_CHECK(session.add_mesh(vertices_only, group) is None)
 
-    # add(add_XXX(...), group) stays a valid one-liner when the geometry was skipped.
     session.add(session.add_mesh(Mesh(), group), group)
 
     MINI_CHECK(len(session.lookup) == 0)
@@ -283,8 +341,8 @@ def test_session_add_hierarchy():
     from session_py import Point
 
     session = Session()
-    p1 = Point(0,0,0)
-    p2 = Point(1,0,0)
+    p1 = Point(0, 0, 0)
+    p2 = Point(1, 0, 0)
     n1 = session.add_point(p1)
     n2 = session.add_point(p2)
     session.add(n1)
@@ -300,8 +358,8 @@ def test_session_get_children():
     from session_py import Point
 
     session = Session()
-    p1 = Point(0,0,0)
-    p2 = Point(1,0,0)
+    p1 = Point(0, 0, 0)
+    p2 = Point(1, 0, 0)
     n1 = session.add_point(p1)
     n2 = session.add_point(p2)
     session.add(n1)
@@ -320,8 +378,8 @@ def test_session_add_relationship():
     from session_py import Point
 
     session = Session()
-    p1 = Point(0,0,0)
-    p2 = Point(1,0,0)
+    p1 = Point(0, 0, 0)
+    p2 = Point(1, 0, 0)
     session.add_point(p1)
     session.add_point(p2)
     session.add_relationship(p1.guid, p2.guid, "connects_to")
@@ -335,8 +393,8 @@ def test_session_get_neighbours():
     from session_py import Point
 
     session = Session()
-    p1 = Point(0,0,0)
-    p2 = Point(1,0,0)
+    p1 = Point(0, 0, 0)
+    p2 = Point(1, 0, 0)
     session.add_point(p1)
     session.add_point(p2)
     session.add_edge(p1.guid, p2.guid, "connection")
@@ -360,14 +418,14 @@ def test_session_get_collisions():
         x_axis=Vector(1.0, 0.0, 0.0),
         y_axis=Vector(0.0, 1.0, 0.0),
         z_axis=Vector(0.0, 0.0, 1.0),
-        half_size=Vector(2.0, 2.0, 2.0)
+        half_size=Vector(2.0, 2.0, 2.0),
     )
     obb2 = OBB(
         center=Point(1.0, 0.0, 0.0),
         x_axis=Vector(1.0, 0.0, 0.0),
         y_axis=Vector(0.0, 1.0, 0.0),
         z_axis=Vector(0.0, 0.0, 1.0),
-        half_size=Vector(2.0, 2.0, 2.0)
+        half_size=Vector(2.0, 2.0, 2.0),
     )
     session.add_obb(obb1)
     session.add_obb(obb2)
@@ -395,6 +453,7 @@ def test_session_ray_cast():
     MINI_CHECK(len(hits) >= 1)
 
     from session_py import Xform
+
     placed = Mesh()
     placed.add_vertex(Point(-1.0, -1.0, 0.0), 0)
     placed.add_vertex(Point(1.0, -1.0, 0.0), 1)
@@ -406,7 +465,7 @@ def test_session_ray_cast():
     hits2 = session.ray_cast(Point(100.0, 0.0, 2.0), Vector(0.0, 0.0, -1.0))
 
     MINI_CHECK(len(hits2) >= 1)
-    MINI_CHECK(TOLERANCE.is_close(hits2[0].point[0], 100.0))
+    MINI_CHECK(TOLERANCE.is_close(hits2[0].hit_point[0], 100.0))
 
 
 @MINI_TEST("Session", "Get Object")
@@ -435,12 +494,17 @@ def test_session_remove_object():
     removed = session.remove_object(point.guid)
 
     from session_py import Element
+
     plate = Element("p1")
     eguid = plate.guid
     session.add_element(plate)
     eremoved = session.remove_object(eguid)
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_remove.bin"
+    fname = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_session_remove.bin"
+    )
     session.pb_dump(fname)
     loaded = Session.pb_load(fname)
 
@@ -448,7 +512,7 @@ def test_session_remove_object():
     MINI_CHECK(point.guid not in session.lookup)
     MINI_CHECK(eremoved)
     MINI_CHECK(len(session.objects.elements) == 0)
-    MINI_CHECK(eguid not in loaded.lookup)  # removed objects must not resurrect on save/load
+    MINI_CHECK(eguid not in loaded.lookup)
 
 
 @MINI_TEST("Session", "Get Geometry")
@@ -467,8 +531,6 @@ def test_session_get_geometry():
 
 @MINI_TEST("Session", "Get Geometry Is Pure")
 def test_session_get_geometry_is_pure():
-    # get_geometry() returns a flattened SNAPSHOT and must never touch the session's own
-    # geometry, so calling it twice gives the same answer.
     from session_py import Session
     from session_py import Point
     from session_py import Xform
@@ -500,13 +562,6 @@ def test_session_json_roundtrip():
     session.add_point(p1)
     session.add_point(p2)
     session.add_edge(p1.guid, p2.guid, "connection")
-
-    #   __jsondump__()  │ dict         │ to JSON object (internal use)
-    #   __jsonload__(d) │ dict         │ from JSON object (internal use)
-    #   file_json_dumps()    │ str          │ to JSON string
-    #   file_json_loads(s)   │ str          │ from JSON string
-    #   file_json_dump(path) │ file         │ write to file
-    #   file_json_load(path) │ file         │ read from file
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
     session.file_json_dump(fname)
@@ -551,7 +606,11 @@ def test_session_lookup_mutation_roundtrip():
 
     session.lookup[guid].width = 5.0
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_lookup.bin"
+    fname = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_session_lookup.bin"
+    )
     session.pb_dump(fname)
     loaded = Session.pb_load(fname)
 
@@ -576,7 +635,9 @@ def test_session_order():
 
     order = session.order()
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_order.bin"
+    fname = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_session_order.bin"
+    )
     session.pb_dump(fname)
     loaded = Session.pb_load(fname)
 
@@ -601,8 +662,6 @@ def test_session_set_xform():
     session.set_xform(guid, shift)
 
     MINI_CHECK(session.xform(guid) == shift)
-    # No parent was passed, so the object has no tree node: it is its own root and keeps
-    # its placement. Falling back to identity here would move it to the origin.
     MINI_CHECK(session.world_xform(guid) == shift)
     MINI_CHECK(session.world_xforms()[guid] == shift)
     MINI_CHECK(session.xform("missing") == Xform.identity())
@@ -631,7 +690,6 @@ def test_session_world_xform_hierarchy():
     session.add(b_node, a_node)
     session.add(c_node, b_node)
 
-    # Rotation and translation do not commute, so a reversed fold fails these checks.
     a_xform = Xform.rotation_z(PI / 2.0)
     b_xform = Xform.translation(2.0, 0.0, 0.0)
     c_xform = Xform.rotation_z(PI / 2.0)
@@ -660,7 +718,9 @@ def test_session_xform_roundtrip():
     session.add_point(point)
     session.set_xform(guid, Xform.translation(7.0, 8.0, 9.0))
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_xform.bin"
+    fname = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_session_xform.bin"
+    )
     session.pb_dump(fname)
     loaded = Session.pb_load(fname)
     json_loaded = Session.file_json_loads(session.file_json_dumps())
@@ -671,39 +731,52 @@ def test_session_xform_roundtrip():
     MINI_CHECK(len(json_loaded.xforms) == 1)
 
 
+def create_box(center, size):
+    """A cube mesh of the given size centred on center."""
+
+    from session_py import Mesh
+    from session_py import Point
+
+    mesh = Mesh()
+    h = size * 0.5
+    verts = [
+        Point(center[0] - h, center[1] - h, center[2] - h),
+        Point(center[0] + h, center[1] - h, center[2] - h),
+        Point(center[0] + h, center[1] + h, center[2] - h),
+        Point(center[0] - h, center[1] + h, center[2] - h),
+        Point(center[0] - h, center[1] - h, center[2] + h),
+        Point(center[0] + h, center[1] - h, center[2] + h),
+        Point(center[0] + h, center[1] + h, center[2] + h),
+        Point(center[0] - h, center[1] + h, center[2] + h),
+    ]
+
+    for i in range(len(verts)):
+        mesh.add_vertex(verts[i], i)
+
+    faces = [
+        [0, 1, 2, 3],
+        [4, 7, 6, 5],
+        [0, 4, 5, 1],
+        [2, 6, 7, 3],
+        [0, 3, 7, 4],
+        [1, 5, 6, 2],
+    ]
+
+    for f in faces:
+        mesh.add_face(f)
+
+    return mesh
+
+
 @MINI_TEST("Session", "Tree Transformation Hierarchy")
 def test_session_tree_transformation_hierarchy():
     from session_py import Session
     from session_py import Point
     from session_py import Vector
-    from session_py import Mesh
     from session_py import Xform
     from session_py import Plane
 
     scene = Session("tree_transformation_test")
-
-    def create_box(center, size):
-        mesh = Mesh()
-        h = size * 0.5
-        verts = [
-            Point(center[0] - h, center[1] - h, center[2] - h),
-            Point(center[0] + h, center[1] - h, center[2] - h),
-            Point(center[0] + h, center[1] + h, center[2] - h),
-            Point(center[0] - h, center[1] + h, center[2] - h),
-            Point(center[0] - h, center[1] - h, center[2] + h),
-            Point(center[0] + h, center[1] - h, center[2] + h),
-            Point(center[0] + h, center[1] + h, center[2] + h),
-            Point(center[0] - h, center[1] + h, center[2] + h),
-        ]
-        for i, v in enumerate(verts):
-            mesh.add_vertex(v, i)
-        faces = [
-            [0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1],
-            [2, 6, 7, 3], [0, 3, 7, 4], [1, 5, 6, 2],
-        ]
-        for f in faces:
-            mesh.add_face(f)
-        return mesh
 
     box1 = create_box(Point(0, 0, 0), 2.0)
     box1_guid = box1.guid
@@ -723,11 +796,11 @@ def test_session_tree_transformation_hierarchy():
     plane_to = Plane(Point(0, 0, 1.0), Vector(1, 0, 0), Vector(0, 1, 0))
     xy_to_top = Xform.plane_to_plane(plane_from, plane_to)
     scene.set_xform(box1_guid, Xform.rotation_z(PI / 1.5) * xy_to_top)
-    scene.set_xform(box2_guid, Xform.translation(2.0, 0, 0) * Xform.rotation_z(PI / 6.0))
+    scene.set_xform(
+        box2_guid, Xform.translation(2.0, 0, 0) * Xform.rotation_z(PI / 6.0)
+    )
     scene.set_xform(box3_guid, Xform.translation(2.0, 0, 0))
 
-    # get_geometry BAKES the cumulative placement into the coordinates, so the deepest box
-    # must land exactly where its world xform sends the original corner.
     world3 = scene.world_xform(box3_guid)
     expected = world3.transform_point(Point(-1.0, -1.0, -1.0))
     transformed = scene.get_geometry()
@@ -741,79 +814,51 @@ def test_session_tree_transformation_hierarchy():
 
 @MINI_TEST("Session", "Add Component")
 def test_session_add_component():
-    import uuid
     from session_py import Session
-    from session_py.file_encoders import file_register_class
-
-    class Box:
-        def __init__(self, width=1.0, height=2.0):
-            self._guid = str(uuid.uuid4())
-            self.name = "my_box"
-            self.width = width
-            self.height = height
-        @property
-        def guid(self): return self._guid
-        def __jsondump__(self):
-            return {"type": "Box", "guid": self.guid, "name": self.name,
-                    "width": self.width, "height": self.height}
-        @classmethod
-        def __jsonload__(cls, data, guid=None, name=None):
-            obj = cls(data["width"], data["height"])
-            obj._guid = guid or data.get("guid", obj._guid)
-            obj.name  = name or data.get("name", obj.name)
-            return obj
-
-    file_register_class("Box", Box)
+    from session_py import Component
 
     session = Session()
-    box = Box(width=3.0, height=5.0)
-    guid = box.guid
 
-    session.add_component(box)
+    c = Component()
+    c.type_name = "FloorBuilder"
+    c.name = "floor_builder"
+    c.extra = {"size": 3000, "height": 650}
+    guid = c.guid
+
+    session.add_component(c)
 
     MINI_CHECK(len(session.objects.components) == 1)
-    MINI_CHECK(session.lookup[guid] is box)
+    MINI_CHECK(guid in session.component_lookup)
     MINI_CHECK(session.graph.has_node(guid))
 
 
 @MINI_TEST("Session", "Component Json Roundtrip")
 def test_session_component_json_roundtrip():
-    import uuid
     from session_py import Session
-    from session_py.file_encoders import file_register_class
+    from session_py import Component
+    from session_py.file_encoders import file_json_dump
+    from session_py.file_encoders import file_json_load
     from pathlib import Path
 
-    class Box:
-        def __init__(self, width=1.0, height=2.0):
-            self._guid = str(uuid.uuid4())
-            self.name = "my_box"
-            self.width = width
-            self.height = height
-        @property
-        def guid(self): return self._guid
-        def __jsondump__(self):
-            return {"type": "Box", "guid": self.guid, "name": self.name,
-                    "width": self.width, "height": self.height}
-        @classmethod
-        def __jsonload__(cls, data, guid=None, name=None):
-            obj = cls(data["width"], data["height"])
-            obj._guid = guid or data.get("guid", obj._guid)
-            obj.name  = name or data.get("name", obj.name)
-            return obj
-
-    file_register_class("Box", Box)
-
     original = Session()
-    box = Box(width=3.0, height=5.0)
-    guid = box.guid
-    original.add_component(box)
+    c = Component()
+    c.type_name = "FloorBuilder"
+    c.name = "floor_builder"
+    c.extra = {"size": 3000, "height": 650, "rise": 453}
+    guid = c.guid
+    original.add_component(c)
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_component.json"
-    original.file_json_dump(fname)
-    loaded = Session.file_json_load(fname)
+    filename = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_session_component.json"
+    )
+    file_json_dump(original, filename)
+    loaded = file_json_load(filename)
 
     MINI_CHECK(len(loaded.objects.components) == 1)
-    MINI_CHECK(loaded.objects.components[0].width == 3.0)
+    MINI_CHECK(loaded.objects.components[0].type_name == "FloorBuilder")
+    MINI_CHECK(loaded.objects.components[0].extra["size"] == 3000)
     MINI_CHECK(loaded.objects.components[0].guid == guid)
 
 
@@ -840,7 +885,11 @@ def test_session_document_workflow():
     shift = Xform.translation(0.0, 5.0, 0.0)
     session.set_xform(a_guid, shift)
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session_document.bin"
+    fname = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_session_document.bin"
+    )
     session.pb_dump(fname)
     loaded = Session.pb_load(fname)
 
@@ -1012,11 +1061,14 @@ def test_session_history_capacity():
     from session_py import Point
 
     session = Session()
+
     for i in range(70):
         session.begin("add")
         session.add_point(Point(float(i), 0.0, 0.0))
         session.commit()
+
     depth = session.history.depth()
+
     while session.undo():
         pass
 

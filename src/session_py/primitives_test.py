@@ -10,6 +10,7 @@ import math
 # Mesh primitives
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @MINI_TEST("Primitives", "Mesh Arrow")
 def test_mesh_arrow():
     from session_py import Primitives
@@ -58,18 +59,23 @@ def test_mesh_edge_pipes():
 # NurbsCurve primitives
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 @MINI_TEST("Primitives", "Nurbscurve Polyline")
 def test_nurbscurve_polyline():
     from session_py import NurbsCurve
     from session_py import Point
 
-    c = NurbsCurve.create(False, 1, [
-        Point(0, 0, 0),
-        Point(1, 2, 0),
-        Point(2, 0, 0),
-        Point(3, 2, 0),
-        Point(4, 0, 0),
-    ])
+    c = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(0, 0, 0),
+            Point(1, 2, 0),
+            Point(2, 0, 0),
+            Point(3, 2, 0),
+            Point(4, 0, 0),
+        ],
+    )
 
     MINI_CHECK(c.cv_count() == 5)
     MINI_CHECK(c.order() == 2)
@@ -158,6 +164,7 @@ def test_nurbscurve_spiral():
 # ═══════════════════════════════════════════════════════════════════════════
 # NurbsSurface primitives
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 @MINI_TEST("Primitives", "Nurbssurface Cylinder")
 def test_nurbssurface_cylinder():
@@ -288,6 +295,7 @@ def test_nurbssurface_quad_sphere():
     faces = Primitives.quad_sphere(0.0, 0.0, 0.0, radius)
 
     MINI_CHECK(len(faces) == 6)
+
     for f in range(6):
         MINI_CHECK(faces[f].is_valid())
         MINI_CHECK(faces[f].is_rational())
@@ -297,16 +305,20 @@ def test_nurbssurface_quad_sphere():
         MINI_CHECK(faces[f].cv_count(1) == 3)
 
     max_err = 0.0
+
     for f in range(6):
         for i in range(5):
             u = i / 4.0
+
             for j in range(5):
                 v = j / 4.0
                 p = faces[f].point_at(u, v)
-                dist = math.sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2])
+                dist = math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2])
                 err = abs(dist - radius)
+
                 if err > max_err:
                     max_err = err
+
     MINI_CHECK(max_err < 0.02 * radius)
 
     top = faces[0].point_at(0.5, 0.5)
@@ -333,6 +345,7 @@ def test_nurbssurface_quad_sphere():
 # ═══════════════════════════════════════════════════════════════════════════
 # NurbsSurface factory methods
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 @MINI_TEST("Primitives", "Nurbssurface Ruled")
 def test_nurbssurface_ruled():
@@ -365,35 +378,38 @@ def test_nurbssurface_ruled():
     MINI_CHECK(len(rd[0]) == 5)
 
     pts = []
+
     for i in range(len(rd)):
         for j in range(len(rd[i])):
             pts.append(rd[i][j])
 
     normals = []
+
     for i in range(len(ruv)):
         for j in range(len(ruv[i])):
             normals.append(srf.normal_at(ruv[i][j][0], ruv[i][j][1]))
 
     uvs = []
+
     for i in range(len(ruv)):
         for j in range(len(ruv[i])):
             uvs.append(ruv[i][j])
 
-    MINI_CHECK(TOLERANCE.is_point_close(pts[0],  Point( 3.00, 0.00, 0.00)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[1],  Point( 3.00, 1.25, 1.25)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[2],  Point( 3.00, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[3],  Point( 3.00, 3.75, 3.75)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[4],  Point( 3.00, 5.00, 5.00)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[5],  Point( 1.75, 0.00, 1.25)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[6],  Point( 1.75, 1.25, 1.875)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[7],  Point( 1.75, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[8],  Point( 1.75, 3.75, 3.125)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[9],  Point( 1.75, 5.00, 3.75)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[10], Point( 0.50, 0.00, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[11], Point( 0.50, 1.25, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[12], Point( 0.50, 2.50, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[13], Point( 0.50, 3.75, 2.50)))
-    MINI_CHECK(TOLERANCE.is_point_close(pts[14], Point( 0.50, 5.00, 2.50)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[0], Point(3.00, 0.00, 0.00)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[1], Point(3.00, 1.25, 1.25)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[2], Point(3.00, 2.50, 2.50)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[3], Point(3.00, 3.75, 3.75)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[4], Point(3.00, 5.00, 5.00)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[5], Point(1.75, 0.00, 1.25)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[6], Point(1.75, 1.25, 1.875)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[7], Point(1.75, 2.50, 2.50)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[8], Point(1.75, 3.75, 3.125)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[9], Point(1.75, 5.00, 3.75)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[10], Point(0.50, 0.00, 2.50)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[11], Point(0.50, 1.25, 2.50)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[12], Point(0.50, 2.50, 2.50)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[13], Point(0.50, 3.75, 2.50)))
+    MINI_CHECK(TOLERANCE.is_point_close(pts[14], Point(0.50, 5.00, 2.50)))
     MINI_CHECK(TOLERANCE.is_point_close(pts[15], Point(-0.75, 0.00, 3.75)))
     MINI_CHECK(TOLERANCE.is_point_close(pts[16], Point(-0.75, 1.25, 3.125)))
     MINI_CHECK(TOLERANCE.is_point_close(pts[17], Point(-0.75, 2.50, 2.50)))
@@ -405,31 +421,125 @@ def test_nurbssurface_ruled():
     MINI_CHECK(TOLERANCE.is_point_close(pts[23], Point(-2.00, 3.75, 1.25)))
     MINI_CHECK(TOLERANCE.is_point_close(pts[24], Point(-2.00, 5.00, 0.00)))
 
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[0],  Vector(-0.577350269189626,  0.577350269189626, -0.577350269189626)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[1],  Vector(-1.0/3.0,  2.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[2],  Vector( 0.0,  0.707106781186547, -0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[3],  Vector( 1.0/3.0,  2.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[4],  Vector( 0.577350269189626,  0.577350269189626, -0.577350269189626)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[5],  Vector(-2.0/3.0,  1.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[6],  Vector(-0.408248290463863,  0.408248290463863, -0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[7],  Vector( 0.0,  0.447213595499958, -0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[8],  Vector( 0.408248290463863,  0.408248290463863, -0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[9],  Vector( 2.0/3.0,  1.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[10], Vector(-0.707106781186547,  0.0, -0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[11], Vector(-0.447213595499958,  0.0, -0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[12], Vector( 0.0,  0.0, -1.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[13], Vector( 0.447213595499958,  0.0, -0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[14], Vector( 0.707106781186547,  0.0, -0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[15], Vector(-2.0/3.0, -1.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[16], Vector(-0.408248290463863, -0.408248290463863, -0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[17], Vector( 0.0, -0.447213595499958, -0.894427190999916)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[18], Vector( 0.408248290463863, -0.408248290463863, -0.816496580927726)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[19], Vector( 2.0/3.0, -1.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[20], Vector(-0.577350269189626, -0.577350269189626, -0.577350269189626)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[21], Vector(-1.0/3.0, -2.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[22], Vector( 0.0, -0.707106781186547, -0.707106781186547)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[23], Vector( 1.0/3.0, -2.0/3.0, -2.0/3.0)))
-    MINI_CHECK(TOLERANCE.is_vector_close(normals[24], Vector( 0.577350269189626, -0.577350269189626, -0.577350269189626)))
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[0],
+            Vector(-0.577350269189626, 0.577350269189626, -0.577350269189626),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(normals[1], Vector(-1.0 / 3.0, 2.0 / 3.0, -2.0 / 3.0))
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[2], Vector(0.0, 0.707106781186547, -0.707106781186547)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(normals[3], Vector(1.0 / 3.0, 2.0 / 3.0, -2.0 / 3.0))
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[4], Vector(0.577350269189626, 0.577350269189626, -0.577350269189626)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(normals[5], Vector(-2.0 / 3.0, 1.0 / 3.0, -2.0 / 3.0))
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[6],
+            Vector(-0.408248290463863, 0.408248290463863, -0.816496580927726),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[7], Vector(0.0, 0.447213595499958, -0.894427190999916)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[8], Vector(0.408248290463863, 0.408248290463863, -0.816496580927726)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(normals[9], Vector(2.0 / 3.0, 1.0 / 3.0, -2.0 / 3.0))
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[10], Vector(-0.707106781186547, 0.0, -0.707106781186547)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[11], Vector(-0.447213595499958, 0.0, -0.894427190999916)
+        )
+    )
+    MINI_CHECK(TOLERANCE.is_vector_close(normals[12], Vector(0.0, 0.0, -1.0)))
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[13], Vector(0.447213595499958, 0.0, -0.894427190999916)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[14], Vector(0.707106781186547, 0.0, -0.707106781186547)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[15], Vector(-2.0 / 3.0, -1.0 / 3.0, -2.0 / 3.0)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[16],
+            Vector(-0.408248290463863, -0.408248290463863, -0.816496580927726),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[17], Vector(0.0, -0.447213595499958, -0.894427190999916)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[18],
+            Vector(0.408248290463863, -0.408248290463863, -0.816496580927726),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[19], Vector(2.0 / 3.0, -1.0 / 3.0, -2.0 / 3.0)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[20],
+            Vector(-0.577350269189626, -0.577350269189626, -0.577350269189626),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[21], Vector(-1.0 / 3.0, -2.0 / 3.0, -2.0 / 3.0)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[22], Vector(0.0, -0.707106781186547, -0.707106781186547)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[23], Vector(1.0 / 3.0, -2.0 / 3.0, -2.0 / 3.0)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_vector_close(
+            normals[24],
+            Vector(0.577350269189626, -0.577350269189626, -0.577350269189626),
+        )
+    )
 
     MINI_CHECK(TOLERANCE.is_close(uvs[0][0], 0.00))
     MINI_CHECK(TOLERANCE.is_close(uvs[0][1], 0.00))
@@ -461,44 +571,62 @@ def test_nurbssurface_planar():
     c4 = math.cos(1.13)
     s4 = math.sin(1.13)
 
-    ca = NurbsCurve.create(False, 1, [
-        Point(0.0, 0.0, 0.0),
-        Point(4.0, 0.0, 0.0),
-        Point(4.0, 3.0*c1, 3.0*s1),
-        Point(0.0, 3.0*c1, 3.0*s1),
-        Point(0.0, 0.0, 0.0),
-    ])
+    ca = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(4.0, 0.0, 0.0),
+            Point(4.0, 3.0 * c1, 3.0 * s1),
+            Point(0.0, 3.0 * c1, 3.0 * s1),
+            Point(0.0, 0.0, 0.0),
+        ],
+    )
     s_quad = Primitives.create_planar(ca)
     m_quad = s_quad.mesh()
 
-    cb1 = NurbsCurve.create(False, 1, [
-        Point(8.0, 0.0, 0.0),
-        Point(8.0+5.0*c2, 0.0, 5.0*s2),
-        Point(8.0+2.0*c2, 3.0, 2.0*s2),
-        Point(8.0, 0.0, 0.0),
-    ])
+    cb1 = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(8.0, 0.0, 0.0),
+            Point(8.0 + 5.0 * c2, 0.0, 5.0 * s2),
+            Point(8.0 + 2.0 * c2, 3.0, 2.0 * s2),
+            Point(8.0, 0.0, 0.0),
+        ],
+    )
     s_triangle = Primitives.create_planar(cb1)
     m_triangle = s_triangle.mesh()
 
     ox = 18.0
-    cb2 = NurbsCurve.create(False, 1, [
-        Point(ox+0.0*c3, 0.0*s3, 0.0),
-        Point(ox+4.0*c3, 4.0*s3, 0.0),
-        Point(ox+5.0*c3-2.0*s3, 5.0*s3+2.0*c3, 0.0),
-        Point(ox+3.0*c3-4.0*s3, 3.0*s3+4.0*c3, 0.0),
-        Point(ox-1.0*c3-3.0*s3, -1.0*s3+3.0*c3, 0.0),
-        Point(ox+0.0*c3, 0.0*s3, 0.0)])
+    cb2 = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(ox + 0.0 * c3, 0.0 * s3, 0.0),
+            Point(ox + 4.0 * c3, 4.0 * s3, 0.0),
+            Point(ox + 5.0 * c3 - 2.0 * s3, 5.0 * s3 + 2.0 * c3, 0.0),
+            Point(ox + 3.0 * c3 - 4.0 * s3, 3.0 * s3 + 4.0 * c3, 0.0),
+            Point(ox - 1.0 * c3 - 3.0 * s3, -1.0 * s3 + 3.0 * c3, 0.0),
+            Point(ox + 0.0 * c3, 0.0 * s3, 0.0),
+        ],
+    )
     s_polygon = Primitives.create_planar(cb2)
     m_polygon = s_polygon.mesh()
 
-    cc = NurbsCurve.create(False, 3, [
-        Point(26.0, 0.0, 0.0),
-        Point(29.0, 1.0*c4, 1.0*s4),
-        Point(31.0, 0.5*c4, 0.5*s4),
-        Point(32.0, 3.0*c4, 3.0*s4),
-        Point(30.0, 5.0*c4, 5.0*s4),
-        Point(27.0, 4.0*c4, 4.0*s4),
-        Point(26.0, 0.0, 0.0)])
+    cc = NurbsCurve.create(
+        False,
+        3,
+        [
+            Point(26.0, 0.0, 0.0),
+            Point(29.0, 1.0 * c4, 1.0 * s4),
+            Point(31.0, 0.5 * c4, 0.5 * s4),
+            Point(32.0, 3.0 * c4, 3.0 * s4),
+            Point(30.0, 5.0 * c4, 5.0 * s4),
+            Point(27.0, 4.0 * c4, 4.0 * s4),
+            Point(26.0, 0.0, 0.0),
+        ],
+    )
     s_nurbs = Primitives.create_planar(cc)
     m_nurbs = s_nurbs.mesh()
 
@@ -509,9 +637,17 @@ def test_nurbssurface_planar():
     MINI_CHECK(m_quad.number_of_vertices() == 4)
     MINI_CHECK(m_quad.number_of_faces() == 2)
     MINI_CHECK(TOLERANCE.is_point_close(s_quad.get_cv(0, 0), Point(0.0, 0.0, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_quad.get_cv(0, 1), Point(0.0, 2.294526561853465, 1.932653061713073)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_quad.get_cv(0, 1), Point(0.0, 2.294526561853465, 1.932653061713073)
+        )
+    )
     MINI_CHECK(TOLERANCE.is_point_close(s_quad.get_cv(1, 0), Point(4.0, 0.0, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_quad.get_cv(1, 1), Point(4.0, 2.294526561853465, 1.932653061713073)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_quad.get_cv(1, 1), Point(4.0, 2.294526561853465, 1.932653061713073)
+        )
+    )
 
     MINI_CHECK(s_triangle.is_valid())
     MINI_CHECK(s_triangle.is_planar())
@@ -521,8 +657,16 @@ def test_nurbssurface_planar():
     MINI_CHECK(m_triangle.number_of_faces() == 1)
     MINI_CHECK(TOLERANCE.is_point_close(s_triangle.get_cv(0, 0), Point(8.0, 0.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_triangle.get_cv(0, 1), Point(8.0, 0.0, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_triangle.get_cv(1, 0), Point(10.867599930362283, 0.0, 4.095957841504991)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_triangle.get_cv(1, 1), Point(9.147039972144913, 3.0, 1.638383136601997)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_triangle.get_cv(1, 0), Point(10.867599930362283, 0.0, 4.095957841504991)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_triangle.get_cv(1, 1), Point(9.147039972144913, 3.0, 1.638383136601997)
+        )
+    )
 
     MINI_CHECK(s_polygon.is_valid())
     MINI_CHECK(s_polygon.is_planar())
@@ -530,10 +674,26 @@ def test_nurbssurface_planar():
     MINI_CHECK(s_polygon.cv_count(1) == 2)
     MINI_CHECK(m_polygon.number_of_vertices() == 4)
     MINI_CHECK(m_polygon.number_of_faces() == 2)
-    MINI_CHECK(TOLERANCE.is_point_close(s_polygon.get_cv(0, 0), Point(19.673777861921977, 6.364048611360808, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_polygon.get_cv(0, 1), Point(22.915428262469927, 2.987233669553135, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_polygon.get_cv(1, 0), Point(15.247175891573059, 2.114631246911942, 0.0)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_polygon.get_cv(1, 1), Point(18.488826292121008, -1.262183694895731, 0.0)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_polygon.get_cv(0, 0), Point(19.673777861921977, 6.364048611360808, 0.0)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_polygon.get_cv(0, 1), Point(22.915428262469927, 2.987233669553135, 0.0)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_polygon.get_cv(1, 0), Point(15.247175891573059, 2.114631246911942, 0.0)
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_polygon.get_cv(1, 1), Point(18.488826292121008, -1.262183694895731, 0.0)
+        )
+    )
 
     MINI_CHECK(s_nurbs.is_valid())
     MINI_CHECK(s_nurbs.is_planar())
@@ -541,10 +701,30 @@ def test_nurbssurface_planar():
     MINI_CHECK(s_nurbs.cv_count(1) == 2)
     MINI_CHECK(m_nurbs.number_of_vertices() == 4)
     MINI_CHECK(m_nurbs.number_of_faces() == 2)
-    MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(0, 0), Point(26.652846559932474, -0.727774577493594, -1.542700265577809)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(0, 1), Point(24.347485651711366, 0.916607409071279, 1.942978687541882)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(1, 0), Point(32.606791655643732, 0.791738725121784, 1.678288276735475)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_nurbs.get_cv(1, 1), Point(30.301430747422629, 2.436120711686657, 5.163967229855166)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_nurbs.get_cv(0, 0),
+            Point(26.652846559932474, -0.727774577493594, -1.542700265577809),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_nurbs.get_cv(0, 1),
+            Point(24.347485651711366, 0.916607409071279, 1.942978687541882),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_nurbs.get_cv(1, 0),
+            Point(32.606791655643732, 0.791738725121784, 1.678288276735475),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_nurbs.get_cv(1, 1),
+            Point(30.301430747422629, 2.436120711686657, 5.163967229855166),
+        )
+    )
 
     TOLERANCE.reset()
 
@@ -558,10 +738,14 @@ def test_nurbssurface_extrusion():
 
     dir = Vector(0.0, 1.0, 5.0)
 
-    c1 = NurbsCurve.create(False, 1, [
-        Point(13.0, 0.0, 0.0),
-        Point(18.0, 0.0, 0.0),
-    ])
+    c1 = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(13.0, 0.0, 0.0),
+            Point(18.0, 0.0, 0.0),
+        ],
+    )
     s_line = Primitives.create_extrusion(c1, dir)
     m_line = s_line.mesh()
 
@@ -569,20 +753,28 @@ def test_nurbssurface_extrusion():
     s_circle = Primitives.create_extrusion(c2, dir)
     m_circle = s_circle.mesh()
 
-    c3 = NurbsCurve.create(False, 2, [
-        Point(30.0, 0.0, 0.0),
-        Point(33.0, 5.0, 0.0),
-        Point(37.0, 0.0, 0.0),
-    ])
+    c3 = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(30.0, 0.0, 0.0),
+            Point(33.0, 5.0, 0.0),
+            Point(37.0, 0.0, 0.0),
+        ],
+    )
     s_arc = Primitives.create_extrusion(c3, dir)
     m_arc = s_arc.mesh()
 
-    c4 = NurbsCurve.create(False, 1, [
-        Point(40.0, 3.0, 0.0),
-        Point(45.0, 0.0, 0.0),
-        Point(50.0, 3.0, 0.0),
-        Point(55.0, 0.0, 0.0),
-    ])
+    c4 = NurbsCurve.create(
+        False,
+        1,
+        [
+            Point(40.0, 3.0, 0.0),
+            Point(45.0, 0.0, 0.0),
+            Point(50.0, 3.0, 0.0),
+            Point(55.0, 0.0, 0.0),
+        ],
+    )
     s_wavy = Primitives.create_extrusion(c4, dir)
     m_wavy = s_wavy.mesh()
 
@@ -627,20 +819,27 @@ def test_nurbssurface_extrusion():
     MINI_CHECK(s_wavy.cv_count(0) == 4 and s_wavy.cv_count(1) == 2)
     MINI_CHECK(m_wavy.number_of_vertices() == 12)
     MINI_CHECK(m_wavy.number_of_faces() == 6)
+
     for i in range(4):
         for j in range(2):
             position = s_wavy.get_cv(i, j)
             copies = 0
+
             for vertex in m_wavy.vertex.values():
                 if TOLERANCE.is_point_close(vertex.position(), position):
                     copies += 1
+
             MINI_CHECK(copies == (1 if i == 0 or i == 3 else 2))
+
     for key, corners in m_wavy.face.items():
         normal = m_wavy.face_normal(key)
+
         for corner in corners:
             shading = m_wavy.vertex[corner].normal()
+
             for axis in range(3):
                 MINI_CHECK(abs(shading[axis] - normal[axis]) < 1e-9)
+
     MINI_CHECK(TOLERANCE.is_point_close(s_wavy.get_cv(0, 0), Point(40.0, 3.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_wavy.get_cv(0, 1), Point(40.0, 4.0, 5.0)))
     MINI_CHECK(TOLERANCE.is_point_close(s_wavy.get_cv(1, 0), Point(45.0, 0.0, 0.0)))
@@ -665,42 +864,222 @@ def test_nurbssurface_loft():
     MINI_CHECK(srf.is_valid())
     MINI_CHECK(srf.cv_count(0) == 9)
     MINI_CHECK(srf.cv_count(1) == 4)
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 0), Point(2.000000000000000, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 1), Point(-0.689223125118461, 0.000000000000000, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 2), Point(3.009774760647534, 0.000000000000000, 4.110399016539784)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(0, 3), Point(0.800000000000000, 0.000000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 0), Point(2.000000000000000, 2.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 1), Point(-0.689223125118461, -0.689223125118461, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 2), Point(3.009774760647534, 3.009774760647534, 4.110399016539783)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(1, 3), Point(0.800000000000000, 0.800000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 0), Point(0.000000000000000, 2.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 1), Point(0.000000000000000, -0.689223125118461, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 2), Point(0.000000000000000, 3.009774760647534, 4.110399016539784)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(2, 3), Point(0.000000000000000, 0.800000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 0), Point(-2.000000000000000, 2.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 1), Point(0.689223125118461, -0.689223125118461, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 2), Point(-3.009774760647534, 3.009774760647534, 4.110399016539783)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(3, 3), Point(-0.800000000000000, 0.800000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 0), Point(-2.000000000000000, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 1), Point(0.689223125118461, 0.000000000000000, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 2), Point(-3.009774760647534, 0.000000000000000, 4.110399016539784)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(4, 3), Point(-0.800000000000000, 0.000000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 0), Point(-2.000000000000000, -2.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 1), Point(0.689223125118461, 0.689223125118461, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 2), Point(-3.009774760647534, -3.009774760647534, 4.110399016539783)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(5, 3), Point(-0.800000000000000, -0.800000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 0), Point(0.000000000000000, -2.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 1), Point(0.000000000000000, 0.689223125118461, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 2), Point(0.000000000000000, -3.009774760647534, 4.110399016539784)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(6, 3), Point(0.000000000000000, -0.800000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 0), Point(2.000000000000000, -2.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 1), Point(-0.689223125118461, 0.689223125118461, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 2), Point(3.009774760647534, -3.009774760647534, 4.110399016539783)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(7, 3), Point(0.800000000000000, -0.800000000000000, 6.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 0), Point(2.000000000000000, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 1), Point(-0.689223125118461, 0.000000000000000, 1.662346559763863)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 2), Point(3.009774760647534, 0.000000000000000, 4.110399016539784)))
-    MINI_CHECK(TOLERANCE.is_point_close(srf.get_cv(8, 3), Point(0.800000000000000, 0.000000000000000, 6.000000000000000)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(0, 0),
+            Point(2.000000000000000, 0.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(0, 1),
+            Point(-0.689223125118461, 0.000000000000000, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(0, 2),
+            Point(3.009774760647534, 0.000000000000000, 4.110399016539784),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(0, 3),
+            Point(0.800000000000000, 0.000000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(1, 0),
+            Point(2.000000000000000, 2.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(1, 1),
+            Point(-0.689223125118461, -0.689223125118461, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(1, 2),
+            Point(3.009774760647534, 3.009774760647534, 4.110399016539783),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(1, 3),
+            Point(0.800000000000000, 0.800000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(2, 0),
+            Point(0.000000000000000, 2.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(2, 1),
+            Point(0.000000000000000, -0.689223125118461, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(2, 2),
+            Point(0.000000000000000, 3.009774760647534, 4.110399016539784),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(2, 3),
+            Point(0.000000000000000, 0.800000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(3, 0),
+            Point(-2.000000000000000, 2.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(3, 1),
+            Point(0.689223125118461, -0.689223125118461, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(3, 2),
+            Point(-3.009774760647534, 3.009774760647534, 4.110399016539783),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(3, 3),
+            Point(-0.800000000000000, 0.800000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(4, 0),
+            Point(-2.000000000000000, 0.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(4, 1),
+            Point(0.689223125118461, 0.000000000000000, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(4, 2),
+            Point(-3.009774760647534, 0.000000000000000, 4.110399016539784),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(4, 3),
+            Point(-0.800000000000000, 0.000000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(5, 0),
+            Point(-2.000000000000000, -2.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(5, 1),
+            Point(0.689223125118461, 0.689223125118461, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(5, 2),
+            Point(-3.009774760647534, -3.009774760647534, 4.110399016539783),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(5, 3),
+            Point(-0.800000000000000, -0.800000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(6, 0),
+            Point(0.000000000000000, -2.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(6, 1),
+            Point(0.000000000000000, 0.689223125118461, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(6, 2),
+            Point(0.000000000000000, -3.009774760647534, 4.110399016539784),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(6, 3),
+            Point(0.000000000000000, -0.800000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(7, 0),
+            Point(2.000000000000000, -2.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(7, 1),
+            Point(-0.689223125118461, 0.689223125118461, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(7, 2),
+            Point(3.009774760647534, -3.009774760647534, 4.110399016539783),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(7, 3),
+            Point(0.800000000000000, -0.800000000000000, 6.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(8, 0),
+            Point(2.000000000000000, 0.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(8, 1),
+            Point(-0.689223125118461, 0.000000000000000, 1.662346559763863),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(8, 2),
+            Point(3.009774760647534, 0.000000000000000, 4.110399016539784),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            srf.get_cv(8, 3),
+            Point(0.800000000000000, 0.000000000000000, 6.000000000000000),
+        )
+    )
 
     open_pts = [
         [
@@ -733,18 +1112,78 @@ def test_nurbssurface_loft():
     MINI_CHECK(open_srf.cv_count(0) == 4)
     MINI_CHECK(open_srf.cv_count(1) == 3)
 
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 0), Point(10.000000000000000, -12.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 1), Point(5.500000000000000, -12.000000000000000, 7.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(0, 2), Point(1.000000000000000, -12.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(1, 0), Point(10.000000000000000, -10.000000000000000, 3.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(1, 1), Point(5.500000000000000, -10.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(1, 2), Point(1.000000000000000, -10.000000000000000, 3.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(2, 0), Point(10.000000000000000, -7.000000000000000, 3.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(2, 1), Point(5.500000000000000, -7.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(2, 2), Point(1.000000000000000, -7.000000000000000, 3.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 0), Point(10.000000000000000, -5.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 1), Point(5.500000000000000, -5.000000000000000, 7.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(open_srf.get_cv(3, 2), Point(1.000000000000000, -5.000000000000000, 0.000000000000000)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(0, 0),
+            Point(10.000000000000000, -12.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(0, 1),
+            Point(5.500000000000000, -12.000000000000000, 7.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(0, 2),
+            Point(1.000000000000000, -12.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(1, 0),
+            Point(10.000000000000000, -10.000000000000000, 3.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(1, 1),
+            Point(5.500000000000000, -10.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(1, 2),
+            Point(1.000000000000000, -10.000000000000000, 3.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(2, 0),
+            Point(10.000000000000000, -7.000000000000000, 3.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(2, 1),
+            Point(5.500000000000000, -7.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(2, 2),
+            Point(1.000000000000000, -7.000000000000000, 3.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(3, 0),
+            Point(10.000000000000000, -5.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(3, 1),
+            Point(5.500000000000000, -5.000000000000000, 7.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            open_srf.get_cv(3, 2),
+            Point(1.000000000000000, -5.000000000000000, 0.000000000000000),
+        )
+    )
 
 
 @MINI_TEST("Primitives", "Nurbssurface Revolve")
@@ -754,15 +1193,19 @@ def test_nurbssurface_revolve():
     from session_py import Point
     from session_py import Vector
 
-    pa = NurbsCurve.create(False, 3, [
-        Point(1.5, 0.0, 0.0),
-        Point(1.5, 0.0, 0.3),
-        Point(0.3, 0.0, 0.5),
-        Point(0.3, 0.0, 2.5),
-        Point(0.2, 0.0, 3.0),
-        Point(2.0, 0.0, 4.5),
-        Point(1.8, 0.0, 5.0),
-    ])
+    pa = NurbsCurve.create(
+        False,
+        3,
+        [
+            Point(1.5, 0.0, 0.0),
+            Point(1.5, 0.0, 0.3),
+            Point(0.3, 0.0, 0.5),
+            Point(0.3, 0.0, 2.5),
+            Point(0.2, 0.0, 3.0),
+            Point(2.0, 0.0, 4.5),
+            Point(1.8, 0.0, 5.0),
+        ],
+    )
     s_vase = Primitives.create_revolve(pa, Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
     m_vase = s_vase.mesh()
 
@@ -775,29 +1218,40 @@ def test_nurbssurface_revolve():
     rr = 5.0
     r = 1.5
     tcx = 14.0
+
     for i in range(10):
         pb.set_nurbsknot(i, ck[i])
+
     for i in range(9):
         pb.set_cv_4d(i, (tcx + rr + r * ca[i]) * cw[i], 0.0, r * sa[i] * cw[i], cw[i])
+
     s_torus = Primitives.create_revolve(pb, Point(tcx, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
     m_torus = s_torus.mesh()
 
     pc = NurbsCurve.create(False, 1, [Point(29.0, 0.0, -0.5), Point(29.0, 0.0, 0.5)])
-    s_elbow = Primitives.create_revolve(pc, Point(26.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0), PI / 2.0)
+    s_elbow = Primitives.create_revolve(
+        pc, Point(26.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0), PI / 2.0
+    )
     m_elbow = s_elbow.mesh()
 
     sr = 2.0
     scx = 36.0
     pd = NurbsCurve(3, True, 3, 5)
     sk = [0, 0, 1, 1, 2, 2]
+
     for i in range(6):
         pd.set_nurbsknot(i, sk[i])
+
     spx = [0, sr, sr, sr, 0]
     spz = [-sr, -sr, 0, sr, sr]
     spw = [1, w, 1, w, 1]
+
     for i in range(5):
         pd.set_cv_4d(i, (scx + spx[i]) * spw[i], 0.0, spz[i] * spw[i], spw[i])
-    s_sphere = Primitives.create_revolve(pd, Point(scx, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+
+    s_sphere = Primitives.create_revolve(
+        pd, Point(scx, 0.0, 0.0), Vector(0.0, 0.0, 1.0)
+    )
     m_sphere = s_sphere.mesh()
 
     pe = NurbsCurve.create(False, 1, [Point(44.0, 0.0, 3.0), Point(46.0, 0.0, 0.0)])
@@ -866,35 +1320,55 @@ def test_nurbssurface_sweep():
     from session_py import NurbsCurve
     from session_py import Point
 
-    rail = NurbsCurve.create(False, 2, [
-        Point(0.0, 0.0, 0.0),
-        Point(0.0, 5.0, 0.0),
-        Point(2.0, 9.0, 0.0),
-    ])
+    rail = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(0.0, 5.0, 0.0),
+            Point(2.0, 9.0, 0.0),
+        ],
+    )
     profile = Primitives.circle(0.0, 0.0, 0.0, 1.0)
     s_sweep1 = Primitives.create_sweep1(rail, profile)
     m_sweep1 = s_sweep1.mesh()
 
-    rail1 = NurbsCurve.create(False, 2, [
-        Point(6.0, -1.0, 0.0),
-        Point(7.0, 3.0, 0.0),
-        Point(8.0, 4.0, 0.0),
-    ])
-    rail2 = NurbsCurve.create(False, 2, [
-        Point(10.0, -1.0, 0.0),
-        Point(10.0, 3.0, 0.0),
-        Point(9.0, 4.0, 0.0),
-    ])
-    shape1 = NurbsCurve.create(False, 2, [
-        Point(6.0, -1.0, 0.0),
-        Point(8.0, -1.0, 2.0),
-        Point(10.0, -1.0, 0.0),
-    ])
-    shape2 = NurbsCurve.create(False, 2, [
-        Point(8.0, 4.0, 0.0),
-        Point(8.5, 4.0, 1.5),
-        Point(9.0, 4.0, 0.0),
-    ])
+    rail1 = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(6.0, -1.0, 0.0),
+            Point(7.0, 3.0, 0.0),
+            Point(8.0, 4.0, 0.0),
+        ],
+    )
+    rail2 = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(10.0, -1.0, 0.0),
+            Point(10.0, 3.0, 0.0),
+            Point(9.0, 4.0, 0.0),
+        ],
+    )
+    shape1 = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(6.0, -1.0, 0.0),
+            Point(8.0, -1.0, 2.0),
+            Point(10.0, -1.0, 0.0),
+        ],
+    )
+    shape2 = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(8.0, 4.0, 0.0),
+            Point(8.5, 4.0, 1.5),
+            Point(9.0, 4.0, 0.0),
+        ],
+    )
     s_sweep2 = Primitives.create_sweep2(rail1, rail2, [shape1, shape2])
     m_sweep2 = s_sweep2.mesh()
 
@@ -905,84 +1379,444 @@ def test_nurbssurface_sweep():
     MINI_CHECK(m_sweep1.number_of_vertices() > 0)
     MINI_CHECK(m_sweep1.number_of_faces() > 0)
     TOLERANCE.set_absolute(1e-6)
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 0), Point(0.888888888888889, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 1), Point(0.888650781842197, 1.196033690639573, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 2), Point(1.023137542521078, 2.984678629452259, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 3), Point(1.644124175132323, 5.883369976716751, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 4), Point(2.267033741447567, 7.548154043673421, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(0, 5), Point(2.795046402150731, 8.602476824301650, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 0), Point(0.888888888888889, 0.000000000000000, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 1), Point(0.888650781842196, 1.196033690639572, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 2), Point(1.023137542521079, 2.984678629452261, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 3), Point(1.644124175132322, 5.883369976716749, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 4), Point(2.267033741447568, 7.548154043673421, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(1, 5), Point(2.795046402150731, 8.602476824301650, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 0), Point(-0.111111111111111, 0.000000000000000, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 1), Point(-0.111355426965362, 1.245520819229018, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 2), Point(0.028671366170157, 3.117459574526332, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 3), Point(0.682455101244336, 6.170731523133928, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 4), Point(1.341409898439919, 7.933301269620500, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(2, 5), Point(1.900619199731158, 9.049690396962294, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 0), Point(-1.111111111111111, 0.000000000000000, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 1), Point(-1.111361635772921, 1.295007947818465, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 2), Point(-0.965794810180765, 3.250240519600404, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 3), Point(-0.279213972643651, 6.458093069551111, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 4), Point(0.415786055432270, 8.318448495567573, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(3, 5), Point(1.006191997311586, 9.496903969622938, -1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 0), Point(-1.111111111111111, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 1), Point(-1.111361635772921, 1.295007947818464, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 2), Point(-0.965794810180765, 3.250240519600406, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 3), Point(-0.279213972643651, 6.458093069551108, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 4), Point(0.415786055432269, 8.318448495567575, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(4, 5), Point(1.006191997311586, 9.496903969622938, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 0), Point(-1.111111111111111, 0.000000000000000, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 1), Point(-1.111361635772921, 1.295007947818465, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 2), Point(-0.965794810180765, 3.250240519600404, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 3), Point(-0.279213972643651, 6.458093069551111, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 4), Point(0.415786055432270, 8.318448495567573, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(5, 5), Point(1.006191997311586, 9.496903969622938, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 0), Point(-0.111111111111111, 0.000000000000000, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 1), Point(-0.111355426965362, 1.245520819229018, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 2), Point(0.028671366170157, 3.117459574526332, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 3), Point(0.682455101244336, 6.170731523133928, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 4), Point(1.341409898439919, 7.933301269620500, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(6, 5), Point(1.900619199731158, 9.049690396962294, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 0), Point(0.888888888888889, 0.000000000000000, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 1), Point(0.888650781842196, 1.196033690639572, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 2), Point(1.023137542521079, 2.984678629452261, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 3), Point(1.644124175132322, 5.883369976716749, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 4), Point(2.267033741447568, 7.548154043673421, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(7, 5), Point(2.795046402150731, 8.602476824301650, 1.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 0), Point(0.888888888888889, 0.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 1), Point(0.888650781842197, 1.196033690639573, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 2), Point(1.023137542521078, 2.984678629452259, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 3), Point(1.644124175132323, 5.883369976716751, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 4), Point(2.267033741447567, 7.548154043673421, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep1.get_cv(8, 5), Point(2.795046402150731, 8.602476824301650, 0.000000000000000)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(0, 0),
+            Point(0.888888888888889, 0.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(0, 1),
+            Point(0.888650781842197, 1.196033690639573, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(0, 2),
+            Point(1.023137542521078, 2.984678629452259, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(0, 3),
+            Point(1.644124175132323, 5.883369976716751, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(0, 4),
+            Point(2.267033741447567, 7.548154043673421, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(0, 5),
+            Point(2.795046402150731, 8.602476824301650, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(1, 0),
+            Point(0.888888888888889, 0.000000000000000, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(1, 1),
+            Point(0.888650781842196, 1.196033690639572, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(1, 2),
+            Point(1.023137542521079, 2.984678629452261, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(1, 3),
+            Point(1.644124175132322, 5.883369976716749, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(1, 4),
+            Point(2.267033741447568, 7.548154043673421, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(1, 5),
+            Point(2.795046402150731, 8.602476824301650, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(2, 0),
+            Point(-0.111111111111111, 0.000000000000000, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(2, 1),
+            Point(-0.111355426965362, 1.245520819229018, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(2, 2),
+            Point(0.028671366170157, 3.117459574526332, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(2, 3),
+            Point(0.682455101244336, 6.170731523133928, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(2, 4),
+            Point(1.341409898439919, 7.933301269620500, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(2, 5),
+            Point(1.900619199731158, 9.049690396962294, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(3, 0),
+            Point(-1.111111111111111, 0.000000000000000, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(3, 1),
+            Point(-1.111361635772921, 1.295007947818465, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(3, 2),
+            Point(-0.965794810180765, 3.250240519600404, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(3, 3),
+            Point(-0.279213972643651, 6.458093069551111, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(3, 4),
+            Point(0.415786055432270, 8.318448495567573, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(3, 5),
+            Point(1.006191997311586, 9.496903969622938, -1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(4, 0),
+            Point(-1.111111111111111, 0.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(4, 1),
+            Point(-1.111361635772921, 1.295007947818464, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(4, 2),
+            Point(-0.965794810180765, 3.250240519600406, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(4, 3),
+            Point(-0.279213972643651, 6.458093069551108, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(4, 4),
+            Point(0.415786055432269, 8.318448495567575, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(4, 5),
+            Point(1.006191997311586, 9.496903969622938, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(5, 0),
+            Point(-1.111111111111111, 0.000000000000000, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(5, 1),
+            Point(-1.111361635772921, 1.295007947818465, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(5, 2),
+            Point(-0.965794810180765, 3.250240519600404, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(5, 3),
+            Point(-0.279213972643651, 6.458093069551111, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(5, 4),
+            Point(0.415786055432270, 8.318448495567573, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(5, 5),
+            Point(1.006191997311586, 9.496903969622938, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(6, 0),
+            Point(-0.111111111111111, 0.000000000000000, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(6, 1),
+            Point(-0.111355426965362, 1.245520819229018, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(6, 2),
+            Point(0.028671366170157, 3.117459574526332, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(6, 3),
+            Point(0.682455101244336, 6.170731523133928, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(6, 4),
+            Point(1.341409898439919, 7.933301269620500, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(6, 5),
+            Point(1.900619199731158, 9.049690396962294, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(7, 0),
+            Point(0.888888888888889, 0.000000000000000, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(7, 1),
+            Point(0.888650781842196, 1.196033690639572, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(7, 2),
+            Point(1.023137542521079, 2.984678629452261, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(7, 3),
+            Point(1.644124175132322, 5.883369976716749, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(7, 4),
+            Point(2.267033741447568, 7.548154043673421, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(7, 5),
+            Point(2.795046402150731, 8.602476824301650, 1.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(8, 0),
+            Point(0.888888888888889, 0.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(8, 1),
+            Point(0.888650781842197, 1.196033690639573, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(8, 2),
+            Point(1.023137542521078, 2.984678629452259, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(8, 3),
+            Point(1.644124175132323, 5.883369976716751, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(8, 4),
+            Point(2.267033741447567, 7.548154043673421, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep1.get_cv(8, 5),
+            Point(2.795046402150731, 8.602476824301650, 0.000000000000000),
+        )
+    )
 
     MINI_CHECK(s_sweep2.is_valid())
     MINI_CHECK(s_sweep2.cv_count(0) == 3)
     MINI_CHECK(s_sweep2.cv_count(1) == 6)
     MINI_CHECK(m_sweep2.number_of_vertices() > 0)
     MINI_CHECK(m_sweep2.number_of_faces() > 0)
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 0), Point(6.000000000000000, -1.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 1), Point(6.175969120718316, -0.300506740098127, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 2), Point(6.459569103687756, 0.747208154997334, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 3), Point(7.052015306099445, 2.456377031677760, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 4), Point(7.525387263758168, 3.480360762535406, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(0, 5), Point(8.000000000000000, 4.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 0), Point(8.000000000000000, -1.000000000000000, 2.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 1), Point(8.087302079238063, -0.305563785913389, 2.040878660089621)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 2), Point(8.215030901365994, 0.738012519337792, 2.128261757662849)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 3), Point(8.402488235814772, 2.450241721213838, 2.205206310224664)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 4), Point(8.490843623722080, 3.486294461007204, 2.229418074862260)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(1, 5), Point(8.500000000000000, 4.000000000000000, 1.500000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 0), Point(10.000000000000000, -1.000000000000000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 1), Point(9.998635037757797, -0.310620831728651, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 2), Point(9.970492699044241, 0.728816883678250, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 3), Point(9.752961165530088, 2.444106410749916, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 4), Point(9.456299983685991, 3.492228159479000, 0.000000000000000)))
-    MINI_CHECK(TOLERANCE.is_point_close(s_sweep2.get_cv(2, 5), Point(9.000000000000000, 4.000000000000000, 0.000000000000000)))
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(0, 0),
+            Point(6.000000000000000, -1.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(0, 1),
+            Point(6.175969120718316, -0.300506740098127, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(0, 2),
+            Point(6.459569103687756, 0.747208154997334, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(0, 3),
+            Point(7.052015306099445, 2.456377031677760, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(0, 4),
+            Point(7.525387263758168, 3.480360762535406, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(0, 5),
+            Point(8.000000000000000, 4.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(1, 0),
+            Point(8.000000000000000, -1.000000000000000, 2.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(1, 1),
+            Point(8.087302079238063, -0.305563785913389, 2.040878660089621),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(1, 2),
+            Point(8.215030901365994, 0.738012519337792, 2.128261757662849),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(1, 3),
+            Point(8.402488235814772, 2.450241721213838, 2.205206310224664),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(1, 4),
+            Point(8.490843623722080, 3.486294461007204, 2.229418074862260),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(1, 5),
+            Point(8.500000000000000, 4.000000000000000, 1.500000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(2, 0),
+            Point(10.000000000000000, -1.000000000000000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(2, 1),
+            Point(9.998635037757797, -0.310620831728651, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(2, 2),
+            Point(9.970492699044241, 0.728816883678250, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(2, 3),
+            Point(9.752961165530088, 2.444106410749916, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(2, 4),
+            Point(9.456299983685991, 3.492228159479000, 0.000000000000000),
+        )
+    )
+    MINI_CHECK(
+        TOLERANCE.is_point_close(
+            s_sweep2.get_cv(2, 5),
+            Point(9.000000000000000, 4.000000000000000, 0.000000000000000),
+        )
+    )
     TOLERANCE.reset()
 
 
@@ -998,7 +1832,7 @@ def test_nurbssurface_edge():
         Point(1.0, 25.569076, 3.0),
         Point(1.0, 27.569076, 0.0),
     ]
-    pts_west  = [
+    pts_west = [
         Point(10.0, 20.569076, 0.0),
         Point(5.5, 20.569076, 3.5),
         Point(1.0, 20.569076, 0.0),
@@ -1009,16 +1843,16 @@ def test_nurbssurface_edge():
         Point(10.0, 25.569076, 3.0),
         Point(10.0, 27.569076, 0.0),
     ]
-    pts_east  = [
+    pts_east = [
         Point(10.0, 27.569076, 0.0),
         Point(5.5, 27.569076, 3.5),
         Point(1.0, 27.569076, 0.0),
     ]
 
     south = NurbsCurve.create(False, 3, pts_south)
-    west  = NurbsCurve.create(False, 2, pts_west)
+    west = NurbsCurve.create(False, 2, pts_west)
     north = NurbsCurve.create(False, 3, pts_north)
-    east  = NurbsCurve.create(False, 2, pts_east)
+    east = NurbsCurve.create(False, 2, pts_east)
 
     surf = Primitives.create_edge(south, west, north, east)
     m = surf.mesh()
@@ -1047,6 +1881,7 @@ def test_nurbssurface_edge():
 # ═══════════════════════════════════════════════════════════════════════════
 # Surface-to-mesh subdivision
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 @MINI_TEST("Primitives", "Mesh Quad Mesh")
 def test_mesh_quad_mesh():
@@ -1087,13 +1922,13 @@ def test_mesh_hex_mesh():
     from session_py import Primitives
 
     cyl = Primitives.cylinder_surface(0, 0, 0, 1.0, 5.0)
-    m = Primitives.hex_mesh(cyl, 6, 4, 1.0/3.0)
+    m = Primitives.hex_mesh(cyl, 6, 4, 1.0 / 3.0)
     MINI_CHECK(m.number_of_vertices() == 78)
     MINI_CHECK(m.number_of_faces() == 15)
     MINI_CHECK(m.is_valid())
 
     sph = Primitives.sphere_surface(0, 0, 0, 3.0)
-    m2 = Primitives.hex_mesh(sph, 6, 4, 1.0/3.0)
+    m2 = Primitives.hex_mesh(sph, 6, 4, 1.0 / 3.0)
     MINI_CHECK(m2.number_of_vertices() == 68)
     MINI_CHECK(m2.number_of_faces() == 15)
     MINI_CHECK(m2.is_valid())
@@ -1115,7 +1950,7 @@ def test_mesh_cone_subdivisions():
     MINI_CHECK(m2.number_of_faces() == 16)
     MINI_CHECK(m2.is_valid())
 
-    m3 = Primitives.hex_mesh(cone, 6, 4, 1.0/3.0)
+    m3 = Primitives.hex_mesh(cone, 6, 4, 1.0 / 3.0)
     MINI_CHECK(m3.number_of_vertices() == 73)
     MINI_CHECK(m3.number_of_faces() == 15)
     MINI_CHECK(m3.is_valid())

@@ -47,10 +47,26 @@ def test_pointcloud_constructor():
     MINI_CHECK(pcrepr == "PointCloud(my_pointcloud, 3 points, 3 colors, 3 normals)")
     MINI_CHECK(pccopy == pc and pccopy.guid != pc.guid)
     MINI_CHECK(pcother != pc)
-    MINI_CHECK(TOLERANCE.is_close(pc_iadd.get_point(0)[0], 11.0) and TOLERANCE.is_close(pc_iadd.get_point(0)[1], 22.0) and TOLERANCE.is_close(pc_iadd.get_point(0)[2], 33.0))
-    MINI_CHECK(TOLERANCE.is_close(pc_isub.get_point(0)[0], -9.0) and TOLERANCE.is_close(pc_isub.get_point(0)[1], -18.0) and TOLERANCE.is_close(pc_isub.get_point(0)[2], -27.0))
-    MINI_CHECK(TOLERANCE.is_close(pc_add.get_point(0)[0], 11.0) and TOLERANCE.is_close(pc_add.get_point(0)[1], 22.0) and TOLERANCE.is_close(pc_add.get_point(0)[2], 33.0))
-    MINI_CHECK(TOLERANCE.is_close(pc_sub.get_point(0)[0], -9.0) and TOLERANCE.is_close(pc_sub.get_point(0)[1], -18.0) and TOLERANCE.is_close(pc_sub.get_point(0)[2], -27.0))
+    MINI_CHECK(
+        TOLERANCE.is_close(pc_iadd.get_point(0)[0], 11.0)
+        and TOLERANCE.is_close(pc_iadd.get_point(0)[1], 22.0)
+        and TOLERANCE.is_close(pc_iadd.get_point(0)[2], 33.0)
+    )
+    MINI_CHECK(
+        TOLERANCE.is_close(pc_isub.get_point(0)[0], -9.0)
+        and TOLERANCE.is_close(pc_isub.get_point(0)[1], -18.0)
+        and TOLERANCE.is_close(pc_isub.get_point(0)[2], -27.0)
+    )
+    MINI_CHECK(
+        TOLERANCE.is_close(pc_add.get_point(0)[0], 11.0)
+        and TOLERANCE.is_close(pc_add.get_point(0)[1], 22.0)
+        and TOLERANCE.is_close(pc_add.get_point(0)[2], 33.0)
+    )
+    MINI_CHECK(
+        TOLERANCE.is_close(pc_sub.get_point(0)[0], -9.0)
+        and TOLERANCE.is_close(pc_sub.get_point(0)[1], -18.0)
+        and TOLERANCE.is_close(pc_sub.get_point(0)[2], -27.0)
+    )
 
 
 @MINI_TEST("PointCloud", "From Coords")
@@ -73,7 +89,9 @@ def test_pointcloud_point_count():
     from session_py import PointCloud
     from session_py import Point
 
-    pc = PointCloud([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)], [], [])
+    pc = PointCloud(
+        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)], [], []
+    )
 
     MINI_CHECK(pc.point_count() == 3)
 
@@ -182,7 +200,12 @@ def test_pointcloud_set_color():
     pc = PointCloud([], [], [Color(0.0, 0.0, 0.0, 0.0)])
     pc.set_color(0, Color(1.0, 0.0, 0.0, 1.0))
 
-    MINI_CHECK(pc.get_color(0).r == 1.0 and pc.get_color(0).g == 0.0 and pc.get_color(0).b == 0.0 and pc.get_color(0).a == 1.0)
+    MINI_CHECK(
+        pc.get_color(0).r == 1.0
+        and pc.get_color(0).g == 0.0
+        and pc.get_color(0).b == 0.0
+        and pc.get_color(0).a == 1.0
+    )
 
 
 @MINI_TEST("PointCloud", "Add Color")
@@ -194,7 +217,11 @@ def test_pointcloud_add_color():
     pc.add_color(Color(1.0, 0.0, 1.0, 1.0))
 
     MINI_CHECK(pc.color_count() == 1)
-    MINI_CHECK(pc.get_color(0).r == 1.0 and pc.get_color(0).g == 0.0 and pc.get_color(0).b == 1.0)
+    MINI_CHECK(
+        pc.get_color(0).r == 1.0
+        and pc.get_color(0).g == 0.0
+        and pc.get_color(0).b == 1.0
+    )
 
 
 @MINI_TEST("PointCloud", "Coords")
@@ -219,7 +246,9 @@ def test_pointcloud_colors():
     colors = pc.colors()
 
     MINI_CHECK(len(colors) == 4)
-    MINI_CHECK(colors[0] == 255 and colors[1] == 0 and colors[2] == 0 and colors[3] == 255)
+    MINI_CHECK(
+        colors[0] == 255 and colors[1] == 0 and colors[2] == 0 and colors[3] == 255
+    )
 
 
 @MINI_TEST("PointCloud", "Get Colors")
@@ -300,7 +329,32 @@ def test_pointcloud_get_normals():
 def test_pointcloud_point_ids():
     from session_py import PointCloud
 
-    coords = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    coords = [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    ]
     pc = PointCloud.from_coords(coords, [], [])
     before = pc.get_point(5)
     pc.build_lod(1.0, 2)
@@ -314,7 +368,32 @@ def test_pointcloud_point_ids():
 def test_pointcloud_build_lod():
     from session_py import PointCloud
 
-    coords = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    coords = [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        0.0,
+        1.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    ]
     pc = PointCloud.from_coords(coords, [], [])
     pc.build_lod(1.0, 2)
 
@@ -366,11 +445,13 @@ def test_pointcloud_json_roundtrip():
     pc = PointCloud(
         [Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)],
         [Vector(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0)],
-        [Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)]
+        [Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)],
     )
     pc.name = "test_pointcloud"
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.json"
+    fname = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.json"
+    )
     pc.file_json_dump(fname)
     loaded = PointCloud.file_json_load(fname)
 
@@ -392,11 +473,13 @@ def test_pointcloud_protobuf_roundtrip():
     pc = PointCloud(
         [Point(1.0, 2.0, 3.0), Point(4.0, 5.0, 6.0)],
         [Vector(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0)],
-        [Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)]
+        [Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 1.0, 0.0, 1.0)],
     )
     pc.name = "test_pointcloud"
 
-    fname = Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.bin"
+    fname = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_pointcloud.bin"
+    )
     pc.pb_dump(fname)
     loaded = PointCloud.pb_load(fname)
 
