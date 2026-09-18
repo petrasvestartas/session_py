@@ -460,6 +460,41 @@ def test_polyline_point_in_polygon_2d():
     MINI_CHECK(not sq.point_in_polygon_2d(Point(2.0, 2.0, 0.0)))
 
 
+@MINI_TEST("Polyline", "Trim Rectangles By Plane")
+def test_polyline_trim_rectangles_by_plane():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    first = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(4.0, 0.0, 0.0),
+            Point(4.0, 1.0, 0.0),
+            Point(0.0, 1.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    second = Polyline(
+        [
+            Point(0.0, 0.0, 1.0),
+            Point(4.0, 0.0, 1.0),
+            Point(4.0, 1.0, 1.0),
+            Point(0.0, 1.0, 1.0),
+            Point(0.0, 0.0, 1.0),
+        ]
+    )
+    plane = Plane.from_point_normal(Point(3.0, 0.0, 0.0), Vector(-1.0, 0.0, 0.0))
+    ok = Polyline.trim_rectangles_by_plane(first, second, plane)
+
+    MINI_CHECK(ok)
+    MINI_CHECK(TOLERANCE.is_close(first[1][0], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(first[2][0], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(second[1][0], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(first[0][0], 0.0))
+
+
 @MINI_TEST("Polyline", "Extend Segment")
 def test_polyline_extend_segment():
     from session_py import Polyline

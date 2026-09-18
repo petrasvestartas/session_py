@@ -1622,6 +1622,40 @@ class Polyline:
 
         return (rect0, rect1)
 
+    @staticmethod
+    def trim_rectangles_by_plane(first: Polyline, second: Polyline, plane: Plane) -> bool:
+        """Cut two closed 5-point rectangles at plane, keeping the side on the positive half; false when a long edge misses the plane."""
+        from .intersection import line_plane
+        from .line import Line
+
+        if first.point_count() != 5 or second.point_count() != 5:
+            return False
+
+        points = [
+            line_plane(Line.from_points(first[0], first[1]), plane, False),
+            line_plane(Line.from_points(first[3], first[2]), plane, False),
+            line_plane(Line.from_points(second[0], second[1]), plane, False),
+            line_plane(Line.from_points(second[3], second[2]), plane, False),
+        ]
+        for point in points:
+            if point is None or not all(math.isfinite(point[i]) for i in range(3)):
+                return False
+
+        if plane.has_on_negative_side(first[0]):
+            first.set_point(0, points[0])
+            first.set_point(3, points[1])
+            first.set_point(4, points[0])
+            second.set_point(0, points[2])
+            second.set_point(3, points[3])
+            second.set_point(4, points[2])
+        else:
+            first.set_point(1, points[0])
+            first.set_point(2, points[1])
+            second.set_point(1, points[2])
+            second.set_point(2, points[3])
+
+        return True
+
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════

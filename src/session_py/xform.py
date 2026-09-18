@@ -432,52 +432,6 @@ class Xform:
         return t1 * (r * t0)
 
     @staticmethod
-    def plane_to_xy(
-        origin: "Point", x_axis: "Vector", y_axis: "Vector", z_axis: "Vector"
-    ) -> "Xform":
-        """Construct from frame axes as columns minus origin (local-to-world despite the name)."""
-
-        x = x_axis.normalized()
-        y = y_axis.normalized()
-        z = z_axis.normalized()
-        t = Xform.translation(-origin[0], -origin[1], -origin[2])
-        f = Xform()
-        f.m[0] = x[0]
-        f.m[1] = x[1]
-        f.m[2] = x[2]
-        f.m[4] = y[0]
-        f.m[5] = y[1]
-        f.m[6] = y[2]
-        f.m[8] = z[0]
-        f.m[9] = z[1]
-        f.m[10] = z[2]
-
-        return f * t
-
-    @staticmethod
-    def xy_to_plane(
-        origin: "Point", x_axis: "Vector", y_axis: "Vector", z_axis: "Vector"
-    ) -> "Xform":
-        """Construct from frame axes as rows plus origin."""
-
-        x = x_axis.normalized()
-        y = y_axis.normalized()
-        z = z_axis.normalized()
-        f = Xform()
-        f.m[0] = x[0]
-        f.m[4] = y[0]
-        f.m[8] = z[0]
-        f.m[1] = x[1]
-        f.m[5] = y[1]
-        f.m[9] = z[1]
-        f.m[2] = x[2]
-        f.m[6] = y[2]
-        f.m[10] = z[2]
-        t = Xform.translation(origin[0], origin[1], origin[2])
-
-        return t * f
-
-    @staticmethod
     def world_to_frame(
         origin: "Point", x_axis: "Vector", y_axis: "Vector", z_axis: "Vector"
     ) -> "Xform":

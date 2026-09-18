@@ -627,3 +627,39 @@ def test_xform_from_change_of_basis():
 
 if __name__ == "__main__":
     run_all("python")
+
+
+@MINI_TEST("Xform", "World To Frame")
+def test_xform_world_to_frame():
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Xform
+
+    origin = Point(1.0, 2.0, 3.0)
+    x_axis = Vector(0.0, 1.0, 0.0)
+    y_axis = Vector(0.0, 0.0, 1.0)
+    z_axis = Vector(1.0, 0.0, 0.0)
+    xf = Xform.world_to_frame(origin, x_axis, y_axis, z_axis)
+    p = Point(1.0, 4.0, 6.0).transformed(xf)
+
+    MINI_CHECK(TOLERANCE.is_close(p[0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(p[1], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(p[2], 0.0))
+
+
+@MINI_TEST("Xform", "Frame To World")
+def test_xform_frame_to_world():
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Xform
+
+    origin = Point(1.0, 2.0, 3.0)
+    x_axis = Vector(0.0, 1.0, 0.0)
+    y_axis = Vector(0.0, 0.0, 1.0)
+    z_axis = Vector(1.0, 0.0, 0.0)
+    xf = Xform.frame_to_world(origin, x_axis, y_axis, z_axis)
+    p = Point(2.0, 3.0, 0.0).transformed(xf)
+
+    MINI_CHECK(TOLERANCE.is_close(p[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(p[1], 4.0))
+    MINI_CHECK(TOLERANCE.is_close(p[2], 6.0))

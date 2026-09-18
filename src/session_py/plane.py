@@ -583,6 +583,22 @@ class Plane:
             p[0] - dist * self._a, p[1] - dist * self._b, p[2] - dist * self._c
         )
 
+    def axis_point(self) -> Point:
+        """Return the plane point on the axis of the largest normal component, the other two coordinates zero."""
+
+        n = self._z_axis
+        d = -n.dot(Vector(self._origin[0], self._origin[1], self._origin[2]))
+        fa = abs(n[0])
+        fb = abs(n[1])
+        fc = abs(n[2])
+
+        if fa > fb and fa > fc:
+            return Point(-d / n[0], 0.0, 0.0)
+        if fb > fc:
+            return Point(0.0, -d / n[1], 0.0)
+
+        return Point(0.0, 0.0, -d / n[2])
+
     def has_on_negative_side(self, p: Point) -> bool:
         """Return whether a*p[0] + b*p[1] + c*p[2] + d < 0."""
         return self._a * p[0] + self._b * p[1] + self._c * p[2] + self._d < 0.0

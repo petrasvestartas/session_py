@@ -1665,7 +1665,7 @@ class Primitives:
         pole = Vector(0.0, 0.0, 1.0) if abs(z_axis[2]) < 0.9 else Vector(1.0, 0.0, 0.0)
         x_axis = pole.cross(z_axis)
 
-        return Xform.xy_to_plane(origin, x_axis, z_axis.cross(x_axis), z_axis)
+        return Xform.frame_to_world(origin, x_axis, z_axis.cross(x_axis), z_axis)
 
     @staticmethod
     def _add_geometry(

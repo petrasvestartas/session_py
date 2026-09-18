@@ -279,5 +279,20 @@ def test_plane_squared_distance():
     MINI_CHECK(TOLERANCE.is_close(pl.squared_distance(on), 0.0))
 
 
+@MINI_TEST("Plane", "Axis Point")
+def test_plane_axis_point():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    pl = Plane.from_point_normal(Point(1.0, 2.0, 3.0), Vector(0.0, 0.0, 1.0))
+    p = pl.axis_point()
+
+    MINI_CHECK(TOLERANCE.is_close(p[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(p[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(p[2], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.squared_distance(p), 0.0))
+
+
 if __name__ == "__main__":
     run_all("python")
