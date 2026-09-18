@@ -212,6 +212,11 @@ class Color:
         return cls(0.75, 0.75, 0.75, 1.0, "silver")
 
     @classmethod
+    def lightgrey(cls) -> "Color":
+        """Return opaque light grey, the default surface color of meshes, breps and surfaces."""
+        return cls(0.9, 0.9, 0.9, 1.0, "lightgrey")
+
+    @classmethod
     def palette(cls) -> list["Color"]:
         """The 12 spectral colors in order"""
 

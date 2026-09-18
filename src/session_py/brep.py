@@ -1336,7 +1336,7 @@ class BRep:
         self._guid = None
         self.name = "my_brep"
         self.width = 1.0
-        self.surfacecolor = Color.black()
+        self.surfacecolor = Color.lightgrey()
         self.m_surfaces: list[NurbsSurface] = []
         self.m_curves_3d: list[NurbsCurve] = []
         self.m_curves_2d: list[NurbsCurve] = []

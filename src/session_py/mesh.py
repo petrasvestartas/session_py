@@ -1541,7 +1541,7 @@ class Mesh:
         self._facecolors: list[Color] = []
         self._linecolors: list[Color] = []
         self._widths: list[float] = []
-        self._objectcolor = Color.white()
+        self._objectcolor = Color.lightgrey()
         self._max_vertex = 0
         self._max_face = 0
         self.triangulation: dict[int, list[list[int]]] = {}
@@ -2902,7 +2902,7 @@ class Mesh:
         self._facecolors.clear()
         self._linecolors.clear()
         self._widths.clear()
-        self._objectcolor = Color.white()
+        self._objectcolor = Color.lightgrey()
         self.color_mode = ColorMode.OBJECTCOLOR
         self.clear_triangle_bvh()
 

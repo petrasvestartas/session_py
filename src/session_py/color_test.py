@@ -137,6 +137,7 @@ def test_color_presets():
     navy = Color.navy()
     purple = Color.purple()
     silver = Color.silver()
+    lightgrey = Color.lightgrey()
     palette = Color.palette()
 
     MINI_CHECK(white == Color(1.0, 1.0, 1.0, 1.0, "white"))
@@ -161,6 +162,7 @@ def test_color_presets():
     MINI_CHECK(navy == Color(0.0, 0.0, 0.5, 1.0, "navy"))
     MINI_CHECK(purple == Color(0.5, 0.0, 0.5, 1.0, "purple"))
     MINI_CHECK(silver == Color(0.75, 0.75, 0.75, 1.0, "silver"))
+    MINI_CHECK(lightgrey == Color(0.9, 0.9, 0.9, 1.0, "lightgrey"))
     MINI_CHECK(
         palette
         == [
