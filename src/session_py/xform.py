@@ -789,6 +789,70 @@ class Xform:
             [self.m[12], self.m[13], self.m[14], self.m[15]],
         ]
 
+    def uniform_scale(self) -> float:
+        """Return the length of the first column: the uniform scale the matrix applies."""
+        return math.sqrt(self.m[0] * self.m[0] + self.m[1] * self.m[1] + self.m[2] * self.m[2])
+
+    def eye(self) -> "Point":
+        """Return the eye of a view-projection: where clip x, y and w vanish at once; orthographic has none, so the view direction pushed far back."""
+        from .point import Point
+
+        rows = [
+            [self[0, 0], self[0, 1], self[0, 2]],
+            [self[1, 0], self[1, 1], self[1, 2]],
+            [self[3, 0], self[3, 1], self[3, 2]],
+        ]
+        rhs = [-self[0, 3], -self[1, 3], -self[3, 3]]
+        d = Xform._det3(rows)
+        norm = 1.0
+
+        for row in rows:
+            norm *= math.sqrt(row[0] * row[0] + row[1] * row[1] + row[2] * row[2])
+
+        if abs(d) <= 1e-9 * max(norm, 1e-30):
+            fx = self[2, 0]
+            fy = self[2, 1]
+            fz = self[2, 2]
+            length = max(math.sqrt(fx * fx + fy * fy + fz * fz), 1e-30)
+
+            return Point(fx / length * 1.0e9, fy / length * 1.0e9, fz / length * 1.0e9)
+
+        eye = [0.0, 0.0, 0.0]
+
+        for k in range(3):
+            replaced = [list(row) for row in rows]
+
+            for row in range(3):
+                replaced[row][k] = rhs[row]
+
+            eye[k] = Xform._det3(replaced) / d
+
+        return Point(eye[0], eye[1], eye[2])
+
+    def ortho_half_height(self) -> float:
+        """Return the half-height of an orthographic view-projection in world units, 0 in perspective."""
+
+        w2 = self[3, 0] * self[3, 0] + self[3, 1] * self[3, 1] + self[3, 2] * self[3, 2]
+
+        if w2 > 1e-12:
+            return 0.0
+
+        r1 = self[1, 0] * self[1, 0] + self[1, 1] * self[1, 1] + self[1, 2] * self[1, 2]
+
+        if r1 <= 1e-30:
+            return 0.0
+
+        return 1.0 / math.sqrt(r1)
+
+    @staticmethod
+    def _det3(m: list[list[float]]) -> float:
+        """Return the determinant of a 3x3 given by rows."""
+        return (
+            m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+        )
+
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════

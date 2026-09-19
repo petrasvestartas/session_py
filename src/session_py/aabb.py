@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .pointcloud import PointCloud
     from .polyline import Polyline
+    from .xform import Xform
 
 NUM_SAMPLES = 20
 MAX_ITER = 20
@@ -171,7 +172,13 @@ class AABB:
 
     @staticmethod
     def merge(a: "AABB", b: "AABB") -> "AABB":
-        """Construct the box enclosing both a and b."""
+        """Construct the box enclosing both a and b; an invalid box contributes nothing."""
+
+        if not a.is_valid():
+            return b
+
+        if not b.is_valid():
+            return a
 
         min_x = min(a.cx - a.hx, b.cx - b.hx)
         min_y = min(a.cy - a.hy, b.cy - b.hy)
@@ -188,6 +195,11 @@ class AABB:
             (max_y - min_y) * 0.5,
             (max_z - min_z) * 0.5,
         )
+
+    @staticmethod
+    def empty() -> "AABB":
+        """Construct the box nothing has grown yet: negative half-sizes, so is_valid is false."""
+        return AABB(0.0, 0.0, 0.0, -1.0, -1.0, -1.0)
 
     @staticmethod
     def _compute_extremum(
@@ -283,7 +295,11 @@ class AABB:
         return 8.0 * (self.hx * self.hy + self.hy * self.hz + self.hz * self.hx)
 
     def diagonal(self) -> float:
-        """Return the length of the space diagonal."""
+        """Return the length of the space diagonal, 0 when invalid."""
+
+        if not self.is_valid():
+            return 0.0
+
         return 2.0 * math.sqrt(
             self.hx * self.hx + self.hy * self.hy + self.hz * self.hz
         )
@@ -387,7 +403,7 @@ class AABB:
         self.hz += amount
 
     def union_with(self, other: "AABB") -> None:
-        """Grow to enclose other."""
+        """Grow to enclose other; an invalid box contributes nothing."""
 
         merged = AABB.merge(self, other)
         self.cx = merged.cx
@@ -396,6 +412,39 @@ class AABB:
         self.hx = merged.hx
         self.hy = merged.hy
         self.hz = merged.hz
+
+    def union_with_point(self, x: float, y: float, z: float) -> None:
+        """Grow to enclose (x, y, z); coordinates, not a Point, so a vertex loop allocates nothing."""
+        self.union_with(AABB(x, y, z, 0.0, 0.0, 0.0))
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Transformation
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    def transform(self, xform: "Xform") -> None:
+        """Replace the box by the box of its eight transformed corners."""
+
+        out = self.transformed(xform)
+        self.cx = out.cx
+        self.cy = out.cy
+        self.cz = out.cz
+        self.hx = out.hx
+        self.hy = out.hy
+        self.hz = out.hz
+
+    def transformed(self, xform: "Xform") -> "AABB":
+        """Return the box of the eight transformed corners; an invalid box stays invalid."""
+
+        if not self.is_valid():
+            return AABB(self.cx, self.cy, self.cz, self.hx, self.hy, self.hz)
+
+        out = AABB.empty()
+
+        for corner in self.corners():
+            p = xform.transform_point(corner)
+            out.union_with_point(p[0], p[1], p[2])
+
+        return out
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String

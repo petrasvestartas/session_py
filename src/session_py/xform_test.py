@@ -527,6 +527,40 @@ def test_xform_to_cols():
     MINI_CHECK(TOLERANCE.is_close(cols[3][2], 3.0))
 
 
+@MINI_TEST("Xform", "Uniform Scale")
+def test_xform_uniform_scale():
+    from session_py import Xform
+
+    MINI_CHECK(TOLERANCE.is_close(Xform.scale_xyz(2.0, 2.0, 2.0).uniform_scale(), 2.0))
+    MINI_CHECK(TOLERANCE.is_close(Xform.translation(1.0, 2.0, 3.0).uniform_scale(), 1.0))
+
+
+@MINI_TEST("Xform", "Eye")
+def test_xform_eye():
+    from session_py import Xform
+    from session_py import Point
+    from session_py import Vector
+
+    view = Xform.look_at_right_handed(Point(1.0, 2.0, 5.0), Point(0.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0))
+    perspective = Xform.perspective(PI / 2.0, 1.0, 1.0, 10.0) * view
+    orthographic = Xform.orthographic(-2.0, 2.0, -1.0, 1.0, 1.0, 10.0) * view
+    MINI_CHECK(TOLERANCE.is_point_close(perspective.eye(), Point(1.0, 2.0, 5.0)))
+    MINI_CHECK(orthographic.eye().distance(Point(0.0, 0.0, 0.0)) > 1.0e8)
+
+
+@MINI_TEST("Xform", "Ortho Half Height")
+def test_xform_ortho_half_height():
+    from session_py import Xform
+    from session_py import Point
+    from session_py import Vector
+
+    view = Xform.look_at_right_handed(Point(1.0, 2.0, 5.0), Point(0.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0))
+    perspective = Xform.perspective(PI / 2.0, 1.0, 1.0, 10.0) * view
+    orthographic = Xform.orthographic(-2.0, 2.0, -1.0, 1.0, 1.0, 10.0) * view
+    MINI_CHECK(TOLERANCE.is_close(perspective.ortho_half_height(), 0.0))
+    MINI_CHECK(TOLERANCE.is_close(orthographic.ortho_half_height(), 1.0))
+
+
 @MINI_TEST("Xform", "Transform Geometry")
 def test_xform_transform_geometry():
     from session_py import Xform
