@@ -16,7 +16,7 @@ class Color:
 
     __slots__ = ("_guid", "name", "r", "g", "b", "a")
 
-    def __init__(self, r: float = 1.0, g: float = 1.0, b: float = 1.0, a: float = 1.0, name: str = "my_color"):
+    def __init__(self, r: float = 0.94, g: float = 0.94, b: float = 0.94, a: float = 1.0, name: str = "my_color"):
         self._guid = None
         self.name = name
         self.r = max(0.0, min(1.0, float(r)))
@@ -214,7 +214,7 @@ class Color:
     @classmethod
     def lightgrey(cls) -> "Color":
         """Return opaque light grey, the default surface color of meshes, breps and surfaces."""
-        return cls(0.9, 0.9, 0.9, 1.0, "lightgrey")
+        return cls(0.94, 0.94, 0.94, 1.0, "lightgrey")
 
     @classmethod
     def palette(cls) -> list["Color"]:

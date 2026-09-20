@@ -29,7 +29,7 @@ def test_color_constructor():
     ccopy = c.duplicate()
     cother = Color(1.0, 0.0, 0.0, 1.0, "red")
 
-    MINI_CHECK(cdefault == Color())
+    MINI_CHECK(cdefault == Color(0.94, 0.94, 0.94, 1.0))
     MINI_CHECK(clamped == Color(0.0, 1.0, 0.5, 1.0))
     MINI_CHECK(fresh)
     MINI_CHECK(c.name == "red")
@@ -162,7 +162,7 @@ def test_color_presets():
     MINI_CHECK(navy == Color(0.0, 0.0, 0.5, 1.0, "navy"))
     MINI_CHECK(purple == Color(0.5, 0.0, 0.5, 1.0, "purple"))
     MINI_CHECK(silver == Color(0.75, 0.75, 0.75, 1.0, "silver"))
-    MINI_CHECK(lightgrey == Color(0.9, 0.9, 0.9, 1.0, "lightgrey"))
+    MINI_CHECK(lightgrey == Color(0.94, 0.94, 0.94, 1.0, "lightgrey"))
     MINI_CHECK(
         palette
         == [
