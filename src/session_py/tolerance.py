@@ -14,35 +14,37 @@ if TYPE_CHECKING:
     from .vector import Vector
 
 
-PI = math.pi
-TWO_PI = 2.0 * math.pi
-HALF_PI = math.pi / 2.0
-TO_DEGREES = 180.0 / math.pi
-TO_RADIANS = math.pi / 180.0
-
-SCALE = 1e6
+PI = math.pi  # Circle constant.
+TWO_PI = 2.0 * math.pi  # Full turn in radians.
+HALF_PI = math.pi / 2.0  # Quarter turn in radians.
+TO_DEGREES = 180.0 / math.pi  # Radian-to-degree factor.
+TO_RADIANS = math.pi / 180.0  # Degree-to-radian factor.
+SCALE = 1e6  # Default coordinate-key scale.
 
 
 class Tolerance:
     """Tolerance settings for geometric comparisons"""
 
-    PI = math.pi
-    TWO_PI = 2.0 * math.pi
-    HALF_PI = math.pi / 2.0
-    TO_DEGREES = 180.0 / math.pi
-    TO_RADIANS = math.pi / 180.0
+    PI = math.pi  # Circle constant.
+    TWO_PI = 2.0 * math.pi  # Full turn in radians.
+    HALF_PI = math.pi / 2.0  # Quarter turn in radians.
+    TO_DEGREES = 180.0 / math.pi  # Radian-to-degree factor.
+    TO_RADIANS = math.pi / 180.0  # Degree-to-radian factor.
 
-    ABSOLUTE = 1e-9
-    RELATIVE = 1e-6
-    ANGULAR = 1e-6
-    APPROXIMATION = 1e-3
-    PRECISION = 3
-    LINEARDEFLECTION = 1e-3
-    ANGULARDEFLECTION = 1e-1
-    ANGLE_TOLERANCE_DEGREES = 0.11
-    ZERO_TOLERANCE = 1e-12
-    ROUNDING = 6
+    ABSOLUTE = 1e-9  # Default absolute tolerance.
+    RELATIVE = 1e-6  # Default relative tolerance.
+    ANGULAR = 1e-6  # Default angular tolerance.
+    APPROXIMATION = 1e-3  # Default approximation tolerance.
+    PRECISION = 3  # Default decimal precision.
+    LINEARDEFLECTION = 1e-3  # Default linear deflection.
+    ANGULARDEFLECTION = 1e-1  # Default angular deflection.
+    ANGLE_TOLERANCE_DEGREES = 0.11  # Angular tolerance in degrees.
+    ZERO_TOLERANCE = 1e-12  # Used heavily by algorithms; do not change.
+    ROUNDING = 6  # Default coordinate-key rounding.
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, unit: str = "M"):
         """Construct tolerance with a unit system ("M" or "MM")"""
 
@@ -55,17 +57,9 @@ class Tolerance:
         self._lineardeflection = None
         self._angulardeflection = None
 
-    def reset(self) -> None:
-        """Reset all overrides to default constants"""
-
-        self._absolute = None
-        self._relative = None
-        self._angular = None
-        self._approximation = None
-        self._precision = None
-        self._lineardeflection = None
-        self._angulardeflection = None
-
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def unit(self) -> str:
         """Current unit system"""
         return self._unit
@@ -113,8 +107,23 @@ class Tolerance:
             else self.ANGULARDEFLECTION
         )
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Mutators
+    # ═══════════════════════════════════════════════════════════════════════════
+    def reset(self) -> None:
+        """Reset all overrides to default constants"""
+
+        self._absolute = None
+        self._relative = None
+        self._angular = None
+        self._approximation = None
+        self._precision = None
+        self._lineardeflection = None
+        self._angulardeflection = None
+
     def set_unit(self, value: str) -> None:
         """Set current unit system"""
+
         if value != "M" and value != "MM":
             raise ValueError(f"Invalid unit: {value}")
 
@@ -138,6 +147,7 @@ class Tolerance:
 
     def set_precision(self, value: int) -> None:
         """Override decimal precision for formatting"""
+
         if value == 0:
             raise ValueError("Precision cannot be zero.")
 
@@ -151,6 +161,20 @@ class Tolerance:
         """Override angular deflection"""
         self._angulardeflection = value
 
+    @contextmanager
+    def temporary(self) -> Iterator[Tolerance]:
+        """Context manager that restores tolerance on exit"""
+
+        saved = dict(self.__dict__)
+
+        try:
+            yield self
+        finally:
+            self.__dict__.update(saved)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Comparison
+    # ═══════════════════════════════════════════════════════════════════════════
     def tolerance(self, truevalue: float, rtol: float, atol: float) -> float:
         """Compute combined tolerance from relative and absolute components"""
         return rtol * abs(truevalue) + atol
@@ -173,6 +197,7 @@ class Tolerance:
 
     def is_between(self, value: float, minval: float, maxval: float) -> bool:
         """Check if value is within a range with absolute tolerance"""
+
         atol = self.absolute()
 
         return minval - atol <= value and value <= maxval + atol
@@ -222,17 +247,9 @@ class Tolerance:
 
         return True
 
-    @contextmanager
-    def temporary(self) -> Iterator[Tolerance]:
-        """Context manager that restores tolerance on exit"""
-
-        saved = dict(self.__dict__)
-
-        try:
-            yield self
-        finally:
-            self.__dict__.update(saved)
-
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Keys and formatting
+    # ═══════════════════════════════════════════════════════════════════════════
     def key(self, x: float, y: float, z: float, precision: int = -999) -> str:
         """Create a geometric key string for 3D point with optional precision"""
 
@@ -322,6 +339,30 @@ class Tolerance:
 
         return int(text[pos + 2 :])
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Numeric conversion
+    # ═══════════════════════════════════════════════════════════════════════════
+    @staticmethod
+    def to_radians(degrees: float) -> float:
+        """Convert degrees to radians"""
+        return degrees * Tolerance.TO_RADIANS
+
+    @staticmethod
+    def to_degrees(radians: float) -> float:
+        """Convert radians to degrees"""
+        return radians * Tolerance.TO_DEGREES
+
+    @staticmethod
+    def round_to(value: float, ndigits: int) -> float:
+        """Round a value to a given number of decimal places"""
+
+        factor = 10.0**ndigits
+
+        return math.copysign(math.floor(abs(value) * factor + 0.5), value) / factor
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # JSON
+    # ═══════════════════════════════════════════════════════════════════════════
     def __jsondump__(self) -> dict:
         """Serialize to a JSON-compatible dictionary."""
 
@@ -363,15 +404,20 @@ class Tolerance:
 
     def file_json_dump(self, filename: Union[str, Path]) -> None:
         """Write JSON to a file."""
+
         with open(filename, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
     def file_json_load(cls, filename: Union[str, Path]) -> "Tolerance":
         """Read JSON from a file."""
+
         with open(filename) as file:
             return cls.__jsonload__(json.load(file))
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
     def to_proto(self) -> tolerance_pb2.Tolerance:
         """Convert to the protobuf message."""
 
@@ -436,31 +482,18 @@ class Tolerance:
     @classmethod
     def pb_load(cls, filename: Union[str, Path]) -> "Tolerance":
         """Read protobuf bytes from a file."""
+
         with open(filename, "rb") as file:
             return cls.pb_loads(file.read())
 
-    @staticmethod
-    def to_radians(degrees: float) -> float:
-        """Convert degrees to radians"""
-        return degrees * Tolerance.TO_RADIANS
-
-    @staticmethod
-    def to_degrees(radians: float) -> float:
-        """Convert radians to degrees"""
-        return radians * Tolerance.TO_DEGREES
-
-    @staticmethod
-    def round_to(value: float, ndigits: int) -> float:
-        """Round a value to a given number of decimal places"""
-        factor = 10.0**ndigits
-
-        return math.copysign(math.floor(abs(value) * factor + 0.5), value) / factor
-
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
     def __repr__(self) -> str:
         """Return a constructor-style representation."""
         return f"Tolerance(unit='{self.unit()}', absolute={self.absolute()}, relative={self.relative()}, angular={self.angular()}, approximation={self.approximation()}, precision={self.precision()}, lineardeflection={self.lineardeflection()}, angulardeflection={self.angulardeflection()})"
 
-TOLERANCE = Tolerance()
+TOLERANCE = Tolerance()  # Global tolerance instance.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Utilities
@@ -472,6 +505,7 @@ def is_finite(x: float) -> bool:
 
 def unique_from_two_int(a: int, b: int) -> int:
     """Order-independent key from two ints: larger in the high 32 bits"""
+
     lo = min(a, b)
     hi = max(a, b)
 
@@ -479,6 +513,7 @@ def unique_from_two_int(a: int, b: int) -> int:
 
 def wrap_index(index: int, n: int) -> int:
     """Signed modulo into [0, n-1]; 0 when n == 0"""
+
     if n == 0:
         return 0
 

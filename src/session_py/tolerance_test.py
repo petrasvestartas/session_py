@@ -95,17 +95,21 @@ def test_tolerance_runtime_modification():
 
     tolerance.set_absolute(1e-12)
     tolerance.set_relative(1e-12)
+
     MINI_CHECK(tolerance.absolute() == 1e-12)
     MINI_CHECK(tolerance.relative() == 1e-12)
 
     close_with_tight = tolerance.is_close(1.0, 1.0 + 1e-11)
+
     MINI_CHECK(not close_with_tight)
 
     tolerance.reset()
+
     MINI_CHECK(tolerance.absolute() == 1e-9)
     MINI_CHECK(tolerance.relative() == 1e-6)
 
     close_with_default = tolerance.is_close(1.0, 1.0 + 1e-11)
+
     MINI_CHECK(close_with_default)
 
 @MINI_TEST("Tolerance", "Json Roundtrip")
@@ -126,6 +130,7 @@ def test_tolerance_json_roundtrip():
         Path(__file__).resolve().parents[2] / "serialization" / "test_tolerance.json"
     )
     tolerance.file_json_dump(filename)
+
     loaded = Tolerance.file_json_load(filename)
     parsed = Tolerance.file_json_loads(tolerance.file_json_dumps())
 
@@ -157,6 +162,7 @@ def test_tolerance_protobuf_roundtrip():
         Path(__file__).resolve().parents[2] / "serialization" / "test_tolerance.bin"
     )
     tolerance.pb_dump(filename)
+
     loaded = Tolerance.pb_load(filename)
     parsed = Tolerance.pb_loads(tolerance.pb_dumps())
     converted = Tolerance.from_proto(tolerance.to_proto())
@@ -232,9 +238,9 @@ def test_tolerance_triangle_edge_by_angle():
     from session_py.tolerance import triangle_edge_by_angle
 
     r = triangle_edge_by_angle(1.0, 45.0)
+    r2 = triangle_edge_by_angle(5.0, 0.0)
 
     MINI_CHECK(abs(r - 1.0) < 1e-9)
-    r2 = triangle_edge_by_angle(5.0, 0.0)
     MINI_CHECK(abs(r2) < 1e-9)
 
 @MINI_TEST("Tolerance", "Rad Deg Conversion")
@@ -391,7 +397,6 @@ def test_tolerance_temporary():
         inside = guard.absolute() == 1e-12
 
     restored = tolerance.absolute() == original
-
     threw = False
 
     try:
