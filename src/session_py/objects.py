@@ -263,7 +263,7 @@ class Objects:
             m.pb_fill(proto.meshes.add())
 
         for nc in self.nurbscurves:
-            nc.pb_fill(proto.nurbscurves.add())
+            proto.nurbscurves.add().CopyFrom(nc.to_proto())
 
         for ns in self.nurbssurfaces:
             ns.pb_fill(proto.nurbssurfaces.add())

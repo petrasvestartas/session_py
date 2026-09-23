@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
+import functools
 import json
 import math
 import uuid
@@ -65,21 +65,24 @@ GL_WEIGHTS = [
 class NurbsCurve:
     """A NURBS curve: OpenNURBS layout, nurbsknot count = order + cv_count - 2, homogeneous CVs when rational."""
 
-    def __init__(
-        self,
-        dimension: int = 0,
-        is_rational: bool = False,
-        order: int = 0,
-        cv_count: int = 0,
-    ):
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
+    def __init__(self, dimension: int = 0, is_rational: bool = False, order: int = 0, cv_count: int = 0):
         """Construct an unset curve with the given layout."""
 
-        self._guid = None
-        self.name = "my_nurbscurve"
-        self.width = 1.0
-        self.pointcolors: list[Color] = []
-        self.linecolors: list[Color] = []
-        self.initialize()
+        self._guid = None  # Lazily minted GUID.
+        self.name = "my_nurbscurve"  # Curve name.
+        self.width = 1.0  # Display width.
+        self.pointcolors: list[Color] = []  # Display color per control point.
+        self.linecolors: list[Color] = []  # Display color per control polygon segment.
+        self.m_dim = 0  # Coordinate dimension.
+        self.m_is_rat = 0  # 1 when rational, 0 otherwise.
+        self.m_order = 0  # Degree + 1.
+        self.m_cv_count = 0  # Number of control vertices.
+        self.m_cv_stride = 0  # Doubles between consecutive CVs.
+        self.m_nurbsknot = np.zeros(0, dtype=np.float64)  # NurbsKnot vector, order + cv_count - 2 values.
+        self.m_cv = np.zeros(0, dtype=np.float64)  # Flat CV array, homogeneous when rational.
         self.create_curve(dimension, is_rational, order, cv_count)
 
     def __deepcopy__(self, memo):
@@ -91,35 +94,13 @@ class NurbsCurve:
 
         return result
 
-    def duplicate(self) -> "NurbsCurve":
-        """Copy (new guid, same data)"""
+    def duplicate(self) -> NurbsCurve:
+        """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
-
-    def has_guid(self) -> bool:
-        """Return whether the lazy guid has been created."""
-        return self._guid is not None
-
-    @property
-    def guid(self) -> str:
-        """Return the guid, creating it on first access."""
-        if self._guid is None:
-            self._guid = str(uuid.uuid4())
-
-        return self._guid
-
-    @guid.setter
-    def guid(self, value: str) -> None:
-        """Set the guid."""
-        self._guid = value
-
-    def refresh_guid(self) -> None:
-        """Clear the guid so a fresh one mints lazily on the next read."""
-        self._guid = None
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Static constructors
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def create(
         periodic: bool,
@@ -127,7 +108,7 @@ class NurbsCurve:
         points: list[Point],
         dimension: int = 3,
         nurbsknot_delta: float = 1.0,
-    ) -> "NurbsCurve":
+    ) -> NurbsCurve:
         """Construct a clamped or periodic uniform curve through control points, domain rescaled to [0, arc length]."""
 
         curve = NurbsCurve()
@@ -164,7 +145,7 @@ class NurbsCurve:
         points: list[Point],
         parameterization: CurveNurbsKnotStyle = CurveNurbsKnotStyle.Chord,
         end_condition: CurveInterpStyle = CurveInterpStyle.Rhino,
-    ) -> "NurbsCurve":
+    ) -> NurbsCurve:
         """Construct an interpolated cubic through points; Rhino (Bessel) or Occt (Lagrange) end tangents."""
 
         n = len(points)
@@ -264,41 +245,8 @@ class NurbsCurve:
                 for d in range(dim):
                     cv[i * dim + d] = points[i][d]
 
-            for col in range(n):
-                pivot = col
-
-                for row in range(col + 1, n):
-                    if abs(A[row][col]) > abs(A[pivot][col]):
-                        pivot = row
-
-                if pivot != col:
-                    A[col], A[pivot] = A[pivot], A[col]
-
-                    for d in range(dim):
-                        cv[col * dim + d], cv[pivot * dim + d] = (
-                            cv[pivot * dim + d],
-                            cv[col * dim + d],
-                        )
-                if abs(A[col][col]) < 1e-300:
-                    return NurbsCurve()
-
-                for row in range(col + 1, n):
-                    factor = A[row][col] / A[col][col]
-
-                    for j in range(col, n):
-                        A[row][j] -= factor * A[col][j]
-
-                    for d in range(dim):
-                        cv[row * dim + d] -= factor * cv[col * dim + d]
-
-            for i in range(n - 1, -1, -1):
-                for d in range(dim):
-                    sum_ = cv[i * dim + d]
-
-                    for j in range(i + 1, n):
-                        sum_ -= A[i][j] * cv[j * dim + d]
-
-                    cv[i * dim + d] = sum_ / A[i][i]
+            if not NurbsCurve._solve_dense(A, cv, n, dim):
+                return NurbsCurve()
 
             curve = NurbsCurve(dim, False, order, cv_count)
 
@@ -339,7 +287,7 @@ class NurbsCurve:
         else:
             tan_start = NurbsCurve._bessel_tangent(points, 0, 1, 2)
             end_raw = NurbsCurve._bessel_tangent(points, n - 1, n - 2, n - 3)
-            tan_end = Vector(-end_raw[0], -end_raw[1], -end_raw[2])
+            tan_end = -end_raw
             s0 = points[0].distance(points[1]) / 3.0
             s1 = -points[n - 1].distance(points[n - 2]) / 3.0
 
@@ -412,7 +360,7 @@ class NurbsCurve:
         mults: list[int],
         degree: int,
         periodic: bool = False,
-    ) -> "NurbsCurve":
+    ) -> NurbsCurve:
         """Construct from poles, weights, distinct knots and multiplicities (OCCT convention)."""
 
         n = len(points)
@@ -469,7 +417,7 @@ class NurbsCurve:
     @staticmethod
     def create_fitted(
         points: list[Point], num_cvs: int, degree: int = 3, is_periodic: bool = False
-    ) -> "NurbsCurve":
+    ) -> NurbsCurve:
         """Construct a least-squares fit with num_cvs control points (Piegl & Tiller 9.4)."""
 
         m = len(points)
@@ -530,41 +478,8 @@ class NurbsCurve:
                     for b in range(order):
                         NtN[ci][(span + b) % num_cvs] += basis[a] * basis[b]
 
-            for col in range(num_cvs):
-                pivot = col
-
-                for row in range(col + 1, num_cvs):
-                    if abs(NtN[row][col]) > abs(NtN[pivot][col]):
-                        pivot = row
-
-                if pivot != col:
-                    NtN[col], NtN[pivot] = NtN[pivot], NtN[col]
-
-                    for d in range(dim):
-                        cv[col * dim + d], cv[pivot * dim + d] = (
-                            cv[pivot * dim + d],
-                            cv[col * dim + d],
-                        )
-                if abs(NtN[col][col]) < 1e-300:
-                    return NurbsCurve()
-
-                for row in range(col + 1, num_cvs):
-                    factor = NtN[row][col] / NtN[col][col]
-
-                    for j in range(col, num_cvs):
-                        NtN[row][j] -= factor * NtN[col][j]
-
-                    for d in range(dim):
-                        cv[row * dim + d] -= factor * cv[col * dim + d]
-
-            for i in range(num_cvs - 1, -1, -1):
-                for d in range(dim):
-                    sum_ = cv[i * dim + d]
-
-                    for j in range(i + 1, num_cvs):
-                        sum_ -= NtN[i][j] * cv[j * dim + d]
-
-                    cv[i * dim + d] = sum_ / NtN[i][i]
+            if not NurbsCurve._solve_dense(NtN, cv, num_cvs, dim):
+                return NurbsCurve()
 
             curve = NurbsCurve(dim, False, order, cv_count)
 
@@ -656,8 +571,8 @@ class NurbsCurve:
 
     @staticmethod
     def join(
-        curves: list["NurbsCurve"], tolerance: float = Tolerance.ZERO_TOLERANCE
-    ) -> list["NurbsCurve"]:
+        curves: list[NurbsCurve], tolerance: float = Tolerance.ZERO_TOLERANCE
+    ) -> list[NurbsCurve]:
         """Chain segments by endpoint matching, raise to a common degree and merge with C0 junctions."""
 
         segs = []
@@ -703,6 +618,7 @@ class NurbsCurve:
                 continue
 
             used[i] = True
+
             chain = [segs[i]]
 
             if not segs[i].is_closed():
@@ -826,7 +742,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __eq__(self, other) -> bool:
         """Compare name, width, colors, layout, nurbsknots and CVs to 1e-12; guid ignored."""
 
@@ -883,7 +798,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
     def transform(self, xform: Xform) -> bool:
         """Transform in place."""
 
@@ -901,8 +815,9 @@ class NurbsCurve:
 
         return True
 
-    def transformed(self, xform: Xform) -> "NurbsCurve":
+    def transformed(self, xform: Xform) -> NurbsCurve:
         """Return a transformed copy."""
+
         result = self.duplicate()
         result.transform(xform)
 
@@ -911,7 +826,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Initialization
     # ═══════════════════════════════════════════════════════════════════════════
-
     def initialize(self) -> None:
         """Zero every field."""
 
@@ -923,10 +837,8 @@ class NurbsCurve:
         self.m_nurbsknot = np.zeros(0, dtype=np.float64)
         self.m_cv = np.zeros(0, dtype=np.float64)
 
-    def create_curve(
-        self, dimension: int, is_rational: bool, order: int, cv_count: int
-    ) -> bool:
-        """Allocate layout for dimension, rationality, order and cv_count (the C++ member create)."""
+    def create_curve(self, dimension: int, is_rational: bool, order: int, cv_count: int) -> bool:
+        """Allocate layout for dimension, rationality, order and cv_count."""
 
         if dimension < 1 or order < 2 or cv_count < order:
             return False
@@ -1014,7 +926,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Boolean queries
     # ═══════════════════════════════════════════════════════════════════════════
-
     def is_valid(self) -> bool:
         """Return whether the layout, nurbsknots and CVs are consistent."""
 
@@ -1102,7 +1013,7 @@ class NurbsCurve:
 
         p0 = self.get_cv(0)
         p1 = self.get_cv(self.m_cv_count - 1)
-        line_vec = Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+        line_vec = p1 - p0
         line_length = line_vec.magnitude()
 
         if line_length < tolerance:
@@ -1110,7 +1021,7 @@ class NurbsCurve:
 
         for i in range(1, self.m_cv_count - 1):
             p = self.get_cv(i)
-            v = Vector(p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
+            v = p - p0
 
             if line_vec.cross(v).magnitude() / line_length > tolerance:
                 return False
@@ -1128,8 +1039,8 @@ class NurbsCurve:
         p0 = self.get_cv(0)
         p1 = self.get_cv(self.m_cv_count // 2)
         p2 = self.get_cv(self.m_cv_count - 1)
-        v1 = Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
-        v2 = Vector(p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2])
+        v1 = p1 - p0
+        v2 = p2 - p0
         normal = v1.cross(v2)
 
         if normal.magnitude() < tolerance:
@@ -1137,13 +1048,14 @@ class NurbsCurve:
 
         for i in range(self.m_cv_count):
             p = self.get_cv(i)
-            v = Vector(p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
+            v = p - p0
 
             if abs(v.dot(normal)) / normal.magnitude() > tolerance:
                 return False
 
         if plane is not None:
             normal.normalize_self()
+
             x_axis = Vector(v1[0], v1[1], v1[2])
             x_axis.normalize_self()
             NurbsCurve._assign_plane(plane, Plane(p0, x_axis, normal.cross(x_axis)))
@@ -1176,8 +1088,8 @@ class NurbsCurve:
         p0 = self.point_at(t0)
         p1 = self.point_at((t0 + t1) * 0.5)
         p2 = self.point_at(t1)
-        d1 = Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
-        d2 = Vector(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2])
+        d1 = p1 - p0
+        d2 = p2 - p1
         normal = d1.cross(d2)
 
         if normal.magnitude() < Tolerance.ZERO_TOLERANCE:
@@ -1185,8 +1097,8 @@ class NurbsCurve:
 
         normal = normal.normalized()
 
-        m1 = Point((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5, (p0[2] + p1[2]) * 0.5)
-        m2 = Point((p1[0] + p2[0]) * 0.5, (p1[1] + p2[1]) * 0.5, (p1[2] + p2[2]) * 0.5)
+        m1 = Point.sum(p0, p1) * 0.5
+        m2 = Point.sum(p1, p2) * 0.5
         perp1 = d1.cross(normal).normalized()
         perp2 = d2.cross(normal).normalized()
         denom = perp1[0] * perp2[1] - perp1[1] * perp2[0]
@@ -1200,7 +1112,7 @@ class NurbsCurve:
         dx = m2[0] - m1[0]
         dy = m2[1] - m1[1]
         s = (dx * perp2[1] - dy * perp2[0]) / denom
-        center = Point(m1[0] + s * perp1[0], m1[1] + s * perp1[1], m1[2] + s * perp1[2])
+        center = m1 + perp1 * s
         radius = center.distance(p0)
 
         if radius < Tolerance.ZERO_TOLERANCE:
@@ -1230,11 +1142,7 @@ class NurbsCurve:
 
         for i in range(self.m_cv_count):
             pt = self.get_cv(i)
-            v = Vector(
-                pt[0] - test_plane.origin[0],
-                pt[1] - test_plane.origin[1],
-                pt[2] - test_plane.origin[2],
-            )
+            v = pt - test_plane.origin
 
             if abs(v.dot(test_plane.z_axis)) > tolerance:
                 return False
@@ -1308,6 +1216,7 @@ class NurbsCurve:
                     points.append(
                         self.get_cv(i * (self.m_order - 1) + (self.m_order - 1))
                     )
+
                 params = self.get_span_vector()
 
                 return span_cnt + 1, points, params
@@ -1330,7 +1239,7 @@ class NurbsCurve:
 
     def is_duplicate(
         self,
-        other: "NurbsCurve",
+        other: NurbsCurve,
         ignore_parameterization: bool,
         tolerance: float = Tolerance.ZERO_TOLERANCE,
     ) -> bool:
@@ -1438,6 +1347,27 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
     # ═══════════════════════════════════════════════════════════════════════════
+    def has_guid(self) -> bool:
+        """Return whether the lazy guid has been created."""
+        return self._guid is not None
+
+    @property
+    def guid(self) -> str:
+        """Return the guid, creating it on first access."""
+
+        if self._guid is None:
+            self._guid = str(uuid.uuid4())
+
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str) -> None:
+        """Set the guid."""
+        self._guid = value
+
+    def refresh_guid(self) -> None:
+        """Clear the guid so a fresh one mints lazily on the next read."""
+        self._guid = None
 
     def dimension(self) -> int:
         """Return the coordinate dimension."""
@@ -1457,6 +1387,7 @@ class NurbsCurve:
 
     def cv_size(self) -> int:
         """Return the doubles per CV: dimension + 1 when rational."""
+
         if self.m_dim <= 0:
             return 0
 
@@ -1481,9 +1412,8 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Control vertex access
     # ═══════════════════════════════════════════════════════════════════════════
-
     def cv(self, cv_index: int) -> np.ndarray | None:
-        """Return the mutable pointer to the CV doubles, nullptr when out of range."""
+        """Return the pointer to the CV doubles, nullptr when out of range."""
 
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return None
@@ -1509,10 +1439,11 @@ class NurbsCurve:
             return Point(
                 cv_ptr[0] / w, cv_ptr[1] / w, cv_ptr[2] / w if self.m_dim > 2 else 0.0
             )
+
         return Point(cv_ptr[0], cv_ptr[1], cv_ptr[2] if self.m_dim > 2 else 0.0)
 
     def get_cv_4d(self, cv_index: int) -> tuple[float, float, float, float]:
-        """Get the homogeneous CV (x, y, z, w) through out-parameters."""
+        """Return the homogeneous CV (x, y, z, w)."""
 
         cv_ptr = self.cv(cv_index)
 
@@ -1602,9 +1533,9 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # NurbsKnot access
     # ═══════════════════════════════════════════════════════════════════════════
-
     def nurbsknot(self, nurbsknot_index: int) -> float:
         """Return the nurbsknot at nurbsknot_index."""
+
         if nurbsknot_index < 0 or nurbsknot_index >= len(self.m_nurbsknot):
             return 0.0
 
@@ -1662,7 +1593,7 @@ class NurbsCurve:
         return self.m_nurbsknot
 
     def cv_array(self) -> np.ndarray:
-        """Return the mutable CV array pointer."""
+        """Return the CV array pointer."""
         return self.m_cv
 
     def get_nurbsknots(self) -> list[float]:
@@ -1741,10 +1672,12 @@ class NurbsCurve:
                 cv_new[i * self.m_cv_stride : (i + 1) * self.m_cv_stride] = self.m_cv[
                     i * self.m_cv_stride : (i + 1) * self.m_cv_stride
                 ]
+
             for i in range(k + 1, n + 2):
                 cv_new[i * self.m_cv_stride : (i + 1) * self.m_cv_stride] = self.m_cv[
                     (i - 1) * self.m_cv_stride : i * self.m_cv_stride
                 ]
+
             for i in range(k - p + 1, k + 1):
                 alpha = 0.0
                 denom = U[i + p] - U[i]
@@ -1759,6 +1692,7 @@ class NurbsCurve:
 
             self.m_cv_count = new_cv_count
             self.m_cv = cv_new
+
             kc = self.m_order + self.m_cv_count - 2
             nurbsknot_new = np.zeros(kc, dtype=np.float64)
 
@@ -1801,7 +1735,7 @@ class NurbsCurve:
         return float(g)
 
     def get_greville_abcissae(self) -> list[float]:
-        """Get the Greville abcissae of every CV through an out-parameter."""
+        """Return the Greville abcissae of every CV."""
 
         abcissae: list[float] = []
 
@@ -1816,7 +1750,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Domain
     # ═══════════════════════════════════════════════════════════════════════════
-
     def domain(self) -> tuple[float, float]:
         """Return the domain (t0, t1)."""
 
@@ -1829,6 +1762,7 @@ class NurbsCurve:
 
     def domain_start(self) -> float:
         """Return the domain start."""
+
         if len(self.m_nurbsknot) == 0:
             return 0.0
 
@@ -1836,6 +1770,7 @@ class NurbsCurve:
 
     def domain_end(self) -> float:
         """Return the domain end."""
+
         if len(self.m_nurbsknot) == 0:
             return 0.0
 
@@ -1905,16 +1840,8 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def get_next_discontinuity(
-        self,
-        continuity_type: int,
-        t0: float,
-        t1: float,
-        cos_angle_tolerance: float = 0.99984769515639123,
-        curvature_tolerance: float = 1e-8,
-    ) -> tuple[bool, float]:
-        """Find the first interior nurbsknot in (t0, t1) whose multiplicity breaks continuity_type."""
+    def get_next_discontinuity(self, continuity_type: int, t0: float, t1: float) -> tuple[bool, float]:
+        """Return (found, t) for the first interior nurbsknot in (t0, t1) whose multiplicity breaks continuity_type."""
 
         if not self.is_valid():
             return False, 0.0
@@ -1995,7 +1922,7 @@ class NurbsCurve:
         min_edge_length: float = 0.0,
         max_edge_length: float = 0.0,
     ) -> tuple[list[Point], list[float]]:
-        """Compute the chord-deviation subdivision; angle_tolerance in radians, edge lengths default to length / 10 and / 1000."""
+        """Return the chord-deviation subdivision points and parameters."""
 
         points: list[Point] = []
         params: list[float] = []
@@ -2025,6 +1952,7 @@ class NurbsCurve:
 
         while len(work_queue) > 0 and iterations < max_iterations:
             iterations += 1
+
             ta, tb = work_queue.pop()
             pa = self.point_at(ta)
             pb = self.point_at(tb)
@@ -2035,20 +1963,15 @@ class NurbsCurve:
 
             tm = (ta + tb) * 0.5
             pm = self.point_at(tm)
-            chord = Vector(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2])
-            to_mid = Vector(pm[0] - pa[0], pm[1] - pa[1], pm[2] - pa[2])
+            chord = pb - pa
+            to_mid = pm - pa
             chord_len_sq = chord.dot(chord)
             deviation = 0.0
 
             if chord_len_sq > 1e-20:
                 proj = to_mid.dot(chord) / chord_len_sq
-                deviation = pm.distance(
-                    Point(
-                        pa[0] + proj * chord[0],
-                        pa[1] + proj * chord[1],
-                        pa[2] + proj * chord[2],
-                    )
-                )
+                deviation = pm.distance(pa + chord * proj)
+
             deviation_tolerance = chord_length * angle_tolerance * 0.5
 
             if deviation > deviation_tolerance or chord_length > max_edge_length:
@@ -2056,7 +1979,7 @@ class NurbsCurve:
                 work_queue.append((ta, tm))
                 work_queue.append((tm, tb))
 
-        samples.sort(key=lambda sample: sample[0])
+        samples.sort(key=functools.cmp_to_key(_sample_before))
 
         for t, p in samples:
             points.append(p)
@@ -2067,7 +1990,7 @@ class NurbsCurve:
     def divide_by_count(
         self, count: int, include_endpoints: bool = True
     ) -> tuple[list[Point], list[float]]:
-        """Compute count points at equal arc length, ends included or excluded."""
+        """Return count points at equal arc length and their parameters."""
 
         points: list[Point] = []
         params: list[float] = []
@@ -2092,6 +2015,7 @@ class NurbsCurve:
             s_vals[i] = s_vals[i - 1] + self._arc_length_gauss(
                 t_vals[i - 1], t_vals[i], h
             )
+
         n_segs = (count - 1) if include_endpoints else (count + 1)
         seg_len = s_vals[n_samples] / n_segs
 
@@ -2106,7 +2030,7 @@ class NurbsCurve:
     def divide_by_length(
         self, segment_length: float
     ) -> tuple[list[Point], list[float]]:
-        """Compute points every segment_length of arc length from the start."""
+        """Return points every segment_length of arc length and their parameters."""
 
         points: list[Point] = []
         params: list[float] = []
@@ -2131,6 +2055,7 @@ class NurbsCurve:
             s_vals[i] = s_vals[i - 1] + self._arc_length_gauss(
                 t_vals[i - 1], t_vals[i], h
             )
+
         total_len = s_vals[n_samples]
         s = 0.0
 
@@ -2145,7 +2070,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Evaluation
     # ═══════════════════════════════════════════════════════════════════════════
-
     def point_at(self, t: float) -> Point:
         """Return the point at parameter t."""
 
@@ -2260,7 +2184,7 @@ class NurbsCurve:
             p1 = self.point_at(t - h)
             p2 = self.point_at(t + h)
 
-        tan = Vector(p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2])
+        tan = p2 - p1
 
         if tan.magnitude() > 1e-14:
             tan.normalize_self()
@@ -2284,6 +2208,7 @@ class NurbsCurve:
 
     def closest_parameter(self, test_point: Point) -> float:
         """Return the parameter of the closest point to test_point."""
+
         from .closest import Closest
 
         return Closest.curve_point(self, test_point)[0]
@@ -2292,16 +2217,18 @@ class NurbsCurve:
         """Return the closest point to test_point."""
         return self.point_at(self.closest_parameter(test_point))
 
-    def closest_parameters_curve(self, other: "NurbsCurve") -> tuple[float, float]:
+    def closest_parameters_curve(self, other: NurbsCurve) -> tuple[float, float]:
         """Return the parameters (u, v) where this curve and other are closest."""
+
         from .closest import Closest
 
         u, v, dist = Closest.curve_curve(self, other)
 
         return u, v
 
-    def closest_points_curve(self, other: "NurbsCurve") -> tuple[Point, Point]:
+    def closest_points_curve(self, other: NurbsCurve) -> tuple[Point, Point]:
         """Return the points where this curve and other are closest."""
+
         u, v = self.closest_parameters_curve(other)
 
         return self.point_at(u), other.point_at(v)
@@ -2332,7 +2259,7 @@ class NurbsCurve:
             p0 = self.point_at(t0)
             pp = self.point_at(t0 + h)
             pp2 = self.point_at(t0 + 2 * h)
-            d1 = Vector(pp[0] - p0[0], pp[1] - p0[1], pp[2] - p0[2])
+            d1 = pp - p0
             d2 = Vector(
                 (pp2[0] - 2 * pp[0] + p0[0]) / (h * h),
                 (pp2[1] - 2 * pp[1] + p0[1]) / (h * h),
@@ -2345,7 +2272,7 @@ class NurbsCurve:
             pm = self.point_at(t1 - h)
             p0 = self.point_at(t1)
             pm2 = self.point_at(t1 - 2 * h)
-            d1 = Vector(p0[0] - pm[0], p0[1] - pm[1], p0[2] - pm[2])
+            d1 = p0 - pm
             d2 = Vector(
                 (p0[0] - 2 * pm[0] + pm2[0]) / (h * h),
                 (p0[1] - 2 * pm[1] + pm2[1]) / (h * h),
@@ -2357,11 +2284,7 @@ class NurbsCurve:
         pm = self.point_at(param - h)
         p0 = self.point_at(param)
         pp = self.point_at(param + h)
-        d1 = Vector(
-            (pp[0] - pm[0]) / (2 * h),
-            (pp[1] - pm[1]) / (2 * h),
-            (pp[2] - pm[2]) / (2 * h),
-        )
+        d1 = (pp - pm) / (2 * h)
         d2 = Vector(
             (pp[0] - 2 * p0[0] + pm[0]) / (h * h),
             (pp[1] - 2 * p0[1] + pm[1]) / (h * h),
@@ -2400,11 +2323,7 @@ class NurbsCurve:
         T0 = D1_0 / D1_0_mag
         D2_dot_D1 = D2_0.dot(D1_0)
         D1_0_mag_sq = D1_0_mag * D1_0_mag
-        N0_unnorm = Vector(
-            D2_0[0] - (D2_dot_D1 / D1_0_mag_sq) * D1_0[0],
-            D2_0[1] - (D2_dot_D1 / D1_0_mag_sq) * D1_0[1],
-            D2_0[2] - (D2_dot_D1 / D1_0_mag_sq) * D1_0[2],
-        )
+        N0_unnorm = D2_0 - D1_0 * (D2_dot_D1 / D1_0_mag_sq)
         N0_mag = N0_unnorm.magnitude()
 
         if N0_mag < 1e-14:
@@ -2439,7 +2358,8 @@ class NurbsCurve:
             xi_next = self.point_at(ti_next)
             Ti_next = self.tangent_at(ti_next)
             Ti_next.normalize_self()
-            v1 = Vector(xi_next[0] - xi[0], xi_next[1] - xi[1], xi_next[2] - xi[2])
+
+            v1 = xi_next - xi
             c1 = v1.dot(v1)
 
             if c1 < 1e-28:
@@ -2449,29 +2369,18 @@ class NurbsCurve:
                 continue
 
             ri_dot_v1 = ri.dot(v1)
-            rL = Vector(
-                ri[0] - 2.0 * ri_dot_v1 / c1 * v1[0],
-                ri[1] - 2.0 * ri_dot_v1 / c1 * v1[1],
-                ri[2] - 2.0 * ri_dot_v1 / c1 * v1[2],
-            )
+            rL = ri - v1 * (2.0 * ri_dot_v1 / c1)
             Ti_dot_v1 = Ti.dot(v1)
-            TL = Vector(
-                Ti[0] - 2.0 * Ti_dot_v1 / c1 * v1[0],
-                Ti[1] - 2.0 * Ti_dot_v1 / c1 * v1[1],
-                Ti[2] - 2.0 * Ti_dot_v1 / c1 * v1[2],
-            )
-            v2 = Vector(Ti_next[0] - TL[0], Ti_next[1] - TL[1], Ti_next[2] - TL[2])
+            TL = Ti - v1 * (2.0 * Ti_dot_v1 / c1)
+            v2 = Ti_next - TL
             c2 = v2.dot(v2)
 
             if c2 < 1e-28:
                 ri = rL
             else:
                 rL_dot_v2 = rL.dot(v2)
-                ri = Vector(
-                    rL[0] - 2.0 * rL_dot_v2 / c2 * v2[0],
-                    rL[1] - 2.0 * rL_dot_v2 / c2 * v2[1],
-                    rL[2] - 2.0 * rL_dot_v2 / c2 * v2[2],
-                )
+                ri = rL - v2 * (2.0 * rL_dot_v2 / c2)
+
             if ri.magnitude() > 1e-14:
                 ri.normalize_self()
 
@@ -2481,10 +2390,9 @@ class NurbsCurve:
 
         T = self.tangent_at(param)
         T.normalize_self()
+
         ri_dot_T = ri.dot(T)
-        ri = Vector(
-            ri[0] - ri_dot_T * T[0], ri[1] - ri_dot_T * T[1], ri[2] - ri_dot_T * T[2]
-        )
+        ri -= T * ri_dot_T
 
         if ri.magnitude() > 1e-14:
             ri.normalize_self()
@@ -2524,6 +2432,7 @@ class NurbsCurve:
             return False
 
         self.clamp_end(2)
+
         w = self.weight(0) if self.m_is_rat else 1.0
 
         if self.m_is_rat and w != 1.0:
@@ -2545,6 +2454,7 @@ class NurbsCurve:
             return False
 
         self.clamp_end(2)
+
         last = self.m_cv_count - 1
         w = self.weight(last) if self.m_is_rat else 1.0
 
@@ -2563,7 +2473,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Modifications
     # ═══════════════════════════════════════════════════════════════════════════
-
     def reverse(self) -> bool:
         """Reverse the direction keeping the domain."""
 
@@ -2657,6 +2566,7 @@ class NurbsCurve:
             U[i + 1] = float(self.m_nurbsknot[i])
 
         U[full_nurbsknot_count - 1] = float(self.m_nurbsknot[-1])
+
         tol = Tolerance.ZERO_TOLERANCE
         start_span = -1
 
@@ -2698,6 +2608,7 @@ class NurbsCurve:
             new_nurbsknot[p - 1 + i] = (
                 U[src_idx] if src_idx < full_nurbsknot_count else t1
             )
+
         for i in range(p - 1):
             new_nurbsknot[new_nurbsknot_count - p + 1 + i] = t1
 
@@ -2708,14 +2619,15 @@ class NurbsCurve:
                 (first_cv + i) * self.m_cv_stride : (first_cv + i + 1)
                 * self.m_cv_stride
             ]
+
         self.m_cv_count = new_cv_count
         self.m_cv = new_cv
         self.m_nurbsknot = new_nurbsknot
 
         return True
 
-    def split(self, t: float) -> tuple["NurbsCurve", "NurbsCurve"]:
-        """Compute trimmed copies on both sides of t."""
+    def split(self, t: float) -> tuple[NurbsCurve, NurbsCurve]:
+        """Return trimmed copies on both sides of t."""
 
         left_curve = NurbsCurve()
         right_curve = NurbsCurve()
@@ -2769,6 +2681,7 @@ class NurbsCurve:
 
         if t1 > d1:
             self.clamp_end(1)
+
             i0 = self.m_cv_count - self.m_order
             NurbsCurve._evaluate_nurbs_de_boor(
                 cvdim,
@@ -2781,6 +2694,7 @@ class NurbsCurve:
                 -1,
                 t1,
             )
+
             kc = self.nurbsknot_count()
 
             for i in range(self.m_cv_count - 1, kc):
@@ -3031,6 +2945,7 @@ class NurbsCurve:
                                 - self.m_nurbsknot[curr - 1 - i]
                                 + self.m_nurbsknot[curr - 2 - i]
                             )
+
                         cv_id = nurbsknot_index - p + 1
 
                         for i in range(cvc):
@@ -3043,6 +2958,7 @@ class NurbsCurve:
                                 self.m_cv[i * self.m_cv_stride + j] = old_cv[
                                     src * self.m_cv_stride + j
                                 ]
+
                             cv_id += 1
 
                         self.set_domain(t, t + dom_len)
@@ -3066,6 +2982,7 @@ class NurbsCurve:
                 new_cv[i * self.m_cv_stride + j] = right_crv.m_cv[
                     i * right_crv.m_cv_stride + j
                 ]
+
         for i in range(1, left_crv.m_cv_count):
             dst = right_crv.m_cv_count + i - 1
 
@@ -3073,6 +2990,7 @@ class NurbsCurve:
                 new_cv[dst * self.m_cv_stride + j] = left_crv.m_cv[
                     i * left_crv.m_cv_stride + j
                 ]
+
         rkc = right_crv.nurbsknot_count()
 
         for i in range(rkc):
@@ -3093,7 +3011,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
@@ -3134,9 +3051,7 @@ class NurbsCurve:
         }
 
     @classmethod
-    def __jsonload__(
-        cls, data: dict, guid: str = None, name: str = None
-    ) -> "NurbsCurve":
+    def __jsonload__(cls, data: dict, guid: str | None = None, name: str | None = None) -> NurbsCurve:
         """Deserialize from a JSON object."""
 
         curve = cls()
@@ -3170,6 +3085,7 @@ class NurbsCurve:
         curve.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         curve.name = name if name is not None else data.get("name", "my_nurbscurve")
         curve.width = data.get("width", 1.0)
+
         arr = data.get("pointcolors", [])
 
         for i in range(0, len(arr) - 3, 4):
@@ -3187,40 +3103,35 @@ class NurbsCurve:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "NurbsCurve":
+    def file_json_loads(cls, json_string: str) -> NurbsCurve:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write to a JSON file."""
-        with open(filepath, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
+
+        with open(filepath, "w") as file:
+            json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsCurve":
+    def file_json_load(cls, filepath: str | Path) -> NurbsCurve:
         """Read from a JSON file."""
-        with open(filepath) as f:
-            return cls.__jsonload__(json.load(f))
+
+        with open(filepath) as file:
+            return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> nurbscurve_pb2.NurbsCurve:
+        """Convert to the protobuf message."""
 
         from .proto import nurbscurve_pb2
 
         proto = nurbscurve_pb2.NurbsCurve()
-        self.pb_fill(proto)
-
-        return proto.SerializeToString()
-
-    def pb_fill(self, proto: "nurbscurve_pb2.NurbsCurve") -> None:
-        """Fill a NurbsCurve proto in place (Session and Brep embed it directly)."""
 
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
 
         proto.name = self.name
         proto.dimension = int(self.m_dim)
@@ -3246,14 +3157,12 @@ class NurbsCurve:
             cp.b = c.b
             cp.a = c.a
 
+        return proto
+
     @classmethod
-    def pb_loads(cls, data: bytes) -> "NurbsCurve":
-        """Deserialize from protobuf bytes."""
+    def from_proto(cls, proto: nurbscurve_pb2.NurbsCurve) -> NurbsCurve:
+        """Construct from the protobuf message."""
 
-        from .proto import nurbscurve_pb2
-
-        proto = nurbscurve_pb2.NurbsCurve()
-        proto.ParseFromString(data)
         curve = cls(proto.dimension, proto.is_rational, proto.order, proto.cv_count)
 
         if proto.guid:
@@ -3272,21 +3181,37 @@ class NurbsCurve:
 
         return curve
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a protobuf file."""
-        with open(filepath, "wb") as f:
-            f.write(self.pb_dumps())
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "NurbsCurve":
+    def pb_loads(cls, data: bytes) -> NurbsCurve:
+        """Deserialize from protobuf bytes."""
+
+        from .proto import nurbscurve_pb2
+
+        proto = nurbscurve_pb2.NurbsCurve()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
+    def pb_dump(self, filepath: str | Path) -> None:
+        """Write to a protobuf file."""
+
+        with open(filepath, "wb") as file:
+            file.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath: str | Path) -> NurbsCurve:
         """Read from a protobuf file."""
-        with open(filepath, "rb") as f:
-            return cls.pb_loads(f.read())
+
+        with open(filepath, "rb") as file:
+            return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "NurbsCurve(name=..., degree=..., cvs=...)"."""
         return f"NurbsCurve(name={self.name}, degree={self.degree()}, cvs={self.cv_count()})"
@@ -3309,7 +3234,6 @@ class NurbsCurve:
     # ═══════════════════════════════════════════════════════════════════════════
     # Private helpers
     # ═══════════════════════════════════════════════════════════════════════════
-
     def _span_is_linear(
         self, span_index: int, min_length: float, tolerance: float
     ) -> bool:
@@ -3349,7 +3273,7 @@ class NurbsCurve:
 
         p0 = self.get_cv(span_index)
         p1 = self.get_cv(span_index + self.m_order - 1)
-        line_vec = Vector(p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+        line_vec = p1 - p0
         line_length = line_vec.magnitude()
 
         if line_length < min_length:
@@ -3357,7 +3281,7 @@ class NurbsCurve:
 
         for i in range(1, self.m_order - 1):
             p = self.get_cv(span_index + i)
-            v = Vector(p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
+            v = p - p0
 
             if line_vec.cross(v).magnitude() / line_length > tolerance:
                 return False
@@ -3428,6 +3352,7 @@ class NurbsCurve:
         for j in range(1, self.m_order):
             left[j] = t - self.m_nurbsknot[offset + 1 - j]
             right[j] = self.m_nurbsknot[offset + j] - t
+
             saved = 0.0
 
             for r in range(j):
@@ -3457,6 +3382,7 @@ class NurbsCurve:
         for j in range(1, p + 1):
             left[j] = t - self.m_nurbsknot[offset + 1 - j]
             right[j] = self.m_nurbsknot[offset + j] - t
+
             saved = 0.0
 
             for r in range(j):
@@ -3510,7 +3436,7 @@ class NurbsCurve:
 
         return ders
 
-    def _deep_copy_from(self, src: "NurbsCurve") -> None:
+    def _deep_copy_from(self, src: NurbsCurve) -> None:
         """Copy every field but the guid."""
 
         self.m_dim = src.m_dim
@@ -3569,6 +3495,7 @@ class NurbsCurve:
                         alpha1 = delta_t[di] / (
                             float(nurbsknots[kn + k - di]) - float(nurbsknots[kn - di])
                         )
+
                     alpha0 = 1.0 - alpha1
                     row1 = cv0 + (order - k + i) * cv_stride
                     row0 = row1 - cv_stride
@@ -3597,12 +3524,53 @@ class NurbsCurve:
                     alpha0 = delta_t[i] / (
                         float(nurbsknots[kn + i]) - float(nurbsknots[kn - k + i])
                     )
+
                 alpha1 = 1.0 - alpha0
                 row0 = cv0 + i * cv_stride
                 row1 = row0 + cv_stride
 
                 for j in range(cv_dim):
                     cv[row0 + j] = cv[row0 + j] * alpha0 + cv[row1 + j] * alpha1
+
+        return True
+
+    @staticmethod
+    def _solve_dense(matrix: list[list[float]], rhs: list[float], n: int, dim: int) -> bool:
+        """Solve matrix * x = rhs in place by Gaussian elimination with partial pivoting, dim values per row."""
+
+        for col in range(n):
+            pivot = col
+
+            for row in range(col + 1, n):
+                if abs(matrix[row][col]) > abs(matrix[pivot][col]):
+                    pivot = row
+
+            if pivot != col:
+                matrix[col], matrix[pivot] = matrix[pivot], matrix[col]
+
+                for d in range(dim):
+                    rhs[col * dim + d], rhs[pivot * dim + d] = rhs[pivot * dim + d], rhs[col * dim + d]
+
+            if abs(matrix[col][col]) < 1e-300:
+                return False
+
+            for row in range(col + 1, n):
+                factor = matrix[row][col] / matrix[col][col]
+
+                for j in range(col, n):
+                    matrix[row][j] -= factor * matrix[col][j]
+
+                for d in range(dim):
+                    rhs[row * dim + d] -= factor * rhs[col * dim + d]
+
+        for i in range(n - 1, -1, -1):
+            for d in range(dim):
+                sum_ = rhs[i * dim + d]
+
+                for j in range(i + 1, n):
+                    sum_ -= matrix[i][j] * rhs[j * dim + d]
+
+                rhs[i * dim + d] = sum_ / matrix[i][i]
 
         return True
 
@@ -3624,7 +3592,7 @@ class NurbsCurve:
             p2 = self.point_at(t + h)
             dt = 2.0 * h
 
-        return Vector((p2[0] - p1[0]) / dt, (p2[1] - p1[1]) / dt, (p2[2] - p1[2]) / dt)
+        return (p2 - p1) / dt
 
     def _arc_length_gauss(self, ta: float, tb: float, h: float) -> float:
         """Return the arc length of [ta, tb] by 5-point Gauss-Legendre."""
@@ -3638,6 +3606,7 @@ class NurbsCurve:
                 GL_WEIGHTS[i]
                 * self._derivative_at(mid + half * GL_NODES[i], h).magnitude()
             )
+
         return half * sum_
 
     def _find_t_at_s(
@@ -3699,10 +3668,9 @@ class NurbsCurve:
 
         T = Vector(d1[0], d1[1], d1[2])
         T.normalize_self()
+
         d2_dot_T = d2.dot(T)
-        N = Vector(
-            d2[0] - d2_dot_T * T[0], d2[1] - d2_dot_T * T[1], d2[2] - d2_dot_T * T[2]
-        )
+        N = d2 - T * d2_dot_T
         n_mag = N.magnitude()
 
         if n_mag < 1e-14:
@@ -3736,18 +3704,14 @@ class NurbsCurve:
         denom = 2.0 * s * t
 
         if denom < 1e-16:
-            chord = Vector(
-                points[i1][0] - points[i0][0],
-                points[i1][1] - points[i0][1],
-                points[i1][2] - points[i0][2],
-            )
+            chord = points[i1] - points[i0]
 
             return chord if chord.normalize_self() else Vector(0.0, 0.0, 0.0)
 
         cvx = (-t * t * points[i0][0] + points[i1][0] - s * s * points[i2][0]) / denom
         cvy = (-t * t * points[i0][1] + points[i1][1] - s * s * points[i2][1]) / denom
         cvz = (-t * t * points[i0][2] + points[i1][2] - s * s * points[i2][2]) / denom
-        tangent = Vector(cvx - points[i0][0], cvy - points[i0][1], cvz - points[i0][2])
+        tangent = Point(cvx, cvy, cvz) - points[i0]
 
         return tangent if tangent.normalize_self() else Vector(0.0, 0.0, 0.0)
 
@@ -3778,11 +3742,8 @@ class NurbsCurve:
                 dsum += term
 
             Pj = points[i0 + j]
-            result = Vector(
-                result[0] + Pj[0] * dsum,
-                result[1] + Pj[1] * dsum,
-                result[2] + Pj[2] * dsum,
-            )
+            result += Vector(Pj[0], Pj[1], Pj[2]) * dsum
+
         return result
 
     @staticmethod
@@ -3797,10 +3758,16 @@ class NurbsCurve:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Sampling
+# ═══════════════════════════════════════════════════════════════════════════
+def _sample_before(a: tuple[float, Point], b: tuple[float, Point]) -> int:
+    """Order two (t, point) samples by parameter."""
+    return (a[0] > b[0]) - (a[0] < b[0])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Degree elevation
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _evaluate_nurbs_blossom(
     cvdim: int,
     order: int,
@@ -3812,7 +3779,7 @@ def _evaluate_nurbs_blossom(
     t: list[float],
     P: list[float],
 ) -> bool:
-    """Blossom of one span at order - 1 parameters by the de Boor recurrence."""
+    """Compute the blossom of one span at order - 1 parameters by the de Boor recurrence."""
 
     if cv_stride < cvdim:
         return False
@@ -3843,6 +3810,7 @@ def _evaluate_nurbs_blossom(
                 ) / denom * space[k - j] + (
                     t[j - 1] - nurbsknot_[kn0 + k - 1]
                 ) / denom * space[k - j + 1]
+
         P[i] = space[0]
 
     return True
@@ -3862,7 +3830,7 @@ def _get_raised_degree_cv(
     newCV: np.ndarray,
     ncv0: int,
 ) -> bool:
-    """One CV of the degree-raised span as the average of blossoms."""
+    """Compute one CV of the degree-raised span as the average of blossoms."""
 
     if cv_id < 0 or cv_id > old_order:
         return False
@@ -3900,7 +3868,7 @@ def _get_raised_degree_cv(
 def _next_span_index(
     order: int, cv_count: int, nurbsknot_: np.ndarray, span_index: int
 ) -> int:
-    """Next span index past degenerate spans."""
+    """Return the next span index past degenerate spans."""
 
     if span_index < 0 or span_index > cv_count - order:
         return -1
@@ -3973,6 +3941,7 @@ def _increment_nurbs_degree(N: NurbsCurve) -> bool:
                 N.m_cv,
                 (siN + j) * N.m_cv_stride,
             )
+
         siN = _next_span_index(N.order(), N.cv_count(), N.m_nurbsknot, siN)
         siM = _next_span_index(M.order(), M.cv_count(), M.m_nurbsknot, siM)
 
@@ -3981,4 +3950,5 @@ def _increment_nurbs_degree(N: NurbsCurve) -> bool:
         N.m_cv[(N.cv_count() - 1) * N.m_cv_stride + i] = M.m_cv[
             (M.cv_count() - 1) * M.m_cv_stride + i
         ]
+
     return True

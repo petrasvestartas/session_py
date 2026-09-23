@@ -27,9 +27,7 @@ def test_nurbscurve_constructor():
     ccopy = curve.duplicate()
     cother = NurbsCurve.create(False, 2, points)
 
-    divided, _ = curve.divide_by_count(10, True)
-
-    MINI_CHECK(curve.is_valid() == True)
+    MINI_CHECK(curve.is_valid())
     MINI_CHECK(curve.cv_count() == 4)
     MINI_CHECK(curve.degree() == 2)
     MINI_CHECK(curve.order() == 3)
@@ -39,6 +37,8 @@ def test_nurbscurve_constructor():
     MINI_CHECK("name=my_nurbscurve" in crepr)
     MINI_CHECK(ccopy.cv_count() == curve.cv_count())
     MINI_CHECK(ccopy.guid != curve.guid)
+    MINI_CHECK(ccopy == curve)
+    MINI_CHECK(cother != curve)
 
 
 @MINI_TEST("NurbsCurve", "Create Interpolated")
@@ -62,39 +62,23 @@ def test_nurbscurve_create_interpolated():
     MINI_CHECK(c.degree() == 3)
     MINI_CHECK(c.order() == 4)
     MINI_CHECK(c.cv_count() == 7)
-    MINI_CHECK(c.is_rational() == False)
-
-    d0, d1 = c.domain()
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), points[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), points[4]))
+    MINI_CHECK(not c.is_rational())
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(c.domain_start()), points[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(c.domain_end()), points[4]))
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), points[0]))
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(6), points[4]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(1), Point(15.342776949, 13.734888836, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(3), Point(24.678472471, 0.354555126, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(5), Point(39.626394361, 15.472490151, 0.0)))
 
-    MINI_CHECK(
-        TOLERANCE.is_point_close(c.get_cv(1), Point(15.342776949, 13.734888836, 0.0))
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(c.get_cv(3), Point(24.678472471, 0.354555126, 0.0))
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(c.get_cv(5), Point(39.626394361, 15.472490151, 0.0))
-    )
+    co = NurbsCurve.create_interpolated(points, CurveNurbsKnotStyle.Chord, CurveInterpStyle.Occt)
 
-    co = NurbsCurve.create_interpolated(
-        points, CurveNurbsKnotStyle.Chord, CurveInterpStyle.Occt
-    )
     MINI_CHECK(co.cv_count() == 7)
     MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(0), points[0]))
     MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(6), points[4]))
-    MINI_CHECK(
-        TOLERANCE.is_point_close(co.get_cv(1), Point(17.3526678158, 24.4472657919, 0.0))
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(co.get_cv(3), Point(24.7854378511, 2.1457823679, 0.0))
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(co.get_cv(5), Point(39.1865250566, 18.5349257754, 0.0))
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(1), Point(17.3526678158, 24.4472657919, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(3), Point(24.7854378511, 2.1457823679, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(co.get_cv(5), Point(39.1865250566, 18.5349257754, 0.0)))
 
     closed_pts = [
         Point(4, 20, 0),
@@ -122,16 +106,26 @@ def test_nurbscurve_create_from_parameters():
     from session_py import NurbsCurve
     from session_py import Point
 
-    p4 = [Point(0, 0, 0), Point(3, 6, 0), Point(6, -3, 3), Point(10, 0, 0)]
+    p4 = [
+        Point(0, 0, 0),
+        Point(3, 6, 0),
+        Point(6, -3, 3),
+        Point(10, 0, 0),
+    ]
+
     c = NurbsCurve.create_from_parameters(
-        p4, [1.0, 1.0, 1.0, 1.0], [0.0, 1.0], [4, 4], 3
+        p4,
+        [1.0, 1.0, 1.0, 1.0],
+        [0.0, 1.0],
+        [4, 4],
+        3,
     )
+
     MINI_CHECK(c.is_valid())
     MINI_CHECK(c.degree() == 3)
     MINI_CHECK(c.cv_count() == 4)
     MINI_CHECK(not c.is_rational())
-    d0, d1 = c.domain()
-    MINI_CHECK(abs(d0 - 0.0) < 1e-12 and abs(d1 - 1.0) < 1e-12)
+    MINI_CHECK(abs(c.domain_start() - 0.0) < 1e-12 and abs(c.domain_end() - 1.0) < 1e-12)
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(0), Point(0, 0, 0)))
     MINI_CHECK(TOLERANCE.is_point_close(c.get_cv(3), Point(10, 0, 0)))
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at(0.5), Point(4.625, 1.125, 1.125)))
@@ -148,6 +142,7 @@ def test_nurbscurve_create_from_parameters():
         Point(1, -1, 0),
         Point(0, -1, 0),
     ]
+
     circle = NurbsCurve.create_from_parameters(
         cpts,
         [1, w, 1, w, 1, w, 1, w, 1],
@@ -155,6 +150,7 @@ def test_nurbscurve_create_from_parameters():
         [3, 2, 2, 2, 3],
         2,
     )
+
     MINI_CHECK(circle.is_valid())
     MINI_CHECK(circle.degree() == 2)
     MINI_CHECK(circle.cv_count() == 9)
@@ -164,6 +160,7 @@ def test_nurbscurve_create_from_parameters():
 
     for k in range(17):
         pp = circle.point_at(k / 16.0)
+
         MINI_CHECK(abs(math.sqrt(pp[0] * pp[0] + pp[1] * pp[1]) - 1.0) < 1e-9)
 
 
@@ -183,9 +180,8 @@ def test_nurbscurve_create_fitted():
     MINI_CHECK(c.is_valid())
     MINI_CHECK(c.degree() == 3)
     MINI_CHECK(c.cv_count() == 8)
-    d0, d1 = c.domain()
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d0), pts[0]))
-    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(d1), pts[20]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(c.domain_start()), pts[0]))
+    MINI_CHECK(TOLERANCE.is_point_close(c.point_at(c.domain_end()), pts[20]))
 
     cpts = []
 
@@ -206,13 +202,12 @@ def test_nurbscurve_join():
     from session_py import Point
     from session_py import Primitives
 
-    arc1 = Primitives.arc(
-        Point(-1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0), Point(1.0, 0.0, 0.0)
-    )
-    arc2 = Primitives.arc(
-        Point(1.0, 0.0, 0.0), Point(1.5, -1.0, 0.0), Point(1.0, -2.0, 0.0)
-    )
-    pts = [Point(1.0, -2.0, 0.0), Point(-1.0, 0.0, 0.0)]
+    arc1 = Primitives.arc(Point(-1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0), Point(1.0, 0.0, 0.0))
+    arc2 = Primitives.arc(Point(1.0, 0.0, 0.0), Point(1.5, -1.0, 0.0), Point(1.0, -2.0, 0.0))
+    pts = [
+        Point(1.0, -2.0, 0.0),
+        Point(-1.0, 0.0, 0.0),
+    ]
     line = NurbsCurve.create(False, 1, pts)
     arc2.reverse()
 
@@ -251,17 +246,14 @@ def test_nurbscurve_attributes():
     curve = NurbsCurve.create(False, 2, points)
 
     is_valid = curve.is_valid()
-    MINI_CHECK(is_valid == True)
-
     is_valid_nurbsknot_vector = curve.is_valid_nurbsknot_vector()
-    MINI_CHECK(is_valid_nurbsknot_vector == True)
-
     is_clamped_start = curve.is_clamped(0)
     is_clamped_end = curve.is_clamped(1)
     is_clamped_both = curve.is_clamped(2)
-    MINI_CHECK(is_clamped_start == True)
-    MINI_CHECK(is_clamped_end == True)
-    MINI_CHECK(is_clamped_both == True)
+
+    MINI_CHECK(is_valid)
+    MINI_CHECK(is_valid_nurbsknot_vector)
+    MINI_CHECK(is_clamped_start and is_clamped_end and is_clamped_both)
 
     is_rational = curve.is_rational()
     closed = curve.is_closed()
@@ -272,33 +264,34 @@ def test_nurbscurve_attributes():
     plane = Plane.xy_plane()
     on_plane = curve.is_in_plane(plane)
     is_open = curve.is_natural()
-    is_polyline, _, _ = curve.is_polyline()
+    is_polyline = curve.is_polyline()[0]
     is_singular = curve.is_singular()
     is_duplicate = curve.is_duplicate(curve, False)
     is_continuous = curve.is_continuous(1, curve.domain_middle())
 
-    MINI_CHECK(is_rational == False)
-    MINI_CHECK(closed == False)
-    MINI_CHECK(periodic == False)
-    MINI_CHECK(linear == False)
-    MINI_CHECK(planar == True)
-    MINI_CHECK(arc == False)
-    MINI_CHECK(on_plane == True)
-    MINI_CHECK(is_open == False)
-    MINI_CHECK(is_polyline == False)
-    MINI_CHECK(is_singular == False)
-    MINI_CHECK(is_duplicate == True)
-    MINI_CHECK(is_continuous == True)
+    MINI_CHECK(not is_rational)
+    MINI_CHECK(not closed)
+    MINI_CHECK(not periodic)
+    MINI_CHECK(not linear)
+    MINI_CHECK(planar)
+    MINI_CHECK(not arc)
+    MINI_CHECK(on_plane)
+    MINI_CHECK(not is_open)
+    MINI_CHECK(not is_polyline)
+    MINI_CHECK(not is_singular)
+    MINI_CHECK(is_duplicate)
+    MINI_CHECK(is_continuous)
 
     copy_curve = curve.duplicate()
     before_pt = copy_curve.point_at(1.5)
     copy_curve.insert_nurbsknot(1.5, 1)
+
     MINI_CHECK(TOLERANCE.is_point_close(before_pt, copy_curve.point_at(1.5)))
 
     greville0 = curve.greville_abcissa(0)
-    MINI_CHECK(TOLERANCE.is_close(greville0, 0.0))
-
     greville = curve.get_greville_abcissae()
+
+    MINI_CHECK(TOLERANCE.is_close(greville0, 0.0))
     MINI_CHECK(len(greville) == 4)
     MINI_CHECK(TOLERANCE.is_close(greville[0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(greville[1], 0.879872167739067))
@@ -306,49 +299,52 @@ def test_nurbscurve_attributes():
     MINI_CHECK(TOLERANCE.is_close(greville[3], 3.519488670956267))
 
     dimension = curve.dimension()
-    MINI_CHECK(dimension == 3)
     degree = curve.degree()
-    MINI_CHECK(degree == 2)
     order = curve.order()
-    MINI_CHECK(order == 3)
     cv_count = curve.cv_count()
-    MINI_CHECK(cv_count == 4)
     cv_size = curve.cv_size()
-    MINI_CHECK(cv_size == 3)
     nurbsknot_count = curve.nurbsknot_count()
-    MINI_CHECK(nurbsknot_count == 5)
     span_count = curve.span_count()
+
+    MINI_CHECK(dimension == 3)
+    MINI_CHECK(degree == 2)
+    MINI_CHECK(order == 3)
+    MINI_CHECK(cv_count == 4)
+    MINI_CHECK(cv_size == 3)
+    MINI_CHECK(nurbsknot_count == 5)
     MINI_CHECK(span_count == 2)
 
     p = curve.cv(1)
-    MINI_CHECK(p[0] == 1.0 and p[1] == 1.0 and p[2] == 0.0)
-
     cv_point = curve.get_cv(1)
-    MINI_CHECK(cv_point == Point(1.0, 1.0, 0.0))
+    cv4 = curve.get_cv_4d(1)
 
-    x, y, z, w = curve.get_cv_4d(1)
-    MINI_CHECK(x == 1.0 and y == 1.0 and z == 0.0 and w == 1.0)
+    MINI_CHECK(p[0] == 1.0 and p[1] == 1.0 and p[2] == 0.0)
+    MINI_CHECK(cv_point == Point(1.0, 1.0, 0.0))
+    MINI_CHECK(cv4[0] == 1.0 and cv4[1] == 1.0 and cv4[2] == 0.0 and cv4[3] == 1.0)
 
     curve.set_cv(2, Point(2.0, 0.0, 0.5))
+
     MINI_CHECK(curve.get_cv(2)[0] == 2.0)
     MINI_CHECK(curve.get_cv(2)[1] == 0.0)
     MINI_CHECK(curve.get_cv(2)[2] == 0.5)
 
     curve.set_cv_4d(2, 2.0, 0.0, 0.5, 0.707)
-    x, y, z, w = curve.get_cv_4d(2)
-    MINI_CHECK(x == 2.0 and y == 0.0 and z == 0.5 and w == 0.707)
 
+    cv4_weighted = curve.get_cv_4d(2)
     weight = curve.weight(2)
+
+    MINI_CHECK(cv4_weighted[0] == 2.0 and cv4_weighted[1] == 0.0 and cv4_weighted[2] == 0.5 and cv4_weighted[3] == 0.707)
     MINI_CHECK(weight == 0.707)
 
     curve.set_weight(2, 0.5)
+
     MINI_CHECK(curve.weight(2) == 0.5)
 
     nurbsknot3 = curve.nurbsknot(3)
-    MINI_CHECK(TOLERANCE.is_close(nurbsknot3, 3.519488670956267))
-
     end_nurbsknot = curve.nurbsknot(4)
     curve.set_nurbsknot(4, end_nurbsknot)
+
+    MINI_CHECK(TOLERANCE.is_close(nurbsknot3, 3.519488670956267))
     MINI_CHECK(TOLERANCE.is_close(curve.nurbsknot(4), end_nurbsknot))
 
     m0 = curve.nurbsknot_multiplicity(0)
@@ -356,57 +352,49 @@ def test_nurbscurve_attributes():
     m2 = curve.nurbsknot_multiplicity(2)
     m3 = curve.nurbsknot_multiplicity(3)
     m4 = curve.nurbsknot_multiplicity(4)
+    superfluous_nurbsknot = curve.superfluous_nurbsknot(1)
+
     MINI_CHECK(m0 == 2)
     MINI_CHECK(m1 == 2)
     MINI_CHECK(m2 == 1)
     MINI_CHECK(m3 == 2)
     MINI_CHECK(m4 == 2)
-
-    superfluous_nurbsknot = curve.superfluous_nurbsknot(1)
     MINI_CHECK(TOLERANCE.is_close(superfluous_nurbsknot, 7.038977341912535))
 
     nurbsknots = curve.nurbsknot_array()
     k0 = nurbsknots[0]
     nurbsknot_vector = curve.get_nurbsknots()
+    cvs = curve.cv_array()
+    cx0 = cvs[0]
+
     MINI_CHECK(k0 == 0.0)
     MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[1], 0.0))
     MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[2], 1.759744335478134))
     MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[3], 3.519488670956267))
     MINI_CHECK(TOLERANCE.is_close(nurbsknot_vector[4], 3.519488670956267))
-
-    cvs = curve.cv_array()
-    cx0 = cvs[0]
     MINI_CHECK(cx0 == 0.0)
 
-    start, end = curve.domain()
-    MINI_CHECK(
-        TOLERANCE.is_close(start, 0.0) and TOLERANCE.is_close(end, 3.519488670956267)
-    )
-
+    interval = curve.domain()
     start = curve.domain_start()
     middle = curve.domain_middle()
     end = curve.domain_end()
+
+    MINI_CHECK(TOLERANCE.is_close(interval[0], 0.0) and TOLERANCE.is_close(interval[1], 3.519488670956267))
     MINI_CHECK(TOLERANCE.is_close(start, 0.0))
     MINI_CHECK(TOLERANCE.is_close(middle, 1.759744335478134))
     MINI_CHECK(TOLERANCE.is_close(end, 3.519488670956267))
 
     curve.set_domain(0.0, 1.0)
+
+    intervals = curve.get_span_vector()
+    discontinuity = curve.get_next_discontinuity(2, curve.domain_start(), curve.domain_end())
+
     MINI_CHECK(curve.domain_start() == 0.0)
     MINI_CHECK(curve.domain_middle() == 0.5)
     MINI_CHECK(curve.domain_end() == 1.0)
-
-    intervals = curve.get_span_vector()
-    MINI_CHECK(
-        TOLERANCE.is_close(intervals[0], 0.0)
-        and TOLERANCE.is_close(intervals[1], 0.5)
-        and TOLERANCE.is_close(intervals[2], 1.0)
-    )
-
-    found, t_out = curve.get_next_discontinuity(
-        2, curve.domain_start(), curve.domain_end()
-    )
-    MINI_CHECK(found == True and TOLERANCE.is_close(t_out, 0.5))
+    MINI_CHECK(TOLERANCE.is_close(intervals[0], 0.0) and TOLERANCE.is_close(intervals[1], 0.5) and TOLERANCE.is_close(intervals[2], 1.0))
+    MINI_CHECK(discontinuity[0] and TOLERANCE.is_close(discontinuity[1], 0.5))
 
 
 @MINI_TEST("NurbsCurve", "Conversions")
@@ -423,82 +411,29 @@ def test_nurbscurve_conversions():
     ]
 
     curve = NurbsCurve.create(False, 2, points)
-
-    adaptive_pts, adaptive_params = curve.to_polyline_adaptive(0.1, 0.0, 0.0)
+    adaptive_pts = curve.to_polyline_adaptive(0.1, 0.0, 0.0)[0]
+    div_pts = curve.divide_by_count(10, True)[0]
+    len_pts = curve.divide_by_length(0.5)[0]
 
     MINI_CHECK(len(adaptive_pts) == 27)
     MINI_CHECK(TOLERANCE.is_point_close(adaptive_pts[0], Point(0.0, 0.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(adaptive_pts[13], Point(2.0, 0.5, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(adaptive_pts[26], Point(4.0, 0.0, 0.0)))
-
-    div_pts, div_params = curve.divide_by_count(10, True)
-
     MINI_CHECK(len(div_pts) == 10)
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[1], Point(0.328571016773017, 0.598213507757063, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[2], Point(0.740744944144815, 1.140321237310326, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[3], Point(1.338524001477341, 1.232716038191446, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[4], Point(1.712929668000343, 0.664818751028787, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[5], Point(2.287070333148604, 0.664818752348101, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[6], Point(2.661475999779531, 1.232716039392177, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[7], Point(3.259255057037078, 1.140321236176910, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[8], Point(3.671428983538974, 0.598213507250245, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            div_pts[9], Point(4.000000000000000, 0.000000000000000, 0.000000000000000)
-        )
-    )
-
-    len_pts, len_params = curve.divide_by_length(0.5)
-
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[1], Point(0.328571016773017, 0.598213507757063, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[2], Point(0.740744944144815, 1.140321237310326, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[3], Point(1.338524001477341, 1.232716038191446, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[4], Point(1.712929668000343, 0.664818751028787, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[5], Point(2.287070333148604, 0.664818752348101, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[6], Point(2.661475999779531, 1.232716039392177, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[7], Point(3.259255057037078, 1.140321236176910, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[8], Point(3.671428983538974, 0.598213507250245, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(div_pts[9], Point(4.000000000000000, 0.000000000000000, 0.000000000000000)))
     MINI_CHECK(len(len_pts) == 13)
     MINI_CHECK(TOLERANCE.is_point_close(len_pts[0], Point(0.0, 0.0, 0.0)))
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            len_pts[6], Point(1.928691288503169, 0.510169864670676, 0.0)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            len_pts[12], Point(3.934494396222682, 0.128829843907475, 0.0)
-        )
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(len_pts[6], Point(1.928691288503169, 0.510169864670676, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(len_pts[12], Point(3.934494396222682, 0.128829843907475, 0.0)))
 
 
 @MINI_TEST("NurbsCurve", "Evaluation")
@@ -506,7 +441,6 @@ def test_nurbscurve_evaluation():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Vector
-    from session_py import Plane
 
     points = [
         Point(1.957614, 1.140253, -0.191281),
@@ -524,14 +458,15 @@ def test_nurbscurve_evaluation():
 
     curve = NurbsCurve.create(False, 2, points)
 
-    MINI_CHECK(TOLERANCE.is_close(curve.length(), 11.3010276326))
-
+    length = curve.length()
     point_at = curve.point_at(0.5)
+    derivatives = curve.evaluate(0.5, 2)
+    tangent = curve.tangent_at(0.5)
+
+    MINI_CHECK(TOLERANCE.is_close(length, 11.3010276326))
     MINI_CHECK(TOLERANCE.is_close(point_at[0], 1.463452399002842))
     MINI_CHECK(TOLERANCE.is_close(point_at[1], 1.680997287875395))
     MINI_CHECK(TOLERANCE.is_close(point_at[2], -0.124474565996108))
-
-    derivatives = curve.evaluate(0.5, 2)
     MINI_CHECK(len(derivatives) == 3)
     MINI_CHECK(TOLERANCE.is_close(derivatives[0][0], 1.463452399002842))
     MINI_CHECK(TOLERANCE.is_close(derivatives[0][1], 1.680997287875395))
@@ -542,13 +477,12 @@ def test_nurbscurve_evaluation():
     MINI_CHECK(TOLERANCE.is_close(derivatives[2][0], 2.706815143892446))
     MINI_CHECK(TOLERANCE.is_close(derivatives[2][1], -0.429869481117820))
     MINI_CHECK(TOLERANCE.is_close(derivatives[2][2], -0.684219293829483))
-
-    tangent = curve.tangent_at(0.5)
     MINI_CHECK(TOLERANCE.is_close(tangent[0], -0.304511941745027))
     MINI_CHECK(TOLERANCE.is_close(tangent[1], 0.951805546117607))
     MINI_CHECK(TOLERANCE.is_close(tangent[2], -0.036587972264639))
 
     f = curve.plane_at(0.5, True)
+
     MINI_CHECK(TOLERANCE.is_close(f.origin[0], 3.156927375))
     MINI_CHECK(TOLERANCE.is_close(f.origin[1], 1.3351115))
     MINI_CHECK(TOLERANCE.is_close(f.origin[2], 0.130488875))
@@ -562,119 +496,44 @@ def test_nurbscurve_evaluation():
     MINI_CHECK(TOLERANCE.is_close(f.z_axis[1], -0.622429365908747))
     MINI_CHECK(TOLERANCE.is_close(f.z_axis[2], 0.607649657861031))
 
-    MINI_CHECK(curve.plane_at(-0.1, True).is_valid() == False)
-    MINI_CHECK(curve.plane_at(1.1, True).is_valid() == False)
-    MINI_CHECK(curve.plane_at(curve.domain_start(), False).is_valid() == True)
-    MINI_CHECK(curve.plane_at(curve.domain_end(), False).is_valid() == True)
-    MINI_CHECK(curve.plane_at(curve.domain_start() - 0.1, False).is_valid() == False)
+    MINI_CHECK(not curve.plane_at(-0.1, True).is_valid())
+    MINI_CHECK(not curve.plane_at(1.1, True).is_valid())
+    MINI_CHECK(curve.plane_at(curve.domain_start(), False).is_valid())
+    MINI_CHECK(curve.plane_at(curve.domain_end(), False).is_valid())
+    MINI_CHECK(not curve.plane_at(curve.domain_start() - 0.1, False).is_valid())
 
     pf = curve.perpendicular_plane_at(0.5, True)
-    MINI_CHECK(
-        TOLERANCE.is_point_close(pf.origin, Point(3.156927375, 1.3351115, 0.130488875))
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            pf.x_axis, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            pf.y_axis, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            pf.z_axis, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)
-        )
-    )
-    MINI_CHECK(curve.perpendicular_plane_at(-0.1, True).is_valid() == False)
-    MINI_CHECK(curve.perpendicular_plane_at(1.1, True).is_valid() == False)
-    MINI_CHECK(
-        curve.perpendicular_plane_at(curve.domain_start(), False).is_valid() == True
-    )
-    MINI_CHECK(
-        curve.perpendicular_plane_at(curve.domain_end(), False).is_valid() == True
-    )
-    MINI_CHECK(
-        curve.perpendicular_plane_at(curve.domain_start() - 0.1, False).is_valid()
-        == False
-    )
+
+    MINI_CHECK(TOLERANCE.is_point_close(pf.origin, Point(3.156927375, 1.3351115, 0.130488875)))
+    MINI_CHECK(TOLERANCE.is_vector_close(pf.x_axis, Vector(0.632703652329189, -0.703685357647999, 0.323284713157168)))
+    MINI_CHECK(TOLERANCE.is_vector_close(pf.y_axis, Vector(0.327344206830723, -0.135306795251661, -0.935167279909370)))
+    MINI_CHECK(TOLERANCE.is_vector_close(pf.z_axis, Vector(0.701806140314880, 0.697509131546342, 0.144738221716994)))
+    MINI_CHECK(not curve.perpendicular_plane_at(-0.1, True).is_valid())
+    MINI_CHECK(not curve.perpendicular_plane_at(1.1, True).is_valid())
+    MINI_CHECK(curve.perpendicular_plane_at(curve.domain_start(), False).is_valid())
+    MINI_CHECK(curve.perpendicular_plane_at(curve.domain_end(), False).is_valid())
+    MINI_CHECK(not curve.perpendicular_plane_at(curve.domain_start() - 0.1, False).is_valid())
 
     frames = curve.get_perpendicular_planes(4)
+
     MINI_CHECK(len(frames) == 5)
-    MINI_CHECK(
-        TOLERANCE.is_point_close(frames[0].origin, Point(1.957614, 1.140253, -0.191281))
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[0].x_axis,
-            Vector(0.532767753269467, 0.809398954921174, -0.247046256496055),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[0].y_axis,
-            Vector(-0.261213903019039, -0.120386647366337, -0.957744408496052),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[0].z_axis,
-            Vector(-0.804938393882267, 0.574787253606414, 0.147288136473484),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            frames[2].origin,
-            Point(3.676077075808618, 0.909845354074582, 0.350126131660904),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[2].x_axis,
-            Vector(-0.188216728828592, 0.616420980974357, -0.764591156896073),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[2].y_axis,
-            Vector(0.183061410483993, -0.742842969436200, -0.643950963001702),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[2].z_axis,
-            Vector(-0.964916049706230, -0.261169479407185, 0.026972579511507),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            frames[4].origin,
-            Point(2.150320000000000, 1.868606000000000, 0.000000000000000),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[4].x_axis,
-            Vector(0.183261707646767, 0.080808692310795, 0.979737261594868),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[4].y_axis,
-            Vector(0.896455027441244, 0.395289116385372, -0.200287039627106),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            frames[4].z_axis,
-            Vector(-0.403464410184726, 0.914995338629816, 0.000000000000000),
-        )
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(frames[0].origin, Point(1.957614, 1.140253, -0.191281)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[0].x_axis, Vector(0.532767753269467, 0.809398954921174, -0.247046256496055)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[0].y_axis, Vector(-0.261213903019039, -0.120386647366337, -0.957744408496052)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[0].z_axis, Vector(-0.804938393882267, 0.574787253606414, 0.147288136473484)))
+    MINI_CHECK(TOLERANCE.is_point_close(frames[2].origin, Point(3.676077075808618, 0.909845354074582, 0.350126131660904)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[2].x_axis, Vector(-0.188216728828592, 0.616420980974357, -0.764591156896073)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[2].y_axis, Vector(0.183061410483993, -0.742842969436200, -0.643950963001702)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[2].z_axis, Vector(-0.964916049706230, -0.261169479407185, 0.026972579511507)))
+    MINI_CHECK(TOLERANCE.is_point_close(frames[4].origin, Point(2.150320000000000, 1.868606000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[4].x_axis, Vector(0.183261707646767, 0.080808692310795, 0.979737261594868)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[4].y_axis, Vector(0.896455027441244, 0.395289116385372, -0.200287039627106)))
+    MINI_CHECK(TOLERANCE.is_vector_close(frames[4].z_axis, Vector(-0.403464410184726, 0.914995338629816, 0.000000000000000)))
 
     p0 = curve.point_at_start()
     p1 = curve.point_at_middle()
     p2 = curve.point_at_end()
+
     MINI_CHECK(TOLERANCE.is_close(p0[0], 1.957614))
     MINI_CHECK(TOLERANCE.is_close(p0[1], 1.140253))
     MINI_CHECK(TOLERANCE.is_close(p0[2], -0.191281))
@@ -687,6 +546,7 @@ def test_nurbscurve_evaluation():
 
     curve.set_start_point(Point(1.957614, 1.140253, 2.0))
     curve.set_end_point(Point(2.15032, 1.868606, 2.0))
+
     MINI_CHECK(TOLERANCE.is_close(curve.point_at_start()[2], 2.0))
     MINI_CHECK(TOLERANCE.is_close(curve.point_at_end()[2], 2.0))
 
@@ -708,11 +568,11 @@ def test_nurbscurve_modifications():
 
     curve_reversed = curve.duplicate()
     curve_reversed.reverse()
-    MINI_CHECK(
-        TOLERANCE.is_point_close(curve_reversed.point_at_start(), curve.point_at_end())
-    )
+
+    MINI_CHECK(TOLERANCE.is_point_close(curve_reversed.point_at_start(), curve.point_at_end()))
 
     curve.swap_coordinates(0, 1)
+
     MINI_CHECK(TOLERANCE.is_point_close(curve.get_cv(0), Point(0.0, 0.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(curve.get_cv(1), Point(2.0, 1.0, 0.0)))
     MINI_CHECK(TOLERANCE.is_point_close(curve.get_cv(2), Point(0.0, 2.0, 0.0)))
@@ -723,28 +583,29 @@ def test_nurbscurve_modifications():
     a = ct.domain_start() + (ct.domain_end() - ct.domain_start()) / 3.0
     b = ct.domain_start() + 2.0 * (ct.domain_end() - ct.domain_start()) / 3.0
     ct.trim(a, b)
+
     MINI_CHECK(ct.length() < curve.length())
 
     split_t = curve.domain_middle()
-    curve_left, curve_right = curve.split(split_t)
-    MINI_CHECK(
-        TOLERANCE.is_point_close(curve.point_at(split_t), curve_left.point_at_end())
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(curve.point_at(split_t), curve_right.point_at_start())
-    )
+    halves = curve.split(split_t)
+
+    MINI_CHECK(TOLERANCE.is_point_close(curve.point_at(split_t), halves[0].point_at_end()))
+    MINI_CHECK(TOLERANCE.is_point_close(curve.point_at(split_t), halves[1].point_at_start()))
 
     curve_extended = curve.duplicate()
     curve_extended.extend(curve.domain_start() - 0.5, curve.domain_end() + 0.5)
+
     MINI_CHECK(curve_extended.length() > curve.length())
 
     curve_rational = curve.duplicate()
     original_length = curve.length()
     curve_rational.make_rational()
     curve_rational.set_weight(2, 10)
+
     MINI_CHECK(curve_rational.length() != original_length)
 
     curve_rational.make_non_rational(True)
+
     MINI_CHECK(curve_rational.length() == original_length)
 
     points_open = points
@@ -757,16 +618,17 @@ def test_nurbscurve_modifications():
         curve_open.set_nurbsknot(i, i * 1.0)
 
     curve_open.clamp_end(2)
+
     nurbsknots = curve_open.get_nurbsknots()
+
     MINI_CHECK(TOLERANCE.is_close(nurbsknots[0], nurbsknots[1]))
-    MINI_CHECK(TOLERANCE.is_close(nurbsknots[-2], nurbsknots[-1]))
+    MINI_CHECK(TOLERANCE.is_close(nurbsknots[len(nurbsknots) - 2], nurbsknots[len(nurbsknots) - 1]))
 
     raised = curve.duplicate()
     raised.increase_degree(3)
+
     MINI_CHECK(curve.degree() != raised.degree())
-    MINI_CHECK(
-        TOLERANCE.is_point_close(curve.point_at_middle(), raised.point_at_middle())
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(curve.point_at_middle(), raised.point_at_middle()))
 
     closed_pts = [
         Point(1.0, 0.0, 0.0),
@@ -774,9 +636,11 @@ def test_nurbscurve_modifications():
         Point(-1.0, 0.0, 0.0),
         Point(0.0, -1.0, 0.0),
     ]
+
     c = NurbsCurve.create(True, 2, closed_pts)
     expected_start = c.point_at(c.domain_middle())
     c.change_closed_curve_seam(c.domain_middle())
+
     MINI_CHECK(TOLERANCE.is_point_close(c.point_at_start(), expected_start))
 
 
@@ -797,21 +661,22 @@ def test_nurbscurve_transformations():
     curve1 = NurbsCurve.create(False, 2, points)
     curve1_xf = Xform.translation(0.0, 0.0, 1.0)
     curve1.transform(curve1_xf)
-    MINI_CHECK(curve1.cv(0)[2] == 1.0)
 
     curve2 = NurbsCurve.create(False, 2, points)
     x = Xform.translation(0.0, 0.0, 1.0)
     curve2.transform(x)
-    MINI_CHECK(curve2.cv(0)[2] == 1.0)
 
     curve3 = NurbsCurve.create(False, 2, points)
     curve3_xf = Xform.translation(0.0, 0.0, 10.0)
     curve3_transformed = curve3.transformed(curve3_xf)
-    MINI_CHECK(curve3_transformed.cv(0)[2] == 10.0)
 
     curve4 = NurbsCurve.create(False, 2, points)
     x = Xform.translation(0.0, 0.0, 10.0)
     curve4_transformed = curve4.transformed(x)
+
+    MINI_CHECK(curve1.cv(0)[2] == 1.0)
+    MINI_CHECK(curve2.cv(0)[2] == 1.0)
+    MINI_CHECK(curve3_transformed.cv(0)[2] == 10.0)
     MINI_CHECK(curve4_transformed.cv(0)[2] == 10.0)
 
 
@@ -827,23 +692,21 @@ def test_nurbscurve_json_roundtrip():
         Point(3.0, 2.0, 0.0),
         Point(4.0, 0.0, 0.0),
     ]
+
     curve = NurbsCurve.create(False, 2, points)
-
-    json_obj = curve.__jsondump__()
-    loaded_json = NurbsCurve.__jsonload__(json_obj)
-
-    json_string = curve.file_json_dumps()
-    loaded_json_string = NurbsCurve.file_json_loads(json_string)
-
-    filename = (
-        Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
-    )
+    guid = curve.guid
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
     curve.file_json_dump(filename)
+
+    json = curve.__jsondump__()
+    loaded_json = NurbsCurve.__jsonload__(json)
+    loaded_json_string = NurbsCurve.file_json_loads(curve.file_json_dumps())
     loaded_from_file = NurbsCurve.file_json_load(filename)
 
     MINI_CHECK(loaded_json == curve)
     MINI_CHECK(loaded_json_string == curve)
     MINI_CHECK(loaded_from_file == curve)
+    MINI_CHECK(loaded_from_file.guid == guid)
 
 
 @MINI_TEST("NurbsCurve", "Protobuf Roundtrip")
@@ -858,19 +721,21 @@ def test_nurbscurve_protobuf_roundtrip():
         Point(3.0, 2.0, 0.0),
         Point(4.0, 0.0, 0.0),
     ]
+
     curve = NurbsCurve.create(False, 2, points)
-
-    proto_string = curve.pb_dumps()
-    loaded_proto_string = NurbsCurve.pb_loads(proto_string)
-
-    filename = (
-        Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
-    )
+    guid = curve.guid
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
     curve.pb_dump(filename)
+
+    loaded_proto_string = NurbsCurve.pb_loads(curve.pb_dumps())
     loaded = NurbsCurve.pb_load(filename)
+    converted = NurbsCurve.from_proto(curve.to_proto())
 
     MINI_CHECK(loaded_proto_string == curve)
     MINI_CHECK(loaded == curve)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(converted == curve)
+    MINI_CHECK(converted.guid == guid)
 
 
 @MINI_TEST("NurbsCurve", "Curvature")
@@ -881,14 +746,23 @@ def test_nurbscurve_curvature():
 
     R = 2.0
     circle = Primitives.circle(0, 0, 0, R)
-    t0, t1 = circle.domain()
+    t0 = circle.domain_start()
+    t1 = circle.domain_end()
 
     for i in range(9):
         t = t0 + (t1 - t0) * i / 8.0
+
         MINI_CHECK(abs(circle.curvature_at(t) - 1.0 / R) < 1e-6)
 
-    line_pts = [Point(0, 0, 0), Point(1, 0, 0), Point(2, 0, 0), Point(3, 0, 0)]
+    line_pts = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(2, 0, 0),
+        Point(3, 0, 0),
+    ]
+
     line = NurbsCurve.create(False, 1, line_pts)
+
     MINI_CHECK(line.curvature_at(line.domain_middle()) < 1e-9)
 
 
@@ -902,40 +776,45 @@ def test_nurbscurve_closest_point():
 
     circle = Primitives.circle(0, 0, 0, 2.0)
     cp = circle.closest_point(Point(5, 0, 0))
-    MINI_CHECK(abs(cp[0] - 2.0) < 1e-5 and abs(cp[1]) < 1e-5 and abs(cp[2]) < 1e-5)
     cp2 = circle.closest_point(Point(0, 5, 0))
+
+    MINI_CHECK(abs(cp[0] - 2.0) < 1e-5 and abs(cp[1]) < 1e-5 and abs(cp[2]) < 1e-5)
     MINI_CHECK(abs(cp2[0]) < 1e-5 and abs(cp2[1] - 2.0) < 1e-5)
 
-    ipts = [Point(0, 0, 0), Point(3, 0, 2), Point(6, 0, -3), Point(8, 0, 0)]
-    ic = NurbsCurve.create_interpolated(
-        ipts, CurveNurbsKnotStyle.Chord, CurveInterpStyle.Occt
-    )
+    ipts = [
+        Point(0, 0, 0),
+        Point(3, 0, 2),
+        Point(6, 0, -3),
+        Point(8, 0, 0),
+    ]
+
+    ic = NurbsCurve.create_interpolated(ipts, CurveNurbsKnotStyle.Chord, CurveInterpStyle.Occt)
     pc = ic.closest_point(Point(2, -1, 0))
+
     MINI_CHECK(TOLERANCE.is_point_close(pc, Point(0.5808155659, 0.0, 0.9672315271)))
 
-    c0 = NurbsCurve.create_from_parameters(
-        [Point(0, 0, 0), Point(3, 6, 0), Point(6, -3, 3), Point(10, 0, 0)],
-        [1, 1, 1, 1],
-        [0, 1],
-        [4, 4],
-        3,
-    )
-    c1 = NurbsCurve.create_from_parameters(
-        [Point(6, -3, 0), Point(3, 1, 0), Point(6, 6, 3), Point(3, 12, 0)],
-        [1, 1, 1, 1],
-        [0, 1],
-        [4, 4],
-        3,
-    )
-    u, v = c0.closest_parameters_curve(c1)
-    MINI_CHECK(abs(u - 0.4757682937) < 1e-6 and abs(v - 0.3366914716) < 1e-6)
-    pa, pb = c0.closest_points_curve(c1)
-    MINI_CHECK(
-        TOLERANCE.is_point_close(pa, Point(4.389607399, 1.285537564, 1.067964425))
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(pb, Point(4.552264625, 1.380381100, 0.676740741))
-    )
+    p0 = [
+        Point(0, 0, 0),
+        Point(3, 6, 0),
+        Point(6, -3, 3),
+        Point(10, 0, 0),
+    ]
+
+    p1 = [
+        Point(6, -3, 0),
+        Point(3, 1, 0),
+        Point(6, 6, 3),
+        Point(3, 12, 0),
+    ]
+
+    c0 = NurbsCurve.create_from_parameters(p0, [1, 1, 1, 1], [0, 1], [4, 4], 3)
+    c1 = NurbsCurve.create_from_parameters(p1, [1, 1, 1, 1], [0, 1], [4, 4], 3)
+    params = c0.closest_parameters_curve(c1)
+    closest = c0.closest_points_curve(c1)
+
+    MINI_CHECK(abs(params[0] - 0.4757682937) < 1e-6 and abs(params[1] - 0.3366914716) < 1e-6)
+    MINI_CHECK(TOLERANCE.is_point_close(closest[0], Point(4.389607399, 1.285537564, 1.067964425)))
+    MINI_CHECK(TOLERANCE.is_point_close(closest[1], Point(4.552264625, 1.380381100, 0.676740741)))
 
 
 if __name__ == "__main__":
