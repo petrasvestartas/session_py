@@ -14,11 +14,12 @@ def test_kdtree_constructor():
         Point(3.0, 0.0, 0.0),
         Point(10.0, 0.0, 0.0),
     ]
-    tree = SpatialKDTree(pts)
-    idx, dist = tree.nearest(Point(2.0, 0.0, 0.0))
 
-    MINI_CHECK(idx == 1)
-    MINI_CHECK(TOLERANCE.is_close(dist, 1.0))
+    tree = SpatialKDTree(pts)
+    hit = tree.nearest(Point(2.0, 0.0, 0.0))
+
+    MINI_CHECK(hit[0] == 1)
+    MINI_CHECK(TOLERANCE.is_close(hit[1], 1.0))
 
 
 @MINI_TEST("SpatialKDTree", "Nearest")
@@ -33,12 +34,13 @@ def test_kdtree_nearest():
         Point(3.0, 0.0, 0.0),
         Point(4.0, 0.0, 0.0),
     ]
+
     tree = SpatialKDTree(pts)
     query = Point(1.1, 0.0, 0.0)
-    idx, dist = tree.nearest(query)
+    hit = tree.nearest(query)
 
-    MINI_CHECK(idx == 1)
-    MINI_CHECK(TOLERANCE.is_close(dist, 0.1))
+    MINI_CHECK(hit[0] == 1)
+    MINI_CHECK(TOLERANCE.is_close(hit[1], 0.1))
 
 
 @MINI_TEST("SpatialKDTree", "Nearest K")
@@ -53,6 +55,7 @@ def test_kdtree_nearest_k():
         Point(3.0, 0.0, 0.0),
         Point(4.0, 0.0, 0.0),
     ]
+
     tree = SpatialKDTree(pts)
     query = Point(1.5, 0.0, 0.0)
     result = tree.nearest_k(query, 3)
@@ -74,6 +77,7 @@ def test_kdtree_radius_search():
         Point(2.0, 0.0, 0.0),
         Point(5.0, 0.0, 0.0),
     ]
+
     tree = SpatialKDTree(pts)
     query = Point(0.5, 0.0, 0.0)
     result = tree.radius_search(query, 1.1)
