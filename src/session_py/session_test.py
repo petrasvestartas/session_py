@@ -935,7 +935,7 @@ def test_session_undo_remove():
     MINI_CHECK(group.children[1].name == b_guid)
     MINI_CHECK(group.children[1].children[0].name == c_guid)
     MINI_CHECK(session.graph.has_edge((a_guid, b_guid)))
-    MINI_CHECK(session.graph.edge_attribute(a_guid, b_guid) == "connection")
+    MINI_CHECK(session.graph.edge_label(a_guid, b_guid) == "connection")
     MINI_CHECK(session.xform(b_guid) == shift)
 
     session.redo()
@@ -1076,6 +1076,483 @@ def test_session_history_capacity():
     MINI_CHECK(not session.history.can_undo())
     MINI_CHECK(len(session.objects.points) == 6)
     MINI_CHECK(TOLERANCE.is_close(session.objects.points[5][0], 5.0))
+
+
+@MINI_TEST("Session", "Str Hierarchy")
+def test_session_str_hierarchy():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session("blocks")
+    group = session.add_group("Group")
+    session.add_point(Point(0.0, 0.0, 0.0), group)
+    session.add_point(Point(1.0, 0.0, 0.0), group)
+    text = str(session)
+
+    MINI_CHECK("Spatial Hierarchy" in text)
+    MINI_CHECK("Element Interactions" in text)
+    MINI_CHECK("\u2514\u2500\u2500 " in text)
+    MINI_CHECK("<Tree with " in text)
+    MINI_CHECK("<Graph with " in text)
+    MINI_CHECK(repr(session).startswith("Session(name=blocks"))
+
+
+@MINI_TEST("Session", "Add Definition")
+def test_session_add_definition():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    box = create_box(Point(0, 0, 0), 2.0)
+    guid = session.add_definition(box)
+    again = session.add_definition(box)
+    session.set_xform(guid, Xform.translation(1.0, 0.0, 0.0))
+    point = Point(1.0, 2.0, 3.0)
+    session.add_point(point)
+    taken = session.add_definition(point)
+
+    MINI_CHECK(guid == box.guid)
+    MINI_CHECK(again == guid)
+    MINI_CHECK(taken == "")
+    MINI_CHECK(len(session.definitions.meshes) == 1)
+    MINI_CHECK(guid in session.definition_lookup)
+    MINI_CHECK(guid not in session.lookup)
+    MINI_CHECK(len(session.order()) == 1)
+    MINI_CHECK(not session.graph.has_node(guid))
+    MINI_CHECK(session.tree.get_node_by_name(guid) is None)
+    MINI_CHECK(len(session.xforms) == 0)
+
+
+@MINI_TEST("Session", "Add Instance")
+def test_session_add_instance():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    group = session.add_group("bay")
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    instance = InstanceRef(definition, Xform.translation(0.0, 0.0, 3.0))
+    instance.name = "column"
+    guid = instance.guid
+    node = session.add_instance(instance, Xform.translation(10.0, 0.0, 0.0), group)
+    orphan = session.add_instance(InstanceRef("missing", Xform.identity()))
+
+    MINI_CHECK(node.name == guid)
+    MINI_CHECK(group.children[0].name == guid)
+    MINI_CHECK(session.graph.node_label(guid) == "instance_column")
+    MINI_CHECK(len(session.objects.instances) == 1)
+    MINI_CHECK(session.instance_lookup[guid].xform == Xform.identity())
+    MINI_CHECK(session.xform(guid) == Xform.translation(10.0, 0.0, 3.0))
+    MINI_CHECK(orphan is None)
+    MINI_CHECK(len(session.order()) == 0)
+
+
+@MINI_TEST("Session", "Definition Of")
+def test_session_definition_of():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    instance = InstanceRef(definition, Xform.identity())
+    guid = instance.guid
+    session.add_instance(instance)
+    found = session.definition_of(guid)
+
+    MINI_CHECK(found is not None)
+    MINI_CHECK(found.guid == definition)
+    MINI_CHECK(session.definition_of(definition) is None)
+    MINI_CHECK(session.definition_of("missing") is None)
+
+
+@MINI_TEST("Session", "Instances Of")
+def test_session_instances_of():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    first = InstanceRef(definition, Xform.identity())
+    second = InstanceRef(definition, Xform.identity())
+    first_guid = first.guid
+    second_guid = second.guid
+    session.add_instance(first)
+    session.add_instance(second)
+    guids = session.instances_of(definition)
+
+    MINI_CHECK(len(guids) == 2)
+    MINI_CHECK(guids[0] == first_guid)
+    MINI_CHECK(guids[1] == second_guid)
+    MINI_CHECK(len(session.instances_of("missing")) == 0)
+
+
+@MINI_TEST("Session", "World Geometry")
+def test_session_world_geometry():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    instance = InstanceRef(definition, Xform.identity())
+    instance.name = "box"
+    guid = instance.guid
+    session.add_instance(instance, Xform.translation(10.0, 0.0, 0.0))
+    point = Point(1.0, 2.0, 3.0)
+    session.add_point(point)
+    session.set_xform(point.guid, Xform.translation(0.0, 0.0, 5.0))
+
+    mesh = session.world_geometry(guid)
+    moved = session.world_geometry(point.guid)
+    local = session.definition_lookup[definition]
+
+    MINI_CHECK(mesh.guid == guid)
+    MINI_CHECK(mesh.name == "box")
+    MINI_CHECK(TOLERANCE.is_close(mesh.vertex_point(0)[0], 9.0))
+    MINI_CHECK(TOLERANCE.is_close(local.vertex_point(0)[0], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(moved[2], 8.0))
+    MINI_CHECK(TOLERANCE.is_close(point[2], 3.0))
+    MINI_CHECK(session.world_geometry("missing") is None)
+
+
+@MINI_TEST("Session", "Get Geometry Resolves Instances")
+def test_session_get_geometry_resolves_instances():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    group = session.add_group("row")
+    session.set_xform("row", Xform.translation(0.0, 5.0, 0.0))
+    session.add_instance(
+        InstanceRef(definition, Xform.identity()),
+        Xform.translation(10.0, 0.0, 0.0),
+        group,
+    )
+    session.add_instance(
+        InstanceRef(definition, Xform.identity()),
+        Xform.translation(20.0, 0.0, 0.0),
+        group,
+    )
+
+    geometry = session.get_geometry()
+    corner = geometry.meshes[1].vertex_point(0)
+
+    MINI_CHECK(len(geometry.instances) == 0)
+    MINI_CHECK(len(geometry.meshes) == 2)
+    MINI_CHECK(TOLERANCE.is_close(corner[0], 19.0))
+    MINI_CHECK(TOLERANCE.is_close(corner[1], 4.0))
+    MINI_CHECK(len(session.objects.instances) == 2)
+    MINI_CHECK(len(session.objects.meshes) == 0)
+
+
+@MINI_TEST("Session", "Replace Definition")
+def test_session_replace_definition():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    first = InstanceRef(definition, Xform.identity())
+    second = InstanceRef(definition, Xform.identity())
+    second_guid = second.guid
+    session.add_instance(first, Xform.translation(10.0, 0.0, 0.0))
+    session.add_instance(second, Xform.translation(20.0, 0.0, 0.0))
+
+    replaced = session.replace_definition(definition, create_box(Point(0, 0, 0), 4.0))
+    missing = session.replace_definition("missing", create_box(Point(0, 0, 0), 4.0))
+    mesh = session.world_geometry(second_guid)
+
+    MINI_CHECK(replaced)
+    MINI_CHECK(not missing)
+    MINI_CHECK(len(session.definitions.meshes) == 1)
+    MINI_CHECK(session.definitions.meshes[0].guid == definition)
+    MINI_CHECK(TOLERANCE.is_close(mesh.vertex_point(0)[0], 18.0))
+
+
+@MINI_TEST("Session", "Remove Definition")
+def test_session_remove_definition():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    instance = InstanceRef(definition, Xform.identity())
+    guid = instance.guid
+    session.add_instance(instance)
+
+    refused = not session.remove_definition(definition)
+    session.remove_object(guid)
+    removed = session.remove_definition(definition)
+
+    MINI_CHECK(refused)
+    MINI_CHECK(removed)
+    MINI_CHECK(len(session.definitions.meshes) == 0)
+    MINI_CHECK(len(session.definition_lookup) == 0)
+    MINI_CHECK(len(session.objects.instances) == 0)
+    MINI_CHECK(not session.remove_definition("missing"))
+
+
+@MINI_TEST("Session", "To Instance")
+def test_session_to_instance():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    group = session.add_group("bay")
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    point = Point(0.0, 0.0, 0.0)
+    box = create_box(Point(5.0, 0.0, 0.0), 2.0)
+    box.name = "column"
+    guid = box.guid
+    session.add_point(point, group)
+    session.add_mesh(box, group)
+    session.add_edge(point.guid, guid, "contact")
+    session.set_xform(guid, Xform.translation(0.0, 0.0, 1.0))
+
+    before = session.world_geometry(guid).vertex_point(0)
+    converted = session.to_instance(guid, definition, Xform.translation(5.0, 0.0, 0.0))
+    after = session.world_geometry(guid).vertex_point(0)
+
+    MINI_CHECK(converted)
+    MINI_CHECK(len(session.objects.meshes) == 0)
+    MINI_CHECK(session.instance_lookup[guid].name == "column")
+    MINI_CHECK(session.instance_lookup[guid].definition_guid == definition)
+    MINI_CHECK(group.children[1].name == guid)
+    MINI_CHECK(session.graph.has_edge((point.guid, guid)))
+    MINI_CHECK(session.graph.node_label(guid) == "instance_column")
+    MINI_CHECK(TOLERANCE.is_close(before[0], after[0]))
+    MINI_CHECK(TOLERANCE.is_close(before[2], after[2]))
+    MINI_CHECK(not session.to_instance(guid, definition, Xform.identity()))
+
+
+@MINI_TEST("Session", "Explode")
+def test_session_explode():
+    from session_py import Session
+    from session_py import Element
+    from session_py import ElementFeature
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(
+        Element(create_box(Point(0, 0, 0), 2.0), "plate")
+    )
+    instance = InstanceRef(definition, Xform.identity())
+    instance.name = "deck"
+    instance.features.append(
+        ElementFeature("contact", 0, [Polyline([Point(0, 0, 0), Point(1, 0, 0)])])
+    )
+    guid = instance.guid
+    feature = instance.features[0].guid
+    point = Point(0.0, 0.0, 0.0)
+    session.add_point(point)
+    session.add_instance(instance, Xform.translation(10.0, 0.0, 0.0))
+    session.add_edge(point.guid, guid, "contact")
+
+    exploded = session.explode(guid)
+    element = session.get_object(guid)
+
+    MINI_CHECK(exploded)
+    MINI_CHECK(len(session.objects.instances) == 0)
+    MINI_CHECK(element.name == "deck")
+    MINI_CHECK(len(element.features) == 1)
+    MINI_CHECK(element.features[0].guid == feature)
+    MINI_CHECK(session.xform(guid) == Xform.translation(10.0, 0.0, 0.0))
+    MINI_CHECK(session.graph.has_edge((point.guid, guid)))
+    MINI_CHECK(session.graph.node_label(guid) == "element_deck")
+    MINI_CHECK(len(session.definitions.elements) == 1)
+    MINI_CHECK(not session.explode(guid))
+
+
+@MINI_TEST("Session", "Undo Instance")
+def test_session_undo_instance():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    group = session.add_group("bay")
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    point = Point(0.0, 0.0, 0.0)
+    box = create_box(Point(0, 0, 0), 2.0)
+    guid = box.guid
+    session.add_point(point, group)
+    session.add_mesh(box, group)
+    session.add_edge(point.guid, guid, "contact")
+    edge = session.graph.edges[point.guid][guid].guid
+    order = session.order()
+    tree = str(session.tree)
+    label = session.graph.node_label(guid)
+
+    session.begin("to instance")
+    session.to_instance(guid, definition, Xform.identity())
+    session.commit()
+    session.begin("explode")
+    session.explode(guid)
+    session.commit()
+    session.undo()
+    instanced = guid in session.instance_lookup and str(session.tree) == tree
+    session.undo()
+
+    instance = InstanceRef(definition, Xform.identity())
+    added = instance.guid
+    session.begin("add")
+    session.add_instance(instance, Xform.translation(1.0, 0.0, 0.0), group)
+    session.commit()
+    session.undo()
+    gone = len(session.instance_lookup) == 0 and len(session.xforms) == 0
+    session.redo()
+
+    MINI_CHECK(instanced)
+    MINI_CHECK(gone)
+    MINI_CHECK(session.objects.meshes[0].guid == guid)
+    MINI_CHECK(session.graph.has_edge((point.guid, guid)))
+    MINI_CHECK(session.graph.edges[guid][point.guid].guid == edge)
+    MINI_CHECK(session.graph.node_label(guid) == label)
+    MINI_CHECK(session.order() == order)
+    MINI_CHECK(session.xform(added) == Xform.translation(1.0, 0.0, 0.0))
+    MINI_CHECK(group.children[2].name == added)
+
+
+@MINI_TEST("Session", "Instance Json Roundtrip")
+def test_session_instance_json_roundtrip():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+    from pathlib import Path
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    instance = InstanceRef(definition, Xform.identity())
+    guid = instance.guid
+    session.add_instance(instance, Xform.translation(10.0, 0.0, 0.0))
+
+    fname = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_session_instance.json"
+    )
+    session.file_json_dump(fname)
+    loaded = Session.file_json_load(fname)
+    data = session.__jsondump__()
+    data["objects"]["instances"][0]["xform"] = Xform.translation(
+        0.0, 0.0, 1.0
+    ).__jsondump__()
+    folded = Session.__jsonload__(data)
+
+    MINI_CHECK(len(loaded.definitions.meshes) == 1)
+    MINI_CHECK(guid in loaded.instance_lookup)
+    MINI_CHECK(loaded.definition_of(guid) is not None)
+    MINI_CHECK(loaded.xform(guid) == Xform.translation(10.0, 0.0, 0.0))
+    MINI_CHECK(folded.xform(guid) == Xform.translation(10.0, 0.0, 1.0))
+    MINI_CHECK(folded.instance_lookup[guid].xform == Xform.identity())
+
+
+@MINI_TEST("Session", "Instance Protobuf Roundtrip")
+def test_session_instance_protobuf_roundtrip():
+    from session_py import Session
+    from session_py import ElementFeature
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Xform
+    from session_py.proto import session_pb2
+    from pathlib import Path
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    instance = InstanceRef(definition, Xform.identity())
+    instance.features.append(
+        ElementFeature("contact", 0, [Polyline([Point(0, 0, 0), Point(1, 0, 0)])])
+    )
+    guid = instance.guid
+    feature = instance.features[0].guid
+    session.add_instance(instance, Xform.translation(10.0, 0.0, 0.0))
+
+    fname = (
+        Path(__file__).resolve().parents[2]
+        / "serialization"
+        / "test_session_instance.bin"
+    )
+    session.pb_dump(fname)
+    loaded = Session.pb_load(fname)
+    plain = session_pb2.Session()
+    plain.ParseFromString(Session().pb_dumps())
+
+    MINI_CHECK(len(loaded.definitions.meshes) == 1)
+    MINI_CHECK(len(loaded.instance_lookup[guid].features) == 1)
+    MINI_CHECK(loaded.instance_lookup[guid].features[0].guid == feature)
+    MINI_CHECK(loaded.definition_of(guid) is not None)
+    MINI_CHECK(loaded.xform(guid) == Xform.translation(10.0, 0.0, 0.0))
+    MINI_CHECK(not plain.HasField("definitions"))
+
+
+@MINI_TEST("Session", "Get Collisions Instances")
+def test_session_get_collisions_instances():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    first = InstanceRef(definition, Xform.identity())
+    second = InstanceRef(definition, Xform.identity())
+    third = InstanceRef(definition, Xform.identity())
+    first_guid = first.guid
+    second_guid = second.guid
+    third_guid = third.guid
+    session.add_instance(first)
+    session.add_instance(second, Xform.translation(1.0, 0.0, 0.0))
+    session.add_instance(third, Xform.translation(100.0, 0.0, 0.0))
+
+    pairs = session.get_collisions()
+
+    MINI_CHECK(len(pairs) == 1)
+    MINI_CHECK(session.graph.has_edge((first_guid, second_guid)))
+    MINI_CHECK(not session.graph.has_edge((first_guid, third_guid)))
+
+
+@MINI_TEST("Session", "Ray Cast Instance")
+def test_session_ray_cast_instance():
+    from session_py import Session
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Vector
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(create_box(Point(0, 0, 0), 2.0))
+    instance = InstanceRef(definition, Xform.identity())
+    guid = instance.guid
+    session.add_instance(instance, Xform.translation(100.0, 0.0, 0.0))
+
+    hits = session.ray_cast(Point(100.0, 0.0, 5.0), Vector(0.0, 0.0, -1.0))
+
+    MINI_CHECK(len(hits) == 1)
+    MINI_CHECK(hits[0].guid == guid)
+    MINI_CHECK(TOLERANCE.is_close(hits[0].hit_point[0], 100.0))
+    MINI_CHECK(TOLERANCE.is_close(hits[0].hit_point[2], 1.0))
 
 
 if __name__ == "__main__":

@@ -19,11 +19,13 @@ from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .brep import BRep
 from .element import Element
+from .instance_ref import InstanceRef
 from .tree import Tree
 from .tree import TreeNode
 from .graph import Graph
 from .history import History
 from .history import AddOp
+from .history import DefinitionOp
 from .history import RemoveOp
 from .history import ReplaceOp
 from .history import XformOp
@@ -54,6 +56,7 @@ COLLECTIONS = [
     ("breps", "brep"),
     ("elements", "element"),
     ("components", "component"),
+    ("instances", "instance"),
 ]
 
 
@@ -75,6 +78,82 @@ def _clone_objects(objects: Objects) -> Objects:
             dst.guid = src.guid
 
     return out
+
+
+def _locate(objects: Objects, guid: str) -> tuple[str, int]:
+    """Which list of objects holds a guid, and where; ("", -1) when none does."""
+
+    for collection, prefix in COLLECTIONS:
+        items = getattr(objects, collection)
+
+        for i in range(len(items)):
+            if items[i].guid == guid:
+                return collection, i
+
+    return "", -1
+
+
+def _collection_of(geometry: Any) -> tuple[str, str]:
+    """The COLLECTIONS entry whose list holds the type of geometry."""
+
+    types = (
+        Point,
+        Line,
+        Plane,
+        OBB,
+        Polyline,
+        PointCloud,
+        Mesh,
+        NurbsCurve,
+        NurbsSurface,
+        BRep,
+        Element,
+    )
+
+    for entry, cls in zip(COLLECTIONS, types):
+        if isinstance(geometry, cls):
+            return entry
+
+    return "", ""
+
+
+def _index_geometry(objects: Objects, lookup: dict[str, Any]) -> None:
+    """Every geometry of objects under its guid."""
+
+    for collection, prefix in COLLECTIONS:
+        if collection == "components" or collection == "instances":
+            continue
+
+        for item in getattr(objects, collection):
+            lookup[item.guid] = item
+
+
+def _place(geometry: Any, xform: Xform) -> None:
+    """Move geometry in place: an element is placed, anything else transformed; identity leaves it untouched."""
+
+    if xform.is_identity():
+        return
+
+    if isinstance(geometry, Element):
+        geometry.place(xform)
+    else:
+        geometry.transform(xform)
+
+
+def _resolve(instance: InstanceRef, definition: Any, xform: Xform) -> Any:
+    """The definition copied as the instance, its guid and name and on an element its features, then moved by xform."""
+
+    result = clone(definition)
+    result.guid = instance.guid
+    result.name = instance.name
+
+    if isinstance(result, Element):
+        for feature in clone(instance.features):
+            result.add_feature(feature)
+
+    _place(result, xform)
+
+    return result
 
 
 def _bake(items: list, world: dict[str, Xform]) -> None:
@@ -101,6 +180,18 @@ def _placed_box(points: list[Point], xform: Xform, inflate: float) -> OBB:
         placed.append(xform.transform_point(point))
 
     return OBB.from_points(placed, inflate)
+
+
+def _edge_guid(graph: Graph, a: str, b: str) -> str:
+    """The guid of the edge between a and b, from whichever stored copy has one; "" when neither was minted."""
+
+    forward = graph.edges[a][b]
+    backward = graph.edges[b][a]
+
+    if forward.has_guid():
+        return forward.guid
+
+    return backward.guid if backward.has_guid() else ""
 
 
 def _ray_point(ray: Line, point: Point, tolerance: float) -> Point | None:
@@ -135,6 +226,9 @@ class Session:
         self.graph = Graph(name=f"{name}_graph")  # Graph structure for relationships.
         self.component_lookup: dict[str, Component] = {}  # Components by GUID.
         self.xforms: dict[str, Xform] = {}  # Guid -> LOCAL transform.
+        self.definitions = Objects()  # Shared geometry instances place, each in its own frame; never in order(), the tree, the graph or xforms.
+        self.definition_lookup: dict[str, Any] = {}  # Definitions by guid.
+        self.instance_lookup: dict[str, InstanceRef] = {}  # Instances by guid.
         self.history = History()  # Undo/redo buffer, purged by every save.
         self.bvh = SpatialBVH()  # Bounding volume hierarchy for collision detection.
         self.cached_ray_bvh = SpatialBVH()  # Cached SpatialBVH for ray casting.
@@ -156,6 +250,7 @@ class Session:
         result.tree = copy.deepcopy(self.tree, memo)
         result.graph = copy.deepcopy(self.graph, memo)
         result.xforms = copy.deepcopy(self.xforms, memo)
+        result.definitions = _clone_objects(self.definitions)
         result._index_objects()
         memo[id(self)] = result
 
@@ -222,7 +317,7 @@ class Session:
         raise ValueError(f"Group '{group_name}' not found")
 
     def order(self) -> list[str]:
-        """Canonical object order: the objects lists walked in one fixed type sequence."""
+        """Canonical object order: the objects lists walked in one fixed type sequence; instances are not in it."""
 
         order = []
 
@@ -318,7 +413,7 @@ class Session:
         return self.graph.neighbors(obj_guid)
 
     def get_geometry(self) -> Objects:
-        """All geometry with its hierarchical placement BAKED into the coordinates."""
+        """All geometry with its hierarchical placement BAKED into the coordinates; each instance becomes its definition placed, in the definition's list."""
 
         out = _clone_objects(self.objects)
         world = self.world_xforms()
@@ -341,7 +436,60 @@ class Session:
 
             element.place(xform)
 
+        for instance in self.objects.instances:
+            definition = self.definition_lookup.get(instance.definition_guid)
+
+            if definition is None:
+                continue
+
+            resolved = _resolve(
+                instance, definition, world.get(instance.guid, Xform.identity())
+            )
+            getattr(out, _collection_of(resolved)[0]).append(resolved)
+
+        out.instances.clear()
+
         return out
+
+    def definition_of(self, instance_guid: str) -> Any | None:
+        """The definition an instance places; None when guid is no instance or its definition is missing."""
+
+        instance = self.instance_lookup.get(instance_guid)
+
+        if instance is None:
+            return None
+
+        return self.definition_lookup.get(instance.definition_guid)
+
+    def instances_of(self, definition_guid: str) -> list[str]:
+        """Guids of every instance of a definition, in objects.instances order."""
+
+        guids = []
+
+        for instance in self.objects.instances:
+            if instance.definition_guid == definition_guid:
+                guids.append(instance.guid)
+
+        return guids
+
+    def world_geometry(self, guid: str) -> Any | None:
+        """One object in world placement, as a copy: an instance becomes its definition moved by the world transform, carrying the instance's guid, name and features."""
+
+        world = self.world_xform(guid)
+        geometry = self.lookup.get(guid)
+
+        if geometry is not None:
+            result = clone(geometry)
+            _place(result, world)
+
+            return result
+
+        definition = self.definition_of(guid)
+
+        if definition is None:
+            return None
+
+        return _resolve(self.instance_lookup[guid], definition, world)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry management
@@ -444,6 +592,51 @@ class Session:
         """Add a custom component (any object with type_name/guid/name/extra)."""
         return self._add_object("components", component, "component", parent)
 
+    def add_definition(self, definition: Any) -> str:
+        """Add a definition, geometry in its own frame that instances share; returns its guid, also when that guid is already defined, and "" for None or a guid an object, instance or component holds."""
+
+        if definition is None:
+            return ""
+
+        guid = definition.guid
+
+        if guid in self.definition_lookup:
+            return guid
+
+        if (
+            guid in self.lookup
+            or guid in self.instance_lookup
+            or guid in self.component_lookup
+        ):
+            return ""
+
+        if self.history.current is not None:
+            self.history.record(DefinitionOp(guid, None, clone(definition)))
+
+        self._define(guid, definition)
+
+        return guid
+
+    def add_instance(
+        self,
+        instance: InstanceRef,
+        xform: Xform | None = None,
+        parent: TreeNode | None = None,
+    ) -> TreeNode | None:
+        """Add an instance under parent, placed by xform relative to the parent with its own xform folded in; None when None or its definition_guid names no definition."""
+
+        if instance is None or instance.definition_guid not in self.definition_lookup:
+            return None
+
+        placement = (xform if xform is not None else Xform.identity()) * instance.xform
+        instance.xform = Xform.identity()
+        node = self._add_object("instances", instance, "instance", parent)
+
+        if not placement.is_identity():
+            self.set_xform(instance.guid, placement)
+
+        return node
+
     def add(self, node: TreeNode | None, parent: TreeNode | None = None) -> None:
         """Add a TreeNode to the tree hierarchy, under the root when no parent is given; None is ignored."""
 
@@ -505,8 +698,109 @@ class Session:
 
         return True
 
+    def replace_definition(self, guid: str, definition: Any) -> bool:
+        """Swap the geometry of a definition, which keeps its guid, so every instance of it changes at once; False when guid is no definition."""
+
+        before = self.definition_lookup.get(guid)
+
+        if before is None:
+            return False
+
+        definition.guid = guid
+
+        if self.history.current is not None:
+            self.history.record(DefinitionOp(guid, clone(before), clone(definition)))
+
+        self._define(guid, definition)
+
+        return True
+
+    def remove_definition(self, guid: str) -> bool:
+        """Remove a definition; False when guid is no definition or an instance still names it."""
+
+        before = self.definition_lookup.get(guid)
+
+        if before is None or len(self.instances_of(guid)) > 0:
+            return False
+
+        if self.history.current is not None:
+            self.history.record(DefinitionOp(guid, clone(before), None))
+
+        self._define(guid, None)
+
+        return True
+
+    def to_instance(self, guid: str, definition_guid: str, frame: Xform) -> bool:
+        """Turn an object into an instance of a definition, keeping its guid, name, tree node and edges; frame maps the definition onto the object and is folded into its local transform."""
+
+        obj = self.lookup.get(guid)
+
+        if obj is None or definition_guid not in self.definition_lookup:
+            return False
+
+        instance = InstanceRef(definition_guid, Xform.identity())
+        instance.guid = guid
+        instance.name = obj.name
+        placement = self.xform(guid) * frame
+        removed = self._detach(guid)
+        added = AddOp(
+            guid,
+            instance,
+            "instances",
+            len(self.objects.instances),
+            None if placement.is_identity() else placement,
+            removed.parent_guid,
+            removed.index,
+            removed.node,
+            f"instance_{instance.name}",
+            removed.edges,
+        )
+        self.history.record(removed)
+        self.history.record(added)
+        self._attach(added)
+
+        return True
+
+    def explode(self, instance_guid: str) -> bool:
+        """Turn an instance into a standalone copy of its definition in the definition frame, keeping its guid, name, transform, tree node and edges, and on an element its features."""
+
+        definition = self.definition_of(instance_guid)
+
+        if definition is None:
+            return False
+
+        instance = self.instance_lookup[instance_guid]
+        result = _resolve(instance, definition, Xform.identity())
+        collection, prefix = _collection_of(result)
+        size = len(getattr(self.objects, collection))
+        removed = self._detach(instance_guid)
+        added = AddOp(
+            instance_guid,
+            result,
+            collection,
+            size,
+            removed.xform,
+            removed.parent_guid,
+            removed.index,
+            removed.node,
+            f"{prefix}_{instance.name}",
+            removed.edges,
+        )
+        self.history.record(removed)
+        self.history.record(added)
+        self._attach(added)
+
+        return True
+
     def set_xform(self, guid: str, xform: Xform) -> None:
-        """Sets the LOCAL transform of an object, relative to its tree parent."""
+        """Sets the LOCAL transform of an object, relative to its tree parent; a guid that names only a definition is ignored."""
+
+        if (
+            guid in self.definition_lookup
+            and guid not in self.lookup
+            and guid not in self.instance_lookup
+        ):
+            return
 
         if self.history.current is not None:
             self.history.record(XformOp(guid, self.xforms.get(guid), xform))
@@ -662,6 +956,9 @@ class Session:
             geometry = self.lookup.get(guid)
 
             if geometry is None:
+                geometry = self.definition_of(guid)
+
+            if geometry is None:
                 continue
 
             placement = world.get(guid, Xform.identity())
@@ -695,7 +992,7 @@ class Session:
         for obj_guid, obj_xform in self._xforms_ordered():
             xforms.append({"guid": obj_guid, "xform": obj_xform.__jsondump__()})
 
-        return {
+        data = {
             "type": "Session",
             "name": self.name,
             "guid": self.guid,
@@ -704,6 +1001,11 @@ class Session:
             "graph": self.graph.__jsondump__(),
             "xforms": xforms,
         }
+
+        if self.definition_lookup:
+            data["definitions"] = self.definitions.__jsondump__()
+
+        return data
 
     @classmethod
     def __jsonload__(
@@ -725,10 +1027,13 @@ class Session:
         if data.get("graph"):
             session.graph = file_decode_node(data["graph"])
 
-        session._index_objects()
+        if data.get("definitions"):
+            session.definitions = file_decode_node(data["definitions"])
 
         for entry in data.get("xforms", []):
             session.xforms[entry["guid"]] = Xform.__jsonload__(entry["xform"])
+
+        session._index_objects()
 
         return session
 
@@ -777,6 +1082,9 @@ class Session:
             entry.guid = obj_guid
             entry.xform.ParseFromString(obj_xform.pb_dumps())
 
+        if self.definition_lookup:
+            proto.definitions.ParseFromString(self.definitions.pb_dumps())
+
         return proto.SerializeToString()
 
     @classmethod
@@ -801,10 +1109,13 @@ class Session:
         if proto.HasField("graph"):
             session.graph = Graph.pb_loads(proto.graph.SerializeToString())
 
-        session._index_objects()
+        if proto.HasField("definitions"):
+            session.definitions = Objects.from_proto(proto.definitions)
 
         for entry in proto.xforms:
             session.xforms[entry.guid] = Xform.pb_loads(entry.xform.SerializeToString())
+
+        session._index_objects()
 
         return session
 
@@ -822,12 +1133,15 @@ class Session:
             return cls.pb_loads(f.read())
 
     def __str__(self) -> str:
-        """Return a string representation of the session."""
-        return f"Session(name={self.name}, objects={self.objects.to_str()}, tree={self.tree.to_str()}, graph={self.graph.to_str()})"
+        """Return the spatial hierarchy and the element interactions as a banner block."""
+
+        bar = "=" * 80
+
+        return f"{bar}\nSpatial Hierarchy\n{bar}\n{self.tree}{bar}\nElement Interactions\n{bar}\n{self.graph}\n{bar}\n"
 
     def __repr__(self) -> str:
-        """Return a string representation of the session for debugging."""
-        return self.__str__()
+        """Return the name, object counts, tree and graph on one line."""
+        return f"Session(name={self.name}, objects={self.objects}, tree={self.tree!r}, graph={self.graph!r})"
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Details
@@ -845,6 +1159,8 @@ class Session:
 
         if collection == "components":
             self.component_lookup[guid] = obj
+        elif collection == "instances":
+            self.instance_lookup[guid] = obj
         else:
             self.lookup[guid] = obj
 
@@ -852,13 +1168,14 @@ class Session:
         self.graph.add_node(guid, attribute)
         self.bvh_cache_dirty = True
         node = TreeNode(name=guid)
+        host = parent if parent is not None else self.tree.root
         parent_guid = None
         index = 0
 
-        if parent is not None:
-            self.add(node, parent)
-            parent_guid = parent.name
-            index = len(parent.children) - 1
+        if host is not None:
+            self.add(node, host)
+            parent_guid = host.name
+            index = len(host.children) - 1
 
         if self.history.current is not None:
             self.history.record(
@@ -880,15 +1197,7 @@ class Session:
 
     def _locate(self, guid: str) -> tuple[str, int]:
         """Which Objects list holds a guid, and where; ("", -1) when none does."""
-
-        for collection, prefix in COLLECTIONS:
-            items = getattr(self.objects, collection)
-
-            for i in range(len(items)):
-                if items[i].guid == guid:
-                    return collection, i
-
-        return "", -1
+        return _locate(self.objects, guid)
 
     def _detach(self, guid: str) -> RemoveOp | None:
         """Take an object out of every live table, unrecorded, returning its tombstone."""
@@ -897,6 +1206,9 @@ class Session:
 
         if obj is None:
             obj = self.component_lookup.get(guid)
+
+        if obj is None:
+            obj = self.instance_lookup.get(guid)
 
         if obj is None:
             return None
@@ -908,6 +1220,7 @@ class Session:
 
         self.lookup.pop(guid, None)
         self.component_lookup.pop(guid, None)
+        self.instance_lookup.pop(guid, None)
         xform = self.xforms.pop(guid, None)
         self.bvh_cache_dirty = True
         parent_guid = None
@@ -927,8 +1240,13 @@ class Session:
         edges = []
 
         if self.graph.has_node(guid):
-            attribute = self.graph.node_attribute(guid)
-            edges = self.graph.edges_of(guid)
+            attribute = self.graph.node_label(guid)
+
+            for other, label, forward in self.graph.edges_of(guid):
+                edges.append(
+                    (other, label, forward, _edge_guid(self.graph, guid, other))
+                )
+
             self.graph.remove_node(guid)
 
         return RemoveOp(
@@ -953,6 +1271,8 @@ class Session:
 
         if op.collection == "components":
             self.component_lookup[op.guid] = obj
+        elif op.collection == "instances":
+            self.instance_lookup[op.guid] = obj
         else:
             self.lookup[op.guid] = obj
 
@@ -977,7 +1297,7 @@ class Session:
 
         self.graph.add_node(op.guid, op.attribute)
 
-        for other, attribute, forward in op.edges:
+        for other, attribute, forward, id in op.edges:
             if not self.graph.has_node(other):
                 continue
 
@@ -985,6 +1305,12 @@ class Session:
                 self.graph.add_edge(op.guid, other, attribute)
             else:
                 self.graph.add_edge(other, op.guid, attribute)
+
+            if id == "":
+                continue
+
+            self.graph.edges[op.guid][other].guid = id
+            self.graph.edges[other][op.guid].guid = id
 
     def _swap(self, guid: str, obj: Any) -> None:
         """Store obj under guid in its typed list and lookup, unrecorded."""
@@ -998,6 +1324,8 @@ class Session:
 
         if collection == "components":
             self.component_lookup[guid] = obj
+        elif collection == "instances":
+            self.instance_lookup[guid] = obj
         else:
             self.lookup[guid] = obj
 
@@ -1009,49 +1337,48 @@ class Session:
                 attribute = f"{prefix}_{obj.name}"
 
         if self.graph.has_node(guid):
-            self.graph.node_attribute(guid, attribute)
+            self.graph.node_label(guid, attribute)
 
     def _index_objects(self) -> None:
-        """Point lookup and component_lookup at the objects this session currently holds."""
+        """Point every lookup at the objects and definitions this session holds, folding a non-identity instance xform into xforms."""
 
         self.lookup.clear()
         self.component_lookup.clear()
-
-        for point in self.objects.points:
-            self.lookup[point.guid] = point
-
-        for line in self.objects.lines:
-            self.lookup[line.guid] = line
-
-        for plane in self.objects.planes:
-            self.lookup[plane.guid] = plane
-
-        for bbox in self.objects.bboxes:
-            self.lookup[bbox.guid] = bbox
-
-        for polyline in self.objects.polylines:
-            self.lookup[polyline.guid] = polyline
-
-        for pointcloud in self.objects.pointclouds:
-            self.lookup[pointcloud.guid] = pointcloud
-
-        for mesh in self.objects.meshes:
-            self.lookup[mesh.guid] = mesh
-
-        for nurbscurve in self.objects.nurbscurves:
-            self.lookup[nurbscurve.guid] = nurbscurve
-
-        for nurbssurface in self.objects.nurbssurfaces:
-            self.lookup[nurbssurface.guid] = nurbssurface
-
-        for brep in self.objects.breps:
-            self.lookup[brep.guid] = brep
-
-        for element in self.objects.elements:
-            self.lookup[element.guid] = element
+        self.instance_lookup.clear()
+        self.definition_lookup.clear()
+        _index_geometry(self.objects, self.lookup)
+        _index_geometry(self.definitions, self.definition_lookup)
 
         for component in self.objects.components:
             self.component_lookup[component.guid] = component
+
+        for instance in self.objects.instances:
+            self.instance_lookup[instance.guid] = instance
+
+            if instance.xform.is_identity():
+                continue
+
+            self.xforms[instance.guid] = self.xform(instance.guid) * instance.xform
+            instance.xform = Xform.identity()
+
+    def _define(self, guid: str, definition: Any | None) -> None:
+        """Set or drop (None) a definition under guid, unrecorded."""
+
+        collection, position = _locate(self.definitions, guid)
+
+        if position >= 0:
+            getattr(self.definitions, collection).pop(position)
+
+        self.definition_lookup.pop(guid, None)
+        self.bvh_cache_dirty = True
+
+        if definition is None:
+            return
+
+        items = getattr(self.definitions, _collection_of(definition)[0])
+        at = len(items) if position < 0 else min(position, len(items))
+        items.insert(at, definition)
+        self.definition_lookup[guid] = definition
 
     def _place(self, guid: str, xform: Xform | None) -> None:
         """Set or drop (None) the local transform under guid, unrecorded."""
@@ -1087,7 +1414,7 @@ class Session:
         return ordered
 
     def _compute_boxes(self, guids: list[str]) -> list[OBB]:
-        """World bounding box of every object in order() sequence, with the guid of each."""
+        """World bounding box of every object in order() sequence, then of every instance, with the guid of each."""
 
         guids.clear()
         boxes = []
@@ -1103,6 +1430,28 @@ class Session:
                 self.compute_bounding_box(geometry, world.get(guid, Xform.identity()))
             )
             guids.append(guid)
+
+        local: dict[str, OBB] = {}
+
+        for instance in self.objects.instances:
+            definition = self.definition_lookup.get(instance.definition_guid)
+
+            if definition is None:
+                continue
+
+            if instance.definition_guid not in local:
+                local[instance.definition_guid] = self.compute_bounding_box(
+                    definition, Xform.identity()
+                )
+
+            placed = copy.deepcopy(local[instance.definition_guid])
+            xform = world.get(instance.guid)
+
+            if xform is not None:
+                placed.transform(xform)
+
+            boxes.append(placed)
+            guids.append(instance.guid)
 
         return boxes
 
