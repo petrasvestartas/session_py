@@ -86,5 +86,42 @@ def test_history_clear():
     MINI_CHECK(len(session.objects.points) == 1)
 
 
+@MINI_TEST("History", "Undo Definition")
+def test_history_undo_definition():
+    from session_py import Point, Session
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+
+    session.begin("define")
+    session.add_definition(point)
+    session.commit()
+    session.begin("replace")
+    session.replace_definition(guid, Point(9.0, 9.0, 9.0))
+    session.commit()
+    session.begin("remove")
+    session.remove_definition(guid)
+    session.commit()
+    removed = guid not in session.definition_lookup
+    session.undo()
+    replaced = session.definition_lookup[guid][0]
+    session.undo()
+    restored = session.definition_lookup[guid][0]
+    session.undo()
+    undefined = (
+        len(session.definition_lookup) == 0 and len(session.definitions.points) == 0
+    )
+    redone = session.redo()
+
+    MINI_CHECK(removed)
+    MINI_CHECK(TOLERANCE.is_close(replaced, 9.0))
+    MINI_CHECK(TOLERANCE.is_close(restored, 1.0))
+    MINI_CHECK(undefined)
+    MINI_CHECK(redone)
+    MINI_CHECK(len(session.definitions.points) == 1)
+    MINI_CHECK(session.definitions.points[0].guid == guid)
+
+
 if __name__ == "__main__":
     run_all(language="python")

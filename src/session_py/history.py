@@ -2,6 +2,8 @@ from __future__ import annotations
 from typing import Any
 from typing import TYPE_CHECKING
 import copy
+from .element import Element
+from .instance_ref import InstanceRef
 
 if TYPE_CHECKING:
     from .session import Session
@@ -12,12 +14,25 @@ CAPACITY = 64
 
 
 def clone(obj: Any) -> Any:
-    """Return a deep copy that keeps the guid, which duplicate() and a bare deepcopy would mint anew."""
+    """Return a deep copy that keeps the guid, which duplicate() and a bare deepcopy would mint anew; a list of features, and an element's or instance's features, keep theirs too."""
 
     snapshot = copy.deepcopy(obj)
 
+    if isinstance(obj, list):
+        for i in range(len(obj)):
+            if obj[i].has_guid():
+                snapshot[i].guid = obj[i].guid
+
+        return snapshot
+
     if snapshot.guid != obj.guid:
         snapshot.guid = obj.guid
+
+    if isinstance(obj, Element):
+        snapshot.set_features(clone(obj.features))
+
+    if isinstance(obj, InstanceRef):
+        snapshot.features = clone(obj.features)
 
     return snapshot
 
@@ -43,7 +58,7 @@ class Tombstone:
         index: int,
         node: TreeNode | None,
         attribute: str,
-        edges: list[tuple[str, str, bool]],
+        edges: list[tuple[str, str, bool, str]],
     ):
         """Construct from every field of the kit."""
 
@@ -56,7 +71,7 @@ class Tombstone:
         self.index = index  # Its position among the parent's children.
         self.node = node  # Detached tree node with its subtree, None for an add.
         self.attribute = attribute  # Its graph node attribute.
-        self.edges = edges  # Incident edges as (guid, attribute, forward).
+        self.edges = edges  # Incident edges as (other guid, attribute, forward, edge guid or "").
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
@@ -117,6 +132,26 @@ class XformOp:
     def __repr__(self) -> str:
         """Return a string representation of the record for debugging."""
         return f"xform({self.guid})"
+
+
+class DefinitionOp:
+    """A definition added (None before), removed (None after) or replaced."""
+
+    kind = "definition"
+
+    def __init__(self, guid: str, before: Any | None, after: Any | None):
+        """Construct from the guid and the before and after snapshots."""
+        self.guid = guid
+        self.before = before
+        self.after = after
+
+    def __str__(self) -> str:
+        """Return a string representation of the record."""
+        return f"definition({self.guid})"
+
+    def __repr__(self) -> str:
+        """Return a string representation of the record for debugging."""
+        return f"definition({self.guid})"
 
 
 class Transaction:
@@ -238,6 +273,8 @@ class History:
             session._attach(op)
         elif op.kind == "replace":
             session._swap(op.guid, clone(op.before))
+        elif op.kind == "definition":
+            session._define(op.guid, None if op.before is None else clone(op.before))
         elif op.kind == "xform":
             session._place(op.guid, op.before)
 
@@ -250,6 +287,8 @@ class History:
             session._detach(op.guid)
         elif op.kind == "replace":
             session._swap(op.guid, clone(op.after))
+        elif op.kind == "definition":
+            session._define(op.guid, None if op.after is None else clone(op.after))
         elif op.kind == "xform":
             session._place(op.guid, op.after)
 
