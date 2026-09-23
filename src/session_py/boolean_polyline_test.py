@@ -9,8 +9,8 @@ PI2 = 6.283185307179586476
 @MINI_TEST("Boolean Polyline", "Overlapping Squares")
 def test_boolean_polyline_overlapping_squares():
     from session_py import BooleanPolyline
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     a = Polyline(
         [
@@ -22,7 +22,13 @@ def test_boolean_polyline_overlapping_squares():
         ]
     )
     b = Polyline(
-        [Point(0, 0, 0), Point(2, 0, 0), Point(2, 2, 0), Point(0, 2, 0), Point(0, 0, 0)]
+        [
+            Point(0, 0, 0),
+            Point(2, 0, 0),
+            Point(2, 2, 0),
+            Point(0, 2, 0),
+            Point(0, 0, 0),
+        ]
     )
     isect = Polyline.boolean_op(a, b, 0)
     uni = Polyline.boolean_op(a, b, 1)
@@ -64,8 +70,8 @@ def test_boolean_polyline_overlapping_squares():
 
 @MINI_TEST("Boolean Polyline", "Circle Vs Rectangle")
 def test_boolean_polyline_circle_vs_rectangle():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     pts = []
 
@@ -98,8 +104,8 @@ def test_boolean_polyline_circle_vs_rectangle():
 
 @MINI_TEST("Boolean Polyline", "Star Vs Circle")
 def test_boolean_polyline_star_vs_circle():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     star_pts = []
 
@@ -132,8 +138,8 @@ def test_boolean_polyline_star_vs_circle():
 
 @MINI_TEST("Boolean Polyline", "L Shape Vs Rectangle")
 def test_boolean_polyline_l_shape_vs_rectangle():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     l_shape = Polyline(
         [
@@ -169,8 +175,8 @@ def test_boolean_polyline_l_shape_vs_rectangle():
 
 @MINI_TEST("Boolean Polyline", "Two Large Circles")
 def test_boolean_polyline_two_large_circles():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     pts_a = []
     pts_b = []
@@ -198,8 +204,8 @@ def test_boolean_polyline_two_large_circles():
 
 @MINI_TEST("Boolean Polyline", "Diamond Vs Triangle")
 def test_boolean_polyline_diamond_vs_triangle():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     diamond = Polyline(
         [
@@ -211,7 +217,12 @@ def test_boolean_polyline_diamond_vs_triangle():
         ]
     )
     tri = Polyline(
-        [Point(29, -2, 0), Point(33, 0, 0), Point(29, 2, 0), Point(29, -2, 0)]
+        [
+            Point(29, -2, 0),
+            Point(33, 0, 0),
+            Point(29, 2, 0),
+            Point(29, -2, 0),
+        ]
     )
     isect = Polyline.boolean_op(diamond, tri, 0)
     uni = Polyline.boolean_op(diamond, tri, 1)
@@ -227,8 +238,8 @@ def test_boolean_polyline_diamond_vs_triangle():
 
 @MINI_TEST("Boolean Polyline", "Star Vs Star")
 def test_boolean_polyline_star_vs_star():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     pts_a = []
 
@@ -262,8 +273,8 @@ def test_boolean_polyline_star_vs_star():
 
 @MINI_TEST("Boolean Polyline", "Cross Shape")
 def test_boolean_polyline_cross_shape():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     narrow = Polyline(
         [
@@ -297,8 +308,8 @@ def test_boolean_polyline_cross_shape():
 
 @MINI_TEST("Boolean Polyline", "Concave Arrow Vs Circle")
 def test_boolean_polyline_concave_arrow_vs_circle():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     arrow = Polyline(
         [
@@ -334,8 +345,8 @@ def test_boolean_polyline_concave_arrow_vs_circle():
 
 @MINI_TEST("Boolean Polyline", "Two Large Circles 1000")
 def test_boolean_polyline_two_large_circles_1000():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     pts_a = []
     pts_b = []
@@ -363,8 +374,8 @@ def test_boolean_polyline_two_large_circles_1000():
 
 @MINI_TEST("Boolean Polyline", "Large Coords Auto Scale")
 def test_boolean_polyline_large_coords_auto_scale():
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
     a = Polyline(
         [
@@ -399,10 +410,15 @@ def test_boolean_polyline_large_coords_auto_scale():
 @MINI_TEST("Boolean Polyline Open", "Horizontal Line Vs Unit Square")
 def test_boolean_polyline_open_horizontal_line_vs_unit_square():
     from session_py import BooleanPolyline
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
-    open_line = Polyline([Point(-2, 0, 0), Point(2, 0, 0)])
+    open_line = Polyline(
+        [
+            Point(-2, 0, 0),
+            Point(2, 0, 0),
+        ]
+    )
     sq = Polyline(
         [
             Point(-1, -1, 0),
@@ -416,6 +432,7 @@ def test_boolean_polyline_open_horizontal_line_vs_unit_square():
 
     MINI_CHECK(len(out) == 1)
     MINI_CHECK(out[0].point_count() == 2)
+
     p0 = out[0].get_point(0)
     p1 = out[0].get_point(1)
 
@@ -428,10 +445,15 @@ def test_boolean_polyline_open_horizontal_line_vs_unit_square():
 @MINI_TEST("Boolean Polyline Open", "Diagonal Line Vs Unit Square")
 def test_boolean_polyline_open_diagonal_line_vs_unit_square():
     from session_py import BooleanPolyline
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
-    open_line = Polyline([Point(-2, -2, 0), Point(2, 2, 0)])
+    open_line = Polyline(
+        [
+            Point(-2, -2, 0),
+            Point(2, 2, 0),
+        ]
+    )
     sq = Polyline(
         [
             Point(-1, -1, 0),
@@ -445,6 +467,7 @@ def test_boolean_polyline_open_diagonal_line_vs_unit_square():
 
     MINI_CHECK(len(out) == 1)
     MINI_CHECK(out[0].point_count() == 2)
+
     p0 = out[0].get_point(0)
     p1 = out[0].get_point(1)
 
@@ -455,10 +478,16 @@ def test_boolean_polyline_open_diagonal_line_vs_unit_square():
 @MINI_TEST("Boolean Polyline Open", "Interior Open Path Passes Through")
 def test_boolean_polyline_open_interior_open_path_passes_through():
     from session_py import BooleanPolyline
-    from session_py import Polyline
     from session_py import Point
+    from session_py import Polyline
 
-    open_path = Polyline([Point(-2, 0, 0), Point(0, 0.2, 0), Point(2, 0, 0)])
+    open_path = Polyline(
+        [
+            Point(-2, 0, 0),
+            Point(0, 0.2, 0),
+            Point(2, 0, 0),
+        ]
+    )
     sq = Polyline(
         [
             Point(-1, -1, 0),

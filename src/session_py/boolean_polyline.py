@@ -3,13 +3,17 @@ import heapq
 import math
 from .polyline import Polyline
 
-_VF_NONE = 0
-_VF_LOCAL_MAX = 4
-_VF_LOCAL_MIN = 8
-_JW_NONE = 0
-_JW_LEFT = 1
-_JW_RIGHT = 2
-_INF = float("inf")
+_VF_NONE = 0  # Plain vertex.
+_VF_LOCAL_MAX = 4  # Local maximum in y.
+_VF_LOCAL_MIN = 8  # Local minimum in y.
+_JW_NONE = 0  # Not joined.
+_JW_LEFT = 1  # Joined with the edge on the left.
+_JW_RIGHT = 2  # Joined with the edge on the right.
+_DBL_MAX = 1.7976931348623157e308  # Inverse slope of a horizontal edge.
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sweep structures
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 class _BIVec2:
@@ -168,15 +172,23 @@ class _VattiScratch:
         self.succeeded = True
 
     def new_outpt(self, pt: _BIVec2, rec: _VOutRec) -> _VOutPt:
-        o = _VOutPt(_BIVec2(pt.x, pt.y), rec)
-
-        return o
+        return _VOutPt(_BIVec2(pt.x, pt.y), rec)
 
     def new_outrec(self) -> _VOutRec:
         r = _VOutRec(len(self.outrec_list))
         self.outrec_list.append(r)
 
         return r
+
+
+def _v_cvt_to_i64(coords: list[float], offset: int, scale: float) -> _BIVec2:
+    return _BIVec2(round(coords[offset] * scale), round(coords[offset + 1] * scale))
+
+
+def _v_cvt_to_dbl(dst: list[float], pt: _BIVec2, inv_scale: float) -> None:
+    dst.append(pt.x * inv_scale)
+    dst.append(pt.y * inv_scale)
+    dst.append(0.0)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -190,7 +202,7 @@ def _v_get_dx(p1: _BIVec2, p2: _BIVec2) -> float:
     if dy != 0:
         return float(p2.x - p1.x) / dy
 
-    return -_INF if p2.x > p1.x else _INF
+    return -_DBL_MAX if p2.x > p1.x else _DBL_MAX
 
 
 def _v_top_x(ae: _VActive, y: int) -> int:
@@ -453,7 +465,7 @@ def _v_find_local_minima(head: _VVertex, polytype: int, sc: _VattiScratch) -> No
 def _v_link_path(
     pts: list[_BIVec2], n: int, polytype: int, sc: _VattiScratch
 ) -> _VVertex | None:
-    """Links n scaled points into a circular vertex list; returns its head or None if degenerate."""
+    """Link n scaled points into a circular vertex list and return its head, or None if degenerate."""
 
     head = _VVertex()
     head.pt = pts[0]
@@ -494,15 +506,11 @@ def _v_add_path_from_doubles(
     pts = []
 
     for i in range(n):
-        pts.append(
-            _BIVec2(
-                round(coords[i * 3] * bool_scale), round(coords[i * 3 + 1] * bool_scale)
-            )
-        )
+        pts.append(_v_cvt_to_i64(coords, i * 3, bool_scale))
 
-    minX, maxX, minY, maxY = _v_bounds(pts)
+    min_x, max_x, min_y, max_y = _v_bounds(pts)
 
-    return _v_link_path(pts, n, polytype, sc), minX, maxX, minY, maxY
+    return _v_link_path(pts, n, polytype, sc), min_x, max_x, min_y, max_y
 
 
 def _v_add_path(pts: list[_BIVec2], n: int, polytype: int, sc: _VattiScratch) -> None:
@@ -729,8 +737,8 @@ def _v_pop_horz(sc: _VattiScratch) -> tuple[bool, _VActive | None]:
 
 
 def _v_set_wind_count(sc: _VattiScratch, e: _VActive) -> None:
-    e2 = e.prev_in_ael
     pt = _v_polytype(e)
+    e2 = e.prev_in_ael
 
     while e2 is not None and _v_polytype(e2) != pt:
         e2 = e2.prev_in_ael
@@ -1042,14 +1050,8 @@ def _v_check_join_right(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _v_intersect_edges(
-    e1: _VActive, e2: _VActive, pt: _BIVec2, sc: _VattiScratch, cliptype: int
-) -> None:
-    if _v_is_joined(e1):
-        _v_split(e1, pt, sc)
-
-    if _v_is_joined(e2):
-        _v_split(e2, pt, sc)
+def _v_update_wind_counts(e1: _VActive, e2: _VActive) -> None:
+    """Update the winding counts of two edges that cross."""
 
     if _v_polytype(e1) == _v_polytype(e2):
         if e1.wind_cnt + e2.wind_dx == 0:
@@ -1064,6 +1066,18 @@ def _v_intersect_edges(
     else:
         e1.wind_cnt2 += e2.wind_dx
         e2.wind_cnt2 -= e1.wind_dx
+
+
+def _v_intersect_edges(
+    e1: _VActive, e2: _VActive, pt: _BIVec2, sc: _VattiScratch, cliptype: int
+) -> None:
+    if _v_is_joined(e1):
+        _v_split(e1, pt, sc)
+
+    if _v_is_joined(e2):
+        _v_split(e2, pt, sc)
+
+    _v_update_wind_counts(e1, e2)
 
     old_e1_wc = abs(e1.wind_cnt)
     old_e2_wc = abs(e2.wind_cnt)
@@ -1094,21 +1108,21 @@ def _v_intersect_edges(
         _v_add_outpt(e2, pt, sc)
         _v_swap_outrecs(e1, e2)
     else:
-        e1Wc2 = abs(e1.wind_cnt2)
-        e2Wc2 = abs(e2.wind_cnt2)
+        e1_wc2 = abs(e1.wind_cnt2)
+        e2_wc2 = abs(e2.wind_cnt2)
 
         if not _v_same_polytype(e1, e2):
             _v_add_local_min_poly(e1, e2, pt, sc, False)
         elif old_e1_wc == 1 and old_e2_wc == 1:
             if cliptype == 0:
-                if e1Wc2 > 0 and e2Wc2 > 0:
+                if e1_wc2 > 0 and e2_wc2 > 0:
                     _v_add_local_min_poly(e1, e2, pt, sc, False)
             elif cliptype == 1:
-                if e1Wc2 <= 0 and e2Wc2 <= 0:
+                if e1_wc2 <= 0 and e2_wc2 <= 0:
                     _v_add_local_min_poly(e1, e2, pt, sc, False)
             else:
-                if (_v_polytype(e1) == 1 and e1Wc2 > 0 and e2Wc2 > 0) or (
-                    _v_polytype(e1) == 0 and e1Wc2 <= 0 and e2Wc2 <= 0
+                if (_v_polytype(e1) == 1 and e1_wc2 > 0 and e2_wc2 > 0) or (
+                    _v_polytype(e1) == 0 and e1_wc2 <= 0 and e2_wc2 <= 0
                 ):
                     _v_add_local_min_poly(e1, e2, pt, sc, False)
 
@@ -1273,7 +1287,7 @@ def _v_do_horizontal(horz: _VActive, sc: _VattiScratch, cliptype: int) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _v_dup_outpt(op: _VOutPt, after: _VOutPt, sc: _VattiScratch) -> _VOutPt:
+def _v_dup_outpt(op: _VOutPt, after: bool, sc: _VattiScratch) -> _VOutPt:
     r = sc.new_outpt(op.pt, op.outrec)
 
     if after:
@@ -1291,84 +1305,121 @@ def _v_dup_outpt(op: _VOutPt, after: _VOutPt, sc: _VattiScratch) -> _VOutPt:
 
 
 def _v_horz_seg_key(hs: _VHorzSeg) -> tuple:
-    return (
-        -1 if hs.right_op is None else 0,
-        -hs.left_op.pt.x if hs.right_op is not None else 0,
-    )
+    if hs.right_op is None:
+        return (1, 0)
+
+    return (0, hs.left_op.pt.x)
+
+
+def _v_update_horz_segment(hs: _VHorzSeg) -> bool:
+    """Extend a trial segment to its full horizontal run and return whether it can join."""
+
+    op = hs.left_op
+    outrec = op.outrec
+
+    while outrec is not None and outrec.pts is None:
+        outrec = outrec.owner
+
+    if outrec is None:
+        hs.right_op = None
+
+        return False
+
+    has_edges = outrec.front_edge is not None
+    cy = op.pt.y
+    op_p = op
+    op_n = op
+
+    if has_edges:
+        op_a = outrec.pts
+        op_z = op_a.next
+
+        while op_p is not op_z and op_p.prev.pt.y == cy:
+            op_p = op_p.prev
+
+        while op_n is not op_a and op_n.next.pt.y == cy:
+            op_n = op_n.next
+    else:
+        while op_p.prev is not op_n and op_p.prev.pt.y == cy:
+            op_p = op_p.prev
+
+        while op_n.next is not op_p and op_n.next.pt.y == cy:
+            op_n = op_n.next
+
+    if op_p.pt.x == op_n.pt.x:
+        hs.right_op = None
+
+        return False
+
+    if op_p.pt.x < op_n.pt.x:
+        hs.left_op = op_p
+        hs.right_op = op_n
+        hs.left_to_right = True
+    else:
+        hs.left_op = op_n
+        hs.right_op = op_p
+        hs.left_to_right = False
+
+    if hs.left_op.horz is not None:
+        hs.right_op = None
+
+        return False
+
+    hs.left_op.horz = hs
+
+    return True
+
+
+def _v_add_horz_join(sc: _VattiScratch, hs1: _VHorzSeg, hs2: _VHorzSeg) -> None:
+    """Join two overlapping horizontal segments of opposite direction."""
+
+    cy = hs1.left_op.pt.y
+
+    if hs1.left_to_right:
+        while hs1.left_op.next.pt.y == cy and hs1.left_op.next.pt.x <= hs2.left_op.pt.x:
+            hs1.left_op = hs1.left_op.next
+
+        while hs2.left_op.prev.pt.y == cy and hs2.left_op.prev.pt.x <= hs1.left_op.pt.x:
+            hs2.left_op = hs2.left_op.prev
+
+        sc.horz_join_list.append(
+            _VHorzJoin(
+                _v_dup_outpt(hs1.left_op, True, sc),
+                _v_dup_outpt(hs2.left_op, False, sc),
+            )
+        )
+    else:
+        while hs1.left_op.prev.pt.y == cy and hs1.left_op.prev.pt.x <= hs2.left_op.pt.x:
+            hs1.left_op = hs1.left_op.prev
+
+        while hs2.left_op.next.pt.y == cy and hs2.left_op.next.pt.x <= hs1.left_op.pt.x:
+            hs2.left_op = hs2.left_op.next
+
+        sc.horz_join_list.append(
+            _VHorzJoin(
+                _v_dup_outpt(hs2.left_op, True, sc),
+                _v_dup_outpt(hs1.left_op, False, sc),
+            )
+        )
 
 
 def _v_convert_horz_segs_to_joins(sc: _VattiScratch) -> None:
     valid = 0
 
     for hs in sc.horz_seg_list:
-        op = hs.left_op
-        outrec = op.outrec
-
-        while outrec is not None and outrec.pts is None:
-            outrec = outrec.owner
-
-        if outrec is None:
-            hs.right_op = None
-            continue
-
-        has_edges = outrec.front_edge is not None
-        cy = op.pt.y
-        opP = op
-        opN = op
-
-        if has_edges:
-            opA = outrec.pts
-            opZ = opA.next
-
-            while opP is not opZ and opP.prev.pt.y == cy:
-                opP = opP.prev
-
-            while opN is not opA and opN.next.pt.y == cy:
-                opN = opN.next
-        else:
-            while opP.prev is not opN and opP.prev.pt.y == cy:
-                opP = opP.prev
-
-            while opN.next is not opP and opN.next.pt.y == cy:
-                opN = opN.next
-
-        if opP.pt.x == opN.pt.x:
-            hs.right_op = None
-            continue
-
-        if opP.pt.x < opN.pt.x:
-            hs.left_op = opP
-            hs.right_op = opN
-            hs.left_to_right = True
-        else:
-            hs.left_op = opN
-            hs.right_op = opP
-            hs.left_to_right = False
-
-        if hs.left_op.horz is not None:
-            hs.right_op = None
-            continue
-
-        hs.left_op.horz = hs
-        valid += 1
+        if _v_update_horz_segment(hs):
+            valid += 1
 
     if valid < 2:
         return
 
     sc.horz_seg_list.sort(key=_v_horz_seg_key)
-    j = valid
 
-    for i in range(j - 1):
+    for i in range(valid - 1):
         hs1 = sc.horz_seg_list[i]
 
-        if hs1.right_op is None:
-            continue
-
-        for k in range(i + 1, j):
+        for k in range(i + 1, valid):
             hs2 = sc.horz_seg_list[k]
-
-            if hs2.right_op is None:
-                continue
 
             if (
                 hs2.left_op.pt.x >= hs1.right_op.pt.x
@@ -1377,46 +1428,7 @@ def _v_convert_horz_segs_to_joins(sc: _VattiScratch) -> None:
             ):
                 continue
 
-            cy = hs1.left_op.pt.y
-
-            if hs1.left_to_right:
-                while (
-                    hs1.left_op.next.pt.y == cy
-                    and hs1.left_op.next.pt.x <= hs2.left_op.pt.x
-                ):
-                    hs1.left_op = hs1.left_op.next
-
-                while (
-                    hs2.left_op.prev.pt.y == cy
-                    and hs2.left_op.prev.pt.x <= hs1.left_op.pt.x
-                ):
-                    hs2.left_op = hs2.left_op.prev
-
-                sc.horz_join_list.append(
-                    _VHorzJoin(
-                        _v_dup_outpt(hs1.left_op, True, sc),
-                        _v_dup_outpt(hs2.left_op, False, sc),
-                    )
-                )
-            else:
-                while (
-                    hs1.left_op.prev.pt.y == cy
-                    and hs1.left_op.prev.pt.x <= hs2.left_op.pt.x
-                ):
-                    hs1.left_op = hs1.left_op.prev
-
-                while (
-                    hs2.left_op.next.pt.y == cy
-                    and hs2.left_op.next.pt.x <= hs1.left_op.pt.x
-                ):
-                    hs2.left_op = hs2.left_op.next
-
-                sc.horz_join_list.append(
-                    _VHorzJoin(
-                        _v_dup_outpt(hs2.left_op, True, sc),
-                        _v_dup_outpt(hs1.left_op, False, sc),
-                    )
-                )
+            _v_add_horz_join(sc, hs1, hs2)
 
 
 def _v_fix_outrec_pts(outrec: _VOutRec) -> None:
@@ -1630,6 +1642,21 @@ def _v_process_intersect_list(sc: _VattiScratch, cliptype: int) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+def _v_new_bound(lm: _VLocalMinima, wind_dx: int) -> _VActive:
+    """New active edge leaving a local minimum, wind_dx -1 along prev and 1 along next."""
+
+    b = _VActive()
+    b.bot = _BIVec2(lm.vertex.pt.x, lm.vertex.pt.y)
+    b.curr_x = b.bot.x
+    b.wind_dx = wind_dx
+    b.vertex_top = lm.vertex.prev if wind_dx < 0 else lm.vertex.next
+    b.top = _BIVec2(b.vertex_top.pt.x, b.vertex_top.pt.y)
+    b.local_min = lm
+    _v_set_dx(b)
+
+    return b
+
+
 def _v_insert_local_minima_into_ael(
     sc: _VattiScratch, bot_y: int, cliptype: int
 ) -> None:
@@ -1639,29 +1666,14 @@ def _v_insert_local_minima_into_ael(
         if not ok:
             break
 
-        lb = _VActive()
-        lb.bot = _BIVec2(lm.vertex.pt.x, lm.vertex.pt.y)
-        lb.curr_x = lb.bot.x
-        lb.wind_dx = -1
-        lb.vertex_top = lm.vertex.prev
-        lb.top = _BIVec2(lb.vertex_top.pt.x, lb.vertex_top.pt.y)
-        lb.local_min = lm
-        _v_set_dx(lb)
-
-        rb = _VActive()
-        rb.bot = _BIVec2(lm.vertex.pt.x, lm.vertex.pt.y)
-        rb.curr_x = rb.bot.x
-        rb.wind_dx = 1
-        rb.vertex_top = lm.vertex.next
-        rb.top = _BIVec2(rb.vertex_top.pt.x, rb.vertex_top.pt.y)
-        rb.local_min = lm
-        _v_set_dx(rb)
+        lb = _v_new_bound(lm, -1)
+        rb = _v_new_bound(lm, 1)
 
         if _v_is_horizontal(lb):
-            if lb.dx == -_INF:
+            if lb.dx == -_DBL_MAX:
                 lb, rb = rb, lb
         elif _v_is_horizontal(rb):
-            if rb.dx == _INF:
+            if rb.dx == _DBL_MAX:
                 lb, rb = rb, lb
         elif lb.dx < rb.dx:
             lb, rb = rb, lb
@@ -1776,11 +1788,15 @@ def _v_dispose_outpt(op: _VOutPt) -> _VOutPt | None:
     return r
 
 
-def _v_do_split_op(sc: _VattiScratch, outrec: _VOutRec, splitOp: _VOutPt) -> None:
-    prevOp = splitOp.prev
-    nnOp = splitOp.next.next
-    outrec.pts = prevOp
-    ok, ip = _v_get_seg_isect_pt(prevOp.pt, splitOp.pt, splitOp.next.pt, nnOp.pt)
+def _v_do_split_op(sc: _VattiScratch, outrec: _VOutRec, split_op: _VOutPt) -> None:
+    prev_op = split_op.prev
+    nn_op = split_op.next.next
+    outrec.pts = prev_op
+    ok, ip = _v_get_seg_isect_pt(prev_op.pt, split_op.pt, split_op.next.pt, nn_op.pt)
+
+    if not ok:
+        return
+
     area1 = _v_area_outpt(outrec.pts)
 
     if abs(area1) < 2:
@@ -1788,30 +1804,30 @@ def _v_do_split_op(sc: _VattiScratch, outrec: _VOutRec, splitOp: _VOutPt) -> Non
 
         return
 
-    area2 = _v_area_tri(ip, splitOp.pt, splitOp.next.pt)
-    absA2 = abs(area2)
+    area2 = _v_area_tri(ip, split_op.pt, split_op.next.pt)
+    abs_a2 = abs(area2)
 
-    if ip == prevOp.pt or ip == nnOp.pt:
-        nnOp.prev = prevOp
-        prevOp.next = nnOp
+    if ip == prev_op.pt or ip == nn_op.pt:
+        nn_op.prev = prev_op
+        prev_op.next = nn_op
     else:
-        nop = sc.new_outpt(ip, prevOp.outrec)
-        nop.prev = prevOp
-        nop.next = nnOp
-        nnOp.prev = nop
-        prevOp.next = nop
+        nop = sc.new_outpt(ip, prev_op.outrec)
+        nop.prev = prev_op
+        nop.next = nn_op
+        nn_op.prev = nop
+        prev_op.next = nop
 
-    if absA2 >= 1 and (absA2 > abs(area1) or (area2 > 0) == (area1 > 0)):
+    if abs_a2 >= 1 and (abs_a2 > abs(area1) or (area2 > 0) == (area1 > 0)):
         nr = sc.new_outrec()
         nr.owner = outrec.owner
-        splitOp.outrec = nr
-        splitOp.next.outrec = nr
-        nop2 = sc.new_outpt(ip, nr)
-        nop2.prev = splitOp.next
-        nop2.next = splitOp
-        nr.pts = nop2
-        splitOp.prev = nop2
-        splitOp.next.next = nop2
+        split_op.outrec = nr
+        split_op.next.outrec = nr
+        nop = sc.new_outpt(ip, nr)
+        nop.prev = split_op.next
+        nop.next = split_op
+        nr.pts = nop
+        split_op.prev = nop
+        split_op.next.next = nop
 
 
 def _v_fix_self_intersects(sc: _VattiScratch, outrec: _VOutRec) -> None:
@@ -1851,8 +1867,8 @@ def _v_clean_collinear(sc: _VattiScratch, outrec: _VOutRec) -> None:
 
         return
 
-    startOp = outrec.pts
-    op2 = startOp
+    start_op = outrec.pts
+    op2 = start_op
 
     while True:
         if _v_is_collinear(op2.prev.pt, op2.pt, op2.next.pt) and (
@@ -1870,12 +1886,12 @@ def _v_clean_collinear(sc: _VattiScratch, outrec: _VOutRec) -> None:
 
                 return
 
-            startOp = op2
+            start_op = op2
             continue
 
         op2 = op2.next
 
-        if op2 is startOp:
+        if op2 is start_op:
             break
 
     _v_fix_self_intersects(sc, outrec)
@@ -1950,7 +1966,7 @@ def _v_execute_internal(sc: _VattiScratch, cliptype: int) -> bool:
 
 
 def _v_strip_closing(c: list[float], n: int) -> int:
-    """Drops a closing point that repeats the first one."""
+    """Drop a closing point that repeats the first one."""
 
     if n < 2:
         return n
@@ -2038,21 +2054,21 @@ def _v_select_count(
 
 
 def _v_bounds(v: list[_BIVec2]) -> tuple[int, int, int, int]:
-    minX = maxX = v[0].x
-    minY = maxY = v[0].y
+    min_x = max_x = v[0].x
+    min_y = max_y = v[0].y
 
     for i in range(1, len(v)):
-        if v[i].x < minX:
-            minX = v[i].x
-        elif v[i].x > maxX:
-            maxX = v[i].x
+        if v[i].x < min_x:
+            min_x = v[i].x
+        elif v[i].x > max_x:
+            max_x = v[i].x
 
-        if v[i].y < minY:
-            minY = v[i].y
-        elif v[i].y > maxY:
-            maxY = v[i].y
+        if v[i].y < min_y:
+            min_y = v[i].y
+        elif v[i].y > max_y:
+            max_y = v[i].y
 
-    return minX, maxX, minY, maxY
+    return min_x, max_x, min_y, max_y
 
 
 def _v_any_cross(va: list[_BIVec2], vb: list[_BIVec2]) -> bool:
@@ -2099,7 +2115,7 @@ def _v_centroid(v: list[_BIVec2]) -> _BIVec2:
 
 
 def _v_contains(va: list[_BIVec2], vb: list[_BIVec2]) -> tuple[bool, bool]:
-    """Containment of non-crossing polygons: vertex test, validated by the centroid, then the centroid nudged by one unit when it sits on the boundary."""
+    """Containment of non-crossing polygons by vertex, centroid and nudged centroid tests."""
 
     a_in_b = _pip_i(va[0], vb)
     b_in_a = _pip_i(vb[0], va)
@@ -2158,13 +2174,13 @@ def _v_extract(sc: _VattiScratch, inv_scale: float) -> list[Polyline]:
         coords = []
         o = op.next
         last = o.pt
-        coords.extend([last.x * inv_scale, last.y * inv_scale, 0.0])
+        _v_cvt_to_dbl(coords, last, inv_scale)
         o = o.next
 
         while o is not op.next:
             if o.pt != last:
                 last = o.pt
-                coords.extend([last.x * inv_scale, last.y * inv_scale, 0.0])
+                _v_cvt_to_dbl(coords, last, inv_scale)
 
             o = o.next
 
@@ -2263,7 +2279,7 @@ class BooleanPolyline:
 
     @staticmethod
     def compute(a: Polyline, b: Polyline, clip_type: int) -> list[Polyline]:
-        """Compute the Vatti boolean of two closed planar polylines; clip_type 0 intersection, 1 union, 2 a minus b."""
+        """Compute the Vatti boolean of two closed planar polylines with clip_type 0 intersection, 1 union, 2 a minus b."""
 
         ca = a.coords
         cb = b.coords
@@ -2281,23 +2297,20 @@ class BooleanPolyline:
             vb = []
 
             for i in range(na):
-                va.append(
-                    _BIVec2(
-                        round(ca[i * 3] * bool_scale), round(ca[i * 3 + 1] * bool_scale)
-                    )
-                )
+                va.append(_v_cvt_to_i64(ca, i * 3, bool_scale))
 
             for i in range(nb):
-                vb.append(
-                    _BIVec2(
-                        round(cb[i * 3] * bool_scale), round(cb[i * 3 + 1] * bool_scale)
-                    )
-                )
+                vb.append(_v_cvt_to_i64(cb, i * 3, bool_scale))
 
-            aMinX, aMaxX, aMinY, aMaxY = _v_bounds(va)
-            bMinX, bMaxX, bMinY, bMaxY = _v_bounds(vb)
+            a_min_x, a_max_x, a_min_y, a_max_y = _v_bounds(va)
+            b_min_x, b_max_x, b_min_y, b_max_y = _v_bounds(vb)
 
-            if aMaxX < bMinX or bMaxX < aMinX or aMaxY < bMinY or bMaxY < aMinY:
+            if (
+                a_max_x < b_min_x
+                or b_max_x < a_min_x
+                or a_max_y < b_min_y
+                or b_max_y < a_min_y
+            ):
                 return _v_select(a, b, _pip_i(va[0], vb), _pip_i(vb[0], va), clip_type)
 
             if not _v_any_cross(va, vb):
@@ -2308,17 +2321,22 @@ class BooleanPolyline:
             _v_add_path(va, na, 0, sc)
             _v_add_path(vb, nb, 1, sc)
         else:
-            va_head, aMinX, aMaxX, aMinY, aMaxY = _v_add_path_from_doubles(
+            va_head, a_min_x, a_max_x, a_min_y, a_max_y = _v_add_path_from_doubles(
                 ca, na, 0, bool_scale, sc
             )
-            vb_head, bMinX, bMaxX, bMinY, bMaxY = _v_add_path_from_doubles(
+            vb_head, b_min_x, b_max_x, b_min_y, b_max_y = _v_add_path_from_doubles(
                 cb, nb, 1, bool_scale, sc
             )
 
             if va_head is None or vb_head is None:
                 return []
 
-            if aMaxX < bMinX or bMaxX < aMinX or aMaxY < bMinY or bMaxY < aMinY:
+            if (
+                a_max_x < b_min_x
+                or b_max_x < a_min_x
+                or a_max_y < b_min_y
+                or b_max_y < a_min_y
+            ):
                 return _v_select(
                     a,
                     b,
@@ -2334,7 +2352,7 @@ class BooleanPolyline:
 
     @staticmethod
     def compute_count(a: Polyline, b: Polyline, clip_type: int) -> int:
-        """Return the number of output points of compute, without building polylines."""
+        """Return the number of output points of compute without building polylines."""
 
         ca = a.coords
         cb = b.coords
@@ -2346,17 +2364,22 @@ class BooleanPolyline:
 
         bool_scale = _v_bool_scale(ca, na, cb, nb)
         sc = _VattiScratch()
-        va_head, aMinX, aMaxX, aMinY, aMaxY = _v_add_path_from_doubles(
+        va_head, a_min_x, a_max_x, a_min_y, a_max_y = _v_add_path_from_doubles(
             ca, na, 0, bool_scale, sc
         )
-        vb_head, bMinX, bMaxX, bMinY, bMaxY = _v_add_path_from_doubles(
+        vb_head, b_min_x, b_max_x, b_min_y, b_max_y = _v_add_path_from_doubles(
             cb, nb, 1, bool_scale, sc
         )
 
         if va_head is None or vb_head is None:
             return 0
 
-        if aMaxX < bMinX or bMaxX < aMinX or aMaxY < bMinY or bMaxY < aMinY:
+        if (
+            a_max_x < b_min_x
+            or b_max_x < a_min_x
+            or a_max_y < b_min_y
+            or b_max_y < a_min_y
+        ):
             return _v_select_count(
                 len(ca) // 3,
                 len(cb) // 3,
@@ -2397,7 +2420,7 @@ class BooleanPolyline:
         out_xy: list[float],
         max_out: int,
     ) -> int:
-        """Compute on flat xy arrays; write up to max_out result points to out_xy and return the total."""
+        """Compute on flat xy arrays, write up to max_out result points to out_xy and return the total."""
 
         a = Polyline.from_coords([0.0] * (na * 3))
         b = Polyline.from_coords([0.0] * (nb * 3))
@@ -2429,7 +2452,7 @@ class BooleanPolyline:
     def clip_open_against_closed(
         open_subject: Polyline, closed_clip: Polyline
     ) -> list[Polyline]:
-        """Return the pieces of an open polyline that lie inside a closed clip polygon, in the xy plane."""
+        """Return the pieces of an open polyline that lie inside a closed clip polygon in the xy plane."""
 
         result = []
         cs = open_subject.coords
