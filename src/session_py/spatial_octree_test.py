@@ -47,18 +47,17 @@ def test_octree_node_cube():
         pts.append(Point(float(x), 0.0, 0.0))
 
     tree = SpatialOctree(pts, 4.0, 4)
-    center, size = tree.node_cube(0)
-    child_center, child_size = tree.node_cube(1)
+    cube = tree.node_cube(0)
+    child = tree.node_cube(1)
 
     MINI_CHECK(
-        TOLERANCE.is_close(center[0], 4.0) and TOLERANCE.is_close(center[1], 0.0)
+        TOLERANCE.is_close(cube[0][0], 4.0) and TOLERANCE.is_close(cube[0][1], 0.0)
     )
-    MINI_CHECK(TOLERANCE.is_close(size, 8.0))
+    MINI_CHECK(TOLERANCE.is_close(cube[1], 8.0))
     MINI_CHECK(
-        TOLERANCE.is_close(child_center[0], 2.0)
-        and TOLERANCE.is_close(child_center[2], 2.0)
+        TOLERANCE.is_close(child[0][0], 2.0) and TOLERANCE.is_close(child[0][2], 2.0)
     )
-    MINI_CHECK(TOLERANCE.is_close(child_size, 4.0))
+    MINI_CHECK(TOLERANCE.is_close(child[1], 4.0))
 
 
 @MINI_TEST("SpatialOctree", "Node Level")

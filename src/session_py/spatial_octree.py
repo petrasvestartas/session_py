@@ -4,9 +4,9 @@ import math
 
 from .point import Point
 
-MAX_LEVEL = 21
-STACK_SIZE = 8 * MAX_LEVEL
-NULL_IDX = -1
+MAX_LEVEL = 21  # Deepest subdivision level.
+STACK_SIZE = 8 * MAX_LEVEL  # Explicit stack depth, 8 children per level.
+NULL_IDX = -1  # Missing child marker.
 
 
 class _Node:
@@ -24,13 +24,13 @@ class _Node:
     ):
         """Construct a node."""
 
-        self.min = min_
-        self.size = size
-        self.level = level
-        self.spacing = spacing
-        self.first = first
-        self.count = count
-        self.children = children
+        self.min = min_  # Cube min corner.
+        self.size = size  # Cube edge length.
+        self.level = level  # Depth from the root.
+        self.spacing = spacing  # Grid-accept spacing.
+        self.first = first  # First point index into order.
+        self.count = count  # Point count in order.
+        self.children = children  # Child node per octant or NULL_IDX.
 
 
 class _Task:
@@ -49,19 +49,22 @@ class _Task:
     ):
         """Construct a task."""
 
-        self.min = min_
-        self.size = size
-        self.level = level
-        self.spacing = spacing
-        self.lo = lo
-        self.hi = hi
-        self.parent = parent
-        self.octant = octant
+        self.min = min_  # Cube min corner.
+        self.size = size  # Cube edge length.
+        self.level = level  # Depth from the root.
+        self.spacing = spacing  # Grid-accept spacing.
+        self.lo = lo  # Index range start.
+        self.hi = hi  # Index range end, exclusive.
+        self.parent = parent  # Parent node or NULL_IDX.
+        self.octant = octant  # Octant of the parent this task fills.
 
 
 class SpatialOctree:
     """Potree-style LOD octree: every node keeps a spacing-limited subsample and order() makes each node's points contiguous."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, points: list[Point], root_spacing: float, leaf_capacity: int):
         """Construct the tree over points."""
 
@@ -72,8 +75,8 @@ class SpatialOctree:
             coords.append(p[1])
             coords.append(p[2])
 
-        self._nodes: list[_Node] = []
-        self._order: list[int] = []
+        self._nodes: list[_Node] = []  # Nodes in build order, root first.
+        self._order = []  # Point indices permuted so each node's points are contiguous.
         self._build(coords, root_spacing, leaf_capacity)
 
     @classmethod
@@ -89,6 +92,56 @@ class SpatialOctree:
 
         return tree
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
+    def node_count(self) -> int:
+        """Return the number of nodes."""
+        return len(self._nodes)
+
+    def node_cube(self, i: int) -> tuple[Point, float]:
+        """Return the node cube center and edge length."""
+
+        node = self._nodes[i]
+        half = node.size * 0.5
+
+        return Point(
+            node.min[0] + half, node.min[1] + half, node.min[2] + half
+        ), node.size
+
+    def node_level(self, i: int) -> int:
+        """Return the node depth from the root."""
+        return self._nodes[i].level
+
+    def node_spacing(self, i: int) -> float:
+        """Return the grid-accept spacing of a node."""
+        return self._nodes[i].spacing
+
+    def node_range(self, i: int) -> tuple[int, int]:
+        """Return the node point range as (first, count) into order."""
+
+        node = self._nodes[i]
+
+        return node.first, node.count
+
+    def children(self, i: int) -> list[int]:
+        """Return the present child node indices."""
+
+        result: list[int] = []
+
+        for c in self._nodes[i].children:
+            if c != NULL_IDX:
+                result.append(c)
+
+        return result
+
+    def order(self) -> list[int]:
+        """Return the point indices permuted so each node's points are contiguous."""
+        return self._order
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Build
+    # ═══════════════════════════════════════════════════════════════════════════
     def _root_cube(self, coords: list[float]) -> tuple[list[float], float]:
         """Return the min corner and edge length of the cube bounding coords."""
 
@@ -125,7 +178,9 @@ class SpatialOctree:
 
         root_min, root_size = self._root_cube(coords)
         indices = list(range(n))
+
         stack: list[_Task] = []
+
         self._push(
             stack, _Task(root_min, root_size, 0, root_spacing, 0, n, NULL_IDX, 0)
         )
@@ -133,6 +188,7 @@ class SpatialOctree:
         while len(stack) > 0:
             task = stack.pop()
             node = len(self._nodes)
+
             self._nodes.append(
                 _Node(
                     task.min,
@@ -155,6 +211,7 @@ class SpatialOctree:
 
             bounds = self._accept(coords, task, indices)
             self._nodes[node].count = len(self._order) - self._nodes[node].first
+
             half = task.size * 0.5
 
             for b in range(7, -1, -1):
@@ -166,6 +223,7 @@ class SpatialOctree:
                     task.min[1] + ((b >> 1) & 1) * half,
                     task.min[2] + ((b >> 2) & 1) * half,
                 ]
+
                 self._push(
                     stack,
                     _Task(
@@ -228,47 +286,6 @@ class SpatialOctree:
 
     def _push(self, stack: list[_Task], task: _Task) -> None:
         """Push a task onto the build stack."""
+
         assert len(stack) < STACK_SIZE
         stack.append(task)
-
-    def node_count(self) -> int:
-        """Return the number of nodes."""
-        return len(self._nodes)
-
-    def node_cube(self, i: int) -> tuple[Point, float]:
-        """Return the node cube center and edge length."""
-        node = self._nodes[i]
-        half = node.size * 0.5
-
-        return Point(
-            node.min[0] + half, node.min[1] + half, node.min[2] + half
-        ), node.size
-
-    def node_level(self, i: int) -> int:
-        """Return the node depth from the root."""
-        return self._nodes[i].level
-
-    def node_spacing(self, i: int) -> float:
-        """Return the grid-accept spacing of a node."""
-        return self._nodes[i].spacing
-
-    def node_range(self, i: int) -> tuple[int, int]:
-        """Return the node point range as (first, count) into order."""
-        node = self._nodes[i]
-
-        return node.first, node.count
-
-    def children(self, i: int) -> list[int]:
-        """Return the present child node indices."""
-
-        result: list[int] = []
-
-        for c in self._nodes[i].children:
-            if c != NULL_IDX:
-                result.append(c)
-
-        return result
-
-    def order(self) -> list[int]:
-        """Return the point indices permuted so each node's points are contiguous."""
-        return self._order
