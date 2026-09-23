@@ -553,7 +553,7 @@ def test_brep_cut_by_plane():
     MINI_CHECK(abs(half.volume() - 4.0) < 1e-9)
     MINI_CHECK(piece.is_solid())
     MINI_CHECK(piece.face_count() == 6)
-    MINI_CHECK(abs(piece.volume() - 6000000.0) < 0.01)
+    MINI_CHECK(abs(piece.volume() / 6000000.0 - 1.0) < 1e-6)
 
 
 @MINI_TEST("BRep", "Json Roundtrip")
