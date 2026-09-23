@@ -17,6 +17,7 @@ from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
 from .brep import BRep
 from .element import Element
+from .instance_ref import InstanceRef
 import json
 import uuid
 
@@ -128,6 +129,7 @@ class Objects:
         self.breps: list[BRep] = []
         self.elements: list[Element] = []
         self.components: list[Component] = []
+        self.instances: list[InstanceRef] = []  # Each places a Session definition.
 
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
@@ -169,6 +171,7 @@ class Objects:
             "breps": [b.__jsondump__() for b in self.breps],
             "components": [c.__jsondump__() for c in self.components],
             "elements": [e.__jsondump__() for e in self.elements],
+            "instances": [i.__jsondump__() for i in self.instances],
             "lines": [l.__jsondump__() for l in self.lines],
             "meshes": [m.__jsondump__() for m in self.meshes],
             "nurbscurves": [nc.__jsondump__() for nc in self.nurbscurves],
@@ -193,6 +196,9 @@ class Objects:
             Component.__jsonload__(c) for c in data.get("components", [])
         ]
         objects.elements = [file_decode_node(e) for e in data.get("elements", [])]
+        objects.instances = [
+            InstanceRef.__jsonload__(i) for i in data.get("instances", [])
+        ]
         objects.lines = [file_decode_node(l) for l in data.get("lines", [])]
         objects.meshes = [file_decode_node(m) for m in data.get("meshes", [])]
         objects.nurbscurves = [
@@ -277,6 +283,9 @@ class Objects:
         for c in self.components:
             proto.components.add().ParseFromString(c.pb_dumps())
 
+        for i in self.instances:
+            proto.instances.add().ParseFromString(i.pb_dumps())
+
         return proto.SerializeToString()
 
     @classmethod
@@ -323,6 +332,9 @@ class Objects:
 
         for c in proto.components:
             objects.components.append(Component.pb_loads(c.SerializeToString()))
+
+        for i in proto.instances:
+            objects.instances.append(InstanceRef.from_proto(i))
 
         return objects
 

@@ -19,8 +19,10 @@ def test_objects_constructor():
 
 @MINI_TEST("Objects", "Json Roundtrip")
 def test_objects_json_roundtrip():
+    from session_py import InstanceRef
     from session_py import Objects
     from session_py import Point
+    from session_py import Xform
     from session_py.file_encoders import file_json_dump
     from session_py.file_encoders import file_json_load
     from pathlib import Path
@@ -30,6 +32,9 @@ def test_objects_json_roundtrip():
     point2 = Point(4.0, 5.0, 6.0)
     original.points.append(point1)
     original.points.append(point2)
+    instance = InstanceRef("def-abc", Xform.identity())
+    guid = instance.guid
+    original.instances.append(instance)
 
     filename = (
         Path(__file__).resolve().parents[2] / "serialization" / "test_objects.json"
@@ -38,12 +43,17 @@ def test_objects_json_roundtrip():
     loaded = file_json_load(filename)
 
     MINI_CHECK(len(loaded.points) == len(original.points))
+    MINI_CHECK(len(loaded.instances) == 1)
+    MINI_CHECK(loaded.instances[0].guid == guid)
+    MINI_CHECK(loaded.instances[0].definition_guid == "def-abc")
 
 
 @MINI_TEST("Objects", "Protobuf Roundtrip")
 def test_objects_protobuf_roundtrip():
+    from session_py import InstanceRef
     from session_py import Objects
     from session_py import Point
+    from session_py import Xform
     from pathlib import Path
 
     original = Objects()
@@ -51,6 +61,9 @@ def test_objects_protobuf_roundtrip():
     point2 = Point(4.0, 5.0, 6.0)
     original.points.append(point1)
     original.points.append(point2)
+    instance = InstanceRef("def-abc", Xform.identity())
+    guid = instance.guid
+    original.instances.append(instance)
 
     filename = (
         Path(__file__).resolve().parents[2] / "serialization" / "test_objects.bin"
@@ -59,6 +72,9 @@ def test_objects_protobuf_roundtrip():
     loaded = Objects.pb_load(filename)
 
     MINI_CHECK(len(loaded.points) == len(original.points))
+    MINI_CHECK(len(loaded.instances) == 1)
+    MINI_CHECK(loaded.instances[0].guid == guid)
+    MINI_CHECK(loaded.instances[0].definition_guid == "def-abc")
 
 
 @MINI_TEST("Objects", "Component Constructor")
