@@ -53,6 +53,7 @@ def _set_circle_row(
 
 def _add_ring(vertices: list[Point], n: int, radius: float, z: float) -> None:
     """Appends n points of a circle of the given radius in the plane z."""
+
     for i in range(n):
         angle = 2.0 * PI * i / n
         vertices.append(Point(radius * math.cos(angle), radius * math.sin(angle), z))
@@ -475,6 +476,7 @@ def _shape_plane(shape: NurbsCurve) -> Plane:
 
 def _shape_width(shape: NurbsCurve) -> float:
     """Chord length of a shape, 1 when degenerate."""
+
     width = shape.point_at_start().distance(shape.point_at_end())
 
     return 1.0 if width < 1e-14 else width
@@ -605,6 +607,7 @@ class Primitives:
                 Line.from_points(mesh.vertex[u].position(), mesh.vertex[v].position()),
                 radius,
             )
+
             pipe.set_facecolors([colors[i]] * pipe.number_of_faces())
             pipes.append(pipe)
 
@@ -792,13 +795,8 @@ class Primitives:
         curve = NurbsCurve(3, True, 3, 3)
         curve.m_nurbsknot = np.array([0.0, 0.0, 1.0, 1.0], dtype=np.float64)
         curve.set_cv_4d(0, start[0], start[1], start[2], 1.0)
-        curve.set_cv_4d(
-            1,
-            chord_mid[0] * w + sagitta[0],
-            chord_mid[1] * w + sagitta[1],
-            chord_mid[2] * w + sagitta[2],
-            w,
-        )
+        weighted = chord_mid * w + sagitta
+        curve.set_cv_4d(1, weighted[0], weighted[1], weighted[2], w)
         curve.set_cv_4d(2, end[0], end[1], end[2], 1.0)
 
         return curve
@@ -1067,6 +1065,7 @@ class Primitives:
         curves[0].set_domain(0.0, 1.0)
         curves[1].set_domain(0.0, 1.0)
         _make_curves_compatible(curves)
+
         cv_count_u = curves[0].cv_count()
         is_rat = curves[0].is_rational()
         surface = NurbsSurface(3, is_rat, curves[0].order(), 2, cv_count_u, 2)
@@ -1164,6 +1163,7 @@ class Primitives:
             curves.append(c.duplicate())
 
         _make_curves_compatible(curves)
+
         n = len(curves)
         cv_count_u = curves[0].cv_count()
         is_rat = curves[0].is_rational()
@@ -1322,6 +1322,7 @@ class Primitives:
             compat.append(shape.duplicate())
 
         _make_curves_compatible(compat)
+
         n_shapes = len(compat)
         planes = []
         widths = []
@@ -1411,9 +1412,11 @@ class Primitives:
         v_pair = [loop[0].duplicate(), loop[2].duplicate()]
         v_pair[1].reverse()
         _make_curves_compatible(v_pair)
+
         u_pair = [loop[3].duplicate(), loop[1].duplicate()]
         u_pair[0].reverse()
         _make_curves_compatible(u_pair)
+
         south = v_pair[0]
         north = v_pair[1]
         west = u_pair[0]
@@ -1594,6 +1597,7 @@ class Primitives:
         vertices = []
         _add_ring(vertices, n, 0.5, -0.5)
         _add_ring(vertices, n, 0.5, 0.5)
+
         triangles = []
 
         for i in range(n):
@@ -1610,6 +1614,7 @@ class Primitives:
         n = 8
         vertices = [Point(0.0, 0.0, 0.5)]
         _add_ring(vertices, n, 0.5, -0.5)
+
         triangles = []
 
         for i in range(n):
@@ -1638,6 +1643,7 @@ class Primitives:
         vertices.append(Point(0.0, 0.0, -radius))
         _add_ring(vertices, n, r_hemi, length + off)
         vertices.append(Point(0.0, 0.0, length + radius))
+
         triangles = []
 
         for i in range(n):
