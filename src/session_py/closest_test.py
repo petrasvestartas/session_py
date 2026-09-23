@@ -4,6 +4,52 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
+@MINI_TEST("Closest", "Curve Point")
+def test_closest_curve_point():
+    from session_py import Closest
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    pts = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 2.0, 0.0),
+        Point(3.0, 2.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+    ]
+    crv = NurbsCurve.create(False, 3, pts)
+
+    t, dist = Closest.curve_point(crv, Point(2.0, 3.0, 0.0))
+
+    MINI_CHECK(dist < 1.6)
+
+    cp = crv.point_at(t)
+
+    MINI_CHECK(TOLERANCE.is_close(cp.distance(Point(2.0, 3.0, 0.0)), dist))
+
+    dist2 = Closest.curve_point(crv, Point(0.0, 0.0, 0.0))[1]
+
+    MINI_CHECK(dist2 < 0.01)
+
+
+@MINI_TEST("Closest", "Curve Curve")
+def test_closest_curve_curve():
+    from session_py import Closest
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    curve0 = NurbsCurve.create(False, 1, [Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)])
+    curve1 = NurbsCurve.create(False, 1, [Point(5.0, -5.0, 1.0), Point(5.0, 5.0, 1.0)])
+
+    u, v, dist = Closest.curve_curve(curve0, curve1)
+    p0 = curve0.point_at(u)
+    p1 = curve1.point_at(v)
+
+    MINI_CHECK(TOLERANCE.is_close(dist, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(p0[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(p1[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(p0.distance(p1), dist))
+
+
 @MINI_TEST("Closest", "Line Point")
 def test_closest_line_point():
     from session_py import Closest
@@ -46,41 +92,15 @@ def test_closest_polyline_point():
         ]
     )
 
-    cp1, t1, d1 = Closest.polyline_point(pl, Point(5.0, 5.0, 0.0))
+    d1 = Closest.polyline_point(pl, Point(5.0, 5.0, 0.0))[2]
 
     MINI_CHECK(TOLERANCE.is_close(d1, 5.0))
 
-    cp2, t2, d2 = Closest.polyline_point(pl, Point(10.0, 5.0, 0.0))
+    cp2, _, d2 = Closest.polyline_point(pl, Point(10.0, 5.0, 0.0))
 
     MINI_CHECK(TOLERANCE.is_close(cp2[0], 10.0))
     MINI_CHECK(TOLERANCE.is_close(cp2[1], 5.0))
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
-
-
-@MINI_TEST("Closest", "Curve Point")
-def test_closest_curve_point():
-    from session_py import Closest
-    from session_py import NurbsCurve
-    from session_py import Point
-
-    pts = [
-        Point(0.0, 0.0, 0.0),
-        Point(1.0, 2.0, 0.0),
-        Point(3.0, 2.0, 0.0),
-        Point(4.0, 0.0, 0.0),
-    ]
-    crv = NurbsCurve.create(False, 3, pts)
-
-    t, dist = Closest.curve_point(crv, Point(2.0, 3.0, 0.0))
-
-    MINI_CHECK(dist < 1.6)
-    cp = crv.point_at(t)
-
-    MINI_CHECK(TOLERANCE.is_close(cp.distance(Point(2.0, 3.0, 0.0)), dist))
-
-    t2, dist2 = Closest.curve_point(crv, Point(0.0, 0.0, 0.0))
-
-    MINI_CHECK(dist2 < 0.01)
 
 
 @MINI_TEST("Closest", "Surface Point")
@@ -112,11 +132,12 @@ def test_closest_surface_point():
     u, v, dist = Closest.surface_point(srf, Point(1.5, 1.5, 2.0))
 
     MINI_CHECK(dist < 1.5)
+
     cp = srf.point_at(u, v)
 
     MINI_CHECK(TOLERANCE.is_close(cp.distance(Point(1.5, 1.5, 2.0)), dist))
 
-    u2, v2, dist2 = Closest.surface_point(srf, Point(0.0, 0.0, 0.0))
+    dist2 = Closest.surface_point(srf, Point(0.0, 0.0, 0.0))[2]
 
     MINI_CHECK(dist2 < 0.01)
 
@@ -146,6 +167,7 @@ def test_closest_surface_curve():
     pcurves = Closest.surface_curve(cyl, crv)
 
     MINI_CHECK(len(pcurves) == 2)
+
     on_border = 0
     inside = True
 
@@ -187,12 +209,12 @@ def test_closest_mesh_point():
 
     m = Primitives.cube(2.0)
 
-    cp1, fk1, d1 = Closest.mesh_point(m, Point(0.0, 0.0, 2.0))
+    cp1, _, d1 = Closest.mesh_point(m, Point(0.0, 0.0, 2.0))
 
     MINI_CHECK(TOLERANCE.is_close(cp1[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
 
-    cp2, fk2, d2 = Closest.mesh_point(m, Point(1.0, 1.0, 1.0))
+    d2 = Closest.mesh_point(m, Point(1.0, 1.0, 1.0))[2]
 
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
 
@@ -205,12 +227,12 @@ def test_closest_mesh_point_aabb():
 
     m = Primitives.cube(2.0)
 
-    cp1, fk1, d1 = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 2.0))
+    cp1, _, d1 = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 2.0))
 
     MINI_CHECK(TOLERANCE.is_close(cp1[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
 
-    cp2, fk2, d2 = Closest.mesh_point_aabb(m, Point(1.0, 1.0, 1.0))
+    d2 = Closest.mesh_point_aabb(m, Point(1.0, 1.0, 1.0))[2]
 
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
 
@@ -236,7 +258,7 @@ def test_closest_pointcloud_point():
     MINI_CHECK(i1 == 1)
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
 
-    cp2, i2, d2 = Closest.pointcloud_point(pc, Point(10.0, 10.0, 0.0))
+    _, i2, d2 = Closest.pointcloud_point(pc, Point(10.0, 10.0, 0.0))
 
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
     MINI_CHECK(i2 == 3)
@@ -263,7 +285,7 @@ def test_closest_pointcloud_point_kdtree():
     MINI_CHECK(i1 == 1)
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
 
-    cp2, i2, d2 = Closest.pointcloud_point_kdtree(pc, Point(10.0, 10.0, 0.0))
+    _, i2, d2 = Closest.pointcloud_point_kdtree(pc, Point(10.0, 10.0, 0.0))
 
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
     MINI_CHECK(i2 == 3)

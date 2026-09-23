@@ -101,8 +101,10 @@ def _curve_newton(
 def _curve_curve_seed(curve0: NurbsCurve, curve1: NurbsCurve) -> tuple[float, float]:
     """Parameters of the closest pair on dense grids over both domains."""
 
-    u0, u1 = curve0.domain()
-    v0, v1 = curve1.domain()
+    u0 = curve0.domain_start()
+    u1 = curve0.domain_end()
+    v0 = curve1.domain_start()
+    v1 = curve1.domain_end()
     n0 = max(40, curve0.cv_count() * 8)
     n1 = max(40, curve1.cv_count() * 8)
     p0 = []
@@ -120,10 +122,7 @@ def _curve_curve_seed(curve0: NurbsCurve, curve1: NurbsCurve) -> tuple[float, fl
 
     for i in range(n0 + 1):
         for j in range(n1 + 1):
-            dx = p0[i][0] - p1[j][0]
-            dy = p0[i][1] - p1[j][1]
-            dz = p0[i][2] - p1[j][2]
-            d2 = dx * dx + dy * dy + dz * dz
+            d2 = (p0[i] - p1[j]).magnitude_squared()
 
             if d2 < best:
                 best = d2
@@ -150,6 +149,7 @@ def _surface_seed(
 
     domain_u0, domain_u1 = surface.domain(0)
     domain_v0, domain_v1 = surface.domain(1)
+
     full_u = max(10, surface.order(0))
     full_v = max(10, surface.order(1))
     u_frac = (u1 - u0) / max(domain_u1 - domain_u0, 1e-12)
@@ -243,23 +243,25 @@ class _Pullback:
     """Surface domain, trace step and tolerances shared by the surface_curve steps."""
 
     def __init__(self):
-        self.u0 = 0.0
-        self.u1 = 0.0
-        self.v0 = 0.0
-        self.v1 = 0.0
-        self.range_u = 0.0
-        self.range_v = 0.0
-        self.closed_u = False
-        self.closed_v = False
-        self.du = 0.0
-        self.dv = 0.0
-        self.step = 0.0
-        self.fit_tol = 0.0
-        self.reject_tol = 0.0
-        self.on_surf_tol = 0.0
+        self.u0 = 0.0  # Surface domain start in u.
+        self.u1 = 0.0  # Surface domain end in u.
+        self.v0 = 0.0  # Surface domain start in v.
+        self.v1 = 0.0  # Surface domain end in v.
+        self.range_u = 0.0  # Domain length in u.
+        self.range_v = 0.0  # Domain length in v.
+        self.closed_u = False  # Surface closed in u.
+        self.closed_v = False  # Surface closed in v.
+        self.du = 0.0  # Quarter-span step in u.
+        self.dv = 0.0  # Quarter-span step in v.
+        self.step = 0.0  # Uv deviation bound of a fitted pcurve.
+        self.fit_tol = 0.0  # 3d deviation bound of a lifted uv midpoint.
+        self.reject_tol = 0.0  # Residual above which a sample is re-inverted globally.
+        self.on_surf_tol = 0.0  # Residual above which the curve is off the surface.
 
 
 def _pullback_setup(surface: NurbsSurface, tolerance: float) -> _Pullback:
+    """Domain, steps and tolerances of the surface for one pullback."""
+
     pb = _Pullback()
     pb.u0, pb.u1 = surface.domain(0)
     pb.v0, pb.v1 = surface.domain(1)
@@ -267,10 +269,12 @@ def _pullback_setup(surface: NurbsSurface, tolerance: float) -> _Pullback:
     pb.range_v = pb.v1 - pb.v0
     pb.closed_u = surface.is_closed(0)
     pb.closed_v = surface.is_closed(1)
+
     nu = max(len(surface.get_span_vector(0)) - 1, 1) * 4
     nv = max(len(surface.get_span_vector(1)) - 1, 1) * 4
     pb.du = pb.range_u / nu
     pb.dv = pb.range_v / nv
+
     mu = (pb.u0 + pb.u1) * 0.5
     mv = (pb.v0 + pb.v1) * 0.5
     pmid = surface.point_at(mu, mv)
@@ -292,6 +296,7 @@ def _pullback_setup(surface: NurbsSurface, tolerance: float) -> _Pullback:
         tolerance if tolerance > 0.0 else pb.step * (uv_to_3d + uv_to_3d_min) * 0.5
     )
     pb.reject_tol = pb.fit_tol * 100.0
+
     corner_diag = surface.point_at(pb.u0, pb.v0).distance(
         surface.point_at(pb.u1, pb.v1)
     )
@@ -465,6 +470,7 @@ def _pullback_refine(
 
             uu = _pullback_unwrap(a[1], ru, pb.range_u, pb.closed_u)
             vv = _pullback_unwrap(a[2], rv, pb.range_v, pb.closed_v)
+
             samples.insert(i + 1, [tm, uu, vv, rd])
             inserted += 1
             i += 2
@@ -545,6 +551,8 @@ def _pullback_at_seam(x: float, x0: float, range_: float, closed: bool) -> bool:
 
 
 def _pullback_on_seam(pb: _Pullback, p: list[float]) -> bool:
+    """True when p sits on a seam of either closed axis."""
+
     return _pullback_at_seam(p[0], pb.u0, pb.range_u, pb.closed_u) or _pullback_at_seam(
         p[1], pb.v0, pb.range_v, pb.closed_v
     )
@@ -634,6 +642,7 @@ def _pullback_pieces(
             continue
 
         _pullback_shift(pb, seg)
+
         umin = 1e300
         umax = -1e300
         vmin = 1e300
@@ -660,6 +669,7 @@ def _pullback_pieces(
             and umax - umin < pb.range_u * 0.9
             and vmax - vmin < pb.range_v * 0.9
         )
+
         pieces.append((seg, seg_loop))
 
     return pieces
@@ -715,6 +725,7 @@ def _pullback_fit(
     """Fit one piece as a uv pcurve on [0, 1]; interpolation and a degree-1 polyline are the fallbacks."""
 
     _pullback_shift(pb, piece_pts)
+
     pts_uv = []
 
     for p in piece_pts:
@@ -735,7 +746,8 @@ def _pullback_fit(
         if not pcurve.is_valid():
             break
 
-        ft0, ft1 = pcurve.domain()
+        ft0 = pcurve.domain_start()
+        ft1 = pcurve.domain_end()
         max_dev = 0.0
 
         for i in range(mp):
@@ -850,23 +862,6 @@ def _mesh_face_keys(mesh: Mesh) -> list[int]:
     return sorted(mesh.face.keys())
 
 
-def _mesh_triangles(mesh: Mesh) -> tuple[list[tuple[Point, Point, Point]], list[int]]:
-    """Fan triangles of every face with their face index."""
-
-    vertices, faces = mesh.to_vertices_and_faces()
-    tris = []
-    tri_face_idx = []
-
-    for fi in range(len(faces)):
-        fv = faces[fi]
-
-        for j in range(1, len(fv) - 1):
-            tris.append((vertices[fv[0]], vertices[fv[j]], vertices[fv[j + 1]]))
-            tri_face_idx.append(fi)
-
-    return tris, tri_face_idx
-
-
 class Closest:
     """Closest-point queries between points, curves, surfaces, meshes and clouds."""
 
@@ -883,7 +878,8 @@ class Closest:
         if not curve.is_valid():
             return (0.0, math.inf)
 
-        domain_start, domain_end = curve.domain()
+        domain_start = curve.domain_start()
+        domain_end = curve.domain_end()
 
         if t0 <= 0.0:
             t0 = domain_start
@@ -893,6 +889,7 @@ class Closest:
 
         t0 = max(t0, domain_start)
         t1 = min(t1, domain_end)
+
         t = _curve_newton(
             curve, test_point, t0, t1, _curve_seed(curve, test_point, t0, t1)
         )
@@ -919,8 +916,10 @@ class Closest:
         if not curve0.is_valid() or not curve1.is_valid():
             return (0.0, 0.0, math.inf)
 
-        u0, u1 = curve0.domain()
-        v0, v1 = curve1.domain()
+        u0 = curve0.domain_start()
+        u1 = curve0.domain_end()
+        v0 = curve1.domain_start()
+        v1 = curve1.domain_end()
         u, v = _curve_curve_seed(curve0, curve1)
 
         for _ in range(64):
@@ -986,21 +985,14 @@ class Closest:
 
         start = line.start()
         end = line.end()
-        dx = end[0] - start[0]
-        dy = end[1] - start[1]
-        dz = end[2] - start[2]
-        len_sq = dx * dx + dy * dy + dz * dz
+        direction = end - start
+        len_sq = direction.magnitude_squared()
 
         if len_sq < 1e-20:
             return (start, 0.0, start.distance(test_point))
 
-        t = (
-            (test_point[0] - start[0]) * dx
-            + (test_point[1] - start[1]) * dy
-            + (test_point[2] - start[2]) * dz
-        ) / len_sq
-        t = max(0.0, min(1.0, t))
-        closest = Point(start[0] + t * dx, start[1] + t * dy, start[2] + t * dz)
+        t = max(0.0, min(1.0, (test_point - start).dot(direction) / len_sq))
+        closest = start + direction * t
 
         return (closest, t, closest.distance(test_point))
 
@@ -1026,8 +1018,8 @@ class Closest:
 
         for i in range(len(points) - 1):
             segment = Line.from_points(points[i], points[i + 1])
-            closest, t, dist = Closest.line_point(segment, test_point)
             segment_length = segment.length()
+            closest, t, dist = Closest.line_point(segment, test_point)
 
             if dist < best_dist:
                 best_dist = dist
@@ -1079,6 +1071,7 @@ class Closest:
         u1 = min(u1, domain_u1)
         v0 = max(v0, domain_v0)
         v1 = min(v1, domain_v1)
+
         seed = _surface_seed(surface, test_point, u0, u1, v0, v1)
         u, v = _surface_newton(surface, test_point, u0, u1, v0, v1, seed)
 
@@ -1097,7 +1090,8 @@ class Closest:
         if not surface.is_valid() or not curve.is_valid():
             return []
 
-        ct0, ct1 = curve.domain()
+        ct0 = curve.domain_start()
+        ct1 = curve.domain_end()
 
         if t0 <= 0.0:
             t0 = ct0
@@ -1118,6 +1112,7 @@ class Closest:
             return []
 
         _pullback_refine(surface, curve, pb, samples)
+
         result = []
 
         for piece_pts, piece_loop in _pullback_pieces(pb, curve, samples):
@@ -1207,22 +1202,16 @@ class Closest:
         if mesh.number_of_faces() == 0:
             return (best_point, best_face_key, best_dist)
 
-        tris, tri_face_idx = _mesh_triangles(mesh)
+        mesh.build_triangle_aabb_tree()
+        tree = mesh.get_cached_aabb_tree()
 
-        if not tris:
+        if tree is None or tree.empty():
             return (best_point, best_face_key, best_dist)
 
-        aabbs = []
-
-        for v0, v1, v2 in tris:
-            aabbs.append(AABB.from_points([v0, v1, v2]))
-
-        tree = SpatialAABBTree()
-        tree.build(aabbs)
         face_keys = _mesh_face_keys(mesh)
         stack = [0]
 
-        while stack:
+        while len(stack) > 0:
             ni = stack.pop()
             node = tree.nodes[ni]
 
@@ -1230,14 +1219,20 @@ class Closest:
                 continue
 
             if node.object_id >= 0:
-                v0, v1, v2 = tris[node.object_id]
+                found, face_idx, sub_idx, v0, v1, v2 = mesh.get_triangle_by_id(
+                    node.object_id
+                )
+
+                if not found:
+                    continue
+
                 cp = _closest_point_on_triangle(test_point, v0, v1, v2)
                 dist = cp.distance(test_point)
 
                 if dist < best_dist:
                     best_dist = dist
                     best_point = cp
-                    best_face_key = face_keys[tri_face_idx[node.object_id]]
+                    best_face_key = face_keys[face_idx]
 
                 continue
 
@@ -1334,10 +1329,10 @@ class Closest:
                 if j <= i:
                     continue
 
-                cp_a, t_a, d_a = Closest.line_point(lines[j], lines[i].start())
-                cp_b, t_b, d_b = Closest.line_point(lines[j], lines[i].end())
-                cp_c, t_c, d_c = Closest.line_point(lines[i], lines[j].start())
-                cp_d, t_d, d_d = Closest.line_point(lines[i], lines[j].end())
+                d_a = Closest.line_point(lines[j], lines[i].start())[2]
+                d_b = Closest.line_point(lines[j], lines[i].end())[2]
+                d_c = Closest.line_point(lines[i], lines[j].start())[2]
+                d_d = Closest.line_point(lines[i], lines[j].end())[2]
 
                 if min(d_a, d_b, d_c, d_d) <= threshold:
                     pairs.append((i, j))
@@ -1371,7 +1366,7 @@ class Closest:
                 dist = math.inf
 
                 for pt in polylines[i].get_points():
-                    cp, t, d = Closest.polyline_point(polylines[j], pt)
+                    d = Closest.polyline_point(polylines[j], pt)[2]
 
                     if d < dist:
                         dist = d
@@ -1405,11 +1400,10 @@ class Closest:
                 if j <= i:
                     continue
 
-                t0, t1 = curves[i].domain()
-                p_start = curves[i].point_at(t0)
-                p_end = curves[i].point_at(t1)
-                t_a, d_a = Closest.curve_point(curves[j], p_start)
-                t_b, d_b = Closest.curve_point(curves[j], p_end)
+                p_start = curves[i].point_at(curves[i].domain_start())
+                p_end = curves[i].point_at(curves[i].domain_end())
+                d_a = Closest.curve_point(curves[j], p_start)[1]
+                d_b = Closest.curve_point(curves[j], p_end)[1]
 
                 if min(d_a, d_b) <= threshold:
                     pairs.append((i, j))
