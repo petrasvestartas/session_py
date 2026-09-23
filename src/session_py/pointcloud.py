@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
 import json
 import uuid
@@ -10,6 +9,7 @@ from .vector import Vector
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .proto import pointcloud_pb2
     from .xform import Xform
 
 
@@ -18,8 +18,6 @@ class PointCloud:
 
     __slots__ = (
         "_guid",
-        "name",
-        "point_size",
         "_coords",
         "_colors",
         "_normals",
@@ -31,8 +29,13 @@ class PointCloud:
         "_lod_count",
         "_lod_children",
         "_point_ids",
+        "name",
+        "point_size",
     )
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(
         self,
         points: list[Point] | None = None,
@@ -41,36 +44,34 @@ class PointCloud:
     ):
         """Construct from points, normals and colors."""
 
-        self._guid = None
-        self.name = "my_pointcloud"
-        self.point_size = 1.0
-        self._coords: list[float] = []
-        self._colors: list[int] = []
-        self._normals: list[float] = []
-        self._lod_min: list[float] = []
-        self._lod_size: list[float] = []
-        self._lod_spacing: list[float] = []
-        self._lod_level: list[int] = []
-        self._lod_first: list[int] = []
-        self._lod_count: list[int] = []
-        self._lod_children: list[int] = []
-        self._point_ids: list[int] = []
+        self._guid = None  # Lazily minted GUID.
+        self._coords = []  # Flat [x, y, z, ...].
+        self._colors = []  # Flat [r, g, b, a, ...] as 0-255.
+        self._normals = []  # Flat [nx, ny, nz, ...].
+        self._lod_min = []  # Node cube min corner, 3 per node.
+        self._lod_size = []  # Node cube edge length.
+        self._lod_spacing = []  # Node grid-accept spacing.
+        self._lod_level = []  # Node depth from the root.
+        self._lod_first = []  # Node first point index.
+        self._lod_count = []  # Node point count.
+        self._lod_children = []  # Node child indices, 8 per node, -1 unused.
+        self._point_ids = []  # Stable point ids parallel to the points.
+        self.name = "my_pointcloud"  # Cloud name.
+        self.point_size = 1.0  # Display point size.
 
-        for p in points or []:
-            self.add_point(p)
+        for point in points or []:
+            self.add_point(point)
 
-        for n in normals or []:
-            self.add_normal(n)
+        for normal in normals or []:
+            self.add_normal(normal)
 
-        for c in colors or []:
-            self.add_color(c)
+        for color in colors or []:
+            self.add_color(color)
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
 
         result = PointCloud()
-        result.name = self.name
-        result.point_size = self.point_size
         result._coords = list(self._coords)
         result._colors = list(self._colors)
         result._normals = list(self._normals)
@@ -82,14 +83,19 @@ class PointCloud:
         result._lod_count = list(self._lod_count)
         result._lod_children = list(self._lod_children)
         result._point_ids = list(self._point_ids)
+        result.name = self.name
+        result.point_size = self.point_size
         memo[id(self)] = result
 
         return result
 
-    def duplicate(self) -> "PointCloud":
-        """Copy (new guid, same data)"""
+    def duplicate(self) -> PointCloud:
+        """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -97,6 +103,7 @@ class PointCloud:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -114,13 +121,12 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # Static constructors
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def from_coords(
         coords: list[float],
         colors: list[int] | None = None,
         normals: list[float] | None = None,
-    ) -> "PointCloud":
+    ) -> PointCloud:
         """Construct from flat arrays: coords [x, y, z, ...], colors [r, g, b, a, ...] as 0-255, normals [nx, ny, nz, ...]."""
 
         cloud = PointCloud()
@@ -133,7 +139,6 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __eq__(self, other) -> bool:
         """Compare name, arrays, LOD ranges and point ids; guid ignored."""
 
@@ -154,7 +159,7 @@ class PointCloud:
         """Compare name, arrays, LOD ranges and point ids; guid ignored."""
         return not self.__eq__(other)
 
-    def __iadd__(self, other: Vector) -> "PointCloud":
+    def __iadd__(self, other: Vector) -> PointCloud:
         """Translate in place."""
 
         for i in range(0, len(self._coords), 3):
@@ -164,7 +169,7 @@ class PointCloud:
 
         return self
 
-    def __isub__(self, other: Vector) -> "PointCloud":
+    def __isub__(self, other: Vector) -> PointCloud:
         """Translate back in place."""
 
         for i in range(0, len(self._coords), 3):
@@ -174,15 +179,17 @@ class PointCloud:
 
         return self
 
-    def __add__(self, other: Vector) -> "PointCloud":
+    def __add__(self, other: Vector) -> PointCloud:
         """Return a translated copy."""
+
         result = copy.deepcopy(self)
         result += other
 
         return result
 
-    def __sub__(self, other: Vector) -> "PointCloud":
+    def __sub__(self, other: Vector) -> PointCloud:
         """Return a copy translated back."""
+
         result = copy.deepcopy(self)
         result -= other
 
@@ -191,8 +198,7 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def transform(self, xform: "Xform") -> None:
+    def transform(self, xform: Xform) -> None:
         """Transform points and normals in place."""
 
         for i in range(self.point_count()):
@@ -201,8 +207,9 @@ class PointCloud:
         for i in range(self.normal_count()):
             self.set_normal(i, self.get_normal(i).transformed(xform))
 
-    def transformed(self, xform: "Xform") -> "PointCloud":
+    def transformed(self, xform: Xform) -> PointCloud:
         """Return a transformed copy."""
+
         result = copy.deepcopy(self)
         result.transform(xform)
 
@@ -211,7 +218,6 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # Points
     # ═══════════════════════════════════════════════════════════════════════════
-
     def point_count(self) -> int:
         """Return the number of points."""
         return len(self._coords) // 3
@@ -226,6 +232,7 @@ class PointCloud:
 
     def get_point(self, index: int) -> Point:
         """Return the point at index."""
+
         idx = index * 3
 
         return Point(self._coords[idx], self._coords[idx + 1], self._coords[idx + 2])
@@ -240,6 +247,7 @@ class PointCloud:
 
     def add_point(self, point: Point) -> None:
         """Append a point."""
+
         self._coords.append(point[0])
         self._coords.append(point[1])
         self._coords.append(point[2])
@@ -261,13 +269,13 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # Colors
     # ═══════════════════════════════════════════════════════════════════════════
-
     def color_count(self) -> int:
         """Return the number of colors."""
         return len(self._colors) // 4
 
     def get_color(self, index: int) -> Color:
         """Return the color at index."""
+
         idx = index * 4
 
         return Color(
@@ -311,13 +319,13 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # Normals
     # ═══════════════════════════════════════════════════════════════════════════
-
     def normal_count(self) -> int:
         """Return the number of normals."""
         return len(self._normals) // 3
 
     def get_normal(self, index: int) -> Vector:
         """Return the normal at index."""
+
         idx = index * 3
 
         return Vector(
@@ -334,6 +342,7 @@ class PointCloud:
 
     def add_normal(self, normal: Vector) -> None:
         """Append a normal."""
+
         self._normals.append(normal[0])
         self._normals.append(normal[1])
         self._normals.append(normal[2])
@@ -348,10 +357,13 @@ class PointCloud:
 
         return normals
 
+    def normals(self) -> list[float]:
+        """Return the flat normal array itself; get_normal builds a Vector per call."""
+        return self._normals
+
     # ═══════════════════════════════════════════════════════════════════════════
     # LOD octree
     # ═══════════════════════════════════════════════════════════════════════════
-
     def build_lod(self, root_spacing: float, leaf_capacity: int) -> None:
         """Build the octree and permute the arrays into octree order, so a node is one contiguous range."""
 
@@ -366,10 +378,11 @@ class PointCloud:
 
         has_colors = len(self._colors) == len(order) * 4
         has_normals = len(self._normals) == len(order) * 3
-        coords: list[float] = []
-        colors: list[int] = []
-        normals: list[float] = []
-        ids: list[int] = []
+
+        coords = []
+        colors = []
+        normals = []
+        ids = []
 
         for idx in order:
             ids.append(self._point_ids[idx])
@@ -404,7 +417,7 @@ class PointCloud:
 
         for i in range(tree.node_count()):
             cube = tree.node_cube(i)
-            range_ = tree.node_range(i)
+            span = tree.node_range(i)
             kids = tree.children(i)
 
             for k in range(3):
@@ -413,8 +426,8 @@ class PointCloud:
             self._lod_size.append(cube[1])
             self._lod_spacing.append(tree.node_spacing(i))
             self._lod_level.append(tree.node_level(i))
-            self._lod_first.append(range_[0])
-            self._lod_count.append(range_[1])
+            self._lod_first.append(span[0])
+            self._lod_count.append(span[1])
 
             for k in range(8):
                 self._lod_children.append(kids[k] if k < len(kids) else -1)
@@ -429,16 +442,13 @@ class PointCloud:
 
     def lod_cube(self, i: int) -> tuple[Point, float]:
         """Return the node cube center and edge length."""
-        half = self._lod_size[i] * 0.5
 
-        return (
-            Point(
-                self._lod_min[i * 3] + half,
-                self._lod_min[i * 3 + 1] + half,
-                self._lod_min[i * 3 + 2] + half,
-            ),
-            self._lod_size[i],
+        half = self._lod_size[i] * 0.5
+        corner = Point(
+            self._lod_min[i * 3], self._lod_min[i * 3 + 1], self._lod_min[i * 3 + 2]
         )
+
+        return (corner + Vector(half, half, half), self._lod_size[i])
 
     def lod_spacing(self, i: int) -> float:
         """Return the grid-accept spacing of a node."""
@@ -459,7 +469,6 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # Point ids
     # ═══════════════════════════════════════════════════════════════════════════
-
     def point_ids(self) -> list[int]:
         """Return the stable ids parallel to the points, minted by the first build_lod; empty before that."""
         return self._point_ids
@@ -483,9 +492,8 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
-        """Serialize to a JSON object."""
+        """Serialize to an ordered JSON object."""
 
         return {
             "colors": self._colors,
@@ -507,13 +515,14 @@ class PointCloud:
 
     @classmethod
     def __jsonload__(
-        cls, data: dict, guid: str = None, name: str = None
-    ) -> "PointCloud":
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> PointCloud:
         """Deserialize from a JSON object."""
 
         cloud = cls.from_coords(
             data.get("coords", []), data.get("colors", []), data.get("normals", [])
         )
+
         cloud.guid = guid if guid is not None else data.get("guid", cloud.guid)
         cloud.name = name if name is not None else data.get("name", cloud.name)
         cloud.point_size = data.get("point_size", 1.0)
@@ -533,34 +542,35 @@ class PointCloud:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "PointCloud":
+    def file_json_loads(cls, json_string: str) -> PointCloud:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a JSON file."""
+    def file_json_dump(self, filepath: str | Path) -> None:
+        """Write JSON to a file."""
+
         with open(filepath, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "PointCloud":
-        """Read from a JSON file."""
+    def file_json_load(cls, filepath: str | Path) -> PointCloud:
+        """Read JSON from a file."""
+
         with open(filepath) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> pointcloud_pb2.PointCloud:
+        """Convert to the protobuf message."""
 
         from .proto import pointcloud_pb2
 
         proto = pointcloud_pb2.PointCloud()
 
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
 
         proto.name = self.name
         proto.point_size = self.point_size
@@ -576,16 +586,12 @@ class PointCloud:
         proto.lod_children.extend(self._lod_children)
         proto.point_ids.extend(self._point_ids)
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "PointCloud":
-        """Deserialize from protobuf bytes."""
+    def from_proto(cls, proto: pointcloud_pb2.PointCloud) -> PointCloud:
+        """Construct from the protobuf message."""
 
-        from .proto import pointcloud_pb2
-
-        proto = pointcloud_pb2.PointCloud()
-        proto.ParseFromString(data)
         cloud = cls.from_coords(
             list(proto.coords), list(proto.colors), list(proto.normals)
         )
@@ -609,21 +615,37 @@ class PointCloud:
 
         return cloud
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a protobuf file."""
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> PointCloud:
+        """Deserialize from protobuf bytes."""
+
+        from .proto import pointcloud_pb2
+
+        proto = pointcloud_pb2.PointCloud()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
+    def pb_dump(self, filepath: str | Path) -> None:
+        """Write protobuf bytes to a file."""
+
         with open(filepath, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "PointCloud":
-        """Read from a protobuf file."""
+    def pb_load(cls, filepath: str | Path) -> PointCloud:
+        """Read protobuf bytes from a file."""
+
         with open(filepath, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "N points"."""
         return f"{self.point_count()} points"
