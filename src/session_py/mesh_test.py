@@ -1737,6 +1737,70 @@ def test_mesh_transformation():
     MINI_CHECK(mesh4t.vertex_point(v0)[2] == 10.0)
 
 
+@MINI_TEST("Mesh", "Cut By Plane")
+def test_mesh_cut_by_plane():
+    from session_py import Mesh
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    box = Mesh.create_box(2.0, 2.0, 2.0)
+    half = box.cut_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    )
+    copy = box.cut_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 5.0), Vector(0.0, 0.0, -1.0))
+    )
+    empty = box.cut_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 5.0), Vector(0.0, 0.0, 1.0))
+    )
+
+    MINI_CHECK(half.is_closed())
+    MINI_CHECK(half.number_of_vertices() == 8)
+    MINI_CHECK(half.number_of_faces() == 6)
+    MINI_CHECK(TOLERANCE.is_close(half.volume(), 4.0))
+    MINI_CHECK(copy == box)
+    MINI_CHECK(empty.is_empty())
+
+    bottom = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 1.0, 0.0),
+            Point(1.0, 1.0, 0.0),
+            Point(1.0, 2.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    top = Polyline(
+        [
+            Point(0.0, 0.0, 1.0),
+            Point(2.0, 0.0, 1.0),
+            Point(2.0, 1.0, 1.0),
+            Point(1.0, 1.0, 1.0),
+            Point(1.0, 2.0, 1.0),
+            Point(0.0, 2.0, 1.0),
+            Point(0.0, 0.0, 1.0),
+        ]
+    )
+    prism = Mesh.loft([bottom], [top])
+    upper = prism.cut_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 0.5), Vector(0.0, 0.0, 1.0))
+    )
+    corners = prism.cut_by_plane(
+        Plane.from_point_normal(Point(1.25, 1.25, 0.0), Vector(1.0, 1.0, 0.0))
+    )
+
+    MINI_CHECK(upper.is_closed())
+    MINI_CHECK(upper.number_of_faces() == 8)
+    MINI_CHECK(TOLERANCE.is_close(upper.volume(), 1.5))
+    MINI_CHECK(corners.is_closed())
+    MINI_CHECK(corners.number_of_faces() == 10)
+    MINI_CHECK(TOLERANCE.is_close(corners.volume(), 0.25))
+
+
 @MINI_TEST("Mesh", "Json Roundtrip")
 def test_mesh_json_roundtrip():
     from session_py import Mesh
@@ -1814,9 +1878,11 @@ def test_mesh_protobuf_roundtrip():
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_mesh.bin"
     mesh.pb_dump(filename)
     loaded_file = Mesh.pb_load(filename)
+    converted = Mesh.from_proto(mesh.to_proto())
 
     MINI_CHECK(loaded_string == mesh)
     MINI_CHECK(loaded_file == mesh)
+    MINI_CHECK(converted == mesh)
 
     polys = [
         [
@@ -2570,6 +2636,230 @@ def test_mesh_assignment_keeps_objectcolor():
     MINI_CHECK(target.get_objectcolor().g == source.get_objectcolor().g)
     MINI_CHECK(target.get_objectcolor().b == source.get_objectcolor().b)
     MINI_CHECK(target.color_mode == source.color_mode)
+
+
+@MINI_TEST("Mesh", "From Polyline Pairs")
+def test_mesh_from_polyline_pairs():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
+
+    top = Polyline(
+        [
+            Point(0.0, 0.0, 1.0),
+            Point(1.0, 0.0, 1.0),
+            Point(1.0, 1.0, 1.0),
+            Point(0.0, 1.0, 1.0),
+            Point(0.0, 0.0, 1.0),
+        ]
+    )
+    bot = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(1.0, 1.0, 0.0),
+            Point(0.0, 1.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    mesh = Mesh.from_polyline_pairs([top, bot], 2.0)
+
+    MINI_CHECK(mesh.is_closed())
+    MINI_CHECK(mesh.number_of_faces() == 6)
+    MINI_CHECK(TOLERANCE.is_close(mesh.volume(), 0.125))
+
+
+@MINI_TEST("Mesh", "From Polyline Pairs Vnf")
+def test_mesh_from_polyline_pairs_vnf():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
+
+    top = Polyline(
+        [
+            Point(0.0, 0.0, 1.0),
+            Point(1.0, 0.0, 1.0),
+            Point(1.0, 1.0, 1.0),
+            Point(0.0, 1.0, 1.0),
+            Point(0.0, 0.0, 1.0),
+        ]
+    )
+    bot = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(1.0, 1.0, 0.0),
+            Point(0.0, 1.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    vertices, normals, triangles = Mesh.from_polyline_pairs_vnf([top, bot], 1.0)
+
+    MINI_CHECK(len(triangles) == 36)
+    MINI_CHECK(len(vertices) == 108)
+    MINI_CHECK(len(normals) == 108)
+    MINI_CHECK(triangles[35] == 35)
+
+
+@MINI_TEST("Mesh", "Reflex Fold")
+def test_mesh_reflex_fold():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
+
+    cross_section = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(2.0, 1.0, 0.0),
+        ]
+    )
+    profile = Polyline(
+        [
+            Point(0.0, -1.0, 0.0),
+            Point(0.0, 0.0, 1.0),
+            Point(0.0, 1.0, 0.0),
+        ]
+    )
+    mesh = Mesh.reflex_fold(cross_section, profile)
+
+    MINI_CHECK(mesh.is_valid())
+    MINI_CHECK(mesh.number_of_vertices() == 9)
+    MINI_CHECK(mesh.number_of_faces() == 4)
+
+
+@MINI_TEST("Mesh", "Miter Contours")
+def test_mesh_miter_contours():
+    from session_py import Mesh
+    from session_py import Vector
+
+    shell = Mesh.create_box(2.0, 2.0, 2.0)
+    contours = Mesh.miter_contours(shell, 0.1, 0.0, 0.0, False)
+
+    MINI_CHECK(len(contours) == 6)
+    MINI_CHECK(len(contours[0][0]) == 4)
+    MINI_CHECK(len(contours[0][1]) == 4)
+    MINI_CHECK(len(contours[0][2]) == 4)
+    MINI_CHECK(len(contours[0][3]) == 4)
+    MINI_CHECK(TOLERANCE.is_vector_close(contours[0][4], Vector(0.0, 0.0, -1.0)))
+
+
+@MINI_TEST("Mesh", "Set Face Triangulation")
+def test_mesh_set_face_triangulation():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.set_face_triangulation(0, [[0, 3, 2], [0, 2, 1]])
+
+    MINI_CHECK(len(mesh.get_triangulation()[0]) == 2)
+    MINI_CHECK(mesh.get_triangulation()[0][1] == [0, 2, 1])
+
+
+@MINI_TEST("Mesh", "Set Face Holes")
+def test_mesh_set_face_holes():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.set_face_holes(0, [[4, 5, 6]])
+
+    MINI_CHECK(len(mesh.get_face_holes()[0]) == 1)
+    MINI_CHECK(mesh.get_face_holes()[0][0] == [4, 5, 6])
+
+
+@MINI_TEST("Mesh", "Rebuild Halfedges")
+def test_mesh_rebuild_halfedges():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    halfedge = dict(mesh.halfedge)
+    mesh.halfedge.clear()
+    mesh.rebuild_halfedges()
+
+    MINI_CHECK(mesh.halfedge == halfedge)
+
+
+@MINI_TEST("Mesh", "Ensure Halfedges")
+def test_mesh_ensure_halfedges():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    mesh.halfedge.clear()
+    mesh.ensure_halfedges()
+
+    MINI_CHECK(len(mesh.halfedge) == 8)
+    MINI_CHECK(mesh.halfedge_face((0, 3)) is not None)
+
+
+@MINI_TEST("Mesh", "Edge Face Map")
+def test_mesh_edge_face_map():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    efm = mesh.edge_face_map()
+
+    MINI_CHECK(len(efm) == 24)
+    MINI_CHECK(efm[(0, 3)] == 0)
+    MINI_CHECK(efm[(3, 0)] == 4)
+
+
+@MINI_TEST("Mesh", "Face Outlines")
+def test_mesh_face_outlines():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    outlines = mesh.face_outlines()
+
+    MINI_CHECK(len(outlines) == 6)
+    MINI_CHECK(outlines[0].point_count() == 5)
+    MINI_CHECK(outlines[0].is_closed())
+
+
+@MINI_TEST("Mesh", "Dihedral Angle")
+def test_mesh_dihedral_angle():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(1.0, 1.0, 1.0)
+    angle = mesh.dihedral_angle(0, 1)
+
+    MINI_CHECK(angle is not None)
+    MINI_CHECK(TOLERANCE.is_close(angle, 90.0))
+
+
+@MINI_TEST("Mesh", "Triangle Bvh")
+def test_mesh_triangle_bvh():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Vector
+
+    mesh = Mesh.create_box(2.0, 2.0, 2.0)
+    mesh.build_triangle_bvh()
+    ids = []
+    hit = mesh.triangle_bvh_ray_cast(
+        Point(0.1, 0.2, -10.0), Vector(0.0, 0.0, 1.0), ids, True
+    )
+    found, face_idx, sub_idx, v0, v1, v2 = mesh.get_triangle_by_id(ids[0])
+
+    MINI_CHECK(mesh.get_cached_bvh() is not None)
+    MINI_CHECK(hit)
+    MINI_CHECK(len(ids) == 4)
+    MINI_CHECK(found)
+    MINI_CHECK(face_idx < 2)
+    MINI_CHECK(TOLERANCE.is_close(abs(v0[2]), 1.0))
+
+    mesh.clear_triangle_bvh()
+
+    MINI_CHECK(mesh.get_cached_bvh() is None)
+
+
+@MINI_TEST("Mesh", "Triangle Aabb Tree")
+def test_mesh_triangle_aabb_tree():
+    from session_py import Mesh
+
+    mesh = Mesh.create_box(2.0, 2.0, 2.0)
+    mesh.build_triangle_aabb_tree()
+
+    MINI_CHECK(mesh.get_cached_aabb_tree() is not None)
+    MINI_CHECK(mesh.get_cached_bvh() is not None)
 
 
 if __name__ == "__main__":

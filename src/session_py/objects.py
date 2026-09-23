@@ -260,7 +260,7 @@ class Objects:
             proto.pointclouds.add().ParseFromString(pc.pb_dumps())
 
         for m in self.meshes:
-            m.pb_fill(proto.meshes.add())
+            proto.meshes.add().CopyFrom(m.to_proto())
 
         for nc in self.nurbscurves:
             proto.nurbscurves.add().CopyFrom(nc.to_proto())

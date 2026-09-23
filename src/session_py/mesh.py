@@ -7,6 +7,7 @@ from enum import Enum
 import copy
 import json
 import math
+import struct
 import uuid
 
 if TYPE_CHECKING:
@@ -73,6 +74,7 @@ class Attributes:
 
     def update(self, other: Attributes | dict[str, float]) -> None:
         """Store every entry of other."""
+
         for k, v in other.items():
             self[k] = v
 
@@ -97,7 +99,8 @@ class Attributes:
         self._m = None
 
     def __getitem__(self, key: str) -> float:
-        """Return the mutable value named k; the only mutating entry point, and the only one that can allocate."""
+        """Return the value named key; raises when missing."""
+
         if self._m is None:
             raise KeyError(key)
 
@@ -105,6 +108,7 @@ class Attributes:
 
     def __setitem__(self, key: str, value: float) -> None:
         """Store a value, allocating the map on first use."""
+
         if self._m is None:
             self._m = {}
 
@@ -145,12 +149,13 @@ class Attributes:
 
     def __ne__(self, other: object) -> bool:
         """Compare the stored maps."""
+
         eq = self.__eq__(other)
 
         return eq if eq is NotImplemented else not eq
 
     def __repr__(self) -> str:
-        """Return the multi-line form with name, vertices, faces and edges."""
+        """Return the stored map as a string."""
         return repr(self._m if self._m is not None else {})
 
 
@@ -170,6 +175,7 @@ class VertexData:
 
     def __eq__(self, other):
         """Compare position and attributes exactly."""
+
         if not isinstance(other, VertexData):
             return NotImplemented
 
@@ -190,12 +196,14 @@ class VertexData:
 
     def set_position(self, point: Point) -> None:
         """Set the position from a Point."""
+
         self.x = point[0]
         self.y = point[1]
         self.z = point[2]
 
     def color(self) -> list[float]:
         """Return the vertex color as RGB, 0.5 grey when unset."""
+
         return [
             self.attributes.get("r", 0.5),
             self.attributes.get("g", 0.5),
@@ -204,12 +212,14 @@ class VertexData:
 
     def set_color(self, r: float, g: float, b: float) -> None:
         """Set the vertex color."""
+
         self.attributes["r"] = r
         self.attributes["g"] = g
         self.attributes["b"] = b
 
     def normal(self) -> list[float] | None:
         """Return the vertex normal when set."""
+
         if (
             "nx" in self.attributes
             and "ny" in self.attributes
@@ -221,6 +231,7 @@ class VertexData:
 
     def set_normal(self, nx: float, ny: float, nz: float) -> None:
         """Set the vertex normal."""
+
         self.attributes["nx"] = nx
         self.attributes["ny"] = ny
         self.attributes["nz"] = nz
@@ -252,6 +263,17 @@ def _newell_normal(pts: list[Point]) -> Vector:
         return Vector(0.0, 0.0, 0.0)
 
     return normal
+
+
+def _round_half_away(x: float) -> int:
+    """Round to the nearest integer, halves away from zero like std::round."""
+
+    r = math.floor(abs(x))
+
+    if abs(x) - r >= 0.5:
+        r += 1
+
+    return int(math.copysign(r, x))
 
 
 def _ring_centroid(pts: list[Point]) -> Point:
@@ -425,6 +447,7 @@ class _LoftFrame:
 
     def __init__(self, origin: Point, xaxis: Vector, yaxis: Vector):
         """Construct from origin and axes."""
+
         self.origin = origin
         self.xaxis = xaxis
         self.yaxis = yaxis
@@ -435,6 +458,7 @@ class _LoftRing:
 
     def __init__(self, off: int, n: int):
         """Construct from offset and length."""
+
         self.off = off
         self.n = n
 
@@ -444,6 +468,7 @@ class _LoftPoly:
 
     def __init__(self, bot: _LoftRing, top: _LoftRing):
         """Construct from bottom and top rings."""
+
         self.bot = bot
         self.top = top
 
@@ -451,14 +476,9 @@ class _LoftPoly:
 def _loft_project(frame: _LoftFrame, p: Point) -> tuple[float, float]:
     """Return the 2D coordinates of p in the frame."""
 
-    dx = p[0] - frame.origin[0]
-    dy = p[1] - frame.origin[1]
-    dz = p[2] - frame.origin[2]
+    d = p - frame.origin
 
-    return (
-        dx * frame.xaxis[0] + dy * frame.xaxis[1] + dz * frame.xaxis[2],
-        dx * frame.yaxis[0] + dy * frame.yaxis[1] + dz * frame.yaxis[2],
-    )
+    return (d.dot(frame.xaxis), d.dot(frame.yaxis))
 
 
 def _loft_open_points(pl: Polyline) -> list[Point]:
@@ -539,7 +559,7 @@ def _loft_frame(bottom: Polyline, top: Polyline) -> _LoftFrame:
     bottom_to_top = c1 - c0
 
     if zaxis.dot(bottom_to_top) < 0:
-        yaxis = Vector(-yaxis[0], -yaxis[1], -yaxis[2])
+        yaxis = -yaxis
 
     return _LoftFrame(origin, xaxis, yaxis)
 
@@ -638,12 +658,12 @@ def _loft_drop_degenerate(
         u0, v0 = _loft_project(frame, mesh.vertex[t[0]].position())
         u1, v1 = _loft_project(frame, mesh.vertex[t[1]].position())
         u2, v2 = _loft_project(frame, mesh.vertex[t[2]].position())
-        iu0 = round(u0 * sc)
-        iv0 = round(v0 * sc)
-        iu1 = round(u1 * sc)
-        iv1 = round(v1 * sc)
-        iu2 = round(u2 * sc)
-        iv2 = round(v2 * sc)
+        iu0 = _round_half_away(u0 * sc)
+        iv0 = _round_half_away(v0 * sc)
+        iu1 = _round_half_away(u1 * sc)
+        iv1 = _round_half_away(v1 * sc)
+        iu2 = _round_half_away(u2 * sc)
+        iv2 = _round_half_away(v2 * sc)
 
         if (iu1 - iu0) * (iv2 - iv0) - (iv1 - iv0) * (iu2 - iu0) != 0:
             kept.append(t)
@@ -773,6 +793,7 @@ def _loft_wall_start(
 
 def _loft_same_point(a: Point, b: Point) -> bool:
     """Return whether a and b coincide within 1e-10."""
+
     return (
         abs(a[0] - b[0]) < 1e-10
         and abs(a[1] - b[1]) < 1e-10
@@ -1000,7 +1021,7 @@ def _lp_offset_toward(p: Point, cx: float, cy: float, cz: float, gap: float) -> 
         dy *= gap / length
         dz *= gap / length
 
-    return Point(p[0] + dx, p[1] + dy, p[2] + dz)
+    return p + Vector(dx, dy, dz)
 
 
 def _lp_face_centroid(m: "Mesh", fk: int) -> Point:
@@ -1515,9 +1536,333 @@ def _miter_contour(corner_lines: list[Line], plane: Plane) -> list[Point]:
     return contour
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Cutting
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class _CutFace:
+    """One face of a cut and the input face it came from."""
+
+    def __init__(self, rings: list[list[int]], parent: int | None):
+        """Construct from rings and parent."""
+
+        self.rings = rings  # Outer ring, then hole rings.
+        self.parent = parent  # Input face key, none for a cap.
+
+
+def _cut_points(ring: list[int], points: dict[int, Point]) -> list[Point]:
+    """Positions of a key ring."""
+
+    result = []
+
+    for key in ring:
+        result.append(points[key])
+
+    return result
+
+
+def _cut_area(ring: list[int], uv: dict[int, tuple[float, float]]) -> float:
+    """Twice the signed area of a key ring in plane coordinates."""
+
+    area = 0.0
+
+    for i in range(len(ring)):
+        a = uv[ring[i]]
+        b = uv[ring[(i + 1) % len(ring)]]
+        area += a[0] * b[1] - b[0] * a[1]
+
+    return area
+
+
+def _cut_inside(
+    p: tuple[float, float],
+    rings: list[list[int]],
+    uv: dict[int, tuple[float, float]],
+) -> bool:
+    """Whether p lies inside the key rings by the even-odd rule."""
+
+    inside = False
+
+    for ring in rings:
+        for i in range(len(ring)):
+            a = uv[ring[i]]
+            b = uv[ring[(i + 1) % len(ring)]]
+
+            if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < a[0] + (p[1] - a[1]) * (
+                b[0] - a[0]
+            ) / (b[1] - a[1]):
+                inside = not inside
+
+    return inside
+
+
+def _cut_split(walk: list[int], loops: list[list[int]]) -> None:
+    """Split a closed walk into simple loops where it revisits a vertex; loops under three vertices are dropped."""
+
+    stack = []
+    index = {}
+
+    for key in walk:
+        start = index.get(key)
+
+        if start is None:
+            index[key] = len(stack)
+            stack.append(key)
+            continue
+
+        if len(stack) - start > 2:
+            loops.append(stack[start:])
+
+        for k in range(start + 1, len(stack)):
+            del index[stack[k]]
+
+        del stack[start + 1 :]
+
+    if len(stack) > 2:
+        loops.append(stack)
+
+
+def _cut_loops(
+    edges: dict[int, list[int]], uv: dict[int, tuple[float, float]]
+) -> list[list[int]]:
+    """Closed loops of directed edges, turning sharpest left where loops meet; open chains are dropped."""
+
+    loops = []
+
+    while edges:
+        first = min(edges)
+        walk = [first]
+        prev = first
+        cur = edges[first].pop()
+
+        if not edges[first]:
+            del edges[first]
+
+        while cur != walk[0]:
+            targets = edges.get(cur)
+
+            if targets is None:
+                walk.clear()
+                break
+
+            walk.append(cur)
+            ax = uv[cur][0] - uv[prev][0]
+            ay = uv[cur][1] - uv[prev][1]
+            best = 0
+            turn = -4.0
+
+            for j in range(len(targets)):
+                bx = uv[targets[j]][0] - uv[cur][0]
+                by = uv[targets[j]][1] - uv[cur][1]
+                angle = math.atan2(ax * by - ay * bx, ax * bx + ay * by)
+
+                if angle > turn:
+                    turn = angle
+                    best = j
+
+            prev = cur
+            cur = targets.pop(best)
+
+            if not targets:
+                del edges[prev]
+
+        _cut_split(walk, loops)
+
+    return loops
+
+
+def _cut_regions(
+    loops: list[list[int]], uv: dict[int, tuple[float, float]]
+) -> list[_CutFace]:
+    """Loops wound like the largest one become outer rings, each taking the opposite-wound loops inside it as holes."""
+
+    areas = []
+    largest = 0.0
+
+    for loop in loops:
+        areas.append(_cut_area(loop, uv))
+
+        if abs(areas[-1]) > abs(largest):
+            largest = areas[-1]
+
+    regions = []
+    sizes = []
+
+    for i in range(len(loops)):
+        if areas[i] * largest > 0.0:
+            regions.append(_CutFace([loops[i]], None))
+            sizes.append(abs(areas[i]))
+
+    for i in range(len(loops)):
+        if areas[i] * largest >= 0.0:
+            continue
+
+        a = uv[loops[i][0]]
+        b = uv[loops[i][1]]
+        mid = ((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)
+        owner = None
+
+        for r in range(len(regions)):
+            if _cut_inside(mid, [regions[r].rings[0]], uv) and (
+                owner is None or sizes[r] < sizes[owner]
+            ):
+                owner = r
+
+        if owner is not None:
+            regions[owner].rings.append(loops[i])
+
+    return regions
+
+
+def _cut_triangulation(piece: _CutFace, points: dict[int, Point]) -> list[list[int]]:
+    """CDT of a face with hole rings, wound like its outer ring; empty when degenerate."""
+
+    normal = _newell_normal(_cut_points(piece.rings[0], points))
+
+    if normal.magnitude() == 0.0:
+        return []
+
+    plane = Plane.from_point_normal(points[piece.rings[0][0]], normal)
+    frame = _LoftFrame(plane.origin, plane.x_axis, plane.y_axis)
+    rings_2d = []
+    flat = []
+
+    for ring in piece.rings:
+        rings_2d.append([])
+
+        for key in ring:
+            u, v = _loft_project(frame, points[key])
+            rings_2d[-1].append(Point(u, v, 0.0))
+            flat.append(key)
+
+    triangles = []
+
+    for t in _cdt_triangulate(rings_2d[0], rings_2d[1:]):
+        triangles.append([flat[t[0]], flat[t[1]], flat[t[2]]])
+
+    _loft_fix_collinear(triangles, piece.rings[0])
+
+    return triangles
+
+
+def _cut_pieces(
+    rings: list[list[int]],
+    normal: Vector,
+    xaxis: Vector,
+    distance: dict[int, float],
+    points: dict[int, Point],
+    tolerance: float,
+) -> list[_CutFace]:
+    """Kept pieces of one crossed face from its rings with crossing vertices inserted, split along the plane in the face frame."""
+
+    frame = _LoftFrame(points[rings[0][0]], xaxis, normal.cross(xaxis))
+    uv = {}
+    edges = {}
+    lines = set()
+    events = set()
+
+    for ring in rings:
+        for key in ring:
+            uv[key] = _loft_project(frame, points[key])
+
+    for ring in rings:
+        for i in range(len(ring)):
+            a = ring[i]
+            b = ring[(i + 1) % len(ring)]
+
+            if distance[a] == 0.0:
+                events.add(a)
+
+            if distance[a] == 0.0 and distance[b] == 0.0:
+                lines.add((min(a, b), max(a, b)))
+
+            if (
+                distance[a] >= 0.0
+                and distance[b] >= 0.0
+                and (distance[a] + distance[b] > 0.0 or uv[b][1] < uv[a][1])
+            ):
+                edges.setdefault(a, []).append(b)
+
+    order = sorted(events, key=lambda key: uv[key][1])
+
+    for i in range(len(order) - 1):
+        a = uv[order[i]]
+        b = uv[order[i + 1]]
+        mid = ((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)
+
+        if (
+            b[1] - a[1] > tolerance
+            and (min(order[i], order[i + 1]), max(order[i], order[i + 1])) not in lines
+            and _cut_inside(mid, rings, uv)
+        ):
+            edges.setdefault(order[i + 1], []).append(order[i])
+
+    return _cut_regions(_cut_loops(edges, uv), uv)
+
+
+def _cut_crossing(
+    edge: tuple[int, int],
+    crossings: dict[tuple[int, int], int],
+    distance: dict[int, float],
+    points: dict[int, Point],
+    first: int,
+) -> int:
+    """Key of the vertex where edge crosses the plane, added on first use as first plus the number of crossings so far."""
+
+    edge = (min(edge[0], edge[1]), max(edge[0], edge[1]))
+
+    if edge in crossings:
+        return crossings[edge]
+
+    key = first + len(crossings)
+    t = distance[edge[0]] / (distance[edge[0]] - distance[edge[1]])
+    points[key] = points[edge[0]] + (points[edge[1]] - points[edge[0]]) * t
+    distance[key] = 0.0
+    crossings[edge] = key
+
+    return key
+
+
+def _cut_caps(
+    faces: dict[int, _CutFace],
+    distance: dict[int, float],
+    points: dict[int, Point],
+    plane: Plane,
+) -> list[_CutFace]:
+    """Caps closing the loops of unpaired half-edges that lie on the plane."""
+
+    frame = _LoftFrame(plane.origin, plane.y_axis, plane.x_axis)
+    halfedges = set()
+    section = {}
+    uv = {}
+
+    for piece in faces.values():
+        for ring in piece.rings:
+            for i in range(len(ring)):
+                halfedges.add((ring[i], ring[(i + 1) % len(ring)]))
+
+    for edge in sorted(halfedges):
+        if (
+            distance[edge[0]] == 0.0
+            and distance[edge[1]] == 0.0
+            and (edge[1], edge[0]) not in halfedges
+        ):
+            section.setdefault(edge[1], []).append(edge[0])
+
+    for vk, d in distance.items():
+        if d == 0.0:
+            uv[vk] = _loft_project(frame, points[vk])
+
+    return _cut_regions(_cut_loops(section, uv), uv)
+
+
 class Mesh:
     """A halfedge mesh data structure for representing polygonal surfaces."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self):
         """Construct an empty mesh."""
 
@@ -1553,142 +1898,6 @@ class Mesh:
         self._vertices_cache: list[Point] = []
         self._triangle_aabb_tree: SpatialAABBTree | None = None
 
-    def has_guid(self) -> bool:
-        """Return whether the lazy guid has been created."""
-        return self._guid is not None
-
-    @property
-    def guid(self) -> str:
-        """Return the guid, creating it on first access."""
-        if self._guid is None:
-            self._guid = str(uuid.uuid4())
-
-        return self._guid
-
-    @guid.setter
-    def guid(self, value: str) -> None:
-        """Set the guid."""
-        self._guid = value
-
-    def refresh_guid(self) -> None:
-        """Clear the guid so a fresh one mints lazily on the next read."""
-        self._guid = None
-
-    def set_pointcolors(self, colors: list[Color]) -> None:
-        """Store vertex colors and render with them."""
-        self._pointcolors = list(colors)
-        self.color_mode = ColorMode.POINTCOLORS
-
-    def set_facecolors(self, colors: list[Color]) -> None:
-        """Store face colors and render with them."""
-        self._facecolors = list(colors)
-        self.color_mode = ColorMode.FACECOLORS
-
-    def set_linecolors(
-        self, colors: list[Color], widths: list[float] | None = None
-    ) -> None:
-        """Store edge colors and, when given, edge widths."""
-        self._linecolors = list(colors)
-
-        if widths:
-            self._widths = list(widths)
-
-    def set_objectcolor(self, color: Color) -> None:
-        """Store the object color."""
-        self._objectcolor = color
-
-    def clear_pointcolors(self) -> None:
-        """Drop vertex colors, falling back to the object color when they were active."""
-        self._pointcolors.clear()
-
-        if self.color_mode == ColorMode.POINTCOLORS:
-            self.color_mode = ColorMode.OBJECTCOLOR
-
-    def clear_facecolors(self) -> None:
-        """Drop face colors, falling back to the object color when they were active."""
-        self._facecolors.clear()
-
-        if self.color_mode == ColorMode.FACECOLORS:
-            self.color_mode = ColorMode.OBJECTCOLOR
-
-    def clear_linecolors(self) -> None:
-        """Drop edge colors and widths."""
-        self._linecolors.clear()
-        self._widths.clear()
-
-    def get_pointcolors(self) -> list[Color]:
-        """Return the vertex colors."""
-        return self._pointcolors
-
-    def get_facecolors(self) -> list[Color]:
-        """Return the face colors."""
-        return self._facecolors
-
-    def get_linecolors(self) -> list[Color]:
-        """Return the edge colors."""
-        return self._linecolors
-
-    def get_widths(self) -> list[float]:
-        """Return the edge widths."""
-        return self._widths
-
-    def get_objectcolor(self) -> Color:
-        """Return the object color."""
-        return self._objectcolor
-
-    def get_triangulation(self) -> dict[int, list[list[int]]]:
-        """Return the cached triangulation per face."""
-        return self.triangulation
-
-    def set_face_triangulation(self, fk: int, tris: list[list[int]]) -> None:
-        """Cache the triangles of face fk."""
-        self.triangulation[fk] = tris
-
-    def get_face_holes(self) -> dict[int, list[list[int]]]:
-        """Return the hole rings per face."""
-        return self.face_holes
-
-    def set_face_holes(self, fkey: int, rings: list[list[int]]) -> None:
-        """Store the hole rings of face fkey."""
-        self.face_holes[fkey] = rings
-
-    def directed_face_edges(self) -> set[tuple[int, int]]:
-        """Return every directed edge (u, v) some face ring walks."""
-
-        s = set()
-
-        for verts in self.face.values():
-            n = len(verts)
-
-            for i in range(n):
-                s.add((verts[i], verts[(i + 1) % n]))
-
-        return s
-
-    def compute_halfedges(self) -> dict[int, dict[int, int | None]]:
-        """Return the face-derived halfedge connectivity, computed without mutating."""
-
-        he = {}
-
-        for vkey in self.vertex:
-            he[vkey] = {}
-
-        for fkey, verts in self.face.items():
-            n = len(verts)
-
-            for i in range(n):
-                u = verts[i]
-                v = verts[(i + 1) % n]
-                he.setdefault(u, {})[v] = fkey
-
-                if u not in he.setdefault(v, {}):
-                    he[v][u] = None
-
-        return he
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Constructors
-    # ═══════════════════════════════════════════════════════════════════════════
 
     def __deepcopy__(self, memo):
         """Copy (same guid, same data)."""
@@ -1726,32 +1935,15 @@ class Mesh:
 
     def duplicate(self) -> "Mesh":
         """Copy (new guid, same data)."""
+
         result = copy.deepcopy(self)
         result.refresh_guid()
 
         return result
 
-    def __eq__(self, other):
-        """Compare vertices, faces, attributes and colors; guid ignored."""
-
-        if not isinstance(other, Mesh):
-            return NotImplemented
-
-        if self.name != other.name:
-            return False
-
-        if self.vertex != other.vertex:
-            return False
-
-        if self.face != other.face:
-            return False
-
-        return True
-
-    def __ne__(self, other):
-        """Compare vertices, faces, attributes and colors; guid ignored."""
-        return not self.__eq__(other)
-
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Static constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     @staticmethod
     def from_vertices_and_faces(
         vertices: list[Point], faces: list[list[int]]
@@ -1772,13 +1964,13 @@ class Mesh:
     def _polylines_vertex_key(
         mesh: "Mesh", p: Point, precision: float | None, map_eps: dict, map_exact: dict
     ) -> int:
-        """Vertex key of p, merged by precision grid when given and by exact value otherwise."""
+        """Vertex key of p, merged by precision grid when given and by exact bits otherwise."""
 
         if precision is not None:
             key = (
-                round(p[0] / precision),
-                round(p[1] / precision),
-                round(p[2] / precision),
+                _round_half_away(p[0] / precision),
+                _round_half_away(p[1] / precision),
+                _round_half_away(p[2] / precision),
             )
 
             if key in map_eps:
@@ -1789,7 +1981,7 @@ class Mesh:
 
             return vk
 
-        key = (p[0], p[1], p[2])
+        key = struct.pack("<3d", p[0], p[1], p[2])
 
         if key in map_exact:
             return map_exact[key]
@@ -1849,7 +2041,7 @@ class Mesh:
     def from_polylines_polyline(
         polylines: list[Polyline], precision: float | None = None
     ) -> "Mesh":
-        """Mesh from a list of polylines, merging vertices within precision when given."""
+        """Construct from a list of polygons, merging vertices within precision when given."""
 
         polygons = []
 
@@ -1890,7 +2082,11 @@ class Mesh:
     def _lines_vertex_id(p: Point, eps: float, vmap: dict, verts: list[Point]) -> int:
         """Index of p in verts, appending it when its grid cell is new."""
 
-        key = (round(p[0] / eps), round(p[1] / eps), round(p[2] / eps))
+        key = (
+            _round_half_away(p[0] / eps),
+            _round_half_away(p[1] / eps),
+            _round_half_away(p[2] / eps),
+        )
 
         if key in vmap:
             return vmap[key]
@@ -2314,8 +2510,7 @@ class Mesh:
         pts = []
 
         for j in range(limit):
-            p = src.get_point(j)
-            pts.append(Point(p[0] / scale, p[1] / scale, p[2] / scale))
+            pts.append(src.get_point(j) / scale)
 
         return Polyline(pts)
 
@@ -2410,10 +2605,10 @@ class Mesh:
         faces = []
 
         for i in range(1, n_cs):
-            po = planes[i].origin()
-            pp = planes[i - 1].origin()
+            po = planes[i].origin
+            pp = planes[i - 1].origin
             n1 = po - pp
-            n2 = planes[i].z_axis()
+            n2 = planes[i].z_axis
             row_start = len(all_pts)
 
             for j in range(n_p):
@@ -2421,7 +2616,7 @@ class Mesh:
                 diff = po - pvrt
                 denom = n2.dot(n1)
                 t = n2.dot(diff) / denom if abs(denom) > 1e-12 else 0.0
-                all_pts.append((pvrt + n1 * t))
+                all_pts.append(pvrt + n1 * t)
 
             for j in range(n_p - 1):
                 new_j = row_start + j
@@ -2439,7 +2634,7 @@ class Mesh:
         flatter: bool,
         chamfer_angle_deg: float = 90.0,
     ) -> list[tuple[list[Point], list[Point], list[Point], list[Point], Vector]]:
-        """Per-face miter plate contours of a shell: (top_chamfered, bot_chamfered, top_raw, bot_raw, face_normal)."""
+        """Compute the per-face miter plate contours of a shell: (top_chamfered, bot_chamfered, top_raw, bot_raw, face_normal)."""
 
         from .intersection import plane_plane
 
@@ -2474,11 +2669,7 @@ class Mesh:
             if len(corner_lines) != n:
                 continue
 
-            bot_origin = Point(
-                cen[0] + fn[0] * 2.0 * thickness,
-                cen[1] + fn[1] * 2.0 * thickness,
-                cen[2] + fn[2] * 2.0 * thickness,
-            )
+            bot_origin = cen + fn * 2.0 * thickness
             top_contour = _miter_contour(corner_lines, Plane.from_point_normal(cen, fn))
             bot_contour = _miter_contour(
                 corner_lines, Plane.from_point_normal(bot_origin, fn)
@@ -2496,9 +2687,141 @@ class Mesh:
         return result
 
     # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
+    def has_guid(self) -> bool:
+        """Return whether the lazy guid has been created."""
+        return self._guid is not None
+
+    @property
+    def guid(self) -> str:
+        """Return the guid, creating it on first access."""
+
+        if self._guid is None:
+            self._guid = str(uuid.uuid4())
+
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str) -> None:
+        """Set the guid."""
+        self._guid = value
+
+    def refresh_guid(self) -> None:
+        """Clear the guid so a fresh one mints lazily on the next read."""
+        self._guid = None
+
+    def set_pointcolors(self, colors: list[Color]) -> None:
+        """Store vertex colors and render with them."""
+
+        self._pointcolors = list(colors)
+        self.color_mode = ColorMode.POINTCOLORS
+
+    def set_facecolors(self, colors: list[Color]) -> None:
+        """Store face colors and render with them."""
+
+        self._facecolors = list(colors)
+        self.color_mode = ColorMode.FACECOLORS
+
+    def set_linecolors(
+        self, colors: list[Color], line_widths: list[float] | None = None
+    ) -> None:
+        """Store edge colors and, when given, edge widths."""
+
+        self._linecolors = list(colors)
+
+        if line_widths:
+            self._widths = list(line_widths)
+
+    def set_objectcolor(self, color: Color) -> None:
+        """Store the object color."""
+        self._objectcolor = color
+
+    def clear_pointcolors(self) -> None:
+        """Drop vertex colors, falling back to the object color when they were active."""
+
+        self._pointcolors.clear()
+
+        if self.color_mode == ColorMode.POINTCOLORS:
+            self.color_mode = ColorMode.OBJECTCOLOR
+
+    def clear_facecolors(self) -> None:
+        """Drop face colors, falling back to the object color when they were active."""
+
+        self._facecolors.clear()
+
+        if self.color_mode == ColorMode.FACECOLORS:
+            self.color_mode = ColorMode.OBJECTCOLOR
+
+    def clear_linecolors(self) -> None:
+        """Drop edge colors and widths."""
+
+        self._linecolors.clear()
+        self._widths.clear()
+
+    def get_pointcolors(self) -> list[Color]:
+        """Return the vertex colors."""
+        return self._pointcolors
+
+    def get_facecolors(self) -> list[Color]:
+        """Return the face colors."""
+        return self._facecolors
+
+    def get_linecolors(self) -> list[Color]:
+        """Return the edge colors."""
+        return self._linecolors
+
+    def get_widths(self) -> list[float]:
+        """Return the edge widths."""
+        return self._widths
+
+    def get_objectcolor(self) -> Color:
+        """Return the object color."""
+        return self._objectcolor
+
+    def get_triangulation(self) -> dict[int, list[list[int]]]:
+        """Return the cached triangulation per face."""
+        return self.triangulation
+
+    def set_face_triangulation(self, fk: int, tris: list[list[int]]) -> None:
+        """Cache the triangles of face fk."""
+        self.triangulation[fk] = tris
+
+    def get_face_holes(self) -> dict[int, list[list[int]]]:
+        """Return the hole rings per face."""
+        return self.face_holes
+
+    def set_face_holes(self, fkey: int, rings: list[list[int]]) -> None:
+        """Store the hole rings of face fkey."""
+        self.face_holes[fkey] = rings
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Operators
+    # ═══════════════════════════════════════════════════════════════════════════
+    def __eq__(self, other):
+        """Compare name, vertices and faces; guid ignored."""
+
+        if not isinstance(other, Mesh):
+            return NotImplemented
+
+        if self.name != other.name:
+            return False
+
+        if self.vertex != other.vertex:
+            return False
+
+        if self.face != other.face:
+            return False
+
+        return True
+
+    def __ne__(self, other):
+        """Compare name, vertices and faces; guid ignored."""
+        return not self.__eq__(other)
+
+    # ═══════════════════════════════════════════════════════════════════════════
     # Boolean Queries
     # ═══════════════════════════════════════════════════════════════════════════
-
     def is_empty(self) -> bool:
         """Return whether the mesh has no vertices."""
         return len(self.vertex) == 0
@@ -2532,7 +2855,7 @@ class Mesh:
                     hole_edges.add((ring[i], ring[(i + 1) % n]))
                     hole_edges.add((ring[(i + 1) % n], ring[i]))
 
-        dfe = self.directed_face_edges()
+        dfe = self._directed_face_edges()
 
         for u, v in dfe:
             if (v, u) not in dfe and (v, u) not in hole_edges:
@@ -2543,7 +2866,7 @@ class Mesh:
     def is_vertex_on_boundary(self, vertex_key: int) -> bool:
         """Return whether the vertex touches a boundary edge."""
 
-        dfe = self.directed_face_edges()
+        dfe = self._directed_face_edges()
 
         for u, v in dfe:
             if (v, u) not in dfe and (u == vertex_key or v == vertex_key):
@@ -2553,7 +2876,8 @@ class Mesh:
 
     def is_edge_on_boundary(self, u: int, v: int) -> bool:
         """Return whether the edge has a face on one side only."""
-        dfe = self.directed_face_edges()
+
+        dfe = self._directed_face_edges()
 
         return not ((u, v) in dfe and (v, u) in dfe)
 
@@ -2574,7 +2898,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Attributes
     # ═══════════════════════════════════════════════════════════════════════════
-
     def number_of_vertices(self) -> int:
         """Return the vertex count."""
         return len(self.vertex)
@@ -2586,7 +2909,7 @@ class Mesh:
     def number_of_edges(self) -> int:
         """Return the undirected edge count."""
 
-        dfe = self.directed_face_edges()
+        dfe = self._directed_face_edges()
         count = 0
 
         for u, v in dfe:
@@ -2597,6 +2920,7 @@ class Mesh:
 
     def euler(self) -> int:
         """Return the Euler characteristic V - E + F."""
+
         return (
             self.number_of_vertices() - self.number_of_edges() + self.number_of_faces()
         )
@@ -2614,7 +2938,7 @@ class Mesh:
 
         seen = set()
 
-        for u, v in self.directed_face_edges():
+        for u, v in self._directed_face_edges():
             seen.add((min(u, v), max(u, v)))
 
         return sorted(seen)
@@ -2655,7 +2979,7 @@ class Mesh:
     def naked_edges(self, boundary: bool = True) -> list[tuple[int, int]]:
         """Return the boundary (true) or interior (false) edges."""
 
-        dfe = self.directed_face_edges()
+        dfe = self._directed_face_edges()
         seen = set()
 
         for u, v in dfe:
@@ -2696,7 +3020,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Vertex and Face Operations
     # ═══════════════════════════════════════════════════════════════════════════
-
     def add_vertex(self, position: Point, vkey: int | None = None) -> int:
         """Add a vertex, with an explicit key when given; returns the key."""
 
@@ -2881,13 +3204,14 @@ class Mesh:
 
     def flip(self) -> None:
         """Reverse the winding of every face."""
+
         for fkey in self.face:
             self.face[fkey].reverse()
 
         self.rebuild_halfedges()
 
     def clear(self) -> None:
-        """Free the map."""
+        """Clear all mesh data."""
 
         self.halfedge.clear()
         self.vertex.clear()
@@ -3099,17 +3423,17 @@ class Mesh:
 
     def rebuild_halfedges(self) -> None:
         """Recreate halfedge from vertex and face alone."""
-        self.halfedge = self.compute_halfedges()
+        self.halfedge = self._compute_halfedges()
 
     def ensure_halfedges(self) -> None:
         """Build the lazy halfedge map when it is empty and faces exist."""
+
         if not self.halfedge and self.face:
             self.rebuild_halfedges()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Connectivity Queries
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def _edge_ends(dfe: set[tuple[int, int]], x: int) -> list[int]:
         """Sorted neighbors of x over a directed edge set."""
@@ -3127,7 +3451,7 @@ class Mesh:
     def edge_edges(self, u: int, v: int) -> list[tuple[int, int]] | None:
         """Return the edges sharing a vertex with (u, v), excluding (u, v) and (v, u)."""
 
-        dfe = self.directed_face_edges()
+        dfe = self._directed_face_edges()
 
         if (u, v) not in dfe and (v, u) not in dfe:
             return None
@@ -3185,7 +3509,7 @@ class Mesh:
     def edge_line(self, u: int, v: int) -> Line | None:
         """Return the edge as a Line."""
 
-        dfe = self.directed_face_edges()
+        dfe = self._directed_face_edges()
 
         if (u, v) not in dfe and (v, u) not in dfe:
             return None
@@ -3309,10 +3633,11 @@ class Mesh:
 
     def vertex_vertices(self, vertex_key: int) -> list[int] | None:
         """Return the neighboring vertices of a vertex."""
+
         if vertex_key not in self.vertex:
             return None
 
-        return Mesh._edge_ends(self.directed_face_edges(), vertex_key)
+        return Mesh._edge_ends(self._directed_face_edges(), vertex_key)
 
     def vertex_neighbors(
         self, vertex_key: int, ordered: bool = False
@@ -3361,7 +3686,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Boundary
     # ═══════════════════════════════════════════════════════════════════════════
-
     def vertices_on_boundary(self) -> list[int]:
         """Return the vertices touching a boundary edge."""
 
@@ -3399,7 +3723,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Halfedge Navigation
     # ═══════════════════════════════════════════════════════════════════════════
-
     def halfedge_face(self, edge: tuple[int, int]) -> int | None:
         """Return the face of a directed edge, nullopt when unknown or on the boundary."""
 
@@ -3558,7 +3881,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Sampling
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def _lcg_sample(keys: list, size: int, seed: int) -> list:
         """Return size keys; seed 0 takes the first keys, any other seed drives a deterministic LCG."""
@@ -3605,7 +3927,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Aliases
     # ═══════════════════════════════════════════════════════════════════════════
-
     def face_center(self, face_key: int) -> Point | None:
         """Return the average of a face's vertex positions."""
         return self.face_centroid(face_key)
@@ -3643,19 +3964,21 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Attribute API
     # ═══════════════════════════════════════════════════════════════════════════
-
     def update_default_vertex_attributes(self, attrs: dict[str, float]) -> None:
         """Merge attrs into the default vertex attributes."""
+
         for k, v in attrs.items():
             self.default_vertex_attributes[k] = v
 
     def update_default_face_attributes(self, attrs: dict[str, float]) -> None:
         """Merge attrs into the default face attributes."""
+
         for k, v in attrs.items():
             self.default_face_attributes[k] = v
 
     def update_default_edge_attributes(self, attrs: dict[str, float]) -> None:
         """Merge attrs into the default edge attributes."""
+
         for k, v in attrs.items():
             self.default_edge_attributes[k] = v
 
@@ -3697,6 +4020,7 @@ class Mesh:
 
     def set_face_attribute(self, fkey: int, name: str, value: float) -> None:
         """Store an attribute on a face."""
+
         if fkey not in self.face:
             return
 
@@ -3726,6 +4050,7 @@ class Mesh:
         self, edge: tuple[int, int], name: str, value: float
     ) -> None:
         """Store an attribute on an edge."""
+
         u, v = edge
         key = (v, u) if (v, u) in self.edgedata else (u, v)
         self.edgedata.setdefault(key, {})[name] = value
@@ -3958,7 +4283,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometric Properties
     # ═══════════════════════════════════════════════════════════════════════════
-
     def area(self) -> float:
         """Return the total surface area of all faces."""
 
@@ -4079,13 +4403,7 @@ class Mesh:
                 t = j / arc_n
                 w1 = math.sin((1.0 - t) * theta) / math.sin(theta)
                 w2 = math.sin(t * theta) / math.sin(theta)
-                arc_pts.append(
-                    Point(
-                        mid[0] + (w1 * d0[0] + w2 * d1[0]) * scale,
-                        mid[1] + (w1 * d0[1] + w2 * d1[1]) * scale,
-                        mid[2] + (w1 * d0[2] + w2 * d1[2]) * scale,
-                    )
-                )
+                arc_pts.append(mid + (d0 * w1 + d1 * w2) * scale)
 
             if with_arcs:
                 arc = Polyline(arc_pts)
@@ -4238,9 +4556,7 @@ class Mesh:
                 if weight is None:
                     weight = 1.0
 
-            normal_acc[0] = normal_acc[0] + fn[0] * weight
-            normal_acc[1] = normal_acc[1] + fn[1] * weight
-            normal_acc[2] = normal_acc[2] + fn[2] * weight
+            normal_acc += fn * weight
 
         length = normal_acc.magnitude()
 
@@ -4305,9 +4621,7 @@ class Mesh:
                     weight = Mesh._corner_angle(pts, i)
 
                 v = acc.setdefault(vkeys[i], Vector(0.0, 0.0, 0.0))
-                v[0] = v[0] + normal[0] * weight
-                v[1] = v[1] + normal[1] * weight
-                v[2] = v[2] + normal[2] * weight
+                v += normal * weight
 
         normals = {}
 
@@ -4353,7 +4667,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Triangle BVH
     # ═══════════════════════════════════════════════════════════════════════════
-
     def _triangle_tasks(
         self, faces: list[list[int]]
     ) -> list[tuple[int, int, int, int, int]]:
@@ -4526,14 +4839,13 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
     def transform(self, xf: "Xform") -> bool:
         """Transform every vertex in place and drop the triangle caches; always true."""
 
         for vdata in self.vertex.values():
-            pt = Point(vdata.x, vdata.y, vdata.z)
-            pt.transform(xf)
-            vdata.set_position(pt)
+            point = vdata.position()
+            point.transform(xf)
+            vdata.set_position(point)
 
         self.clear_triangle_bvh()
 
@@ -4541,15 +4853,154 @@ class Mesh:
 
     def transformed(self, xf: "Xform") -> "Mesh":
         """Return a transformed copy."""
+
         result = copy.deepcopy(self)
         result.transform(xf)
 
         return result
 
     # ═══════════════════════════════════════════════════════════════════════════
+    # Cutting
+    # ═══════════════════════════════════════════════════════════════════════════
+    def cut_by_plane(self, plane: Plane) -> "Mesh":
+        """Return the part on the side the plane normal points to, every section loop capped by one n-gon face, so a closed mesh stays closed; empty when nothing lies on that side, a copy when everything does."""
+
+        big = math.inf
+        low = Point(big, big, big)
+        high = Point(-big, -big, -big)
+        points = {}
+
+        for vk, vd in self.vertex.items():
+            points[vk] = vd.position()
+
+            for k in range(3):
+                low[k] = min(low[k], points[vk][k])
+                high[k] = max(high[k], points[vk][k])
+
+        tolerance = 1e-9 * low.distance(high)
+        distance = {}
+        lowest = 0.0
+        highest = 0.0
+
+        for vk, p in points.items():
+            d = (p - plane.origin).dot(plane.z_axis)
+            distance[vk] = 0.0 if abs(d) <= tolerance else d
+            lowest = min(lowest, distance[vk])
+            highest = max(highest, distance[vk])
+
+        if lowest >= 0.0:
+            return self.duplicate()
+
+        if highest <= 0.0:
+            return Mesh()
+
+        crossings = {}
+        output = {}
+        count = self._max_face
+
+        for fk, ring in sorted(self.face.items()):
+            normal = _newell_normal(_cut_points(ring, points))
+            rings = [list(ring)]
+
+            for hole in self.face_holes.get(fk, []):
+                rings.append(list(hole))
+
+                if _newell_normal(_cut_points(hole, points)).dot(normal) > 0.0:
+                    rings[-1].reverse()
+
+            above = False
+            below = False
+
+            for r in rings:
+                for key in r:
+                    above = above or distance[key] > 0.0
+                    below = below or distance[key] < 0.0
+
+            if not above:
+                continue
+
+            if not below:
+                output[fk] = _CutFace(rings, fk)
+                continue
+
+            xaxis = plane.z_axis - normal * plane.z_axis.dot(normal)
+
+            if not xaxis.normalize_self():
+                continue
+
+            split = []
+
+            for r in rings:
+                split.append([])
+
+                for i in range(len(r)):
+                    split[-1].append(r[i])
+
+                    if distance[r[i]] * distance[r[(i + 1) % len(r)]] < 0.0:
+                        split[-1].append(
+                            _cut_crossing(
+                                (r[i], r[(i + 1) % len(r)]),
+                                crossings,
+                                distance,
+                                points,
+                                self._max_vertex,
+                            )
+                        )
+
+            pieces = _cut_pieces(split, normal, xaxis, distance, points, tolerance)
+
+            for i in range(len(pieces)):
+                pieces[i].parent = fk
+
+                if i == 0:
+                    output[fk] = pieces[i]
+                else:
+                    output[count] = pieces[i]
+                    count += 1
+
+        for cap in _cut_caps(output, distance, points, plane):
+            output[count] = cap
+            count += 1
+
+        result = Mesh()
+        result.name = self.name
+        result._objectcolor = self._objectcolor
+        used = set()
+
+        for piece in output.values():
+            for r in piece.rings:
+                used.update(r)
+
+        for vk in sorted(used):
+            result.add_vertex(points[vk], vk)
+
+        for fk, piece in sorted(output.items()):
+            if result.add_face(piece.rings[0], fk) is None:
+                continue
+
+            whole = (
+                piece.parent is not None and piece.rings[0] == self.face[piece.parent]
+            )
+
+            if len(piece.rings) > 1:
+                result.set_face_holes(fk, piece.rings[1:])
+
+            if piece.parent in self.facedata:
+                result.facedata[fk] = dict(self.facedata[piece.parent])
+
+            if whole and fk in self.triangulation:
+                result.set_face_triangulation(
+                    fk, [list(t) for t in self.triangulation[fk]]
+                )
+
+            if not whole and (len(piece.rings) > 1 or len(piece.rings[0]) > 3):
+                result.set_face_triangulation(fk, _cut_triangulation(piece, points))
+
+        return result
+
+    # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def _colors_to_json(colors: list[Color]) -> list[float]:
         """Colors as a flat [r, g, b, a, ...] array."""
@@ -4613,7 +5064,7 @@ class Mesh:
         data["facedata"] = facedata_json
         data["guid"] = self.guid
         he = (
-            self.compute_halfedges()
+            self._compute_halfedges()
             if not self.halfedge and self.face
             else self.halfedge
         )
@@ -4778,12 +5229,14 @@ class Mesh:
 
     def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write to a JSON file."""
+
         with open(filepath, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
     def file_json_load(cls, filepath: Union[str, "Path"]) -> "Mesh":
         """Read from a JSON file."""
+
         with open(filepath) as f:
             data = json.load(f)
 
@@ -4792,7 +5245,6 @@ class Mesh:
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def _colors_to_rgba(colors: list[Color], rgba) -> None:
         """Append colors as flat r, g, b, a floats."""
@@ -4816,13 +5268,7 @@ class Mesh:
 
     def pb_dumps(self) -> bytes:
         """Serialize to protobuf bytes."""
-
-        from .proto import mesh_pb2
-
-        proto = mesh_pb2.Mesh()
-        self.pb_fill(proto)
-
-        return proto.SerializeToString()
+        return self.to_proto().SerializeToString()
 
     @classmethod
     def pb_loads(cls, data: bytes) -> "Mesh":
@@ -4837,6 +5283,7 @@ class Mesh:
 
     def pb_dump(self, filepath: Union[str, "Path"]) -> None:
         """Write to a protobuf file."""
+
         data = self.pb_dumps()
 
         with open(filepath, "wb") as f:
@@ -4845,15 +5292,18 @@ class Mesh:
     @classmethod
     def pb_load(cls, filepath: Union[str, "Path"]) -> "Mesh":
         """Read from a protobuf file."""
+
         with open(filepath, "rb") as f:
             data = f.read()
 
         return cls.pb_loads(data)
 
-    def pb_fill(self, proto: "mesh_pb2.Mesh") -> None:
-        """Fill the proto message; pb_dumps encodes it and Objects embeds it."""
+    def to_proto(self) -> "mesh_pb2.Mesh":
+        """Convert to the protobuf message."""
 
         from .proto import mesh_pb2
+
+        proto = mesh_pb2.Mesh()
 
         if self.has_guid():
             proto.guid = self._guid
@@ -4912,17 +5362,14 @@ class Mesh:
         Mesh._colors_to_rgba(self._facecolors, proto.facecolors_rgba)
         Mesh._colors_to_rgba(self._linecolors, proto.linecolors_rgba)
         proto.widths.extend(self._widths)
-        proto.objectcolor.guid = self._objectcolor.guid
-        proto.objectcolor.name = self._objectcolor.name
-        proto.objectcolor.r = self._objectcolor[0]
-        proto.objectcolor.g = self._objectcolor[1]
-        proto.objectcolor.b = self._objectcolor[2]
-        proto.objectcolor.a = self._objectcolor[3]
+        proto.objectcolor.CopyFrom(self._objectcolor.to_proto())
         proto.color_mode = list(ColorMode).index(self.color_mode)
+
+        return proto
 
     @classmethod
     def from_proto(cls, proto: "mesh_pb2.Mesh") -> "Mesh":
-        """Build from an already-decoded proto; pb_loads decodes then calls this."""
+        """Construct from the protobuf message."""
 
         mesh = cls()
 
@@ -4964,10 +5411,10 @@ class Mesh:
         mesh._facecolors = Mesh._colors_from_rgba(proto.facecolors_rgba)
         mesh._linecolors = Mesh._colors_from_rgba(proto.linecolors_rgba)
         mesh._widths = list(proto.widths)
-        oc = proto.objectcolor
-        mesh._objectcolor = Color(oc.r, oc.g, oc.b, oc.a)
-        mesh._objectcolor.guid = oc.guid
-        mesh._objectcolor.name = oc.name
+
+        if proto.HasField("objectcolor"):
+            mesh._objectcolor = Color.from_proto(proto.objectcolor)
+
         mesh.color_mode = (
             list(ColorMode)[proto.color_mode]
             if 0 <= proto.color_mode < 4
@@ -4983,9 +5430,8 @@ class Mesh:
         return mesh
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # String Representation
+    # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return the "Mesh(name=..., vertices=..., faces=...)" form."""
         return f"Mesh(name={self.name}, vertices={self.number_of_vertices()}, faces={self.number_of_faces()})"
@@ -4993,3 +5439,40 @@ class Mesh:
     def __repr__(self) -> str:
         """Return the multi-line form with name, vertices, faces and edges."""
         return f"Mesh(\n  name={self.name},\n  vertices={self.number_of_vertices()},\n  faces={self.number_of_faces()},\n  edges={self.number_of_edges()}\n)"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Private helpers
+    # ═══════════════════════════════════════════════════════════════════════════
+    def _directed_face_edges(self) -> set[tuple[int, int]]:
+        """Return every directed edge (u, v) some face ring walks."""
+
+        s = set()
+
+        for verts in self.face.values():
+            n = len(verts)
+
+            for i in range(n):
+                s.add((verts[i], verts[(i + 1) % n]))
+
+        return s
+
+    def _compute_halfedges(self) -> dict[int, dict[int, int | None]]:
+        """Return the face-derived halfedge connectivity, computed without mutating."""
+
+        he = {}
+
+        for vkey in self.vertex:
+            he[vkey] = {}
+
+        for fkey, verts in self.face.items():
+            n = len(verts)
+
+            for i in range(n):
+                u = verts[i]
+                v = verts[(i + 1) % n]
+                he.setdefault(u, {})[v] = fkey
+
+                if u not in he.setdefault(v, {}):
+                    he[v][u] = None
+
+        return he
