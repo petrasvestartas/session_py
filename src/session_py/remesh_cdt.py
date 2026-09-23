@@ -22,10 +22,14 @@ MAX_PRECISION = 6
 
 def _to_int64(x: float) -> int:
     """Round to the nearest int64."""
-    if x >= 0.0:
-        return math.floor(x + 0.5)
 
-    return -math.floor(-x + 0.5)
+    magnitude = abs(x)
+    whole = math.floor(magnitude)
+
+    if magnitude - whole >= 0.5:
+        whole += 1
+
+    return whole if x >= 0.0 else -whole
 
 
 def _to_point64(p, scale: float) -> tuple[int, int]:
@@ -35,6 +39,7 @@ def _to_point64(p, scale: float) -> tuple[int, int]:
 
 def _div3(s: int) -> int:
     """Integer division truncating towards zero like C++."""
+
     if s >= 0:
         return s // 3
 
@@ -69,6 +74,7 @@ def _right_turning(p1, p2, p3) -> bool:
 
 def _sweep_before(a, b) -> bool:
     """True when a is swept before b: higher y first, then lower x."""
+
     if a[1] == b[1]:
         return a[0] < b[0]
 
@@ -77,6 +83,7 @@ def _sweep_before(a, b) -> bool:
 
 def _dist_sqr(a, b) -> float:
     """Squared distance between two integer points."""
+
     dx = float(a[0] - b[0])
     dy = float(a[1] - b[1])
 
@@ -212,9 +219,9 @@ def _find_loc_min(path, i: int) -> tuple[bool, int]:
 # Sweep graph
 # ═══════════════════════════════════════════════════════════════════════════
 
-LOOSE = 0
-ASCEND = 1
-DESCEND = 2
+LOOSE = 0  # Diagonal between two boundary edges.
+ASCEND = 1  # Boundary edge on the left side.
+DESCEND = 2  # Boundary edge on the right side.
 
 
 class _Vertex:
@@ -304,6 +311,7 @@ class _Delaunay:
 
     def _add_vertex(self, p: tuple[int, int]) -> int:
         """Append a vertex and return its index."""
+
         self.vs.append(_Vertex(p))
 
         return len(self.vs) - 1
@@ -328,6 +336,7 @@ class _Delaunay:
 
         self._remove_from_vertex(self.es[e].vb, e)
         self._remove_from_vertex(self.es[e].vt, e)
+
         prev = self.es[e].prev
         next = self.es[e].next
 
@@ -344,6 +353,7 @@ class _Delaunay:
 
     def _remove_from_vertex(self, v: int, e: int) -> None:
         """Drop e from the edge list of v."""
+
         edges = self.vs[v].edges
 
         if e in edges:
@@ -354,13 +364,16 @@ class _Delaunay:
 
         e = len(self.es)
         self.es.append(_Edge())
+
         p1 = self.vs[v1].pt
         p2 = self.vs[v2].pt
+
         self.es[e].vb = v2 if p1[1] < p2[1] else v1
         self.es[e].vt = v1 if p1[1] < p2[1] else v2
         self.es[e].vl = v1 if p1[0] <= p2[0] else v2
         self.es[e].vr = v2 if p1[0] <= p2[0] else v1
         self.es[e].kind = kind
+
         self.vs[v1].edges.append(e)
         self.vs[v2].edges.append(e)
 
@@ -393,6 +406,7 @@ class _Delaunay:
 
         old_t = self.es[long_e].vt
         new_t = self.es[short_e].vt
+
         self._remove_from_vertex(old_t, long_e)
         self.es[long_e].vt = new_t
 
@@ -620,7 +634,7 @@ class _Delaunay:
 
         max_fan = 2 * len(self.vs) + 2
 
-        for step in range(max_fan):
+        for _step in range(max_fan):
             v_alt, e_alt = self._fan_vertex(edge, pivot, left)
 
             if v_alt is NULL_IDX or self.vs[v_alt].pt[1] < min_y:
@@ -751,6 +765,7 @@ class _Delaunay:
 
         while steps < budget:
             steps += 1
+
             self.loc_mins.append(v_prev)
 
             if self.lowermost is NULL_IDX or _sweep_before(
@@ -771,6 +786,7 @@ class _Delaunay:
                     return False
 
                 v = self._add_vertex(path[i])
+
                 self._create_edge(v_prev, v, ASCEND)
                 v_prev = v
                 i = i_next
@@ -794,6 +810,7 @@ class _Delaunay:
                     return False
 
                 v = self._add_vertex(path[i])
+
                 self._create_edge(v, v_prev, DESCEND)
                 v_prev_prev = v_prev
                 v_prev = v
@@ -820,7 +837,8 @@ class _Delaunay:
         return False
 
     def _discard(self, start: int) -> None:
-        """Detach the edges of every vertex added since from."""
+        """Detach the edges of every vertex added since start."""
+
         for v in range(start, len(self.vs)):
             self.vs[v].edges = []
 
@@ -908,6 +926,7 @@ class _Delaunay:
 
         while self.loc_mins:
             lm = self.loc_mins.pop()
+
             e = self._create_loc_min_edge(lm)
 
             if e is NULL_IDX:
@@ -1003,11 +1022,12 @@ class _Delaunay:
 
         max_flips = 64 * len(self.vs) + 4096
 
-        for flips in range(max_flips):
+        for _flips in range(max_flips):
             if not self.pending:
                 return
 
             e = self.pending.pop()
+
             self._force_legal(e)
 
     def _tri_points(self, t: _Tri) -> list[tuple[int, int]]:
@@ -1044,7 +1064,7 @@ class _Delaunay:
 
         return res
 
-    def _execute(self, paths) -> list[list[tuple[int, int]]]:
+    def execute(self, paths) -> list[list[tuple[int, int]]]:
         """Triangles of the paths, empty when they hold no polygon or a hole cannot be connected."""
 
         if not self._add_paths(paths):
@@ -1054,8 +1074,10 @@ class _Delaunay:
             self._flip_winding()
 
         self.loc_mins = []
+
         order = list(range(len(self.vs)))
         order.sort(key=lambda v: (-self.vs[v].pt[1], self.vs[v].pt[0]))
+
         self._merge_duplicates(order)
 
         if not self._sweep(order):
@@ -1243,6 +1265,7 @@ def _signed_area(pts) -> float:
 
     for i in range(n):
         j = (i + 1) % n
+
         area += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1]
 
     return area * 0.5
@@ -1288,6 +1311,7 @@ def _project_2d(
         dx = p[0] - origin[0]
         dy = p[1] - origin[1]
         dz = p[2] - origin[2]
+
         out.append(
             (
                 dx * xaxis[0] + dy * xaxis[1] + dz * xaxis[2],
@@ -1381,7 +1405,7 @@ def _cdt_triangulate(border_2d, holes_2d) -> list[tuple[int, int, int]]:
         paths.append(_to_path64(hole, scale))
 
     delaunay = _Delaunay()
-    tris = delaunay._execute(paths)
+    tris = delaunay.execute(paths)
 
     if holes:
         _remove_hole_triangles(tris, paths)
@@ -1391,6 +1415,10 @@ def _cdt_triangulate(border_2d, holes_2d) -> list[tuple[int, int, int]]:
 
 class RemeshCDT:
     """Constrained Delaunay triangulation of a border polyline with hole polylines."""
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Triangulation
+    # ═══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
     def triangulate(polylines: list[Polyline]) -> list[tuple[int, int, int]]:

@@ -35,16 +35,16 @@ def test_remesh_cdt_triangulate():
     for p in hole.get_points():
         flat.append(p)
 
-    m = Mesh()
+    mesh = Mesh()
     vkeys = []
 
     for p in flat:
-        vkeys.append(m.add_vertex(p))
+        vkeys.append(mesh.add_vertex(p))
 
     for t in tris:
-        m.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+        mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Triangle")
@@ -53,16 +53,16 @@ def test_remesh_cdt_triangle():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline(
+    polyline = Polyline(
         [
             Point(0, 0, 0),
             Point(1, 0, 0),
             Point(0, 1, 0),
         ]
     )
-    m = RemeshCDT.from_polylines([pl])
+    mesh = RemeshCDT.from_polylines([polyline])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Rectangle")
@@ -71,7 +71,7 @@ def test_remesh_cdt_rectangle():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline(
+    polyline = Polyline(
         [
             Point(3, 0, 0),
             Point(5, 0, 0),
@@ -79,9 +79,9 @@ def test_remesh_cdt_rectangle():
             Point(3, 2, 0),
         ]
     )
-    m = RemeshCDT.from_polylines([pl])
+    mesh = RemeshCDT.from_polylines([polyline])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "L Shape")
@@ -90,7 +90,7 @@ def test_remesh_cdt_l_shape():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline(
+    polyline = Polyline(
         [
             Point(7, 0, 0),
             Point(10, 0, 0),
@@ -100,9 +100,9 @@ def test_remesh_cdt_l_shape():
             Point(7, 3, 0),
         ]
     )
-    m = RemeshCDT.from_polylines([pl])
+    mesh = RemeshCDT.from_polylines([polyline])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "U Shape")
@@ -111,7 +111,7 @@ def test_remesh_cdt_u_shape():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline(
+    polyline = Polyline(
         [
             Point(25, 0, 0),
             Point(31, 0, 0),
@@ -123,9 +123,9 @@ def test_remesh_cdt_u_shape():
             Point(25, 4, 0),
         ]
     )
-    m = RemeshCDT.from_polylines([pl])
+    mesh = RemeshCDT.from_polylines([polyline])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Octagon")
@@ -134,11 +134,11 @@ def test_remesh_cdt_octagon():
     from session_py import Polyline
     from session_py import Vector
 
-    pl = Polyline.from_sides(8, 1.5)
-    pl += Vector(14, 1.5, 0)
-    m = RemeshCDT.from_polylines([pl])
+    polyline = Polyline.from_sides(8, 1.5)
+    polyline += Vector(14, 1.5, 0)
+    mesh = RemeshCDT.from_polylines([polyline])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Rectangle With Rectangle Hole")
@@ -163,9 +163,9 @@ def test_remesh_cdt_rectangle_with_rectangle_hole():
             Point(3, 1, 0),
         ]
     )
-    m = RemeshCDT.from_polylines([border, hole])
+    mesh = RemeshCDT.from_polylines([border, hole])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Duplicate Vertices")
@@ -174,7 +174,7 @@ def test_remesh_cdt_duplicate_vertices():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline(
+    polyline = Polyline(
         [
             Point(33, 0, 0),
             Point(36, 0, 0),
@@ -184,9 +184,9 @@ def test_remesh_cdt_duplicate_vertices():
             Point(33, 0, 0),
         ]
     )
-    m = RemeshCDT.from_polylines([pl])
+    mesh = RemeshCDT.from_polylines([polyline])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Tilted Rectangle With Rectangle Hole")
@@ -211,9 +211,9 @@ def test_remesh_cdt_tilted_rectangle_with_rectangle_hole():
             Point(56, 3, 1.5),
         ]
     )
-    m = RemeshCDT.from_polylines([border, hole], False, False)
+    mesh = RemeshCDT.from_polylines([border, hole], False, False)
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Irregular Tilted Polyline")
@@ -272,9 +272,9 @@ def test_remesh_cdt_irregular_tilted_polyline():
         Point(129.662786, 15.027072, -12.81958),
         Point(125.390575, 14.236865, -16.468853),
     ]
-    m = RemeshCDT.from_polylines([Polyline(border)])
+    mesh = RemeshCDT.from_polylines([Polyline(border)])
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Irregular Tilted Polyline With Holes")
@@ -389,13 +389,13 @@ def test_remesh_cdt_irregular_tilted_polyline_with_holes():
         Point(77.272732, 16.707375, 0),
         Point(78.759389, 19.25978, 0),
     ]
-    m = RemeshCDT.from_polylines(
+    mesh = RemeshCDT.from_polylines(
         [Polyline(border), Polyline(h1), Polyline(h2), Polyline(h3), Polyline(h4)],
         False,
         False,
     )
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 @MINI_TEST("RemeshCDT", "Degenerate Hole Keeps Flat Indices")
@@ -427,14 +427,14 @@ def test_remesh_cdt_degenerate_hole_keeps_flat_indices():
         ]
     )
     tris = RemeshCDT.triangulate([border, degen, hole])
-    mx = 0
+    max_index = 0
 
     for t in tris:
         for k in range(3):
-            if t[k] > mx:
-                mx = t[k]
+            if t[k] > max_index:
+                max_index = t[k]
 
-    MINI_CHECK(len(tris) > 0 and mx == 9)
+    MINI_CHECK(len(tris) > 0 and max_index == 9)
 
 
 @MINI_TEST("RemeshCDT", "Large Coordinates")
@@ -507,13 +507,13 @@ def test_remesh_cdt_plate_four_holes():
         Point(223.854739, -1566.236493, 335.782108),
         Point(219.882876, -1531.572963, 353.83603),
     ]
-    m = RemeshCDT.from_polylines(
+    mesh = RemeshCDT.from_polylines(
         [Polyline(border), Polyline(h1), Polyline(h2), Polyline(h3), Polyline(h4)],
         False,
         False,
     )
 
-    MINI_CHECK(m.is_valid())
+    MINI_CHECK(mesh.is_valid())
 
 
 if __name__ == "__main__":
