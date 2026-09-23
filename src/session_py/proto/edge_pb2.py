@@ -24,13 +24,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nedge.proto\x12\rsession_proto\"\\\n\x04\x45\x64ge\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\n\n\x02v0\x18\x03 \x01(\t\x12\n\n\x02v1\x18\x04 \x01(\t\x12\x11\n\tattribute\x18\x05 \x01(\t\x12\r\n\x05index\x18\x06 \x01(\x05\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\nedge.proto\x12\rsession_proto\"\xc8\x01\n\x04\x45\x64ge\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\n\n\x02v0\x18\x03 \x01(\t\x12\n\n\x02v1\x18\x04 \x01(\t\x12\x11\n\tattribute\x18\x05 \x01(\t\x12\r\n\x05index\x18\x06 \x01(\x05\x12\x37\n\nattributes\x18\x07 \x03(\x0b\x32#.session_proto.Edge.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'edge_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_EDGE']._serialized_start=29
-  _globals['_EDGE']._serialized_end=121
+  _globals['_EDGE_ATTRIBUTESENTRY']._loaded_options = None
+  _globals['_EDGE_ATTRIBUTESENTRY']._serialized_options = b'8\001'
+  _globals['_EDGE']._serialized_start=30
+  _globals['_EDGE']._serialized_end=230
+  _globals['_EDGE_ATTRIBUTESENTRY']._serialized_start=181
+  _globals['_EDGE_ATTRIBUTESENTRY']._serialized_end=230
 # @@protoc_insertion_point(module_scope)

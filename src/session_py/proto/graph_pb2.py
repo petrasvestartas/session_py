@@ -26,7 +26,7 @@ from . import vertex_pb2 as vertex__pb2
 from . import edge_pb2 as edge__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bgraph.proto\x12\rsession_proto\x1a\x0cvertex.proto\x1a\nedge.proto\"\xef\x01\n\x05Graph\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x34\n\x08vertices\x18\x03 \x03(\x0b\x32\".session_proto.Graph.VerticesEntry\x12\"\n\x05\x65\x64ges\x18\x04 \x03(\x0b\x32\x13.session_proto.Edge\x12\x14\n\x0cvertex_count\x18\x05 \x01(\x05\x12\x12\n\nedge_count\x18\x06 \x01(\x05\x1a\x46\n\rVerticesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12$\n\x05value\x18\x02 \x01(\x0b\x32\x15.session_proto.Vertex:\x02\x38\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0bgraph.proto\x12\rsession_proto\x1a\x0cvertex.proto\x1a\nedge.proto\"\x95\x04\n\x05Graph\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x34\n\x08vertices\x18\x03 \x03(\x0b\x32\".session_proto.Graph.VerticesEntry\x12\"\n\x05\x65\x64ges\x18\x04 \x03(\x0b\x32\x13.session_proto.Edge\x12\x14\n\x0cvertex_count\x18\x05 \x01(\x05\x12\x12\n\nedge_count\x18\x06 \x01(\x05\x12T\n\x19\x64\x65\x66\x61ult_vertex_attributes\x18\x07 \x03(\x0b\x32\x31.session_proto.Graph.DefaultVertexAttributesEntry\x12P\n\x17\x64\x65\x66\x61ult_edge_attributes\x18\x08 \x03(\x0b\x32/.session_proto.Graph.DefaultEdgeAttributesEntry\x1a\x46\n\rVerticesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12$\n\x05value\x18\x02 \x01(\x0b\x32\x15.session_proto.Vertex:\x02\x38\x01\x1a>\n\x1c\x44\x65\x66\x61ultVertexAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x1a<\n\x1a\x44\x65\x66\x61ultEdgeAttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,8 +35,16 @@ if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_GRAPH_VERTICESENTRY']._loaded_options = None
   _globals['_GRAPH_VERTICESENTRY']._serialized_options = b'8\001'
+  _globals['_GRAPH_DEFAULTVERTEXATTRIBUTESENTRY']._loaded_options = None
+  _globals['_GRAPH_DEFAULTVERTEXATTRIBUTESENTRY']._serialized_options = b'8\001'
+  _globals['_GRAPH_DEFAULTEDGEATTRIBUTESENTRY']._loaded_options = None
+  _globals['_GRAPH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_options = b'8\001'
   _globals['_GRAPH']._serialized_start=57
-  _globals['_GRAPH']._serialized_end=296
-  _globals['_GRAPH_VERTICESENTRY']._serialized_start=226
-  _globals['_GRAPH_VERTICESENTRY']._serialized_end=296
+  _globals['_GRAPH']._serialized_end=590
+  _globals['_GRAPH_VERTICESENTRY']._serialized_start=394
+  _globals['_GRAPH_VERTICESENTRY']._serialized_end=464
+  _globals['_GRAPH_DEFAULTVERTEXATTRIBUTESENTRY']._serialized_start=466
+  _globals['_GRAPH_DEFAULTVERTEXATTRIBUTESENTRY']._serialized_end=528
+  _globals['_GRAPH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_start=530
+  _globals['_GRAPH_DEFAULTEDGEATTRIBUTESENTRY']._serialized_end=590
 # @@protoc_insertion_point(module_scope)

@@ -24,13 +24,17 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cvertex.proto\x12\rsession_proto\"F\n\x06Vertex\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x11\n\tattribute\x18\x03 \x01(\t\x12\r\n\x05index\x18\x04 \x01(\x05\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cvertex.proto\x12\rsession_proto\"\xb4\x01\n\x06Vertex\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04guid\x18\x02 \x01(\t\x12\x11\n\tattribute\x18\x03 \x01(\t\x12\r\n\x05index\x18\x04 \x01(\x05\x12\x39\n\nattributes\x18\x05 \x03(\x0b\x32%.session_proto.Vertex.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x01:\x02\x38\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'vertex_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_VERTEX']._serialized_start=31
-  _globals['_VERTEX']._serialized_end=101
+  _globals['_VERTEX_ATTRIBUTESENTRY']._loaded_options = None
+  _globals['_VERTEX_ATTRIBUTESENTRY']._serialized_options = b'8\001'
+  _globals['_VERTEX']._serialized_start=32
+  _globals['_VERTEX']._serialized_end=212
+  _globals['_VERTEX_ATTRIBUTESENTRY']._serialized_start=163
+  _globals['_VERTEX_ATTRIBUTESENTRY']._serialized_end=212
 # @@protoc_insertion_point(module_scope)
