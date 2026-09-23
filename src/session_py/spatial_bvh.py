@@ -7,8 +7,13 @@ from .obb import OBB
 from .point import Point
 from .vector import Vector
 
-STACK_SIZE = 64
-NULL_IDX = -1
+STACK_SIZE = 64  # Depth bound of the explicit traversal stack.
+NULL_IDX = -1  # Index of a missing child or object.
+
+
+def _quantize(t: float) -> int:
+    """Return t clamped to [0, 1] scaled to 10 bits."""
+    return int(min(max(t, 0.0), 1.0) * 1023.0)
 
 
 class Node:
@@ -23,41 +28,52 @@ class Node:
     ):
         """Construct from bounds, child indices and object id."""
 
-        self.aabb = AABB() if aabb is None else aabb
-        self.left = left
-        self.right = right
-        self.object_id = object_id
+        self.aabb = AABB() if aabb is None else aabb  # Bounds of the subtree.
+        self.left = left  # Left child index, NULL_IDX on a leaf.
+        self.right = right  # Right child index, NULL_IDX on a leaf.
+        self.object_id = object_id  # Object id on a leaf, NULL_IDX on an internal node.
 
     def is_leaf(self) -> bool:
         """Return whether the node holds an object."""
         return self.object_id != NULL_IDX
 
 
-def _quantize(t: float) -> int:
-    """Return t clamped to [0, 1] scaled to 10 bits."""
-    return int(min(max(t, 0.0), 1.0) * 1023.0)
-
-
 class SpatialBVH:
     """Linear BVH (Karras 2012): leaves in Morton order, internal node i splits the sorted range it covers, node 0 is the root."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, world_size: float = 1000.0):
         """Construct an empty tree over a Morton cube of world_size."""
 
-        self._guid = None
-        self.name = "my_bvh"
-        self.world_size = world_size
-        self.object_guids: list[str] = []
-        self.nodes: list[Node] = []
+        self._guid = None  # Lazy guid.
+        self.name = "my_bvh"  # Tree name.
+        self.world_size = world_size  # Extent of the Morton cube.
+        self.object_guids = []  # Guid per object id, set by build_with_guids.
+        self.nodes = []  # Internal nodes first, then the leaves in Morton order.
 
+    @staticmethod
+    def from_boxes(bounding_boxes: list[OBB], world_size: float) -> SpatialBVH:
+        """Construct and build over the boxes with the given world size."""
+
+        bvh = SpatialBVH(world_size)
+        bvh.build(bounding_boxes)
+
+        return bvh
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
-        return getattr(self, "_guid", None) is not None
+        return self._guid is not None
 
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
-        if getattr(self, "_guid", None) is None:
+
+        if self._guid is None:
             self._guid = str(uuid.uuid4())
 
         return self._guid
@@ -67,14 +83,6 @@ class SpatialBVH:
         """Set the guid."""
         self._guid = value
 
-    @staticmethod
-    def from_boxes(bounding_boxes: list[OBB], world_size: float) -> SpatialBVH:
-        """Construct and build over the boxes with the given world size."""
-        bvh = SpatialBVH(world_size)
-        bvh.build(bounding_boxes)
-
-        return bvh
-
     def empty(self) -> bool:
         """Return whether the tree has no nodes."""
         return len(self.nodes) == 0
@@ -83,25 +91,9 @@ class SpatialBVH:
         """Return the node count."""
         return len(self.nodes)
 
-    @staticmethod
-    def compute_world_size(bounding_boxes: list[OBB]) -> float:
-        """Return the largest absolute box coordinate times 2.2, at least 10."""
-
-        if len(bounding_boxes) == 0:
-            return 1000.0
-
-        max_extent = 0.0
-
-        for bbox in bounding_boxes:
-            for k in range(3):
-                max_extent = max(max_extent, abs(bbox.center[k]) + bbox.half_size[k])
-
-        return max(max_extent * 2.2, 10.0)
-
     # ═══════════════════════════════════════════════════════════════════════════
-    # Build
+    # Mutators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def build(self, bounding_boxes: list[OBB]) -> None:
         """Build over the boxes with the current world size."""
         self.build_from_boxes(bounding_boxes, self.world_size)
@@ -121,6 +113,7 @@ class SpatialBVH:
 
         self.world_size = ws
         self.nodes = []
+
         n = len(aabbs)
 
         if n == 0:
@@ -140,6 +133,7 @@ class SpatialBVH:
         for i in range(n - 1):
             first, last = self._determine_range(codes, i)
             split = self._find_split(codes, first, last)
+
             self.nodes[i].left = leaf + split if split == first else split
             self.nodes[i].right = leaf + split + 1 if split + 1 == last else split + 1
             order.append((last - first, i))
@@ -165,6 +159,221 @@ class SpatialBVH:
         self.world_size = self.compute_world_size(bounding_boxes)
         self.build(bounding_boxes)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Queries
+    # ═══════════════════════════════════════════════════════════════════════════
+    def check_all_collisions(
+        self, bounding_boxes: list[OBB]
+    ) -> tuple[list[tuple[int, int]], list[int], int]:
+        """Return the overlapping (i, j) pairs with i < j, the ids in any pair, and the number of nodes tested."""
+
+        pairs = []
+        visited = [False] * len(bounding_boxes)
+        total_checks = 0
+
+        for i in range(len(bounding_boxes)):
+            found = self.find_collisions(i, bounding_boxes[i], bounding_boxes)
+            total_checks += found[1]
+
+            for j in found[0]:
+                if j < i:
+                    continue
+
+                pairs.append((i, j))
+                visited[i] = True
+                visited[j] = True
+
+        colliding_indices = []
+
+        for i in range(len(visited)):
+            if visited[i]:
+                colliding_indices.append(i)
+
+        return (pairs, colliding_indices, total_checks)
+
+    def check_all_collisions_guids(
+        self, bounding_boxes: list[OBB]
+    ) -> list[tuple[str, str]]:
+        """Return the overlapping pairs as guid pairs."""
+
+        pairs = self.check_all_collisions(bounding_boxes)[0]
+        guid_pairs = []
+
+        for pair in pairs:
+            if pair[0] < len(self.object_guids) and pair[1] < len(self.object_guids):
+                guid_pairs.append(
+                    (self.object_guids[pair[0]], self.object_guids[pair[1]])
+                )
+
+        return guid_pairs
+
+    def find_collisions(
+        self, object_id: int, query_bbox: OBB, bounding_boxes: list[OBB]
+    ) -> tuple[list[int], int]:
+        """Return the ids overlapping query_bbox other than object_id, and the number of nodes tested."""
+
+        collisions = []
+        check_count = 0
+        query = self._aabb_from_obb(query_bbox)
+
+        stack = []
+
+        if len(self.nodes) > 0:
+            stack.append(0)
+
+        while len(stack) > 0:
+            node = self.nodes[stack.pop()]
+
+            if not node.aabb.intersects(query):
+                continue
+
+            check_count += 1
+
+            if node.is_leaf():
+                id = node.object_id
+
+                if (
+                    id != object_id
+                    and id < len(bounding_boxes)
+                    and query.intersects(self._aabb_from_obb(bounding_boxes[id]))
+                ):
+                    collisions.append(id)
+
+                continue
+
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(node.left)
+            stack.append(node.right)
+
+        return (collisions, check_count)
+
+    def query_aabb(self, query: AABB | OBB) -> list[int]:
+        """Return the ids of every leaf box that intersects query."""
+
+        if isinstance(query, OBB):
+            query = self._aabb_from_obb(query)
+
+        hits = []
+
+        stack = []
+
+        if len(self.nodes) > 0:
+            stack.append(0)
+
+        while len(stack) > 0:
+            node = self.nodes[stack.pop()]
+
+            if not node.aabb.intersects(query):
+                continue
+
+            if node.is_leaf():
+                hits.append(node.object_id)
+                continue
+
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(node.left)
+            stack.append(node.right)
+
+        return hits
+
+    def nearest_neighbors(
+        self, object_id: int, bounding_boxes: list[OBB], inflate: float = 1.2
+    ) -> list[int]:
+        """Return the ids overlapping the box of object_id with its half-sizes scaled by inflate, object_id excluded."""
+
+        result = []
+
+        if object_id < 0 or object_id >= len(bounding_boxes):
+            return result
+
+        query = self._aabb_from_obb(bounding_boxes[object_id])
+        query.hx *= inflate
+        query.hy *= inflate
+        query.hz *= inflate
+
+        for id in self.query_aabb(query):
+            if id != object_id:
+                result.append(id)
+
+        return result
+
+    def ray_cast(
+        self,
+        origin: Point,
+        direction: Vector,
+        candidate_leaf_ids: list[int],
+        find_all: bool = False,
+    ) -> bool:
+        """Collect the leaf ids whose box the ray enters, nearest entry first; true when any."""
+
+        candidate_leaf_ids.clear()
+        found = []
+
+        stack = []
+
+        if len(self.nodes) > 0:
+            stack.append(0)
+
+        while len(stack) > 0:
+            node = self.nodes[stack.pop()]
+            span = self._ray_aabb(origin, direction, node.aabb)
+
+            if span[1] < span[0] or span[1] < 0.0:
+                continue
+
+            if node.is_leaf():
+                found.append((span[0], node.object_id))
+                continue
+
+            assert len(stack) + 2 <= STACK_SIZE
+            stack.append(node.left)
+            stack.append(node.right)
+
+        found.sort()
+
+        for hit in found:
+            candidate_leaf_ids.append(hit[1])
+
+        return len(candidate_leaf_ids) > 0
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Boxes
+    # ═══════════════════════════════════════════════════════════════════════════
+    @staticmethod
+    def compute_world_size(bounding_boxes: list[OBB]) -> float:
+        """Return the largest absolute box coordinate times 2.2, at least 10."""
+
+        if len(bounding_boxes) == 0:
+            return 1000.0
+
+        max_extent = 0.0
+
+        for bbox in bounding_boxes:
+            for k in range(3):
+                max_extent = max(max_extent, abs(bbox.center[k]) + bbox.half_size[k])
+
+        return max(max_extent * 2.2, 10.0)
+
+    def merge_aabb(self, aabb1: OBB, aabb2: OBB) -> OBB:
+        """Return the axis-aligned box enclosing both boxes."""
+        return OBB.from_aabb(
+            AABB.merge(self._aabb_from_obb(aabb1), self._aabb_from_obb(aabb2))
+        )
+
+    def aabb_intersect(self, aabb1: AABB | OBB, aabb2: AABB | OBB) -> bool:
+        """Return whether the axis-aligned bounds of the boxes overlap."""
+
+        if isinstance(aabb1, OBB):
+            aabb1 = self._aabb_from_obb(aabb1)
+
+        if isinstance(aabb2, OBB):
+            aabb2 = self._aabb_from_obb(aabb2)
+
+        return aabb1.intersects(aabb2)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Build
+    # ═══════════════════════════════════════════════════════════════════════════
     def _sorted_codes(self, aabbs: list[AABB]) -> list[tuple[int, int]]:
         """Return (morton code, id) sorted by code, codes quantized over the bounding cube of the box centers."""
 
@@ -175,19 +384,19 @@ class SpatialBVH:
             lo[k] = self._center(aabbs[0], k)
             hi[k] = lo[k]
 
-        for aabb in aabbs[1:]:
+        for i in range(1, len(aabbs)):
             for k in range(3):
-                lo[k] = min(lo[k], self._center(aabb, k))
-                hi[k] = max(hi[k], self._center(aabb, k))
+                lo[k] = min(lo[k], self._center(aabbs[i], k))
+                hi[k] = max(hi[k], self._center(aabbs[i], k))
 
         ext = max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2])
         codes = []
 
-        for i, aabb in enumerate(aabbs):
+        for i in range(len(aabbs)):
             code = 0
 
             for k in range(3):
-                t = (self._center(aabb, k) - lo[k]) / ext if ext > 0.0 else 0.0
+                t = (self._center(aabbs[i], k) - lo[k]) / ext if ext > 0.0 else 0.0
                 code |= expand_bits(_quantize(t)) << k
 
             codes.append((code, i))
@@ -254,180 +463,8 @@ class SpatialBVH:
         return split
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Queries
+    # Traversal
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def check_all_collisions(
-        self, bounding_boxes: list[OBB]
-    ) -> tuple[list[tuple[int, int]], list[int], int]:
-        """Return the overlapping (i, j) pairs with i < j, the ids in any pair, and the number of nodes tested."""
-
-        pairs = []
-        visited = [False] * len(bounding_boxes)
-        total_checks = 0
-
-        for i in range(len(bounding_boxes)):
-            found = self.find_collisions(i, bounding_boxes[i], bounding_boxes)
-            total_checks += found[1]
-
-            for j in found[0]:
-                if j < i:
-                    continue
-
-                pairs.append((i, j))
-                visited[i] = True
-                visited[j] = True
-
-        colliding_indices = []
-
-        for i in range(len(visited)):
-            if visited[i]:
-                colliding_indices.append(i)
-
-        return (pairs, colliding_indices, total_checks)
-
-    def check_all_collisions_guids(
-        self, bounding_boxes: list[OBB]
-    ) -> list[tuple[str, str]]:
-        """Return the overlapping pairs as guid pairs."""
-
-        pairs, _colliding_indices, _total_checks = self.check_all_collisions(
-            bounding_boxes
-        )
-        guid_pairs = []
-
-        for i, j in pairs:
-            if i < len(self.object_guids) and j < len(self.object_guids):
-                guid_pairs.append((self.object_guids[i], self.object_guids[j]))
-
-        return guid_pairs
-
-    def find_collisions(
-        self, object_id: int, query_bbox: OBB, bounding_boxes: list[OBB]
-    ) -> tuple[list[int], int]:
-        """Return the ids overlapping query_bbox other than object_id, and the number of nodes tested."""
-
-        collisions = []
-        check_count = 0
-        query = self._aabb_from_obb(query_bbox)
-        stack: list[int] = []
-
-        if len(self.nodes) > 0:
-            stack.append(0)
-
-        while len(stack) > 0:
-            node = self.nodes[stack.pop()]
-
-            if not node.aabb.intersects(query):
-                continue
-
-            check_count += 1
-
-            if node.is_leaf():
-                id = node.object_id
-
-                if (
-                    id != object_id
-                    and id < len(bounding_boxes)
-                    and query.intersects(self._aabb_from_obb(bounding_boxes[id]))
-                ):
-                    collisions.append(id)
-
-                continue
-
-            assert len(stack) + 2 <= STACK_SIZE
-            stack.append(node.left)
-            stack.append(node.right)
-
-        return (collisions, check_count)
-
-    def query_aabb(self, query: AABB | OBB) -> list[int]:
-        """Return the ids of every leaf box that intersects query."""
-
-        if isinstance(query, OBB):
-            query = self._aabb_from_obb(query)
-
-        hits: list[int] = []
-        stack: list[int] = []
-
-        if len(self.nodes) > 0:
-            stack.append(0)
-
-        while len(stack) > 0:
-            node = self.nodes[stack.pop()]
-
-            if not node.aabb.intersects(query):
-                continue
-
-            if node.is_leaf():
-                hits.append(node.object_id)
-                continue
-
-            assert len(stack) + 2 <= STACK_SIZE
-            stack.append(node.left)
-            stack.append(node.right)
-
-        return hits
-
-    def nearest_neighbors(
-        self, object_id: int, bounding_boxes: list[OBB], inflate: float = 1.2
-    ) -> list[int]:
-        """Return the ids overlapping the box of object_id with its half-sizes scaled by inflate, object_id excluded."""
-
-        result: list[int] = []
-
-        if object_id < 0 or object_id >= len(bounding_boxes):
-            return result
-
-        query = self._aabb_from_obb(bounding_boxes[object_id])
-        query.hx *= inflate
-        query.hy *= inflate
-        query.hz *= inflate
-
-        for id in self.query_aabb(query):
-            if id != object_id:
-                result.append(id)
-
-        return result
-
-    def ray_cast(
-        self,
-        origin: Point,
-        direction: Vector,
-        candidate_leaf_ids: list[int],
-        find_all: bool = False,
-    ) -> bool:
-        """Collect the leaf ids whose box the ray enters, nearest entry first; true when any."""
-
-        candidate_leaf_ids.clear()
-        found = []
-        stack: list[int] = []
-
-        if len(self.nodes) > 0:
-            stack.append(0)
-
-        while len(stack) > 0:
-            node = self.nodes[stack.pop()]
-            span = self._ray_aabb(origin, direction, node.aabb)
-
-            if span[1] < span[0] or span[1] < 0.0:
-                continue
-
-            if node.is_leaf():
-                found.append((span[0], node.object_id))
-                continue
-
-            assert len(stack) + 2 <= STACK_SIZE
-            stack.append(node.left)
-            stack.append(node.right)
-
-        found.sort()
-
-        for hit in found:
-            candidate_leaf_ids.append(hit[1])
-
-        return len(candidate_leaf_ids) > 0
-
     def _ray_aabb(
         self, origin: Point, direction: Vector, aabb: AABB
     ) -> tuple[float, float]:
@@ -440,38 +477,11 @@ class SpatialBVH:
             inv = 1.0 / direction[k] if direction[k] != 0.0 else math.inf
             t1 = (self._center(aabb, k) - self._half(aabb, k) - origin[k]) * inv
             t2 = (self._center(aabb, k) + self._half(aabb, k) - origin[k]) * inv
+
             tmin = max(tmin, min(t1, t2))
             tmax = min(tmax, max(t1, t2))
 
         return (tmin, tmax)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Boxes
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def merge_aabb(self, aabb1: OBB, aabb2: OBB) -> OBB:
-        """Return the axis-aligned box enclosing both boxes."""
-
-        merged = AABB.merge(self._aabb_from_obb(aabb1), self._aabb_from_obb(aabb2))
-
-        return OBB(
-            merged.center(),
-            Vector(1, 0, 0),
-            Vector(0, 1, 0),
-            Vector(0, 0, 1),
-            Vector(merged.hx, merged.hy, merged.hz),
-        )
-
-    def aabb_intersect(self, aabb1: AABB | OBB, aabb2: AABB | OBB) -> bool:
-        """Return whether the axis-aligned bounds of the boxes overlap."""
-
-        if isinstance(aabb1, OBB):
-            aabb1 = self._aabb_from_obb(aabb1)
-
-        if isinstance(aabb2, OBB):
-            aabb2 = self._aabb_from_obb(aabb2)
-
-        return aabb1.intersects(aabb2)
 
     @staticmethod
     def _aabb_from_obb(obb: OBB) -> AABB:
@@ -516,8 +526,6 @@ class SpatialBVH:
 # ═══════════════════════════════════════════════════════════════════════════
 # Morton codes
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def expand_bits(v: int) -> int:
     """Spread the low 10 bits of v to every third bit."""
 
