@@ -13,8 +13,9 @@ class _Rect:
 
     def __init__(self):
         """Construct with zeroed fields."""
-        self.m_min = [0.0, 0.0, 0.0]
-        self.m_max = [0.0, 0.0, 0.0]
+
+        self.m_min = [0.0, 0.0, 0.0]  # Minimum corner.
+        self.m_max = [0.0, 0.0, 0.0]  # Maximum corner.
 
     def copy(self) -> _Rect:
         """Copy by value."""
@@ -31,9 +32,10 @@ class _Branch:
 
     def __init__(self):
         """Construct with zeroed fields."""
-        self.m_rect = _Rect()
-        self.m_child = None
-        self.m_data = 0
+
+        self.m_rect = _Rect()  # Cover of the child or datum.
+        self.m_child = None  # Child node, none on leaves.
+        self.m_data = 0  # Leaf datum.
 
     def copy(self) -> _Branch:
         """Copy by value."""
@@ -52,9 +54,9 @@ class _Node:
     def __init__(self):
         """Construct with zeroed fields."""
 
-        self.m_count = 0
-        self.m_level = 0
-        self.m_branch = [None] * (MAXNODES + 1)
+        self.m_count = 0  # Branches in use.
+        self.m_level = 0  # 0 for leaves.
+        self.m_branch = [None] * (MAXNODES + 1)  # Branch slots.
 
         for i in range(MAXNODES + 1):
             self.m_branch[i] = _Branch()
@@ -69,8 +71,9 @@ class _Visit:
 
     def __init__(self, node: _Node, index: int):
         """Construct from a node and its next branch index."""
-        self.node = node
-        self.index = index
+
+        self.node = node  # Node being walked.
+        self.index = index  # Next branch to visit.
 
 
 class _PartitionVars:
@@ -79,34 +82,43 @@ class _PartitionVars:
     def __init__(self):
         """Construct with zeroed fields."""
 
-        self.m_partition = [NOT_TAKEN] * (MAXNODES + 1)
-        self.m_total = 0
-        self.m_min_fill = 0
-        self.m_count = [0, 0]
-        self.m_cover = [_Rect(), _Rect()]
-        self.m_area = [0.0, 0.0]
-        self.m_branch_buf = [None] * (MAXNODES + 1)
+        self.m_partition = [NOT_TAKEN] * (MAXNODES + 1)  # Group of each buffered branch.
+        self.m_total = 0  # Buffered branch count.
+        self.m_min_fill = 0  # Minimum branches per group.
+        self.m_count = [0, 0]  # Branches per group.
+        self.m_cover = [_Rect(), _Rect()]  # Cover per group.
+        self.m_area = [0.0, 0.0]  # Cover volume per group.
+        self.m_branch_buf = [None] * (MAXNODES + 1)  # Branches being split.
+        self.m_branch_count = 0  # Branches in the buffer.
+        self.m_cover_split = _Rect()  # Cover of the whole buffer.
+        self.m_cover_split_area = 0.0  # Volume of the whole buffer cover.
 
         for i in range(MAXNODES + 1):
             self.m_branch_buf[i] = _Branch()
-
-        self.m_branch_count = 0
-        self.m_cover_split = _Rect()
-        self.m_cover_split_area = 0.0
 
 
 class SpatialRTree:
     """R-tree with dynamic insert and remove (Guttman quadratic split, fan-out 4 to 8) for box overlap queries."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self):
         """Construct an empty tree with a single leaf root."""
-        self._m_root = self._alloc_node()
-        self._m_size = 0
 
+        self._m_root = self._alloc_node()  # Tree root.
+        self._m_size = 0  # Stored item count.
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def count(self) -> int:
         """Number of stored items."""
         return self._m_size
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Mutators
+    # ═══════════════════════════════════════════════════════════════════════════
     def insert(self, a_min: list[float], a_max: list[float], a_data: int) -> None:
         """Insert an item with its bounding box."""
 
@@ -114,6 +126,7 @@ class SpatialRTree:
         branch.m_rect = self._make_rect(a_min, a_max)
         branch.m_child = None
         branch.m_data = a_data
+
         self._insert_branch_internal(branch, 0)
         self._m_size += 1
 
@@ -139,9 +152,13 @@ class SpatialRTree:
 
     def remove_all(self) -> None:
         """Remove every item."""
+
         self._m_root = self._alloc_node()
         self._m_size = 0
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Queries
+    # ═══════════════════════════════════════════════════════════════════════════
     def search(self, a_min: list[float], a_max: list[float], a_callback: Callable[[int], bool]) -> int:
         """Visit every item overlapping the box until the callback returns false; returns the visit count."""
 
@@ -174,6 +191,9 @@ class SpatialRTree:
 
         return count
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Node allocation
+    # ═══════════════════════════════════════════════════════════════════════════
     def _alloc_node(self) -> _Node:
         """Allocate an empty leaf node."""
 
@@ -183,6 +203,9 @@ class SpatialRTree:
 
         return node
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Rect math
+    # ═══════════════════════════════════════════════════════════════════════════
     def _make_rect(self, a_min: list[float], a_max: list[float]) -> _Rect:
         """Build a rect from min and max corners."""
 
@@ -234,6 +257,9 @@ class SpatialRTree:
 
         return rect
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Branches
+    # ═══════════════════════════════════════════════════════════════════════════
     def _add_branch(self, branch: _Branch, node: _Node) -> _Node | None:
         """Add a branch, splitting the node when full; returns the new sibling or none."""
 
@@ -247,7 +273,9 @@ class SpatialRTree:
 
     def _disconnect_branch(self, node: _Node, index: int) -> None:
         """Remove a branch by swapping in the last one."""
+
         assert 0 <= index < node.m_count
+
         node.m_branch[index] = node.m_branch[node.m_count - 1]
         node.m_count -= 1
 
@@ -271,6 +299,9 @@ class SpatialRTree:
 
         return best
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Quadratic split
+    # ═══════════════════════════════════════════════════════════════════════════
     def _get_branches(self, node: _Node, branch: _Branch, part_vars: _PartitionVars) -> None:
         """Collect the node's branches plus one extra into the partition buffer."""
 
@@ -349,6 +380,7 @@ class SpatialRTree:
         while (part_vars.m_count[0] + part_vars.m_count[1]) < part_vars.m_total and \
               part_vars.m_count[0] < (part_vars.m_total - part_vars.m_min_fill) and \
               part_vars.m_count[1] < (part_vars.m_total - part_vars.m_min_fill):
+
             biggest_diff = -1.0
             chosen = 0
             better_group = 0
@@ -387,8 +419,10 @@ class SpatialRTree:
 
     def _load_nodes(self, node_a: _Node, node_b: _Node, part_vars: _PartitionVars) -> None:
         """Move partitioned branches into the two nodes."""
+
         for i in range(part_vars.m_total):
             target = node_a if part_vars.m_partition[i] == 0 else node_b
+
             self._add_branch(part_vars.m_branch_buf[i], target)
 
     def _split_node(self, node: _Node, branch: _Branch) -> _Node:
@@ -397,12 +431,16 @@ class SpatialRTree:
         part_vars = _PartitionVars()
         self._get_branches(node, branch, part_vars)
         self._choose_partition(part_vars, MINNODES)
+
         new_node = self._alloc_node()
         new_node.m_level = node.m_level
         self._load_nodes(node, new_node, part_vars)
 
         return new_node
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Insertion
+    # ═══════════════════════════════════════════════════════════════════════════
     def _insert_rect_internal(self, branch: _Branch, level: int) -> _Node | None:
         """Insert a branch at a level; returns the root's new sibling or none."""
 
@@ -411,8 +449,8 @@ class SpatialRTree:
 
         while node.m_level != level:
             assert node.m_level > level
-
             assert len(stack) < STACK_SIZE
+
             idx = self._pick_branch(branch.m_rect, node)
             stack.append(_Visit(node, idx))
             node = node.m_branch[idx].m_child
@@ -428,9 +466,11 @@ class SpatialRTree:
                 continue
 
             parent.m_branch[idx].m_rect = self._node_cover(parent.m_branch[idx].m_child)
+
             new_b = _Branch()
             new_b.m_rect = self._node_cover(other)
             new_b.m_child = other
+
             other = self._add_branch(new_b, parent)
 
         return other
@@ -446,15 +486,21 @@ class SpatialRTree:
         old_root = self._m_root
         self._m_root = self._alloc_node()
         self._m_root.m_level = old_root.m_level + 1
+
         b1 = _Branch()
         b1.m_rect = self._node_cover(old_root)
         b1.m_child = old_root
+
         b2 = _Branch()
         b2.m_rect = self._node_cover(new_node)
         b2.m_child = new_node
+
         self._add_branch(b1, self._m_root)
         self._add_branch(b2, self._m_root)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Removal
+    # ═══════════════════════════════════════════════════════════════════════════
     def _remove_rect_internal(self, rect: _Rect, data: int, reinsert_list: list[_Node]) -> bool:
         """Remove the matching leaf branch; underfull nodes go to the reinsert list."""
 
