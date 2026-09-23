@@ -671,6 +671,79 @@ def _loft_drop_degenerate(
     return kept
 
 
+def _loft_cap_outer(ring: _LoftRing, vkeys: list[int]) -> list[int]:
+    """Point indices of the outer ring, skipping consecutive points that share a vertex key."""
+
+    outer = []
+
+    for i in range(ring.n):
+        vi = ring.off + i
+
+        if outer and vkeys[vi] == vkeys[outer[-1]]:
+            continue
+
+        outer.append(vi)
+
+    return outer
+
+
+def _loft_cap_triangles(
+    frame: _LoftFrame,
+    rings: list[_LoftRing],
+    pts: list[Point],
+    vkeys: list[int],
+    outer: list[int],
+    reverse: bool,
+) -> list[list[int]]:
+    """CDT triangles of the outer ring with its holes as vertex keys, reversed for the bottom."""
+
+    border_2d = []
+
+    for vi in outer:
+        u, v = _loft_project(frame, pts[vi])
+        border_2d.append(Point(u, v, 0.0))
+
+    flat = list(outer)
+    holes_2d = []
+
+    for h in range(1, len(rings)):
+        hole = []
+
+        for i in range(rings[h].off, rings[h].off + rings[h].n):
+            u, v = _loft_project(frame, pts[i])
+            hole.append(Point(u, v, 0.0))
+            flat.append(i)
+
+        holes_2d.append(hole)
+
+    tris = _cdt_triangulate(border_2d, holes_2d)
+    tri_list = []
+
+    for t in tris:
+        if reverse:
+            tri_list.append([vkeys[flat[t[0]]], vkeys[flat[t[2]]], vkeys[flat[t[1]]]])
+        else:
+            tri_list.append([vkeys[flat[t[0]]], vkeys[flat[t[1]]], vkeys[flat[t[2]]]])
+
+    return tri_list
+
+
+def _loft_cap_holes(rings: list[_LoftRing], vkeys: list[int]) -> list[list[int]]:
+    """Vertex keys of the hole rings, every ring after the first."""
+
+    hole_rings = []
+
+    for h in range(1, len(rings)):
+        ring = []
+
+        for i in range(rings[h].off, rings[h].off + rings[h].n):
+            ring.append(vkeys[i])
+
+        hole_rings.append(ring)
+
+    return hole_rings
+
+
 def _loft_cap(
     mesh: "Mesh",
     frame: _LoftFrame,
@@ -682,37 +755,8 @@ def _loft_cap(
 ) -> None:
     """One n-gon cap with stored CDT triangulation and hole rings; reversed for the bottom."""
 
-    border_2d = []
-    outer = []
-
-    for i in range(rings[0].n):
-        vi = rings[0].off + i
-
-        if outer and vkeys[vi] == vkeys[outer[-1]]:
-            continue
-
-        u, v = _loft_project(frame, pts[vi])
-        border_2d.append(Point(u, v, 0.0))
-        outer.append(vi)
-
-    flat = list(outer)
-    holes_2d = []
-    hole_rings = []
-
-    for h in range(1, len(rings)):
-        hole = []
-        ring = []
-
-        for i in range(rings[h].off, rings[h].off + rings[h].n):
-            u, v = _loft_project(frame, pts[i])
-            hole.append(Point(u, v, 0.0))
-            flat.append(i)
-            ring.append(vkeys[i])
-
-        holes_2d.append(hole)
-        hole_rings.append(ring)
-
-    tris = _cdt_triangulate(border_2d, holes_2d)
+    outer = _loft_cap_outer(rings[0], vkeys)
+    tri_list = _loft_cap_triangles(frame, rings, pts, vkeys, outer, reverse)
     fvkeys = []
 
     for i in range(len(outer)):
@@ -723,18 +767,11 @@ def _loft_cap(
     if fk is None:
         return
 
-    tri_list = []
-
-    for t in tris:
-        if reverse:
-            tri_list.append([vkeys[flat[t[0]]], vkeys[flat[t[2]]], vkeys[flat[t[1]]]])
-        else:
-            tri_list.append([vkeys[flat[t[0]]], vkeys[flat[t[1]]], vkeys[flat[t[2]]]])
-
     if fix_collinear:
         _loft_fix_collinear(tri_list, fvkeys)
         tri_list = _loft_drop_degenerate(tri_list, mesh, frame)
 
+    hole_rings = _loft_cap_holes(rings, vkeys)
     mesh.set_face_triangulation(fk, tri_list)
 
     if hole_rings and tri_list:
@@ -918,6 +955,29 @@ def _loft_walls(
         _loft_walls_quads(mesh, poly, ia, ib, bpts, tpts, bot_vkeys, top_vkeys)
     else:
         _loft_walls_zipper(mesh, poly, ia, ib, bpts, tpts, bot_vkeys, top_vkeys)
+
+
+def _loft_order(n: int, border_idx: int) -> list[int]:
+    """Polygon order with the border polygon first and the rest in input order."""
+
+    order = [border_idx]
+
+    for i in range(n):
+        if i != border_idx:
+            order.append(i)
+
+    return order
+
+
+def _loft_rings(polys: list[_LoftPoly], top: bool) -> list[_LoftRing]:
+    """Top or bottom rings of every lofted polygon."""
+
+    rings = []
+
+    for poly in polys:
+        rings.append(poly.top if top else poly.bot)
+
+    return rings
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2161,6 +2221,46 @@ class Mesh:
         return min_idx
 
     @staticmethod
+    def _lines_sort_neighbors(adj: dict[int, list[int]], verts: list[Point]) -> None:
+        """Sort and dedupe every neighbor list counter-clockwise by angle around its vertex."""
+
+        for v in adj:
+            nbrs = sorted(set(adj[v]))
+            vx = verts[v][0]
+            vy = verts[v][1]
+            nbrs.sort(key=lambda n: math.atan2(verts[n][1] - vy, verts[n][0] - vx))
+            adj[v] = nbrs
+
+    @staticmethod
+    def _lines_cycle_triangles(
+        cycle: list[int], verts: list[Point], vkeys: list[int]
+    ) -> list[list[int]]:
+        """CDT triangles of one face cycle as mesh vertex keys, counter-clockwise in xy."""
+
+        ordered = list(cycle)
+        bpts = []
+
+        for vid in ordered:
+            bpts.append((verts[vid][0], verts[vid][1]))
+
+        if _signed_area_2d(bpts) < 0.0:
+            bpts.reverse()
+            ordered.reverse()
+
+        bpts2d = []
+
+        for b in bpts:
+            bpts2d.append(Point(b[0], b[1], 0.0))
+
+        tris = _cdt_triangulate(bpts2d, [])
+        tri_list = []
+
+        for t in tris:
+            tri_list.append([vkeys[ordered[t[0]]], vkeys[ordered[t[1]]], vkeys[ordered[t[2]]]])
+
+        return tri_list
+
+    @staticmethod
     def from_lines(
         lines: list[Line],
         delete_boundary_face: bool = False,
@@ -2192,12 +2292,7 @@ class Mesh:
             adj.setdefault(a, []).append(b)
             adj.setdefault(b, []).append(a)
 
-        for v in adj:
-            nbrs = sorted(set(adj[v]))
-            vx = verts[v][0]
-            vy = verts[v][1]
-            nbrs.sort(key=lambda n: math.atan2(verts[n][1] - vy, verts[n][0] - vx))
-            adj[v] = nbrs
+        Mesh._lines_sort_neighbors(adj, verts)
 
         cycles = Mesh._lines_face_cycles(adj, len(verts))
 
@@ -2218,33 +2313,8 @@ class Mesh:
 
             fk = mesh.add_face(fvkeys)
 
-            if fk is None:
-                continue
-
-            ordered = list(cycle)
-            bpts = []
-
-            for vid in ordered:
-                bpts.append((verts[vid][0], verts[vid][1]))
-
-            if _signed_area_2d(bpts) < 0.0:
-                bpts.reverse()
-                ordered.reverse()
-
-            bpts2d = []
-
-            for b in bpts:
-                bpts2d.append(Point(b[0], b[1], 0.0))
-
-            tris = _cdt_triangulate(bpts2d, [])
-            tri_list = []
-
-            for t in tris:
-                tri_list.append(
-                    [vkeys[ordered[t[0]]], vkeys[ordered[t[1]]], vkeys[ordered[t[2]]]]
-                )
-
-            mesh.triangulation[fk] = tri_list
+            if fk is not None:
+                mesh.triangulation[fk] = Mesh._lines_cycle_triangles(cycle, verts, vkeys)
 
         return mesh
 
@@ -2283,12 +2353,7 @@ class Mesh:
 
         border_idx = _loft_border_index(polylines0)
         frame = _loft_frame(polylines0[border_idx], polylines1[border_idx])
-        order = [border_idx]
-
-        for i in range(len(polylines0)):
-            if i != border_idx:
-                order.append(i)
-
+        order = _loft_order(len(polylines0), border_idx)
         polys = []
         all_bot = []
         all_top = []
@@ -2315,15 +2380,12 @@ class Mesh:
         top_vkeys = _loft_add_vkeys(mesh, all_top)
 
         if cap:
-            bot_rings = []
-            top_rings = []
-
-            for poly in polys:
-                bot_rings.append(poly.bot)
-                top_rings.append(poly.top)
-
-            _loft_cap(mesh, frame, bot_rings, all_bot, bot_vkeys, True, fix_collinear)
-            _loft_cap(mesh, frame, top_rings, all_top, top_vkeys, False, fix_collinear)
+            _loft_cap(
+                mesh, frame, _loft_rings(polys, False), all_bot, bot_vkeys, True, fix_collinear
+            )
+            _loft_cap(
+                mesh, frame, _loft_rings(polys, True), all_top, top_vkeys, False, fix_collinear
+            )
 
         for poly in polys:
             _loft_walls(mesh, frame, poly, all_bot, all_top, bot_vkeys, top_vkeys)
