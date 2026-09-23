@@ -54,8 +54,10 @@ def test_plane_constructor():
     offset = Vector(1.0, 2.0, 3.0)
     pl_iadd = Plane.xy_plane()
     pl_iadd += offset
+
     pl_isub = Plane.xy_plane()
     pl_isub -= offset
+
     pl_base = Plane.xy_plane()
     pl_add = pl_base + offset
     pl_sub = pl_base - offset
@@ -68,6 +70,7 @@ def test_plane_constructor():
     MINI_CHECK(plstr == "0.000000, 0.000000, 0.000000\n1.000000, 0.000000, 0.000000\n0.000000, 1.000000, 0.000000\n0.000000, 0.000000, 1.000000")
     MINI_CHECK(plrepr == "Plane(my_plane, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 1.000000, Color(blue, 0.0, 0.0, 1.0, 1.0))")
     MINI_CHECK(plcopy == pl and plcopy.guid != pl.guid)
+    MINI_CHECK(xy != yz)
     MINI_CHECK(TOLERANCE.is_close(pl_pn.origin[2], 5.0) and TOLERANCE.is_close(pl_pn.z_axis[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pl_pts.c, 1.0))
     MINI_CHECK(TOLERANCE.is_close(pl_2pts.x_axis[0], 1.0))
@@ -185,6 +188,7 @@ def test_plane_base1_base2():
     xy = Plane.xy_plane()
     b1 = xy.base1()
     b2 = xy.base2()
+
     MINI_CHECK(TOLERANCE.is_close(abs(b1.dot(xy.z_axis)), 0.0))
     MINI_CHECK(TOLERANCE.is_close(abs(b2.dot(xy.z_axis)), 0.0))
     MINI_CHECK(TOLERANCE.is_close(b1.dot(b2), 0.0))
@@ -223,34 +227,53 @@ def test_plane_transformed():
 
 @MINI_TEST("Plane", "Json Roundtrip")
 def test_plane_json_roundtrip():
-    from session_py import Plane
     from pathlib import Path
+    from session_py import Plane
 
     pl = Plane.xy_plane()
     pl.name = "test_plane"
 
+    guid = pl.guid
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.json"
     pl.file_json_dump(fname)
+
     loaded = Plane.file_json_load(fname)
+    parsed = Plane.file_json_loads(pl.file_json_dumps())
 
     MINI_CHECK(loaded.name == "test_plane")
     MINI_CHECK(TOLERANCE.is_close(loaded.c, 1.0))
+    MINI_CHECK(parsed == pl)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(parsed.guid == guid)
 
 
 @MINI_TEST("Plane", "Protobuf Roundtrip")
 def test_plane_protobuf_roundtrip():
-    from session_py import Plane
     from pathlib import Path
+    from session_py import Plane
 
+    fresh = Plane()
+    fresh_proto = fresh.to_proto()
     pl = Plane.xy_plane()
     pl.name = "test_plane"
 
+    guid = pl.guid
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_plane.bin"
     pl.pb_dump(fname)
-    loaded = Plane.pb_load(fname)
 
+    loaded = Plane.pb_load(fname)
+    parsed = Plane.pb_loads(pl.pb_dumps())
+    converted = Plane.from_proto(pl.to_proto())
+
+    MINI_CHECK(not fresh.has_guid())
+    MINI_CHECK(fresh_proto.guid == "")
     MINI_CHECK(loaded.name == "test_plane")
     MINI_CHECK(TOLERANCE.is_close(loaded.c, 1.0))
+    MINI_CHECK(parsed == pl)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(parsed.guid == guid)
+    MINI_CHECK(converted == pl)
+    MINI_CHECK(converted.guid == guid)
 
 
 @MINI_TEST("Plane", "Has On Negative Side")
