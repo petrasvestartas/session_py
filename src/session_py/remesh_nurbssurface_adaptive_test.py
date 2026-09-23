@@ -24,6 +24,7 @@ def test_remesh_nurbssurface_adaptive_parameters():
 
     s = Primitives.sphere_surface(0, 0, 0, 1.0)
     ta = RemeshNurbsSurfaceAdaptive(s)
+
     ta.set_max_angle(15.0).set_max_edge_length(2.0).set_min_edge_length(
         0.1
     ).set_max_chord_height(0.05)

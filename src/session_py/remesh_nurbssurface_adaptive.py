@@ -12,6 +12,10 @@ if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .mesh import Mesh
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 MAX_DEPTH = 8
 STACK_SIZE = 64
 KEY_SCALE = 1e10
@@ -64,7 +68,7 @@ class _Quadtree:
         self.closed = [
             s.is_closed(0),
             s.is_closed(1),
-        ]  # True per direction when closed.
+        ]  # True per direction when the surface closes on itself.
         self.norm_tol = norm_tol  # Normal turn tolerance in squared length.
         self.chord_tol = chord_tol  # Chord height tolerance.
         self.max_edge = max_edge  # Longest cell edge, 0 for no limit.
@@ -82,8 +86,6 @@ class _Quadtree:
 # ═══════════════════════════════════════════════════════════════════════════
 # Sampling
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _norm(v: Vector) -> float:
     """Euclidean length without the zero gate of magnitude()."""
     return math.sqrt(v.magnitude_squared())
@@ -169,10 +171,9 @@ def _sample_edges(s: NurbsSurface, p: _Node) -> list[_Corner]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Splitting
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _normals_turn(a: _Corner, b: _Corner, norm_tol: float) -> bool:
     """True when both normals exist and differ by more than norm_tol in squared length."""
+
     if a.n.magnitude_squared() <= 1e-20 or b.n.magnitude_squared() <= 1e-20:
         return False
 
@@ -251,8 +252,10 @@ def _split_flags(q: _Quadtree, p: _Node, mids: list[_Corner]) -> tuple[bool, boo
     se = p.c[1]
     ne = p.c[2]
     nw = p.c[3]
+
     split_u = _normals_turn(sw, se, q.norm_tol) or _normals_turn(ne, nw, q.norm_tol)
     split_v = _normals_turn(se, ne, q.norm_tol) or _normals_turn(nw, sw, q.norm_tol)
+
     split_u = (
         split_u
         or _chord_off(mids[0], sw, se, q.chord_tol)
@@ -280,13 +283,15 @@ def _split_flags(q: _Quadtree, p: _Node, mids: list[_Corner]) -> tuple[bool, boo
 
     if q.max_edge > 0.0:
         limit = q.max_edge * q.max_edge
+
         split_u = split_u or _dist2(sw.p, se.p) > limit or _dist2(ne.p, nw.p) > limit
         split_v = split_v or _dist2(se.p, ne.p) > limit or _dist2(nw.p, sw.p) > limit
 
     if not split_u or not split_v:
-        curved_u, curved_v = _curved(q.s, p, q.chord_tol)
-        split_u = split_u or curved_u
-        split_v = split_v or curved_v
+        curvature = _curved(q.s, p, q.chord_tol)
+
+        split_u = split_u or curvature[0]
+        split_v = split_v or curvature[1]
 
     return split_u, split_v
 
@@ -300,7 +305,8 @@ def _split_node(
     um = (p.u0 + p.u1) * 0.5
     vm = (p.v0 + p.v1) * 0.5
     depth = p.depth + 1
-    p.leaf = False
+
+    q.nodes[idx].leaf = False
 
     if split_u and split_v:
         q.nodes.append(
@@ -350,8 +356,7 @@ def _split_node(
 def _subdivide(q: _Quadtree, root: int) -> None:
     """Cells split from root down to MAX_DEPTH over an explicit stack, first child popped first so the pool fills depth first."""
 
-    stack: list[int] = []
-    stack.append(root)
+    stack: list[int] = [root]
 
     while len(stack) > 0:
         idx = stack.pop()
@@ -361,13 +366,15 @@ def _subdivide(q: _Quadtree, root: int) -> None:
             continue
 
         mids = _sample_edges(q.s, p)
-        split_u, split_v = _split_flags(q, p, mids)
+        split = _split_flags(q, p, mids)
 
-        if not split_u and not split_v:
+        if not split[0] and not split[1]:
             continue
 
         first = len(q.nodes)
-        _split_node(q, idx, mids, split_u, split_v)
+
+        _split_node(q, idx, mids, split[0], split[1])
+
         count = len(q.nodes) - first
 
         assert len(stack) + count <= STACK_SIZE
@@ -381,6 +388,7 @@ def _build(q: _Quadtree) -> None:
 
     nu = len(q.usp)
     nv = len(q.vsp)
+
     grid: list[_Corner] = []
 
     for i in range(nu):
@@ -390,6 +398,7 @@ def _build(q: _Quadtree) -> None:
     for i in range(nu - 1):
         for j in range(nv - 1):
             root = len(q.nodes)
+
             q.nodes.append(
                 _make_node(
                     q.s,
@@ -412,10 +421,8 @@ def _build(q: _Quadtree) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Vertices and faces
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _quantize(t: float) -> int:
-    """t rounded at KEY_SCALE."""
+    """t rounded at KEY_SCALE, so a parameter reached from two cells keys alike."""
     return round(t * KEY_SCALE)
 
 
@@ -444,6 +451,7 @@ def _index_leaves(q: _Quadtree) -> None:
                 _quantize(_wrap(q.closed[0], q.usp, us[ci])),
                 _quantize(_wrap(q.closed[1], q.vsp, vs[ci])),
             )
+
             q.corners.setdefault(key, nd.c[ci])
             q.rows.setdefault(key[1], []).append(_quantize(us[ci]))
             q.cols.setdefault(key[0], []).append(_quantize(vs[ci]))
@@ -509,6 +517,7 @@ def _vertex_at(q: _Quadtree, u: float, v: float) -> int:
         q.corners[key] = _sample(q.s, uw, vw)
 
     vertex = q.mesh.add_vertex(q.corners[key].p)
+
     q.mesh.vertex[vertex].attributes["u"] = uw
     q.mesh.vertex[vertex].attributes["v"] = vw
     q.keys[key] = vertex
@@ -519,8 +528,7 @@ def _vertex_at(q: _Quadtree, u: float, v: float) -> int:
 def _leaf_polygon(q: _Quadtree, nd: _Node) -> list[int]:
     """Vertices counter-clockwise around the leaf with the T-junction vertices on each edge, repeats at poles and seams dropped."""
 
-    poly: list[int] = []
-    poly.append(_vertex_at(q, nd.u0, nd.v0))
+    poly: list[int] = [_vertex_at(q, nd.u0, nd.v0)]
 
     for u in _row_mids(q, nd.u0, nd.u1, nd.v0):
         poly.append(_vertex_at(q, u, nd.v0))
@@ -583,7 +591,9 @@ def _add_leaf_faces(q: _Quadtree, nd: _Node) -> None:
 
     cu = _wrap(q.closed[0], q.usp, (nd.u0 + nd.u1) * 0.5)
     cv = _wrap(q.closed[1], q.vsp, (nd.v0 + nd.v1) * 0.5)
+
     q.corners.setdefault((_quantize(cu), _quantize(cv)), nd.c[4])
+
     centre = _vertex_at(q, cu, cv)
 
     for i in range(n):
@@ -596,8 +606,6 @@ def _add_leaf_faces(q: _Quadtree, nd: _Node) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Normals
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _fan_normals(mesh: Mesh) -> list[Vector]:
     """Sum of the unnormalized face normals around each vertex key, faces taken in key order."""
 
@@ -627,17 +635,16 @@ def _set_normals(mesh: Mesh) -> None:
     for key, vd in mesh.vertex.items():
         length = _norm(sums[key])
         n = sums[key] / length if length > 1e-15 else sums[key]
+
         vd.set_normal(n[0], n[1], n[2])
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# RemeshNurbsSurfaceAdaptive
-# ═══════════════════════════════════════════════════════════════════════════
 
 
 class RemeshNurbsSurfaceAdaptive:
     """Adaptive mesh of a NURBS surface: a quadtree in UV split where normals turn or chords deviate, T-junctions fanned, poles and seams shared."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, surface: NurbsSurface):
         """Construct over a surface with the default tolerances."""
 
@@ -647,30 +654,9 @@ class RemeshNurbsSurfaceAdaptive:
         self._min_edge_length = 0.0  # Shortest cell edge still split, 0 for no limit.
         self._max_chord_height = 0.0  # Largest chord height, 0 for 0.5 percent of bbox.
 
-    def set_max_angle(self, degrees: float) -> RemeshNurbsSurfaceAdaptive:
-        """Largest normal turn across a cell in degrees, 20 by default."""
-        self._max_angle = degrees
-
-        return self
-
-    def set_max_edge_length(self, length: float) -> RemeshNurbsSurfaceAdaptive:
-        """Longest cell edge; 0 for no limit."""
-        self._max_edge_length = length
-
-        return self
-
-    def set_min_edge_length(self, length: float) -> RemeshNurbsSurfaceAdaptive:
-        """Shortest cell edge still split; 0 for no limit."""
-        self._min_edge_length = length
-
-        return self
-
-    def set_max_chord_height(self, height: float) -> RemeshNurbsSurfaceAdaptive:
-        """Largest chord height; 0 for 0.5 percent of the bbox diagonal."""
-        self._max_chord_height = height
-
-        return self
-
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def get_max_angle(self) -> float:
         """Return the largest normal turn in degrees."""
         return self._max_angle
@@ -687,6 +673,40 @@ class RemeshNurbsSurfaceAdaptive:
         """Return the largest chord height."""
         return self._max_chord_height
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Mutators
+    # ═══════════════════════════════════════════════════════════════════════════
+    def set_max_angle(self, degrees: float) -> RemeshNurbsSurfaceAdaptive:
+        """Largest normal turn across a cell in degrees, 20 by default."""
+
+        self._max_angle = degrees
+
+        return self
+
+    def set_max_edge_length(self, length: float) -> RemeshNurbsSurfaceAdaptive:
+        """Longest cell edge; 0 for no limit."""
+
+        self._max_edge_length = length
+
+        return self
+
+    def set_min_edge_length(self, length: float) -> RemeshNurbsSurfaceAdaptive:
+        """Shortest cell edge still split; 0 for no limit."""
+
+        self._min_edge_length = length
+
+        return self
+
+    def set_max_chord_height(self, height: float) -> RemeshNurbsSurfaceAdaptive:
+        """Largest chord height; 0 for 0.5 percent of the bbox diagonal."""
+
+        self._max_chord_height = height
+
+        return self
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Meshing
+    # ═══════════════════════════════════════════════════════════════════════════
     def mesh(self) -> Mesh:
         """Triangle mesh with u, v vertex attributes and fan normals."""
 
@@ -703,6 +723,7 @@ class RemeshNurbsSurfaceAdaptive:
             self._max_edge_length,
             self._min_edge_length,
         )
+
         _build(q)
         _index_leaves(q)
 
