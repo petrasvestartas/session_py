@@ -61,181 +61,43 @@ def test_nurbssurface_constructor():
     )
     MINI_CHECK(scopy.cv_count() == s.cv_count())
     MINI_CHECK(scopy.guid != s.guid)
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[0][0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[0][1], Point(-0.416666666666667, 0.578703703703704, 0.833333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[0][2], Point(-0.666666666666667, 1.462962962962963, 1.333333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[0][3], Point(-0.750000000000000, 2.500000000000000, 1.500000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[0][4], Point(-0.666666666666667, 3.537037037037037, 1.333333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[0][5], Point(-0.416666666666667, 4.421296296296297, 0.833333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[0][6], Point(0.000000000000000, 5.000000000000000, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[1][0], Point(0.992187500000000, -0.562500000000000, 1.125000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[1][1], Point(0.881510416666667, 0.333912037037037, 1.958333333333334)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[1][2], Point(0.815104166666667, 1.379629629629630, 2.458333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[1][3], Point(0.792968750000000, 2.500000000000000, 2.625000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[1][4], Point(0.815104166666667, 3.620370370370370, 2.458333333333334)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[1][5], Point(0.881510416666667, 4.666087962962964, 1.958333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[1][6], Point(0.992187500000000, 5.562500000000000, 1.125000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[2][0], Point(2.500000000000000, -0.750000000000000, 1.500000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[2][1], Point(2.500000000000000, 0.252314814814815, 2.333333333333334)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[2][2], Point(2.500000000000000, 1.351851851851852, 2.833333333333334)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[2][3], Point(2.500000000000000, 2.500000000000000, 3.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[2][4], Point(2.500000000000000, 3.648148148148148, 2.833333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[2][5], Point(2.500000000000000, 4.747685185185186, 2.333333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[2][6], Point(2.500000000000000, 5.750000000000000, 1.500000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[3][0], Point(4.007812500000000, -0.562500000000000, 1.125000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[3][1], Point(4.118489583333334, 0.333912037037037, 1.958333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[3][2], Point(4.184895833333334, 1.379629629629630, 2.458333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[3][3], Point(4.207031250000000, 2.500000000000000, 2.625000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[3][4], Point(4.184895833333333, 3.620370370370370, 2.458333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[3][5], Point(4.118489583333333, 4.666087962962964, 1.958333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[3][6], Point(4.007812500000000, 5.562500000000000, 1.125000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[4][0], Point(5.000000000000000, 0.000000000000000, 0.000000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[4][1], Point(5.416666666666668, 0.578703703703704, 0.833333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[4][2], Point(5.666666666666668, 1.462962962962963, 1.333333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[4][3], Point(5.750000000000000, 2.500000000000000, 1.500000000000000)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[4][4], Point(5.666666666666666, 3.537037037037037, 1.333333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[4][5], Point(5.416666666666667, 4.421296296296297, 0.833333333333333)
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            p[4][6], Point(5.000000000000000, 5.000000000000000, 0.000000000000000)
-        )
-    )
+    MINI_CHECK(s == sother)
+    MINI_CHECK(not (s != sother))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][0], Point(0.000000000000000, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][1], Point(-0.416666666666667, 0.578703703703704, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][2], Point(-0.666666666666667, 1.462962962962963, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][3], Point(-0.750000000000000, 2.500000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][4], Point(-0.666666666666667, 3.537037037037037, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][5], Point(-0.416666666666667, 4.421296296296297, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[0][6], Point(0.000000000000000, 5.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][0], Point(0.992187500000000, -0.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][1], Point(0.881510416666667, 0.333912037037037, 1.958333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][2], Point(0.815104166666667, 1.379629629629630, 2.458333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][3], Point(0.792968750000000, 2.500000000000000, 2.625000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][4], Point(0.815104166666667, 3.620370370370370, 2.458333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][5], Point(0.881510416666667, 4.666087962962964, 1.958333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[1][6], Point(0.992187500000000, 5.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][0], Point(2.500000000000000, -0.750000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][1], Point(2.500000000000000, 0.252314814814815, 2.333333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][2], Point(2.500000000000000, 1.351851851851852, 2.833333333333334)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][3], Point(2.500000000000000, 2.500000000000000, 3.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][4], Point(2.500000000000000, 3.648148148148148, 2.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][5], Point(2.500000000000000, 4.747685185185186, 2.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[2][6], Point(2.500000000000000, 5.750000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][0], Point(4.007812500000000, -0.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][1], Point(4.118489583333334, 0.333912037037037, 1.958333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][2], Point(4.184895833333334, 1.379629629629630, 2.458333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][3], Point(4.207031250000000, 2.500000000000000, 2.625000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][4], Point(4.184895833333333, 3.620370370370370, 2.458333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][5], Point(4.118489583333333, 4.666087962962964, 1.958333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[3][6], Point(4.007812500000000, 5.562500000000000, 1.125000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][0], Point(5.000000000000000, 0.000000000000000, 0.000000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][1], Point(5.416666666666668, 0.578703703703704, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][2], Point(5.666666666666668, 1.462962962962963, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][3], Point(5.750000000000000, 2.500000000000000, 1.500000000000000)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][4], Point(5.666666666666666, 3.537037037037037, 1.333333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][5], Point(5.416666666666667, 4.421296296296297, 0.833333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(p[4][6], Point(5.000000000000000, 5.000000000000000, 0.000000000000000)))
 
 
 @MINI_TEST("NurbsSurface", "Create From Parameters")
@@ -264,19 +126,13 @@ def test_nurbssurface_create_from_parameters():
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.0, 0.0), Point(0, 0, 0)))
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(1.0, 1.0), Point(3, 3, 0)))
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.5, 0.5), Point(1.5, 1.5, 1.125)))
-    MINI_CHECK(
-        TOLERANCE.is_point_close(s.point_at(0.37, 0.41), Point(1.11, 1.23, 1.01496402))
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.37, 0.41), Point(1.11, 1.23, 1.01496402)))
 
     fr = s.frame_at(0.3, 0.4)
     MINI_CHECK(TOLERANCE.is_point_close(fr.origin, s.point_at(0.3, 0.4)))
     n = s.normal_at(0.3, 0.4)
     za = fr.z_axis
-    MINI_CHECK(
-        abs(za[0] - n[0]) < 1e-9
-        and abs(za[1] - n[1]) < 1e-9
-        and abs(za[2] - n[2]) < 1e-9
-    )
+    MINI_CHECK(abs(za[0] - n[0]) < 1e-9 and abs(za[1] - n[1]) < 1e-9 and abs(za[2] - n[2]) < 1e-9)
 
     from session_py import Line
 
@@ -560,177 +416,37 @@ def test_division():
     planes, uvs1 = s.divide_by_count_planes(3, 3)
 
     MINI_CHECK(TOLERANCE.is_point_close(division_points[0][0], Point(0, 0, 0)))
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[0][1],
-            Point(-0.666666666666667, 1.46296296296296, 1.33333333333333),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[0][2],
-            Point(-0.666666666666667, 3.53703703703704, 1.33333333333333),
-        )
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[0][1], Point(-0.666666666666667, 1.46296296296296, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[0][2], Point(-0.666666666666667, 3.53703703703704, 1.33333333333333)))
     MINI_CHECK(TOLERANCE.is_point_close(division_points[0][3], Point(0, 5, 0)))
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[1][0],
-            Point(1.46296296296296, -0.666666666666667, 1.33333333333333),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[1][1],
-            Point(1.3641975308642, 1.3641975308642, 2.66666666666667),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[1][2],
-            Point(1.3641975308642, 3.6358024691358, 2.66666666666667),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[1][3],
-            Point(1.46296296296296, 5.66666666666667, 1.33333333333333),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[2][0],
-            Point(3.53703703703704, -0.666666666666667, 1.33333333333333),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[2][1],
-            Point(3.6358024691358, 1.3641975308642, 2.66666666666667),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[2][2],
-            Point(3.6358024691358, 3.6358024691358, 2.66666666666667),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[2][3],
-            Point(3.53703703703704, 5.66666666666667, 1.33333333333333),
-        )
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][0], Point(1.46296296296296, -0.666666666666667, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][1], Point(1.3641975308642, 1.3641975308642, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][2], Point(1.3641975308642, 3.6358024691358, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[1][3], Point(1.46296296296296, 5.66666666666667, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][0], Point(3.53703703703704, -0.666666666666667, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][1], Point(3.6358024691358, 1.3641975308642, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][2], Point(3.6358024691358, 3.6358024691358, 2.66666666666667)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[2][3], Point(3.53703703703704, 5.66666666666667, 1.33333333333333)))
     MINI_CHECK(TOLERANCE.is_point_close(division_points[3][0], Point(5, 0, 0)))
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[3][1],
-            Point(5.66666666666667, 1.46296296296296, 1.33333333333333),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_point_close(
-            division_points[3][2],
-            Point(5.66666666666667, 3.53703703703704, 1.33333333333333),
-        )
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[3][1], Point(5.66666666666667, 1.46296296296296, 1.33333333333333)))
+    MINI_CHECK(TOLERANCE.is_point_close(division_points[3][2], Point(5.66666666666667, 3.53703703703704, 1.33333333333333)))
     MINI_CHECK(TOLERANCE.is_point_close(division_points[3][3], Point(5, 5, 0)))
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[0][0],
-            Vector(-0.704360725060499, -0.704360725060499, -0.0880450906325624),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[0][1],
-            Vector(-0.722897836195991, -0.327787263130091, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[0][2],
-            Vector(-0.722897836195991, 0.327787263130091, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[0][3],
-            Vector(-0.704360725060499, 0.704360725060499, -0.0880450906325624),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[1][0],
-            Vector(-0.327787263130091, -0.722897836195991, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[1][1],
-            Vector(-0.280457757277237, -0.280457757277237, 0.917979788865771),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[1][2],
-            Vector(-0.280457757277237, 0.280457757277237, 0.917979788865771),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[1][3],
-            Vector(-0.327787263130091, 0.722897836195991, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[2][0],
-            Vector(0.327787263130091, -0.722897836195991, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[2][1],
-            Vector(0.280457757277237, -0.280457757277237, 0.917979788865771),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[2][2],
-            Vector(0.280457757277237, 0.280457757277237, 0.917979788865771),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[2][3],
-            Vector(0.327787263130091, 0.722897836195991, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[3][0],
-            Vector(0.704360725060499, -0.704360725060499, -0.0880450906325624),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[3][1],
-            Vector(0.722897836195991, -0.327787263130091, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[3][2],
-            Vector(0.722897836195991, 0.327787263130091, 0.608255068661856),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            vectors[3][3],
-            Vector(0.704360725060499, 0.704360725060499, -0.0880450906325624),
-        )
-    )
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][0], Vector(-0.704360725060499, -0.704360725060499, -0.0880450906325624)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][1], Vector(-0.722897836195991, -0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][2], Vector(-0.722897836195991, 0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[0][3], Vector(-0.704360725060499, 0.704360725060499, -0.0880450906325624)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][0], Vector(-0.327787263130091, -0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][1], Vector(-0.280457757277237, -0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][2], Vector(-0.280457757277237, 0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[1][3], Vector(-0.327787263130091, 0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][0], Vector(0.327787263130091, -0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][1], Vector(0.280457757277237, -0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][2], Vector(0.280457757277237, 0.280457757277237, 0.917979788865771)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[2][3], Vector(0.327787263130091, 0.722897836195991, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][0], Vector(0.704360725060499, -0.704360725060499, -0.0880450906325624)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][1], Vector(0.722897836195991, -0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][2], Vector(0.722897836195991, 0.327787263130091, 0.608255068661856)))
+    MINI_CHECK(TOLERANCE.is_vector_close(vectors[3][3], Vector(0.704360725060499, 0.704360725060499, -0.0880450906325624)))
     MINI_CHECK(TOLERANCE.is_close(uvs0[0][0][0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(uvs0[0][0][1], 0.0))
     MINI_CHECK(TOLERANCE.is_close(uvs0[0][1][0], 0.0))
@@ -763,198 +479,38 @@ def test_division():
     MINI_CHECK(TOLERANCE.is_close(uvs0[3][2][1], 0.666666666666667))
     MINI_CHECK(TOLERANCE.is_close(uvs0[3][3][0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(uvs0[3][3][1], 1.0))
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][0].x_axis,
-            Vector(0.317999364001908, -0.423999152002544, 0.847998304005088),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][1].x_axis,
-            Vector(0.657483781160109, -0.0556600026378928, 0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][2].x_axis,
-            Vector(0.657483781160109, 0.055660002637893, 0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][3].x_axis,
-            Vector(0.317999364001908, 0.423999152002544, 0.847998304005088),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][0].x_axis,
-            Vector(0.93542594448836, -0.158100159631836, 0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][1].x_axis,
-            Vector(0.957938608304167, -0.0211991946512679, 0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][2].x_axis,
-            Vector(0.957938608304167, 0.0211991946512677, 0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][3].x_axis,
-            Vector(0.93542594448836, 0.158100159631835, 0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][0].x_axis,
-            Vector(0.93542594448836, 0.158100159631835, -0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][1].x_axis,
-            Vector(0.957938608304167, 0.0211991946512679, -0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][2].x_axis,
-            Vector(0.957938608304167, -0.021199194651268, -0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][3].x_axis,
-            Vector(0.93542594448836, -0.158100159631836, -0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][0].x_axis,
-            Vector(0.317999364001908, 0.423999152002544, -0.847998304005088),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][1].x_axis,
-            Vector(0.657483781160109, 0.0556600026378928, -0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][2].x_axis,
-            Vector(0.657483781160109, -0.0556600026378928, -0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][3].x_axis,
-            Vector(0.317999364001908, -0.423999152002544, -0.847998304005088),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][0].y_axis,
-            Vector(-0.423999152002544, 0.317999364001908, 0.847998304005088),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][1].y_axis,
-            Vector(-0.158100159631836, 0.93542594448836, 0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][2].y_axis,
-            Vector(0.158100159631835, 0.93542594448836, -0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[0][3].y_axis,
-            Vector(0.423999152002544, 0.317999364001908, -0.847998304005088),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][0].y_axis,
-            Vector(-0.0556600026378928, 0.657483781160109, 0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][1].y_axis,
-            Vector(-0.0211991946512679, 0.957938608304167, 0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][2].y_axis,
-            Vector(0.0211991946512679, 0.957938608304167, -0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[1][3].y_axis,
-            Vector(0.0556600026378928, 0.657483781160109, -0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][0].y_axis,
-            Vector(0.0556600026378928, 0.657483781160109, 0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][1].y_axis,
-            Vector(0.0211991946512678, 0.957938608304167, 0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][2].y_axis,
-            Vector(-0.0211991946512678, 0.957938608304167, -0.286189127792116),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[2][3].y_axis,
-            Vector(-0.0556600026378928, 0.657483781160109, -0.751410035611553),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][0].y_axis,
-            Vector(0.423999152002544, 0.317999364001908, 0.847998304005088),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][1].y_axis,
-            Vector(0.158100159631835, 0.93542594448836, 0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][2].y_axis,
-            Vector(-0.158100159631836, 0.93542594448836, -0.316200319263671),
-        )
-    )
-    MINI_CHECK(
-        TOLERANCE.is_vector_close(
-            planes[3][3].y_axis,
-            Vector(-0.423999152002544, 0.317999364001908, -0.847998304005088),
-        )
-    )
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][0].x_axis, Vector(0.317999364001908, -0.423999152002544, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][1].x_axis, Vector(0.657483781160109, -0.0556600026378928, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][2].x_axis, Vector(0.657483781160109, 0.055660002637893, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][3].x_axis, Vector(0.317999364001908, 0.423999152002544, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][0].x_axis, Vector(0.93542594448836, -0.158100159631836, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][1].x_axis, Vector(0.957938608304167, -0.0211991946512679, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][2].x_axis, Vector(0.957938608304167, 0.0211991946512677, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][3].x_axis, Vector(0.93542594448836, 0.158100159631835, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][0].x_axis, Vector(0.93542594448836, 0.158100159631835, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][1].x_axis, Vector(0.957938608304167, 0.0211991946512679, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][2].x_axis, Vector(0.957938608304167, -0.021199194651268, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][3].x_axis, Vector(0.93542594448836, -0.158100159631836, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][0].x_axis, Vector(0.317999364001908, 0.423999152002544, -0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][1].x_axis, Vector(0.657483781160109, 0.0556600026378928, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][2].x_axis, Vector(0.657483781160109, -0.0556600026378928, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][3].x_axis, Vector(0.317999364001908, -0.423999152002544, -0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][0].y_axis, Vector(-0.423999152002544, 0.317999364001908, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][1].y_axis, Vector(-0.158100159631836, 0.93542594448836, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][2].y_axis, Vector(0.158100159631835, 0.93542594448836, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[0][3].y_axis, Vector(0.423999152002544, 0.317999364001908, -0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][0].y_axis, Vector(-0.0556600026378928, 0.657483781160109, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][1].y_axis, Vector(-0.0211991946512679, 0.957938608304167, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][2].y_axis, Vector(0.0211991946512679, 0.957938608304167, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[1][3].y_axis, Vector(0.0556600026378928, 0.657483781160109, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][0].y_axis, Vector(0.0556600026378928, 0.657483781160109, 0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][1].y_axis, Vector(0.0211991946512678, 0.957938608304167, 0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][2].y_axis, Vector(-0.0211991946512678, 0.957938608304167, -0.286189127792116)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[2][3].y_axis, Vector(-0.0556600026378928, 0.657483781160109, -0.751410035611553)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][0].y_axis, Vector(0.423999152002544, 0.317999364001908, 0.847998304005088)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][1].y_axis, Vector(0.158100159631835, 0.93542594448836, 0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][2].y_axis, Vector(-0.158100159631836, 0.93542594448836, -0.316200319263671)))
+    MINI_CHECK(TOLERANCE.is_vector_close(planes[3][3].y_axis, Vector(-0.423999152002544, 0.317999364001908, -0.847998304005088)))
 
 
 @MINI_TEST("NurbsSurface", "Evaluation")
@@ -1010,7 +566,6 @@ def test_evaluation():
 
 @MINI_TEST("NurbsSurface", "Modification")
 def test_modification():
-    import copy
     from session_py import NurbsSurface
     from session_py import Point
 
@@ -1035,28 +590,26 @@ def test_modification():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    s_rev = copy.deepcopy(s)
+    s_rev = s.duplicate()
     s_rev.reverse(0)
 
     MINI_CHECK(s_rev.point_at_corner(0, 0) == s.point_at_corner(1, 0))
     MINI_CHECK(s_rev.normal_at(0.5, 0.5) == s.normal_at(0.5, 0.5) * -1)
 
-    s_tr = copy.deepcopy(s)
+    s_tr = s.duplicate()
     s_tr.transpose()
     MINI_CHECK(s.point_at(0, 0.5) == s_tr.point_at(0.5, 0))
 
-    s_swap = copy.deepcopy(s)
+    s_swap = s.duplicate()
     s_swap.swap_coordinates(0, 2)
     MINI_CHECK(s.point_at(0.5, 0.5)[0] == s_swap.point_at(0.5, 0.5)[2])
     MINI_CHECK(s.point_at(0.5, 0.5)[2] == s_swap.point_at(0.5, 0.5)[0])
 
-    s_trim = copy.deepcopy(s)
+    s_trim = s.duplicate()
     s_trim.trim(0, (0.25, 0.75))
     MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[0], 0.25))
     MINI_CHECK(TOLERANCE.is_close(s_trim.domain(0)[1], 0.75))
-    MINI_CHECK(
-        TOLERANCE.is_point_close(s.point_at(0.25, 0.5), s_trim.point_at(0.25, 0.5))
-    )
+    MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.25, 0.5), s_trim.point_at(0.25, 0.5)))
 
     west, east = s.split(0, 0.5)
     ww, we = west.split(1, (west.domain(1)[0] + west.domain(1)[1]) / 2.0)
@@ -1067,14 +620,14 @@ def test_modification():
     MINI_CHECK(TOLERANCE.is_point_close(ew.point_at_corner(0, 1), center))
     MINI_CHECK(TOLERANCE.is_point_close(ee.point_at_corner(0, 0), center))
 
-    s_rat = copy.deepcopy(s)
+    s_rat = s.duplicate()
     s_rat.make_rational()
     s_rat.set_weight(2, 2, 3.0)
     MINI_CHECK(s.point_at(0.5, 0.5) != s_rat.point_at(0.5, 0.5))
     s_rat.make_non_rational()
     MINI_CHECK(s.point_at(0.5, 0.5) == s_rat.point_at(0.5, 0.5))
 
-    s_deg = copy.deepcopy(s)
+    s_deg = s.duplicate()
     s_deg.increase_degree(0, 6)
     s_deg.increase_degree(1, 6)
     MINI_CHECK(s.cv_count(0) == 4 and s.cv_count(1) == 4)
@@ -1532,18 +1085,19 @@ def test_protobuf_roundtrip():
         Point(5.0, 5.0, 0.0),
     ]
     surface = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
-
-    proto_string = surface.pb_dumps()
-    loaded_proto_string = NurbsSurface.pb_loads(proto_string)
-
-    filename = (
-        Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
-    )
+    guid = surface.guid
+    filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbssurface.bin"
     surface.pb_dump(filename)
+
+    loaded_proto_string = NurbsSurface.pb_loads(surface.pb_dumps())
     loaded = NurbsSurface.pb_load(filename)
+    converted = NurbsSurface.from_proto(surface.to_proto())
 
     MINI_CHECK(loaded_proto_string == surface)
     MINI_CHECK(loaded == surface)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(converted == surface)
+    MINI_CHECK(converted.guid == guid)
 
 
 @MINI_TEST("NurbsSurface", "Closest Point")

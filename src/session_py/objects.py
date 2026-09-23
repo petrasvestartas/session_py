@@ -266,7 +266,7 @@ class Objects:
             proto.nurbscurves.add().CopyFrom(nc.to_proto())
 
         for ns in self.nurbssurfaces:
-            ns.pb_fill(proto.nurbssurfaces.add())
+            proto.nurbssurfaces.add().CopyFrom(ns.to_proto())
 
         for b in self.breps:
             proto.breps.add().ParseFromString(b.pb_dumps())
@@ -313,7 +313,7 @@ class Objects:
             objects.nurbscurves.append(NurbsCurve.pb_loads(nc.SerializeToString()))
 
         for ns in proto.nurbssurfaces:
-            objects.nurbssurfaces.append(NurbsSurface.pb_loads(ns.SerializeToString()))
+            objects.nurbssurfaces.append(NurbsSurface.from_proto(ns))
 
         for b in proto.breps:
             objects.breps.append(BRep.pb_loads(b.SerializeToString()))
