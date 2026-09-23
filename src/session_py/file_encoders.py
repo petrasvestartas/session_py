@@ -13,13 +13,88 @@ _CLASS_MODULE_MAP = {
 _EXTERNAL_CLASS_MAP: dict = {}
 
 
-def file_register_class(name: str, cls) -> None:
-    """Register an external class by its "type" name for polymorphic decoding"""
+# ═══════════════════════════════════════════════════════════════════════════
+# JSON string
+# ═══════════════════════════════════════════════════════════════════════════
+def file_json_dumps(data: Any, pretty: bool = True) -> str:
+    """Serialize an object to a JSON string."""
+
+    if pretty:
+        return json.dumps(data, cls=GeometryFileEncoder, indent=4)
+
+    return json.dumps(data, cls=GeometryFileEncoder)
+
+
+def file_json_loads(json_str: str) -> Any:
+    """Deserialize an object from a JSON string."""
+
+    return json.loads(json_str, cls=GeometryFileDecoder)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# JSON file
+# ═══════════════════════════════════════════════════════════════════════════
+def file_json_dump(data: Any, filepath: str, pretty: bool = True) -> None:
+    """Write an object to a JSON file."""
+
+    with open(filepath, "w") as file:
+        file.write(file_json_dumps(data, pretty))
+
+
+def file_json_load_data(filepath: str) -> Any:
+    """Read a JSON value from a file."""
+
+    with open(filepath) as file:
+        return json.load(file)
+
+
+def file_json_load(filepath: str) -> Any:
+    """Read an object from a JSON file."""
+
+    with open(filepath) as file:
+        return file_json_loads(file.read())
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Collections
+# ═══════════════════════════════════════════════════════════════════════════
+def file_encode_collection(collection: list) -> list:
+    """Encode a collection of objects to a JSON array, skipping None entries."""
+
+    array = []
+
+    for item in collection:
+        if item is not None:
+            array.append(item.__jsondump__())
+
+    return array
+
+
+def file_decode_collection(data: Any, cls: type) -> list:
+    """Decode a JSON array to a collection of objects."""
+
+    result = []
+
+    if not isinstance(data, list):
+        return result
+
+    for item in data:
+        result.append(cls.__jsonload__(item))
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Polymorphic decoding
+# ═══════════════════════════════════════════════════════════════════════════
+def file_register_class(name: str, cls: type) -> None:
+    """Register an external class by its "type" name for polymorphic decoding."""
+
     _EXTERNAL_CLASS_MAP[name] = cls
 
 
 def _get_class_from_name(class_name: str):
-    """Find a class by name in the registry or by importing session_py.<lowercase name>"""
+    """Find a class by name in the registry or by importing session_py.<lowercase name>."""
 
     if class_name in _EXTERNAL_CLASS_MAP:
         return _EXTERNAL_CLASS_MAP[class_name]
@@ -34,7 +109,7 @@ def _get_class_from_name(class_name: str):
 
 
 def _decode_typed(node: dict) -> Any:
-    """Rebuild a geometry object from a dict with a "type" field, or return the dict"""
+    """Rebuild a geometry object from a dict with a "type" field, or return the dict."""
 
     try:
         class_name = node["type"].rsplit("/", 1)[-1]
@@ -48,8 +123,33 @@ def _decode_typed(node: dict) -> Any:
         return node
 
 
+def file_decode_node(node: Any) -> Any:
+    """Recursively rebuild geometry objects inside a decoded JSON node."""
+
+    if isinstance(node, list):
+        result = []
+
+        for item in node:
+            result.append(file_decode_node(item))
+
+        return result
+
+    if not isinstance(node, dict):
+        return node
+
+    if "type" in node:
+        return _decode_typed(node)
+
+    result = {}
+
+    for key, value in node.items():
+        result[key] = file_decode_node(value)
+
+    return result
+
+
 class GeometryFileEncoder(json.JSONEncoder):
-    """JSON encoder that serializes geometry objects through __jsondump__"""
+    """JSON encoder that serializes geometry objects through __jsondump__."""
 
     def default(self, obj: Any) -> Any:
         if hasattr(obj, "__jsondump__"):
@@ -62,7 +162,7 @@ class GeometryFileEncoder(json.JSONEncoder):
 
 
 class GeometryFileDecoder(json.JSONDecoder):
-    """JSON decoder that rebuilds geometry objects from their "type" field"""
+    """JSON decoder that rebuilds geometry objects from their "type" field."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(object_hook=self.object_hook, *args, **kwargs)
@@ -72,43 +172,3 @@ class GeometryFileDecoder(json.JSONDecoder):
             return obj
 
         return _decode_typed(obj)
-
-
-def file_json_dump(data: Any, filepath: str, pretty: bool = True) -> None:
-    """Write data to a json file"""
-    with open(filepath, "w") as f:
-        f.write(file_json_dumps(data, pretty))
-
-
-def file_json_load(filepath: str) -> Any:
-    """Read data from a json file"""
-    with open(filepath) as f:
-        return file_json_loads(f.read())
-
-
-def file_json_dumps(data: Any, pretty: bool = True) -> str:
-    """Serialize data to a json string"""
-    if pretty:
-        return json.dumps(data, cls=GeometryFileEncoder, indent=4)
-
-    return json.dumps(data, cls=GeometryFileEncoder)
-
-
-def file_json_loads(json_str: str) -> Any:
-    """Deserialize data from a json string"""
-    return json.loads(json_str, cls=GeometryFileDecoder)
-
-
-def file_decode_node(node: Any) -> Any:
-    """Recursively rebuild geometry objects inside a decoded json node"""
-
-    if isinstance(node, list):
-        return [file_decode_node(x) for x in node]
-
-    if not isinstance(node, dict):
-        return node
-
-    if "type" in node:
-        return _decode_typed(node)
-
-    return {k: file_decode_node(v) for k, v in node.items()}

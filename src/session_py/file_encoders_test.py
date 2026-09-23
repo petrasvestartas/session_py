@@ -56,17 +56,14 @@ def test_file_json_dumps_loads():
 @MINI_TEST("FileEncoders", "Encode Collection Values")
 def test_file_encode_collection_values():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps
-    import json
+    from session_py.file_encoders import file_encode_collection
 
-    points = [
-        Point(1.0, 2.0, 3.0),
-        Point(4.0, 5.0, 6.0),
-        Point(7.0, 8.0, 9.0),
-    ]
+    points = []
+    points.append(Point(1.0, 2.0, 3.0))
+    points.append(Point(4.0, 5.0, 6.0))
+    points.append(Point(7.0, 8.0, 9.0))
 
-    json_str = file_json_dumps(points)
-    json_arr = json.loads(json_str)
+    json_arr = file_encode_collection(points)
 
     MINI_CHECK(isinstance(json_arr, list))
     MINI_CHECK(len(json_arr) == 3)
@@ -78,16 +75,13 @@ def test_file_encode_collection_values():
 @MINI_TEST("FileEncoders", "Encode Collection Shared Ptr")
 def test_file_encode_collection_shared_ptr():
     from session_py import Line
-    from session_py.file_encoders import file_json_dumps
-    import json
+    from session_py.file_encoders import file_encode_collection
 
-    lines = [
-        Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0),
-        Line(0.0, 0.0, 0.0, 0.0, 1.0, 0.0),
-    ]
+    lines = []
+    lines.append(Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0))
+    lines.append(Line(0.0, 0.0, 0.0, 0.0, 1.0, 0.0))
 
-    json_str = file_json_dumps(lines)
-    json_arr = json.loads(json_str)
+    json_arr = file_encode_collection(lines)
 
     MINI_CHECK(isinstance(json_arr, list))
     MINI_CHECK(len(json_arr) == 2)
@@ -98,16 +92,15 @@ def test_file_encode_collection_shared_ptr():
 @MINI_TEST("FileEncoders", "Decode Collection")
 def test_file_decode_collection():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps
-    from session_py.file_encoders import file_json_loads
+    from session_py.file_encoders import file_encode_collection
+    from session_py.file_encoders import file_decode_collection
 
-    original_points = [
-        Point(1.0, 2.0, 3.0),
-        Point(4.0, 5.0, 6.0),
-    ]
+    original_points = []
+    original_points.append(Point(1.0, 2.0, 3.0))
+    original_points.append(Point(4.0, 5.0, 6.0))
 
-    json_str = file_json_dumps(original_points)
-    decoded_points = file_json_loads(json_str)
+    json_arr = file_encode_collection(original_points)
+    decoded_points = file_decode_collection(json_arr, Point)
 
     MINI_CHECK(len(decoded_points) == 2)
     MINI_CHECK(TOLERANCE.is_close(decoded_points[0][0], 1.0))
@@ -117,16 +110,15 @@ def test_file_decode_collection():
 @MINI_TEST("FileEncoders", "Decode Collection Ptr")
 def test_file_decode_collection_ptr():
     from session_py import Vector
-    from session_py.file_encoders import file_json_dumps
-    from session_py.file_encoders import file_json_loads
+    from session_py.file_encoders import file_encode_collection
+    from session_py.file_encoders import file_decode_collection
 
-    original_vectors = [
-        Vector(1.0, 0.0, 0.0),
-        Vector(0.0, 1.0, 0.0),
-    ]
+    original_vectors = []
+    original_vectors.append(Vector(1.0, 0.0, 0.0))
+    original_vectors.append(Vector(0.0, 1.0, 0.0))
 
-    json_str = file_json_dumps(original_vectors)
-    decoded_vectors = file_json_loads(json_str)
+    json_arr = file_encode_collection(original_vectors)
+    decoded_vectors = file_decode_collection(json_arr, Vector)
 
     MINI_CHECK(len(decoded_vectors) == 2)
     MINI_CHECK(TOLERANCE.is_close(decoded_vectors[0][0], 1.0))
@@ -136,19 +128,21 @@ def test_file_decode_collection_ptr():
 @MINI_TEST("FileEncoders", "Nested Collections")
 def test_nested_collections():
     from session_py import Line
-    from session_py.file_encoders import file_json_dumps
-    from session_py.file_encoders import file_json_loads
+    from session_py.file_encoders import file_encode_collection
+    from session_py.file_encoders import file_decode_collection
+    import json
 
-    lines = [
-        Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0),
-        Line(0.0, 0.0, 0.0, 0.0, 1.0, 0.0),
-    ]
+    lines = []
+    lines.append(Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0))
+    lines.append(Line(0.0, 0.0, 0.0, 0.0, 1.0, 0.0))
 
-    json_str = file_json_dumps(lines)
+    json_arr = file_encode_collection(lines)
+    json_str = json.dumps(json_arr)
 
     MINI_CHECK(json_str != "")
 
-    loaded = file_json_loads(json_str)
+    loaded_json = json.loads(json_str)
+    loaded = file_decode_collection(loaded_json, Line)
 
     MINI_CHECK(len(loaded) == 2)
     MINI_CHECK(TOLERANCE.is_close(loaded[0].end()[0], 1.0))
@@ -158,24 +152,27 @@ def test_nested_collections():
 @MINI_TEST("FileEncoders", "Roundtrip File Io")
 def test_roundtrip_file_io():
     from session_py import Vector
+    from session_py.file_encoders import file_encode_collection
+    from session_py.file_encoders import file_decode_collection
     from session_py.file_encoders import file_json_dump
-    from session_py.file_encoders import file_json_load
+    from session_py.file_encoders import file_json_load_data
     from pathlib import Path
 
-    vectors = [
-        Vector(1.0, 0.0, 0.0),
-        Vector(0.0, 1.0, 0.0),
-        Vector(0.0, 0.0, 1.0),
-    ]
+    vectors = []
+    vectors.append(Vector(1.0, 0.0, 0.0))
+    vectors.append(Vector(0.0, 1.0, 0.0))
+    vectors.append(Vector(0.0, 0.0, 1.0))
 
     filepath = (
         Path(__file__).resolve().parents[2]
         / "serialization"
         / "test_encoders_collection.json"
     )
-    file_json_dump(vectors, filepath)
+    json_arr = file_encode_collection(vectors)
+    file_json_dump(json_arr, filepath)
 
-    decoded_vectors = file_json_load(filepath)
+    loaded_json = file_json_load_data(filepath)
+    decoded_vectors = file_decode_collection(loaded_json, Vector)
 
     MINI_CHECK(len(decoded_vectors) == 3)
     MINI_CHECK(TOLERANCE.is_close(decoded_vectors[0][0], 1.0))
@@ -220,24 +217,27 @@ def test_decode_primitives():
     float_val = 3.14
     json_str = json.dumps(float_val)
     loaded = json.loads(json_str)
+
     MINI_CHECK(TOLERANCE.is_close(loaded, 3.14))
 
     text = "hello"
     json_str = json.dumps(text)
     loaded = json.loads(json_str)
+
     MINI_CHECK(loaded == "hello")
 
     flag = True
     json_str = json.dumps(flag)
     loaded = json.loads(json_str)
+
     MINI_CHECK(loaded is True)
 
 
 @MINI_TEST("FileEncoders", "Decode List")
 def test_decode_list():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps
-    from session_py.file_encoders import file_json_loads
+    from session_py.file_encoders import file_encode_collection
+    from session_py.file_encoders import file_decode_collection
     import json
 
     data = [1, 2, 3]
@@ -248,13 +248,13 @@ def test_decode_list():
     MINI_CHECK(loaded_vec[0] == 1)
     MINI_CHECK(loaded_vec[2] == 3)
 
-    points = [
-        Point(1.0, 2.0, 3.0),
-        Point(4.0, 5.0, 6.0),
-    ]
+    points = []
+    points.append(Point(1.0, 2.0, 3.0))
+    points.append(Point(4.0, 5.0, 6.0))
 
-    json_str = file_json_dumps(points)
-    decoded = file_json_loads(json_str)
+    json_arr = file_encode_collection(points)
+    decoded = file_decode_collection(json_arr, Point)
+
     MINI_CHECK(len(decoded) == 2)
     MINI_CHECK(TOLERANCE.is_close(decoded[0][0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(decoded[1][0], 4.0))
@@ -267,7 +267,10 @@ def test_decode_dict():
     from session_py.file_encoders import file_json_loads
     import json
 
-    data = {"a": 1, "b": 2}
+    data = {}
+    data["a"] = 1
+    data["b"] = 2
+
     json_str = json.dumps(data)
     loaded = json.loads(json_str)
 
@@ -277,6 +280,7 @@ def test_decode_dict():
     vec = Vector(1.0, 2.0, 3.0)
     vec_json = file_json_dumps(vec)
     loaded_vec = file_json_loads(vec_json)
+
     MINI_CHECK(TOLERANCE.is_close(loaded_vec[0], 1.0))
 
 
@@ -296,26 +300,27 @@ def test_list_in_list_in_list():
 @MINI_TEST("FileEncoders", "Dict Of Lists")
 def test_dict_of_lists():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps
-    from session_py.file_encoders import file_json_loads
+    from session_py.file_encoders import file_encode_collection
+    from session_py.file_encoders import file_decode_collection
+    import json
 
-    points = [
-        Point(1.0, 0.0, 0.0),
-        Point(0.0, 1.0, 0.0),
-    ]
+    points = []
+    points.append(Point(1.0, 0.0, 0.0))
+    points.append(Point(0.0, 1.0, 0.0))
 
-    data = {
-        "numbers": [1, 2, 3],
-        "letters": ["a", "b", "c"],
-        "points": points,
-    }
+    data = {}
+    data["numbers"] = [1, 2, 3]
+    data["letters"] = ["a", "b", "c"]
+    data["points"] = file_encode_collection(points)
 
-    json_str = file_json_dumps(data)
-    loaded = file_json_loads(json_str)
+    json_str = json.dumps(data)
+    loaded = json.loads(json_str)
 
     MINI_CHECK(len(loaded["numbers"]) == 3)
     MINI_CHECK(loaded["letters"][0] == "a")
-    loaded_points = loaded["points"]
+
+    loaded_points = file_decode_collection(loaded["points"], Point)
+
     MINI_CHECK(len(loaded_points) == 2)
     MINI_CHECK(TOLERANCE.is_close(loaded_points[0][0], 1.0))
 
@@ -323,24 +328,24 @@ def test_dict_of_lists():
 @MINI_TEST("FileEncoders", "List Of Dict")
 def test_list_of_dict():
     from session_py import Point
-    from session_py.file_encoders import file_json_dumps
-    from session_py.file_encoders import file_json_loads
+    import json
 
     point = Point(1.0, 2.0, 3.0)
 
-    data = [
-        {"name": "point1", "value": 10},
-        {"name": "point2", "value": 20},
-        {"geometry": point},
-    ]
+    data = []
+    data.append({"name": "point1", "value": 10})
+    data.append({"name": "point2", "value": 20})
+    data.append({"geometry": point.__jsondump__()})
 
-    json_str = file_json_dumps(data)
-    loaded = file_json_loads(json_str)
+    json_str = json.dumps(data)
+    loaded = json.loads(json_str)
 
     MINI_CHECK(len(loaded) == 3)
     MINI_CHECK(loaded[0]["name"] == "point1")
     MINI_CHECK(loaded[1]["value"] == 20)
-    loaded_point = loaded[2]["geometry"]
+
+    loaded_point = Point.__jsonload__(loaded[2]["geometry"])
+
     MINI_CHECK(TOLERANCE.is_close(loaded_point[2], 3.0))
 
 
@@ -348,24 +353,26 @@ def test_list_of_dict():
 def test_dict_of_dicts():
     from session_py import Point
     from session_py import Vector
-    from session_py.file_encoders import file_json_dumps
-    from session_py.file_encoders import file_json_loads
+    import json
 
     point = Point(1.0, 2.0, 3.0)
     vec = Vector(0.0, 0.0, 1.0)
 
-    data = {
-        "config": {"tolerance": 0.001, "scale": 1000},
-        "geometry": {"point": point, "vector": vec},
-    }
+    data = {"config": {}, "geometry": {}}
+    data["config"]["tolerance"] = 0.001
+    data["config"]["scale"] = 1000
+    data["geometry"]["point"] = point.__jsondump__()
+    data["geometry"]["vector"] = vec.__jsondump__()
 
-    json_str = file_json_dumps(data)
-    loaded = file_json_loads(json_str)
+    json_str = json.dumps(data)
+    loaded = json.loads(json_str)
 
     MINI_CHECK(TOLERANCE.is_close(loaded["config"]["tolerance"], 0.001))
     MINI_CHECK(loaded["config"]["scale"] == 1000)
-    loaded_point = loaded["geometry"]["point"]
-    loaded_vec = loaded["geometry"]["vector"]
+
+    loaded_point = Point.__jsonload__(loaded["geometry"]["point"])
+    loaded_vec = Vector.__jsonload__(loaded["geometry"]["vector"])
+
     MINI_CHECK(TOLERANCE.is_close(loaded_point[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(loaded_vec[2], 1.0))
 
@@ -375,10 +382,11 @@ def test_write_error():
     from session_py import Point
     from session_py.file_encoders import file_json_dump
 
+    point = Point(1.0, 2.0, 3.0)
     threw = False
 
     try:
-        file_json_dump(Point(1.0, 2.0, 3.0), "/definitely/missing-directory/test.json")
+        file_json_dump(point, "serialization/missing-directory/test.json")
     except OSError:
         threw = True
 
