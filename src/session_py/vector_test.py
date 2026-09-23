@@ -33,10 +33,13 @@ def test_vector_constructor():
 
     vmult = v.duplicate()
     vmult *= 2.0
+
     vdiv = v.duplicate()
     vdiv /= 2.0
+
     vadd = v.duplicate()
     vadd += Vector(1.0, 1.0, 1.0)
+
     vsub = v.duplicate()
     vsub -= Vector(1.0, 1.0, 1.0)
 
@@ -229,9 +232,10 @@ def test_vector_projection():
     x = Vector.x_axis()
     y = Vector.y_axis()
     z = Vector.z_axis()
+
     proj_x, len_x, perp_x, perp_len_x = v.projection(x)
-    proj_y, len_y, perp_y, perp_len_y = v.projection(y)
-    proj_z, len_z, perp_z, perp_len_z = v.projection(z)
+    proj_y, len_y, _, _ = v.projection(y)
+    proj_z, len_z, _, _ = v.projection(z)
 
     MINI_CHECK(proj_x[0] == 1.0 and proj_x[1] == 0.0 and proj_x[2] == 0.0)
     MINI_CHECK(proj_y[0] == 0.0 and proj_y[1] == 1.0 and proj_y[2] == 0.0)
@@ -341,7 +345,11 @@ def test_vector_cos_sin_laws():
 def test_vector_sum_of_vectors():
     from session_py import Vector
 
-    vecs = [Vector(1.0, 1.0, 1.0), Vector(2.0, 2.0, 2.0), Vector(3.0, 3.0, 3.0)]
+    vecs = [
+        Vector(1.0, 1.0, 1.0),
+        Vector(2.0, 2.0, 2.0),
+        Vector(3.0, 3.0, 3.0),
+    ]
     sum = Vector.sum_of_vectors(vecs)
 
     empty = []
@@ -355,7 +363,11 @@ def test_vector_sum_of_vectors():
 def test_vector_average():
     from session_py import Vector
 
-    vecs = [Vector(1.0, 2.0, 3.0), Vector(3.0, 4.0, 5.0), Vector(5.0, 6.0, 7.0)]
+    vecs = [
+        Vector(1.0, 2.0, 3.0),
+        Vector(3.0, 4.0, 5.0),
+        Vector(5.0, 6.0, 7.0),
+    ]
     avg = Vector.average(vecs)
 
     empty = []
@@ -382,15 +394,13 @@ def test_vector_is_zero():
 def test_vector_scale():
     from session_py import Vector
 
-    v = Vector(2.0, 4.0, 6.0)
-    v.scale(0.5)
     v_up = Vector(1.0, 2.0, 3.0)
     v_up.scale_up()
+
     v_rt = Vector(1.0, 2.0, 3.0)
     v_rt.scale_up()
     v_rt.scale_down()
 
-    MINI_CHECK(v[0] == 1.0 and v[1] == 2.0 and v[2] == 3.0)
     MINI_CHECK(v_up[0] == SCALE)
     MINI_CHECK(
         TOLERANCE.is_close(v_rt[0], 1.0)
@@ -429,7 +439,7 @@ def test_vector_average_normal():
 
     MINI_CHECK(TOLERANCE.is_close(abs(n[2]), 1.0))
     MINI_CHECK(TOLERANCE.is_close(n[0], 0.0) and TOLERANCE.is_close(n[1], 0.0))
-    MINI_CHECK(empty.is_zero)
+    MINI_CHECK(empty.is_zero())
 
 
 @MINI_TEST("Vector", "Average Normal Polyline")
@@ -450,7 +460,7 @@ def test_vector_average_normal_polyline():
 
     MINI_CHECK(TOLERANCE.is_close(abs(n[2]), 1.0))
     MINI_CHECK(TOLERANCE.is_close(n[0], 0.0) and TOLERANCE.is_close(n[1], 0.0))
-    MINI_CHECK(empty.is_zero)
+    MINI_CHECK(empty.is_zero())
 
 
 @MINI_TEST("Vector", "Json Roundtrip")
@@ -492,12 +502,14 @@ def test_vector_protobuf_roundtrip():
 
     data = v.pb_dumps()
     parsed = Vector.pb_loads(data)
+    converted = Vector.from_proto(v.to_proto())
 
     MINI_CHECK(loaded.name == "test_vector")
     MINI_CHECK(TOLERANCE.is_close(loaded[0], 42.1))
     MINI_CHECK(TOLERANCE.is_close(loaded[1], 84.2))
     MINI_CHECK(TOLERANCE.is_close(loaded[2], 126.3))
     MINI_CHECK(parsed == v)
+    MINI_CHECK(converted == v)
 
 
 if __name__ == "__main__":

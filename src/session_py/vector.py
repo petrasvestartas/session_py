@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
 import json
 import math
+import sys
 import uuid
 from .tolerance import Tolerance
 from .tolerance import TOLERANCE
@@ -15,40 +15,72 @@ if TYPE_CHECKING:
     from pathlib import Path
     from .point import Point
     from .polyline import Polyline
+    from .proto import vector_pb2
     from .xform import Xform
 
 
 class Vector:
     """A 3D vector with a cached magnitude."""
 
-    __slots__ = ("_guid", "name", "_x", "_y", "_z", "_magnitude", "_has_magnitude")
+    __slots__ = ("_guid", "_x", "_y", "_z", "_magnitude", "_has_magnitude", "name")
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0):
         """Construct from components."""
 
-        self._guid = None
-        self.name = "my_vector"
-        self._x = x
-        self._y = y
-        self._z = z
-        self._magnitude = 0.0
-        self._has_magnitude = False
+        self._guid = None  # Lazily minted GUID.
+        self._x = x  # X component.
+        self._y = y  # Y component.
+        self._z = z  # Z component.
+        self._magnitude = 0.0  # Cached magnitude.
+        self._has_magnitude = False  # Whether the cached magnitude is valid.
+        self.name = "my_vector"  # Vector name.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
 
         result = Vector(self._x, self._y, self._z)
-        result.name = self.name
         result._magnitude = self._magnitude
         result._has_magnitude = self._has_magnitude
+        result.name = self.name
         memo[id(self)] = result
 
         return result
 
-    def duplicate(self) -> "Vector":
+    def duplicate(self) -> Vector:
         """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
 
+    @staticmethod
+    def zero() -> Vector:
+        """Construct the zero vector."""
+        return Vector(0.0, 0.0, 0.0)
+
+    @staticmethod
+    def x_axis() -> Vector:
+        """Construct the unit vector along x."""
+        return Vector(1.0, 0.0, 0.0)
+
+    @staticmethod
+    def y_axis() -> Vector:
+        """Construct the unit vector along y."""
+        return Vector(0.0, 1.0, 0.0)
+
+    @staticmethod
+    def z_axis() -> Vector:
+        """Construct the unit vector along z."""
+        return Vector(0.0, 0.0, 1.0)
+
+    @staticmethod
+    def from_points(p0: Point, p1: Point) -> Vector:
+        """Construct the vector from p0 to p1."""
+        return p1 - p0
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -56,6 +88,7 @@ class Vector:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -66,34 +99,22 @@ class Vector:
         """Set the guid."""
         self._guid = value
 
-    @staticmethod
-    def zero() -> "Vector":
-        """Construct the zero vector."""
-        return Vector(0.0, 0.0, 0.0)
-
-    @staticmethod
-    def x_axis() -> "Vector":
-        """Construct the unit vector along x."""
-        return Vector(1.0, 0.0, 0.0)
-
-    @staticmethod
-    def y_axis() -> "Vector":
-        """Construct the unit vector along y."""
-        return Vector(0.0, 1.0, 0.0)
-
-    @staticmethod
-    def z_axis() -> "Vector":
-        """Construct the unit vector along z."""
-        return Vector(0.0, 0.0, 1.0)
-
-    @staticmethod
-    def from_points(p0: "Point", p1: "Point") -> "Vector":
-        """Construct the vector from p0 to p1."""
-        return p1 - p0
-
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
+    def __setitem__(self, index: int, value: float) -> None:
+        """Set the component by index (0=x, 1=y, 2=z), dropping the cached magnitude."""
+
+        self._has_magnitude = False
+
+        if index == 0:
+            self._x = value
+        elif index == 1:
+            self._y = value
+        elif index == 2:
+            self._z = value
+        else:
+            raise IndexError("Index out of range")
 
     def __getitem__(self, index: int) -> float:
         """Return the component by index (0=x, 1=y, 2=z)."""
@@ -108,20 +129,6 @@ class Vector:
             return self._z
 
         raise IndexError("Index out of range")
-
-    def __setitem__(self, index: int, value: float) -> None:
-        """Set the component by index (0=x, 1=y, 2=z), dropping the cached magnitude."""
-
-        if index == 0:
-            self._x = value
-        elif index == 1:
-            self._y = value
-        elif index == 2:
-            self._z = value
-        else:
-            raise IndexError("Index out of range")
-
-        self._has_magnitude = False
 
     def __eq__(self, other) -> bool:
         """Compare components within rounding."""
@@ -140,7 +147,7 @@ class Vector:
         """Compare components within rounding."""
         return not self == other
 
-    def __imul__(self, factor: float) -> "Vector":
+    def __imul__(self, factor: float) -> Vector:
         """Scale in place."""
 
         self._x *= factor
@@ -150,7 +157,7 @@ class Vector:
 
         return self
 
-    def __itruediv__(self, factor: float) -> "Vector":
+    def __itruediv__(self, factor: float) -> Vector:
         """Divide in place."""
 
         self._x /= factor
@@ -160,7 +167,7 @@ class Vector:
 
         return self
 
-    def __iadd__(self, other: "Vector") -> "Vector":
+    def __iadd__(self, other: Vector) -> Vector:
         """Add in place."""
 
         self._x += other[0]
@@ -170,7 +177,7 @@ class Vector:
 
         return self
 
-    def __isub__(self, other: "Vector") -> "Vector":
+    def __isub__(self, other: Vector) -> Vector:
         """Subtract in place."""
 
         self._x -= other[0]
@@ -180,35 +187,34 @@ class Vector:
 
         return self
 
-    def __mul__(self, factor: float) -> "Vector":
+    def __mul__(self, factor: float) -> Vector:
         """Return a scaled copy."""
         return Vector(self._x * factor, self._y * factor, self._z * factor)
 
-    def __rmul__(self, factor: float) -> "Vector":
-        """Return a vector scaled by a factor on the left."""
-        return Vector(self._x * factor, self._y * factor, self._z * factor)
-
-    def __truediv__(self, factor: float) -> "Vector":
+    def __truediv__(self, factor: float) -> Vector:
         """Return a divided copy."""
         return Vector(self._x / factor, self._y / factor, self._z / factor)
 
-    def __add__(self, other: "Vector") -> "Vector":
+    def __add__(self, other: Vector) -> Vector:
         """Return the sum."""
         return Vector(self._x + other[0], self._y + other[1], self._z + other[2])
 
-    def __sub__(self, other: "Vector") -> "Vector":
+    def __sub__(self, other: Vector) -> Vector:
         """Return the difference."""
         return Vector(self._x - other[0], self._y - other[1], self._z - other[2])
 
-    def __neg__(self) -> "Vector":
+    def __neg__(self) -> Vector:
         """Return the negation."""
         return Vector(-self._x, -self._y, -self._z)
+
+    def __rmul__(self, factor: float) -> Vector:
+        """Return a vector scaled by a factor on the left."""
+        return self * factor
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def transform(self, xform: "Xform") -> None:
+    def transform(self, xform: Xform) -> None:
         """Transform in place; only rotation and scale apply, a vector has no position."""
 
         x = self._x
@@ -220,8 +226,9 @@ class Vector:
         self._z = m[2] * x + m[6] * y + m[10] * z
         self._has_magnitude = False
 
-    def transformed(self, xform: "Xform") -> "Vector":
+    def transformed(self, xform: Xform) -> Vector:
         """Return a transformed copy."""
+
         result = self.duplicate()
         result.transform(xform)
 
@@ -230,9 +237,9 @@ class Vector:
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
     def reverse(self) -> None:
         """Negate every component in place."""
+
         self._x = -self._x
         self._y = -self._y
         self._z = -self._z
@@ -264,7 +271,7 @@ class Vector:
         elif az >= ax and az >= ay:
             ax, az = az, ax
 
-        if ax > 2.2250738585072014e-308:
+        if ax > sys.float_info.min:
             ay /= ax
             az /= ax
 
@@ -304,20 +311,22 @@ class Vector:
 
         return True
 
-    def normalized(self) -> "Vector":
-        """Return a unit length copy."""
+    def normalized(self) -> Vector:
+        """Return a unit length copy; zero when the magnitude is zero."""
+
         result = Vector(self._x, self._y, self._z)
-        result.normalize_self()
+
+        if not result.normalize_self():
+            return Vector.zero()
 
         return result
 
-    def dot(self, other: "Vector") -> float:
+    def dot(self, other: Vector) -> float:
         """Return the dot product."""
         return self._x * other[0] + self._y * other[1] + self._z * other[2]
 
-    def cross(self, other: "Vector") -> "Vector":
+    def cross(self, other: Vector) -> Vector:
         """Return the cross product."""
-
         return Vector(
             self._y * other[2] - self._z * other[1],
             self._z * other[0] - self._x * other[2],
@@ -326,7 +335,7 @@ class Vector:
 
     def angle(
         self,
-        other: "Vector",
+        other: Vector,
         sign_by_cross_product: bool = True,
         degrees: bool = True,
         tolerance: float = Tolerance.ZERO_TOLERANCE,
@@ -347,8 +356,8 @@ class Vector:
         return angle * TO_DEGREES if degrees else angle
 
     def projection(
-        self, projection_vector: "Vector", tolerance: float = Tolerance.ZERO_TOLERANCE
-    ) -> tuple:
+        self, projection_vector: Vector, tolerance: float = Tolerance.ZERO_TOLERANCE
+    ) -> tuple[Vector, float, Vector, float]:
         """Return the projection onto projection_vector: (projection, projected length, perpendicular, perpendicular length)."""
 
         projection_vector_length = projection_vector.magnitude()
@@ -364,7 +373,7 @@ class Vector:
 
         return projected, projected_length, perpendicular, perpendicular_length
 
-    def is_parallel_to(self, other: "Vector") -> int:
+    def is_parallel_to(self, other: Vector) -> int:
         """Return 1 when parallel, -1 when antiparallel, 0 otherwise."""
 
         cos_tolerance = math.cos(Tolerance.ANGLE_TOLERANCE_DEGREES * TO_RADIANS)
@@ -383,11 +392,11 @@ class Vector:
 
         return 0
 
-    def is_perpendicular_to(self, other: "Vector") -> bool:
+    def is_perpendicular_to(self, other: Vector) -> bool:
         """Return whether the dot product is within tolerance of zero."""
         return abs(self.dot(other)) < Tolerance.ZERO_TOLERANCE
 
-    def perpendicular_to(self, v: "Vector") -> bool:
+    def perpendicular_to(self, v: Vector) -> bool:
         """Set this vector perpendicular to v; false when v is zero."""
 
         i = 0
@@ -443,18 +452,20 @@ class Vector:
         """Return whether the magnitude is within tolerance of zero."""
         return self._compute_magnitude() < Tolerance.ZERO_TOLERANCE
 
-    def get_leveled_vector(self, vertical_height: float) -> "Vector":
+    def get_leveled_vector(self, vertical_height: float) -> Vector:
         """Return a copy scaled along its direction so its rise along z equals vertical_height."""
 
-        result = Vector(self._x, self._y, self._z)
+        copy = Vector(self._x, self._y, self._z)
 
-        if result.normalize_self():
-            angle_rad = result.angle(Vector.z_axis(), False) * TO_RADIANS
-            result *= vertical_height / math.cos(angle_rad)
+        if copy.normalize_self():
+            angle_rad = copy.angle(Vector.z_axis(), False) * TO_RADIANS
+            copy *= vertical_height / math.cos(angle_rad)
 
-        return result
+        return copy
 
-    def coordinate_direction_3angles(self, degrees: bool = False) -> tuple:
+    def coordinate_direction_3angles(
+        self, degrees: bool = False
+    ) -> tuple[float, float, float]:
         """Return the angles to the x, y and z axes."""
 
         r = math.sqrt(self._x * self._x + self._y * self._y + self._z * self._z)
@@ -471,7 +482,9 @@ class Vector:
 
         return (alpha, beta, gamma)
 
-    def coordinate_direction_2angles(self, degrees: bool = False) -> tuple:
+    def coordinate_direction_2angles(
+        self, degrees: bool = False
+    ) -> tuple[float, float]:
         """Return the polar angle from z and the azimuth from x."""
 
         r = math.sqrt(self._x * self._x + self._y * self._y + self._z * self._z)
@@ -488,12 +501,12 @@ class Vector:
         return (phi, theta)
 
     @staticmethod
-    def angle_between_vector_xy_components(vector: "Vector") -> float:
+    def angle_between_vector_xy_components(vector: Vector) -> float:
         """Return the angle in degrees of the xy projection from the x-axis."""
         return math.atan2(vector[1], vector[0]) * TO_DEGREES
 
     @staticmethod
-    def sum_of_vectors(vectors: list["Vector"]) -> "Vector":
+    def sum_of_vectors(vectors: list[Vector]) -> Vector:
         """Return the component-wise sum."""
 
         sum = Vector(0.0, 0.0, 0.0)
@@ -504,37 +517,31 @@ class Vector:
         return sum
 
     @staticmethod
-    def average(vectors: list["Vector"]) -> "Vector":
+    def average(vectors: list[Vector]) -> Vector:
         """Return the component-wise average; empty input returns zero."""
+
         if not vectors:
             return Vector.zero()
 
         return Vector.sum_of_vectors(vectors) / float(len(vectors))
 
-    def scale(self, factor: float) -> None:
-        """Scale in place."""
-
-        self._x *= factor
-        self._y *= factor
-        self._z *= factor
-        self._has_magnitude = False
-
     def scale_up(self) -> None:
         """Scale in place by SCALE."""
-        self.scale(SCALE)
+        self *= SCALE
 
     def scale_down(self) -> None:
         """Scale in place by 1 / SCALE."""
-        self.scale(1.0 / SCALE)
+        self *= 1.0 / SCALE
 
-    def reflect(self, plane_normal: "Vector") -> "Vector":
+    def reflect(self, plane_normal: Vector) -> Vector:
         """Return the reflection through the plane with the given unit normal."""
+
         d = self.dot(plane_normal)
 
         return self - plane_normal * (2.0 * d)
 
     @staticmethod
-    def average_normal(points: list["Point"]) -> "Vector":
+    def average_normal(points: list[Point]) -> Vector:
         """Return the unit area-weighted normal of a polygon by Newell's method."""
 
         if not points:
@@ -551,19 +558,19 @@ class Vector:
             b = points[next] - points[i]
             normal += a.cross(b)
 
-        normal.normalize_self()
+        if not normal.normalize_self():
+            return Vector.zero()
 
         return normal
 
     @staticmethod
-    def average_normal_polyline(polyline: "Polyline") -> "Vector":
+    def average_normal_polyline(polyline: Polyline) -> Vector:
         """Return the unit area-weighted normal of a closed polyline by Newell's method."""
         return Vector.average_normal(polyline.get_points())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Triangle laws
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def cosine_law(
         triangle_edge_length_a: float,
@@ -660,7 +667,6 @@ class Vector:
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
@@ -674,7 +680,9 @@ class Vector:
         }
 
     @classmethod
-    def __jsonload__(cls, data: dict, guid: str = None, name: str = None) -> "Vector":
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> Vector:
         """Deserialize from a JSON object."""
 
         vector = cls(data["x"], data["y"], data["z"])
@@ -688,27 +696,28 @@ class Vector:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "Vector":
+    def file_json_loads(cls, json_string: str) -> Vector:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write to a JSON file."""
+
         with open(filepath, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Vector":
+    def file_json_load(cls, filepath: str | Path) -> Vector:
         """Read from a JSON file."""
+
         with open(filepath) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> vector_pb2.Vector:
+        """Convert to the protobuf message."""
 
         from .proto import vector_pb2
 
@@ -718,44 +727,58 @@ class Vector:
         proto.y = self._y
         proto.z = self._z
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Vector":
+    def from_proto(cls, proto: vector_pb2.Vector) -> Vector:
+        """Construct from the protobuf message."""
+
+        vector = cls(proto.x, proto.y, proto.z)
+        vector.name = proto.name
+
+        return vector
+
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> Vector:
         """Deserialize from protobuf bytes."""
 
         from .proto import vector_pb2
 
         proto = vector_pb2.Vector()
         proto.ParseFromString(data)
-        vector = cls(proto.x, proto.y, proto.z)
-        vector.name = proto.name
 
-        return vector
+        return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write to a protobuf file."""
+
         with open(filepath, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Vector":
+    def pb_load(cls, filepath: str | Path) -> Vector:
         """Read from a protobuf file."""
+
         with open(filepath, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "x, y, z"."""
+
         prec = Tolerance.ROUNDING
 
         return f"{TOLERANCE.format_number(self._x, prec)}, {TOLERANCE.format_number(self._y, prec)}, {TOLERANCE.format_number(self._z, prec)}"
 
     def __repr__(self) -> str:
         """Return "Vector(name, x, y, z, magnitude)"."""
+
         prec = Tolerance.ROUNDING
 
         return f"Vector({self.name}, {TOLERANCE.format_number(self._x, prec)}, {TOLERANCE.format_number(self._y, prec)}, {TOLERANCE.format_number(self._z, prec)}, {TOLERANCE.format_number(self.magnitude(), prec)})"
