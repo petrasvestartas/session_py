@@ -2,6 +2,7 @@ from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
+from .tolerance import Tolerance
 
 
 @MINI_TEST("Polyline", "Constructor")
@@ -171,16 +172,29 @@ def test_polyline_json_roundtrip():
         ]
     )
     pl.name = "test_polyline"
+    pl.dash = [3.0, 2.0]
+
+    j = pl.__jsondump__()
+    loaded_j = Polyline.__jsonload__(j)
+
+    s = pl.file_json_dumps()
+    loaded_s = Polyline.file_json_loads(s)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_polyline.json"
     pl.file_json_dump(fname)
     loaded = Polyline.file_json_load(fname)
 
+    MINI_CHECK(loaded_j.name == "test_polyline")
+    MINI_CHECK(TOLERANCE.is_close(loaded_j.get_point(0)[0], 1.0))
+    MINI_CHECK(loaded_s.name == "test_polyline")
+    MINI_CHECK(TOLERANCE.is_close(loaded_s.get_point(0)[0], 1.0))
     MINI_CHECK(loaded.name == "test_polyline")
     MINI_CHECK(len(loaded) == 4)
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(0)[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(1)[1], 5.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
+    MINI_CHECK(loaded.dash == [3.0, 2.0])
+    MINI_CHECK(loaded.guid == pl.guid)
 
 
 @MINI_TEST("Polyline", "Protobuf Roundtrip")
@@ -198,16 +212,29 @@ def test_polyline_protobuf_roundtrip():
         ]
     )
     pl.name = "test_polyline"
+    pl.dash = [3.0, 2.0]
+
+    guid = pl.guid
+    s = pl.pb_dumps()
+    loaded_s = Polyline.pb_loads(s)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_polyline.bin"
     pl.pb_dump(fname)
     loaded = Polyline.pb_load(fname)
+    converted = Polyline.from_proto(pl.to_proto())
 
+    MINI_CHECK(loaded_s.name == "test_polyline")
+    MINI_CHECK(TOLERANCE.is_close(loaded_s.get_point(0)[0], 1.0))
+    MINI_CHECK(loaded_s.guid == guid)
     MINI_CHECK(loaded.name == "test_polyline")
     MINI_CHECK(len(loaded) == 4)
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(0)[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(1)[1], 5.0))
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
+    MINI_CHECK(loaded.dash == [3.0, 2.0])
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(converted == pl)
+    MINI_CHECK(converted.guid == guid)
 
 
 @MINI_TEST("Polyline", "Length")
@@ -390,6 +417,7 @@ def test_polyline_line_line_overlap():
     s2 = Point(5.0, 0.0, 0.0)
     e2 = Point(6.0, 0.0, 0.0)
     no_overlap = Polyline.line_line_overlap(s0, e0, s2, e2)
+
     MINI_CHECK(no_overlap is None)
 
 
@@ -433,7 +461,10 @@ def test_polyline_line_from_projected_points():
 
     s = Point(0.0, 0.0, 0.0)
     e = Point(4.0, 0.0, 0.0)
-    pts = [Point(1.0, 1.0, 0.0), Point(3.0, -1.0, 0.0)]
+    pts = [
+        Point(1.0, 1.0, 0.0),
+        Point(3.0, -1.0, 0.0),
+    ]
     result = Polyline.line_from_projected_points(s, e, pts)
 
     MINI_CHECK(result is not None)
@@ -508,7 +539,7 @@ def test_polyline_extend_segment():
             Point(3.0, 0.0, 0.0),
         ]
     )
-    pl.extend_segment(0, 0.5, 0.5)
+    pl.extend_segment(0, 0.5, 0.5, 0.0, 0.0)
     first = pl.get_point(0)[0]
     second = pl.get_point(1)[0]
 
@@ -529,7 +560,7 @@ def test_polyline_extend_segment_equally():
             Point(3.0, 0.0, 0.0),
         ]
     )
-    pl.extend_segment_equally(0, 0.5)
+    pl.extend_segment_equally(0, 0.5, 0.0)
     first = pl.get_point(0)[0]
     second = pl.get_point(1)[0]
 
@@ -597,7 +628,6 @@ def test_polyline_get_points():
 def test_polyline_get_lines():
     from session_py import Polyline
     from session_py import Point
-    from session_py import Line
 
     pl = Polyline(
         [
@@ -626,7 +656,12 @@ def test_polyline_add_point():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
+    pl = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+        ]
+    )
     pl.add_point(Point(2.0, 0.0, 0.0))
 
     MINI_CHECK(pl.point_count() == 3)
@@ -638,7 +673,12 @@ def test_polyline_insert_point():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)])
+    pl = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+        ]
+    )
     pl.insert_point(1, Point(1.0, 0.0, 0.0))
 
     MINI_CHECK(pl.point_count() == 3)
@@ -651,12 +691,18 @@ def test_polyline_remove_point():
     from session_py import Polyline
     from session_py import Point
 
-    pl = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)])
-    removed = pl.remove_point(1)
+    pl = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+        ]
+    )
+    out = pl.remove_point(1)
 
-    MINI_CHECK(removed is not None)
+    MINI_CHECK(out is not None)
     MINI_CHECK(pl.point_count() == 2)
-    MINI_CHECK(TOLERANCE.is_close(removed[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(out[0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(1)[0], 2.0))
 
 
@@ -889,7 +935,7 @@ def test_polyline_polylabel():
         ]
     )
     polys = [poly]
-    c, _plane, r = Polyline.polylabel(polys, 0.5)
+    c, _, r = Polyline.polylabel(polys, 0.5)
 
     MINI_CHECK(abs(c[0] - 5.0) < 0.6)
     MINI_CHECK(abs(c[1] - 5.0) < 0.6)
@@ -996,24 +1042,31 @@ def test_polyline_boolean_op_plane():
     from session_py import Polyline
     from session_py import Vector
 
-    origin = Point(0, 0, 5)
-    normal = Vector(0, 0, 1)
+    origin = Point(0.0, 0.0, 5.0)
+    normal = Vector(0.0, 0.0, 1.0)
     plane = Plane.from_point_normal(origin, normal)
     sq_a = Polyline(
         [
-            Point(-1, -1, 5),
-            Point(1, -1, 5),
-            Point(1, 1, 5),
-            Point(-1, 1, 5),
-            Point(-1, -1, 5),
+            Point(-1.0, -1.0, 5.0),
+            Point(1.0, -1.0, 5.0),
+            Point(1.0, 1.0, 5.0),
+            Point(-1.0, 1.0, 5.0),
+            Point(-1.0, -1.0, 5.0),
         ]
     )
     sq_b = Polyline(
-        [Point(0, 0, 5), Point(2, 0, 5), Point(2, 2, 5), Point(0, 2, 5), Point(0, 0, 5)]
+        [
+            Point(0.0, 0.0, 5.0),
+            Point(2.0, 0.0, 5.0),
+            Point(2.0, 2.0, 5.0),
+            Point(0.0, 2.0, 5.0),
+            Point(0.0, 0.0, 5.0),
+        ]
     )
     isect = Polyline.boolean_op(sq_a, sq_b, 0, plane)
     uni = Polyline.boolean_op(sq_a, sq_b, 1, plane)
     diff = Polyline.boolean_op(sq_a, sq_b, 2, plane)
+
     MINI_CHECK(len(isect) == 1)
     MINI_CHECK(len(uni) == 1)
     MINI_CHECK(len(diff) == 1)
@@ -1041,7 +1094,7 @@ def test_polyline_merge_collinear():
             Point(2.0, 1.0, 0.0),
         ]
     )
-    pl.merge_collinear()
+    pl.merge_collinear(Tolerance.APPROXIMATION)
 
     MINI_CHECK(pl.point_count() == 3)
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(1)[0], 2.0))
@@ -1089,7 +1142,7 @@ def test_polyline_simplify():
     pl = Polyline(pts)
     result = pl.simplify(0.001)
 
-    MINI_CHECK(len(result) == 2)
+    MINI_CHECK(result.point_count() == 2)
     MINI_CHECK(TOLERANCE.is_close(result.get_point(0)[0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(result.get_point(1)[0], 19.0))
 
@@ -1122,7 +1175,7 @@ def test_polyline_simplify_zigzag():
 
     for i in range(10):
         x = float(i)
-        y = 1.0 if (i % 2 == 1) else 0.0
+        y = 1.0 if i % 2 == 1 else 0.0
         z = 0.0
         pts.append(Point(x, y, z))
 
@@ -1162,6 +1215,7 @@ def test_polyline_translate():
         ]
     )
     pl.translate(Vector(5.0, 0.0, 0.0))
+
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(0)[0], 5.0))
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(2)[0], 6.0))
 
@@ -1181,6 +1235,7 @@ def test_polyline_extend_edge_equally():
         ]
     )
     pl.extend_edge_equally(0, 1.0)
+
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(0)[0], -1.0))
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(1)[0], 11.0))
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(4)[0], -1.0))

@@ -1,7 +1,5 @@
 from __future__ import annotations
-from typing import Optional
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
 import heapq
 import json
@@ -89,13 +87,17 @@ class _PCell:
     ):
         """Construct the cell at (cx, cy) with half size h against polygon."""
 
-        self.cx = cx
-        self.cy = cy
-        self.h = h
-        self.d = _point_to_polygon_dist(cx, cy, polygon)
-        self.mx = self.d + h * math.sqrt(2.0)
+        self.cx = cx  # Center x.
+        self.cy = cy  # Center y.
+        self.h = h  # Half size.
+        self.d = _point_to_polygon_dist(
+            cx, cy, polygon
+        )  # Signed distance from the center to the polygon.
+        self.mx = self.d + h * math.sqrt(
+            2.0
+        )  # Upper bound of the distance inside the cell.
 
-    def __lt__(self, o: "_PCell") -> bool:
+    def __lt__(self, o: _PCell) -> bool:
         """Order by the upper bound so the heap pops the most promising cell."""
         return self.mx > o.mx
 
@@ -195,17 +197,20 @@ def _mapbox_polylabel(
 class Polyline:
     """A polyline stored as flat coordinates [x0, y0, z0, x1, y1, z1, ...] with a lazily computed plane."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, points: list[Point] | None = None):
         """Construct from points."""
 
-        self._guid = None
-        self.name = "my_polyline"
-        self.coords: list[float] = []
-        self.plane = Plane()
-        self._plane_dirty = True
-        self.width = 1.0
-        self.dash = []
-        self.linecolor = Color.black()
+        self._guid = None  # Lazily minted GUID.
+        self._plane_dirty = True  # True until get_plane recomputes.
+        self.name = "my_polyline"  # Polyline name.
+        self.coords: list[float] = []  # Flat [x, y, z, ...].
+        self.plane = Plane()  # Lazily computed plane, see get_plane.
+        self.width = 1.0  # Display width.
+        self.dash = []  # Dash pattern lengths.
+        self.linecolor = Color.black()  # Display color.
 
         if points is not None:
             for p in points:
@@ -215,10 +220,10 @@ class Polyline:
         """Copy with a new guid and the same data."""
 
         result = Polyline()
+        result._plane_dirty = self._plane_dirty
         result.name = self.name
         result.coords = list(self.coords)
         result.plane = copy.deepcopy(self.plane, memo)
-        result._plane_dirty = self._plane_dirty
         result.width = self.width
         result.dash = list(self.dash)
         result.linecolor = copy.deepcopy(self.linecolor, memo)
@@ -226,10 +231,91 @@ class Polyline:
 
         return result
 
-    def duplicate(self) -> "Polyline":
-        """Copy (new guid, same data)"""
+    def duplicate(self) -> Polyline:
+        """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Static constructors
+    # ═══════════════════════════════════════════════════════════════════════════
+    @staticmethod
+    def from_coords(coords: list[float]) -> Polyline:
+        """Construct from flat [x, y, z, ...] coordinates."""
+
+        polyline = Polyline()
+        polyline.coords = list(coords)
+        polyline._recompute_plane_if_needed()
+
+        return polyline
+
+    @staticmethod
+    def from_sides(sides: int, radius: float = 1.0, close: bool = False) -> Polyline:
+        """Construct a regular polygon of sides around the origin in the XY plane."""
+
+        points = []
+
+        for i in range(sides):
+            angle = 2.0 * Tolerance.PI * i / sides
+            points.append(
+                Point(radius * math.cos(angle), radius * math.sin(angle), 0.0)
+            )
+
+        if close:
+            points.append(points[0])
+
+        return Polyline(points)
+
+    @staticmethod
+    def rectangle(
+        origin: Point,
+        x_axis: Vector,
+        y_axis: Vector,
+        width: float,
+        height: float,
+        close: bool = True,
+    ) -> Polyline:
+        """Construct a rectangle with its corner at origin, sides along x_axis and y_axis."""
+
+        plane = Plane(origin, x_axis, y_axis)
+        o = plane.origin
+        x = plane.x_axis * width
+        y = plane.y_axis * height
+        points = [o, o + x, o + x + y, o + y]
+
+        if close:
+            points.append(points[0])
+
+        return Polyline(points)
+
+    @staticmethod
+    def quadratic_points(
+        p0: Point, p1: Point, p2: Point, divisions: int = 7
+    ) -> Polyline:
+        """Construct the quadratic Bezier through p0, p1, p2 sampled at divisions points."""
+
+        n = max(divisions, 2)
+        d = float(n - 1)
+        points = []
+
+        for k in range(n):
+            t = k / d
+            s = 1.0 - t
+            s2 = s * s
+            ts = 2.0 * s * t
+            t2 = t * t
+            points.append(
+                Point(
+                    s2 * p0[0] + ts * p1[0] + t2 * p2[0],
+                    s2 * p0[1] + ts * p1[1] + t2 * p2[1],
+                    s2 * p0[2] + ts * p1[2] + t2 * p2[2],
+                )
+            )
+
+        return Polyline(points)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -237,6 +323,7 @@ class Polyline:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -250,86 +337,6 @@ class Polyline:
     def refresh_guid(self) -> None:
         """Clear the guid so a fresh one mints lazily on the next read."""
         self._guid = None
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Static constructors
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    @staticmethod
-    def from_coords(coords: list[float]) -> "Polyline":
-        """Construct from flat [x, y, z, ...] coordinates."""
-
-        pl = Polyline()
-        pl.coords = list(coords)
-        pl._recompute_plane_if_needed()
-
-        return pl
-
-    @staticmethod
-    def from_sides(sides: int, radius: float = 1.0, close: bool = False) -> "Polyline":
-        """Construct a regular polygon of sides around the origin in the XY plane."""
-
-        pts = []
-
-        for i in range(sides):
-            angle = 2.0 * Tolerance.PI * i / sides
-            pts.append(Point(radius * math.cos(angle), radius * math.sin(angle), 0.0))
-
-        if close:
-            pts.append(pts[0])
-
-        return Polyline(pts)
-
-    @staticmethod
-    def rectangle(
-        origin: Point,
-        x_axis: Vector,
-        y_axis: Vector,
-        width: float,
-        height: float,
-        close: bool = True,
-    ) -> "Polyline":
-        """Construct a rectangle with its corner at origin, sides along x_axis and y_axis."""
-
-        plane = Plane(origin, x_axis, y_axis)
-        o = plane.origin
-        x = plane.x_axis * width
-        y = plane.y_axis * height
-        pts = [o, o + x, o + x + y, o + y]
-
-        if close:
-            pts.append(pts[0])
-
-        return Polyline(pts)
-
-    @staticmethod
-    def quadratic_points(
-        p0: Point, p1: Point, p2: Point, divisions: int = 7
-    ) -> "Polyline":
-        """Construct the quadratic Bezier through p0, p1, p2 sampled at divisions points."""
-
-        n = max(divisions, 2)
-        d = float(n - 1)
-        pts = []
-
-        for k in range(n):
-            t = k / d
-            s = 1.0 - t
-            s2 = s * s
-            ts = 2.0 * s * t
-            t2 = t * t
-            pts.append(
-                Point(
-                    s2 * p0[0] + ts * p1[0] + t2 * p2[0],
-                    s2 * p0[1] + ts * p1[1] + t2 * p2[1],
-                    s2 * p0[2] + ts * p1[2] + t2 * p2[2],
-                )
-            )
-        return Polyline(pts)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Accessors
-    # ═══════════════════════════════════════════════════════════════════════════
 
     def point_count(self) -> int:
         """Return the number of points."""
@@ -345,12 +352,13 @@ class Polyline:
 
     def segment_count(self) -> int:
         """Return the number of segments."""
+
         n = self.point_count()
 
         return n - 1 if n > 1 else 0
 
     def get_point(self, index: int) -> Point | None:
-        """Return the point at index, or the origin when out of range."""
+        """Return the point at index, or None when out of range."""
 
         if index < 0 or index >= self.point_count():
             return None
@@ -370,9 +378,10 @@ class Polyline:
                     self.coords[i * 3], self.coords[i * 3 + 1], self.coords[i * 3 + 2]
                 )
             )
+
         return points
 
-    def get_lines(self) -> list["Line"]:
+    def get_lines(self) -> list[Line]:
         """Return one line per segment."""
 
         from .line import Line
@@ -392,6 +401,7 @@ class Polyline:
                     self.coords[idx1 + 2],
                 )
             )
+
         return lines
 
     def get_plane(self) -> Plane:
@@ -445,6 +455,7 @@ class Polyline:
             total += math.sqrt(
                 (self.get_point(i + 1) - self.get_point(i)).magnitude_squared()
             )
+
         return total
 
     def length_squared(self) -> float:
@@ -468,7 +479,7 @@ class Polyline:
             < Tolerance.ZERO_TOLERANCE
         )
 
-    def closed(self) -> "Polyline":
+    def closed(self) -> Polyline:
         """Return a copy with the first point appended when open."""
 
         if self.is_closed():
@@ -629,7 +640,6 @@ class Polyline:
     # ═══════════════════════════════════════════════════════════════════════════
     # Mutators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def set_point(self, index: int, point: Point) -> None:
         """Set the point at index."""
 
@@ -643,6 +653,7 @@ class Polyline:
 
     def add_point(self, point: Point) -> None:
         """Append a point."""
+
         self.coords.extend([point[0], point[1], point[2]])
 
         if self.point_count() == 3:
@@ -661,7 +672,7 @@ class Polyline:
             self._recompute_plane_if_needed()
 
     def remove_point(self, index: int) -> Point | None:
-        """Remove the point at index into out_point; false when out of range."""
+        """Remove and return the point at index; None when out of range."""
 
         if index < 0 or index >= self.point_count():
             return None
@@ -686,11 +697,13 @@ class Polyline:
             coords.extend(
                 [self.coords[idx], self.coords[idx + 1], self.coords[idx + 2]]
             )
+
         self.coords = coords
         self.plane.reverse()
 
-    def reversed(self) -> "Polyline":
+    def reversed(self) -> Polyline:
         """Return a reversed copy."""
+
         result = self.duplicate()
         result.reverse()
 
@@ -718,6 +731,7 @@ class Polyline:
                 coords.extend(
                     [self.coords[src], self.coords[src + 1], self.coords[src + 2]]
                 )
+
             self.coords = coords
 
         if was_closed and n > 0:
@@ -727,8 +741,9 @@ class Polyline:
         """Translate in place."""
         self += v
 
-    def translated(self, v: Vector) -> "Polyline":
+    def translated(self, v: Vector) -> Polyline:
         """Return a translated copy."""
+
         result = self.duplicate()
         result.translate(v)
 
@@ -830,21 +845,21 @@ class Polyline:
         """Drop points whose neighbours are collinear within tol; closed polylines wrap around."""
 
         closed = self.is_closed()
-        pts = self.get_points()
+        points = self.get_points()
 
-        if closed and len(pts) > 1:
-            pts.pop()
+        if closed and len(points) > 1:
+            points.pop()
 
         zt2 = Tolerance.ZERO_TOLERANCE * Tolerance.ZERO_TOLERANCE
-        max_pass = len(pts)
+        max_pass = len(points)
         changed = True
 
         for _ in range(max_pass):
-            if not changed or len(pts) < 3:
+            if not changed or len(points) < 3:
                 break
 
             changed = False
-            m = len(pts)
+            m = len(points)
             out = []
 
             for i in range(m):
@@ -852,11 +867,11 @@ class Polyline:
                 nx = (i + 1) % m
 
                 if not closed and (i == 0 or i == m - 1):
-                    out.append(pts[i])
+                    out.append(points[i])
                     continue
 
-                a = pts[i] - pts[p]
-                b = pts[nx] - pts[i]
+                a = points[i] - points[p]
+                b = points[nx] - points[i]
                 a2 = a.magnitude_squared()
                 b2 = b.magnitude_squared()
 
@@ -867,14 +882,14 @@ class Polyline:
                 ):
                     changed = True
                 else:
-                    out.append(pts[i])
+                    out.append(points[i])
 
-            pts = out
+            points = out
 
-        if closed and pts:
-            pts.append(pts[0])
+        if closed and points:
+            points.append(points[0])
 
-        self.coords = Polyline(pts).coords
+        self.coords = Polyline(points).coords
         self._recompute_plane_if_needed()
 
     def remove_consecutive_duplicates(
@@ -892,11 +907,11 @@ class Polyline:
         self.coords = Polyline(cleaned).coords
         self._recompute_plane_if_needed()
 
-    def simplify(self, tolerance: float) -> "Polyline":
+    def simplify(self, tolerance: float) -> Polyline:
         """Return a Ramer-Douglas-Peucker copy."""
         return Polyline(Polyline.simplify_points(self.get_points(), tolerance))
 
-    def cut_by_plane(self, plane: Plane, flip: bool | None = None) -> "Polyline":
+    def cut_by_plane(self, plane: Plane, flip: bool | None = None) -> Polyline:
         """Return the part on one side of plane; flip picks the normal side, unset keeps the arc-length midpoint side."""
 
         n = self.point_count()
@@ -917,6 +932,7 @@ class Polyline:
                 >= 0.0
                 else -1.0
             )
+
         result = []
 
         for i in range(n - 1):
@@ -944,7 +960,6 @@ class Polyline:
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __eq__(self, other) -> bool:
         """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
 
@@ -976,6 +991,7 @@ class Polyline:
 
     def __getitem__(self, index: int) -> Point:
         """Return the point at index."""
+
         if index < 0 or index >= self.point_count():
             raise IndexError("Index out of range")
 
@@ -983,12 +999,13 @@ class Polyline:
 
     def __setitem__(self, index: int, point: Point) -> None:
         """Set the point at index."""
+
         if index < 0 or index >= self.point_count():
             raise IndexError("Index out of range")
 
         self.set_point(index, point)
 
-    def __iadd__(self, v: Vector) -> "Polyline":
+    def __iadd__(self, v: Vector) -> Polyline:
         """Translate in place."""
 
         for i in range(self.point_count()):
@@ -1000,7 +1017,7 @@ class Polyline:
 
         return self
 
-    def __isub__(self, v: Vector) -> "Polyline":
+    def __isub__(self, v: Vector) -> Polyline:
         """Translate back in place."""
 
         for i in range(self.point_count()):
@@ -1012,66 +1029,72 @@ class Polyline:
 
         return self
 
-    def __imul__(self, factor: float) -> "Polyline":
+    def __imul__(self, factor: float) -> Polyline:
         """Scale every point in place."""
+
         for i in range(len(self.coords)):
             self.coords[i] *= factor
 
         return self
 
-    def __itruediv__(self, factor: float) -> "Polyline":
+    def __itruediv__(self, factor: float) -> Polyline:
         """Divide every point in place."""
+
         for i in range(len(self.coords)):
             self.coords[i] /= factor
 
         return self
 
-    def __add__(self, v: Vector) -> "Polyline":
+    def __add__(self, v: Vector) -> Polyline:
         """Return a translated copy."""
+
         result = self.duplicate()
         result += v
 
         return result
 
-    def __sub__(self, v: Vector) -> "Polyline":
+    def __sub__(self, v: Vector) -> Polyline:
         """Return a copy translated back."""
+
         result = self.duplicate()
         result -= v
 
         return result
 
-    def __mul__(self, factor: float) -> "Polyline":
+    def __mul__(self, factor: float) -> Polyline:
         """Return a scaled copy."""
+
         result = self.duplicate()
         result *= factor
 
         return result
 
-    def __truediv__(self, factor: float) -> "Polyline":
+    def __truediv__(self, factor: float) -> Polyline:
         """Return a divided copy."""
+
         result = self.duplicate()
         result /= factor
 
         return result
 
-    def __neg__(self) -> "Polyline":
+    def __neg__(self) -> Polyline:
         """Return a reversed copy."""
         return self.reversed()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def transform(self, xform: "Xform") -> None:
+    def transform(self, xform: Xform) -> None:
         """Transform in place."""
 
         for i in range(self.point_count()):
-            pt = self.get_point(i)
-            pt.transform(xform)
-            self.set_point(i, pt)
+            point = self.get_point(i)
+            point.transform(xform)
+            self.set_point(i, point)
 
-    def transformed(self, xform: "Xform") -> "Polyline":
+    def transformed(self, xform: Xform) -> Polyline:
         """Return a transformed copy."""
+
         result = self.duplicate()
         result.transform(xform)
 
@@ -1080,7 +1103,6 @@ class Polyline:
     # ═══════════════════════════════════════════════════════════════════════════
     # Segment utilities
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def point_at(start: Point, end: Point, t: float) -> Point:
         """Return the point at parameter t (0 = start, 1 = end)."""
@@ -1117,7 +1139,7 @@ class Polyline:
     def line_line_overlap(
         line0_start: Point, line0_end: Point, line1_start: Point, line1_end: Point
     ) -> tuple[Point, Point] | None:
-        """Compute the collinear overlap of two segments; false when none or a single point."""
+        """Compute the collinear overlap of two segments; None when none or a single point."""
 
         do_overlap, overlap_start, overlap_end = Polyline._line_line_overlap_points(
             line0_start, line0_end, line1_start, line1_end
@@ -1134,16 +1156,8 @@ class Polyline:
     ) -> tuple[Point, Point]:
         """Compute the midpoints of the paired starts and ends."""
 
-        output_start = Point(
-            (line0_start[0] + line1_start[0]) * 0.5,
-            (line0_start[1] + line1_start[1]) * 0.5,
-            (line0_start[2] + line1_start[2]) * 0.5,
-        )
-        output_end = Point(
-            (line0_end[0] + line1_end[0]) * 0.5,
-            (line0_end[1] + line1_end[1]) * 0.5,
-            (line0_end[2] + line1_end[2]) * 0.5,
-        )
+        output_start = line0_start.mid_point(line1_start)
+        output_end = line0_end.mid_point(line1_end)
 
         return (output_start, output_end)
 
@@ -1177,7 +1191,7 @@ class Polyline:
     def line_from_projected_points(
         line_start: Point, line_end: Point, points: list[Point]
     ) -> tuple[Point, Point] | None:
-        """Compute the extreme sub-segment of the line spanned by the projected points; false when a single point."""
+        """Compute the extreme sub-segment of the line spanned by the projected points; None when a single point."""
 
         if not points:
             return None
@@ -1227,6 +1241,7 @@ class Polyline:
     @staticmethod
     def shrink_line_segment(start: Point, end: Point, dist: float) -> None:
         """Move both ends inward by dist as a fraction of the length."""
+
         v = end - start
         start += v * dist
         end -= v * dist
@@ -1234,11 +1249,10 @@ class Polyline:
     # ═══════════════════════════════════════════════════════════════════════════
     # Polygon utilities
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def tween_two_polylines(
-        polyline0: "Polyline", polyline1: "Polyline", weight: float
-    ) -> "Polyline":
+        polyline0: Polyline, polyline1: Polyline, weight: float
+    ) -> Polyline:
         """Return the pointwise blend; polyline0 when the counts differ."""
 
         if polyline0.point_count() != polyline1.point_count():
@@ -1261,10 +1275,11 @@ class Polyline:
         return Point.interpolate(from_pt, to_pt, steps, kind)
 
     @staticmethod
-    def quick_hull(polygon: "Polyline") -> "Polyline":
+    def quick_hull(polygon: Polyline) -> Polyline:
         """Return the convex hull in the polygon's average plane."""
 
         origin, xa, ya, _ = polygon.get_average_plane()
+
         pts2d = polygon._project_to_plane(origin, xa, ya)
         ai = 0
         bi = 0
@@ -1293,6 +1308,7 @@ class Polyline:
         Polyline._quick_hull_recurse(left, ax, ay, bx, by, hull)
         hull.append((bx, by))
         Polyline._quick_hull_recurse(right, bx, by, ax, ay, hull)
+
         pts3d = []
 
         for h in hull:
@@ -1301,7 +1317,7 @@ class Polyline:
         return Polyline(pts3d)
 
     @staticmethod
-    def bounding_rectangle(polygon: "Polyline") -> Optional["Polyline"]:
+    def bounding_rectangle(polygon: Polyline) -> Polyline | None:
         """Return the minimum-area rectangle of the hull as a closed 5-point polyline."""
 
         hull = Polyline.quick_hull(polygon)
@@ -1310,6 +1326,7 @@ class Polyline:
             return None
 
         origin, xa, ya, _ = polygon.get_average_plane()
+
         hull2d = hull._project_to_plane(origin, xa, ya)
         best_area = float("inf")
         best_min_u = 0.0
@@ -1369,13 +1386,14 @@ class Polyline:
                     origin, xa, ya, c[0] * ca - c[1] * sa, c[0] * sa + c[1] * ca
                 )
             )
+
         pts3d.append(pts3d[0])
 
         return Polyline(pts3d)
 
     @staticmethod
     def grid_of_points_in_polygon(
-        polygon: "Polyline", offset_dist: float, div_dist: float, max_pts: int = 100
+        polygon: Polyline, offset_dist: float, div_dist: float, max_pts: int = 100
     ) -> list[Point]:
         """Return a grid of interior points spaced div_dist, on the polygon miter-offset by offset_dist."""
 
@@ -1383,6 +1401,7 @@ class Polyline:
             return []
 
         origin, xa, ya, _ = polygon.get_average_plane()
+
         poly2d = polygon._project_to_plane(origin, xa, ya)
 
         if (
@@ -1427,7 +1446,7 @@ class Polyline:
 
     @staticmethod
     def polylabel(
-        polylines: list["Polyline"], precision: float = 1.0
+        polylines: list[Polyline], precision: float = 1.0
     ) -> tuple[Point, Plane, float]:
         """Return the largest inscribed circle of polylines[0] minus the holes polylines[1..]: center, plane, radius."""
 
@@ -1435,6 +1454,7 @@ class Polyline:
             return (Point(0.0, 0.0, 0.0), Plane(), 0.0)
 
         origin, xa, ya, za = polylines[0].get_average_plane()
+
         rings2d = []
         sizes = []
 
@@ -1461,11 +1481,16 @@ class Polyline:
             rings2d.append(ring)
             sizes.append((mxx - mnx) * (mxx - mnx) + (mxy - mny) * (mxy - mny))
 
-        ids = sorted(range(len(rings2d)), key=lambda i: -sizes[i])
+        order = []
+
+        for i in range(len(rings2d)):
+            order.append((-sizes[i], i))
+
+        order.sort()
         polygon = []
 
-        for id in ids:
-            polygon.append(rings2d[id])
+        for item in order:
+            polygon.append(rings2d[item[1]])
 
         cr = _mapbox_polylabel(polygon, precision)
         center = Polyline._unproject(origin, xa, ya, cr[0], cr[1])
@@ -1475,7 +1500,7 @@ class Polyline:
     @staticmethod
     def polylabel_circle_division_points(
         division_direction_in_3d: Vector,
-        polylines: list["Polyline"],
+        polylines: list[Polyline],
         division: int = 4,
         scale: float = 0.75,
         precision: float = 1.0,
@@ -1509,6 +1534,7 @@ class Polyline:
         x_axis.normalize_self()
         y_axis.normalize_self()
         z_axis.normalize_self()
+
         points = []
         chunk = 360.0 / division
 
@@ -1523,13 +1549,14 @@ class Polyline:
                     radius * math.sin(rad),
                 )
             )
+
         return points
 
     @staticmethod
     def boolean_op(
-        a: "Polyline", b: "Polyline", clip_type: int, plane: Plane | None = None
-    ) -> list["Polyline"]:
-        """Return the Vatti boolean of two closed polylines; plane given: in its local frame, else on x and y; clip_type 0 intersection, 1 union, 2 a minus b."""
+        a: Polyline, b: Polyline, clip_type: int, plane: Plane | None = None
+    ) -> list[Polyline]:
+        """Return the Vatti boolean of two closed polylines on x and y, or in plane's local frame; clip_type 0 intersection, 1 union, 2 a minus b."""
 
         from .boolean_polyline import BooleanPolyline
 
@@ -1540,6 +1567,7 @@ class Polyline:
         pb2d = Polyline._boolean_project(b, plane)
         Polyline._ensure_ccw(pa2d)
         Polyline._ensure_ccw(pb2d)
+
         results = BooleanPolyline.compute(pa2d, pb2d, clip_type)
         o = plane.origin
         x = plane.x_axis
@@ -1551,6 +1579,7 @@ class Polyline:
                     i,
                     Polyline._unproject(o, x, y, r.coords[i * 3], r.coords[i * 3 + 1]),
                 )
+
         return results
 
     @staticmethod
@@ -1566,6 +1595,7 @@ class Polyline:
         keep[0] = True
         keep[n - 1] = True
         Polyline._simplify_rdp(points, 0, n - 1, tolerance, keep)
+
         result = []
 
         for i in range(n):
@@ -1583,7 +1613,7 @@ class Polyline:
         radius: float,
         length: float,
         flip_male: int,
-    ) -> tuple["Polyline", "Polyline"]:
+    ) -> tuple[Polyline, Polyline]:
         """Compute male rect0 and female rect1 cross-sections of radius about p along segment_vector; flip_male rotates the corners."""
 
         y_axis = zaxis.cross(segment_vector)
@@ -1623,8 +1653,11 @@ class Polyline:
         return (rect0, rect1)
 
     @staticmethod
-    def trim_rectangles_by_plane(first: Polyline, second: Polyline, plane: Plane) -> bool:
+    def trim_rectangles_by_plane(
+        first: Polyline, second: Polyline, plane: Plane
+    ) -> bool:
         """Cut two closed 5-point rectangles at plane, keeping the side on the positive half; false when a long edge misses the plane."""
+
         from .intersection import line_plane
         from .line import Line
 
@@ -1637,9 +1670,14 @@ class Polyline:
             line_plane(Line.from_points(second[0], second[1]), plane, False),
             line_plane(Line.from_points(second[3], second[2]), plane, False),
         ]
+
         for point in points:
-            if point is None or not all(math.isfinite(point[i]) for i in range(3)):
+            if point is None:
                 return False
+
+            for i in range(3):
+                if not math.isfinite(point[i]):
+                    return False
 
         if plane.has_on_negative_side(first[0]):
             first.set_point(0, points[0])
@@ -1659,7 +1697,6 @@ class Polyline:
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
@@ -1674,7 +1711,9 @@ class Polyline:
         }
 
     @classmethod
-    def __jsonload__(cls, data: dict, guid: str = None, name: str = None) -> "Polyline":
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> Polyline:
         """Deserialize from a JSON object."""
 
         from .file_encoders import file_decode_node
@@ -1686,8 +1725,8 @@ class Polyline:
         if "coords" in data:
             polyline.coords = list(data["coords"])
         elif "points" in data:
-            for pt_json in data["points"]:
-                polyline.add_point(file_decode_node(pt_json))
+            for point in data["points"]:
+                polyline.add_point(file_decode_node(point))
 
         if "width" in data:
             polyline.width = data["width"]
@@ -1707,105 +1746,109 @@ class Polyline:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "Polyline":
+    def file_json_loads(cls, json_string: str) -> Polyline:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write to a JSON file."""
-        with open(filepath, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
+
+        with open(filepath, "w") as file:
+            json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
+    def file_json_load(cls, filepath: str | Path) -> Polyline:
         """Read from a JSON file."""
-        with open(filepath) as f:
-            data = json.load(f)
 
-        return cls.__jsonload__(data)
+        with open(filepath) as file:
+            return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> polyline_pb2.Polyline:
+        """Convert to the protobuf message."""
 
         from .proto import polyline_pb2
 
         proto = polyline_pb2.Polyline()
-        self.pb_fill(proto)
 
-        return proto.SerializeToString()
+        if self.has_guid():
+            proto.guid = self.guid
+
+        proto.name = self.name
+        proto.width = self.width
+
+        for d in self.dash:
+            proto.dash.append(d)
+
+        for c in self.coords:
+            proto.coords.append(c)
+
+        proto.linecolor.CopyFrom(self.linecolor.to_proto())
+
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Polyline":
+    def from_proto(cls, proto: polyline_pb2.Polyline) -> Polyline:
+        """Construct from the protobuf message."""
+
+        polyline = cls.from_coords(list(proto.coords))
+
+        if proto.guid:
+            polyline.guid = proto.guid
+
+        polyline.name = proto.name
+        polyline.width = proto.width
+        polyline.dash = list(proto.dash)
+
+        if proto.HasField("linecolor"):
+            polyline.linecolor = Color.from_proto(proto.linecolor)
+
+        return polyline
+
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> Polyline:
         """Deserialize from protobuf bytes."""
 
         from .proto import polyline_pb2
 
         proto = polyline_pb2.Polyline()
         proto.ParseFromString(data)
-        pl = cls.from_coords(list(proto.coords))
 
-        if proto.guid:
-            pl.guid = proto.guid
+        return cls.from_proto(proto)
 
-        pl.name = proto.name
-        pl.width = proto.width
-        pl.dash = list(proto.dash)
-
-        if proto.HasField("linecolor"):
-            c = proto.linecolor
-            pl.linecolor = Color(c.r, c.g, c.b, c.a, c.name)
-
-        return pl
-
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write to a protobuf file."""
-        data = self.pb_dumps()
 
-        with open(filepath, "wb") as f:
-            f.write(data)
+        with open(filepath, "wb") as file:
+            file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Polyline":
+    def pb_load(cls, filepath: str | Path) -> Polyline:
         """Read from a protobuf file."""
-        with open(filepath, "rb") as f:
-            data = f.read()
 
-        return cls.pb_loads(data)
-
-    def pb_fill(self, proto: "polyline_pb2.Polyline") -> None:
-        """Fill a Polyline proto in place."""
-
-        if self.has_guid():
-            proto.guid = self._guid
-
-        proto.name = self.name
-        proto.width = self.width
-        proto.dash.extend(self.dash)
-        proto.coords.extend(self.coords)
-        proto.linecolor.r = self.linecolor.r
-        proto.linecolor.g = self.linecolor.g
-        proto.linecolor.b = self.linecolor.b
-        proto.linecolor.a = self.linecolor.a
-        proto.linecolor.name = self.linecolor.name
+        with open(filepath, "rb") as file:
+            return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "[(x0, y0, z0), (x1, y1, z1), ...]"."""
 
-        pts = []
+        points = []
 
         for i in range(self.point_count()):
-            pts.append(
+            points.append(
                 f"({self.coords[i * 3]}, {self.coords[i * 3 + 1]}, {self.coords[i * 3 + 2]})"
             )
-        return "[" + ", ".join(pts) + "]"
+
+        return "[" + ", ".join(points) + "]"
 
     def __repr__(self) -> str:
         """Return "Polyline(name, N points)"."""
@@ -1814,9 +1857,8 @@ class Polyline:
     # ═══════════════════════════════════════════════════════════════════════════
     # Private helpers
     # ═══════════════════════════════════════════════════════════════════════════
-
     def _recompute_plane_if_needed(self) -> None:
-        """Recompute plane when _plane_dirty."""
+        """Mark the plane dirty so get_plane recomputes it."""
         self._plane_dirty = True
 
     def _average_normal(self) -> Vector:
@@ -1876,12 +1918,7 @@ class Polyline:
         origin: Point, x_axis: Vector, y_axis: Vector, u: float, v: float
     ) -> Point:
         """Return the 3D point of (u, v) in the frame (origin, x_axis, y_axis)."""
-
-        return Point(
-            origin[0] + u * x_axis[0] + v * y_axis[0],
-            origin[1] + u * x_axis[1] + v * y_axis[1],
-            origin[2] + u * x_axis[2] + v * y_axis[2],
-        )
+        return origin + x_axis * u + y_axis * v
 
     @staticmethod
     def _line_line_overlap_points(
@@ -1944,7 +1981,7 @@ class Polyline:
     def _offset_polygon_2d(
         poly2d: list[tuple[float, float]], offset_dist: float
     ) -> list[tuple[float, float]]:
-        """Miter-offset a 2D polygon in place by offset_dist."""
+        """Miter-offset a 2D polygon by offset_dist."""
 
         n = len(poly2d)
 
@@ -2001,6 +2038,7 @@ class Polyline:
                         poly2d[i][1] + (np[1] + nn[1]) / denom * delta,
                     )
                 )
+
         out_area = 0.0
 
         for i in range(len(out)):
@@ -2038,7 +2076,7 @@ class Polyline:
 
     @staticmethod
     def _closest_edge(
-        center: Point, polylines: list["Polyline"]
+        center: Point, polylines: list[Polyline]
     ) -> tuple[bool, int, int]:
         """Find the polyline and edge closest to center."""
 
@@ -2070,7 +2108,7 @@ class Polyline:
         return (best_sq < float("inf"), edge_i, edge_j)
 
     @staticmethod
-    def _boolean_project(pl: "Polyline", plane: Plane) -> "Polyline":
+    def _boolean_project(pl: Polyline, plane: Plane) -> Polyline:
         """Return pl projected into plane's local frame as 2D."""
 
         o = plane.origin
@@ -2097,7 +2135,7 @@ class Polyline:
         return p2d
 
     @staticmethod
-    def _ensure_ccw(p2d: "Polyline") -> None:
+    def _ensure_ccw(p2d: Polyline) -> None:
         """Reverse p2d in place when it winds clockwise."""
 
         n = p2d.point_count()
@@ -2121,6 +2159,7 @@ class Polyline:
                 p2d.coords[i * 3] * p2d.coords[j * 3 + 1]
                 - p2d.coords[j * 3] * p2d.coords[i * 3 + 1]
             )
+
         if area < 0.0:
             p2d.reverse()
 

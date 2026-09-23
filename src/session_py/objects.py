@@ -254,7 +254,7 @@ class Objects:
             proto.bboxes.add().ParseFromString(b.pb_dumps())
 
         for pl in self.polylines:
-            pl.pb_fill(proto.polylines.add())
+            proto.polylines.add().CopyFrom(pl.to_proto())
 
         for pc in self.pointclouds:
             proto.pointclouds.add().ParseFromString(pc.pb_dumps())
