@@ -1,7 +1,5 @@
 from __future__ import annotations
-from typing import Optional
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
 import json
 import math
@@ -14,6 +12,7 @@ from .vector import Vector
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .proto import line_pb2
     from .xform import Xform
 
 
@@ -22,18 +21,21 @@ class Line:
 
     __slots__ = (
         "_guid",
-        "name",
-        "width",
-        "dash",
-        "linecolor",
         "_x0",
         "_y0",
         "_z0",
         "_x1",
         "_y1",
         "_z1",
+        "name",
+        "width",
+        "dash",
+        "linecolor",
     )
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(
         self,
         x0: float = 0.0,
@@ -45,17 +47,17 @@ class Line:
     ):
         """Construct from start and end coordinates."""
 
-        self._guid = None
-        self.name = "my_line"
-        self.width = 1.0
-        self.dash = []
-        self.linecolor = Color.black()
-        self._x0 = x0
-        self._y0 = y0
-        self._z0 = z0
-        self._x1 = x1
-        self._y1 = y1
-        self._z1 = z1
+        self._guid = None  # Lazily minted GUID.
+        self._x0 = x0  # Start x.
+        self._y0 = y0  # Start y.
+        self._z0 = z0  # Start z.
+        self._x1 = x1  # End x.
+        self._y1 = y1  # End y.
+        self._z1 = z1  # End z.
+        self.name = "my_line"  # Line name.
+        self.width = 1.0  # Display width.
+        self.dash = []  # Dash pattern lengths.
+        self.linecolor = Color.black()  # Display color.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -69,10 +71,13 @@ class Line:
 
         return result
 
-    def duplicate(self) -> "Line":
-        """Copy (new guid, same data)"""
+    def duplicate(self) -> Line:
+        """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -80,6 +85,7 @@ class Line:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -97,60 +103,31 @@ class Line:
     # ═══════════════════════════════════════════════════════════════════════════
     # Static constructors
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
-    def from_points(p1: Point, p2: Point) -> "Line":
+    def from_points(p1: Point, p2: Point) -> Line:
         """Construct from two points."""
         return Line(p1[0], p1[1], p1[2], p2[0], p2[1], p2[2])
 
     @staticmethod
-    def from_point_and_vector(point: Point, vector: Vector) -> "Line":
+    def from_point_and_vector(point: Point, vector: Vector) -> Line:
         """Construct from point to point + vector."""
-        return Line(
-            point[0],
-            point[1],
-            point[2],
-            point[0] + vector[0],
-            point[1] + vector[1],
-            point[2] + vector[2],
-        )
+        return Line.from_points(point, point + vector)
 
     @staticmethod
     def from_point_direction_length(
         point: Point, direction: Vector, length: float
-    ) -> "Line":
+    ) -> Line:
         """Construct from point along the normalized direction."""
-        d = direction.normalized()
-
-        return Line(
-            point[0],
-            point[1],
-            point[2],
-            point[0] + d[0] * length,
-            point[1] + d[1] * length,
-            point[2] + d[2] * length,
-        )
+        return Line.from_points(point, point + direction.normalized() * length)
 
     @staticmethod
-    def fit_points(points: list[Point], length: float = 0.0) -> "Line":
+    def fit_points(points: list[Point], length: float = 0.0) -> Line:
         """Construct the least-squares line through points by power-iteration PCA; length <= 0 spans the projected extent."""
 
         if len(points) < 2:
             raise ValueError("At least 2 points are required for line fitting")
 
-        n = float(len(points))
-        cx = 0.0
-        cy = 0.0
-        cz = 0.0
-
-        for p in points:
-            cx += p[0]
-            cy += p[1]
-            cz += p[2]
-
-        cx /= n
-        cy /= n
-        cz /= n
+        center = Point.centroid(points)
         cxx = 0.0
         cyy = 0.0
         czz = 0.0
@@ -159,39 +136,33 @@ class Line:
         cyz = 0.0
 
         for p in points:
-            dx = p[0] - cx
-            dy = p[1] - cy
-            dz = p[2] - cz
-            cxx += dx * dx
-            cyy += dy * dy
-            czz += dz * dz
-            cxy += dx * dy
-            cxz += dx * dz
-            cyz += dy * dz
+            d = p - center
+            cxx += d[0] * d[0]
+            cyy += d[1] * d[1]
+            czz += d[2] * d[2]
+            cxy += d[0] * d[1]
+            cxz += d[0] * d[2]
+            cyz += d[1] * d[2]
 
-        vx = 1.0
-        vy = 0.0
-        vz = 0.0
+        axis = Vector(1.0, 0.0, 0.0)
 
         if cyy > cxx and cyy >= czz:
-            vx = 0.0
-            vy = 1.0
+            axis = Vector(0.0, 1.0, 0.0)
         elif czz > cxx and czz > cyy:
-            vx = 0.0
-            vz = 1.0
+            axis = Vector(0.0, 0.0, 1.0)
 
         for _ in range(100):
-            nx = cxx * vx + cxy * vy + cxz * vz
-            ny = cxy * vx + cyy * vy + cyz * vz
-            nz = cxz * vx + cyz * vy + czz * vz
-            mag = math.sqrt(nx * nx + ny * ny + nz * nz)
+            next = Vector(
+                cxx * axis[0] + cxy * axis[1] + cxz * axis[2],
+                cxy * axis[0] + cyy * axis[1] + cyz * axis[2],
+                cxz * axis[0] + cyz * axis[1] + czz * axis[2],
+            )
+            mag = math.sqrt(next.magnitude_squared())
 
             if mag < 1e-15:
                 break
 
-            vx = nx / mag
-            vy = ny / mag
-            vz = nz / mag
+            axis = next / mag
 
         half = length / 2.0
 
@@ -200,7 +171,7 @@ class Line:
             t_max = 0.0
 
             for p in points:
-                t = (p[0] - cx) * vx + (p[1] - cy) * vy + (p[2] - cz) * vz
+                t = (p - center).dot(axis)
                 t_min = min(t_min, t)
                 t_max = max(t_max, t)
 
@@ -209,20 +180,14 @@ class Line:
             if half < 1e-10:
                 half = 0.5
 
-        return Line(
-            cx - vx * half,
-            cy - vy * half,
-            cz - vz * half,
-            cx + vx * half,
-            cy + vy * half,
-            cz + vz * half,
-        )
+        return Line.from_points(center - axis * half, center + axis * half)
 
     @staticmethod
     def with_name(
         name: str, x0: float, y0: float, z0: float, x1: float, y1: float, z1: float
-    ) -> "Line":
+    ) -> Line:
         """Construct a named line from coordinates."""
+
         line = Line(x0, y0, z0, x1, y1, z1)
         line.name = name
 
@@ -231,9 +196,8 @@ class Line:
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __getitem__(self, index: int) -> float:
-        """Return the mutable coordinate by index (0=x0, 1=y0, 2=z0, 3=x1, 4=y1, 5=z1)."""
+        """Return the coordinate by index (0=x0, 1=y0, 2=z0, 3=x1, 4=y1, 5=z1)."""
 
         if index == 0:
             return self._x0
@@ -295,7 +259,7 @@ class Line:
         """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
         return not self == other
 
-    def __iadd__(self, other: Vector) -> "Line":
+    def __iadd__(self, other: Vector) -> Line:
         """Translate in place."""
 
         self._x0 += other[0]
@@ -307,7 +271,7 @@ class Line:
 
         return self
 
-    def __isub__(self, other: Vector) -> "Line":
+    def __isub__(self, other: Vector) -> Line:
         """Translate back in place."""
 
         self._x0 -= other[0]
@@ -319,7 +283,7 @@ class Line:
 
         return self
 
-    def __imul__(self, factor: float) -> "Line":
+    def __imul__(self, factor: float) -> Line:
         """Scale both ends in place."""
 
         self._x0 *= factor
@@ -331,7 +295,7 @@ class Line:
 
         return self
 
-    def __itruediv__(self, factor: float) -> "Line":
+    def __itruediv__(self, factor: float) -> Line:
         """Divide both ends in place."""
 
         self._x0 /= factor
@@ -343,58 +307,61 @@ class Line:
 
         return self
 
-    def __add__(self, other: Vector) -> "Line":
+    def __add__(self, other: Vector) -> Line:
         """Return a translated copy."""
+
         result = copy.deepcopy(self)
         result += other
 
         return result
 
-    def __sub__(self, other: Vector) -> "Line":
+    def __sub__(self, other: Vector) -> Line:
         """Return a copy translated back."""
+
         result = copy.deepcopy(self)
         result -= other
 
         return result
 
-    def __mul__(self, factor: float) -> "Line":
+    def __mul__(self, factor: float) -> Line:
         """Return a copy with both ends scaled."""
+
         result = copy.deepcopy(self)
         result *= factor
 
         return result
 
-    def __truediv__(self, factor: float) -> "Line":
+    def __truediv__(self, factor: float) -> Line:
         """Return a copy with both ends divided."""
+
         result = copy.deepcopy(self)
         result /= factor
 
         return result
 
-    def __neg__(self) -> "Line":
+    def __neg__(self) -> Line:
         """Return a flipped copy (end to start)."""
         return Line(self._x1, self._y1, self._z1, self._x0, self._y0, self._z0)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def transform(self, xform: "Xform") -> None:
+    def transform(self, xform: Xform) -> None:
         """Transform in place."""
 
-        start = Point(self._x0, self._y0, self._z0)
-        end = Point(self._x1, self._y1, self._z1)
-        start.transform(xform)
-        end.transform(xform)
-        self._x0 = start[0]
-        self._y0 = start[1]
-        self._z0 = start[2]
-        self._x1 = end[0]
-        self._y1 = end[1]
-        self._z1 = end[2]
+        s = self.start().transformed(xform)
+        e = self.end().transformed(xform)
 
-    def transformed(self, xform: "Xform") -> "Line":
+        self._x0 = s[0]
+        self._y0 = s[1]
+        self._z0 = s[2]
+        self._x1 = e[0]
+        self._y1 = e[1]
+        self._z1 = e[2]
+
+    def transformed(self, xform: Xform) -> Line:
         """Return a transformed copy."""
+
         result = copy.deepcopy(self)
         result.transform(xform)
 
@@ -403,19 +370,13 @@ class Line:
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
     def length(self) -> float:
         """Return the length."""
         return math.sqrt(self.squared_length())
 
     def squared_length(self) -> float:
         """Return the squared length."""
-
-        dx = self._x1 - self._x0
-        dy = self._y1 - self._y0
-        dz = self._z1 - self._z0
-
-        return dx * dx + dy * dy + dz * dz
+        return self.to_vector().magnitude_squared()
 
     def to_vector(self) -> Vector:
         """Return the vector from start to end."""
@@ -443,6 +404,7 @@ class Line:
 
     def point_at(self, t: float) -> Point:
         """Return the point at parameter t (0 = start, 1 = end)."""
+
         s = 1.0 - t
 
         return Point(
@@ -482,19 +444,13 @@ class Line:
     def closest_point(self, point: Point, limited: bool = True) -> tuple[float, Point]:
         """Return the parameter and closest point; limited clamps t to [0, 1]."""
 
-        dx = self._x1 - self._x0
-        dy = self._y1 - self._y0
-        dz = self._z1 - self._z0
-        len_sq = dx * dx + dy * dy + dz * dz
+        d = self.to_vector()
+        len_sq = d.magnitude_squared()
 
         if len_sq < 1e-20:
             return (0.0, self.start())
 
-        t = (
-            (point[0] - self._x0) * dx
-            + (point[1] - self._y0) * dy
-            + (point[2] - self._z0) * dz
-        ) / len_sq
+        t = (point - self.start()).dot(d) / len_sq
 
         if limited:
             t = max(0.0, min(1.0, t))
@@ -512,6 +468,7 @@ class Line:
             (line0_start[1] + line1_start[1]) * 0.5,
             (line0_start[2] + line1_start[2]) * 0.5,
         )
+
         output_end = Point(
             (line0_end[0] + line1_end[0]) * 0.5,
             (line0_end[1] + line1_end[1]) * 0.5,
@@ -521,8 +478,8 @@ class Line:
         return (output_start, output_end)
 
     @staticmethod
-    def from_projected_points(line: "Line", points: list[Point]) -> Optional["Line"]:
-        """Compute the extreme sub-segment of line spanned by the projected points."""
+    def from_projected_points(line: Line, points: list[Point]) -> Line | None:
+        """Compute the extreme sub-segment of line spanned by the projected points; None when empty."""
 
         from .polyline import Polyline
 
@@ -533,8 +490,8 @@ class Line:
 
         return Line.from_points(result[0], result[1])
 
-    def overlap(self, other: "Line") -> Optional["Line"]:
-        """Compute the collinear overlap with other; false when none or a single point."""
+    def overlap(self, other: Line) -> Line | None:
+        """Compute the collinear overlap with other; None when none or a single point."""
 
         from .polyline import Polyline
 
@@ -547,15 +504,16 @@ class Line:
 
         return Line.from_points(result[0], result[1])
 
-    def overlap_average(self, other: "Line") -> Optional["Line"]:
-        """Compute the longer of the two midpoint pairings of overlap(other) and other.overlap(this)."""
+    def overlap_average(self, other: Line) -> Line | None:
+        """Compute the longer of the two midpoint pairings of overlap(other) and other.overlap(self); None when empty."""
 
         from .polyline import Polyline
 
-        result = Polyline.line_line_overlap_average(
+        output_start, output_end = Polyline.line_line_overlap_average(
             self.start(), self.end(), other.start(), other.end()
         )
-        out = Line.from_points(result[0], result[1])
+
+        out = Line.from_points(output_start, output_end)
 
         if out.squared_length() <= 0.0:
             return None
@@ -570,6 +528,7 @@ class Line:
         s = self.start()
         e = self.end()
         Polyline.extend_line_segment(s, e, ext_start, ext_end)
+
         self._x0 = s[0]
         self._y0 = s[1]
         self._z0 = s[2]
@@ -588,6 +547,7 @@ class Line:
         s = self.start()
         e = self.end()
         Polyline.extend_segment_equally_static(s, e, dist, proportion)
+
         self._x0 = s[0]
         self._y0 = s[1]
         self._z0 = s[2]
@@ -603,6 +563,7 @@ class Line:
         s = self.start()
         e = self.end()
         Polyline.shrink_line_segment(s, e, dist)
+
         self._x0 = s[0]
         self._y0 = s[1]
         self._z0 = s[2]
@@ -613,7 +574,6 @@ class Line:
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
@@ -633,7 +593,9 @@ class Line:
         }
 
     @classmethod
-    def __jsonload__(cls, data: dict, guid: str = None, name: str = None) -> "Line":
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> Line:
         """Deserialize from a JSON object."""
 
         from .file_encoders import file_decode_node
@@ -660,34 +622,35 @@ class Line:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "Line":
+    def file_json_loads(cls, json_string: str) -> Line:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write to a JSON file."""
+
         with open(filepath, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Line":
+    def file_json_load(cls, filepath: str | Path) -> Line:
         """Read from a JSON file."""
+
         with open(filepath) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> line_pb2.Line:
+        """Convert to the protobuf message."""
 
         from .proto import line_pb2
 
         proto = line_pb2.Line()
 
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
 
         proto.name = self.name
         proto.width = self.width
@@ -704,16 +667,12 @@ class Line:
         proto.linecolor_rgba.append(self.linecolor.a)
         proto.linecolor_name = self.linecolor.name
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Line":
-        """Deserialize from protobuf bytes."""
+    def from_proto(cls, proto: line_pb2.Line) -> Line:
+        """Construct from the protobuf message."""
 
-        from .proto import line_pb2
-
-        proto = line_pb2.Line()
-        proto.ParseFromString(data)
         line = cls()
 
         if len(proto.coords) == 6:
@@ -747,29 +706,47 @@ class Line:
 
         return line
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> Line:
+        """Deserialize from protobuf bytes."""
+
+        from .proto import line_pb2
+
+        proto = line_pb2.Line()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write to a protobuf file."""
+
         with open(filepath, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Line":
+    def pb_load(cls, filepath: str | Path) -> Line:
         """Read from a protobuf file."""
+
         with open(filepath, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "x0, y0, z0, x1, y1, z1"."""
+
         prec = Tolerance.ROUNDING
 
         return f"{TOLERANCE.format_number(self._x0, prec)}, {TOLERANCE.format_number(self._y0, prec)}, {TOLERANCE.format_number(self._z0, prec)}, {TOLERANCE.format_number(self._x1, prec)}, {TOLERANCE.format_number(self._y1, prec)}, {TOLERANCE.format_number(self._z1, prec)}"
 
     def __repr__(self) -> str:
         """Return "Line(name, x0, y0, z0, x1, y1, z1, Color(...), width)"."""
+
         prec = Tolerance.ROUNDING
 
         return f"Line({self.name}, {TOLERANCE.format_number(self._x0, prec)}, {TOLERANCE.format_number(self._y0, prec)}, {TOLERANCE.format_number(self._z0, prec)}, {TOLERANCE.format_number(self._x1, prec)}, {TOLERANCE.format_number(self._y1, prec)}, {TOLERANCE.format_number(self._z1, prec)}, {repr(self.linecolor)}, {TOLERANCE.format_number(self.width, prec)})"
