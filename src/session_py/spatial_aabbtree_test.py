@@ -45,6 +45,7 @@ def test_spatial_aabbtree_build_single():
     from session_py import SpatialAABBTree
 
     aabb = AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
+
     tree = SpatialAABBTree()
     tree.build([aabb])
 
@@ -62,6 +63,7 @@ def test_spatial_aabbtree_build_multiple():
         AABB(5.0, 0.0, 0.0, 1.0, 1.0, 1.0),
         AABB(10.0, 0.0, 0.0, 1.0, 1.0, 1.0),
     ]
+
     tree = SpatialAABBTree()
     tree.build(aabbs)
 
@@ -92,12 +94,13 @@ def test_spatial_aabbtree_mesh_point_aabb():
     from session_py import Primitives
 
     m = Primitives.cube(2.0)
-    cp1, fk1, d1 = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 2.0))
+
+    cp1, _, d1 = Closest.mesh_point_aabb(m, Point(0.0, 0.0, 2.0))
 
     MINI_CHECK(TOLERANCE.is_close(cp1[2], 1.0))
     MINI_CHECK(TOLERANCE.is_close(d1, 1.0))
 
-    cp2, fk2, d2 = Closest.mesh_point_aabb(m, Point(1.0, 1.0, 1.0))
+    d2 = Closest.mesh_point_aabb(m, Point(1.0, 1.0, 1.0))[2]
 
     MINI_CHECK(TOLERANCE.is_close(d2, 0.0))
 
@@ -110,8 +113,10 @@ def test_spatial_aabbtree_mesh_point_aabb_matches_bvh():
 
     m = Primitives.cube(2.0)
     tp = Point(0.3, 0.7, 1.5)
-    cp_bvh, fk_bvh, d_bvh = Closest.mesh_point(m, tp)
-    cp_aabb, fk_aabb, d_aabb = Closest.mesh_point_aabb(m, tp)
+
+    cp_bvh, _, d_bvh = Closest.mesh_point(m, tp)
+
+    cp_aabb, _, d_aabb = Closest.mesh_point_aabb(m, tp)
 
     MINI_CHECK(TOLERANCE.is_close(d_bvh, d_aabb))
     MINI_CHECK(TOLERANCE.is_close(cp_bvh[0], cp_aabb[0]))
@@ -129,8 +134,10 @@ def test_spatial_aabbtree_query_aabb():
         AABB(5.0, 0.0, 0.0, 0.5, 0.5, 0.5),
         AABB(10.0, 0.0, 0.0, 0.5, 0.5, 0.5),
     ]
+
     tree = SpatialAABBTree()
     tree.build(aabbs)
+
     hits = tree.query_aabb(AABB(0.0, 0.0, 0.0, 1.0, 1.0, 1.0))
 
     MINI_CHECK(len(hits) == 1)
