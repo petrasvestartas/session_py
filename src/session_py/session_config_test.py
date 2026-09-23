@@ -9,6 +9,7 @@ def test_session_config_runtime_modification():
     from session_py import SessionConfig
 
     SESSION_CONFIG.reset()
+
     config = SessionConfig()
     other = SessionConfig()
 
