@@ -18,6 +18,11 @@ PIVOT_TOLERANCE = Tolerance.ZERO_TOLERANCE / 100.0
 SINGULAR_TOLERANCE = Tolerance.ZERO_TOLERANCE
 
 
+def _eigen_value(pair: tuple[float, list[float]]) -> float:
+    """Return the eigenvalue of an (eigenvalue, eigenvector) pair."""
+    return pair[0]
+
+
 def _matrix_size(rows: int, cols: int) -> int:
     """Return the validated element count for C++-compatible dimensions."""
 
@@ -33,44 +38,26 @@ def _matrix_size(rows: int, cols: int) -> int:
 class Matrix:
     """An NxM matrix with row-major storage."""
 
-    def __init__(self, rows: int = 0, cols: int = 0) -> None:
-        """Construct a rows x cols matrix of zeros."""
-
-        self._guid = None
-        self.name = "my_matrix"
-        self.rows = rows
-        self.cols = cols
-        self.data = [0.0] * _matrix_size(rows, cols)
-
-    def has_guid(self) -> bool:
-        """Return whether the lazy guid has been created."""
-        return self._guid is not None
-
-    @property
-    def guid(self) -> str:
-        """Return the guid, creating it on first access."""
-        if self._guid is None:
-            self._guid = str(uuid.uuid4())
-
-        return self._guid
-
-    @guid.setter
-    def guid(self, value: str) -> None:
-        """Set the guid."""
-        self._guid = value
-
     # ═══════════════════════════════════════════════════════════════════════════
     # Constructors
     # ═══════════════════════════════════════════════════════════════════════════
+    def __init__(self, rows: int = 0, cols: int = 0) -> None:
+        """Construct a rows x cols matrix of zeros; raises for invalid dimensions."""
+
+        self._guid = None  # Lazily minted GUID.
+        self.name = "my_matrix"  # Matrix name.
+        self.rows = rows  # Row count.
+        self.cols = cols  # Column count.
+        self.data = [0.0] * _matrix_size(rows, cols)  # Row-major values.
 
     @staticmethod
     def zeros(rows: int, cols: int) -> "Matrix":
-        """Construct a zero matrix."""
+        """Construct a rows x cols zero matrix."""
         return Matrix(rows, cols)
 
     @staticmethod
     def identity(n: int) -> "Matrix":
-        """Construct an identity matrix."""
+        """Construct an n x n identity matrix."""
 
         m = Matrix(n, n)
 
@@ -81,7 +68,7 @@ class Matrix:
 
     @staticmethod
     def from_vec(rows: int, cols: int, data: list[float]) -> "Matrix":
-        """Construct from row-major values."""
+        """Construct from exact row-major data; raises when the size does not match."""
 
         if len(data) != _matrix_size(rows, cols):
             raise ValueError("Matrix data size does not match its dimensions")
@@ -129,23 +116,49 @@ class Matrix:
 
         return m
 
+    def duplicate(self) -> "Matrix":
+        """Copy with a new guid and the same data."""
+
+        m = Matrix.from_vec(self.rows, self.cols, self.data)
+        m.name = self.name
+
+        return m
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
     # ═══════════════════════════════════════════════════════════════════════════
+    def has_guid(self) -> bool:
+        """Return whether the lazy guid has been created."""
+        return self._guid is not None
+
+    @property
+    def guid(self) -> str:
+        """Return the guid, creating it on first access."""
+
+        if self._guid is None:
+            self._guid = str(uuid.uuid4())
+
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str) -> None:
+        self._guid = value
 
     def __getitem__(self, idx: tuple[int, int]) -> float:
-        """Return the element at ``(row, col)``."""
+        """Return the element at (row, col)."""
+
         r, c = idx
 
         return self.data[r * self.cols + c]
 
     def __setitem__(self, idx: tuple[int, int], value: float) -> None:
-        """Set the element at ``(row, col)``."""
+        """Set the element at (row, col)."""
+
         r, c = idx
         self.data[r * self.cols + c] = value
 
     def is_square(self) -> bool:
-        """Return whether row and column counts are equal."""
+        """Return whether the matrix has equal row and column counts."""
         return self.rows == self.cols
 
     def is_symmetric(self) -> bool:
@@ -162,7 +175,7 @@ class Matrix:
         return True
 
     def trace(self) -> float:
-        """Return the diagonal sum."""
+        """Return the diagonal sum; raises unless the matrix is square."""
 
         if not self.is_square():
             raise ValueError("Matrix trace requires a square matrix")
@@ -174,18 +187,10 @@ class Matrix:
 
         return s
 
-    def duplicate(self) -> "Matrix":
-        """Return a copy with a new guid and the same data."""
-        m = Matrix.from_vec(self.rows, self.cols, self.data)
-        m.name = self.name
-
-        return m
-
     # ═══════════════════════════════════════════════════════════════════════════
-    # Operations
+    # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def add(self, other: "Matrix") -> "Matrix":
+    def __add__(self, other: "Matrix") -> "Matrix":
         """Add an equal-sized matrix."""
 
         if self.rows != other.rows or self.cols != other.cols:
@@ -198,7 +203,7 @@ class Matrix:
 
         return result
 
-    def subtract(self, other: "Matrix") -> "Matrix":
+    def __sub__(self, other: "Matrix") -> "Matrix":
         """Subtract an equal-sized matrix."""
 
         if self.rows != other.rows or self.cols != other.cols:
@@ -211,18 +216,16 @@ class Matrix:
 
         return result
 
-    def scale(self, s: float) -> "Matrix":
-        """Return a matrix with every value multiplied by ``s``."""
+    def __mul__(self, other: "Matrix | float") -> "Matrix":
+        """Multiply by a dimension-compatible matrix or every element by a scalar."""
 
-        result = Matrix(self.rows, self.cols)
+        if not isinstance(other, Matrix):
+            result = Matrix(self.rows, self.cols)
 
-        for i in range(len(self.data)):
-            result.data[i] = self.data[i] * s
+            for i in range(len(self.data)):
+                result.data[i] = self.data[i] * other
 
-        return result
-
-    def multiply(self, other: "Matrix") -> "Matrix":
-        """Multiply by a dimension-compatible matrix."""
+            return result
 
         if self.cols != other.rows:
             raise ValueError("Matrix dimensions are incompatible for multiplication")
@@ -240,35 +243,8 @@ class Matrix:
 
         return result
 
-    def transpose(self) -> "Matrix":
-        """Return the transpose."""
-
-        result = Matrix(self.cols, self.rows)
-
-        for i in range(self.rows):
-            for j in range(self.cols):
-                result[j, i] = self[i, j]
-
-        return result
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Operators
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def __add__(self, other: "Matrix") -> "Matrix":
-        """Add an equal-sized matrix."""
-        return self.add(other)
-
-    def __sub__(self, other: "Matrix") -> "Matrix":
-        """Subtract an equal-sized matrix."""
-        return self.subtract(other)
-
-    def __mul__(self, other: "Matrix") -> "Matrix":
-        """Multiply by a dimension-compatible matrix."""
-        return self.multiply(other)
-
     def __eq__(self, other: object) -> bool:
-        """Compare dimensions and values within the matrix tolerance."""
+        """Compare dimensions and values within the matrix comparison tolerance."""
 
         if not isinstance(other, Matrix):
             return False
@@ -284,14 +260,24 @@ class Matrix:
 
     def __ne__(self, other: object) -> bool:
         """Return whether two matrices differ."""
-        return not self.__eq__(other)
+        return not self == other
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Linear algebra
     # ═══════════════════════════════════════════════════════════════════════════
+    def transpose(self) -> "Matrix":
+        """Return the transpose."""
+
+        result = Matrix(self.cols, self.rows)
+
+        for i in range(self.rows):
+            for j in range(self.cols):
+                result[j, i] = self[i, j]
+
+        return result
 
     def _lu_internal(self) -> tuple["Matrix", "Matrix", "Matrix", int]:
-        """(L, U, P, swaps) by partial pivoting"""
+        """Return (L, U, P, swaps) by partial pivoting."""
 
         n = self.rows
         u = self.duplicate()
@@ -333,7 +319,7 @@ class Matrix:
         return lower, u, p, swaps
 
     def lu_decompose(self) -> tuple["Matrix", "Matrix", "Matrix"]:
-        """Factor the matrix so that ``P * A = L * U``."""
+        """Return (L, U, P) with P * A = L * U; raises unless square."""
 
         if not self.is_square():
             raise ValueError("LU decomposition requires a square matrix")
@@ -343,7 +329,7 @@ class Matrix:
         return lower, u, p
 
     def determinant(self) -> float:
-        """Return the determinant."""
+        """Return the determinant; raises unless the matrix is square."""
 
         if not self.is_square():
             raise ValueError("Matrix determinant requires a square matrix")
@@ -366,7 +352,7 @@ class Matrix:
         return sign * prod
 
     def inverse(self) -> "Matrix | None":
-        """Return the inverse, or ``None`` for a non-square or singular matrix."""
+        """Return the inverse, or None for a non-square or singular matrix."""
 
         if not self.is_square():
             return None
@@ -412,7 +398,7 @@ class Matrix:
         return result
 
     def solve(self, b: "Matrix") -> "Matrix | None":
-        """Solve ``A * x = b``."""
+        """Return x with A * x = b, or None when no compatible unique solution exists."""
 
         if not self.is_square() or b.rows != self.rows or b.cols != 1:
             return None
@@ -456,15 +442,19 @@ class Matrix:
         return result
 
     def qr_decompose(self) -> tuple["Matrix", "Matrix"]:
-        """Compute a Gram-Schmidt QR decomposition."""
+        """Return (Q, R) from Gram-Schmidt decomposition."""
 
         m = self.rows
         n = self.cols
-        a_cols = [[0.0] * m for j in range(n)]
+        a_cols = []
 
         for j in range(n):
+            col = [0.0] * m
+
             for i in range(m):
-                a_cols[j][i] = self[i, j]
+                col[i] = self[i, j]
+
+            a_cols.append(col)
 
         q_cols = []
         r = Matrix.zeros(n, n)
@@ -490,6 +480,7 @@ class Matrix:
 
             norm = math.sqrt(norm)
             r[j, j] = norm
+
             qcol = [0.0] * m
 
             if norm > PIVOT_TOLERANCE:
@@ -507,7 +498,7 @@ class Matrix:
         return q, r
 
     def cholesky(self) -> "Matrix | None":
-        """Return lower ``L`` with ``A = L * L^T`` when it exists."""
+        """Return lower L with A = L * L^T, or None when not positive definite."""
 
         if not self.is_square():
             return None
@@ -533,7 +524,7 @@ class Matrix:
         return lower
 
     def eigenvalues(self) -> list[float]:
-        """Return eigenvalues computed by unshifted QR iteration."""
+        """Return eigenvalues by bounded unshifted QR iteration; raises unless square."""
 
         if not self.is_square():
             raise ValueError("Matrix eigenvalues require a square matrix")
@@ -543,7 +534,8 @@ class Matrix:
 
         for _ in range(1000 * n):
             q, r = a.qr_decompose()
-            a = r.multiply(q)
+            a = r * q
+
             converged = True
 
             for i in range(1, n):
@@ -562,7 +554,7 @@ class Matrix:
         return ev
 
     def _eigen_decompose_symmetric(self) -> list[tuple[float, list[float]]]:
-        """(eigenvalue, eigenvector) pairs by QR iteration with accumulated Q"""
+        """Return (eigenvalue, eigenvector) pairs by QR iteration with accumulated Q."""
 
         n = self.rows
         a = self.duplicate()
@@ -570,8 +562,9 @@ class Matrix:
 
         for _ in range(1000 * n):
             q, r = a.qr_decompose()
-            a = r.multiply(q)
-            v = v.multiply(q)
+            a = r * q
+            v = v * q
+
             converged = True
 
             for i in range(1, n):
@@ -595,14 +588,15 @@ class Matrix:
         return pairs
 
     def svd(self) -> tuple["Matrix", list[float], "Matrix"]:
-        """Compute the singular value decomposition."""
+        """Return (U, singular values, V^T)."""
 
         m = self.rows
         n = self.cols
         at = self.transpose()
-        ata = at.multiply(self)
+        ata = at * self
         pairs = ata._eigen_decompose_symmetric()
-        pairs.sort(key=lambda pair: -pair[0])
+        pairs.sort(key=_eigen_value, reverse=True)
+
         k = min(m, n)
         sv = []
         v_cols = []
@@ -636,7 +630,6 @@ class Matrix:
     # ═══════════════════════════════════════════════════════════════════════════
     # Norms
     # ═══════════════════════════════════════════════════════════════════════════
-
     def norm_frobenius(self) -> float:
         """Return the Frobenius norm."""
 
@@ -704,9 +697,8 @@ class Matrix:
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
-        """Return the JSON-compatible object representation."""
+        """Serialize to an ordered JSON object."""
 
         return {
             "cols": self.cols,
@@ -724,7 +716,7 @@ class Matrix:
         guid: str | None = None,
         name: str | None = None,
     ) -> "Matrix":
-        """Construct from a JSON-compatible object representation."""
+        """Deserialize from a JSON object."""
 
         m = cls.from_vec(data["rows"], data["cols"], data["data"])
         m.guid = guid or data["guid"]
@@ -738,26 +730,25 @@ class Matrix:
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> "Matrix":
-        """Construct from a JSON string."""
+        """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
     def file_json_dump(self, filepath: str | Path) -> None:
-        """Serialize to a JSON file."""
+        """Write JSON to a file."""
         with open(filepath, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
     def file_json_load(cls, filepath: str | Path) -> "Matrix":
-        """Construct from a JSON file."""
+        """Read JSON from a file."""
         with open(filepath) as f:
             return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
     def to_proto(self) -> matrix_pb2.Matrix:
-        """Return the protobuf representation."""
+        """Convert to the protobuf message."""
 
         from .proto import matrix_pb2
 
@@ -775,7 +766,7 @@ class Matrix:
 
     @classmethod
     def from_proto(cls, proto: matrix_pb2.Matrix) -> "Matrix":
-        """Construct from a protobuf message."""
+        """Construct from a shape-valid protobuf message."""
 
         m = cls.from_vec(proto.rows, proto.cols, proto.data)
 
@@ -792,7 +783,7 @@ class Matrix:
 
     @classmethod
     def pb_loads(cls, data: bytes) -> "Matrix":
-        """Construct from protobuf bytes."""
+        """Deserialize from protobuf bytes."""
 
         from .proto import matrix_pb2
 
@@ -802,7 +793,8 @@ class Matrix:
         return cls.from_proto(proto)
 
     def pb_dump(self, filepath: str | Path) -> None:
-        """Serialize to a protobuf file."""
+        """Write protobuf bytes to a file."""
+
         data = self.pb_dumps()
 
         with open(filepath, "wb") as f:
@@ -810,7 +802,8 @@ class Matrix:
 
     @classmethod
     def pb_load(cls, filepath: str | Path) -> "Matrix":
-        """Construct from a protobuf file."""
+        """Read protobuf bytes from a file."""
+
         with open(filepath, "rb") as f:
             data = f.read()
 
@@ -819,9 +812,8 @@ class Matrix:
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
-        """Return the compact shape description."""
+        """Return the compact dimension string."""
         return f"Matrix({self.rows}x{self.cols})"
 
     def __repr__(self) -> str:

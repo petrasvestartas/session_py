@@ -69,12 +69,10 @@ def test_matrix_add():
 
     a = Matrix.from_vec(2, 2, [1.0, 2.0, 3.0, 4.0])
     b = Matrix.from_vec(2, 2, [5.0, 6.0, 7.0, 8.0])
-    c = a.add(b)
-    d = a + b
+    c = a + b
 
     MINI_CHECK(c[0, 0] == 6.0 and c[0, 1] == 8.0)
     MINI_CHECK(c[1, 0] == 10.0 and c[1, 1] == 12.0)
-    MINI_CHECK(c == d)
 
 
 @MINI_TEST("Matrix", "Subtract")
@@ -83,12 +81,10 @@ def test_matrix_subtract():
 
     a = Matrix.from_vec(2, 2, [5.0, 6.0, 7.0, 8.0])
     b = Matrix.from_vec(2, 2, [1.0, 2.0, 3.0, 4.0])
-    c = a.subtract(b)
-    d = a - b
+    c = a - b
 
     MINI_CHECK(c[0, 0] == 4.0 and c[0, 1] == 4.0)
     MINI_CHECK(c[1, 0] == 4.0 and c[1, 1] == 4.0)
-    MINI_CHECK(c == d)
 
 
 @MINI_TEST("Matrix", "Scale")
@@ -96,8 +92,8 @@ def test_matrix_scale():
     from session_py import Matrix
 
     a = Matrix.from_vec(2, 2, [1.0, 2.0, 3.0, 4.0])
-    b = a.scale(2.0)
-    c = a.scale(3.0)
+    b = a * 2.0
+    c = a * 3.0
 
     MINI_CHECK(b[0, 0] == 2.0 and b[0, 1] == 4.0 and b[1, 0] == 6.0 and b[1, 1] == 8.0)
     MINI_CHECK(c[0, 0] == 3.0 and c[1, 1] == 12.0)
@@ -109,15 +105,11 @@ def test_matrix_multiply():
 
     a = Matrix.from_vec(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     b = Matrix.from_vec(3, 2, [7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
-    c = a.multiply(b)
-    d = a * b
+    c = a * b
 
     MINI_CHECK(c.rows == 2 and c.cols == 2)
     MINI_CHECK(TOLERANCE.is_close(c[0, 0], 58.0) and TOLERANCE.is_close(c[0, 1], 64.0))
-    MINI_CHECK(
-        TOLERANCE.is_close(c[1, 0], 139.0) and TOLERANCE.is_close(c[1, 1], 154.0)
-    )
-    MINI_CHECK(c == d)
+    MINI_CHECK(TOLERANCE.is_close(c[1, 0], 139.0) and TOLERANCE.is_close(c[1, 1], 154.0))
 
 
 @MINI_TEST("Matrix", "Transpose")
@@ -157,20 +149,14 @@ def test_matrix_inverse():
     inv_none = singular.inverse()
 
     MINI_CHECK(inv is not None)
-    prod = a.multiply(inv)
-    MINI_CHECK(
-        TOLERANCE.is_close(inv[0, 0], 0.6) and TOLERANCE.is_close(inv[0, 1], -0.7)
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(inv[1, 0], -0.2) and TOLERANCE.is_close(inv[1, 1], 0.4)
-    )
+
+    prod = a * inv
+
+    MINI_CHECK(TOLERANCE.is_close(inv[0, 0], 0.6) and TOLERANCE.is_close(inv[0, 1], -0.7))
+    MINI_CHECK(TOLERANCE.is_close(inv[1, 0], -0.2) and TOLERANCE.is_close(inv[1, 1], 0.4))
     MINI_CHECK(inv_none is None)
-    MINI_CHECK(
-        TOLERANCE.is_close(prod[0, 0], 1.0) and TOLERANCE.is_close(prod[1, 1], 1.0)
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(prod[0, 1], 0.0) and TOLERANCE.is_close(prod[1, 0], 0.0)
-    )
+    MINI_CHECK(TOLERANCE.is_close(prod[0, 0], 1.0) and TOLERANCE.is_close(prod[1, 1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(prod[0, 1], 0.0) and TOLERANCE.is_close(prod[1, 0], 0.0))
 
 
 @MINI_TEST("Matrix", "Solve")
@@ -182,6 +168,7 @@ def test_matrix_solve():
     x = a.solve(b)
 
     MINI_CHECK(x is not None)
+
     residual_0 = 2.0 * x[0, 0] + 1.0 * x[1, 0]
     residual_1 = 1.0 * x[0, 0] + 3.0 * x[1, 0]
 
@@ -197,18 +184,12 @@ def test_matrix_lu_decompose():
 
     a = Matrix.from_vec(3, 3, [2.0, 1.0, 1.0, 4.0, 3.0, 3.0, 8.0, 7.0, 9.0])
     lower, u, p = a.lu_decompose()
-    pa = p.multiply(a)
-    lu = lower.multiply(u)
+    pa = p * a
+    lu = lower * u
 
     MINI_CHECK(lower.rows == 3 and u.cols == 3)
-    MINI_CHECK(
-        TOLERANCE.is_close(pa[0, 0], lu[0, 0])
-        and TOLERANCE.is_close(pa[0, 1], lu[0, 1])
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(pa[1, 0], lu[1, 0])
-        and TOLERANCE.is_close(pa[2, 2], lu[2, 2])
-    )
+    MINI_CHECK(TOLERANCE.is_close(pa[0, 0], lu[0, 0]) and TOLERANCE.is_close(pa[0, 1], lu[0, 1]))
+    MINI_CHECK(TOLERANCE.is_close(pa[1, 0], lu[1, 0]) and TOLERANCE.is_close(pa[2, 2], lu[2, 2]))
     MINI_CHECK(TOLERANCE.is_close(lower[0, 1], 0.0) and TOLERANCE.is_close(lower[0, 2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(lower[1, 2], 0.0))
 
@@ -220,15 +201,13 @@ def test_matrix_qr_decompose():
     a = Matrix.from_vec(3, 3, [12.0, -51.0, 4.0, 6.0, 167.0, -68.0, -4.0, 24.0, -41.0])
     q, r = a.qr_decompose()
     qt = q.transpose()
-    qtq = qt.multiply(q)
-    qr_prod = q.multiply(r)
+    qtq = qt * q
+    qr_prod = q * r
 
     MINI_CHECK(TOLERANCE.is_close(qtq[0, 0], 1.0))
     MINI_CHECK(TOLERANCE.is_close(qtq[1, 1], 1.0))
     MINI_CHECK(TOLERANCE.is_close(qtq[2, 2], 1.0))
-    MINI_CHECK(
-        TOLERANCE.is_close(qtq[0, 1], 0.0) and TOLERANCE.is_close(qtq[0, 2], 0.0)
-    )
+    MINI_CHECK(TOLERANCE.is_close(qtq[0, 1], 0.0) and TOLERANCE.is_close(qtq[0, 2], 0.0))
     MINI_CHECK(TOLERANCE.is_close(qr_prod[0, 0], 12.0))
     MINI_CHECK(TOLERANCE.is_close(qr_prod[1, 1], 167.0))
     MINI_CHECK(TOLERANCE.is_close(qr_prod[2, 2], -41.0))
@@ -242,17 +221,14 @@ def test_matrix_cholesky():
     lower = a.cholesky()
 
     MINI_CHECK(lower is not None)
+
     lt = lower.transpose()
-    llt = lower.multiply(lt)
+    llt = lower * lt
     not_spd = Matrix.from_vec(2, 2, [1.0, 2.0, 2.0, 1.0])
     l_none = not_spd.cholesky()
 
-    MINI_CHECK(
-        TOLERANCE.is_close(llt[0, 0], 4.0) and TOLERANCE.is_close(llt[0, 1], 2.0)
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(llt[1, 0], 2.0) and TOLERANCE.is_close(llt[1, 1], 5.0)
-    )
+    MINI_CHECK(TOLERANCE.is_close(llt[0, 0], 4.0) and TOLERANCE.is_close(llt[0, 1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(llt[1, 0], 2.0) and TOLERANCE.is_close(llt[1, 1], 5.0))
     MINI_CHECK(TOLERANCE.is_close(llt[2, 2], 6.0))
     MINI_CHECK(l_none is None)
 
@@ -264,6 +240,7 @@ def test_matrix_eigenvalues():
     a = Matrix.from_vec(3, 3, [3.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 2.0])
     evs = a.eigenvalues()
     empty = Matrix().eigenvalues()
+
     evs.sort()
 
     MINI_CHECK(len(evs) == 3)
@@ -279,6 +256,7 @@ def test_matrix_svd():
 
     a = Matrix.from_vec(3, 3, [1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0])
     _u, sv, _vt = a.svd()
+
     sv.sort(reverse=True)
 
     MINI_CHECK(len(sv) == 3)
@@ -323,15 +301,14 @@ def test_matrix_json_roundtrip():
     a = Matrix.from_vec(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     a.name = "test_matrix"
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_matrix.json"
+
     a.file_json_dump(fname)
     loaded = Matrix.file_json_load(fname)
     parsed = Matrix.file_json_loads(a.file_json_dumps())
 
     MINI_CHECK(loaded.name == "test_matrix")
     MINI_CHECK(loaded.rows == 2 and loaded.cols == 3)
-    MINI_CHECK(
-        TOLERANCE.is_close(loaded[0, 0], 1.0) and TOLERANCE.is_close(loaded[1, 2], 6.0)
-    )
+    MINI_CHECK(TOLERANCE.is_close(loaded[0, 0], 1.0) and TOLERANCE.is_close(loaded[1, 2], 6.0))
     MINI_CHECK(parsed == a)
 
 
@@ -347,6 +324,7 @@ def test_matrix_protobuf_roundtrip():
     a.name = "test_matrix_proto"
     guid = a.guid
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_matrix.bin"
+
     a.pb_dump(fname)
     loaded = Matrix.pb_load(fname)
     parsed = Matrix.pb_loads(a.pb_dumps())
@@ -356,9 +334,7 @@ def test_matrix_protobuf_roundtrip():
     MINI_CHECK(fresh_proto.guid == "")
     MINI_CHECK(loaded.name == "test_matrix_proto")
     MINI_CHECK(loaded.rows == 2 and loaded.cols == 3)
-    MINI_CHECK(
-        TOLERANCE.is_close(loaded[0, 0], 1.0) and TOLERANCE.is_close(loaded[1, 2], 6.0)
-    )
+    MINI_CHECK(TOLERANCE.is_close(loaded[0, 0], 1.0) and TOLERANCE.is_close(loaded[1, 2], 6.0))
     MINI_CHECK(parsed == a)
     MINI_CHECK(converted == a)
     MINI_CHECK(loaded.guid == guid and parsed.guid == guid and converted.guid == guid)
@@ -445,7 +421,7 @@ def test_matrix_shape_errors():
         cols = True
 
     try:
-        Matrix(2, 3).multiply(Matrix(2, 2))
+        Matrix(2, 3) * Matrix(2, 2)
     except ValueError:
         multiply = True
 
