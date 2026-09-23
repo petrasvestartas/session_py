@@ -24,15 +24,16 @@ _sym_db = _symbol_database.Default()
 
 from . import xform_pb2 as xform__pb2
 from . import color_pb2 as color__pb2
+from . import element_pb2 as element__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12instance_ref.proto\x12\rsession_proto\x1a\x0bxform.proto\x1a\x0b\x63olor.proto\"\x9b\x01\n\x0bInstanceRef\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x17\n\x0f\x64\x65\x66inition_guid\x18\x03 \x01(\t\x12#\n\x05xform\x18\x04 \x01(\x0b\x32\x14.session_proto.Xform\x12#\n\x05\x63olor\x18\x05 \x01(\x0b\x32\x14.session_proto.Color\x12\r\n\x05\x66lags\x18\x06 \x01(\rb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12instance_ref.proto\x12\rsession_proto\x1a\x0bxform.proto\x1a\x0b\x63olor.proto\x1a\relement.proto\"\xcc\x01\n\x0bInstanceRef\x12\x0c\n\x04guid\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x17\n\x0f\x64\x65\x66inition_guid\x18\x03 \x01(\t\x12#\n\x05xform\x18\x04 \x01(\x0b\x32\x14.session_proto.Xform\x12#\n\x05\x63olor\x18\x05 \x01(\x0b\x32\x14.session_proto.Color\x12\r\n\x05\x66lags\x18\x06 \x01(\r\x12/\n\x08\x66\x65\x61tures\x18\x07 \x03(\x0b\x32\x1d.session_proto.ElementFeatureb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'instance_ref_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_INSTANCEREF']._serialized_start=64
-  _globals['_INSTANCEREF']._serialized_end=219
+  _globals['_INSTANCEREF']._serialized_start=79
+  _globals['_INSTANCEREF']._serialized_end=283
 # @@protoc_insertion_point(module_scope)
