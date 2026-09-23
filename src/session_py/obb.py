@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
 import json
 import math
@@ -19,16 +18,28 @@ if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .pointcloud import PointCloud
     from .polyline import Polyline
+    from .proto import boundingbox_pb2
 
-NUM_SAMPLES = 20
-MAX_ITER = 20
+NUM_SAMPLES = 20  # Samples per span when searching curve extrema.
+MAX_ITER = 20  # Newton iterations per extremum.
 
 
 class OBB:
     """Oriented bounding box as center, three axes and half-size."""
 
-    __slots__ = ("_guid", "center", "x_axis", "y_axis", "z_axis", "half_size", "name")
+    __slots__ = (
+        "_guid",
+        "center",
+        "x_axis",
+        "y_axis",
+        "z_axis",
+        "half_size",
+        "name",
+    )
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(
         self,
         center: Point | None = None,
@@ -39,25 +50,13 @@ class OBB:
     ):
         """Construct from center, axes and half-size; defaults to the unit box at the origin."""
 
-        self._guid = None
-        self.center = center if center is not None else Point(0.0, 0.0, 0.0)
-        self.x_axis = x_axis if x_axis is not None else Vector(1.0, 0.0, 0.0)
-        self.y_axis = y_axis if y_axis is not None else Vector(0.0, 1.0, 0.0)
-        self.z_axis = z_axis if z_axis is not None else Vector(0.0, 0.0, 1.0)
-        self.half_size = half_size if half_size is not None else Vector(0.5, 0.5, 0.5)
-        self.name = "my_obb"
-
-    @staticmethod
-    def from_plane(plane: Plane, dx: float, dy: float, dz: float) -> "OBB":
-        """Construct on the plane frame with full sizes dx, dy, dz."""
-
-        return OBB(
-            plane.origin,
-            plane.x_axis,
-            plane.y_axis,
-            plane.z_axis,
-            Vector(dx * 0.5, dy * 0.5, dz * 0.5),
-        )
+        self._guid = None  # Lazy guid.
+        self.center = center if center is not None else Point(0.0, 0.0, 0.0)  # Box center.
+        self.x_axis = x_axis if x_axis is not None else Vector(1.0, 0.0, 0.0)  # Unit x axis.
+        self.y_axis = y_axis if y_axis is not None else Vector(0.0, 1.0, 0.0)  # Unit y axis.
+        self.z_axis = z_axis if z_axis is not None else Vector(0.0, 0.0, 1.0)  # Unit z axis.
+        self.half_size = half_size if half_size is not None else Vector(0.5, 0.5, 0.5)  # Half extent along each axis.
+        self.name = "my_obb"  # Box name.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -74,10 +73,13 @@ class OBB:
 
         return result
 
-    def duplicate(self) -> "OBB":
+    def duplicate(self) -> OBB:
         """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -85,6 +87,7 @@ class OBB:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -102,9 +105,20 @@ class OBB:
     # ═══════════════════════════════════════════════════════════════════════════
     # Static constructors
     # ═══════════════════════════════════════════════════════════════════════════
+    @staticmethod
+    def from_plane(plane: Plane, dx: float, dy: float, dz: float) -> OBB:
+        """Construct on the plane frame with full sizes dx, dy, dz."""
+
+        return OBB(
+            plane.origin.duplicate(),
+            plane.x_axis.duplicate(),
+            plane.y_axis.duplicate(),
+            plane.z_axis.duplicate(),
+            Vector(dx * 0.5, dy * 0.5, dz * 0.5),
+        )
 
     @staticmethod
-    def _from_aabb(aabb: AABB) -> "OBB":
+    def from_aabb(aabb: AABB) -> OBB:
         """Construct the world-aligned box with the center and half-size of aabb."""
 
         return OBB(
@@ -116,28 +130,29 @@ class OBB:
         )
 
     @staticmethod
-    def from_point(point: Point, inflate: float = 0.0) -> "OBB":
+    def from_point(point: Point, inflate: float = 0.0) -> OBB:
         """Construct the world-aligned box of half-size inflate around point."""
-        return OBB._from_aabb(AABB.from_point(point, inflate))
+        return OBB.from_aabb(AABB.from_point(point, inflate))
 
     @staticmethod
     def from_points(
         points: list[Point], inflate: float = 0.0, plane: Plane | None = None
-    ) -> "OBB":
+    ) -> OBB:
         """Construct the world-aligned tight box of points, or tight in the plane frame, grown by inflate."""
 
         if plane is None:
-            return OBB._from_aabb(AABB.from_points(points, inflate))
+            return OBB.from_aabb(AABB.from_points(points, inflate))
 
         if not points:
             return OBB()
 
         origin = plane.origin
-        x_axis = plane.x_axis
-        y_axis = plane.y_axis
-        z_axis = plane.z_axis
+        x_axis = plane.x_axis.duplicate()
+        y_axis = plane.y_axis.duplicate()
+        z_axis = plane.z_axis.duplicate()
         world_to_local = Xform.world_to_frame(origin, x_axis, y_axis, z_axis)
         local_to_world = Xform.frame_to_world(origin, x_axis, y_axis, z_axis)
+
         min_x = math.inf
         min_y = math.inf
         min_z = math.inf
@@ -147,6 +162,7 @@ class OBB:
 
         for pt in points:
             local = pt.transformed(world_to_local)
+
             min_x = min(min_x, local[0])
             min_y = min(min_y, local[1])
             min_z = min(min_z, local[2])
@@ -170,57 +186,58 @@ class OBB:
     @staticmethod
     def from_line(
         line: Line, inflate: float = 0.0, plane: Plane | None = None
-    ) -> "OBB":
+    ) -> OBB:
         """Construct the tight box of the two ends, world-aligned or in the plane frame, grown by inflate."""
+
         if plane is None:
-            return OBB._from_aabb(AABB.from_line(line, inflate))
+            return OBB.from_aabb(AABB.from_line(line, inflate))
 
         return OBB.from_points([line.start(), line.end()], inflate, plane)
 
     @staticmethod
     def from_polyline(
-        polyline: "Polyline", inflate: float = 0.0, plane: Plane | None = None
-    ) -> "OBB":
+        polyline: Polyline, inflate: float = 0.0, plane: Plane | None = None
+    ) -> OBB:
         """Construct the tight box of the vertices, world-aligned or in the plane frame, grown by inflate."""
+
         if plane is None:
-            return OBB._from_aabb(AABB.from_polyline(polyline, inflate))
+            return OBB.from_aabb(AABB.from_polyline(polyline, inflate))
 
         return OBB.from_points(polyline.get_points(), inflate, plane)
 
     @staticmethod
     def from_mesh(
-        mesh: "Mesh", inflate: float = 0.0, plane: Plane | None = None
-    ) -> "OBB":
+        mesh: Mesh, inflate: float = 0.0, plane: Plane | None = None
+    ) -> OBB:
         """Construct the tight box of the vertices, world-aligned or in the plane frame, grown by inflate."""
 
         if plane is None:
-            return OBB._from_aabb(AABB.from_mesh(mesh, inflate))
+            return OBB.from_aabb(AABB.from_mesh(mesh, inflate))
 
-        vertices, faces = mesh.to_vertices_and_faces()
-
-        return OBB.from_points(vertices, inflate, plane)
+        return OBB.from_points(mesh.to_vertices_and_faces()[0], inflate, plane)
 
     @staticmethod
     def from_pointcloud(
-        pointcloud: "PointCloud", inflate: float = 0.0, plane: Plane | None = None
-    ) -> "OBB":
+        pointcloud: PointCloud, inflate: float = 0.0, plane: Plane | None = None
+    ) -> OBB:
         """Construct the tight box of the points, world-aligned or in the plane frame, grown by inflate."""
+
         if plane is None:
-            return OBB._from_aabb(AABB.from_pointcloud(pointcloud, inflate))
+            return OBB.from_aabb(AABB.from_pointcloud(pointcloud, inflate))
 
         return OBB.from_points(pointcloud.get_points(), inflate, plane)
 
     @staticmethod
     def from_nurbscurve(
-        curve: "NurbsCurve",
+        curve: NurbsCurve,
         inflate: float = 0.0,
         tight: bool = False,
         plane: Plane | None = None,
-    ) -> "OBB":
+    ) -> OBB:
         """Construct the box of the control points, or of the curve extrema when tight, world-aligned or in the plane frame."""
 
         if plane is None:
-            return OBB._from_aabb(AABB.from_nurbscurve(curve, inflate, tight))
+            return OBB.from_aabb(AABB.from_nurbscurve(curve, inflate, tight))
 
         if not curve.is_valid() or curve.cv_count() == 0:
             return OBB()
@@ -233,7 +250,9 @@ class OBB:
 
             return OBB.from_points(points, inflate, plane)
 
-        t0, t1 = curve.domain()
+        t0 = curve.domain_start()
+        t1 = curve.domain_end()
+
         points.append(curve.point_at(t0))
         points.append(curve.point_at(t1))
 
@@ -265,12 +284,12 @@ class OBB:
 
     @staticmethod
     def from_nurbssurface(
-        surface: "NurbsSurface", inflate: float = 0.0, plane: Plane | None = None
-    ) -> "OBB":
+        surface: NurbsSurface, inflate: float = 0.0, plane: Plane | None = None
+    ) -> OBB:
         """Construct the box of the control points, world-aligned or in the plane frame, grown by inflate."""
 
         if plane is None:
-            return OBB._from_aabb(AABB.from_nurbssurface(surface, inflate))
+            return OBB.from_aabb(AABB.from_nurbssurface(surface, inflate))
 
         if (
             not surface.is_valid()
@@ -289,31 +308,31 @@ class OBB:
 
     @staticmethod
     def _compute_extremum(
-        curve: "NurbsCurve", axis: Vector, t_lo: float, t_hi: float, d_start: float
+        curve: NurbsCurve, axis: Vector, t_lo: float, t_hi: float, d_start: float
     ) -> float:
         """Compute the parameter in [t_lo, t_hi] where the derivative along axis crosses zero, by Newton steps bracketed by bisection."""
 
         t_root = (t_lo + t_hi) * 0.5
 
-        for it in range(MAX_ITER):
+        for _ in range(MAX_ITER):
             deriv = curve.evaluate(t_root, 2)
 
             if len(deriv) < 3:
                 break
 
-            f = deriv[1].dot(axis)
-            fp = deriv[2].dot(axis)
+            d1 = deriv[1].dot(axis)
+            d2 = deriv[2].dot(axis)
 
-            if abs(f) < 1e-12:
+            if abs(d1) < 1e-12:
                 break
 
-            if abs(fp) > 1e-14:
-                t_new = t_root - f / fp
+            if abs(d2) > 1e-14:
+                t_new = t_root - d1 / d2
 
                 if t_new >= t_lo and t_new <= t_hi:
                     t_root = t_new
                 else:
-                    if f * d_start < 0:
+                    if d1 * d_start < 0:
                         t_hi = t_root
                     else:
                         t_lo = t_root
@@ -327,20 +346,19 @@ class OBB:
             if len(deriv_check) < 2:
                 continue
 
-            f_check = deriv_check[1].dot(axis)
+            d_check = deriv_check[1].dot(axis)
 
-            if f_check * d_start < 0:
+            if d_check * d_start < 0:
                 t_hi = t_root
             else:
                 t_lo = t_root
-                d_start = f_check
+                d_start = d_check
 
         return t_root
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __eq__(self, other) -> bool:
         """Compare name, center, axes and half-size to 1e-6; guid ignored."""
 
@@ -377,7 +395,6 @@ class OBB:
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
     def transform(self, xform: Xform) -> None:
         """Transform center and axes in place."""
 
@@ -386,8 +403,9 @@ class OBB:
         self.y_axis.transform(xform)
         self.z_axis.transform(xform)
 
-    def transformed(self, xform: Xform) -> "OBB":
+    def transformed(self, xform: Xform) -> OBB:
         """Return a transformed copy."""
+
         result = copy.deepcopy(self)
         result.transform(xform)
 
@@ -396,7 +414,6 @@ class OBB:
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
     def aabb(self) -> AABB:
         """Return the world-aligned box enclosing the corners."""
 
@@ -463,20 +480,20 @@ class OBB:
     def closest_point(self, pt: Point) -> Point:
         """Return pt clamped to the box in its own frame."""
 
-        d = pt - self.center
-        lx = max(-self.half_size[0], min(self.half_size[0], d.dot(self.x_axis)))
-        ly = max(-self.half_size[1], min(self.half_size[1], d.dot(self.y_axis)))
-        lz = max(-self.half_size[2], min(self.half_size[2], d.dot(self.z_axis)))
+        offset = pt - self.center
+        lx = max(-self.half_size[0], min(self.half_size[0], offset.dot(self.x_axis)))
+        ly = max(-self.half_size[1], min(self.half_size[1], offset.dot(self.y_axis)))
+        lz = max(-self.half_size[2], min(self.half_size[2], offset.dot(self.z_axis)))
 
         return self.point_at(lx, ly, lz)
 
     def contains(self, pt: Point) -> bool:
         """Return whether pt lies inside or on the box."""
 
-        d = pt - self.center
-        lx = abs(d.dot(self.x_axis))
-        ly = abs(d.dot(self.y_axis))
-        lz = abs(d.dot(self.z_axis))
+        offset = pt - self.center
+        lx = abs(offset.dot(self.x_axis))
+        ly = abs(offset.dot(self.y_axis))
+        lz = abs(offset.dot(self.z_axis))
 
         return (
             lx <= self.half_size[0]
@@ -514,21 +531,21 @@ class OBB:
     def get_edges(self) -> list[Line]:
         """Return the bottom loop, the top loop, then the four verticals."""
 
-        c = self.corners()
+        points = self.corners()
 
         return [
-            Line.from_points(c[0], c[1]),
-            Line.from_points(c[1], c[2]),
-            Line.from_points(c[2], c[3]),
-            Line.from_points(c[3], c[0]),
-            Line.from_points(c[4], c[5]),
-            Line.from_points(c[5], c[6]),
-            Line.from_points(c[6], c[7]),
-            Line.from_points(c[7], c[4]),
-            Line.from_points(c[0], c[4]),
-            Line.from_points(c[1], c[5]),
-            Line.from_points(c[2], c[6]),
-            Line.from_points(c[3], c[7]),
+            Line.from_points(points[0], points[1]),
+            Line.from_points(points[1], points[2]),
+            Line.from_points(points[2], points[3]),
+            Line.from_points(points[3], points[0]),
+            Line.from_points(points[4], points[5]),
+            Line.from_points(points[5], points[6]),
+            Line.from_points(points[6], points[7]),
+            Line.from_points(points[7], points[4]),
+            Line.from_points(points[0], points[4]),
+            Line.from_points(points[1], points[5]),
+            Line.from_points(points[2], points[6]),
+            Line.from_points(points[3], points[7]),
         ]
 
     def two_rectangles(self) -> list[Point]:
@@ -549,15 +566,13 @@ class OBB:
 
     def point_at(self, x: float, y: float, z: float) -> Point:
         """Return the center offset by x, y, z along the axes."""
-
         return self.center + self.x_axis * x + self.y_axis * y + self.z_axis * z
 
     def inflate(self, amount: float) -> None:
         """Grow every half-size by amount."""
-
         self.half_size = self.half_size + Vector(amount, amount, amount)
 
-    def union_with(self, other: "OBB") -> None:
+    def union_with(self, other: OBB) -> None:
         """Grow in place to enclose the corners of other."""
 
         min_x = -self.half_size[0]
@@ -567,11 +582,12 @@ class OBB:
         max_y = self.half_size[1]
         max_z = self.half_size[2]
 
-        for c in other.corners():
-            d = c - self.center
-            lx = d.dot(self.x_axis)
-            ly = d.dot(self.y_axis)
-            lz = d.dot(self.z_axis)
+        for point in other.corners():
+            offset = point - self.center
+            lx = offset.dot(self.x_axis)
+            ly = offset.dot(self.y_axis)
+            lz = offset.dot(self.z_axis)
+
             min_x = min(min_x, lx)
             min_y = min(min_y, ly)
             min_z = min(min_z, lz)
@@ -589,19 +605,19 @@ class OBB:
     # ═══════════════════════════════════════════════════════════════════════════
     # Collision
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def collides_with(self, other: "OBB") -> bool:
+    def collides_with(self, other: OBB) -> bool:
         """Return whether the boxes overlap by the separating axis test (collides_with_rtcd)."""
         return self.collides_with_rtcd(other)
 
-    def collides_with_broad(self, other: "OBB") -> bool:
+    def collides_with_broad(self, other: OBB) -> bool:
         """Return whether the boxes overlap, rejecting by AABB before collides_with."""
+
         if not self.aabb().intersects(other.aabb()):
             return False
 
         return self.collides_with(other)
 
-    def collides_with_rtcd(self, other: "OBB") -> bool:
+    def collides_with_rtcd(self, other: OBB) -> bool:
         """Return whether the boxes overlap by the fifteen-axis test in the frame of this box (Real-Time Collision Detection)."""
 
         eps = 1e-9
@@ -620,10 +636,10 @@ class OBB:
         r20 = self.z_axis.dot(other.x_axis)
         r21 = self.z_axis.dot(other.y_axis)
         r22 = self.z_axis.dot(other.z_axis)
-        d = other.center - self.center
-        t0 = d.dot(self.x_axis)
-        t1 = d.dot(self.y_axis)
-        t2 = d.dot(self.z_axis)
+        offset = other.center - self.center
+        t0 = offset.dot(self.x_axis)
+        t1 = offset.dot(self.y_axis)
+        t2 = offset.dot(self.z_axis)
         ar00 = abs(r00) + eps
         ar01 = abs(r01) + eps
         ar02 = abs(r02) + eps
@@ -681,10 +697,10 @@ class OBB:
 
         return True
 
-    def collides_with_naive(self, other: "OBB") -> bool:
+    def collides_with_naive(self, other: OBB) -> bool:
         """Return whether the boxes overlap by the fifteen-axis test on projected extents."""
 
-        rp = other.center - self.center
+        offset = other.center - self.center
         axes = [
             self.x_axis,
             self.y_axis,
@@ -704,14 +720,14 @@ class OBB:
         ]
 
         for axis in axes:
-            if OBB._separating_plane_exists(rp, axis, self, other):
+            if OBB._separating_plane_exists(offset, axis, self, other):
                 return False
 
         return True
 
     @staticmethod
     def _separating_plane_exists(
-        relative_position: Vector, axis: Vector, box1: "OBB", box2: "OBB"
+        relative_position: Vector, axis: Vector, box1: OBB, box2: OBB
     ) -> bool:
         """Return whether the extents of both boxes projected on axis do not reach their center distance."""
 
@@ -731,7 +747,6 @@ class OBB:
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
@@ -747,7 +762,9 @@ class OBB:
         }
 
     @classmethod
-    def __jsonload__(cls, data: dict, guid: str = None, name: str = None) -> "OBB":
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> OBB:
         """Deserialize from a JSON object."""
 
         from .file_encoders import file_decode_node
@@ -759,6 +776,7 @@ class OBB:
             file_decode_node(data["z_axis"]),
             file_decode_node(data["half_size"]),
         )
+
         obb.guid = guid if guid is not None else data["guid"]
         obb.name = name if name is not None else data["name"]
 
@@ -769,58 +787,55 @@ class OBB:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "OBB":
+    def file_json_loads(cls, json_string: str) -> OBB:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write to a JSON file."""
+
         with open(filepath, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "OBB":
+    def file_json_load(cls, filepath: str | Path) -> OBB:
         """Read from a JSON file."""
+
         with open(filepath) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> boundingbox_pb2.BoundingBox:
+        """Convert to the protobuf message."""
 
         from .proto import boundingbox_pb2
 
         proto = boundingbox_pb2.BoundingBox()
-        proto.center.ParseFromString(self.center.pb_dumps())
-        proto.x_axis.ParseFromString(self.x_axis.pb_dumps())
-        proto.y_axis.ParseFromString(self.y_axis.pb_dumps())
-        proto.z_axis.ParseFromString(self.z_axis.pb_dumps())
-        proto.half_size.ParseFromString(self.half_size.pb_dumps())
+        proto.center.CopyFrom(self.center.to_proto())
+        proto.x_axis.CopyFrom(self.x_axis.to_proto())
+        proto.y_axis.CopyFrom(self.y_axis.to_proto())
+        proto.z_axis.CopyFrom(self.z_axis.to_proto())
+        proto.half_size.CopyFrom(self.half_size.to_proto())
 
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
 
         proto.name = self.name
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "OBB":
-        """Deserialize from protobuf bytes."""
+    def from_proto(cls, proto: boundingbox_pb2.BoundingBox) -> OBB:
+        """Construct from the protobuf message."""
 
-        from .proto import boundingbox_pb2
-
-        proto = boundingbox_pb2.BoundingBox()
-        proto.ParseFromString(data)
         obb = cls(
-            Point.pb_loads(proto.center.SerializeToString()),
-            Vector.pb_loads(proto.x_axis.SerializeToString()),
-            Vector.pb_loads(proto.y_axis.SerializeToString()),
-            Vector.pb_loads(proto.z_axis.SerializeToString()),
-            Vector.pb_loads(proto.half_size.SerializeToString()),
+            Point.from_proto(proto.center),
+            Vector.from_proto(proto.x_axis),
+            Vector.from_proto(proto.y_axis),
+            Vector.from_proto(proto.z_axis),
+            Vector.from_proto(proto.half_size),
         )
 
         if proto.guid:
@@ -830,23 +845,39 @@ class OBB:
 
         return obb
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> OBB:
+        """Deserialize from protobuf bytes."""
+
+        from .proto import boundingbox_pb2
+
+        proto = boundingbox_pb2.BoundingBox()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write to a protobuf file."""
+
         with open(filepath, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "OBB":
+    def pb_load(cls, filepath: str | Path) -> OBB:
         """Read from a protobuf file."""
+
         with open(filepath, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
-        """Return "center."""
+        """Return "center\nx_axis\ny_axis\nz_axis\nhalf_size"."""
         return f"{self.center}\n{self.x_axis}\n{self.y_axis}\n{self.z_axis}\n{self.half_size}"
 
     def __repr__(self) -> str:

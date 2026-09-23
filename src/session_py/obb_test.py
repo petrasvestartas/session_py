@@ -62,7 +62,9 @@ def test_obb_constructor():
     MINI_CHECK(len(corners) == 8)
 
     p_center = bb2.point_at(0.0, 0.0, 0.0)
-    hx, hy, hz = bb2.half_size[0], bb2.half_size[1], bb2.half_size[2]
+    hx = bb2.half_size[0]
+    hy = bb2.half_size[1]
+    hz = bb2.half_size[2]
     p_max_pt = bb2.point_at(hx, hy, hz)
 
     MINI_CHECK(
@@ -83,9 +85,9 @@ def test_obb_constructor():
     MINI_CHECK(TOLERANCE.is_close(bb3.min_point()[0], -1.0))
     MINI_CHECK(TOLERANCE.is_close(bb3.max_point()[0], 3.0))
 
-    MINI_CHECK(bb1.guid != "")
     bb1.name = "test_bbox"
 
+    MINI_CHECK(bb1.guid != "")
     MINI_CHECK(bb1.name == "test_bbox")
 
 
@@ -120,7 +122,6 @@ def test_obb_transformation():
     ]
     bb = OBB.from_points(pts)
     bb_xf = Xform.translation(0.0, 0.0, 5.0)
-
     bbt = bb.transformed(bb_xf)
 
     MINI_CHECK(TOLERANCE.is_close(bbt.center[2], 5.0))
@@ -139,20 +140,21 @@ def test_obb_json_roundtrip():
     bb = OBB.from_point(Point(1.0, 2.0, 3.0), 5.0)
     bb.name = "test_bbox"
 
-    d = bb.__jsondump__()
-    loaded_j = OBB.__jsonload__(d)
+    data = bb.__jsondump__()
+    loaded_j = OBB.__jsonload__(data)
 
     MINI_CHECK(loaded_j.name == "test_bbox")
     MINI_CHECK(TOLERANCE.is_close(loaded_j.center[0], 1.0))
 
-    s = bb.file_json_dumps()
-    loaded_s = OBB.file_json_loads(s)
+    text = bb.file_json_dumps()
+    loaded_s = OBB.file_json_loads(text)
 
     MINI_CHECK(loaded_s.name == "test_bbox")
     MINI_CHECK(TOLERANCE.is_close(loaded_s.half_size[0], 5.0))
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_obb.json"
     bb.file_json_dump(fname)
+
     loaded = OBB.file_json_load(fname)
 
     MINI_CHECK(loaded.name == "test_bbox")
@@ -170,15 +172,21 @@ def test_obb_protobuf_roundtrip():
     bb.name = "test_bbox_proto"
 
     guid = bb.guid
-    b = bb.pb_dumps()
-    loaded_s = OBB.pb_loads(b)
+    data = bb.pb_dumps()
+    loaded_s = OBB.pb_loads(data)
+    proto = bb.to_proto()
+    converted = OBB.from_proto(proto)
 
     MINI_CHECK(loaded_s.name == "test_bbox_proto")
     MINI_CHECK(loaded_s.guid == guid)
     MINI_CHECK(TOLERANCE.is_close(loaded_s.center[0], 1.0))
+    MINI_CHECK(proto.guid == guid)
+    MINI_CHECK(converted == bb)
+    MINI_CHECK(converted.guid == guid)
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_obb.bin"
     bb.pb_dump(fname)
+
     loaded = OBB.pb_load(fname)
 
     MINI_CHECK(loaded.name == "test_bbox_proto")
@@ -207,22 +215,26 @@ def test_obb_accessors():
     MINI_CHECK(TOLERANCE.is_close(b.diagonal(), 2.0 * math.sqrt(14.0)))
     MINI_CHECK(b.is_valid())
     MINI_CHECK(TOLERANCE.is_close(b.volume(), 48.0))
+
     MINI_CHECK(b.closest_point(Point(1.0, 2.0, 3.0)) == Point(1.0, 2.0, 3.0))
     MINI_CHECK(b.closest_point(Point(10.0, 2.0, 3.0)) == Point(2.0, 2.0, 3.0))
     MINI_CHECK(b.contains(Point(1.0, 2.0, 3.0)))
     MINI_CHECK(not b.contains(Point(10.0, 2.0, 3.0)))
+
     MINI_CHECK(b.corner(False, False, False) == Point(0.0, 0.0, 0.0))
     MINI_CHECK(b.corner(True, True, True) == Point(2.0, 4.0, 6.0))
     MINI_CHECK(len(b.get_corners()) == 8)
     MINI_CHECK(len(b.get_edges()) == 12)
-    c = OBB.from_point(Point(5.0, 2.0, 3.0), 1.0)
-    b.union_with(c)
+
+    other = OBB.from_point(Point(5.0, 2.0, 3.0), 1.0)
+    b.union_with(other)
 
     MINI_CHECK(TOLERANCE.is_close(b.half_size[0], 3.0))
 
 
 @MINI_TEST("OBB", "From Geometry")
 def test_obb_from_geometry():
+    from session_py import AABB
     from session_py import Color
     from session_py import Line
     from session_py import NurbsCurve
@@ -233,6 +245,12 @@ def test_obb_from_geometry():
     from session_py import Polyline
     from session_py import Primitives
     from session_py import Vector
+
+    bb_aabb = OBB.from_aabb(AABB(1.0, 2.0, 3.0, 0.5, 1.0, 1.5))
+
+    MINI_CHECK(bb_aabb.center == Point(1.0, 2.0, 3.0))
+    MINI_CHECK(TOLERANCE.is_close(bb_aabb.half_size[2], 1.5))
+    MINI_CHECK(TOLERANCE.is_close(bb_aabb.x_axis[0], 1.0))
 
     bb_line = OBB.from_line(Line(0.0, 0.0, 0.0, 4.0, 0.0, 0.0), 0.1)
 
