@@ -328,6 +328,8 @@ def test_nurbssurface_trimmed_constructor_planar():
         )
     )
 
+    MINI_CHECK(ts.inner_loop_count() == 1)
+
     R = 4.0
     pts = []
 
@@ -360,6 +362,10 @@ def test_nurbssurface_trimmed_constructor_planar():
             ),
         ]
     )
+
+    MINI_CHECK(ts.is_valid())
+    MINI_CHECK(ts.is_trimmed())
+    MINI_CHECK(ts.inner_loop_count() == 2)
 
 
 @MINI_TEST("NurbsSurfaceTrimmed", "Constructor Hole")
@@ -723,7 +729,7 @@ def test_nurbssurface_trimmed_json_roundtrip():
     ts = NurbsSurfaceTrimmed.create(srf, outer)
     ts.name = "test_nurbssurface_trimmed"
     ts.width = 2.0
-    ts.surfacecolor = Color(255, 128, 64, 255)
+    ts.surfacecolor = Color(1.0, 0.5, 0.25, 1.0)
 
     json = ts.__jsondump__()
     loaded_json = NurbsSurfaceTrimmed.__jsonload__(json)
@@ -773,10 +779,12 @@ def test_nurbssurface_trimmed_protobuf_roundtrip():
     ts = NurbsSurfaceTrimmed.create(srf, outer)
     ts.name = "test_nurbssurface_trimmed"
     ts.width = 2.0
-    ts.surfacecolor = Color(255, 128, 64, 255)
+    ts.surfacecolor = Color(1.0, 0.5, 0.25, 1.0)
 
+    guid = ts.guid
     proto_string = ts.pb_dumps()
     loaded_proto_string = NurbsSurfaceTrimmed.pb_loads(proto_string)
+    converted = NurbsSurfaceTrimmed.from_proto(ts.to_proto())
 
     filename = (
         Path(__file__).resolve().parents[2]
@@ -788,6 +796,11 @@ def test_nurbssurface_trimmed_protobuf_roundtrip():
 
     MINI_CHECK(loaded_proto_string == ts)
     MINI_CHECK(loaded == ts)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(converted == ts)
+    MINI_CHECK(converted.guid == guid)
+    MINI_CHECK(converted.inner_loop_count() == ts.inner_loop_count())
+    MINI_CHECK(converted.is_trimmed())
 
 
 if __name__ == "__main__":

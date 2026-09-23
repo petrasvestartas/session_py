@@ -1,30 +1,28 @@
 from __future__ import annotations
-from typing import Union
 from typing import TYPE_CHECKING
-import math
-import uuid
 import copy
 import json
-
+import math
+import uuid
 from .closest import Closest
-from .nurbssurface import NurbsSurface
-from .nurbscurve import NurbsCurve
-from .primitives import Primitives
 from .color import Color
+from .mesh import Mesh
+from .nurbscurve import NurbsCurve
+from .nurbssurface import NurbsSurface
+from .point import Point
+from .primitives import Primitives
+from .tolerance import PI
+from .vector import Vector
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .proto import nurbssurface_trimmed_pb2
     from .xform import Xform
-    from .mesh import Mesh
-    from .point import Point
-    from .vector import Vector
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _crease_side_normal(
     surface: NurbsSurface,
     knots: list[list[float]],
@@ -78,6 +76,7 @@ def _inside_loops(u: float, v: float, loops_uv: list[list[Point]]) -> bool:
 
 def _eval3(srf: NurbsSurface, u: float, v: float) -> list[float]:
     """Surface point at (u, v) as a plain array."""
+
     p = srf.point_at(u, v)
 
     return [p[0], p[1], p[2]]
@@ -87,6 +86,7 @@ def _plane_field(
     srf: NurbsSurface, q: list[float], n: list[float], u: float, v: float
 ) -> float:
     """Signed distance of the surface point at (u, v) to the plane (q, n)."""
+
     p = _eval3(srf, u, v)
 
     return (p[0] - q[0]) * n[0] + (p[1] - q[1]) * n[1] + (p[2] - q[2]) * n[2]
@@ -127,7 +127,7 @@ def _refine_crossing(
 
 def _span_subdivisions(
     srf: NurbsSurface,
-    dr: int,
+    dir: int,
     sp: list[float],
     osp: list[float],
     deg: int,
@@ -146,30 +146,28 @@ def _span_subdivisions(
 
         if deg > 1:
             ma = 0.0
-            pn = [0.0, 0.0, 0.0]
+            pn = Vector(0.0, 0.0, 0.0)
 
             for k in range(5):
                 t = t0 + k * (t1 - t0) / 4.0
-                nm = srf.normal_at(t, smid) if dr == 0 else srf.normal_at(smid, t)
+                nm = srf.normal_at(t, smid) if dir == 0 else srf.normal_at(smid, t)
 
                 if k > 0:
-                    d = max(
-                        -1.0, min(1.0, pn[0] * nm[0] + pn[1] * nm[1] + pn[2] * nm[2])
-                    )
-                    ma += math.acos(d) * 180.0 / math.pi
+                    d = max(-1.0, min(1.0, pn.dot(nm)))
+                    ma += math.acos(d) * 180.0 / PI
 
-                pn = [nm[0], nm[1], nm[2]]
+                pn = nm
 
             subs[i] = max(subs[i], max(1, min(math.ceil(ma / max_angle_deg), 64)))
 
-        p0 = _eval3(srf, t0, smid) if dr == 0 else _eval3(srf, smid, t0)
-        p1 = _eval3(srf, t1, smid) if dr == 0 else _eval3(srf, smid, t1)
+        p0 = _eval3(srf, t0, smid) if dir == 0 else _eval3(srf, smid, t0)
+        p1 = _eval3(srf, t1, smid) if dir == 0 else _eval3(srf, smid, t1)
         dev = 0.0
 
         for k in range(1, 4):
             fr = k / 4.0
             tm = t0 + fr * (t1 - t0)
-            pm = _eval3(srf, tm, smid) if dr == 0 else _eval3(srf, smid, tm)
+            pm = _eval3(srf, tm, smid) if dir == 0 else _eval3(srf, smid, tm)
             lx = p0[0] + fr * (p1[0] - p0[0])
             ly = p0[1] + fr * (p1[1] - p0[1])
             lz = p0[2] + fr * (p1[2] - p0[2])
@@ -199,7 +197,7 @@ def _span_parameters(sp: list[float], subs: list[int]) -> list[float]:
 def _unit3(n: Vector) -> list[float] | None:
     """Unit normal as a plain array, or none when degenerate."""
 
-    nl = math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2])
+    nl = math.sqrt(n.magnitude_squared())
 
     if nl < 1e-12:
         return None
@@ -284,15 +282,9 @@ def _project_to_uv(
 ) -> Point:
     """Plane coordinates of pt in the affine frame (p00, u_axis, v_axis)."""
 
-    from .point import Point
+    d = pt - p00
 
-    dx = pt[0] - p00[0]
-    dy = pt[1] - p00[1]
-    dz = pt[2] - p00[2]
-    nu = (dx * u_axis[0] + dy * u_axis[1] + dz * u_axis[2]) / u_len2
-    nv = (dx * v_axis[0] + dy * v_axis[1] + dz * v_axis[2]) / v_len2
-
-    return Point(nu, nv, 0.0)
+    return Point(d.dot(u_axis) / u_len2, d.dot(v_axis) / v_len2, 0.0)
 
 
 def _snap_to_border(
@@ -316,8 +308,6 @@ def _snap_to_border(
 # ═══════════════════════════════════════════════════════════════════════════
 # VertexWelder
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _VertexWelder:
     """Adds 3D points to a mesh, returning the existing vertex when one lies within tol."""
 
@@ -345,11 +335,7 @@ class _VertexWelder:
                         continue
 
                     for q, vk in bucket:
-                        dx = q[0] - p[0]
-                        dy = q[1] - p[1]
-                        dz = q[2] - p[2]
-
-                        if dx * dx + dy * dy + dz * dz <= self._tol * self._tol:
+                        if (q - p).magnitude_squared() <= self._tol * self._tol:
                             return vk
 
         vk = self._mesh.add_vertex(p)
@@ -373,13 +359,12 @@ class _VertexWelder:
 # ═══════════════════════════════════════════════════════════════════════════
 # UVGraph
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _UVVertexPool:
     """Snapped UV vertices of the split graph: points within snap of each other share one id."""
 
     def __init__(self, snap: float):
         """Construct with the snap distance."""
+
         self._snap = snap  # Snap distance.
         self._cells = {}  # Ids per cell.
         self.verts = []  # UV position per id.
@@ -447,8 +432,6 @@ def _cycle_to_segments(
 ) -> list[NurbsCurve]:
     """Pieces of a cycle: trimmed pcurve runs, straight UV segments where a run cannot be cut."""
 
-    from .point import Point
-
     runs = []
 
     for hi in cycle:
@@ -513,8 +496,6 @@ def _cycle_to_loop(
 ) -> NurbsCurve:
     """Closed loop of a cycle: the joined pieces when they close, else the polygon through its vertices."""
 
-    from .point import Point
-
     pieces = _cycle_to_segments(cycle, hes, verts, pcurves)
 
     if not pieces:
@@ -551,8 +532,6 @@ def _cycle_to_loop(
 # ═══════════════════════════════════════════════════════════════════════════
 # Delaunay2D
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _Vertex2D:
     """UV vertex of the triangulation."""
 
@@ -560,6 +539,7 @@ class _Vertex2D:
 
     def __init__(self, x: float, y: float):
         """Construct at (x, y)."""
+
         self.x = x  # U coordinate.
         self.y = y  # V coordinate.
 
@@ -673,19 +653,19 @@ class _Delaunay2D:
                 if e is not None and e[0] == ti:
                     del self.edge_map[key]
 
-    def _locate(self, x, y, start):
-        """Triangle containing (x, y) by walking from start, -1 when none."""
+    def _locate(self, x, y, start_tri):
+        """Triangle containing (x, y) by walking from start_tri, -1 when none."""
 
-        if start < 0 or start >= len(self.triangles) or not self.triangles[start].alive:
-            start = len(self.triangles) - 1
+        if start_tri < 0 or start_tri >= len(self.triangles) or not self.triangles[start_tri].alive:
+            start_tri = len(self.triangles) - 1
 
-            while start >= 0 and not self.triangles[start].alive:
-                start -= 1
+            while start_tri >= 0 and not self.triangles[start_tri].alive:
+                start_tri -= 1
 
-            if start < 0:
+            if start_tri < 0:
                 return -1
 
-        cur = start
+        cur = start_tri
 
         for _ in range(len(self.triangles)):
             t = self.triangles[cur]
@@ -828,6 +808,7 @@ class _Delaunay2D:
                 self.vertices[e1].x,
                 self.vertices[e1].y,
             )
+
             if abs(o) < 1e-20:
                 continue
 
@@ -895,9 +876,9 @@ class _Delaunay2D:
         ivr = -1
         it = -1
         ti = start_ti
-        guard = len(self.triangles) + 4
+        walk_guard = len(self.triangles) + 4
 
-        for g in range(guard):
+        for _ in range(walk_guard):
             if not self.triangles[ti].alive:
                 break
 
@@ -942,9 +923,9 @@ class _Delaunay2D:
         intersected = [it]
         iv = v0
         cur_it = it
-        guard = len(self.triangles) * 2 + 8
+        cross_guard = len(self.triangles) * 2 + 8
 
-        for g in range(guard):
+        for _ in range(cross_guard):
             if self._has_vertex(cur_it, v1):
                 break
 
@@ -1038,6 +1019,7 @@ class _Delaunay2D:
 
     def _has_vertex(self, ti, v):
         """True when triangle ti has vertex v."""
+
         return (
             self.triangles[ti].v[0] == v
             or self.triangles[ti].v[1] == v
@@ -1055,6 +1037,7 @@ class _Delaunay2D:
             self.vertices[pc].x,
             self.vertices[pc].y,
         )
+
         if abs(o) < 1e-20:
             return
 
@@ -1107,6 +1090,7 @@ class _Delaunay2D:
                 self.vertices[c].x,
                 self.vertices[c].y,
             )
+
             if o > 0:
                 result.append((a, b, c))
             else:
@@ -1118,32 +1102,30 @@ class _Delaunay2D:
 # ═══════════════════════════════════════════════════════════════════════════
 # TrimLoops
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class TrimLoops:
     """Trim wires of one face as UV polygons, optional 3D points per loop vertex shared bit for bit with the neighbouring face, and interior UV seeds."""
 
     def __init__(self):
         """Construct empty trim loops."""
+
         self.uv: list[list[Point]] = []  # UV polygon per loop.
-        self.xyz: list[
-            list[Point]
-        ] = []  # 3D point per loop vertex, empty when not shared.
+        self.xyz: list[list[Point]] = []  # 3D point per loop vertex, empty when not shared.
         self.interior_uv: list[Point] = []  # UV seeds inside the face.
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # NurbsSurfaceTrimmed
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class NurbsSurfaceTrimmed:
     """A NURBS surface bounded by a closed outer loop and optional inner loops in its UV space."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self):
         """Construct an empty untrimmed face."""
 
-        self._guid = None  # Lazy guid.
+        self._guid = None  # Lazily minted GUID.
         self.name = "my_nurbssurface_trimmed"  # Face name.
         self.width = 1.0  # Display width.
         self.surfacecolor = Color.black()  # Display color of the surface.
@@ -1151,38 +1133,21 @@ class NurbsSurfaceTrimmed:
         self.m_outer_loop = NurbsCurve()  # Closed outer loop in UV space.
         self.m_inner_loops = []  # Closed hole loops in UV space.
 
-    def duplicate(self) -> "NurbsSurfaceTrimmed":
+    def duplicate(self) -> NurbsSurfaceTrimmed:
         """Copy with a new guid and the same data."""
+
         result = copy.deepcopy(self)
         result._guid = None
 
         return result
 
-    def has_guid(self) -> bool:
-        """Return whether the lazy guid has been created."""
-        return self._guid is not None
-
-    @property
-    def guid(self) -> str:
-        """Return the guid, creating it on first access."""
-        if self._guid is None:
-            self._guid = str(uuid.uuid4())
-
-        return self._guid
-
-    @guid.setter
-    def guid(self, value: str) -> None:
-        """Set the guid."""
-        self._guid = value
-
     # ═══════════════════════════════════════════════════════════════════════════
     # Static constructors
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def create(
-        surface: "NurbsSurface", outer_loop: "NurbsCurve"
-    ) -> "NurbsSurfaceTrimmed":
+        surface: NurbsSurface, outer_loop: NurbsCurve
+    ) -> NurbsSurfaceTrimmed:
         """Surface with a closed outer loop given in its UV parameter space."""
 
         ts = NurbsSurfaceTrimmed()
@@ -1192,7 +1157,7 @@ class NurbsSurfaceTrimmed:
         return ts
 
     @staticmethod
-    def create_planar(boundary: "NurbsCurve") -> "NurbsSurfaceTrimmed":
+    def create_planar(boundary: NurbsCurve) -> NurbsSurfaceTrimmed:
         """Planar surface fitted to a closed 3D boundary, the boundary projected as the outer loop."""
 
         srf = Primitives.create_planar(boundary)
@@ -1201,12 +1166,10 @@ class NurbsSurfaceTrimmed:
             return NurbsSurfaceTrimmed()
 
         p00 = srf.get_cv(0, 0)
-        p10 = srf.get_cv(1, 0)
-        p01 = srf.get_cv(0, 1)
-        u_axis = p10 - p00
-        v_axis = p01 - p00
-        u_len2 = u_axis[0] ** 2 + u_axis[1] ** 2 + u_axis[2] ** 2
-        v_len2 = v_axis[0] ** 2 + v_axis[1] ** 2 + v_axis[2] ** 2
+        u_axis = srf.get_cv(1, 0) - p00
+        v_axis = srf.get_cv(0, 1) - p00
+        u_len2 = u_axis.magnitude_squared()
+        v_len2 = v_axis.magnitude_squared()
 
         if u_len2 < 1e-28 or v_len2 < 1e-28:
             return NurbsSurfaceTrimmed()
@@ -1222,21 +1185,14 @@ class NurbsSurfaceTrimmed:
                 )
         else:
             spans = boundary.get_span_vector()
+            n_sub = 10
 
             for si in range(len(spans) - 1):
-                n_sub = 10
-
                 for k in range(n_sub + 1):
                     t = spans[si] + (spans[si + 1] - spans[si]) * k / n_sub
-                    uv = _project_to_uv(
-                        boundary.point_at(t), p00, u_axis, v_axis, u_len2, v_len2
-                    )
+                    uv = _project_to_uv(boundary.point_at(t), p00, u_axis, v_axis, u_len2, v_len2)
 
-                    if (
-                        not uv_pts
-                        or (uv[0] - uv_pts[-1][0]) ** 2 + (uv[1] - uv_pts[-1][1]) ** 2
-                        > 1e-24
-                    ):
+                    if not uv_pts or (uv - uv_pts[-1]).magnitude_squared() > 1e-24:
                         uv_pts.append(uv)
 
         ts = NurbsSurfaceTrimmed()
@@ -1249,8 +1205,8 @@ class NurbsSurfaceTrimmed:
 
     @staticmethod
     def split_by_uv_curves(
-        srf: "NurbsSurface", pcurves: list["NurbsCurve"], tolerance: float = 0.0
-    ) -> list["NurbsSurfaceTrimmed"]:
+        srf: NurbsSurface, pcurves: list[NurbsCurve], tolerance: float = 0.0
+    ) -> list[NurbsSurfaceTrimmed]:
         """One trimmed face per region of the UV domain carved by the pcurves (x=u, y=v, z=0); dangling cutters are discarded."""
 
         if not srf.is_valid():
@@ -1408,14 +1364,31 @@ class NurbsSurfaceTrimmed:
                 if A["cidx"] < 0 and B["cidx"] < 0:
                     continue
 
-                aminu = min(p[0] for p in A["pts"]) - snap_uv
-                amaxu = max(p[0] for p in A["pts"]) + snap_uv
-                aminv = min(p[1] for p in A["pts"]) - snap_uv
-                amaxv = max(p[1] for p in A["pts"]) + snap_uv
-                bminu = min(p[0] for p in B["pts"])
-                bmaxu = max(p[0] for p in B["pts"])
-                bminv = min(p[1] for p in B["pts"])
-                bmaxv = max(p[1] for p in B["pts"])
+                aminu = A["pts"][0][0]
+                amaxu = A["pts"][0][0]
+                aminv = A["pts"][0][1]
+                amaxv = A["pts"][0][1]
+
+                for p in A["pts"]:
+                    aminu = min(aminu, p[0])
+                    amaxu = max(amaxu, p[0])
+                    aminv = min(aminv, p[1])
+                    amaxv = max(amaxv, p[1])
+
+                aminu -= snap_uv
+                amaxu += snap_uv
+                aminv -= snap_uv
+                amaxv += snap_uv
+                bminu = B["pts"][0][0]
+                bmaxu = B["pts"][0][0]
+                bminv = B["pts"][0][1]
+                bmaxv = B["pts"][0][1]
+
+                for p in B["pts"]:
+                    bminu = min(bminu, p[0])
+                    bmaxu = max(bmaxu, p[0])
+                    bminv = min(bminv, p[1])
+                    bmaxv = max(bmaxv, p[1])
 
                 if bminu > amaxu or bmaxu < aminu or bminv > amaxv or bmaxv < aminv:
                     continue
@@ -1506,7 +1479,10 @@ class NurbsSurfaceTrimmed:
         alive = [True] * len(edges)
         changed = True
 
-        while changed:
+        for _ in range(len(edges) + 1):
+            if not changed:
+                break
+
             changed = False
             degree = {}
 
@@ -1525,7 +1501,11 @@ class NurbsSurfaceTrimmed:
                     alive[ei] = False
                     changed = True
 
-        live_edges = [e for ei, e in enumerate(edges) if alive[ei]]
+        live_edges = []
+
+        for ei in range(len(edges)):
+            if alive[ei]:
+                live_edges.append(edges[ei])
 
         if not live_edges:
             return []
@@ -1537,18 +1517,24 @@ class NurbsSurfaceTrimmed:
             hes.append([e["a"], e["b"], e, 1])
             hes.append([e["b"], e["a"], e, 0])
 
-        out_map = [[] for _ in range(len(verts))]
+        out_map = []
 
-        for hi, he in enumerate(hes):
-            out_map[he[0]].append(hi)
+        for vid in range(len(verts)):
+            out_map.append([])
+
+        for hi in range(len(hes)):
+            out_map[hes[hi][0]].append(hi)
 
         for vid in range(len(out_map)):
-            out_map[vid].sort(
-                key=lambda hi: math.atan2(
-                    verts[hes[hi][1]][1] - verts[vid][1],
-                    verts[hes[hi][1]][0] - verts[vid][0],
-                )
-            )
+            fan = []
+
+            for hi in out_map[vid]:
+                fan.append((math.atan2(verts[hes[hi][1]][1] - verts[vid][1], verts[hes[hi][1]][0] - verts[vid][0]), hi))
+
+            fan.sort()
+
+            for k in range(len(fan)):
+                out_map[vid][k] = fan[k][1]
 
         next_he = [-1] * len(hes)
 
@@ -1605,7 +1591,10 @@ class NurbsSurfaceTrimmed:
                 if not touches_border:
                     neg_faces.append(cycle)
 
-        holes_of = [[] for _ in range(len(pos_faces))]
+        holes_of = []
+
+        for fi in range(len(pos_faces)):
+            holes_of.append([])
 
         for cycle in neg_faces:
             sample = verts[hes[cycle[0]][0]]
@@ -1660,11 +1649,9 @@ class NurbsSurfaceTrimmed:
 
     @staticmethod
     def split_by_planes(
-        srf: "NurbsSurface", planes: list[tuple["Point", "Vector"]]
-    ) -> list["NurbsSurfaceTrimmed"]:
+        srf: NurbsSurface, planes: list[tuple[Point, Vector]]
+    ) -> list[NurbsSurfaceTrimmed]:
         """One trimmed face per non-empty region carved by the planes (all 2^K sign combinations)."""
-
-        from .vector import Vector
 
         k = len(planes)
 
@@ -1697,41 +1684,97 @@ class NurbsSurfaceTrimmed:
         return out
 
     # ═══════════════════════════════════════════════════════════════════════════
+    # Operators
+    # ═══════════════════════════════════════════════════════════════════════════
+    def __eq__(self, other) -> bool:
+        """Compare name, width, color and surface; guid and loops ignored."""
+
+        if not isinstance(other, NurbsSurfaceTrimmed):
+            return False
+
+        if self.name != other.name:
+            return False
+
+        if self.width != other.width:
+            return False
+
+        if self.surfacecolor != other.surfacecolor:
+            return False
+
+        if self.m_surface != other.m_surface:
+            return False
+
+        return True
+
+    def __ne__(self, other) -> bool:
+        """Compare name, width, color and surface; guid and loops ignored."""
+        return not self.__eq__(other)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Transformation
+    # ═══════════════════════════════════════════════════════════════════════════
+    def transform(self, xform: Xform) -> None:
+        """Transform the surface in place; the loops live in UV and stay."""
+        self.m_surface.transform(xform)
+
+    def transformed(self, xform: Xform) -> NurbsSurfaceTrimmed:
+        """Return a transformed copy."""
+
+        ts = self.duplicate()
+        ts.transform(xform)
+
+        return ts
+
+    # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
     # ═══════════════════════════════════════════════════════════════════════════
+    def has_guid(self) -> bool:
+        """Return whether the lazy guid has been created."""
+        return self._guid is not None
 
-    def surface(self) -> "NurbsSurface":
+    @property
+    def guid(self) -> str:
+        """Return the guid, creating it on first access."""
+
+        if self._guid is None:
+            self._guid = str(uuid.uuid4())
+
+        return self._guid
+
+    @guid.setter
+    def guid(self, value: str) -> None:
+        """Set the guid."""
+        self._guid = value
+
+    def surface(self) -> NurbsSurface:
         """Return a copy of the underlying surface."""
-        return self.m_surface
+        return self.m_surface.duplicate()
 
-    def get_outer_loop(self) -> "NurbsCurve":
+    def get_outer_loop(self) -> NurbsCurve:
         """Return a copy of the outer loop."""
-        return self.m_outer_loop
+        return self.m_outer_loop.duplicate()
 
-    def set_outer_loop(self, loop: "NurbsCurve") -> None:
+    def set_outer_loop(self, loop: NurbsCurve) -> None:
         """Replace the outer loop."""
         self.m_outer_loop = loop
 
     def is_trimmed(self) -> bool:
-        """True when the outer loop is a valid curve."""
+        """Return whether the outer loop is a valid curve."""
         return self.m_outer_loop.is_valid()
 
     def is_valid(self) -> bool:
-        """True when the underlying surface is valid."""
+        """Return whether the underlying surface is valid."""
         return self.m_surface.is_valid()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Inner loops
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def add_inner_loop(self, loop_2d: "NurbsCurve") -> None:
+    def add_inner_loop(self, loop_2d: NurbsCurve) -> None:
         """Hole given directly as a closed 2D curve in UV space."""
         self.m_inner_loops.append(loop_2d)
 
-    def add_hole(self, curve_3d: "NurbsCurve") -> None:
+    def add_hole(self, curve_3d: NurbsCurve) -> None:
         """Hole from a 3D curve pulled onto the surface and normalized into [0,1]^2."""
-
-        from .point import Point
 
         dom = curve_3d.domain()
         sdom_u = self.m_surface.domain(0)
@@ -1752,14 +1795,15 @@ class NurbsSurfaceTrimmed:
         if len(uv_pts) >= 3:
             self.m_inner_loops.append(NurbsCurve.create(True, 1, uv_pts))
 
-    def add_holes(self, curves_3d: list["NurbsCurve"]) -> None:
+    def add_holes(self, curves_3d: list[NurbsCurve]) -> None:
         """Add one hole per 3D curve pulled onto the surface."""
+
         for crv in curves_3d:
             self.add_hole(crv)
 
-    def get_inner_loop(self, index: int) -> "NurbsCurve":
-        """Return a copy of the inner loop at index, an empty curve when out of range."""
-        return self.m_inner_loops[index]
+    def get_inner_loop(self, index: int) -> NurbsCurve:
+        """Return a copy of the inner loop at index."""
+        return self.m_inner_loops[index].duplicate()
 
     def inner_loop_count(self) -> int:
         """Return the number of inner loops."""
@@ -1772,51 +1816,22 @@ class NurbsSurfaceTrimmed:
     # ═══════════════════════════════════════════════════════════════════════════
     # Evaluation
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def point_at(self, u: float, v: float) -> "Point":
-        """Surface point at (u, v)."""
+    def point_at(self, u: float, v: float) -> Point:
+        """Return the surface point at (u, v)."""
         return self.m_surface.point_at(u, v)
 
-    def normal_at(self, u: float, v: float) -> "Vector":
-        """Unit surface normal at (u, v)."""
+    def normal_at(self, u: float, v: float) -> Vector:
+        """Return the unit surface normal at (u, v)."""
         return self.m_surface.normal_at(u, v)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Meshing
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def mesh(self) -> "Mesh":
-        """mesh_q at 20 degrees and a chord factor of 0.005."""
+    def mesh(self) -> Mesh:
+        """Return mesh_q at 20 degrees and a chord factor of 0.005."""
         return self.mesh_q(20.0, 0.005)
 
-    def _bbox_diagonal(self) -> float:
-        """Diagonal of the control-point box, the scale every deflection tolerance is a fraction of."""
-
-        bmin = [1e30, 1e30, 1e30]
-        bmax = [-1e30, -1e30, -1e30]
-
-        for i in range(self.m_surface.cv_count(0)):
-            for j in range(self.m_surface.cv_count(1)):
-                p = self.m_surface.get_cv(i, j)
-
-                for k in range(3):
-                    c = p[k]
-
-                    if c < bmin[k]:
-                        bmin[k] = c
-
-                    if c > bmax[k]:
-                        bmax[k] = c
-
-        bbox_diag = math.sqrt(
-            (bmax[0] - bmin[0]) ** 2
-            + (bmax[1] - bmin[1]) ** 2
-            + (bmax[2] - bmin[2]) ** 2
-        )
-
-        return 1.0 if bbox_diag < 1e-12 else bbox_diag
-
-    def mesh_q(self, max_angle_deg: float, chord_factor: float) -> "Mesh":
+    def mesh_q(self, max_angle_deg: float, chord_factor: float) -> Mesh:
         """Deflection-refined constrained Delaunay of the trim loops: angular bound in degrees, chord factor as a fraction of the bbox diagonal."""
 
         if not self.is_trimmed():
@@ -1831,83 +1846,10 @@ class NurbsSurfaceTrimmed:
 
         return self._triangulate(loops, max_angle_deg, chord_factor)
 
-    def _discretize_loop(self, crv: "NurbsCurve", deflection: float) -> list["Point"]:
-        """UV polygon of a trim loop: control points or samples, each edge split until its 3D chord is within deflection."""
-
-        from .point import Point
-
-        raw = []
-
-        if crv.degree() <= 1 and not crv.is_rational():
-            for i in range(crv.cv_count()):
-                raw.append(crv.get_cv(i))
-        else:
-            n = min(max(crv.cv_count() * 4, 16), 2048)
-            sampled, params = crv.divide_by_count(n)
-            raw = sampled
-
-        while len(raw) > 1:
-            dx = raw[0][0] - raw[-1][0]
-            dy = raw[0][1] - raw[-1][1]
-
-            if dx * dx + dy * dy < 1e-20:
-                raw.pop()
-            else:
-                break
-
-        if len(raw) < 2:
-            return raw
-
-        out = []
-
-        for i in range(len(raw)):
-            stack = [(raw[i], raw[(i + 1) % len(raw)], 0)]
-
-            while stack:
-                a, b, depth = stack.pop()
-                mu = (a[0] + b[0]) * 0.5
-                mv = (a[1] + b[1]) * 0.5
-                pa = _eval3(self.m_surface, a[0], a[1])
-                pb = _eval3(self.m_surface, b[0], b[1])
-                pm = _eval3(self.m_surface, mu, mv)
-                ex = pb[0] - pa[0]
-                ey = pb[1] - pa[1]
-                ez = pb[2] - pa[2]
-                l2 = ex * ex + ey * ey + ez * ez
-
-                if l2 > 1e-30:
-                    t = (
-                        (pm[0] - pa[0]) * ex
-                        + (pm[1] - pa[1]) * ey
-                        + (pm[2] - pa[2]) * ez
-                    ) / l2
-                    cx = pa[0] + t * ex
-                    cy = pa[1] + t * ey
-                    cz = pa[2] + t * ez
-                    dev = math.sqrt(
-                        (pm[0] - cx) ** 2 + (pm[1] - cy) ** 2 + (pm[2] - cz) ** 2
-                    )
-                else:
-                    dev = math.sqrt(
-                        (pm[0] - pa[0]) ** 2
-                        + (pm[1] - pa[1]) ** 2
-                        + (pm[2] - pa[2]) ** 2
-                    )
-
-                if dev > deflection and depth < 6:
-                    stack.append((Point(mu, mv, 0.0), b, depth + 1))
-                    stack.append((a, Point(mu, mv, 0.0), depth + 1))
-                else:
-                    out.append(a)
-
-        return out
-
     def mesh_loops(
         self, loops: TrimLoops, max_angle_deg: float, chord_factor: float
-    ) -> "Mesh":
+    ) -> Mesh:
         """Mesh sampled loops (outer first, then holes) keeping every loop vertex, tagged boundary/{loop}/{sample}; knot crossings add boundary_interval/{loop}/{segment}; empty mesh on invalid input."""
-
-        from .mesh import Mesh
 
         if (
             not loops.uv
@@ -1950,360 +1892,10 @@ class NurbsSurfaceTrimmed:
 
         return result if len(actual) == expected else Mesh()
 
-    def _triangulate(
-        self, loops: TrimLoops, max_angle_deg: float, chord_factor: float
-    ) -> "Mesh":
-        """Constrained Delaunay of the loops in UV, refined, trimmed, lifted and welded: the one body mesh_q and mesh_loops share."""
-
-        from .mesh import Mesh
-        from .point import Point
-        from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
-
-        if not loops.uv or len(loops.uv[0]) < 3:
-            return self.m_surface.mesh()
-
-        outer_uv = loops.uv[0]
-        bbox_diag = self._bbox_diagonal()
-        deflection = bbox_diag * chord_factor
-        cos_max_angle = math.cos(min(max(max_angle_deg, 0.1), 179.0) * math.pi / 180.0)
-
-        bb_umin = 1e30
-        bb_vmin = 1e30
-        bb_umax = -1e30
-        bb_vmax = -1e30
-
-        for p in outer_uv:
-            if p[0] < bb_umin:
-                bb_umin = p[0]
-
-            if p[1] < bb_vmin:
-                bb_vmin = p[1]
-
-            if p[0] > bb_umax:
-                bb_umax = p[0]
-
-            if p[1] > bb_vmax:
-                bb_vmax = p[1]
-
-        crease_knots = [[], []]
-
-        for direction in range(2):
-            start, end = self.m_surface.domain(direction)
-            knots = self.m_surface.m_nurbsknot[direction]
-
-            for knot in knots:
-                if knot <= start or knot >= end or knot in crease_knots[direction]:
-                    continue
-
-                if sum(value == knot for value in knots) >= self.m_surface.degree(
-                    direction
-                ):
-                    crease_knots[direction].append(knot)
-
-        dt = _Delaunay2D(bb_umin, bb_vmin, bb_umax, bb_vmax)
-        loop_vids = []
-        boundary_intervals = {}
-
-        for li, pts in enumerate(loops.uv):
-            vis = [dt.insert(p[0], p[1]) for p in pts]
-
-            for i in range(len(vis)):
-                j = (i + 1) % len(vis)
-                events = [(0.0, vis[i]), (1.0, vis[j])]
-
-                for direction in range(2):
-                    delta = pts[j][direction] - pts[i][direction]
-
-                    if delta == 0.0:
-                        continue
-
-                    for knot in crease_knots[direction]:
-                        t = (knot - pts[i][direction]) / delta
-
-                        if t <= 0.0 or t >= 1.0:
-                            continue
-
-                        uv = [
-                            pts[i][0] + t * (pts[j][0] - pts[i][0]),
-                            pts[i][1] + t * (pts[j][1] - pts[i][1]),
-                        ]
-                        uv[direction] = knot
-                        vi = dt.insert(*uv)
-
-                        if vi >= 0:
-                            boundary_intervals[vi] = (li, i, t)
-
-                        events.append((t, vi))
-
-                events.sort()
-
-                for k in range(1, len(events)):
-                    if (
-                        events[k - 1][1] >= 0
-                        and events[k][1] >= 0
-                        and events[k - 1][1] != events[k][1]
-                    ):
-                        dt.insert_constraint(events[k - 1][1], events[k][1])
-
-            loop_vids.append(vis)
-
-        for u in crease_knots[0]:
-            for v in crease_knots[1]:
-                if _inside_loops(u, v, loops.uv):
-                    dt.insert(u, v)
-
-        for direction in range(2):
-            for knot in crease_knots[direction]:
-                nodes = []
-
-                for vi, vertex in enumerate(dt.vertices):
-                    uv = [vertex.x, vertex.y]
-
-                    if uv[direction] == knot:
-                        nodes.append((uv[1 - direction], vi))
-
-                nodes.sort()
-
-                for k in range(1, len(nodes)):
-                    uv = [knot, knot]
-                    uv[1 - direction] = (nodes[k - 1][0] + nodes[k][0]) * 0.5
-
-                    if _inside_loops(uv[0], uv[1], loops.uv):
-                        dt.insert_constraint(nodes[k - 1][1], nodes[k][1])
-
-        for p in loops.interior_uv:
-            if _inside_loops(p[0], p[1], loops.uv):
-                dt.insert(p[0], p[1])
-
-        MAX_ITERS = 8
-        MAX_VERTS = 200000
-        iters = MAX_ITERS
-
-        for _iter in range(iters):
-            to_insert = []
-
-            for tri in dt.triangles:
-                if not tri.alive:
-                    continue
-
-                a = dt.vertices[tri.v[0]]
-                b = dt.vertices[tri.v[1]]
-                c = dt.vertices[tri.v[2]]
-                cu = (a.x + b.x + c.x) / 3.0
-                cv = (a.y + b.y + c.y) / 3.0
-
-                if not _inside_loops(cu, cv, loops.uv):
-                    continue
-
-                pa = _eval3(self.m_surface, a.x, a.y)
-                pb = _eval3(self.m_surface, b.x, b.y)
-                pc = _eval3(self.m_surface, c.x, c.y)
-                pm = _eval3(self.m_surface, cu, cv)
-                ux = pb[0] - pa[0]
-                uy = pb[1] - pa[1]
-                uz = pb[2] - pa[2]
-                vx = pc[0] - pa[0]
-                vy = pc[1] - pa[1]
-                vz = pc[2] - pa[2]
-                nx = uy * vz - uz * vy
-                ny = uz * vx - ux * vz
-                nz = ux * vy - uy * vx
-                nl = math.sqrt(nx * nx + ny * ny + nz * nz)
-
-                if nl < 1e-30:
-                    continue
-
-                dev = abs(
-                    ((pm[0] - pa[0]) * nx + (pm[1] - pa[1]) * ny + (pm[2] - pa[2]) * nz)
-                    / nl
-                )
-                refine = dev > deflection
-
-                if not refine:
-                    na = _crease_side_normal(
-                        self.m_surface, crease_knots, (cu, cv), [a.x, a.y]
-                    )
-                    nb = _crease_side_normal(
-                        self.m_surface, crease_knots, (cu, cv), [b.x, b.y]
-                    )
-                    nc2 = _crease_side_normal(
-                        self.m_surface, crease_knots, (cu, cv), [c.x, c.y]
-                    )
-                    d1 = na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2]
-                    d2 = nb[0] * nc2[0] + nb[1] * nc2[1] + nb[2] * nc2[2]
-                    d3 = na[0] * nc2[0] + na[1] * nc2[1] + na[2] * nc2[2]
-                    mind = min(d1, d2, d3)
-
-                    if mind < cos_max_angle:
-                        refine = True
-
-                if refine:
-                    to_insert.append((cu, cv))
-
-            if not to_insert:
-                break
-
-            for cu, cv in to_insert:
-                if len(dt.vertices) >= MAX_VERTS:
-                    break
-
-                dt.insert(cu, cv)
-
-            if len(dt.vertices) >= MAX_VERTS:
-                break
-
-        dt.cleanup()
-
-        for ti in range(len(dt.triangles)):
-            if not dt.triangles[ti].alive:
-                continue
-
-            v0, v1, v2 = dt.triangles[ti].v
-            cu = (dt.vertices[v0].x + dt.vertices[v1].x + dt.vertices[v2].x) / 3.0
-            cv = (dt.vertices[v0].y + dt.vertices[v1].y + dt.vertices[v2].y) / 3.0
-
-            if not _inside_loops(cu, cv, loops.uv):
-                dt.triangles[ti].alive = False
-
-        tris = dt.get_triangles()
-
-        if not tris:
-            return Mesh()
-
-        for tri in tris:
-            for direction in range(2):
-                low = math.inf
-                high = -math.inf
-
-                for vi in tri:
-                    value = dt.vertices[vi].x if direction == 0 else dt.vertices[vi].y
-                    low = min(low, value)
-                    high = max(high, value)
-
-                for knot in crease_knots[direction]:
-                    if low < knot < high:
-                        return Mesh()
-
-        nverts = len(dt.vertices)
-        given = [None] * nverts
-
-        for li, vids in enumerate(loop_vids):
-            if li >= len(loops.xyz):
-                break
-
-            for k, vi in enumerate(vids):
-                if vi >= 0 and k < len(loops.xyz[li]):
-                    given[vi] = (li, k)
-
-        result = Mesh()
-        vert_map = [None] * nverts
-        weld_tol = bbox_diag * 1e-5 if not loops.xyz else 0.0
-        welder = _VertexWelder(result, weld_tol, bbox_diag * 1e-5)
-
-        for a, b, c in tris:
-            for vi in (a, b, c):
-                if vert_map[vi] is None:
-                    if given[vi] is not None:
-                        p3d = loops.xyz[given[vi][0]][given[vi][1]]
-                    elif vi in boundary_intervals and loops.xyz:
-                        li, k, t = boundary_intervals[vi]
-                        a, b = (
-                            loops.xyz[li][k],
-                            loops.xyz[li][(k + 1) % len(loops.xyz[li])],
-                        )
-                        p3d = Point(
-                            a[0] + t * (b[0] - a[0]),
-                            a[1] + t * (b[1] - a[1]),
-                            a[2] + t * (b[2] - a[2]),
-                        )
-                    else:
-                        p3d = self.m_surface.point_at(
-                            dt.vertices[vi].x, dt.vertices[vi].y
-                        )
-
-                    vert_map[vi] = welder.weld(p3d)
-
-        for a, b, c in tris:
-            v0 = vert_map[a]
-            v1 = vert_map[b]
-            v2 = vert_map[c]
-
-            if v0 == v1 or v1 == v2 or v2 == v0:
-                continue
-
-            result.add_face([v0, v1, v2])
-
-        fan = {}
-
-        for fk in sorted(result.face.keys()):
-            verts = result.face[fk]
-            a = result.vertex[verts[0]].position()
-            b = result.vertex[verts[1]].position()
-            c = result.vertex[verts[2]].position()
-            e1 = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
-            e2 = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
-            n = (
-                e1[1] * e2[2] - e1[2] * e2[1],
-                e1[2] * e2[0] - e1[0] * e2[2],
-                e1[0] * e2[1] - e1[1] * e2[0],
-            )
-
-            for vk in verts:
-                acc = fan.setdefault(vk, [0.0, 0.0, 0.0])
-                acc[0] += n[0]
-                acc[1] += n[1]
-                acc[2] += n[2]
-
-        for vi in range(nverts):
-            if vert_map[vi] is not None:
-                u = dt.vertices[vi].x
-                v = dt.vertices[vi].y
-                derivatives = self.m_surface.evaluate(u, v, 1)
-                nrm = [0.0, 0.0, 0.0]
-
-                if len(derivatives) >= 3:
-                    normal = derivatives[2].cross(derivatives[1])
-                    nrm = [normal[0], normal[1], normal[2]]
-
-                nl = math.sqrt(nrm[0] * nrm[0] + nrm[1] * nrm[1] + nrm[2] * nrm[2])
-
-                if math.isfinite(nl) and nl > 0.0:
-                    nrm = [nrm[0] / nl, nrm[1] / nl, nrm[2] / nl]
-                else:
-                    f = fan.get(vert_map[vi], [0.0, 0.0, 1.0])
-                    fl = math.sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2])
-                    nrm = (
-                        [f[0] / fl, f[1] / fl, f[2] / fl]
-                        if math.isfinite(fl) and fl > 0.0
-                        else [0.0, 0.0, 1.0]
-                    )
-
-                vd = result.vertex[vert_map[vi]]
-                vd.set_normal(nrm[0], nrm[1], nrm[2])
-                vd.attributes["u"] = u
-                vd.attributes["v"] = v
-
-        for li, vids in enumerate(loop_vids):
-            for k, vi in enumerate(vids):
-                if vi >= 0 and vert_map[vi] is not None:
-                    result.vertex[vert_map[vi]].attributes[f"boundary/{li}/{k}"] = 1.0
-
-        for vi, (li, k, t) in boundary_intervals.items():
-            if vert_map[vi] is not None:
-                result.vertex[vert_map[vi]].attributes[
-                    f"boundary_interval/{li}/{k}"
-                ] = t
-
-        RemeshNurbsSurfaceGrid._split_crease_normals(self.m_surface, result)
-
-        return result
-
     def mesh_by_plane(
-        self, q0: "Point", normal: "Vector", max_angle_deg: float, chord_factor: float
-    ) -> "Mesh":
+        self, q0: Point, normal: Vector, max_angle_deg: float, chord_factor: float
+    ) -> Mesh:
         """Mesh of the half (S-q0).n <= 0: span-adaptive grid, marching-squares clip with Newton-refined crossings, seams welded."""
-
-        from .mesh import Mesh
 
         srf = self.m_surface
         n = _unit3(normal)
@@ -2339,11 +1931,15 @@ class NurbsSurfaceTrimmed:
         if nu < 2 or nv < 2:
             return srf.mesh()
 
-        F = [[0.0] * nv for i in range(nu)]
+        field = []
 
         for i in range(nu):
+            row = []
+
             for j in range(nv):
-                F[i][j] = _plane_field(srf, q, n, us[i], vs[j])
+                row.append(_plane_field(srf, q, n, us[i], vs[j]))
+
+            field.append(row)
 
         result = Mesh()
         weld_tol = bbox_diag * 1e-5
@@ -2353,7 +1949,7 @@ class NurbsSurfaceTrimmed:
             for j in range(nv - 1):
                 cu = [us[i], us[i + 1], us[i + 1], us[i]]
                 cv = [vs[j], vs[j], vs[j + 1], vs[j + 1]]
-                fc = [F[i][j], F[i + 1][j], F[i + 1][j + 1], F[i][j + 1]]
+                fc = [field[i][j], field[i + 1][j], field[i + 1][j + 1], field[i][j + 1]]
                 inn = [fc[0] <= 0, fc[1] <= 0, fc[2] <= 0, fc[3] <= 0]
                 cnt = (
                     (1 if inn[0] else 0)
@@ -2401,13 +1997,11 @@ class NurbsSurfaceTrimmed:
 
     def mesh_by_planes(
         self,
-        planes: list[tuple["Point", "Vector"]],
+        planes: list[tuple[Point, Vector]],
         max_angle_deg: float,
         chord_factor: float,
-    ) -> "Mesh":
+    ) -> Mesh:
         """Mesh of the region inside every half-space (S-q).n <= 0: triangle soup clipped plane by plane, seams welded."""
-
-        from .mesh import Mesh
 
         srf = self.m_surface
         pl = []
@@ -2517,54 +2111,10 @@ class NurbsSurfaceTrimmed:
         return result
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Transformation
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def transform(self, xform: "Xform") -> None:
-        """Transform the surface in place; the loops live in UV and stay."""
-        self.m_surface.transform(xform)
-
-    def transformed(self, xform: "Xform") -> "NurbsSurfaceTrimmed":
-        """Return a transformed copy."""
-        ts = self.duplicate()
-        ts.transform(xform)
-
-        return ts
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Operators
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    def __eq__(self, other):
-        """Same name, width, color, surface and loops; guid ignored."""
-
-        if not isinstance(other, NurbsSurfaceTrimmed):
-            return False
-
-        if self.name != other.name:
-            return False
-
-        if self.width != other.width:
-            return False
-
-        if self.surfacecolor != other.surfacecolor:
-            return False
-
-        if self.m_surface != other.m_surface:
-            return False
-
-        return True
-
-    def __ne__(self, other):
-        """Negation of __eq__."""
-        return not self.__eq__(other)
-
-    # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def __jsondump__(self):
-        """Serialize to a JSON dict."""
+    def __jsondump__(self) -> dict:
+        """Serialize to a JSON object."""
 
         data = {
             "guid": self.guid,
@@ -2586,8 +2136,8 @@ class NurbsSurfaceTrimmed:
         return data
 
     @classmethod
-    def __jsonload__(cls, data):
-        """Deserialize from a JSON dict."""
+    def __jsonload__(cls, data: dict) -> NurbsSurfaceTrimmed:
+        """Deserialize from a JSON object."""
 
         ts = cls()
 
@@ -2615,73 +2165,58 @@ class NurbsSurfaceTrimmed:
 
         return ts
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a JSON file."""
-        with open(filepath, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
-
-    @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurfaceTrimmed":
-        """Read from a JSON file."""
-        with open(filepath) as f:
-            data = json.load(f)
-
-        return cls.__jsonload__(data)
-
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "NurbsSurfaceTrimmed":
+    def file_json_loads(cls, json_string: str) -> NurbsSurfaceTrimmed:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
+
+    def file_json_dump(self, filepath: str | Path) -> None:
+        """Write to a JSON file."""
+
+        with open(filepath, "w") as f:
+            json.dump(self.__jsondump__(), f, indent=2)
+
+    @classmethod
+    def file_json_load(cls, filepath: str | Path) -> NurbsSurfaceTrimmed:
+        """Read from a JSON file."""
+
+        with open(filepath) as f:
+            return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed:
+        """Convert to the protobuf message."""
 
         from .proto import nurbssurface_trimmed_pb2
 
         proto = nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed()
 
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
 
         proto.name = self.name
         proto.width = self.width
-
-        srf_data = self.m_surface.pb_dumps()
-        proto.surface.ParseFromString(srf_data)
+        proto.surface.CopyFrom(self.m_surface.to_proto())
 
         if self.is_trimmed():
-            loop_data = self.m_outer_loop.pb_dumps()
-            proto.outer_loop.ParseFromString(loop_data)
+            proto.outer_loop.CopyFrom(self.m_outer_loop.to_proto())
 
         for inner in self.m_inner_loops:
-            loop_data = inner.pb_dumps()
-            il = proto.inner_loops.add()
-            il.ParseFromString(loop_data)
+            proto.inner_loops.add().CopyFrom(inner.to_proto())
 
-        proto.surfacecolor.name = self.surfacecolor.name
-        proto.surfacecolor.r = self.surfacecolor[0]
-        proto.surfacecolor.g = self.surfacecolor[1]
-        proto.surfacecolor.b = self.surfacecolor[2]
-        proto.surfacecolor.a = self.surfacecolor[3]
+        proto.surfacecolor.CopyFrom(self.surfacecolor.to_proto())
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "NurbsSurfaceTrimmed":
-        """Deserialize from protobuf bytes."""
-
-        from .proto import nurbssurface_trimmed_pb2
-
-        proto = nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed()
-        proto.ParseFromString(data)
+    def from_proto(cls, proto: nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed) -> NurbsSurfaceTrimmed:
+        """Construct from the protobuf message."""
 
         ts = cls()
 
@@ -2692,54 +2227,469 @@ class NurbsSurfaceTrimmed:
         ts.width = proto.width
 
         if proto.HasField("surface"):
-            srf_data = proto.surface.SerializeToString()
-            ts.m_surface = NurbsSurface.pb_loads(srf_data)
+            ts.m_surface = NurbsSurface.from_proto(proto.surface)
 
         if proto.HasField("outer_loop"):
-            loop_data = proto.outer_loop.SerializeToString()
-            ts.m_outer_loop = NurbsCurve.pb_loads(loop_data)
+            ts.m_outer_loop = NurbsCurve.from_proto(proto.outer_loop)
 
-        for il in proto.inner_loops:
-            loop_data = il.SerializeToString()
-            ts.m_inner_loops.append(NurbsCurve.pb_loads(loop_data))
+        for loop in proto.inner_loops:
+            ts.m_inner_loops.append(NurbsCurve.from_proto(loop))
 
-        ts.surfacecolor = Color(
-            proto.surfacecolor.r,
-            proto.surfacecolor.g,
-            proto.surfacecolor.b,
-            proto.surfacecolor.a,
-        )
-        ts.surfacecolor.name = proto.surfacecolor.name
+        ts.surfacecolor = Color.from_proto(proto.surfacecolor)
 
         return ts
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a protobuf file."""
-        data = self.pb_dumps()
-
-        with open(filepath, "wb") as f:
-            f.write(data)
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "NurbsSurfaceTrimmed":
-        """Read from a protobuf file."""
-        with open(filepath, "rb") as f:
-            data = f.read()
+    def pb_loads(cls, data: bytes) -> NurbsSurfaceTrimmed:
+        """Deserialize from protobuf bytes."""
 
-        return cls.pb_loads(data)
+        from .proto import nurbssurface_trimmed_pb2
+
+        proto = nurbssurface_trimmed_pb2.NurbsSurfaceTrimmed()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
+    def pb_dump(self, filepath: str | Path) -> None:
+        """Write to a protobuf file."""
+
+        with open(filepath, "wb") as f:
+            f.write(self.pb_dumps())
+
+    @classmethod
+    def pb_load(cls, filepath: str | Path) -> NurbsSurfaceTrimmed:
+        """Read from a protobuf file."""
+
+        with open(filepath, "rb") as f:
+            return cls.pb_loads(f.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "NurbsSurfaceTrimmed(name=..., trimmed=..., holes=...)"."""
+
         trimmed = "true" if self.is_trimmed() else "false"
 
         return f"NurbsSurfaceTrimmed(name={self.name}, trimmed={trimmed}, holes={self.inner_loop_count()})"
 
     def __repr__(self) -> str:
-        """Multi-line form with the surface."""
+        """Return the multi-line form with the surface."""
+
         trimmed = "true" if self.is_trimmed() else "false"
 
         return f"NurbsSurfaceTrimmed(\n  name={self.name},\n  trimmed={trimmed},\n  holes={self.inner_loop_count()},\n  surface={self.m_surface}\n)"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Private helpers
+    # ═══════════════════════════════════════════════════════════════════════════
+    def _bbox_diagonal(self) -> float:
+        """Return the diagonal of the control-point box, the scale every deflection tolerance is a fraction of."""
+
+        bmin = [1e30, 1e30, 1e30]
+        bmax = [-1e30, -1e30, -1e30]
+
+        for i in range(self.m_surface.cv_count(0)):
+            for j in range(self.m_surface.cv_count(1)):
+                p = self.m_surface.get_cv(i, j)
+
+                for k in range(3):
+                    c = p[k]
+
+                    if c < bmin[k]:
+                        bmin[k] = c
+
+                    if c > bmax[k]:
+                        bmax[k] = c
+
+        bbox_diag = math.sqrt(
+            (bmax[0] - bmin[0]) ** 2
+            + (bmax[1] - bmin[1]) ** 2
+            + (bmax[2] - bmin[2]) ** 2
+        )
+
+        return 1.0 if bbox_diag < 1e-12 else bbox_diag
+
+    def _discretize_loop(self, crv: NurbsCurve, deflection: float) -> list[Point]:
+        """UV polygon of a trim loop: control points or samples, each edge split until its 3D chord is within deflection."""
+
+        raw = []
+
+        if crv.degree() <= 1 and not crv.is_rational():
+            for i in range(crv.cv_count()):
+                raw.append(crv.get_cv(i))
+        else:
+            n = min(max(crv.cv_count() * 4, 16), 2048)
+            raw = crv.divide_by_count(n)[0]
+
+        while len(raw) > 1:
+            dx = raw[0][0] - raw[-1][0]
+            dy = raw[0][1] - raw[-1][1]
+
+            if dx * dx + dy * dy < 1e-20:
+                raw.pop()
+            else:
+                break
+
+        if len(raw) < 2:
+            return raw
+
+        out = []
+
+        for i in range(len(raw)):
+            stack = [(raw[i], raw[(i + 1) % len(raw)], 0)]
+
+            while stack:
+                a, b, depth = stack.pop()
+                mu = (a[0] + b[0]) * 0.5
+                mv = (a[1] + b[1]) * 0.5
+                pa = self.m_surface.point_at(a[0], a[1])
+                pm = self.m_surface.point_at(mu, mv)
+                edge = self.m_surface.point_at(b[0], b[1]) - pa
+                l2 = edge.magnitude_squared()
+
+                if l2 > 1e-30:
+                    t = (pm - pa).dot(edge) / l2
+                    dev = math.sqrt((pm - (pa + edge * t)).magnitude_squared())
+                else:
+                    dev = math.sqrt((pm - pa).magnitude_squared())
+
+                if dev > deflection and depth < 6:
+                    stack.append((Point(mu, mv, 0.0), b, depth + 1))
+                    stack.append((a, Point(mu, mv, 0.0), depth + 1))
+                else:
+                    out.append(a)
+
+        return out
+
+    def _triangulate(
+        self, loops: TrimLoops, max_angle_deg: float, chord_factor: float
+    ) -> Mesh:
+        """Constrained Delaunay of the loops in UV, refined, trimmed, lifted and welded: the one body mesh_q and mesh_loops share."""
+
+        from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
+
+        if not loops.uv or len(loops.uv[0]) < 3:
+            return self.m_surface.mesh()
+
+        outer_uv = loops.uv[0]
+        bbox_diag = self._bbox_diagonal()
+        deflection = bbox_diag * chord_factor
+        cos_max_angle = math.cos(min(max(max_angle_deg, 0.1), 179.0) * PI / 180.0)
+
+        bb_umin = 1e30
+        bb_vmin = 1e30
+        bb_umax = -1e30
+        bb_vmax = -1e30
+
+        for p in outer_uv:
+            if p[0] < bb_umin:
+                bb_umin = p[0]
+
+            if p[1] < bb_vmin:
+                bb_vmin = p[1]
+
+            if p[0] > bb_umax:
+                bb_umax = p[0]
+
+            if p[1] > bb_vmax:
+                bb_vmax = p[1]
+
+        crease_knots = [[], []]
+
+        for direction in range(2):
+            domain = self.m_surface.domain(direction)
+            knots = self.m_surface.m_nurbsknot[direction]
+
+            for knot in knots:
+                if knot <= domain[0] or knot >= domain[1] or knot in crease_knots[direction]:
+                    continue
+
+                multiplicity = 0
+
+                for value in knots:
+                    if value == knot:
+                        multiplicity += 1
+
+                if multiplicity >= self.m_surface.degree(direction):
+                    crease_knots[direction].append(knot)
+
+        dt = _Delaunay2D(bb_umin, bb_vmin, bb_umax, bb_vmax)
+        loop_vids = []
+        boundary_intervals = {}
+
+        for li, pts in enumerate(loops.uv):
+            vis = []
+
+            for p in pts:
+                vis.append(dt.insert(p[0], p[1]))
+
+            for i in range(len(vis)):
+                j = (i + 1) % len(vis)
+                events = [(0.0, vis[i]), (1.0, vis[j])]
+
+                for direction in range(2):
+                    delta = pts[j][direction] - pts[i][direction]
+
+                    if delta == 0.0:
+                        continue
+
+                    for knot in crease_knots[direction]:
+                        t = (knot - pts[i][direction]) / delta
+
+                        if t <= 0.0 or t >= 1.0:
+                            continue
+
+                        uv = [
+                            pts[i][0] + t * (pts[j][0] - pts[i][0]),
+                            pts[i][1] + t * (pts[j][1] - pts[i][1]),
+                        ]
+                        uv[direction] = knot
+                        vi = dt.insert(uv[0], uv[1])
+
+                        if vi >= 0:
+                            boundary_intervals[vi] = (li, i, t)
+
+                        events.append((t, vi))
+
+                events.sort()
+
+                for k in range(1, len(events)):
+                    if (
+                        events[k - 1][1] >= 0
+                        and events[k][1] >= 0
+                        and events[k - 1][1] != events[k][1]
+                    ):
+                        dt.insert_constraint(events[k - 1][1], events[k][1])
+
+            loop_vids.append(vis)
+
+        for u in crease_knots[0]:
+            for v in crease_knots[1]:
+                if _inside_loops(u, v, loops.uv):
+                    dt.insert(u, v)
+
+        for direction in range(2):
+            for knot in crease_knots[direction]:
+                nodes = []
+
+                for vi, vertex in enumerate(dt.vertices):
+                    uv = [vertex.x, vertex.y]
+
+                    if uv[direction] == knot:
+                        nodes.append((uv[1 - direction], vi))
+
+                nodes.sort()
+
+                for k in range(1, len(nodes)):
+                    uv = [knot, knot]
+                    uv[1 - direction] = (nodes[k - 1][0] + nodes[k][0]) * 0.5
+
+                    if _inside_loops(uv[0], uv[1], loops.uv):
+                        dt.insert_constraint(nodes[k - 1][1], nodes[k][1])
+
+        for p in loops.interior_uv:
+            if _inside_loops(p[0], p[1], loops.uv):
+                dt.insert(p[0], p[1])
+
+        MAX_ITERS = 8
+        MAX_VERTS = 200000
+        iters = MAX_ITERS
+
+        for _iter in range(iters):
+            to_insert = []
+
+            for tri in dt.triangles:
+                if not tri.alive:
+                    continue
+
+                a = dt.vertices[tri.v[0]]
+                b = dt.vertices[tri.v[1]]
+                c = dt.vertices[tri.v[2]]
+                cu = (a.x + b.x + c.x) / 3.0
+                cv = (a.y + b.y + c.y) / 3.0
+
+                if not _inside_loops(cu, cv, loops.uv):
+                    continue
+
+                pa = self.m_surface.point_at(a.x, a.y)
+                pb = self.m_surface.point_at(b.x, b.y)
+                pc = self.m_surface.point_at(c.x, c.y)
+                pm = self.m_surface.point_at(cu, cv)
+                n = (pb - pa).cross(pc - pa)
+                nl = math.sqrt(n.magnitude_squared())
+
+                if nl < 1e-30:
+                    continue
+
+                dev = abs((pm - pa).dot(n) / nl)
+                refine = dev > deflection
+
+                if not refine:
+                    na = _crease_side_normal(
+                        self.m_surface, crease_knots, (cu, cv), [a.x, a.y]
+                    )
+                    nb = _crease_side_normal(
+                        self.m_surface, crease_knots, (cu, cv), [b.x, b.y]
+                    )
+                    nc2 = _crease_side_normal(
+                        self.m_surface, crease_knots, (cu, cv), [c.x, c.y]
+                    )
+                    d1 = na.dot(nb)
+                    d2 = nb.dot(nc2)
+                    d3 = na.dot(nc2)
+                    mind = min(d1, min(d2, d3))
+
+                    if mind < cos_max_angle:
+                        refine = True
+
+                if refine:
+                    to_insert.append((cu, cv))
+
+            if not to_insert:
+                break
+
+            for cu, cv in to_insert:
+                if len(dt.vertices) >= MAX_VERTS:
+                    break
+
+                dt.insert(cu, cv)
+
+            if len(dt.vertices) >= MAX_VERTS:
+                break
+
+        dt.cleanup()
+
+        for ti in range(len(dt.triangles)):
+            if not dt.triangles[ti].alive:
+                continue
+
+            v0, v1, v2 = dt.triangles[ti].v
+            cu = (dt.vertices[v0].x + dt.vertices[v1].x + dt.vertices[v2].x) / 3.0
+            cv = (dt.vertices[v0].y + dt.vertices[v1].y + dt.vertices[v2].y) / 3.0
+
+            if not _inside_loops(cu, cv, loops.uv):
+                dt.triangles[ti].alive = False
+
+        tris = dt.get_triangles()
+
+        if not tris:
+            return Mesh()
+
+        for tri in tris:
+            for direction in range(2):
+                low = math.inf
+                high = -math.inf
+
+                for vi in tri:
+                    value = dt.vertices[vi].x if direction == 0 else dt.vertices[vi].y
+                    low = min(low, value)
+                    high = max(high, value)
+
+                for knot in crease_knots[direction]:
+                    if low < knot < high:
+                        return Mesh()
+
+        nverts = len(dt.vertices)
+        given = [None] * nverts
+
+        for li, vids in enumerate(loop_vids):
+            if li >= len(loops.xyz):
+                break
+
+            for k, vi in enumerate(vids):
+                if vi >= 0 and k < len(loops.xyz[li]):
+                    given[vi] = (li, k)
+
+        result = Mesh()
+        vert_map = [None] * nverts
+        weld_tol = bbox_diag * 1e-5 if not loops.xyz else 0.0
+        welder = _VertexWelder(result, weld_tol, bbox_diag * 1e-5)
+
+        for tri in tris:
+            for vi in tri:
+                if vert_map[vi] is not None:
+                    continue
+
+                if given[vi] is not None:
+                    p = loops.xyz[given[vi][0]][given[vi][1]]
+                elif vi in boundary_intervals and loops.xyz:
+                    li, segment, t = boundary_intervals[vi]
+                    a = loops.xyz[li][segment]
+                    b = loops.xyz[li][(segment + 1) % len(loops.xyz[li])]
+                    p = a + (b - a) * t
+                else:
+                    p = self.m_surface.point_at(dt.vertices[vi].x, dt.vertices[vi].y)
+
+                vert_map[vi] = welder.weld(p)
+
+        for a, b, c in tris:
+            v0 = vert_map[a]
+            v1 = vert_map[b]
+            v2 = vert_map[c]
+
+            if v0 == v1 or v1 == v2 or v2 == v0:
+                continue
+
+            result.add_face([v0, v1, v2])
+
+        fan = {}
+
+        for fk in sorted(result.face):
+            verts = result.face[fk]
+            a = result.vertex[verts[0]].position()
+            b = result.vertex[verts[1]].position()
+            c = result.vertex[verts[2]].position()
+            n = (b - a).cross(c - a)
+
+            for vk in verts:
+                if vk not in fan:
+                    fan[vk] = Vector(0.0, 0.0, 0.0)
+
+                fan[vk] += n
+
+        for vi in range(nverts):
+            if vert_map[vi] is not None:
+                u = dt.vertices[vi].x
+                v = dt.vertices[vi].y
+                derivatives = self.m_surface.evaluate(u, v, 1)
+                nrm = Vector(0.0, 0.0, 0.0)
+
+                if len(derivatives) >= 3:
+                    nrm = derivatives[2].cross(derivatives[1])
+
+                nl = math.sqrt(nrm.magnitude_squared())
+
+                if math.isfinite(nl) and nl > 0.0:
+                    nrm = nrm / nl
+                else:
+                    f = fan.get(vert_map[vi], Vector(0.0, 0.0, 1.0))
+                    fl = math.sqrt(f.magnitude_squared())
+                    nrm = f / fl if math.isfinite(fl) and fl > 0.0 else Vector(0.0, 0.0, 1.0)
+
+                vd = result.vertex[vert_map[vi]]
+                vd.set_normal(nrm[0], nrm[1], nrm[2])
+                vd.attributes["u"] = u
+                vd.attributes["v"] = v
+
+        for li, vids in enumerate(loop_vids):
+            for k, vi in enumerate(vids):
+                key = f"boundary/{li}/{k}"
+
+                if vi >= 0 and vert_map[vi] is not None:
+                    result.vertex[vert_map[vi]].attributes[key] = 1.0
+
+        for vi in sorted(boundary_intervals):
+            li, segment, t = boundary_intervals[vi]
+            key = f"boundary_interval/{li}/{segment}"
+
+            if vert_map[vi] is not None:
+                result.vertex[vert_map[vi]].attributes[key] = t
+
+        RemeshNurbsSurfaceGrid._split_crease_normals(self.m_surface, result)
+
+        return result
