@@ -19,6 +19,7 @@ POSITIVE_DEFINITE_TOLERANCE = (
 
 
 def _are_finite(values: Sequence[float] | None, count: int) -> bool:
+
     if values is None or count < 0 or len(values) < count:
         return False
 
@@ -32,58 +33,30 @@ def _are_finite(values: Sequence[float] | None, count: int) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 # Knot styles
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class CurveNurbsKnotStyle(IntEnum):
-    """Parameter spacing for interpolated curves.
+    """Parameter spacing for interpolated curves."""
 
-    Examples
-    --------
-    >>> CurveNurbsKnotStyle.Chord.value
-    1
-    """
-
-    Uniform = 0
-    Chord = 1
-    ChordSquareRoot = 2
-    UniformPeriodic = 3
-    ChordPeriodic = 4
-    ChordSquareRootPeriodic = 5
+    Uniform = 0  # Equal parameter spacing.
+    Chord = 1  # Spacing proportional to chord length.
+    ChordSquareRoot = 2  # Spacing proportional to the square root of chord length.
+    UniformPeriodic = 3  # Equal spacing for a periodic curve.
+    ChordPeriodic = 4  # Chord-length spacing for a periodic curve.
+    ChordSquareRootPeriodic = 5  # Square-root chord spacing for a periodic curve.
 
 
 class CurveInterpStyle(IntEnum):
-    """End-tangent estimate for cubic curve interpolation.
+    """End-tangent estimate for cubic curve interpolation."""
 
-    Examples
-    --------
-    >>> CurveInterpStyle.Rhino.value
-    0
-    """
-
-    Rhino = 0
-    Occt = 1
+    Rhino = 0  # Bessel end tangents matching Rhino.
+    Occt = 1  # Cubic Lagrange end tangents matching OCCT.
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Construction
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def nurbsknot_count(order: int, cv_count: int) -> int:
-    """Return the number of nurbsknots for an order and control-point count.
+    """Return the number of nurbsknots for an order and control-point count."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-
-    Returns
-    -------
-    int
-        ``order + cv_count - 2``, or zero for invalid arguments.
-    """
     if order < 2 or cv_count < order:
         return 0
 
@@ -93,20 +66,8 @@ def nurbsknot_count(order: int, cv_count: int) -> int:
 
 
 def domain_tolerance(a: float, b: float) -> float:
-    """Return the floating-point tolerance for a domain interval.
+    """Return the floating-point tolerance associated with the domain interval [a, b]."""
 
-    Parameters
-    ----------
-    a : float
-        First domain endpoint.
-    b : float
-        Second domain endpoint.
-
-    Returns
-    -------
-    float
-        Scale-aware tolerance, or zero when both endpoints are equal.
-    """
     if a == b:
         return 0.0
 
@@ -117,22 +78,8 @@ def domain_tolerance(a: float, b: float) -> float:
 
 
 def make_clamped_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.ndarray:
-    """Return a clamped uniform nurbsknot vector.
+    """Return a clamped uniform nurbsknot vector, or an empty vector for invalid arguments."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    delta : float, optional
-        Positive interior spacing.
-
-    Returns
-    -------
-    numpy.ndarray
-        Knot values, or an empty array for invalid arguments.
-    """
     if order < 2 or cv_count < order or not math.isfinite(delta) or delta <= 0.0:
         return np.array([], dtype=np.float64)
 
@@ -142,35 +89,21 @@ def make_clamped_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.nd
         return np.array([], dtype=np.float64)
 
     nurbsknot = np.zeros(kc, dtype=np.float64)
-
     k = 0.0
 
     for i in range(order - 2, cv_count):
         nurbsknot[i] = k
         k += delta
 
-    clamp(order, cv_count, nurbsknot, 2)
+    if not clamp(order, cv_count, nurbsknot, 2):
+        return np.array([], dtype=np.float64)
 
     return nurbsknot
 
 
 def make_periodic_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.ndarray:
-    """Return a periodic uniform nurbsknot vector.
+    """Return a periodic uniform nurbsknot vector, or an empty vector for invalid arguments."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    delta : float, optional
-        Positive knot spacing.
-
-    Returns
-    -------
-    numpy.ndarray
-        Knot values, or an empty array for invalid arguments.
-    """
     if order < 2 or cv_count < order or not math.isfinite(delta) or delta <= 0.0:
         return np.array([], dtype=np.float64)
 
@@ -180,7 +113,6 @@ def make_periodic_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.n
         return np.array([], dtype=np.float64)
 
     nurbsknot = np.zeros(kc, dtype=np.float64)
-
     k = 0.0
 
     for i in range(kc):
@@ -191,29 +123,10 @@ def make_periodic_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.n
 
 
 def clamp(
-    order: int,
-    cv_count: int,
-    nurbsknot: MutableSequence[float],
-    end: int = 2,
+    order: int, cv_count: int, nurbsknot: MutableSequence[float], end: int = 2
 ) -> bool:
-    """Clamp selected ends of a nurbsknot vector in place.
+    """Clamp the selected ends in place, where end is 0 for left, 1 for right, or 2 for both."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : MutableSequence[float]
-        Knot values to modify.
-    end : int, optional
-        End selector: zero for left, one for right, or two for both.
-
-    Returns
-    -------
-    bool
-        Whether the arguments were valid and the vector was clamped.
-    """
     if order < 2 or cv_count < order or end < 0 or end > 2:
         return False
 
@@ -240,25 +153,9 @@ def clamp(
 # ═══════════════════════════════════════════════════════════════════════════
 # Queries
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def is_valid(order: int, cv_count: int, nurbsknot: Sequence[float]) -> bool:
-    """Return whether a nurbsknot vector is valid.
+    """Return whether the vector has the required length, finite values, and valid spans."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-
-    Returns
-    -------
-    bool
-        Whether the vector has the required length, finite values, and valid spans.
-    """
     if order < 2 or cv_count < order:
         return False
 
@@ -281,24 +178,8 @@ def is_valid(order: int, cv_count: int, nurbsknot: Sequence[float]) -> bool:
 def is_clamped(
     order: int, cv_count: int, nurbsknot: Sequence[float], end: int = 2
 ) -> bool:
-    """Return whether selected ends contain repeated nurbsknots.
+    """Return whether the selected ends contain order - 1 equal nurbsknots."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-    end : int, optional
-        End selector: zero for left, one for right, or two for both.
-
-    Returns
-    -------
-    bool
-        Whether each selected end has ``order - 1`` equal values.
-    """
     if order < 2 or cv_count < order or end < 0 or end > 2:
         return False
 
@@ -334,22 +215,8 @@ def is_clamped(
 
 
 def is_periodic(order: int, cv_count: int, nurbsknot: Sequence[float]) -> bool:
-    """Return whether a nurbsknot vector has positive uniform spacing.
+    """Return whether the nurbsknot vector has finite, positive, uniform spacing."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-
-    Returns
-    -------
-    bool
-        Whether all values are finite and uniformly spaced.
-    """
     if order < 2 or cv_count < order:
         return False
 
@@ -372,28 +239,11 @@ def is_periodic(order: int, cv_count: int, nurbsknot: Sequence[float]) -> bool:
     return True
 
 
-
-
 def get_domain(
     order: int, cv_count: int, nurbsknot: Sequence[float]
 ) -> tuple[float, float]:
-    """Return the domain of a nurbsknot vector.
+    """Return the finite domain endpoints, or (0, 0) when the required entries cannot be read."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-
-    Returns
-    -------
-    tuple[float, float]
-        Start and end parameters, or ``(0.0, 0.0)`` when the required
-        entries cannot be read.
-    """
     if order < 2 or cv_count < order:
         return (0.0, 0.0)
 
@@ -412,32 +262,10 @@ def get_domain(
 
 
 def set_domain(
-    order: int,
-    cv_count: int,
-    nurbsknot: MutableSequence[float],
-    t0: float,
-    t1: float,
+    order: int, cv_count: int, nurbsknot: MutableSequence[float], t0: float, t1: float
 ) -> bool:
-    """Rescale a nurbsknot vector in place to a finite domain.
+    """Rescale the nurbsknot vector in place to the finite domain [t0, t1]."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : MutableSequence[float]
-        Knot values to modify.
-    t0 : float
-        New domain start.
-    t1 : float
-        New domain end.
-
-    Returns
-    -------
-    bool
-        Whether the vector and new domain were valid.
-    """
     if (
         order < 2
         or cv_count < order
@@ -452,7 +280,9 @@ def set_domain(
     if kc == 0 or len(nurbsknot) != kc or not _are_finite(nurbsknot, kc):
         return False
 
-    old_t0, old_t1 = get_domain(order, cv_count, nurbsknot)
+    domain = get_domain(order, cv_count, nurbsknot)
+    old_t0 = domain[0]
+    old_t1 = domain[1]
 
     if old_t1 <= old_t0:
         return False
@@ -466,22 +296,8 @@ def set_domain(
 
 
 def reverse(order: int, cv_count: int, nurbsknot: MutableSequence[float]) -> bool:
-    """Reverse a nurbsknot vector in place while preserving its domain.
+    """Reverse a finite nurbsknot vector in place while preserving its domain."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : MutableSequence[float]
-        Knot values to modify.
-
-    Returns
-    -------
-    bool
-        Whether the vector was valid and reversed.
-    """
     if order < 2 or cv_count < order:
         return False
 
@@ -504,24 +320,8 @@ def reverse(order: int, cv_count: int, nurbsknot: MutableSequence[float]) -> boo
 def multiplicity(
     order: int, cv_count: int, nurbsknot: Sequence[float], nurbsknot_index: int
 ) -> int:
-    """Return the multiplicity at a nurbsknot index.
+    """Return the multiplicity at nurbsknot_index, or zero for invalid arguments."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-    nurbsknot_index : int
-        Index whose equal neighbors are counted.
-
-    Returns
-    -------
-    int
-        Multiplicity, or zero for invalid arguments.
-    """
     if order < 2 or cv_count < order:
         return 0
 
@@ -539,7 +339,6 @@ def multiplicity(
     nurbsknot_value = nurbsknot[nurbsknot_index]
     tol = PIVOT_TOLERANCE
     mult = 1
-
     i = nurbsknot_index - 1
 
     while i >= 0 and abs(nurbsknot[i] - nurbsknot_value) < tol:
@@ -556,22 +355,8 @@ def multiplicity(
 
 
 def span_count(order: int, cv_count: int, nurbsknot: Sequence[float]) -> int:
-    """Return the number of non-empty spans.
+    """Return the number of non-empty spans, or zero for invalid arguments."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-
-    Returns
-    -------
-    int
-        Number of non-empty spans, or zero for invalid arguments.
-    """
     if order < 2 or cv_count < order:
         return 0
 
@@ -590,8 +375,6 @@ def span_count(order: int, cv_count: int, nurbsknot: Sequence[float]) -> int:
     return count
 
 
-
-
 def find_span(
     order: int,
     cv_count: int,
@@ -600,33 +383,8 @@ def find_span(
     side: int = 0,
     hint: int = 0,
 ) -> int:
-    """Return the index of the span containing a parameter.
+    """Return the index of the span containing finite parameter t in a valid nondecreasing nurbsknot vector."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-    t : float
-        Parameter to locate.
-    side : int, optional
-        Side selector retained for API compatibility.
-    hint : int, optional
-        Search hint retained for API compatibility.
-
-    Returns
-    -------
-    int
-        Span index in ``[0, cv_count - order]``, or zero for invalid arguments.
-
-    Notes
-    -----
-    The nurbsknot vector must be valid and nondecreasing. The search checks only
-    the endpoints and binary-search entries that it reads.
-    """
     del side, hint
 
     if order < 2 or cv_count < order or not math.isfinite(t):
@@ -669,34 +427,11 @@ def find_span(
     return low
 
 
-
-
-
-
 def get_greville_abcissae(
-    order: int,
-    cv_count: int,
-    nurbsknot: Sequence[float],
-    periodic: bool = False,
+    order: int, cv_count: int, nurbsknot: Sequence[float], periodic: bool = False
 ) -> np.ndarray:
-    """Return the Greville abscissae of a nurbsknot vector.
+    """Return the Greville abscissae, or an empty vector for invalid arguments."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    cv_count : int
-        Number of control points.
-    nurbsknot : Sequence[float]
-        Knot values.
-    periodic : bool, optional
-        Return only the independent periodic values.
-
-    Returns
-    -------
-    numpy.ndarray
-        ``cv_count`` values, or ``cv_count - order + 1`` values when periodic.
-    """
     if order < 2 or cv_count < order:
         return np.array([], dtype=np.float64)
 
@@ -723,8 +458,6 @@ def get_greville_abcissae(
 # ═══════════════════════════════════════════════════════════════════════════
 # Interpolation
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def solve_tridiagonal(
     dim: int,
     n: int,
@@ -733,46 +466,28 @@ def solve_tridiagonal(
     upper: Sequence[float],
     rhs: Sequence[float],
 ) -> list[float] | None:
-    """Solve a tridiagonal system with the Thomas algorithm.
+    """Solve a finite tridiagonal system with the Thomas algorithm, returning None if invalid or singular."""
 
-    Parameters
-    ----------
-    dim : int
-        Number of right-hand-side dimensions.
-    n : int
-        Number of equations.
-    lower : Sequence[float]
-        Lower diagonal with at least ``n`` values.
-    diag : Sequence[float]
-        Main diagonal with at least ``n`` values.
-    upper : Sequence[float]
-        Upper diagonal with at least ``n`` values.
-    rhs : Sequence[float]
-        Right-hand side in equation-major order.
-
-    Returns
-    -------
-    list[float] | None
-        Solution in equation-major order, or ``None`` if invalid or singular.
-    """
     if n < 1 or dim < 1:
         return None
 
-    if len(lower) < n or len(diag) < n or len(upper) < n or len(rhs) < n * dim:
+    rhs_count = n * dim
+
+    if len(lower) < n or len(diag) < n or len(upper) < n or len(rhs) < rhs_count:
         return None
 
     if (
         not _are_finite(lower, n)
         or not _are_finite(diag, n)
         or not _are_finite(upper, n)
-        or not _are_finite(rhs, n * dim)
+        or not _are_finite(rhs, rhs_count)
     ):
         return None
 
     eps = PIVOT_TOLERANCE
     c_star = [0.0] * n
-    d_star = [0.0] * (n * dim)
-    solution = [0.0] * (n * dim)
+    d_star = [0.0] * rhs_count
+    solution = [0.0] * rhs_count
 
     if abs(diag[0]) < eps:
         return None
@@ -791,44 +506,36 @@ def solve_tridiagonal(
         c_star[i] = upper[i] / denom if i < n - 1 else 0.0
 
         for d in range(dim):
-            d_star[i * dim + d] = (
-                rhs[i * dim + d] - lower[i] * d_star[(i - 1) * dim + d]
-            ) / denom
+            index = i * dim + d
+            previous = (i - 1) * dim + d
+            d_star[index] = (rhs[index] - lower[i] * d_star[previous]) / denom
 
     for d in range(dim):
         solution[(n - 1) * dim + d] = d_star[(n - 1) * dim + d]
 
     for i in range(n - 2, -1, -1):
         for d in range(dim):
-            solution[i * dim + d] = (
-                d_star[i * dim + d] - c_star[i] * solution[(i + 1) * dim + d]
-            )
+            index = i * dim + d
+            next = (i + 1) * dim + d
+            solution[index] = d_star[index] - c_star[i] * solution[next]
 
     return solution
 
 
 def compute_parameters(
-    points: Sequence[float], point_count: int, dim: int, style: CurveNurbsKnotStyle
+    points: Sequence[float] | None,
+    point_count: int,
+    dim: int,
+    style: CurveNurbsKnotStyle,
 ) -> np.ndarray:
-    """Return one parameter for each point.
+    """Return one parameter per point from a flat point_count by dim coordinate array."""
 
-    Parameters
-    ----------
-    points : Sequence[float]
-        Flat ``point_count`` by ``dim`` coordinate array.
-    point_count : int
-        Number of points.
-    dim : int
-        Coordinate dimension.
-    style : CurveNurbsKnotStyle
-        Parameter-spacing style.
+    if point_count < 1 or dim < 1:
+        return np.array([], dtype=np.float64)
 
-    Returns
-    -------
-    numpy.ndarray
-        Point parameters, or an empty array for invalid arguments.
-    """
-    if point_count < 1 or dim < 1 or not _are_finite(points, point_count * dim):
+    value_count = point_count * dim
+
+    if not _are_finite(points, value_count):
         return np.array([], dtype=np.float64)
 
     params = np.zeros(point_count, dtype=np.float64)
@@ -842,11 +549,12 @@ def compute_parameters(
         dist = 0.0
 
         for d in range(dim):
-            diff = points[i * dim + d] - points[(i - 1) * dim + d]
+            index = i * dim + d
+            previous = (i - 1) * dim + d
+            diff = points[index] - points[previous]
             dist += diff * diff
 
         dist = math.sqrt(dist)
-
         delta = dist
 
         if base_style == 0:
@@ -860,20 +568,8 @@ def compute_parameters(
 
 
 def build_interp_nurbsknots(params: Sequence[float], degree: int) -> np.ndarray:
-    """Return a clamped interpolation nurbsknot vector.
+    """Return a clamped interpolation nurbsknot vector with natural end conditions."""
 
-    Parameters
-    ----------
-    params : Sequence[float]
-        Finite interpolation parameters.
-    degree : int
-        Polynomial degree.
-
-    Returns
-    -------
-    numpy.ndarray
-        Knot values with natural end conditions, or an empty array if invalid.
-    """
     n = len(params)
 
     if n < 2 or degree < 1 or not _are_finite(params, n):
@@ -901,44 +597,29 @@ def build_interp_nurbsknots(params: Sequence[float], degree: int) -> np.ndarray:
 def eval_basis(
     order: int, nurbsknot: Sequence[float], span: int, t: float
 ) -> list[float]:
-    """Evaluate the nonzero B-spline basis values with Cox-de Boor recursion.
+    """Return the order non-zero B-spline basis values at t by Cox-de Boor evaluation over a finite span window."""
 
-    Parameters
-    ----------
-    order : int
-        Polynomial order.
-    nurbsknot : Sequence[float]
-        Knot values needed by the selected span.
-    span : int
-        Span index relative to the curve domain.
-    t : float
-        Parameter to evaluate.
-
-    Returns
-    -------
-    list[float]
-        The ``order`` basis values, or an empty list for invalid arguments.
-    """
     if order < 1 or span < 0 or not math.isfinite(t):
         return []
 
     if order == 1:
         return [1.0]
 
-    end = span + 2 * order - 2
+    first = span
+    width = 2 * order - 2
+    end = first + width
 
     if len(nurbsknot) < end:
         return []
 
-    for i in range(span, end):
+    for i in range(first, end):
         if not math.isfinite(nurbsknot[i]):
             return []
 
     basis = [0.0] * order
     left = [0.0] * order
     right = [0.0] * order
-
-    k_offset = order - 2 + span
+    k_offset = first + order - 2
     basis[0] = 1.0
 
     for j in range(1, order):
@@ -960,11 +641,10 @@ def eval_basis(
 # ═══════════════════════════════════════════════════════════════════════════
 # Fitting
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _build_fitted_nurbsknots(
     params: Sequence[float], num_cvs: int, degree: int
 ) -> list[float]:
+
     m = len(params)
     n_interior = num_cvs - degree - 1
     order = degree + 1
@@ -994,13 +674,15 @@ def _build_fitted_nurbsknots(
 def _turn_angle(
     points: Sequence[float], dim: int, prev: int, i: int, next: int
 ) -> float:
+
     dot = 0.0
     len1sq = 0.0
     len2sq = 0.0
 
     for d in range(dim):
-        a = points[i * dim + d] - points[prev * dim + d]
-        b = points[next * dim + d] - points[i * dim + d]
+        index = i * dim + d
+        a = points[index] - points[prev * dim + d]
+        b = points[next * dim + d] - points[index]
         dot += a * b
         len1sq += a * a
         len2sq += b * b
@@ -1017,6 +699,7 @@ def _turn_angle(
 def _locate_target(
     params: Sequence[float], cum: Sequence[float], last: int, target: float
 ) -> float:
+
     lo = 0
     hi = last
 
@@ -1044,30 +727,8 @@ def build_fitted_nurbsknots_adaptive(
     degree: int,
     scale: float = 3.0,
 ) -> list[float]:
-    """Return an adaptive clamped fitting nurbsknot vector.
+    """Return a clamped fitting vector with denser nurbsknots where the points turn."""
 
-    Parameters
-    ----------
-    params : Sequence[float]
-        Point parameters.
-    points : Sequence[float] | None
-        Flat point coordinates, or ``None`` to use nonadaptive spacing.
-    point_count : int
-        Number of points.
-    dim : int
-        Coordinate dimension.
-    num_cvs : int
-        Number of fitted control points.
-    degree : int
-        Polynomial degree.
-    scale : float, optional
-        Strength of turn-based densification.
-
-    Returns
-    -------
-    list[float]
-        Clamped knot values, or an empty list for invalid arguments.
-    """
     m = point_count
 
     if (
@@ -1076,6 +737,7 @@ def build_fitted_nurbsknots_adaptive(
         or num_cvs <= degree
         or degree < 1
         or not math.isfinite(scale)
+        or len(params) < m
         or not _are_finite(params, m)
     ):
         return []
@@ -1101,7 +763,6 @@ def build_fitted_nurbsknots_adaptive(
         cum[i + 1] = cum[i] + chord * (1.0 + scale * (turn[i] + turn[i + 1]) * 0.5)
 
     total = cum[m - 1]
-
     n_interior = num_cvs - degree - 1
     order = degree + 1
     kc = nurbsknot_count(order, num_cvs)
@@ -1134,35 +795,14 @@ def build_fitted_nurbsknots_periodic_adaptive(
     degree: int,
     scale: float = 3.0,
 ) -> list[float]:
-    """Return an adaptive periodic fitting nurbsknot vector.
+    """Return a periodic fitting vector with denser nurbsknots where the closed points turn."""
 
-    Parameters
-    ----------
-    params : Sequence[float]
-        Closed-curve parameters, including the period at index ``n``.
-    points : Sequence[float] | None
-        Flat coordinates of the closed points, or ``None`` for uniform spacing.
-    n : int
-        Number of distinct closed points.
-    dim : int
-        Coordinate dimension.
-    num_cvs : int
-        Number of independent fitted control points.
-    degree : int
-        Polynomial degree.
-    scale : float, optional
-        Strength of turn-based densification.
-
-    Returns
-    -------
-    list[float]
-        Periodic knot values, or an empty list for invalid arguments.
-    """
     if (
         n < 0
         or degree < 1
         or degree - 1 > num_cvs
         or not math.isfinite(scale)
+        or len(params) <= n
         or not _are_finite(params, n + 1)
     ):
         return []
@@ -1203,8 +843,8 @@ def build_fitted_nurbsknots_periodic_adaptive(
         cum[i + 1] = cum[i] + chord * (
             1.0 + scale * (turn[i] + turn[(i + 1) % n]) * 0.5
         )
-    total = cum[n]
 
+    total = cum[n]
     base = [0.0] * num_cvs
 
     for j in range(num_cvs):
@@ -1233,33 +873,15 @@ def solve_banded_spd(
     band: MutableSequence[float],
     rhs: MutableSequence[float],
 ) -> bool:
-    """Solve a banded symmetric positive-definite system in place.
+    """Solve a finite banded symmetric positive-definite system in place with Cholesky factorization."""
 
-    Parameters
-    ----------
-    dim : int
-        Number of right-hand-side dimensions.
-    n : int
-        Number of equations.
-    half_bw : int
-        Lower half-bandwidth.
-    band : MutableSequence[float]
-        Lower-band storage modified into a Cholesky factor.
-    rhs : MutableSequence[float]
-        Right-hand side replaced with the solution.
+    if dim < 1 or n < 1 or half_bw < 0:
+        return False
 
-    Returns
-    -------
-    bool
-        Whether the storage was valid and the matrix was positive definite.
-    """
-    if (
-        dim < 1
-        or n < 1
-        or half_bw < 0
-        or not _are_finite(band, n * (half_bw + 1))
-        or not _are_finite(rhs, n * dim)
-    ):
+    band_count = n * (half_bw + 1)
+    rhs_count = n * dim
+
+    if not _are_finite(band, band_count) or not _are_finite(rhs, rhs_count):
         return False
 
     bw1 = half_bw + 1
@@ -1269,36 +891,41 @@ def solve_banded_spd(
             sum = 0.0
 
             for k in range(max(0, i - half_bw), j):
-                sum += band[i * bw1 + (i - k)] * band[j * bw1 + (j - k)]
+                i_index = i * bw1 + i - k
+                j_index = j * bw1 + j - k
+                sum += band[i_index] * band[j_index]
+
+            index = i * bw1 + i - j
 
             if i == j:
-                val = band[i * bw1] - sum
+                val = band[index] - sum
 
                 if val <= POSITIVE_DEFINITE_TOLERANCE:
                     return False
 
-                band[i * bw1] = math.sqrt(val)
+                band[index] = math.sqrt(val)
             else:
-                band[i * bw1 + (i - j)] = (band[i * bw1 + (i - j)] - sum) / band[
-                    j * bw1
-                ]
+                band[index] = (band[index] - sum) / band[j * bw1]
 
     for i in range(n):
         for d in range(dim):
             sum = 0.0
 
             for k in range(max(0, i - half_bw), i):
-                sum += band[i * bw1 + (i - k)] * rhs[k * dim + d]
+                sum += band[i * bw1 + i - k] * rhs[k * dim + d]
 
-            rhs[i * dim + d] = (rhs[i * dim + d] - sum) / band[i * bw1]
+            index = i * dim + d
+            rhs[index] = (rhs[index] - sum) / band[i * bw1]
 
     for i in range(n - 1, -1, -1):
         for d in range(dim):
             sum = 0.0
+            upper = min(n, i + bw1)
 
-            for k in range(i + 1, min(n, i + half_bw + 1)):
-                sum += band[k * bw1 + (k - i)] * rhs[k * dim + d]
+            for k in range(i + 1, upper):
+                sum += band[k * bw1 + k - i] * rhs[k * dim + d]
 
-            rhs[i * dim + d] = (rhs[i * dim + d] - sum) / band[i * bw1]
+            index = i * dim + d
+            rhs[index] = (rhs[index] - sum) / band[i * bw1]
 
     return True
