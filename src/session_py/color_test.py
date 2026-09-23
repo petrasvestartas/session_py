@@ -53,6 +53,7 @@ def test_color_json_roundtrip():
     guid = c.guid
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_color.json"
     c.file_json_dump(filename)
+
     loaded = Color.file_json_load(filename)
     parsed = Color.file_json_loads(c.file_json_dumps())
 
@@ -78,6 +79,7 @@ def test_color_protobuf_roundtrip():
     guid = c.guid
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_color.bin"
     c.pb_dump(filename)
+
     loaded = Color.pb_load(filename)
     parsed = Color.pb_loads(c.pb_dumps())
     converted = Color.from_proto(c.to_proto())
@@ -139,6 +141,20 @@ def test_color_presets():
     silver = Color.silver()
     lightgrey = Color.lightgrey()
     palette = Color.palette()
+    expected = [
+        red,
+        orange,
+        yellow,
+        lime,
+        green,
+        mint,
+        cyan,
+        azure,
+        blue,
+        violet,
+        magenta,
+        pink,
+    ]
 
     MINI_CHECK(white == Color(1.0, 1.0, 1.0, 1.0, "white"))
     MINI_CHECK(black == Color(0.0, 0.0, 0.0, 1.0, "black"))
@@ -163,23 +179,7 @@ def test_color_presets():
     MINI_CHECK(purple == Color(0.5, 0.0, 0.5, 1.0, "purple"))
     MINI_CHECK(silver == Color(0.75, 0.75, 0.75, 1.0, "silver"))
     MINI_CHECK(lightgrey == Color(0.94, 0.94, 0.94, 1.0, "lightgrey"))
-    MINI_CHECK(
-        palette
-        == [
-            red,
-            orange,
-            yellow,
-            lime,
-            green,
-            mint,
-            cyan,
-            azure,
-            blue,
-            violet,
-            magenta,
-            pink,
-        ]
-    )
+    MINI_CHECK(palette == expected)
 
 
 @MINI_TEST("Color", "Serialization Errors")
