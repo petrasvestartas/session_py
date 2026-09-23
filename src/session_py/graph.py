@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Callable
+from collections.abc import Callable
 import json
 import uuid
 
@@ -204,7 +204,7 @@ class Edge:
 
 
 class Graph:
-    """An undirected graph with string vertices and string attributes."""
+    """An undirected graph with string vertices, string labels and double attributes."""
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Constructors
@@ -392,10 +392,6 @@ class Graph:
 
         return sorted(self.edges[node])
 
-    def get_neighbors(self, node: str) -> list[str]:
-        """Alias for neighbors()."""
-        return self.neighbors(node)
-
     def edges_of(self, node: str) -> list[tuple[str, str, bool]]:
         """Return incident edges as (other, attribute, forward); forward when node is the edge's v0."""
 
@@ -477,7 +473,7 @@ class Graph:
             self.default_edge_attributes[name] = value
 
     def vertex_attribute(self, key: str, name: str) -> float | None:
-        """Return the attribute of a vertex, falling back to the default; nullopt when neither exists."""
+        """Return the attribute of a vertex, falling back to the default; None when neither exists."""
 
         vertex = self.vertices.get(key)
 
@@ -496,7 +492,7 @@ class Graph:
             self.vertices[key].attributes[name] = value
 
     def edge_attribute(self, edge: tuple[str, str], name: str) -> float | None:
-        """Return the attribute of an edge, falling back to the default; nullopt when neither exists."""
+        """Return the attribute of an edge, falling back to the default; None when neither exists."""
 
         if not self.has_edge(edge):
             return None
@@ -528,13 +524,13 @@ class Graph:
         result = []
 
         for vertex_name in sorted(self.vertices):
-            match = True
+            matched = True
 
             for name, value in conditions.items():
                 if self.vertex_attribute(vertex_name, name) != value:
-                    match = False
+                    matched = False
 
-            if match:
+            if matched:
                 result.append(vertex_name)
 
         return result
@@ -545,13 +541,13 @@ class Graph:
         result = []
 
         for edge in self.get_edges():
-            match = True
+            matched = True
 
             for name, value in conditions.items():
                 if self.edge_attribute(edge, name) != value:
-                    match = False
+                    matched = False
 
-            if match:
+            if matched:
                 result.append(edge)
 
         return result

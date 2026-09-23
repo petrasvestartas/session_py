@@ -335,19 +335,6 @@ def test_graph_neighbors():
     MINI_CHECK(len(neigh) == 2)
 
 
-@MINI_TEST("Graph", "Get Neighbors")
-def test_graph_get_neighbors():
-    from session_py import Graph
-
-    g = Graph("g")
-    g.add_edge("a", "b")
-    g.add_edge("a", "c")
-
-    neigh = g.get_neighbors("a")
-
-    MINI_CHECK(len(neigh) == 2)
-
-
 @MINI_TEST("Graph", "Number Of Vertices")
 def test_graph_number_of_vertices():
     from session_py import Graph
@@ -627,7 +614,7 @@ def test_graph_connected_components():
     comps = g.connected_components()
 
     MINI_CHECK(len(comps) == 2)
-    MINI_CHECK(g.is_connected() == False)
+    MINI_CHECK(not g.is_connected())
     MINI_CHECK(g.number_connected_components() == 2)
 
 
@@ -661,8 +648,8 @@ def test_graph_has_cycle():
     g2.add_edge("x", "y")
     g2.add_edge("y", "z")
 
-    MINI_CHECK(g.has_cycle() == True)
-    MINI_CHECK(g2.has_cycle() == False)
+    MINI_CHECK(g.has_cycle())
+    MINI_CHECK(not g2.has_cycle())
 
 
 @MINI_TEST("Graph", "Cycle Basis")
