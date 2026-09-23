@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional
 from typing import TYPE_CHECKING
 import json
 import math
@@ -11,6 +10,7 @@ if TYPE_CHECKING:
     from .plane import Plane
     from .point import Point
     from .polyline import Polyline
+    from .proto import xform_pb2
 
 from .tolerance import TO_RADIANS
 from .vector import Vector
@@ -19,34 +19,46 @@ from .vector import Vector
 class Xform:
     """A 4x4 column-major transformation matrix."""
 
-    def __init__(self, m: list[float] | None = None):
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
+    def __init__(self, matrix: list[float] | None = None):
         """Construct the identity, or from column-major values."""
 
         self._guid = None
         self.name = "my_xform"
 
-        if m is None:
-            self.m = [
-                1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                1.0,
-            ]
-        else:
-            self.m = list(m)
+        if matrix is not None:
+            self.m = list(matrix)
+            return
 
+        self.m = [0.0] * 16
+        self.m[0] = 1.0
+        self.m[5] = 1.0
+        self.m[10] = 1.0
+        self.m[15] = 1.0
+
+    def duplicate(self) -> Xform:
+        """Copy with a new guid and the same data."""
+
+        copy = Xform(self.m)
+        copy.name = self.name
+
+        return copy
+
+    @staticmethod
+    def identity() -> Xform:
+        """Construct the identity."""
+        return Xform()
+
+    @staticmethod
+    def from_matrix(matrix: list[float]) -> Xform:
+        """Construct from column-major values."""
+        return Xform(matrix)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -54,6 +66,7 @@ class Xform:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -65,32 +78,72 @@ class Xform:
         self._guid = value
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Constructors
+    # Operators
     # ═══════════════════════════════════════════════════════════════════════════
+    def __mul__(self, other: Xform) -> Xform:
+        """Multiply two transforms."""
 
-    @staticmethod
-    def identity() -> "Xform":
-        """Construct the identity."""
-        return Xform()
+        result = Xform()
 
-    @staticmethod
-    def from_matrix(matrix: list[float]) -> "Xform":
-        """Construct from column-major values."""
-        return Xform(matrix)
+        for i in range(4):
+            for j in range(4):
+                total = 0.0
 
-    def duplicate(self) -> "Xform":
-        """Copy with a new guid and the same data."""
-        copy = Xform(self.m)
-        copy.name = self.name
+                for k in range(4):
+                    total += self.m[k * 4 + i] * other.m[j * 4 + k]
 
-        return copy
+                result.m[j * 4 + i] = total
+
+        return result
+
+    def __imul__(self, other: Xform) -> Xform:
+        """Multiply in place."""
+
+        self.m = (self * other).m
+
+        return self
+
+    def __getitem__(self, index: tuple[int, int]) -> float:
+        """Return the element at (row, col)."""
+
+        row, col = index
+
+        if not (0 <= row < 4 and 0 <= col < 4):
+            raise IndexError(f"Index out of bounds: ({row}, {col})")
+
+        return self.m[col * 4 + row]
+
+    def __setitem__(self, index: tuple[int, int], value: float) -> None:
+        """Set the element at (row, col)."""
+
+        row, col = index
+
+        if not (0 <= row < 4 and 0 <= col < 4):
+            raise IndexError(f"Index out of bounds: ({row}, {col})")
+
+        self.m[col * 4 + row] = value
+
+    def __eq__(self, other: object) -> bool:
+        """Compare all elements within tolerance."""
+
+        if not isinstance(other, Xform):
+            return False
+
+        for i in range(16):
+            if abs(self.m[i] - other.m[i]) > 1e-10:
+                return False
+
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        """Compare all elements within tolerance."""
+        return not self == other
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformations
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
-    def from_axes(col_x: "Vector", col_y: "Vector", col_z: "Vector") -> "Xform":
+    def from_axes(col_x: Vector, col_y: Vector, col_z: Vector) -> Xform:
         """Construct a pure rotation from three column axis vectors."""
 
         xform = Xform()
@@ -107,7 +160,7 @@ class Xform:
         return xform
 
     @staticmethod
-    def translation(x: float, y: float, z: float) -> "Xform":
+    def translation(x: float, y: float, z: float) -> Xform:
         """Construct a translation."""
 
         xform = Xform()
@@ -118,15 +171,16 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation_x(angle: float, degrees: bool = False) -> "Xform":
+    def rotation_x(angle: float, degrees: bool = False) -> Xform:
         """Construct a rotation about the x axis."""
 
         if degrees:
-            angle = angle * TO_RADIANS
+            angle *= TO_RADIANS
 
-        xform = Xform()
         cos_angle = math.cos(angle)
         sin_angle = math.sin(angle)
+
+        xform = Xform()
         xform.m[5] = cos_angle
         xform.m[6] = sin_angle
         xform.m[9] = -sin_angle
@@ -135,15 +189,16 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation_y(angle: float, degrees: bool = False) -> "Xform":
+    def rotation_y(angle: float, degrees: bool = False) -> Xform:
         """Construct a rotation about the y axis."""
 
         if degrees:
-            angle = angle * TO_RADIANS
+            angle *= TO_RADIANS
 
-        xform = Xform()
         cos_angle = math.cos(angle)
         sin_angle = math.sin(angle)
+
+        xform = Xform()
         xform.m[0] = cos_angle
         xform.m[2] = -sin_angle
         xform.m[8] = sin_angle
@@ -152,15 +207,16 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation_z(angle: float, degrees: bool = False) -> "Xform":
+    def rotation_z(angle: float, degrees: bool = False) -> Xform:
         """Construct a rotation about the z axis."""
 
         if degrees:
-            angle = angle * TO_RADIANS
+            angle *= TO_RADIANS
 
-        xform = Xform()
         cos_angle = math.cos(angle)
         sin_angle = math.sin(angle)
+
+        xform = Xform()
         xform.m[0] = cos_angle
         xform.m[1] = sin_angle
         xform.m[4] = -sin_angle
@@ -169,16 +225,15 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation(axis: "Vector", angle: float, degrees: bool = False) -> "Xform":
+    def rotation(axis: Vector, angle: float, degrees: bool = False) -> Xform:
         """Construct a rotation about an arbitrary axis through the origin."""
 
         if degrees:
-            angle = angle * TO_RADIANS
+            angle *= TO_RADIANS
 
         if axis.is_zero():
             return Xform.identity()
 
-        xform = Xform()
         unit = axis.normalized()
         cos_angle = math.cos(angle)
         sin_angle = math.sin(angle)
@@ -189,6 +244,8 @@ class Xform:
         yy = unit[1] * unit[1]
         yz = unit[1] * unit[2]
         zz = unit[2] * unit[2]
+
+        xform = Xform()
         xform.m[0] = cos_angle + xx * one_minus_cos
         xform.m[1] = xy * one_minus_cos + unit[2] * sin_angle
         xform.m[2] = xz * one_minus_cos - unit[1] * sin_angle
@@ -202,9 +259,7 @@ class Xform:
         return xform
 
     @staticmethod
-    def rotation_around_line(
-        line: "Line", angle: float, degrees: bool = False
-    ) -> "Xform":
+    def rotation_around_line(line: Line, angle: float, degrees: bool = False) -> Xform:
         """Construct a rotation about a line."""
 
         p = line.start()
@@ -217,15 +272,15 @@ class Xform:
 
     @staticmethod
     def change_basis(
-        origin_1: "Point",
-        x_axis_1: "Vector",
-        y_axis_1: "Vector",
-        z_axis_1: "Vector",
-        origin_0: "Point",
-        x_axis_0: "Vector",
-        y_axis_0: "Vector",
-        z_axis_0: "Vector",
-    ) -> "Xform":
+        origin_1: Point,
+        x_axis_1: Vector,
+        y_axis_1: Vector,
+        z_axis_1: Vector,
+        origin_0: Point,
+        x_axis_0: Vector,
+        y_axis_0: Vector,
+        z_axis_0: Vector,
+    ) -> Xform:
         """Construct a change of basis from frame 1 to frame 0."""
 
         a = x_axis_1.dot(y_axis_1)
@@ -364,7 +419,7 @@ class Xform:
         return t2 * (m_xform * t0)
 
     @staticmethod
-    def from_change_of_basis(rect0: "Polyline", rect1: "Polyline") -> "Xform":
+    def from_change_of_basis(rect0: Polyline, rect1: Polyline) -> Xform:
         """Map the unit cube [-0.5, 0.5]^3 to the joint volume frame spanned by rect0 (x, y) and rect1[0] (z)."""
 
         from .point import Point
@@ -393,7 +448,7 @@ class Xform:
         )
 
     @staticmethod
-    def plane_to_plane(plane_from: "Plane", plane_to: "Plane") -> "Xform":
+    def plane_to_plane(plane_from: Plane, plane_to: Plane) -> Xform:
         """Construct the transform taking one plane to another."""
 
         x0 = plane_from.x_axis.normalized()
@@ -405,7 +460,6 @@ class Xform:
         origin_0 = plane_from.origin
         origin_1 = plane_to.origin
 
-        t0 = Xform.translation(-origin_0[0], -origin_0[1], -origin_0[2])
         f0 = Xform()
         f0.m[0] = x0[0]
         f0.m[1] = x0[1]
@@ -416,6 +470,7 @@ class Xform:
         f0.m[8] = z0[0]
         f0.m[9] = z0[1]
         f0.m[10] = z0[2]
+
         f1 = Xform()
         f1.m[0] = x1[0]
         f1.m[4] = x1[1]
@@ -426,6 +481,8 @@ class Xform:
         f1.m[2] = z1[0]
         f1.m[6] = z1[1]
         f1.m[10] = z1[2]
+
+        t0 = Xform.translation(-origin_0[0], -origin_0[1], -origin_0[2])
         r = f1 * f0
         t1 = Xform.translation(origin_1[0], origin_1[1], origin_1[2])
 
@@ -433,13 +490,14 @@ class Xform:
 
     @staticmethod
     def world_to_frame(
-        origin: "Point", x_axis: "Vector", y_axis: "Vector", z_axis: "Vector"
-    ) -> "Xform":
+        origin: Point, x_axis: Vector, y_axis: Vector, z_axis: Vector
+    ) -> Xform:
         """Construct the world point to frame coordinates transform (axes as rows)."""
 
         x = x_axis.normalized()
         y = y_axis.normalized()
         z = z_axis.normalized()
+
         f = Xform()
         f.m[0] = x[0]
         f.m[4] = x[1]
@@ -450,19 +508,21 @@ class Xform:
         f.m[2] = z[0]
         f.m[6] = z[1]
         f.m[10] = z[2]
+
         t = Xform.translation(-origin[0], -origin[1], -origin[2])
 
         return f * t
 
     @staticmethod
     def frame_to_world(
-        origin: "Point", x_axis: "Vector", y_axis: "Vector", z_axis: "Vector"
-    ) -> "Xform":
+        origin: Point, x_axis: Vector, y_axis: Vector, z_axis: Vector
+    ) -> Xform:
         """Construct the frame coordinates to world point transform (axes as columns)."""
 
         x = x_axis.normalized()
         y = y_axis.normalized()
         z = z_axis.normalized()
+
         f = Xform()
         f.m[0] = x[0]
         f.m[1] = x[1]
@@ -473,36 +533,38 @@ class Xform:
         f.m[8] = z[0]
         f.m[9] = z[1]
         f.m[10] = z[2]
+
         t = Xform.translation(origin[0], origin[1], origin[2])
 
         return t * f
 
     @staticmethod
-    def to_frame(frame: "Plane") -> "Xform":
+    def to_frame(frame: Plane) -> Xform:
         """Construct the world XY to frame plane transform (COMPAS from_frame)."""
 
         x = frame.x_axis.normalized()
         y = frame.y_axis.normalized()
         z = frame.z_axis.normalized()
         o = frame.origin
-        xf = Xform()
-        xf.m[0] = x[0]
-        xf.m[4] = y[0]
-        xf.m[8] = z[0]
-        xf.m[12] = o[0]
-        xf.m[1] = x[1]
-        xf.m[5] = y[1]
-        xf.m[9] = z[1]
-        xf.m[13] = o[1]
-        xf.m[2] = x[2]
-        xf.m[6] = y[2]
-        xf.m[10] = z[2]
-        xf.m[14] = o[2]
 
-        return xf
+        xform = Xform()
+        xform.m[0] = x[0]
+        xform.m[4] = y[0]
+        xform.m[8] = z[0]
+        xform.m[12] = o[0]
+        xform.m[1] = x[1]
+        xform.m[5] = y[1]
+        xform.m[9] = z[1]
+        xform.m[13] = o[1]
+        xform.m[2] = x[2]
+        xform.m[6] = y[2]
+        xform.m[10] = z[2]
+        xform.m[14] = o[2]
+
+        return xform
 
     @staticmethod
-    def scale_xyz(scale_x: float, scale_y: float, scale_z: float) -> "Xform":
+    def scale_xyz(scale_x: float, scale_y: float, scale_z: float) -> Xform:
         """Construct a scale about the origin."""
 
         xform = Xform()
@@ -513,7 +575,7 @@ class Xform:
         return xform
 
     @staticmethod
-    def scale_uniform(origin: "Point", scale_value: float) -> "Xform":
+    def scale_uniform(origin: Point, scale_value: float) -> Xform:
         """Construct a uniform scale about a point."""
 
         t0 = Xform.translation(-origin[0], -origin[1], -origin[2])
@@ -524,8 +586,8 @@ class Xform:
 
     @staticmethod
     def scale_non_uniform(
-        origin: "Point", scale_x: float, scale_y: float, scale_z: float
-    ) -> "Xform":
+        origin: Point, scale_x: float, scale_y: float, scale_z: float
+    ) -> Xform:
         """Construct a non-uniform scale about a point."""
 
         t0 = Xform.translation(-origin[0], -origin[1], -origin[2])
@@ -535,18 +597,19 @@ class Xform:
         return t2 * (t1 * t0)
 
     @staticmethod
-    def axis_rotation(angle: float, axis: "Vector", degrees: bool = False) -> "Xform":
+    def axis_rotation(angle: float, axis: Vector, degrees: bool = False) -> Xform:
         """Construct a Rodrigues rotation about a unit axis."""
 
         if degrees:
-            angle = angle * TO_RADIANS
+            angle *= TO_RADIANS
 
         c = math.cos(angle)
         s = math.sin(angle)
+        t = 1.0 - c
         ux = axis[0]
         uy = axis[1]
         uz = axis[2]
-        t = 1.0 - c
+
         xform = Xform()
         xform.m[0] = t * ux * ux + c
         xform.m[4] = t * ux * uy - uz * s
@@ -561,38 +624,19 @@ class Xform:
         return xform
 
     @staticmethod
-    def look_at_right_handed(eye: "Point", target: "Point", up: "Vector") -> "Xform":
+    def look_at_right_handed(eye: Point, target: Point, up: Vector) -> Xform:
         """Construct a right-handed view matrix looking at a target (camera looks down -Z, up must not be parallel to the view)."""
-
-        f = (target - eye).normalized()
-        s = f.cross(up.normalized()).normalized()
-        u = s.cross(f)
-        xform = Xform()
-        xform.m[0] = s[0]
-        xform.m[4] = s[1]
-        xform.m[8] = s[2]
-        xform.m[1] = u[0]
-        xform.m[5] = u[1]
-        xform.m[9] = u[2]
-        xform.m[2] = -f[0]
-        xform.m[6] = -f[1]
-        xform.m[10] = -f[2]
-        eye_vec = Vector(eye[0], eye[1], eye[2])
-        xform.m[12] = -s.dot(eye_vec)
-        xform.m[13] = -u.dot(eye_vec)
-        xform.m[14] = f.dot(eye_vec)
-
-        return xform
+        return Xform.look_to_right_handed(eye, target - eye, up)
 
     @staticmethod
-    def look_to_right_handed(
-        eye: "Point", direction: "Vector", up: "Vector"
-    ) -> "Xform":
+    def look_to_right_handed(eye: Point, direction: Vector, up: Vector) -> Xform:
         """Construct a right-handed view matrix looking along a direction."""
 
         f = direction.normalized()
         s = f.cross(up.normalized()).normalized()
         u = s.cross(f)
+        eye_vector = Vector(eye[0], eye[1], eye[2])
+
         xform = Xform()
         xform.m[0] = s[0]
         xform.m[4] = s[1]
@@ -603,19 +647,19 @@ class Xform:
         xform.m[2] = -f[0]
         xform.m[6] = -f[1]
         xform.m[10] = -f[2]
-        eye_vec = Vector(eye[0], eye[1], eye[2])
-        xform.m[12] = -s.dot(eye_vec)
-        xform.m[13] = -u.dot(eye_vec)
-        xform.m[14] = f.dot(eye_vec)
+        xform.m[12] = -s.dot(eye_vector)
+        xform.m[13] = -u.dot(eye_vector)
+        xform.m[14] = f.dot(eye_vector)
 
         return xform
 
     @staticmethod
-    def perspective(fov_y: float, aspect: float, near: float, far: float) -> "Xform":
+    def perspective(fov_y: float, aspect: float, near: float, far: float) -> Xform:
         """Construct a right-handed perspective projection with depth [0, 1]."""
 
         f = 1.0 / math.tan(fov_y / 2.0)
         nf = near - far
+
         xform = Xform([0.0] * 16)
         xform.m[0] = f / aspect
         xform.m[5] = f
@@ -628,12 +672,13 @@ class Xform:
     @staticmethod
     def orthographic(
         left: float, right: float, bottom: float, top: float, near: float, far: float
-    ) -> "Xform":
+    ) -> Xform:
         """Construct a right-handed orthographic projection with depth [0, 1]."""
 
         rl = right - left
         tb = top - bottom
         nf = near - far
+
         xform = Xform([0.0] * 16)
         xform.m[0] = 2.0 / rl
         xform.m[5] = 2.0 / tb
@@ -646,13 +691,16 @@ class Xform:
         return xform
 
     @staticmethod
-    def project_to_plane(plane: "Plane") -> "Xform":
+    def project_to_plane(plane: Plane) -> Xform:
         """Construct an orthogonal projection onto a plane."""
 
         n = plane.z_axis
         o = plane.origin
-        nx, ny, nz = n[0], n[1], n[2]
+        nx = n[0]
+        ny = n[1]
+        nz = n[2]
         d = o[0] * nx + o[1] * ny + o[2] * nz
+
         xform = Xform()
         xform.m[0] = 1.0 - nx * nx
         xform.m[4] = -nx * ny
@@ -670,15 +718,20 @@ class Xform:
         return xform
 
     @staticmethod
-    def project_to_plane_by_axis(plane: "Plane", direction: "Vector") -> "Xform":
+    def project_to_plane_by_axis(plane: Plane, direction: Vector) -> Xform:
         """Construct a projection onto a plane along a direction."""
 
         n = plane.z_axis
         o = plane.origin
-        nx, ny, nz = n[0], n[1], n[2]
-        dx, dy, dz = direction[0], direction[1], direction[2]
+        nx = n[0]
+        ny = n[1]
+        nz = n[2]
+        dx = direction[0]
+        dy = direction[1]
+        dz = direction[2]
         s = 1.0 / (nx * dx + ny * dy + nz * dz)
         d = o[0] * nx + o[1] * ny + o[2] * nz
+
         xform = Xform()
         xform.m[0] = 1.0 - dx * s * nx
         xform.m[4] = -dx * s * ny
@@ -696,10 +749,9 @@ class Xform:
         return xform
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Apply Transformations
+    # Apply transformations
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def transform_point(self, p: "Point") -> "Point":
+    def transform_point(self, p: Point) -> Point:
         """Transform a point with a homogeneous multiply, dividing by w when projective."""
 
         from .point import Point
@@ -714,7 +766,7 @@ class Xform:
 
         return Point(x / w, y / w, z / w)
 
-    def transform_vector(self, v: "Vector") -> "Vector":
+    def transform_vector(self, v: Vector) -> Vector:
         """Transform a vector with rotation and scale only."""
 
         x = self.m[0] * v[0] + self.m[4] * v[1] + self.m[8] * v[2]
@@ -726,8 +778,7 @@ class Xform:
     # ═══════════════════════════════════════════════════════════════════════════
     # Details
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def inverse(self) -> Optional["Xform"]:
+    def inverse(self) -> Xform | None:
         """Return the inverse, or None when singular."""
 
         s0 = self.m[0] * self.m[5] - self.m[1] * self.m[4]
@@ -748,36 +799,30 @@ class Xform:
             return None
 
         inv_det = 1.0 / det
-        res = Xform()
-        res.m[0] = (self.m[5] * c5 - self.m[9] * c4 + self.m[13] * c3) * inv_det
-        res.m[4] = (-self.m[4] * c5 + self.m[8] * c4 - self.m[12] * c3) * inv_det
-        res.m[8] = (self.m[7] * s5 - self.m[11] * s4 + self.m[15] * s3) * inv_det
-        res.m[12] = (-self.m[6] * s5 + self.m[10] * s4 - self.m[14] * s3) * inv_det
-        res.m[1] = (-self.m[1] * c5 + self.m[9] * c2 - self.m[13] * c1) * inv_det
-        res.m[5] = (self.m[0] * c5 - self.m[8] * c2 + self.m[12] * c1) * inv_det
-        res.m[9] = (-self.m[3] * s5 + self.m[11] * s2 - self.m[15] * s1) * inv_det
-        res.m[13] = (self.m[2] * s5 - self.m[10] * s2 + self.m[14] * s1) * inv_det
-        res.m[2] = (self.m[1] * c4 - self.m[5] * c2 + self.m[13] * c0) * inv_det
-        res.m[6] = (-self.m[0] * c4 + self.m[4] * c2 - self.m[12] * c0) * inv_det
-        res.m[10] = (self.m[3] * s4 - self.m[7] * s2 + self.m[15] * s0) * inv_det
-        res.m[14] = (-self.m[2] * s4 + self.m[6] * s2 - self.m[14] * s0) * inv_det
-        res.m[3] = (-self.m[1] * c3 + self.m[5] * c1 - self.m[9] * c0) * inv_det
-        res.m[7] = (self.m[0] * c3 - self.m[4] * c1 + self.m[8] * c0) * inv_det
-        res.m[11] = (-self.m[3] * s3 + self.m[7] * s1 - self.m[11] * s0) * inv_det
-        res.m[15] = (self.m[2] * s3 - self.m[6] * s1 + self.m[10] * s0) * inv_det
 
-        return res
+        result = Xform()
+        result.m[0] = (self.m[5] * c5 - self.m[9] * c4 + self.m[13] * c3) * inv_det
+        result.m[4] = (-self.m[4] * c5 + self.m[8] * c4 - self.m[12] * c3) * inv_det
+        result.m[8] = (self.m[7] * s5 - self.m[11] * s4 + self.m[15] * s3) * inv_det
+        result.m[12] = (-self.m[6] * s5 + self.m[10] * s4 - self.m[14] * s3) * inv_det
+        result.m[1] = (-self.m[1] * c5 + self.m[9] * c2 - self.m[13] * c1) * inv_det
+        result.m[5] = (self.m[0] * c5 - self.m[8] * c2 + self.m[12] * c1) * inv_det
+        result.m[9] = (-self.m[3] * s5 + self.m[11] * s2 - self.m[15] * s1) * inv_det
+        result.m[13] = (self.m[2] * s5 - self.m[10] * s2 + self.m[14] * s1) * inv_det
+        result.m[2] = (self.m[1] * c4 - self.m[5] * c2 + self.m[13] * c0) * inv_det
+        result.m[6] = (-self.m[0] * c4 + self.m[4] * c2 - self.m[12] * c0) * inv_det
+        result.m[10] = (self.m[3] * s4 - self.m[7] * s2 + self.m[15] * s0) * inv_det
+        result.m[14] = (-self.m[2] * s4 + self.m[6] * s2 - self.m[14] * s0) * inv_det
+        result.m[3] = (-self.m[1] * c3 + self.m[5] * c1 - self.m[9] * c0) * inv_det
+        result.m[7] = (self.m[0] * c3 - self.m[4] * c1 + self.m[8] * c0) * inv_det
+        result.m[11] = (-self.m[3] * s3 + self.m[7] * s1 - self.m[11] * s0) * inv_det
+        result.m[15] = (self.m[2] * s3 - self.m[6] * s1 + self.m[10] * s0) * inv_det
+
+        return result
 
     def is_identity(self) -> bool:
         """Return whether the matrix is the identity."""
-
-        identity = Xform()
-
-        for i in range(16):
-            if abs(self.m[i] - identity.m[i]) > 1e-10:
-                return False
-
-        return True
+        return self == Xform()
 
     def to_cols(self) -> list[list[float]]:
         """Return four columns of four rows."""
@@ -791,18 +836,21 @@ class Xform:
 
     def uniform_scale(self) -> float:
         """Return the length of the first column: the uniform scale the matrix applies."""
-        return math.sqrt(self.m[0] * self.m[0] + self.m[1] * self.m[1] + self.m[2] * self.m[2])
+        return math.sqrt(
+            self.m[0] * self.m[0] + self.m[1] * self.m[1] + self.m[2] * self.m[2]
+        )
 
-    def eye(self) -> "Point":
+    def eye(self) -> Point:
         """Return the eye of a view-projection: where clip x, y and w vanish at once; orthographic has none, so the view direction pushed far back."""
+
         from .point import Point
 
         rows = [
-            [self[0, 0], self[0, 1], self[0, 2]],
-            [self[1, 0], self[1, 1], self[1, 2]],
-            [self[3, 0], self[3, 1], self[3, 2]],
+            [self.m[0], self.m[4], self.m[8]],
+            [self.m[1], self.m[5], self.m[9]],
+            [self.m[3], self.m[7], self.m[11]],
         ]
-        rhs = [-self[0, 3], -self[1, 3], -self[3, 3]]
+        rhs = [-self.m[12], -self.m[13], -self.m[15]]
         d = Xform._det3(rows)
         norm = 1.0
 
@@ -810,17 +858,16 @@ class Xform:
             norm *= math.sqrt(row[0] * row[0] + row[1] * row[1] + row[2] * row[2])
 
         if abs(d) <= 1e-9 * max(norm, 1e-30):
-            fx = self[2, 0]
-            fy = self[2, 1]
-            fz = self[2, 2]
-            length = max(math.sqrt(fx * fx + fy * fy + fz * fz), 1e-30)
+            length = max(math.sqrt(self.m[2] * self.m[2] + self.m[6] * self.m[6] + self.m[10] * self.m[10]), 1e-30)
 
-            return Point(fx / length * 1.0e9, fy / length * 1.0e9, fz / length * 1.0e9)
+            return Point(
+                self.m[2] / length * 1.0e9, self.m[6] / length * 1.0e9, self.m[10] / length * 1.0e9
+            )
 
         eye = [0.0, 0.0, 0.0]
 
         for k in range(3):
-            replaced = [list(row) for row in rows]
+            replaced = [rows[0][:], rows[1][:], rows[2][:]]
 
             for row in range(3):
                 replaced[row][k] = rhs[row]
@@ -832,12 +879,12 @@ class Xform:
     def ortho_half_height(self) -> float:
         """Return the half-height of an orthographic view-projection in world units, 0 in perspective."""
 
-        w2 = self[3, 0] * self[3, 0] + self[3, 1] * self[3, 1] + self[3, 2] * self[3, 2]
+        w2 = self.m[3] * self.m[3] + self.m[7] * self.m[7] + self.m[11] * self.m[11]
 
         if w2 > 1e-12:
             return 0.0
 
-        r1 = self[1, 0] * self[1, 0] + self[1, 1] * self[1, 1] + self[1, 2] * self[1, 2]
+        r1 = self.m[1] * self.m[1] + self.m[5] * self.m[5] + self.m[9] * self.m[9]
 
         if r1 <= 1e-30:
             return 0.0
@@ -845,20 +892,20 @@ class Xform:
         return 1.0 / math.sqrt(r1)
 
     @staticmethod
-    def _det3(m: list[list[float]]) -> float:
+    def _det3(rows: list[list[float]]) -> float:
         """Return the determinant of a 3x3 given by rows."""
+
         return (
-            m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+            rows[0][0] * (rows[1][1] * rows[2][2] - rows[1][2] * rows[2][1])
+            - rows[0][1] * (rows[1][0] * rows[2][2] - rows[1][2] * rows[2][0])
+            + rows[0][2] * (rows[1][0] * rows[2][1] - rows[1][1] * rows[2][0])
         )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def __jsondump__(self):
-        """Serialize to a JSON object."""
+    def __jsondump__(self) -> dict:
+        """Serialize to an ordered JSON object."""
 
         return {
             "guid": self.guid,
@@ -868,41 +915,44 @@ class Xform:
         }
 
     @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> Xform:
         """Deserialize from a JSON object."""
 
-        xform = cls.from_matrix(data["m"])
+        xform = cls(data["m"])
         xform.guid = guid or data["guid"]
         xform.name = name or data["name"]
 
         return xform
-
-    def file_json_dump(self, filepath: str | Path) -> None:
-        """Write to a JSON file."""
-        with open(filepath, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
-
-    @classmethod
-    def file_json_load(cls, filepath: str | Path) -> "Xform":
-        """Read from a JSON file."""
-        with open(filepath) as f:
-            return cls.__jsonload__(json.load(f))
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "Xform":
+    def file_json_loads(cls, json_string: str) -> Xform:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
+
+    def file_json_dump(self, filepath: str | Path) -> None:
+        """Write JSON to a file."""
+
+        with open(filepath, "w") as file:
+            json.dump(self.__jsondump__(), file, indent=2)
+
+    @classmethod
+    def file_json_load(cls, filepath: str | Path) -> Xform:
+        """Read JSON from a file."""
+
+        with open(filepath) as file:
+            return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> xform_pb2.Xform:
+        """Convert to the protobuf message."""
 
         from .proto import xform_pb2
 
@@ -914,17 +964,13 @@ class Xform:
         proto.name = self.name
         proto.matrix.extend(self.m)
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Xform":
-        """Deserialize from protobuf bytes."""
+    def from_proto(cls, proto: xform_pb2.Xform) -> Xform:
+        """Construct from the protobuf message."""
 
-        from .proto import xform_pb2
-
-        proto = xform_pb2.Xform()
-        proto.ParseFromString(data)
-        xform = Xform()
+        xform = cls()
 
         if proto.guid:
             xform.guid = proto.guid
@@ -936,87 +982,37 @@ class Xform:
 
         return xform
 
-    def pb_dump(self, filepath: str | Path) -> None:
-        """Write to a protobuf file."""
-        data = self.pb_dumps()
-
-        with open(filepath, "wb") as f:
-            f.write(data)
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
 
     @classmethod
-    def pb_load(cls, filepath: str | Path) -> "Xform":
-        """Read from a protobuf file."""
-        with open(filepath, "rb") as f:
-            data = f.read()
+    def pb_loads(cls, data: bytes) -> Xform:
+        """Deserialize from protobuf bytes."""
 
-        return cls.pb_loads(data)
+        from .proto import xform_pb2
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Operators
-    # ═══════════════════════════════════════════════════════════════════════════
+        proto = xform_pb2.Xform()
+        proto.ParseFromString(data)
 
-    def __mul__(self, other: "Xform") -> "Xform":
-        """Multiply two transforms."""
+        return cls.from_proto(proto)
 
-        result = Xform()
+    def pb_dump(self, filepath: str | Path) -> None:
+        """Write protobuf bytes to a file."""
 
-        for i in range(4):
-            for j in range(4):
-                sum_val = 0.0
+        with open(filepath, "wb") as file:
+            file.write(self.pb_dumps())
 
-                for k in range(4):
-                    sum_val += self.m[k * 4 + i] * other.m[j * 4 + k]
+    @classmethod
+    def pb_load(cls, filepath: str | Path) -> Xform:
+        """Read protobuf bytes from a file."""
 
-                result.m[j * 4 + i] = sum_val
-
-        return result
-
-    def __imul__(self, other: "Xform") -> "Xform":
-        """Multiply in place."""
-        self.m = (self * other).m
-
-        return self
-
-    def __getitem__(self, idx: tuple[int, int]) -> float:
-        """Return the element at (row, col)."""
-
-        row, col = idx
-
-        if not (0 <= row < 4 and 0 <= col < 4):
-            raise IndexError(f"Index out of bounds: ({row}, {col})")
-
-        return self.m[col * 4 + row]
-
-    def __setitem__(self, idx: tuple[int, int], value: float) -> None:
-        """Set the element at (row, col)."""
-
-        row, col = idx
-
-        if not (0 <= row < 4 and 0 <= col < 4):
-            raise IndexError(f"Index out of bounds: ({row}, {col})")
-
-        self.m[col * 4 + row] = value
-
-    def __eq__(self, other: object) -> bool:
-        """Compare all elements within tolerance."""
-
-        if not isinstance(other, Xform):
-            return False
-
-        for i in range(16):
-            if abs(self.m[i] - other.m[i]) > 1e-10:
-                return False
-
-        return True
-
-    def __ne__(self, other: object) -> bool:
-        """Compare all elements within tolerance."""
-        return not self.__eq__(other)
+        with open(filepath, "rb") as file:
+            return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # String Representations
+    # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return the four matrix rows."""
 
@@ -1026,6 +1022,7 @@ class Xform:
             rows.append(
                 f"[{self.m[i]:.6f}, {self.m[4 + i]:.6f}, {self.m[8 + i]:.6f}, {self.m[12 + i]:.6f}]"
             )
+
         return "\n".join(rows)
 
     def __repr__(self) -> str:
