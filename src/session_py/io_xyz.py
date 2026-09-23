@@ -3,23 +3,30 @@ from .point import Point
 from .pointcloud import PointCloud
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Write
+# ═══════════════════════════════════════════════════════════════════════════
 def write_xyz_to_string(cloud: PointCloud) -> str:
     """Return the cloud points as "x y z" lines at full double precision."""
 
-    s = ""
+    out = ""
 
     for p in cloud.get_points():
-        s += f"{p[0]} {p[1]} {p[2]}\n"
+        out += f"{p[0]} {p[1]} {p[2]}\n"
 
-    return s
+    return out
 
 
 def write_xyz(cloud: PointCloud, filepath: str) -> None:
     """Write the cloud points as "x y z" lines to filepath."""
-    with open(filepath, "w") as f:
-        f.write(write_xyz_to_string(cloud))
+
+    with open(filepath, "w") as file:
+        file.write(write_xyz_to_string(cloud))
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Read
+# ═══════════════════════════════════════════════════════════════════════════
 def read_xyz_from_str(content: str) -> PointCloud:
     """Return the cloud read from "x y z" lines; blank and # lines skipped."""
 
@@ -48,7 +55,8 @@ def read_xyz_from_str(content: str) -> PointCloud:
 
 def read_xyz(filepath: str) -> PointCloud:
     """Return the cloud read from an .xyz file."""
-    with open(filepath) as f:
-        content = f.read()
+
+    with open(filepath) as file:
+        content = file.read()
 
     return read_xyz_from_str(content)
