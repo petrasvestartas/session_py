@@ -10,44 +10,41 @@ from .brep import BRep
 from .brep import BRepRef
 from .brep import BRepOrientation
 from .closest import Closest
+from .tolerance import PI
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ISO 10303-21 parser
 # ═══════════════════════════════════════════════════════════════════════════
 
-REF = 0
-NUM = 1
-STR = 2
-ENUM = 3
-LIST = 4
-NULL = 5
-
-PI = 3.14159265358979323846
-PI_2 = 1.5707963267948966
-MAX_DEPTH = 8
-NS = 17
+REF = 0  # Entity reference.
+NUM = 1  # Real or integer.
+STR = 2  # Quoted string.
+ENUM = 3  # Enum literal or bare identifier.
+LIST = 4  # Parenthesised list.
+NULL = 5  # Unset or derived value.
 
 
 class StepParam:
-    """One parameter: reference, number, string, enum, list or null."""
+    """One parameter of an entity instance."""
 
     def __init__(self):
         """Construct a null parameter."""
 
-        self.tag = NULL
-        self.ref_id = 0
-        self.num = 0.0
-        self.str = ""
-        self.list = []
+        self.tag = NULL  # Which member is set.
+        self.ref_id = 0  # Entity id for Ref.
+        self.num = 0.0  # Value for Num.
+        self.str = ""  # Text for Str and Enum.
+        self.list = []  # Items for List.
 
 
 class StepSubEntity:
-    """One TYPE(params) part of an entity."""
+    """One TYPE(params) part of an entity instance."""
 
     def __init__(self):
         """Construct an empty part."""
-        self.type = ""
-        self.params = []
+
+        self.type = ""  # Entity type name.
+        self.params = []  # Parameters in file order.
 
 
 class StepEntity:
@@ -55,7 +52,7 @@ class StepEntity:
 
     def __init__(self):
         """Construct an empty entity."""
-        self.parts = []
+        self.parts = []  # Sub-entities of the instance.
 
     def has(self, t: str) -> bool:
         """Return whether any sub-entity carries type t."""
@@ -77,11 +74,11 @@ class StepEntity:
 
 
 class StepFile:
-    """Parsed entities by id."""
+    """Entities of a parsed file by id."""
 
     def __init__(self):
         """Construct an empty file."""
-        self.entities = {}
+        self.entities = {}  # Entities by id.
 
     def ids_of_type(self, t: str) -> list[int]:
         """Return the sorted ids of every entity carrying type t."""
@@ -97,14 +94,20 @@ class StepFile:
         return out
 
 
+PI_2 = 1.5707963267948966  # Quarter turn.
+MAX_DEPTH = 8  # Deepest list nesting parsed recursively.
+NS = 17  # Samples per side of a surface grid.
+
+
 class Cursor:
-    """Position in the text being parsed."""
+    """Read position in a STEP text."""
 
     def __init__(self, text: str):
         """Construct at the start of text."""
-        self.s = text
-        self.p = 0
-        self.end = len(text)
+
+        self.s = text  # Text being parsed.
+        self.p = 0  # Current position.
+        self.end = len(text)  # End of text.
 
 
 def _skip_ws(c: Cursor) -> None:
@@ -230,7 +233,7 @@ def _parse_params(c: Cursor, depth: int) -> list[StepParam]:
 
 
 def _skip_list(c: Cursor) -> None:
-    """Skips a parenthesised group without recursing, for lists nested deeper than MAX_DEPTH."""
+    """Skip a parenthesised group without recursing, for lists nested deeper than MAX_DEPTH."""
 
     open_ = 0
 
@@ -251,6 +254,7 @@ def _parse_param(c: Cursor, depth: int) -> StepParam:
     """Read one parameter: reference, number, string, enum, list or sub-entity."""
 
     _skip_ws(c)
+
     r = StepParam()
 
     if c.p >= c.end:
@@ -276,6 +280,7 @@ def _parse_param(c: Cursor, depth: int) -> StepParam:
         r.str = _parse_string(c)
     elif ch == ".":
         c.p += 1
+
         start = c.p
 
         while c.p < c.end and c.s[c.p] != ".":
@@ -349,6 +354,7 @@ def _parse_step_string(content: str, sf: StepFile) -> None:
             continue
 
         c.p += 1
+
         id_ = _parse_int(c)
 
         if not _consume(c, "="):
@@ -599,6 +605,7 @@ def _full_from_internal(internal) -> list[float]:
 
 def _internal_from_full(full: list[float]) -> list[float]:
     """Drop the two clamped end knots of a full knot vector."""
+
     if len(full) < 2:
         return list(full)
 
@@ -611,49 +618,62 @@ def _internal_from_full(full: list[float]) -> list[float]:
 
 
 class Axis2:
-    """AXIS2_PLACEMENT_3D frame."""
+    """Orthonormal frame of an AXIS2_PLACEMENT_3D."""
 
     def __init__(self):
         """Construct the world frame."""
 
-        self.origin = Point(0, 0, 0)
-        self.ax = Vector(1, 0, 0)
-        self.ay = Vector(0, 1, 0)
-        self.az = Vector(0, 0, 1)
-        self.ok = False
+        self.origin = Point(0, 0, 0)  # Frame origin.
+        self.ax = Vector(1, 0, 0)  # Frame x axis.
+        self.ay = Vector(0, 1, 0)  # Frame y axis.
+        self.az = Vector(0, 0, 1)  # Frame z axis.
+        self.ok = False  # Whether the frame was read.
 
 
 class Proj:
-    """kind: 0 none, 1 plane, 2 cylinder on the quarter-arc chart."""
+    """Parameter projector of a surface: a plane or a cylinder on the quarter-arc chart."""
 
     def __init__(self):
         """Construct a projector of no kind."""
-        self.kind = 0
-        self.a = Axis2()
+
+        self.kind = 0  # 0 none, 1 plane, 2 cylinder.
+        self.a = Axis2()  # Surface frame.
 
 
 class AnFace:
-    """kind: 2 cylinder, 3 cone, 4 sphere, 5 torus; r2 is the cone semi-angle or the torus minor radius."""
+    """Analytic surface of a face."""
 
     def __init__(self):
         """Construct a face of no kind."""
 
-        self.kind = 0
-        self.a = Axis2()
-        self.radius = 0.0
-        self.r2 = 0.0
+        self.kind = 0  # 2 cylinder, 3 cone, 4 sphere, 5 torus.
+        self.a = Axis2()  # Surface frame.
+        self.radius = 0.0  # Main radius.
+        self.r2 = 0.0  # Cone semi-angle or torus minor radius.
 
 
 def _axis_point(a: Axis2, lx: float, ly: float, lz: float) -> Point:
     """Return the point at local coordinates in the axis frame."""
-    return a.origin + (a.ax * lx + a.ay * ly + a.az * lz)
+    return a.origin + a.ax * lx + a.ay * ly + a.az * lz
 
 
 def _angle_of(a: Axis2, pt: Point) -> float:
     """Return the angle of pt around the axis in radians."""
+
     d = pt - a.origin
 
     return math.atan2(d.dot(a.ay), d.dot(a.ax))
+
+
+def _round_half_away(x: float) -> int:
+    """Round to the nearest integer, halves away from zero like std::round."""
+
+    r = math.floor(abs(x))
+
+    if abs(x) - r >= 0.5:
+        r += 1
+
+    return int(math.copysign(r, x))
 
 
 def _arc_param_of_angle(theta: float) -> float:
@@ -691,6 +711,7 @@ def _arc_param_of_angle(theta: float) -> float:
 
 def _chart_u_of_angle(ang: float, q0: int) -> float:
     """Chart coordinate of an angle: quarter-arc spans counted from quarter q0, corrected for the projective span parameterization."""
+
     q = ang / PI_2 - q0
     spanf = math.floor(q + 1e-12)
 
@@ -731,17 +752,13 @@ def _quarter_knots(nspans: int) -> list[float]:
     return knots
 
 
-def _an_local(an: AnFace, p: Point) -> tuple[float, float, float]:
-    """Local coordinates of p in the axis of an."""
-    d = p - an.a.origin
-
-    return d.dot(an.a.ax), d.dot(an.a.ay), d.dot(an.a.az)
-
-
 def _an_st_of(an: AnFace, p: Point) -> tuple[float, float, bool]:
     """Canonical (s, t) of a 3D point; radial_ok is false at a pole or apex where the angle is undefined."""
 
-    x, y, z = _an_local(an, p)
+    d = p - an.a.origin
+    x = d.dot(an.a.ax)
+    y = d.dot(an.a.ay)
+    z = d.dot(an.a.az)
     rho = math.sqrt(x * x + y * y)
     s = math.atan2(y, x)
     radial_ok = rho > 1e-9
@@ -843,6 +860,7 @@ def _plane_surface(
     out = NurbsSurface(3, False, 2, 2, 2, 2)
     out.m_nurbsknot[0] = np.array([u0, u1], dtype=np.float64)
     out.m_nurbsknot[1] = np.array([v0, v1], dtype=np.float64)
+
     ok = (
         out.set_cv(0, 0, _axis_point(a, u0, v0, 0.0))
         and out.set_cv(0, 1, _axis_point(a, u0, v1, 0.0))
@@ -876,6 +894,7 @@ def _cylinder_surface(
     knots.append(u1)
     out.m_nurbsknot[0] = np.array(knots, dtype=np.float64)
     out.m_nurbsknot[1] = np.array([v0, v1], dtype=np.float64)
+
     ca, sa, cw = _arc_nodes(u0, n_spans)
 
     for i in range(n_u):
@@ -1037,7 +1056,7 @@ def _exact_pcurve(proj: Proj, c3: NurbsCurve) -> NurbsCurve:
 
 
 def _unwrap_seam(uv: list[Point]) -> None:
-    """Keeps consecutive cylinder samples on one branch of the quarter-arc chart (period 4)."""
+    """Keep consecutive cylinder samples on one branch of the quarter-arc chart (period 4)."""
 
     for k in range(1, len(uv)):
         du = uv[k][0] - uv[k - 1][0]
@@ -1111,15 +1130,15 @@ def _grid_degenerate(grid: list[Point], ns: int, tol: float, j: int) -> bool:
 
 
 class StepReader:
-    """Entity access with point, direction, frame and projector caches."""
+    """Entity access over a parsed file with points, directions and frames cached by id."""
 
     def __init__(self, sf: StepFile):
         """Construct over a parsed file."""
 
-        self.sf = sf
-        self.pt_cache = {}
-        self.dir_cache = {}
-        self.ax_cache = {}
+        self.sf = sf  # Parsed file.
+        self.pt_cache = {}  # Points by id.
+        self.dir_cache = {}  # Directions by id.
+        self.ax_cache = {}  # Frames by id.
 
     def get(self, id_: int) -> StepEntity | None:
         """Return the entity with this id, or null."""
@@ -1181,6 +1200,7 @@ class StepReader:
 
         a.origin = self.get_point(refs[0])
         a.az = self.get_direction(refs[1]) if len(refs) > 1 else Vector(0, 0, 1)
+
         ln = a.az.magnitude()
 
         if ln > 1e-12:
@@ -1192,6 +1212,7 @@ class StepReader:
             a.ax = Vector(1, 0, 0) if abs(a.az[0]) < 0.9 else Vector(0, 1, 0)
 
         a.ax = a.ax - a.az * a.ax.dot(a.az)
+
         xn = a.ax.magnitude()
 
         if xn > 1e-12:
@@ -1549,9 +1570,10 @@ class Bound:
 
     def __init__(self):
         """Construct an empty bound."""
-        self.is_outer = False
-        self.orient = True
-        self.oe_refs = []
+
+        self.is_outer = False  # Whether the bound is FACE_OUTER_BOUND.
+        self.orient = True  # Bound orientation flag.
+        self.oe_refs = []  # ORIENTED_EDGE ids.
 
 
 def _bound_loop(r: StepReader, bid: int) -> Bound | None:
@@ -1596,6 +1618,7 @@ def _oriented_edge(r: StepReader, oe_id: int) -> tuple[int, bool]:
 
 def _edge_refs(r: StepReader, ec_ref: int) -> list[int]:
     """Start vertex, end vertex and geometry ids of an EDGE_CURVE; empty when missing."""
+
     ecent = r.get(ec_ref)
     ec = ecent.find("EDGE_CURVE") if ecent is not None else None
 
@@ -1604,6 +1627,7 @@ def _edge_refs(r: StepReader, ec_ref: int) -> list[int]:
 
 def _edge_geom_id(r: StepReader, ec_ref: int) -> int:
     """Return the geometry id of an EDGE_CURVE, or -1."""
+
     refs = _edge_refs(r, ec_ref)
 
     return refs[2] if len(refs) >= 3 else -1
@@ -1619,9 +1643,10 @@ class PendingEdge:
 
     def __init__(self, edge: int, reversed_: bool, c2d: NurbsCurve):
         """Construct from edge index, direction and pcurve."""
-        self.edge = edge
-        self.reversed = reversed_
-        self.c2d = c2d
+
+        self.edge = edge  # Brep edge index.
+        self.reversed = reversed_  # Whether the edge runs against the loop.
+        self.c2d = c2d  # Parameter-space curve.
 
 
 class LoopEdge:
@@ -1630,21 +1655,22 @@ class LoopEdge:
     def __init__(self):
         """Construct an empty loop edge."""
 
-        self.edge_idx = -1
-        self.reversed = False
-        self.uv = []
-        self.pc2d = NurbsCurve()
-        self.exact = False
+        self.edge_idx = -1  # Brep edge index.
+        self.reversed = False  # Whether the edge runs against the loop.
+        self.uv = []  # Sampled uv points.
+        self.pc2d = NurbsCurve()  # Parameter-space curve.
+        self.exact = False  # Whether pc2d is exact rather than sampled.
 
 
 class Loop:
-    """One face bound in parameter space."""
+    """One face loop with its edge uses in traversal order."""
 
     def __init__(self):
         """Construct an empty loop."""
-        self.is_outer = False
-        self.projected = False
-        self.edges = []
+
+        self.is_outer = False  # Whether the loop is the outer boundary.
+        self.projected = False  # Whether the uv came from projection.
+        self.edges = []  # Edges in traversal order.
 
 
 class Window:
@@ -1653,12 +1679,12 @@ class Window:
     def __init__(self):
         """Construct an empty window."""
 
-        self.su0 = 0
-        self.nsu = 0
-        self.sv0 = 0
-        self.nsv = 0
-        self.t0 = 0.0
-        self.t1 = 0.0
+        self.su0 = 0  # First quarter arc in u.
+        self.nsu = 0  # Quarter arcs in u.
+        self.sv0 = 0  # First quarter arc in v.
+        self.nsv = 0  # Quarter arcs in v.
+        self.t0 = 0.0  # Start of the linear domain.
+        self.t1 = 0.0  # End of the linear domain.
 
 
 def _loop_bounds(lp: Loop) -> tuple[float, float, float, float]:
@@ -1698,7 +1724,7 @@ def _loops_bounds(loops: list[Loop]) -> tuple[float, float, float, float]:
 
 
 def _pick_outer_loop(loops: list[Loop]) -> None:
-    """Marks the loop with the largest uv extent as outer when none is marked (OCCT and FreeCAD write FACE_BOUND for the outer boundary)."""
+    """Mark the loop with the largest uv extent as outer when none is marked (OCCT and FreeCAD write FACE_BOUND for the outer boundary)."""
 
     for lp in loops:
         if lp.is_outer:
@@ -1789,7 +1815,7 @@ def _surface_periods(proj: Proj, proj_srf: NurbsSurface) -> tuple[float, float]:
 
 
 def _chain_loops(loops: list[Loop], tau_u: float, tau_v: float) -> None:
-    """Shifts each edge by whole periods so its traversal start meets the previous edge's end."""
+    """Shift each edge by whole periods so its traversal start meets the previous edge's end."""
 
     if tau_u <= 0.0 and tau_v <= 0.0:
         return
@@ -1803,8 +1829,16 @@ def _chain_loops(loops: list[Loop], tau_u: float, tau_v: float) -> None:
                 continue
 
             st = le.uv[-1] if le.reversed else le.uv[0]
-            n = round((prev_end[0] - st[0]) / tau_u) if have_prev and tau_u > 0.0 else 0
-            m = round((prev_end[1] - st[1]) / tau_v) if have_prev and tau_v > 0.0 else 0
+            n = (
+                _round_half_away((prev_end[0] - st[0]) / tau_u)
+                if have_prev and tau_u > 0.0
+                else 0
+            )
+            m = (
+                _round_half_away((prev_end[1] - st[1]) / tau_v)
+                if have_prev and tau_v > 0.0
+                else 0
+            )
 
             for p in le.uv:
                 p[0] += n * tau_u
@@ -1815,7 +1849,7 @@ def _chain_loops(loops: list[Loop], tau_u: float, tau_v: float) -> None:
 
 
 def _center_inner_loops(loops: list[Loop], tau_u: float) -> None:
-    """Shifts each inner loop by whole u periods onto the outer loop's u window."""
+    """Shift each inner loop by whole u periods onto the outer loop's u window."""
 
     if tau_u <= 0.0:
         return
@@ -1836,7 +1870,7 @@ def _center_inner_loops(loops: list[Loop], tau_u: float) -> None:
         if center is None:
             continue
 
-        n = round((outer - center) / tau_u)
+        n = _round_half_away((outer - center) / tau_u)
 
         for le in lp.edges:
             for p in le.uv:
@@ -1952,6 +1986,7 @@ def _analytic_window(loops: list[Loop], an: AnFace) -> Window | None:
 
     if an.kind == 4 or an.kind == 5:
         w.sv0 = math.floor(tmin / PI_2 + 1e-9)
+
         sv1 = math.ceil(tmax / PI_2 - 1e-9)
 
         if an.kind == 4:
@@ -1969,16 +2004,16 @@ def _analytic_window(loops: list[Loop], an: AnFace) -> Window | None:
 
 
 class BRepBuilder:
-    """Assembles a BRep from the faces of one shell."""
+    """BRep of one STEP shell, built face by face."""
 
     def __init__(self, reader: StepReader):
         """Construct over a reader."""
 
-        self.r = reader
-        self.brep = BRep()
-        self.vmap = {}
-        self.emap = {}
-        self.face_refs = []
+        self.r = reader  # Entity reader.
+        self.brep = BRep()  # Brep under construction.
+        self.vmap = {}  # Brep vertex by VERTEX_POINT id.
+        self.emap = {}  # Brep edge by EDGE_CURVE id.
+        self.face_refs = []  # Face references in file order.
 
     def vertex_at(self, q: Point, tol: float) -> int:
         """Existing vertex within tol of q, else a new one."""
@@ -2163,11 +2198,11 @@ class BRepBuilder:
                 s = st[-1][0] if k > 0 else ps
 
             rs = st[-1][0] if k > 0 else (ps if have_prev else s)
-            s -= 2 * PI * round((s - rs) / (2 * PI))
+            s -= 2 * PI * _round_half_away((s - rs) / (2 * PI))
 
             if an.kind == 5:
                 rt = st[-1][1] if k > 0 else (pt if have_prev else t)
-                t -= 2 * PI * round((t - rt) / (2 * PI))
+                t -= 2 * PI * _round_half_away((t - rt) / (2 * PI))
 
             st.append(Point(s, t, 0.0))
 
@@ -2249,9 +2284,9 @@ class BRepBuilder:
             if not chains[k] or not chains[k - 1]:
                 continue
 
-            n = round((chains[k - 1][-1][0] - chains[k][0][0]) / period)
+            n = _round_half_away((chains[k - 1][-1][0] - chains[k][0][0]) / period)
             m = (
-                round((chains[k - 1][-1][1] - chains[k][0][1]) / period)
+                _round_half_away((chains[k - 1][-1][1] - chains[k][0][1]) / period)
                 if an.kind == 5
                 else 0
             )
@@ -2273,6 +2308,7 @@ class BRepBuilder:
                     _polyline_nurbs(chains[k], 2),
                 )
             )
+
             nxt = chains[(k + 1) % len(chains)]
 
             if not nxt:
@@ -2541,9 +2577,11 @@ class BRepBuilder:
         )
         loops = []
         self.projected_loops(bound_refs, proj, proj_srf, loops)
+
         tau_u, tau_v = _surface_periods(proj, proj_srf)
         _chain_loops(loops, tau_u, tau_v)
         _center_inner_loops(loops, tau_u)
+
         srf = proj_srf
 
         if not srf.is_valid():
@@ -2674,22 +2712,25 @@ def _fmt_dbl_grid(rows: list[list[float]]) -> str:
 
 
 class StepWriter:
-    """Collects entity lines and emits the STEP text."""
+    """Entity lines of a STEP file under construction."""
 
     def __init__(self):
         """Construct with no entities."""
-        self.next_id = 1
-        self.lines = []
+
+        self.next_id = 1  # Next free entity id.
+        self.lines = []  # Emitted entity lines.
 
     def new_id(self) -> int:
         """Return the next free entity id."""
+
         id_ = self.next_id
         self.next_id += 1
 
         return id_
 
     def write_raw(self, body: str) -> int:
-        """Emits "#id=body;" with a fresh id and returns the id."""
+        """Emit "#id=body;" with a fresh id and return the id."""
+
         id_ = self.new_id()
         self.lines.append(f"#{id_}={body};")
 
@@ -2836,6 +2877,7 @@ class StepWriter:
             return -1
 
         self.write_nurbs_curve(loop_2d)
+
         ec = self.write_raw(f"EDGE_CURVE('',#{v0},#{v0},#{crv3d},.T.)")
         oe = self.write_raw(f"ORIENTED_EDGE('',*,*,#{ec},.T.)")
         el = self.write_raw(f"EDGE_LOOP('',(#{oe}))")
@@ -2925,6 +2967,7 @@ class StepWriter:
         self.write_raw(
             f"APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,#{ac})"
         )
+
         pc = self.write_raw(f"PRODUCT_CONTEXT('',#{ac},'mechanical')")
         pr = self.write_raw(f"PRODUCT('{name}','{name}','',(#{pc}))")
         pf = self.write_raw(f"PRODUCT_DEFINITION_FORMATION('','',#{pr})")
@@ -2967,16 +3010,16 @@ class StepWriter:
 
 
 class BRepEmitter:
-    """Writes one BRep into a StepWriter: vertices, edges and surfaces once each, degenerated edges omitted, a wire of only degenerated edges as a VERTEX_LOOP."""
+    """Write one BRep into a StepWriter: vertices, edges and surfaces once each, degenerated edges omitted, a wire of only degenerated edges as a VERTEX_LOOP."""
 
     def __init__(self, writer: StepWriter, b: BRep):
         """Construct over a writer and the brep to emit."""
 
-        self.w = writer
-        self.brep = b
-        self.vid = {}
-        self.eid = {}
-        self.sid = {}
+        self.w = writer  # Entity writer.
+        self.brep = b  # Brep being emitted.
+        self.vid = {}  # VERTEX_POINT id by vertex.
+        self.eid = {}  # EDGE_CURVE id by edge.
+        self.sid = {}  # Surface id by surface.
 
     def vertex_id(self, vi: int) -> int:
         """Return the VERTEX_POINT id of a brep vertex, emitting it once."""
