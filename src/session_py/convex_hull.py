@@ -3,6 +3,9 @@ from .mesh import Mesh
 from .point import Point
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 def _cross_2d(o: Point, a: Point, b: Point) -> float:
     """Twice the signed area of o-a-b in XY, positive for a left turn."""
     return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
@@ -101,9 +104,68 @@ def _quickhull_faces(
     )
 
 
+def _initial_tetrahedron(points: list[Point]) -> list[int] | None:
+    """Corners of the starting tetrahedron with a-b-c facing away from d, none when the points are collinear or coplanar."""
+
+    n = len(points)
+
+    p0 = 0
+
+    for i in range(1, n):
+        if points[i][0] < points[p0][0]:
+            p0 = i
+
+    p1 = 0
+
+    for i in range(1, n):
+        if (points[i] - points[p0]).magnitude_squared() > (
+            points[p1] - points[p0]
+        ).magnitude_squared():
+            p1 = i
+
+    axis = points[p1] - points[p0]
+
+    p2 = -1
+    best_distance = -1.0
+
+    for i in range(n):
+        if i == p0 or i == p1:
+            continue
+
+        distance = axis.cross(points[i] - points[p0]).magnitude_squared()
+
+        if distance > best_distance:
+            best_distance = distance
+            p2 = i
+
+    p3 = -1
+    best_volume = -1.0
+
+    for i in range(n):
+        if i == p0 or i == p1 or i == p2:
+            continue
+
+        volume = abs(_signed_volume(points[p0], points[p1], points[p2], points[i]))
+
+        if volume > best_volume:
+            best_volume = volume
+            p3 = i
+
+    if p2 < 0 or p3 < 0 or best_distance <= 1e-20 or best_volume <= 1e-20:
+        return None
+
+    if _signed_volume(points[p0], points[p1], points[p2], points[p3]) > 0.0:
+        p1, p2 = p2, p1
+
+    return [p0, p1, p2, p3]
+
+
 class ConvexHull:
     """Convex hull: monotone chain in XY for 2D, quickhull for 3D."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Geometry
+    # ═══════════════════════════════════════════════════════════════════════════
     @staticmethod
     def hull_2d(points: list[Point]) -> list[Point]:
         """Counter-clockwise hull of the points projected to XY, collinear points dropped; fewer than three points come back as given."""
@@ -114,6 +176,7 @@ class ConvexHull:
             return list(points)
 
         order = sorted(range(n), key=lambda i: (points[i][0], points[i][1]))
+
         lower = []
 
         for i in order:
@@ -126,6 +189,7 @@ class ConvexHull:
 
         lower.pop()
         upper.pop()
+
         hull = []
 
         for i in lower:
@@ -154,55 +218,18 @@ class ConvexHull:
 
             return mesh
 
-        p0 = 0
+        corners = _initial_tetrahedron(points)
 
-        for i in range(1, n):
-            if points[i][0] < points[p0][0]:
-                p0 = i
-
-        p1 = 0
-
-        for i in range(1, n):
-            if (points[i] - points[p0]).magnitude_squared() > (
-                points[p1] - points[p0]
-            ).magnitude_squared():
-                p1 = i
-
-        axis = points[p1] - points[p0]
-        p2 = -1
-        best_distance = -1.0
-
-        for i in range(n):
-            if i == p0 or i == p1:
-                continue
-
-            distance = axis.cross(points[i] - points[p0]).magnitude_squared()
-
-            if distance > best_distance:
-                best_distance = distance
-                p2 = i
-
-        p3 = -1
-        best_volume = -1.0
-
-        for i in range(n):
-            if i == p0 or i == p1 or i == p2:
-                continue
-
-            volume = abs(_signed_volume(points[p0], points[p1], points[p2], points[i]))
-
-            if volume > best_volume:
-                best_volume = volume
-                p3 = i
-
-        if p2 < 0 or p3 < 0 or best_distance <= 1e-20 or best_volume <= 1e-20:
+        if corners is None:
             for point in points:
                 mesh.add_vertex(point)
 
             return mesh
 
-        if _signed_volume(points[p0], points[p1], points[p2], points[p3]) > 0.0:
-            p1, p2 = p2, p1
+        p0 = corners[0]
+        p1 = corners[1]
+        p2 = corners[2]
+        p3 = corners[3]
 
         rest = []
 
@@ -211,10 +238,12 @@ class ConvexHull:
                 rest.append(i)
 
         faces = []
+
         _quickhull_faces(points, rest, p0, p1, p2, faces)
         _quickhull_faces(points, rest, p0, p3, p1, faces)
         _quickhull_faces(points, rest, p1, p3, p2, faces)
         _quickhull_faces(points, rest, p2, p3, p0, faces)
+
         used = set()
 
         for face in faces:

@@ -53,6 +53,7 @@ def test_convex_hull_hull_2d_circle():
         points.append(Point(math.cos(angle), math.sin(angle), 0.0))
 
     points.append(Point(0.0, 0.0, 0.0))
+
     hull = ConvexHull.hull_2d(points)
 
     MINI_CHECK(len(hull) == n)
@@ -78,6 +79,7 @@ def test_convex_hull_hull_3d():
     degenerate = ConvexHull.hull_3d(
         [Point(0, 0, 0), Point(1, 0, 0), Point(2, 0, 0), Point(3, 0, 0)]
     )
+
     MINI_CHECK(degenerate.number_of_vertices() == 4)
     MINI_CHECK(degenerate.number_of_faces() == 0)
 
