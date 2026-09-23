@@ -1,7 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import math
-from .aabb import AABB
 from .boolean_polyline import BooleanPolyline
 from .closest import Closest
 from .line import Line
@@ -14,12 +13,36 @@ from .point import Point
 from .polyline import Polyline
 from .spatial_bvh import SpatialBVH
 from .tolerance import Tolerance
-from .tolerance import TO_RADIANS
 from .vector import Vector
 
 if TYPE_CHECKING:
     from .element import Element
     from .nurbssurface import NurbsSurface
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Lines and planes
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _plane_value_at(plane: Plane, point: Point) -> float:
+    """Signed plane equation value at a point."""
+    return plane.a * point[0] + plane.b * point[1] + plane.c * point[2] + plane.d
+
+
+def line_line(line0: Line, line1: Line, tolerance: float) -> Point | None:
+    """Intersection point of two segments, the midpoint of closest approach within tolerance."""
+
+    result = line_line_parameters(line0, line1, tolerance, True, False)
+
+    if result is None:
+        return None
+
+    t0, t1 = result
+    p0 = line0.point_at(t0)
+    p1 = line1.point_at(t1)
+
+    return Point((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5, (p0[2] + p1[2]) * 0.5)
 
 
 def line_line_parameters(
@@ -100,21 +123,6 @@ def line_line_parameters(
     return (t0, t1)
 
 
-def line_line(line0: Line, line1: Line, tolerance: float) -> Point | None:
-    """Intersection point of two segments, the midpoint of closest approach within tolerance."""
-
-    result = line_line_parameters(line0, line1, tolerance, True, False)
-
-    if result is None:
-        return None
-
-    t0, t1 = result
-    p0 = line0.point_at(t0)
-    p1 = line1.point_at(t1)
-
-    return Point((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5, (p0[2] + p1[2]) * 0.5)
-
-
 def plane_plane(plane0: Plane, plane1: Plane) -> Line | None:
     """Intersection line of two planes, anchored on plane0's origin."""
 
@@ -175,11 +183,6 @@ def plane_plane_to_line_canonical(plane0: Plane, plane1: Plane) -> Line | None:
     az = c0 * n0[2] + c1 * n1[2]
 
     return Line(ax, ay, az, ax + dx, ay + dy, az + dz)
-
-
-def _plane_value_at(plane: Plane, point: Point) -> float:
-    """Calculate the plane equation value at a point."""
-    return plane.a * point[0] + plane.b * point[1] + plane.c * point[2] + plane.d
 
 
 def line_plane(line: Line, plane: Plane, is_finite: bool = True) -> Point | None:
@@ -247,6 +250,11 @@ def plane_plane_plane(plane0: Plane, plane1: Plane, plane2: Plane) -> Point | No
     )
 
     return Point(p[0], p[1], p[2])
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rays
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 def ray_box(line: Line, box: OBB, t0: float, t1: float) -> list[Point] | None:
@@ -518,8 +526,20 @@ def ray_mesh_bvh(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# NURBS curve plane helpers
+# NURBS curve helpers
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _unique_sorted(values: list[float], tolerance: float) -> list[float]:
+    """Sorted values without neighbours closer than tolerance to the last kept one."""
+
+    unique = []
+
+    for value in values:
+        if not unique or abs(unique[-1] - value) >= tolerance:
+            unique.append(value)
+
+    return unique
 
 
 def _curve_signed_distance_to_plane(pt, plane):
@@ -598,8 +618,272 @@ def _curve_refine_intersection_newton(curve, plane, t, tolerance):
     return t
 
 
+def _curve_plane_clip(curve, plane, tolerance, ta, tb, depth, results):
+    """Bezier-clipping recursion of the curve-plane distance on [ta, tb]."""
+
+    if depth > 50:
+        tm = (ta + tb) * 0.5
+        pm = curve.point_at(tm)
+        dist = _curve_signed_distance_to_plane(pm, plane)
+
+        if abs(dist) < tolerance:
+            results.append(tm)
+
+        return
+
+    if abs(tb - ta) < tolerance * 0.01:
+        tm = (ta + tb) * 0.5
+        pm = curve.point_at(tm)
+        dist = _curve_signed_distance_to_plane(pm, plane)
+
+        if abs(dist) < tolerance:
+            t = tm
+
+            for _ in range(10):
+                pt = curve.point_at(t)
+                tangent = curve.tangent_at(t)
+                f = _curve_signed_distance_to_plane(pt, plane)
+                df = tangent.dot(plane.z_axis)
+
+                if abs(df) < 1e-12:
+                    break
+
+                dt = -f / df
+                t += dt
+
+                if abs(dt) < tolerance * 0.01:
+                    break
+
+                if t < ta or t > tb:
+                    t = tm
+                    break
+
+            pt_final = curve.point_at(t)
+
+            if (
+                abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance
+                and t >= ta
+                and t <= tb
+            ):
+                results.append(t)
+
+        return
+
+    num_samples = min(curve.order() + 1, 10)
+    distances = []
+    params = []
+    dt = (tb - ta) / (num_samples - 1)
+
+    for i in range(num_samples):
+        t = ta + i * dt
+        p = curve.point_at(t)
+        distances.append(_curve_signed_distance_to_plane(p, plane))
+        params.append(t)
+
+    d_min = min(distances)
+    d_max = max(distances)
+
+    if d_min > tolerance or d_max < -tolerance:
+        return
+
+    t_min = ta
+    t_max = tb
+
+    for i in range(len(distances) - 1):
+        if distances[i] * distances[i + 1] < 0:
+            d0 = distances[i]
+            d1 = distances[i + 1]
+            t_clip = params[i] - d0 * (params[i + 1] - params[i]) / (d1 - d0)
+
+            if d0 > 0:
+                t_max = min(t_max, t_clip + (tb - ta) * 0.1)
+            else:
+                t_min = max(t_min, t_clip - (tb - ta) * 0.1)
+
+    if t_min >= t_max:
+        t_min = ta
+        t_max = tb
+
+    t_min = max(ta, t_min)
+    t_max = min(tb, t_max)
+    reduction = (t_max - t_min) / (tb - ta)
+
+    if reduction > 0.8 or (t_max - t_min) < tolerance * 0.1:
+        tm = (ta + tb) * 0.5
+        _curve_plane_clip(curve, plane, tolerance, ta, tm, depth + 1, results)
+        _curve_plane_clip(curve, plane, tolerance, tm, tb, depth + 1, results)
+    else:
+        _curve_plane_clip(curve, plane, tolerance, t_min, t_max, depth + 1, results)
+
+
+def _curve_plane_subdivide_algebraic(curve, plane, tolerance, a, b, depth, results):
+    """Hodograph subdivision of one span with Newton polishing of the crossings."""
+
+    if depth > 30:
+        return
+
+    p_a = curve.point_at(a)
+    p_b = curve.point_at(b)
+    normal = plane.z_axis
+    f_a = normal.dot(p_a - plane.origin)
+    f_b = normal.dot(p_b - plane.origin)
+
+    if f_a * f_b > 0:
+        return
+
+    mid_t = (a + b) * 0.5
+    p_mid = curve.point_at(mid_t)
+    line_dir = p_b - p_a
+    line_len = line_dir.magnitude()
+
+    if line_len > 1e-14:
+        line_dir = line_dir / line_len
+
+    deviation = abs((p_mid - p_a).cross(line_dir).magnitude())
+
+    if deviation < tolerance * 10.0 or (b - a) < tolerance * 10.0:
+        t = mid_t
+        converged = False
+
+        for _ in range(10):
+            p = curve.point_at(t)
+            f = normal.dot(p - plane.origin)
+
+            if abs(f) < tolerance:
+                converged = True
+                break
+
+            tangent = curve.tangent_at(t)
+            df = normal.dot(tangent)
+
+            if abs(df) < 1e-14:
+                t = (a + b) * 0.5
+                break
+
+            t_new = t - f / df
+
+            if t_new < a or t_new > b:
+                t_new = (a + b) * 0.5
+
+            if abs(t_new - t) < tolerance:
+                t = t_new
+                converged = True
+                break
+
+            t = t_new
+
+        if converged and t >= a and t <= b:
+            is_duplicate = False
+
+            for existing in results:
+                if abs(existing - t) < tolerance * 10.0:
+                    is_duplicate = True
+                    break
+
+            if not is_duplicate:
+                results.append(t)
+    else:
+        _curve_plane_subdivide_algebraic(
+            curve, plane, tolerance, a, mid_t, depth + 1, results
+        )
+        _curve_plane_subdivide_algebraic(
+            curve, plane, tolerance, mid_t, b, depth + 1, results
+        )
+
+
+def _curve_nearly_linear(curve, tolerance, a, b):
+    """True when the chord of [a, b] deviates less than ten tolerances from the curve."""
+
+    p_a = curve.point_at(a)
+    p_b = curve.point_at(b)
+    p_mid = curve.point_at((a + b) * 0.5)
+    ab = p_b - p_a
+    line_length = ab.magnitude()
+
+    if line_length < 1e-14:
+        return True
+
+    am = p_mid - p_a
+    cross_mag = ab.cross(am).magnitude()
+    deviation = cross_mag / line_length
+
+    return deviation < tolerance * 10.0
+
+
+def _curve_plane_subdivide_production(curve, plane, tolerance, a, b, depth, results):
+    """Span subdivision to nearly linear pieces with Newton polishing of the crossings."""
+
+    if depth > 30:
+        return
+
+    p_a = curve.point_at(a)
+    p_b = curve.point_at(b)
+    normal = plane.z_axis
+    f_a = normal.dot(p_a - plane.origin)
+    f_b = normal.dot(p_b - plane.origin)
+
+    if f_a * f_b > 0:
+        return
+
+    if _curve_nearly_linear(curve, tolerance, a, b) or (b - a) < tolerance * 10.0:
+        t = (a + b) * 0.5
+        converged = False
+
+        for _ in range(10):
+            p = curve.point_at(t)
+            f = normal.dot(p - plane.origin)
+
+            if abs(f) < tolerance:
+                converged = True
+                break
+
+            tangent = curve.tangent_at(t)
+            df = normal.dot(tangent)
+
+            if abs(df) < 1e-14:
+                if f * f_a < 0:
+                    b = t
+                else:
+                    a = t
+                    f_a = f
+
+                t = (a + b) * 0.5
+                continue
+
+            t_new = t - f / df
+
+            if t_new < a or t_new > b:
+                t_new = (a + b) * 0.5
+
+            if abs(t_new - t) < tolerance:
+                t = t_new
+                converged = True
+                break
+
+            t = t_new
+
+        if converged and t >= a and t <= b:
+            is_duplicate = False
+
+            for existing in results:
+                if abs(existing - t) < tolerance * 10.0:
+                    is_duplicate = True
+                    break
+
+            if not is_duplicate:
+                results.append(t)
+    else:
+        mid = (a + b) * 0.5
+        _curve_plane_subdivide_production(
+            curve, plane, tolerance, a, mid, depth + 1, results
+        )
+        _curve_plane_subdivide_production(
+            curve, plane, tolerance, mid, b, depth + 1, results
+        )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
-# NURBS curve plane
+# NURBS curves
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -717,125 +1001,19 @@ def curve_plane_bezier_clipping(
 ) -> list[float]:
     """Curve-plane intersection parameters by Bezier clipping."""
 
+    results = []
+
+    if not curve.is_valid():
+        return results
+
     if tolerance is None:
         tolerance = Tolerance.ZERO_TOLERANCE
 
-    if not curve.is_valid():
-        return []
-
-    results = []
     t0, t1 = curve.domain()
-
-    def clip_recursive(ta, tb, depth):
-        if depth > 50:
-            tm = (ta + tb) * 0.5
-            pm = curve.point_at(tm)
-            dist = _curve_signed_distance_to_plane(pm, plane)
-
-            if abs(dist) < tolerance:
-                results.append(tm)
-
-            return
-
-        if abs(tb - ta) < tolerance * 0.01:
-            tm = (ta + tb) * 0.5
-            pm = curve.point_at(tm)
-            dist = _curve_signed_distance_to_plane(pm, plane)
-
-            if abs(dist) < tolerance:
-                t = tm
-
-                for _ in range(10):
-                    pt = curve.point_at(t)
-                    tan = curve.tangent_at(t)
-                    f = _curve_signed_distance_to_plane(pt, plane)
-                    df = tan.dot(plane.z_axis)
-
-                    if abs(df) < 1e-12:
-                        break
-
-                    dt = -f / df
-                    t += dt
-
-                    if abs(dt) < tolerance * 0.01:
-                        break
-
-                    if t < ta or t > tb:
-                        t = tm
-                        break
-
-                pt_final = curve.point_at(t)
-
-                if (
-                    abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance
-                    and ta <= t <= tb
-                ):
-                    results.append(t)
-
-            return
-
-        num_samples = min(curve.order() + 1, 10)
-        distances = []
-        params = []
-
-        dt = (tb - ta) / (num_samples - 1)
-
-        for i in range(num_samples):
-            t = ta + i * dt
-            p = curve.point_at(t)
-            distances.append(_curve_signed_distance_to_plane(p, plane))
-            params.append(t)
-
-        d_min = min(distances)
-        d_max = max(distances)
-
-        if d_min > tolerance or d_max < -tolerance:
-            return
-
-        t_min = ta
-        t_max = tb
-
-        for i in range(len(distances) - 1):
-            if distances[i] * distances[i + 1] < 0:
-                d0 = distances[i]
-                d1 = distances[i + 1]
-                t_clip = params[i] - d0 * (params[i + 1] - params[i]) / (d1 - d0)
-
-                if d0 > 0:
-                    t_max = min(t_max, t_clip + (tb - ta) * 0.1)
-                else:
-                    t_min = max(t_min, t_clip - (tb - ta) * 0.1)
-
-        if t_min >= t_max:
-            t_min = ta
-            t_max = tb
-
-        t_min = max(ta, t_min)
-        t_max = min(tb, t_max)
-
-        reduction = (t_max - t_min) / (tb - ta)
-
-        if reduction > 0.8 or (t_max - t_min) < tolerance * 0.1:
-            tm = (ta + tb) * 0.5
-            clip_recursive(ta, tm, depth + 1)
-            clip_recursive(tm, tb, depth + 1)
-        else:
-            clip_recursive(t_min, t_max, depth + 1)
-
-    clip_recursive(t0, t1, 0)
-
+    _curve_plane_clip(curve, plane, tolerance, t0, t1, 0, results)
     results.sort()
 
-    if len(results) > 1:
-        unique_results = [results[0]]
-
-        for i in range(1, len(results)):
-            if abs(results[i] - results[i - 1]) > tolerance * 2.0:
-                unique_results.append(results[i])
-
-        results = unique_results
-
-    return results
+    return _unique_sorted(results, tolerance * 2.0)
 
 
 def curve_plane_algebraic(
@@ -843,92 +1021,32 @@ def curve_plane_algebraic(
 ) -> list[float]:
     """Curve-plane intersection parameters by hodograph subdivision."""
 
-    if tolerance is None:
-        tolerance = Tolerance.ZERO_TOLERANCE
-
     if not curve.is_valid():
         return []
+
+    if tolerance is None:
+        tolerance = Tolerance.ZERO_TOLERANCE
 
     results = []
     spans = curve.get_span_vector()
 
-    for span_idx in range(len(spans) - 1):
-        span_t0 = spans[span_idx]
-        span_t1 = spans[span_idx + 1]
+    if len(spans) < 2:
+        return []
+
+    for i in range(len(spans) - 1):
+        span_t0 = spans[i]
+        span_t1 = spans[i + 1]
 
         if abs(span_t1 - span_t0) < tolerance:
             continue
 
-        d0 = _curve_signed_distance_to_plane(curve.point_at(span_t0), plane)
-        d1 = _curve_signed_distance_to_plane(curve.point_at(span_t1), plane)
+        _curve_plane_subdivide_algebraic(
+            curve, plane, tolerance, span_t0, span_t1, 0, results
+        )
 
-        if d0 * d1 > tolerance * tolerance:
-            continue
+    results.sort()
 
-        ta, tb = span_t0, span_t1
-        da = d0
-
-        for _ in range(20):
-            if abs(tb - ta) < tolerance * 0.1:
-                break
-
-            tm = (ta + tb) * 0.5
-            pt_m = curve.point_at(tm)
-            dm = _curve_signed_distance_to_plane(pt_m, plane)
-
-            if abs(dm) < tolerance:
-                ta = tb = tm
-                break
-
-            if da * dm < 0:
-                tb = tm
-            else:
-                ta, da = tm, dm
-
-        t = (ta + tb) * 0.5
-
-        for iteration in range(15):
-            pt = curve.point_at(t)
-            f = _curve_signed_distance_to_plane(pt, plane)
-
-            if abs(f) < tolerance:
-                break
-
-            tan = curve.tangent_at(t)
-            df = plane.z_axis.dot(tan)
-
-            if abs(df) < 1e-10:
-                if f * da < 0:
-                    t = (ta + t) * 0.5
-                else:
-                    t = (t + tb) * 0.5
-
-                continue
-
-            dt = -f / df
-            t_new = t + dt
-            t_new = max(span_t0, min(span_t1, t_new))
-
-            if abs(dt) < tolerance * 0.01:
-                t = t_new
-                break
-
-            t = t_new
-
-        pt_final = curve.point_at(t)
-
-        if abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance:
-            is_duplicate = False
-
-            for existing_t in results:
-                if abs(t - existing_t) < tolerance * 2.0:
-                    is_duplicate = True
-                    break
-
-            if not is_duplicate:
-                results.append(t)
-
-    return sorted(results)
+    return _unique_sorted(results, tolerance * 10.0)
 
 
 def curve_plane_production(
@@ -936,167 +1054,32 @@ def curve_plane_production(
 ) -> list[float]:
     """Curve-plane intersection parameters by span subdivision and Newton polishing."""
 
-    if tolerance is None:
-        tolerance = Tolerance.ZERO_TOLERANCE
-
     if not curve.is_valid():
         return []
 
-    def signed_distance_derivative(t):
-        tan = curve.tangent_at(t)
-
-        return plane.z_axis.dot(tan)
+    if tolerance is None:
+        tolerance = Tolerance.ZERO_TOLERANCE
 
     results = []
     spans = curve.get_span_vector()
 
-    for span_idx in range(len(spans) - 1):
-        span_t0 = spans[span_idx]
-        span_t1 = spans[span_idx + 1]
+    if len(spans) < 2:
+        return []
+
+    for i in range(len(spans) - 1):
+        span_t0 = spans[i]
+        span_t1 = spans[i + 1]
 
         if abs(span_t1 - span_t0) < tolerance:
             continue
 
-        bezier_cvs = curve.convert_span_to_bezier(span_idx)
+        _curve_plane_subdivide_production(
+            curve, plane, tolerance, span_t0, span_t1, 0, results
+        )
 
-        if not bezier_cvs:
-            continue
+    results.sort()
 
-        def subdivide_and_solve(ta, tb, depth):
-            MAX_DEPTH = 30
-
-            if depth > MAX_DEPTH:
-                return
-
-            pa = curve.point_at(ta)
-            pb = curve.point_at(tb)
-            da = _curve_signed_distance_to_plane(pa, plane)
-            db = _curve_signed_distance_to_plane(pb, plane)
-
-            if da * db > tolerance * tolerance:
-                return
-
-            segment_length = pa.distance(pb)
-
-            if segment_length < tolerance * 10.0 or abs(tb - ta) < tolerance * 0.001:
-                if abs(db - da) > tolerance:
-                    t_init = ta - da * (tb - ta) / (db - da)
-                else:
-                    t_init = (ta + tb) * 0.5
-
-                t_init = max(ta, min(tb, t_init))
-
-                t = t_init
-
-                for newton_iter in range(5):
-                    pt = curve.point_at(t)
-                    f = _curve_signed_distance_to_plane(pt, plane)
-
-                    if abs(f) < tolerance:
-                        if ta <= t <= tb:
-                            is_duplicate = False
-
-                            for existing_t in results:
-                                if abs(t - existing_t) < tolerance * 2.0:
-                                    is_duplicate = True
-                                    break
-
-                            if not is_duplicate:
-                                results.append(t)
-
-                        return
-
-                    df = signed_distance_derivative(t)
-
-                    if abs(df) < 1e-10:
-                        t = (ta + tb) * 0.5
-                        break
-
-                    dt = -f / df
-                    t_new = t + dt
-                    t_new = max(ta, min(tb, t_new))
-
-                    if abs(dt) < tolerance * 0.001:
-                        t = t_new
-                        break
-
-                    t = t_new
-
-                pt_final = curve.point_at(t)
-
-                if (
-                    abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance
-                    and ta <= t <= tb
-                ):
-                    is_duplicate = False
-
-                    for existing_t in results:
-                        if abs(t - existing_t) < tolerance * 2.0:
-                            is_duplicate = True
-                            break
-
-                    if not is_duplicate:
-                        results.append(t)
-
-                return
-
-            tm = (ta + tb) * 0.5
-            pm = curve.point_at(tm)
-
-            v = pb - pa
-            w = pm - pa
-
-            if v.magnitude() > Tolerance.ZERO_TOLERANCE:
-                t_proj = w.dot(v) / v.dot(v)
-                p_proj = Point(
-                    pa[0] + t_proj * v[0], pa[1] + t_proj * v[1], pa[2] + t_proj * v[2]
-                )
-                deviation = pm.distance(p_proj)
-
-                if deviation < tolerance * 10.0:
-                    if abs(db - da) > tolerance:
-                        t_root = ta - da * (tb - ta) / (db - da)
-                        t_root = max(ta, min(tb, t_root))
-
-                        for _ in range(3):
-                            pt = curve.point_at(t_root)
-                            f = _curve_signed_distance_to_plane(pt, plane)
-
-                            if abs(f) < tolerance:
-                                break
-
-                            df = signed_distance_derivative(t_root)
-
-                            if abs(df) > 1e-10:
-                                t_root -= f / df
-                                t_root = max(ta, min(tb, t_root))
-
-                        if (
-                            abs(
-                                _curve_signed_distance_to_plane(
-                                    curve.point_at(t_root), plane
-                                )
-                            )
-                            < tolerance
-                        ):
-                            is_duplicate = False
-
-                            for existing_t in results:
-                                if abs(t_root - existing_t) < tolerance * 2.0:
-                                    is_duplicate = True
-                                    break
-
-                            if not is_duplicate:
-                                results.append(t_root)
-
-                    return
-
-            subdivide_and_solve(ta, tm, depth + 1)
-            subdivide_and_solve(tm, tb, depth + 1)
-
-        subdivide_and_solve(span_t0, span_t1, 0)
-
-    return sorted(results)
+    return _unique_sorted(results, tolerance * 10.0)
 
 
 def curve_closest_point(
@@ -1107,7 +1090,7 @@ def curve_closest_point(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# NURBS surface plane tracing
+# NURBS surface helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -1796,150 +1779,652 @@ def _surface_plane_fit_3d(
     return crv
 
 
-def surface_plane(
-    surface: "NurbsSurface", plane: Plane, tolerance: float | None = None
-) -> list[NurbsCurve]:
-    """Surface-plane section curves."""
+def _solve_gauss(M, rhs, n):
+    """Solve an n x n linear system by Gaussian elimination with partial pivoting."""
 
-    if not surface.is_valid():
-        return []
+    A = [list(M[r]) + [rhs[r]] for r in range(n)]
 
-    if tolerance is None or tolerance <= 0.0:
-        tolerance = Tolerance.ZERO_TOLERANCE
+    for col in range(n):
+        pivot = col
 
-    traces, step, uv_to_3d, uv_to_3d_min = _surface_plane_traces(
-        surface, plane, tolerance
+        for r in range(col + 1, n):
+            if abs(A[r][col]) > abs(A[pivot][col]):
+                pivot = r
+
+        if abs(A[pivot][col]) < 1e-20:
+            return None
+
+        if pivot != col:
+            A[col], A[pivot] = A[pivot], A[col]
+
+        for r in range(col + 1, n):
+            f = A[r][col] / A[col][col]
+
+            for j in range(col, n + 1):
+                A[r][j] -= f * A[col][j]
+
+    x = [0.0] * n
+
+    for i in range(n - 1, -1, -1):
+        s = A[i][n]
+
+        for j in range(i + 1, n):
+            s -= A[i][j] * x[j]
+
+        x[i] = s / A[i][i]
+
+    return x
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Analytic quadric surface intersection
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _ssi_dot(u, v):
+    """Dot product of two V3."""
+    return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+
+
+def _ssi_cross(u, v):
+    """Cross product of two V3."""
+
+    return (
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
     )
 
-    result = []
 
-    for uv_trace, uv_unwrapped, is_loop in traces:
-        all_pts = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
-        crv = _surface_plane_fit_3d(
-            all_pts, is_loop, plane, step, uv_to_3d, uv_to_3d_min
-        )
+def _ssi_unit(v):
+    """Unit V3, or the input when degenerate."""
+    length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
 
-        if not crv.is_valid():
+    return (v[0] / length, v[1] / length, v[2] / length) if length > 1e-300 else v
+
+
+def _ortho_basis(n):
+    """Two unit vectors spanning the plane perpendicular to unit n."""
+
+    ax = 1.0 if abs(n[0]) <= abs(n[1]) and abs(n[0]) <= abs(n[2]) else 0.0
+    ay = 1.0 if ax == 0.0 and abs(n[1]) <= abs(n[2]) else 0.0
+    az = 1.0 if ax == 0.0 and ay == 0.0 else 0.0
+    ux = ay * n[2] - az * n[1]
+    uy = az * n[0] - ax * n[2]
+    uz = ax * n[1] - ay * n[0]
+    ul = math.sqrt(ux * ux + uy * uy + uz * uz)
+    ux, uy, uz = ux / ul, uy / ul, uz / ul
+    vx = n[1] * uz - n[2] * uy
+    vy = n[2] * ux - n[0] * uz
+    vz = n[0] * uy - n[1] * ux
+
+    return (ux, uy, uz), (vx, vy, vz)
+
+
+def _exact_circle(cx, cy, cz, xa, ya, radius):
+    """Exact 9-CV rational NURBS circle."""
+
+    w = math.sqrt(2.0) / 2.0
+    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+    wts = [1, w, 1, w, 1, w, 1, w, 1]
+    crv = NurbsCurve(3, True, 3, 9)
+    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+
+    for i in range(10):
+        crv.set_nurbsknot(i, float(knots[i]))
+
+    for i in range(9):
+        x = cx + radius * (px[i] * xa[0] + py[i] * ya[0])
+        y = cy + radius * (px[i] * xa[1] + py[i] * ya[1])
+        z = cz + radius * (px[i] * xa[2] + py[i] * ya[2])
+        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
+
+    crv.set_domain(0.0, 1.0)
+
+    return crv
+
+
+def _exact_ellipse(cx, cy, cz, ea, eb, semi_a, semi_b):
+    """Exact 9-CV rational NURBS ellipse."""
+
+    w = math.sqrt(2.0) / 2.0
+    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+    wts = [1, w, 1, w, 1, w, 1, w, 1]
+    crv = NurbsCurve(3, True, 3, 9)
+    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+
+    for i in range(10):
+        crv.set_nurbsknot(i, float(knots[i]))
+
+    for i in range(9):
+        x = cx + semi_a * px[i] * ea[0] + semi_b * py[i] * eb[0]
+        y = cy + semi_a * px[i] * ea[1] + semi_b * py[i] * eb[1]
+        z = cz + semi_a * px[i] * ea[2] + semi_b * py[i] * eb[2]
+        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
+
+    crv.set_domain(0.0, 1.0)
+
+    return crv
+
+
+def _jacobi_eig3(M):
+    """Eigenvalues/vectors of a symmetric 3x3 matrix (cyclic Jacobi)."""
+
+    a = [[M[r][c] for c in range(3)] for r in range(3)]
+    v = [[1.0 if r == c else 0.0 for c in range(3)] for r in range(3)]
+
+    for _ in range(50):
+        off = abs(a[0][1]) + abs(a[0][2]) + abs(a[1][2])
+
+        if off < 1e-18:
+            break
+
+        for p, q in ((0, 1), (0, 2), (1, 2)):
+            if abs(a[p][q]) < 1e-300:
+                continue
+
+            theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q])
+            t = (1.0 if theta >= 0 else -1.0) / (
+                abs(theta) + math.sqrt(theta * theta + 1.0)
+            )
+            c = 1.0 / math.sqrt(t * t + 1.0)
+            s = t * c
+
+            for k in range(3):
+                akp, akq = a[k][p], a[k][q]
+                a[k][p] = c * akp - s * akq
+                a[k][q] = s * akp + c * akq
+
+            for k in range(3):
+                apk, aqk = a[p][k], a[q][k]
+                a[p][k] = c * apk - s * aqk
+                a[q][k] = s * apk + c * aqk
+
+            for k in range(3):
+                vkp, vkq = v[k][p], v[k][q]
+                v[k][p] = c * vkp - s * vkq
+                v[k][q] = s * vkp + c * vkq
+
+    eigvals = [a[0][0], a[1][1], a[2][2]]
+    eigvecs = [(v[0][k], v[1][k], v[2][k]) for k in range(3)]
+
+    return eigvals, eigvecs
+
+
+def _fit_cylinder(surface, tol):
+    """Recognize a cylinder from surface samples: axis point, axis direction and radius."""
+
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    pts = []
+    nrm = []
+
+    for i in range(5):
+        for j in range(5):
+            uu = u0 + (u1 - u0) * i / 4.0
+            vv = v0 + (v1 - v0) * j / 4.0
+            pts.append(surface.point_at(uu, vv))
+            n = surface.normal_at(uu, vv)
+            nrm.append((n[0], n[1], n[2]))
+
+    M = [[0.0] * 3 for _ in range(3)]
+
+    for n in nrm:
+        for r in range(3):
+            for c in range(3):
+                M[r][c] += n[r] * n[c]
+
+    evals, evecs = _jacobi_eig3(M)
+    kmin = min(range(3), key=lambda k: evals[k])
+    w = evecs[kmin]
+    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
+
+    if wl < 1e-12:
+        return None
+
+    w = (w[0] / wl, w[1] / wl, w[2] / wl)
+    ea, eb = _ortho_basis(w)
+    p0 = pts[0]
+    ata = [[0.0] * 3 for _ in range(3)]
+    atb = [0.0] * 3
+    proj = []
+
+    for p in pts:
+        dp = (p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
+        x = dp[0] * ea[0] + dp[1] * ea[1] + dp[2] * ea[2]
+        y = dp[0] * eb[0] + dp[1] * eb[1] + dp[2] * eb[2]
+        proj.append((x, y))
+        row = [x, y, 1.0]
+        rhs = -(x * x + y * y)
+
+        for r in range(3):
+            atb[r] += row[r] * rhs
+
+            for c in range(3):
+                ata[r][c] += row[r] * row[c]
+
+    sol = _solve_gauss(ata, atb, 3)
+
+    if sol is None:
+        return None
+
+    ccx, ccy = -sol[0] / 2.0, -sol[1] / 2.0
+    r2 = ccx * ccx + ccy * ccy - sol[2]
+
+    if r2 <= 1e-18:
+        return None
+
+    r = math.sqrt(r2)
+
+    for x, y in proj:
+        if abs(math.sqrt((x - ccx) ** 2 + (y - ccy) ** 2) - r) > tol:
+            return None
+
+    axis_pt = (
+        p0[0] + ccx * ea[0] + ccy * eb[0],
+        p0[1] + ccx * ea[1] + ccy * eb[1],
+        p0[2] + ccx * ea[2] + ccy * eb[2],
+    )
+
+    return (axis_pt, w, r)
+
+
+def _fit_cone(surface, tol):
+    """Recognize a cone from surface samples: apex, axis and half angle."""
+
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    pts = []
+    nrm = []
+    nu_s = 8
+
+    for i in range(nu_s):
+        uu = u0 + (u1 - u0) * i / nu_s
+
+        for j in range(5):
+            vv = v0 + (v1 - v0) * j / 4.0
+            pts.append(surface.point_at(uu, vv))
+            n = surface.normal_at(uu, vv)
+            nl = math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+
+            if nl < 1e-12:
+                continue
+
+            nrm.append(((n[0] / nl, n[1] / nl, n[2] / nl), surface.point_at(uu, vv)))
+
+    if len(nrm) < 4:
+        return None
+
+    ata = [[0.0] * 3 for _ in range(3)]
+    atb = [0.0] * 3
+
+    for n, p in nrm:
+        npd = n[0] * p[0] + n[1] * p[1] + n[2] * p[2]
+
+        for r in range(3):
+            atb[r] += n[r] * npd
+
+            for c in range(3):
+                ata[r][c] += n[r] * n[c]
+
+    V = _solve_gauss(ata, atb, 3)
+
+    if V is None:
+        return None
+
+    gs = []
+
+    for p in pts:
+        d = (p[0] - V[0], p[1] - V[1], p[2] - V[2])
+        dl = math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2)
+
+        if dl < tol:
             continue
 
-        ct0, ct1 = crv.domain()
-        dup_tol = step * uv_to_3d * 3.0
-        dup = False
+        gs.append((d[0] / dl, d[1] / dl, d[2] / dl))
 
-        for existing in result:
-            et0, et1 = existing.domain()
-            all_close = True
+    if len(gs) < 3:
+        return None
 
-            for f in [0.25, 0.5, 0.75]:
-                cp = crv.point_at(ct0 + (ct1 - ct0) * f)
-                ep = existing.point_at(et0 + (et1 - et0) * f)
-                em = existing.point_at((et0 + et1) * 0.5)
-                d = min(cp.distance(ep), cp.distance(em))
+    G = [[0.0] * 3 for _ in range(3)]
 
-                if d > dup_tol:
-                    all_close = False
-                    break
+    for g in gs:
+        for r in range(3):
+            for c in range(3):
+                G[r][c] += g[r] * g[c]
 
-            if all_close:
-                dup = True
-                break
+    gevals, gevecs = _jacobi_eig3(G)
+    kmax = max(range(3), key=lambda k: gevals[k])
+    w = gevecs[kmax]
+    sx = (sum(g[0] for g in gs), sum(g[1] for g in gs), sum(g[2] for g in gs))
 
-        if not dup:
-            result.append(crv)
+    if w[0] * sx[0] + w[1] * sx[1] + w[2] * sx[2] < 0.0:
+        w = (-w[0], -w[1], -w[2])
 
-    return result
+    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
+
+    if wl < 1e-12:
+        return None
+
+    w = (w[0] / wl, w[1] / wl, w[2] / wl)
+    angs = [
+        math.acos(max(-1.0, min(1.0, g[0] * w[0] + g[1] * w[1] + g[2] * w[2])))
+        for g in gs
+    ]
+    alpha = sum(angs) / len(angs)
+
+    if alpha < 1e-4 or alpha > math.pi / 2 - 1e-4:
+        return None
+
+    ca = math.cos(alpha)
+
+    for p in pts:
+        d = (p[0] - V[0], p[1] - V[1], p[2] - V[2])
+        axd = d[0] * w[0] + d[1] * w[1] + d[2] * w[2]
+        perp = math.sqrt(max(0.0, (d[0] ** 2 + d[1] ** 2 + d[2] ** 2) - axd * axd))
+
+        if abs(perp - axd * math.tan(alpha)) * ca > tol:
+            return None
+
+    return ((V[0], V[1], V[2]), w, alpha)
 
 
-def _clip_pcurve_to_cutter(target, pc, cutter):
-    """Keep the pcurve sub-segments whose lifted 3D point lies inside the cutter footprint."""
+def _fit_sphere(surface, tol):
+    """Recognize a sphere from surface samples: center and radius."""
 
-    n = max(pc.cv_count() * 4, 16)
-    d0, d1 = pc.domain()
-    cu0, cu1 = cutter.domain(0)
-    cv0, cv1 = cutter.domain(1)
-    corner_diag = cutter.point_at(cu0, cv0).distance(cutter.point_at(cu1, cv1))
-    on_tol = max(1e-7, corner_diag * 1e-4)
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    pts = []
 
-    q00 = cutter.point_at(cu0, cv0)
-    q10 = cutter.point_at(cu1, cv0)
-    q01 = cutter.point_at(cu0, cv1)
-    eu0, eu1, eu2_ = q10[0] - q00[0], q10[1] - q00[1], q10[2] - q00[2]
-    ev0, ev1, ev2_ = q01[0] - q00[0], q01[1] - q00[1], q01[2] - q00[2]
-    eu_sq = eu0 * eu0 + eu1 * eu1 + eu2_ * eu2_
-    ev_sq = ev0 * ev0 + ev1 * ev1 + ev2_ * ev2_
-    q00x, q00y, q00z = q00[0], q00[1], q00[2]
-    fast_planar = eu_sq > 1e-28 and ev_sq > 1e-28
+    for i in range(5):
+        for j in range(5):
+            uu = u0 + (u1 - u0) * i / 4.0
+            vv = v0 + (v1 - v0) * j / 4.0
+            pts.append(surface.point_at(uu, vv))
 
-    def gap(t):
-        uv = pc.point_at(t)
-        p3 = target.point_at(uv[0], uv[1])
+    ata = [[0.0] * 4 for _ in range(4)]
+    atb = [0.0] * 4
 
-        if fast_planar:
-            dx = p3[0] - q00x
-            dy = p3[1] - q00y
-            dz = p3[2] - q00z
-            a = (dx * eu0 + dy * eu1 + dz * eu2_) / eu_sq
-            b = (dx * ev0 + dy * ev1 + dz * ev2_) / ev_sq
+    for p in pts:
+        row = [p[0], p[1], p[2], 1.0]
+        rhs = -(p[0] * p[0] + p[1] * p[1] + p[2] * p[2])
 
-            if a < 0.0:
-                a = 0.0
-            elif a > 1.0:
-                a = 1.0
+        for r in range(4):
+            atb[r] += row[r] * rhs
 
-            if b < 0.0:
-                b = 0.0
-            elif b > 1.0:
-                b = 1.0
+            for c in range(4):
+                ata[r][c] += row[r] * row[c]
 
-            cx = q00x + a * eu0 + b * ev0
-            cy = q00y + a * eu1 + b * ev1
-            cz = q00z + a * eu2_ + b * ev2_
+    sol = _solve_gauss(ata, atb, 4)
 
-            return ((p3[0] - cx) ** 2 + (p3[1] - cy) ** 2 + (p3[2] - cz) ** 2) ** 0.5
+    if sol is None:
+        return None
 
-        return Closest.surface_point(cutter, p3, 0.0, 0.0, 0.0, 0.0)[2]
+    cx, cy, cz = -sol[0] / 2.0, -sol[1] / 2.0, -sol[2] / 2.0
+    r2 = cx * cx + cy * cy + cz * cz - sol[3]
 
-    def refine(t_in, t_out):
-        for _ in range(20):
-            tm = (t_in + t_out) * 0.5
+    if r2 <= 0.0:
+        return None
 
-            if gap(tm) < on_tol:
-                t_in = tm
+    r = math.sqrt(r2)
+
+    for p in pts:
+        d = math.sqrt((p[0] - cx) ** 2 + (p[1] - cy) ** 2 + (p[2] - cz) ** 2)
+
+        if abs(d - r) > tol:
+            return None
+
+    return (cx, cy, cz, r)
+
+
+def _fit_torus(surface, tol):
+    """Recognize a torus from the smallest-variance axis and a tube cross-section circle fit."""
+
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    pts = []
+
+    for i in range(8):
+        for j in range(8):
+            pts.append(
+                surface.point_at(u0 + (u1 - u0) * i / 8.0, v0 + (v1 - v0) * j / 8.0)
+            )
+
+    n = len(pts)
+    cen = [sum(p[k] for p in pts) / n for k in range(3)]
+    M = [[0.0] * 3 for _ in range(3)]
+
+    for p in pts:
+        d = (p[0] - cen[0], p[1] - cen[1], p[2] - cen[2])
+
+        for r in range(3):
+            for c in range(3):
+                M[r][c] += d[r] * d[c]
+
+    evals, evecs = _jacobi_eig3(M)
+    kmin = min(range(3), key=lambda k: evals[k])
+    w = evecs[kmin]
+    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
+
+    if wl < 1e-12:
+        return None
+
+    w = (w[0] / wl, w[1] / wl, w[2] / wl)
+    ata = [[0.0] * 3 for _ in range(3)]
+    atb = [0.0] * 3
+    rhoa = []
+
+    for p in pts:
+        d = (p[0] - cen[0], p[1] - cen[1], p[2] - cen[2])
+        a = d[0] * w[0] + d[1] * w[1] + d[2] * w[2]
+        perp = (d[0] - a * w[0], d[1] - a * w[1], d[2] - a * w[2])
+        rho = math.sqrt(perp[0] ** 2 + perp[1] ** 2 + perp[2] ** 2)
+        rhoa.append((rho, a))
+        row = [rho, a, 1.0]
+        rhs = -(rho * rho + a * a)
+
+        for r in range(3):
+            atb[r] += row[r] * rhs
+
+            for c in range(3):
+                ata[r][c] += row[r] * row[c]
+
+    sol = _solve_gauss(ata, atb, 3)
+
+    if sol is None:
+        return None
+
+    R = -sol[0] / 2.0
+    a0 = -sol[1] / 2.0
+    r2 = R * R + a0 * a0 - sol[2]
+
+    if r2 <= 1e-18 or R <= 0.0:
+        return None
+
+    r = math.sqrt(r2)
+
+    if R <= r * 0.5:
+        return None
+
+    for rho, a in rhoa:
+        if abs(math.sqrt((rho - R) ** 2 + (a - a0) ** 2) - r) > tol:
+            return None
+
+    center = (cen[0] + a0 * w[0], cen[1] + a0 * w[1], cen[2] + a0 * w[2])
+
+    return (center, w, R, r)
+
+
+def _recognize_surface(surface, tol):
+    """Classify a surface as plane, cylinder, cone, sphere or torus within tol."""
+
+    if surface.is_planar(None, tol):
+        u0, u1 = surface.domain(0)
+        v0, v1 = surface.domain(1)
+        o = surface.point_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
+        n = surface.normal_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
+
+        return ("plane", (o[0], o[1], o[2]), (n[0], n[1], n[2]))
+
+    sph = _fit_sphere(surface, tol)
+
+    if sph is not None:
+        return ("sphere", (sph[0], sph[1], sph[2]), sph[3])
+
+    cyl = _fit_cylinder(surface, tol)
+
+    if cyl is not None:
+        return ("cylinder", cyl[0], cyl[1], cyl[2])
+
+    cone = _fit_cone(surface, tol)
+
+    if cone is not None:
+        return ("cone", cone[0], cone[1], cone[2])
+
+    tor = _fit_torus(surface, tol)
+
+    if tor is not None:
+        return ("torus", tor[0], tor[1], tor[2], tor[3])
+
+    return None
+
+
+def _analytic_pcurve(srf, recog, c3d):
+    """Analytic pcurve of an exact 3D intersection conic on a recognized quadric surface."""
+
+    if recog is None:
+        return None
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+
+    def dot(p, q):
+        return p[0] * q[0] + p[1] * q[1] + p[2] * q[2]
+
+    if recog[0] == "cylinder":
+        ap = recog[1]
+        ax = recog[2]
+        an = math.sqrt(dot(ax, ax))
+
+        if an < 1e-12:
+            return None
+
+        ax = (ax[0] / an, ax[1] / an, ax[2] / an)
+
+        def height(p):
+            return (
+                (p[0] - ap[0]) * ax[0] + (p[1] - ap[1]) * ax[1] + (p[2] - ap[2]) * ax[2]
+            )
+
+        um = 0.5 * (u0 + u1)
+        h0 = height(srf.point_at(um, v0))
+        h1 = height(srf.point_at(um, v1))
+
+        if abs(h1 - h0) < 1e-12:
+            return None
+
+        hmin = 1e300
+        hmax = -1e300
+        hsum = 0.0
+        ns = 0
+        t0, t1 = c3d.domain()
+
+        for i in range(33):
+            h = height(c3d.point_at(t0 + (t1 - t0) * i / 32))
+            hmin = min(hmin, h)
+            hmax = max(hmax, h)
+            hsum += h
+            ns += 1
+
+        if hmax - hmin > 1e-5 * abs(h1 - h0):
+            return None
+
+        if c3d.point_at(t0).distance(c3d.point_at(t1)) > 1e-6 * (abs(h1 - h0) + 1.0):
+            return None
+
+        hc = hsum / ns
+        vc = v0 + (hc - h0) / (h1 - h0) * (v1 - v0)
+
+        if vc < min(v0, v1) - 1e-9 or vc > max(v0, v1) + 1e-9:
+            return None
+
+        return NurbsCurve.create(
+            False,
+            1,
+            [
+                Point(u0, vc, 0.0),
+                Point(u1, vc, 0.0),
+            ],
+        )
+
+    if recog[0] == "cone":
+        ax = recog[2]
+        an = math.sqrt(dot(ax, ax))
+
+        if an < 1e-12:
+            return None
+
+        ax = (ax[0] / an, ax[1] / an, ax[2] / an)
+        A = recog[1]
+
+        def height(p):
+            return (p[0] - A[0]) * ax[0] + (p[1] - A[1]) * ax[1] + (p[2] - A[2]) * ax[2]
+
+        t0, t1 = c3d.domain()
+        clen = c3d.point_at(t0).distance(c3d.point_at(0.5 * (t0 + t1)))
+        hscale = max(clen, 1e-9)
+        hmin = 1e300
+        hmax = -1e300
+        hsum = 0.0
+        ns = 0
+
+        for i in range(33):
+            h = height(c3d.point_at(t0 + (t1 - t0) * i / 32))
+            hmin = min(hmin, h)
+            hmax = max(hmax, h)
+            hsum += h
+            ns += 1
+
+        if hmax - hmin > hscale * 1e-4:
+            return None
+
+        if c3d.point_at(t0).distance(c3d.point_at(t1)) > hscale * 1e-3:
+            return None
+
+        hc = hsum / ns
+        um2 = 0.5 * (u0 + u1)
+        va = v0
+        vb = v1
+        ha = height(srf.point_at(um2, va))
+        hb = height(srf.point_at(um2, vb))
+
+        if (hc - ha) * (hc - hb) > 0:
+            return None
+
+        for _ in range(60):
+            vmid = 0.5 * (va + vb)
+            hm = height(srf.point_at(um2, vmid))
+
+            if (hm - hc) * (ha - hc) <= 0:
+                vb = vmid
             else:
-                t_out = tm
+                va = vmid
+                ha = hm
 
-        return t_out
+        vc = 0.5 * (va + vb)
 
-    flags = []
+        return NurbsCurve.create(
+            False,
+            1,
+            [
+                Point(u0, vc, 0.0),
+                Point(u1, vc, 0.0),
+            ],
+        )
 
-    for i in range(n + 1):
-        t = d0 + (d1 - d0) * i / n
-        flags.append((t, gap(t) < on_tol))
-
-    pieces = []
-    i = 0
-
-    while i <= n:
-        if flags[i][1]:
-            j = i
-
-            while j + 1 <= n and flags[j + 1][1]:
-                j += 1
-
-            ta = flags[i][0] if i == 0 else refine(flags[i][0], flags[i - 1][0])
-            tb = flags[j][0] if j == n else refine(flags[j][0], flags[j + 1][0])
-
-            if tb - ta > (d1 - d0) * 1e-6:
-                piece = pc.duplicate()
-
-                if piece.trim(ta, tb) and piece.is_valid():
-                    pieces.append(piece)
-
-            i = j + 1
-        else:
-            i += 1
-
-    return pieces
+    return None
 
 
 def _emit_pullback_curve(nodes):
@@ -2423,1071 +2908,6 @@ def _analytic_cone_pullback(srf, recog, c3d):
         out.append(_emit_pullback_curve(seg))
 
     return out
-
-
-def cut_curves_on_surface(
-    target: "NurbsSurface", cutter: "NurbsSurface", tolerance: float | None = None
-) -> list[NurbsCurve]:
-    """UV pcurves of the cutter's section on the target, clipped to the cutter footprint."""
-
-    rtol = max(tolerance if (tolerance and tolerance > 0) else 1e-7, 1e-7) * 1e4
-    rt = _recognize_surface(target, rtol)
-
-    if rt is not None and rt[0] == "sphere":
-        cutter_planar = cutter.is_planar(None, 1e-6)
-        out = []
-
-        for triple in surface_surface(target, cutter, tolerance):
-            c3d = triple[0]
-            pcs = _analytic_sphere_pullback(target, rt, c3d)
-
-            if not pcs:
-                pcs = Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance or 0.0)
-
-            if not pcs:
-                pcs = [triple[1]]
-
-            for pc in pcs:
-                if cutter_planar:
-                    out.extend(_clip_pcurve_to_cutter(target, pc, cutter))
-                else:
-                    out.append(pc)
-
-        return out
-
-    if cutter.is_planar(None, 1e-6):
-        cu0, cu1 = cutter.domain(0)
-        cv0, cv1 = cutter.domain(1)
-        mu = (cu0 + cu1) * 0.5
-        mv = (cv0 + cv1) * 0.5
-        origin = cutter.point_at(mu, mv)
-        normal = cutter.normal_at(mu, mv)
-        plane = Plane.from_point_normal(origin, normal)
-        out = []
-
-        for pair in surface_plane_uv(target, plane, tolerance):
-            out.extend(_clip_pcurve_to_cutter(target, pair[1], cutter))
-
-        return out
-
-    return [triple[1] for triple in surface_surface(target, cutter, tolerance)]
-
-
-def surface_plane_uv(
-    surface: "NurbsSurface", plane: Plane, tolerance: float | None = None
-) -> list[tuple[NurbsCurve, NurbsCurve]]:
-    """Surface-plane section curves paired with their UV pcurves."""
-
-    if not surface.is_valid():
-        return []
-
-    if tolerance is None or tolerance <= 0.0:
-        tolerance = Tolerance.ZERO_TOLERANCE
-
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    range_u = u1 - u0
-    range_v = v1 - v0
-    closed_u = surface.is_closed(0)
-    closed_v = surface.is_closed(1)
-
-    def wrap_u(u):
-        if closed_u:
-            t = math.fmod(u - u0, range_u)
-
-            if t < 0:
-                t += range_u
-
-            return u0 + t
-
-        return max(u0, min(u, u1))
-
-    def wrap_v(v):
-        if closed_v:
-            t = math.fmod(v - v0, range_v)
-
-            if t < 0:
-                t += range_v
-
-            return v0 + t
-
-        return max(v0, min(v, v1))
-
-    pn = plane.z_axis
-    p0 = plane.origin
-
-    def g_and_grad(u, v):
-        derivs = surface.evaluate(wrap_u(u), wrap_v(v), 1)
-        S = derivs[0]
-        Su = derivs[2]
-        Sv = derivs[1]
-        val = (S[0] - p0[0]) * pn[0] + (S[1] - p0[1]) * pn[1] + (S[2] - p0[2]) * pn[2]
-        gu = Su[0] * pn[0] + Su[1] * pn[1] + Su[2] * pn[2]
-        gv = Sv[0] * pn[0] + Sv[1] * pn[1] + Sv[2] * pn[2]
-
-        return val, gu, gv
-
-    def seam_newton(cu, cv_, axis):
-        for _ in range(10):
-            val, gu, gv = g_and_grad(cu, cv_)
-
-            if abs(val) < tolerance:
-                break
-
-            if axis == 0:
-                if abs(gv) < 1e-14:
-                    break
-
-                cv_ = cv_ - val / gv
-            else:
-                if abs(gu) < 1e-14:
-                    break
-
-                cu = cu - val / gu
-
-        return cu, cv_
-
-    traces, step, uv_to_3d, uv_to_3d_min = _surface_plane_traces(
-        surface, plane, tolerance
-    )
-
-    fit_tol = step * (uv_to_3d + uv_to_3d_min) * 0.5
-    dup_tol = step * uv_to_3d * 3.0
-
-    result = []
-    kept_pts3 = []
-
-    for uv_trace, uv_unwrapped, is_loop in traces:
-        m = len(uv_trace)
-        trace_pts3 = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
-        dup = False
-
-        for other in kept_pts3:
-            all_close = True
-
-            for f in [0.25, 0.5, 0.75]:
-                cp = trace_pts3[int((m - 1) * f)]
-                dmin = dup_tol + 1.0
-
-                for k in range(0, len(other), 5):
-                    dmin = min(dmin, cp.distance(other[k]))
-
-                if dmin > dup_tol:
-                    all_close = False
-                    break
-
-            if all_close:
-                dup = True
-                break
-
-        if dup:
-            continue
-
-        kept_pts3.append(trace_pts3)
-
-        pts = [list(p) for p in uv_unwrapped]
-        closure_du = 0.0
-        closure_dv = 0.0
-
-        if is_loop and len(pts) >= 2:
-            du_j = pts[0][0] - pts[-1][0]
-            dv_j = pts[0][1] - pts[-1][1]
-
-            if closed_u:
-                while du_j > range_u * 0.5:
-                    du_j -= range_u
-
-                while du_j < -range_u * 0.5:
-                    du_j += range_u
-
-            if closed_v:
-                while dv_j > range_v * 0.5:
-                    dv_j -= range_v
-
-                while dv_j < -range_v * 0.5:
-                    dv_j += range_v
-
-            closure_du = (pts[-1][0] + du_j) - pts[0][0]
-            closure_dv = (pts[-1][1] + dv_j) - pts[0][1]
-            pts.append([pts[0][0] + closure_du, pts[0][1] + closure_dv])
-
-        out_pts = [pts[0]]
-        cross_idx = []
-
-        for i in range(1, len(pts)):
-            pa = pts[i - 1]
-            pb = pts[i]
-            crossings = []
-
-            if closed_u and abs(pb[0] - pa[0]) > 1e-15:
-                k0 = math.floor((pa[0] - u0) / range_u)
-                k1 = math.floor((pb[0] - u0) / range_u)
-
-                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
-                    L = u0 + k * range_u
-                    t = (L - pa[0]) / (pb[0] - pa[0])
-
-                    if 0.0 < t < 1.0:
-                        crossings.append((t, 0, L))
-
-            if closed_v and abs(pb[1] - pa[1]) > 1e-15:
-                k0 = math.floor((pa[1] - v0) / range_v)
-                k1 = math.floor((pb[1] - v0) / range_v)
-
-                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
-                    L = v0 + k * range_v
-                    t = (L - pa[1]) / (pb[1] - pa[1])
-
-                    if 0.0 < t < 1.0:
-                        crossings.append((t, 1, L))
-
-            crossings.sort()
-
-            for t, axis, L in crossings:
-                cu = pa[0] + (pb[0] - pa[0]) * t
-                cv_ = pa[1] + (pb[1] - pa[1]) * t
-
-                if axis == 0:
-                    cu_r, cv_r = seam_newton(L, cv_, 0)
-                    cu = L
-                    cv_ = cv_r
-                else:
-                    cu_r, cv_r = seam_newton(cu, L, 1)
-                    cu = cu_r
-                    cv_ = L
-
-                out_pts.append([cu, cv_])
-                cross_idx.append(len(out_pts) - 1)
-
-            out_pts.append([pb[0], pb[1]])
-
-            if i < len(pts) - 1:
-                on_seam = False
-
-                if closed_u:
-                    k = round((pb[0] - u0) / range_u)
-                    L = u0 + k * range_u
-
-                    if (
-                        abs(pb[0] - L) < range_u * 1e-9
-                        and abs(pb[0] - pa[0]) > range_u * 1e-9
-                    ):
-                        out_pts[-1][0] = L
-                        on_seam = True
-
-                if closed_v:
-                    k = round((pb[1] - v0) / range_v)
-                    L = v0 + k * range_v
-
-                    if (
-                        abs(pb[1] - L) < range_v * 1e-9
-                        and abs(pb[1] - pa[1]) > range_v * 1e-9
-                    ):
-                        out_pts[-1][1] = L
-                        on_seam = True
-
-                if on_seam:
-                    cross_idx.append(len(out_pts) - 1)
-
-        wrap_drift = abs(closure_du) > range_u * 0.5 or abs(closure_dv) > range_v * 0.5
-
-        if len(cross_idx) == 0:
-            pieces = [(out_pts, is_loop and not wrap_drift)]
-        else:
-            pieces = []
-
-            if is_loop:
-                for a, b in zip(cross_idx, cross_idx[1:]):
-                    pieces.append((out_pts[a : b + 1], False))
-
-                wrap_piece = [list(p) for p in out_pts[cross_idx[-1] :]]
-
-                for p in out_pts[1 : cross_idx[0] + 1]:
-                    wrap_piece.append([p[0] + closure_du, p[1] + closure_dv])
-
-                pieces.append((wrap_piece, False))
-            else:
-                bounds = [0] + cross_idx + [len(out_pts) - 1]
-
-                for a, b in zip(bounds, bounds[1:]):
-                    if b > a:
-                        pieces.append((out_pts[a : b + 1], False))
-
-        for piece_pts, piece_loop in pieces:
-            if len(piece_pts) < 2:
-                continue
-
-            mid = piece_pts[len(piece_pts) // 2]
-
-            if closed_u:
-                k_u = math.floor((mid[0] - u0) / range_u)
-
-                if k_u != 0:
-                    for p in piece_pts:
-                        p[0] -= k_u * range_u
-
-            if closed_v:
-                k_v = math.floor((mid[1] - v0) / range_v)
-
-                if k_v != 0:
-                    for p in piece_pts:
-                        p[1] -= k_v * range_v
-
-            pts3 = [surface.point_at(wrap_u(p[0]), wrap_v(p[1])) for p in piece_pts]
-
-            crv3 = _surface_plane_fit_3d(
-                pts3, piece_loop, plane, step, uv_to_3d, uv_to_3d_min, False
-            )
-
-            if not crv3.is_valid():
-                if piece_loop:
-                    crv3 = NurbsCurve.create_interpolated(
-                        pts3, CurveNurbsKnotStyle.ChordPeriodic
-                    )
-                else:
-                    crv3 = NurbsCurve.create_interpolated(pts3)
-
-            if not crv3.is_valid():
-                continue
-
-            pts_uv = [Point(p[0], p[1], 0.0) for p in piece_pts]
-            mp = len(pts_uv)
-            fit_tol_uv = step
-            total_turning = 0.0
-
-            for i in range(1, mp - 1):
-                dx1 = pts_uv[i][0] - pts_uv[i - 1][0]
-                dy1 = pts_uv[i][1] - pts_uv[i - 1][1]
-                dx2 = pts_uv[i + 1][0] - pts_uv[i][0]
-                dy2 = pts_uv[i + 1][1] - pts_uv[i][1]
-                l1 = math.hypot(dx1, dy1)
-                l2 = math.hypot(dx2, dy2)
-
-                if l1 > 1e-14 and l2 > 1e-14:
-                    c = (dx1 * dx2 + dy1 * dy2) / (l1 * l2)
-                    c = max(-1.0, min(1.0, c))
-                    total_turning += math.acos(c)
-
-            chords = [0.0] * mp
-            total_len = 0.0
-
-            for i in range(1, mp):
-                total_len += pts_uv[i].distance(pts_uv[i - 1])
-                chords[i] = total_len
-
-            if piece_loop and mp > 1:
-                total_len += pts_uv[0].distance(pts_uv[mp - 1])
-
-            if total_len > 1e-14:
-                for i in range(1, mp):
-                    chords[i] /= total_len
-
-            target_cvs = max(8, int(total_turning / 0.5) + 6)
-            max_cvs = mp - 1
-            pcurve = NurbsCurve()
-
-            for attempt in range(5):
-                if target_cvs > max_cvs:
-                    break
-
-                pcurve = NurbsCurve.create_fitted(pts_uv, target_cvs, 3, piece_loop)
-
-                if not pcurve.is_valid():
-                    break
-
-                ft0, ft1 = pcurve.domain()
-                max_dev = 0.0
-
-                for i in range(mp):
-                    t = ft0 + (ft1 - ft0) * chords[i]
-                    max_dev = max(max_dev, pcurve.point_at(t).distance(pts_uv[i]))
-
-                if max_dev < fit_tol_uv:
-                    break
-
-                target_cvs = min(target_cvs * 2, max_cvs)
-
-            if not pcurve.is_valid():
-                if piece_loop:
-                    pcurve = NurbsCurve.create_interpolated(
-                        pts_uv, CurveNurbsKnotStyle.ChordPeriodic
-                    )
-                else:
-                    pcurve = NurbsCurve.create_interpolated(pts_uv)
-
-            if not pcurve.is_valid():
-                continue
-
-            crv3.set_domain(0.0, 1.0)
-            pcurve.set_domain(0.0, 1.0)
-
-            vali_tol = max(10.0 * tolerance, fit_tol * 2.0)
-            max_off = 0.0
-
-            for i in range(17):
-                t = i / 16.0
-                pc = pcurve.point_at(t)
-                val, gu, gv = g_and_grad(pc[0], pc[1])
-                max_off = max(max_off, abs(val))
-
-            if max_off > vali_tol and target_cvs * 2 <= max_cvs:
-                refit = NurbsCurve.create_fitted(pts_uv, target_cvs * 2, 3, piece_loop)
-
-                if refit.is_valid():
-                    refit.set_domain(0.0, 1.0)
-                    pcurve = refit
-
-            result.append((crv3, pcurve))
-
-    return result
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Analytic quadric surface intersection
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def _solve_gauss(M, rhs, n):
-    """Solve an n x n linear system by Gaussian elimination with partial pivoting."""
-
-    A = [list(M[r]) + [rhs[r]] for r in range(n)]
-
-    for col in range(n):
-        pivot = col
-
-        for r in range(col + 1, n):
-            if abs(A[r][col]) > abs(A[pivot][col]):
-                pivot = r
-
-        if abs(A[pivot][col]) < 1e-20:
-            return None
-
-        if pivot != col:
-            A[col], A[pivot] = A[pivot], A[col]
-
-        for r in range(col + 1, n):
-            f = A[r][col] / A[col][col]
-
-            for j in range(col, n + 1):
-                A[r][j] -= f * A[col][j]
-
-    x = [0.0] * n
-
-    for i in range(n - 1, -1, -1):
-        s = A[i][n]
-
-        for j in range(i + 1, n):
-            s -= A[i][j] * x[j]
-
-        x[i] = s / A[i][i]
-
-    return x
-
-
-def _ortho_basis(n):
-    """Two unit vectors spanning the plane perpendicular to unit n."""
-
-    ax = 1.0 if abs(n[0]) <= abs(n[1]) and abs(n[0]) <= abs(n[2]) else 0.0
-    ay = 1.0 if ax == 0.0 and abs(n[1]) <= abs(n[2]) else 0.0
-    az = 1.0 if ax == 0.0 and ay == 0.0 else 0.0
-    ux = ay * n[2] - az * n[1]
-    uy = az * n[0] - ax * n[2]
-    uz = ax * n[1] - ay * n[0]
-    ul = math.sqrt(ux * ux + uy * uy + uz * uz)
-    ux, uy, uz = ux / ul, uy / ul, uz / ul
-    vx = n[1] * uz - n[2] * uy
-    vy = n[2] * ux - n[0] * uz
-    vz = n[0] * uy - n[1] * ux
-
-    return (ux, uy, uz), (vx, vy, vz)
-
-
-def _exact_circle(cx, cy, cz, xa, ya, radius):
-    """Exact 9-CV rational NURBS circle."""
-
-    w = math.sqrt(2.0) / 2.0
-    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-    wts = [1, w, 1, w, 1, w, 1, w, 1]
-    crv = NurbsCurve(3, True, 3, 9)
-    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-
-    for i in range(10):
-        crv.set_nurbsknot(i, float(knots[i]))
-
-    for i in range(9):
-        x = cx + radius * (px[i] * xa[0] + py[i] * ya[0])
-        y = cy + radius * (px[i] * xa[1] + py[i] * ya[1])
-        z = cz + radius * (px[i] * xa[2] + py[i] * ya[2])
-        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
-
-    crv.set_domain(0.0, 1.0)
-
-    return crv
-
-
-def _jacobi_eig3(M):
-    """Eigenvalues/vectors of a symmetric 3x3 matrix (cyclic Jacobi)."""
-
-    a = [[M[r][c] for c in range(3)] for r in range(3)]
-    v = [[1.0 if r == c else 0.0 for c in range(3)] for r in range(3)]
-
-    for _ in range(50):
-        off = abs(a[0][1]) + abs(a[0][2]) + abs(a[1][2])
-
-        if off < 1e-18:
-            break
-
-        for p, q in ((0, 1), (0, 2), (1, 2)):
-            if abs(a[p][q]) < 1e-300:
-                continue
-
-            theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q])
-            t = (1.0 if theta >= 0 else -1.0) / (
-                abs(theta) + math.sqrt(theta * theta + 1.0)
-            )
-            c = 1.0 / math.sqrt(t * t + 1.0)
-            s = t * c
-
-            for k in range(3):
-                akp, akq = a[k][p], a[k][q]
-                a[k][p] = c * akp - s * akq
-                a[k][q] = s * akp + c * akq
-
-            for k in range(3):
-                apk, aqk = a[p][k], a[q][k]
-                a[p][k] = c * apk - s * aqk
-                a[q][k] = s * apk + c * aqk
-
-            for k in range(3):
-                vkp, vkq = v[k][p], v[k][q]
-                v[k][p] = c * vkp - s * vkq
-                v[k][q] = s * vkp + c * vkq
-
-    eigvals = [a[0][0], a[1][1], a[2][2]]
-    eigvecs = [(v[0][k], v[1][k], v[2][k]) for k in range(3)]
-
-    return eigvals, eigvecs
-
-
-def _exact_ellipse(cx, cy, cz, ea, eb, semi_a, semi_b):
-    """Exact 9-CV rational NURBS ellipse."""
-
-    w = math.sqrt(2.0) / 2.0
-    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-    wts = [1, w, 1, w, 1, w, 1, w, 1]
-    crv = NurbsCurve(3, True, 3, 9)
-    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-
-    for i in range(10):
-        crv.set_nurbsknot(i, float(knots[i]))
-
-    for i in range(9):
-        x = cx + semi_a * px[i] * ea[0] + semi_b * py[i] * eb[0]
-        y = cy + semi_a * px[i] * ea[1] + semi_b * py[i] * eb[1]
-        z = cz + semi_a * px[i] * ea[2] + semi_b * py[i] * eb[2]
-        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
-
-    crv.set_domain(0.0, 1.0)
-
-    return crv
-
-
-def _fit_cylinder(surface, tol):
-    """Recognize a cylinder from surface samples: axis point, axis direction and radius."""
-
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    pts = []
-    nrm = []
-
-    for i in range(5):
-        for j in range(5):
-            uu = u0 + (u1 - u0) * i / 4.0
-            vv = v0 + (v1 - v0) * j / 4.0
-            pts.append(surface.point_at(uu, vv))
-            n = surface.normal_at(uu, vv)
-            nrm.append((n[0], n[1], n[2]))
-
-    M = [[0.0] * 3 for _ in range(3)]
-
-    for n in nrm:
-        for r in range(3):
-            for c in range(3):
-                M[r][c] += n[r] * n[c]
-
-    evals, evecs = _jacobi_eig3(M)
-    kmin = min(range(3), key=lambda k: evals[k])
-    w = evecs[kmin]
-    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
-
-    if wl < 1e-12:
-        return None
-
-    w = (w[0] / wl, w[1] / wl, w[2] / wl)
-    ea, eb = _ortho_basis(w)
-    p0 = pts[0]
-    ata = [[0.0] * 3 for _ in range(3)]
-    atb = [0.0] * 3
-    proj = []
-
-    for p in pts:
-        dp = (p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
-        x = dp[0] * ea[0] + dp[1] * ea[1] + dp[2] * ea[2]
-        y = dp[0] * eb[0] + dp[1] * eb[1] + dp[2] * eb[2]
-        proj.append((x, y))
-        row = [x, y, 1.0]
-        rhs = -(x * x + y * y)
-
-        for r in range(3):
-            atb[r] += row[r] * rhs
-
-            for c in range(3):
-                ata[r][c] += row[r] * row[c]
-
-    sol = _solve_gauss(ata, atb, 3)
-
-    if sol is None:
-        return None
-
-    ccx, ccy = -sol[0] / 2.0, -sol[1] / 2.0
-    r2 = ccx * ccx + ccy * ccy - sol[2]
-
-    if r2 <= 1e-18:
-        return None
-
-    r = math.sqrt(r2)
-
-    for x, y in proj:
-        if abs(math.sqrt((x - ccx) ** 2 + (y - ccy) ** 2) - r) > tol:
-            return None
-
-    axis_pt = (
-        p0[0] + ccx * ea[0] + ccy * eb[0],
-        p0[1] + ccx * ea[1] + ccy * eb[1],
-        p0[2] + ccx * ea[2] + ccy * eb[2],
-    )
-
-    return (axis_pt, w, r)
-
-
-def _fit_cone(surface, tol):
-    """Recognize a cone from surface samples: apex, axis and half angle."""
-
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    pts = []
-    nrm = []
-    nu_s = 8
-
-    for i in range(nu_s):
-        uu = u0 + (u1 - u0) * i / nu_s
-
-        for j in range(5):
-            vv = v0 + (v1 - v0) * j / 4.0
-            pts.append(surface.point_at(uu, vv))
-            n = surface.normal_at(uu, vv)
-            nl = math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
-
-            if nl < 1e-12:
-                continue
-
-            nrm.append(((n[0] / nl, n[1] / nl, n[2] / nl), surface.point_at(uu, vv)))
-
-    if len(nrm) < 4:
-        return None
-
-    ata = [[0.0] * 3 for _ in range(3)]
-    atb = [0.0] * 3
-
-    for n, p in nrm:
-        npd = n[0] * p[0] + n[1] * p[1] + n[2] * p[2]
-
-        for r in range(3):
-            atb[r] += n[r] * npd
-
-            for c in range(3):
-                ata[r][c] += n[r] * n[c]
-
-    V = _solve_gauss(ata, atb, 3)
-
-    if V is None:
-        return None
-
-    gs = []
-
-    for p in pts:
-        d = (p[0] - V[0], p[1] - V[1], p[2] - V[2])
-        dl = math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2)
-
-        if dl < tol:
-            continue
-
-        gs.append((d[0] / dl, d[1] / dl, d[2] / dl))
-
-    if len(gs) < 3:
-        return None
-
-    G = [[0.0] * 3 for _ in range(3)]
-
-    for g in gs:
-        for r in range(3):
-            for c in range(3):
-                G[r][c] += g[r] * g[c]
-
-    gevals, gevecs = _jacobi_eig3(G)
-    kmax = max(range(3), key=lambda k: gevals[k])
-    w = gevecs[kmax]
-    sx = (sum(g[0] for g in gs), sum(g[1] for g in gs), sum(g[2] for g in gs))
-
-    if w[0] * sx[0] + w[1] * sx[1] + w[2] * sx[2] < 0.0:
-        w = (-w[0], -w[1], -w[2])
-
-    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
-
-    if wl < 1e-12:
-        return None
-
-    w = (w[0] / wl, w[1] / wl, w[2] / wl)
-    angs = [
-        math.acos(max(-1.0, min(1.0, g[0] * w[0] + g[1] * w[1] + g[2] * w[2])))
-        for g in gs
-    ]
-    alpha = sum(angs) / len(angs)
-
-    if alpha < 1e-4 or alpha > math.pi / 2 - 1e-4:
-        return None
-
-    ca = math.cos(alpha)
-
-    for p in pts:
-        d = (p[0] - V[0], p[1] - V[1], p[2] - V[2])
-        axd = d[0] * w[0] + d[1] * w[1] + d[2] * w[2]
-        perp = math.sqrt(max(0.0, (d[0] ** 2 + d[1] ** 2 + d[2] ** 2) - axd * axd))
-
-        if abs(perp - axd * math.tan(alpha)) * ca > tol:
-            return None
-
-    return ((V[0], V[1], V[2]), w, alpha)
-
-
-def _fit_sphere(surface, tol):
-    """Recognize a sphere from surface samples: center and radius."""
-
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    pts = []
-
-    for i in range(5):
-        for j in range(5):
-            uu = u0 + (u1 - u0) * i / 4.0
-            vv = v0 + (v1 - v0) * j / 4.0
-            pts.append(surface.point_at(uu, vv))
-
-    ata = [[0.0] * 4 for _ in range(4)]
-    atb = [0.0] * 4
-
-    for p in pts:
-        row = [p[0], p[1], p[2], 1.0]
-        rhs = -(p[0] * p[0] + p[1] * p[1] + p[2] * p[2])
-
-        for r in range(4):
-            atb[r] += row[r] * rhs
-
-            for c in range(4):
-                ata[r][c] += row[r] * row[c]
-
-    sol = _solve_gauss(ata, atb, 4)
-
-    if sol is None:
-        return None
-
-    cx, cy, cz = -sol[0] / 2.0, -sol[1] / 2.0, -sol[2] / 2.0
-    r2 = cx * cx + cy * cy + cz * cz - sol[3]
-
-    if r2 <= 0.0:
-        return None
-
-    r = math.sqrt(r2)
-
-    for p in pts:
-        d = math.sqrt((p[0] - cx) ** 2 + (p[1] - cy) ** 2 + (p[2] - cz) ** 2)
-
-        if abs(d - r) > tol:
-            return None
-
-    return (cx, cy, cz, r)
-
-
-def _fit_torus(surface, tol):
-    """Recognize a torus from the smallest-variance axis and a tube cross-section circle fit."""
-
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    pts = []
-
-    for i in range(8):
-        for j in range(8):
-            pts.append(
-                surface.point_at(u0 + (u1 - u0) * i / 8.0, v0 + (v1 - v0) * j / 8.0)
-            )
-
-    n = len(pts)
-    cen = [sum(p[k] for p in pts) / n for k in range(3)]
-    M = [[0.0] * 3 for _ in range(3)]
-
-    for p in pts:
-        d = (p[0] - cen[0], p[1] - cen[1], p[2] - cen[2])
-
-        for r in range(3):
-            for c in range(3):
-                M[r][c] += d[r] * d[c]
-
-    evals, evecs = _jacobi_eig3(M)
-    kmin = min(range(3), key=lambda k: evals[k])
-    w = evecs[kmin]
-    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
-
-    if wl < 1e-12:
-        return None
-
-    w = (w[0] / wl, w[1] / wl, w[2] / wl)
-    ata = [[0.0] * 3 for _ in range(3)]
-    atb = [0.0] * 3
-    rhoa = []
-
-    for p in pts:
-        d = (p[0] - cen[0], p[1] - cen[1], p[2] - cen[2])
-        a = d[0] * w[0] + d[1] * w[1] + d[2] * w[2]
-        perp = (d[0] - a * w[0], d[1] - a * w[1], d[2] - a * w[2])
-        rho = math.sqrt(perp[0] ** 2 + perp[1] ** 2 + perp[2] ** 2)
-        rhoa.append((rho, a))
-        row = [rho, a, 1.0]
-        rhs = -(rho * rho + a * a)
-
-        for r in range(3):
-            atb[r] += row[r] * rhs
-
-            for c in range(3):
-                ata[r][c] += row[r] * row[c]
-
-    sol = _solve_gauss(ata, atb, 3)
-
-    if sol is None:
-        return None
-
-    R = -sol[0] / 2.0
-    a0 = -sol[1] / 2.0
-    r2 = R * R + a0 * a0 - sol[2]
-
-    if r2 <= 1e-18 or R <= 0.0:
-        return None
-
-    r = math.sqrt(r2)
-
-    if R <= r * 0.5:
-        return None
-
-    for rho, a in rhoa:
-        if abs(math.sqrt((rho - R) ** 2 + (a - a0) ** 2) - r) > tol:
-            return None
-
-    center = (cen[0] + a0 * w[0], cen[1] + a0 * w[1], cen[2] + a0 * w[2])
-
-    return (center, w, R, r)
-
-
-def _recognize_surface(surface, tol):
-    """Classify a surface as plane, cylinder, cone, sphere or torus within tol."""
-
-    if surface.is_planar(None, tol):
-        u0, u1 = surface.domain(0)
-        v0, v1 = surface.domain(1)
-        o = surface.point_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
-        n = surface.normal_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
-
-        return ("plane", (o[0], o[1], o[2]), (n[0], n[1], n[2]))
-
-    sph = _fit_sphere(surface, tol)
-
-    if sph is not None:
-        return ("sphere", (sph[0], sph[1], sph[2]), sph[3])
-
-    cyl = _fit_cylinder(surface, tol)
-
-    if cyl is not None:
-        return ("cylinder", cyl[0], cyl[1], cyl[2])
-
-    cone = _fit_cone(surface, tol)
-
-    if cone is not None:
-        return ("cone", cone[0], cone[1], cone[2])
-
-    tor = _fit_torus(surface, tol)
-
-    if tor is not None:
-        return ("torus", tor[0], tor[1], tor[2], tor[3])
-
-    return None
-
-
-def _analytic_pcurve(srf, recog, c3d):
-    """Analytic pcurve of an exact 3D intersection conic on a recognized quadric surface."""
-
-    if recog is None:
-        return None
-
-    u0, u1 = srf.domain(0)
-    v0, v1 = srf.domain(1)
-
-    def dot(p, q):
-        return p[0] * q[0] + p[1] * q[1] + p[2] * q[2]
-
-    if recog[0] == "cylinder":
-        ap = recog[1]
-        ax = recog[2]
-        an = math.sqrt(dot(ax, ax))
-
-        if an < 1e-12:
-            return None
-
-        ax = (ax[0] / an, ax[1] / an, ax[2] / an)
-
-        def height(p):
-            return (
-                (p[0] - ap[0]) * ax[0] + (p[1] - ap[1]) * ax[1] + (p[2] - ap[2]) * ax[2]
-            )
-
-        um = 0.5 * (u0 + u1)
-        h0 = height(srf.point_at(um, v0))
-        h1 = height(srf.point_at(um, v1))
-
-        if abs(h1 - h0) < 1e-12:
-            return None
-
-        hmin = 1e300
-        hmax = -1e300
-        hsum = 0.0
-        ns = 0
-        t0, t1 = c3d.domain()
-
-        for i in range(33):
-            h = height(c3d.point_at(t0 + (t1 - t0) * i / 32))
-            hmin = min(hmin, h)
-            hmax = max(hmax, h)
-            hsum += h
-            ns += 1
-
-        if hmax - hmin > 1e-5 * abs(h1 - h0):
-            return None
-
-        if c3d.point_at(t0).distance(c3d.point_at(t1)) > 1e-6 * (abs(h1 - h0) + 1.0):
-            return None
-
-        hc = hsum / ns
-        vc = v0 + (hc - h0) / (h1 - h0) * (v1 - v0)
-
-        if vc < min(v0, v1) - 1e-9 or vc > max(v0, v1) + 1e-9:
-            return None
-
-        return NurbsCurve.create(
-            False,
-            1,
-            [
-                Point(u0, vc, 0.0),
-                Point(u1, vc, 0.0),
-            ],
-        )
-
-    if recog[0] == "cone":
-        ax = recog[2]
-        an = math.sqrt(dot(ax, ax))
-
-        if an < 1e-12:
-            return None
-
-        ax = (ax[0] / an, ax[1] / an, ax[2] / an)
-        A = recog[1]
-
-        def height(p):
-            return (p[0] - A[0]) * ax[0] + (p[1] - A[1]) * ax[1] + (p[2] - A[2]) * ax[2]
-
-        t0, t1 = c3d.domain()
-        clen = c3d.point_at(t0).distance(c3d.point_at(0.5 * (t0 + t1)))
-        hscale = max(clen, 1e-9)
-        hmin = 1e300
-        hmax = -1e300
-        hsum = 0.0
-        ns = 0
-
-        for i in range(33):
-            h = height(c3d.point_at(t0 + (t1 - t0) * i / 32))
-            hmin = min(hmin, h)
-            hmax = max(hmax, h)
-            hsum += h
-            ns += 1
-
-        if hmax - hmin > hscale * 1e-4:
-            return None
-
-        if c3d.point_at(t0).distance(c3d.point_at(t1)) > hscale * 1e-3:
-            return None
-
-        hc = hsum / ns
-        um2 = 0.5 * (u0 + u1)
-        va = v0
-        vb = v1
-        ha = height(srf.point_at(um2, va))
-        hb = height(srf.point_at(um2, vb))
-
-        if (hc - ha) * (hc - hb) > 0:
-            return None
-
-        for _ in range(60):
-            vmid = 0.5 * (va + vb)
-            hm = height(srf.point_at(um2, vmid))
-
-            if (hm - hc) * (ha - hc) <= 0:
-                vb = vmid
-            else:
-                va = vmid
-                ha = hm
-
-        vc = 0.5 * (va + vb)
-
-        return NurbsCurve.create(
-            False,
-            1,
-            [
-                Point(u0, vc, 0.0),
-                Point(u1, vc, 0.0),
-            ],
-        )
-
-    return None
-
-
-def _ssi_unit(v):
-    """Unit V3, or the input when degenerate."""
-    length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
-
-    return (v[0] / length, v[1] / length, v[2] / length) if length > 1e-300 else v
-
-
-def _ssi_dot(u, v):
-    """Dot product of two V3."""
-    return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
-
-
-def _ssi_cross(u, v):
-    """Cross product of two V3."""
-
-    return (
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4057,6 +3477,434 @@ def _analytic_ssi(a, b, tolerance):
             triples.append((cc3, pa, pb))
 
     return triples
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NURBS surfaces
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def surface_plane(
+    surface: "NurbsSurface", plane: Plane, tolerance: float | None = None
+) -> list[NurbsCurve]:
+    """Surface-plane section curves."""
+
+    if not surface.is_valid():
+        return []
+
+    if tolerance is None or tolerance <= 0.0:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    traces, step, uv_to_3d, uv_to_3d_min = _surface_plane_traces(
+        surface, plane, tolerance
+    )
+
+    result = []
+
+    for uv_trace, uv_unwrapped, is_loop in traces:
+        all_pts = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
+        crv = _surface_plane_fit_3d(
+            all_pts, is_loop, plane, step, uv_to_3d, uv_to_3d_min
+        )
+
+        if not crv.is_valid():
+            continue
+
+        ct0, ct1 = crv.domain()
+        dup_tol = step * uv_to_3d * 3.0
+        dup = False
+
+        for existing in result:
+            et0, et1 = existing.domain()
+            all_close = True
+
+            for f in [0.25, 0.5, 0.75]:
+                cp = crv.point_at(ct0 + (ct1 - ct0) * f)
+                ep = existing.point_at(et0 + (et1 - et0) * f)
+                em = existing.point_at((et0 + et1) * 0.5)
+                d = min(cp.distance(ep), cp.distance(em))
+
+                if d > dup_tol:
+                    all_close = False
+                    break
+
+            if all_close:
+                dup = True
+                break
+
+        if not dup:
+            result.append(crv)
+
+    return result
+
+
+def surface_plane_uv(
+    surface: "NurbsSurface", plane: Plane, tolerance: float | None = None
+) -> list[tuple[NurbsCurve, NurbsCurve]]:
+    """Surface-plane section curves paired with their UV pcurves."""
+
+    if not surface.is_valid():
+        return []
+
+    if tolerance is None or tolerance <= 0.0:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    range_u = u1 - u0
+    range_v = v1 - v0
+    closed_u = surface.is_closed(0)
+    closed_v = surface.is_closed(1)
+
+    def wrap_u(u):
+        if closed_u:
+            t = math.fmod(u - u0, range_u)
+
+            if t < 0:
+                t += range_u
+
+            return u0 + t
+
+        return max(u0, min(u, u1))
+
+    def wrap_v(v):
+        if closed_v:
+            t = math.fmod(v - v0, range_v)
+
+            if t < 0:
+                t += range_v
+
+            return v0 + t
+
+        return max(v0, min(v, v1))
+
+    pn = plane.z_axis
+    p0 = plane.origin
+
+    def g_and_grad(u, v):
+        derivs = surface.evaluate(wrap_u(u), wrap_v(v), 1)
+        S = derivs[0]
+        Su = derivs[2]
+        Sv = derivs[1]
+        val = (S[0] - p0[0]) * pn[0] + (S[1] - p0[1]) * pn[1] + (S[2] - p0[2]) * pn[2]
+        gu = Su[0] * pn[0] + Su[1] * pn[1] + Su[2] * pn[2]
+        gv = Sv[0] * pn[0] + Sv[1] * pn[1] + Sv[2] * pn[2]
+
+        return val, gu, gv
+
+    def seam_newton(cu, cv_, axis):
+        for _ in range(10):
+            val, gu, gv = g_and_grad(cu, cv_)
+
+            if abs(val) < tolerance:
+                break
+
+            if axis == 0:
+                if abs(gv) < 1e-14:
+                    break
+
+                cv_ = cv_ - val / gv
+            else:
+                if abs(gu) < 1e-14:
+                    break
+
+                cu = cu - val / gu
+
+        return cu, cv_
+
+    traces, step, uv_to_3d, uv_to_3d_min = _surface_plane_traces(
+        surface, plane, tolerance
+    )
+
+    fit_tol = step * (uv_to_3d + uv_to_3d_min) * 0.5
+    dup_tol = step * uv_to_3d * 3.0
+
+    result = []
+    kept_pts3 = []
+
+    for uv_trace, uv_unwrapped, is_loop in traces:
+        m = len(uv_trace)
+        trace_pts3 = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
+        dup = False
+
+        for other in kept_pts3:
+            all_close = True
+
+            for f in [0.25, 0.5, 0.75]:
+                cp = trace_pts3[int((m - 1) * f)]
+                dmin = dup_tol + 1.0
+
+                for k in range(0, len(other), 5):
+                    dmin = min(dmin, cp.distance(other[k]))
+
+                if dmin > dup_tol:
+                    all_close = False
+                    break
+
+            if all_close:
+                dup = True
+                break
+
+        if dup:
+            continue
+
+        kept_pts3.append(trace_pts3)
+
+        pts = [list(p) for p in uv_unwrapped]
+        closure_du = 0.0
+        closure_dv = 0.0
+
+        if is_loop and len(pts) >= 2:
+            du_j = pts[0][0] - pts[-1][0]
+            dv_j = pts[0][1] - pts[-1][1]
+
+            if closed_u:
+                while du_j > range_u * 0.5:
+                    du_j -= range_u
+
+                while du_j < -range_u * 0.5:
+                    du_j += range_u
+
+            if closed_v:
+                while dv_j > range_v * 0.5:
+                    dv_j -= range_v
+
+                while dv_j < -range_v * 0.5:
+                    dv_j += range_v
+
+            closure_du = (pts[-1][0] + du_j) - pts[0][0]
+            closure_dv = (pts[-1][1] + dv_j) - pts[0][1]
+            pts.append([pts[0][0] + closure_du, pts[0][1] + closure_dv])
+
+        out_pts = [pts[0]]
+        cross_idx = []
+
+        for i in range(1, len(pts)):
+            pa = pts[i - 1]
+            pb = pts[i]
+            crossings = []
+
+            if closed_u and abs(pb[0] - pa[0]) > 1e-15:
+                k0 = math.floor((pa[0] - u0) / range_u)
+                k1 = math.floor((pb[0] - u0) / range_u)
+
+                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
+                    L = u0 + k * range_u
+                    t = (L - pa[0]) / (pb[0] - pa[0])
+
+                    if 0.0 < t < 1.0:
+                        crossings.append((t, 0, L))
+
+            if closed_v and abs(pb[1] - pa[1]) > 1e-15:
+                k0 = math.floor((pa[1] - v0) / range_v)
+                k1 = math.floor((pb[1] - v0) / range_v)
+
+                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
+                    L = v0 + k * range_v
+                    t = (L - pa[1]) / (pb[1] - pa[1])
+
+                    if 0.0 < t < 1.0:
+                        crossings.append((t, 1, L))
+
+            crossings.sort()
+
+            for t, axis, L in crossings:
+                cu = pa[0] + (pb[0] - pa[0]) * t
+                cv_ = pa[1] + (pb[1] - pa[1]) * t
+
+                if axis == 0:
+                    cu_r, cv_r = seam_newton(L, cv_, 0)
+                    cu = L
+                    cv_ = cv_r
+                else:
+                    cu_r, cv_r = seam_newton(cu, L, 1)
+                    cu = cu_r
+                    cv_ = L
+
+                out_pts.append([cu, cv_])
+                cross_idx.append(len(out_pts) - 1)
+
+            out_pts.append([pb[0], pb[1]])
+
+            if i < len(pts) - 1:
+                on_seam = False
+
+                if closed_u:
+                    k = round((pb[0] - u0) / range_u)
+                    L = u0 + k * range_u
+
+                    if (
+                        abs(pb[0] - L) < range_u * 1e-9
+                        and abs(pb[0] - pa[0]) > range_u * 1e-9
+                    ):
+                        out_pts[-1][0] = L
+                        on_seam = True
+
+                if closed_v:
+                    k = round((pb[1] - v0) / range_v)
+                    L = v0 + k * range_v
+
+                    if (
+                        abs(pb[1] - L) < range_v * 1e-9
+                        and abs(pb[1] - pa[1]) > range_v * 1e-9
+                    ):
+                        out_pts[-1][1] = L
+                        on_seam = True
+
+                if on_seam:
+                    cross_idx.append(len(out_pts) - 1)
+
+        wrap_drift = abs(closure_du) > range_u * 0.5 or abs(closure_dv) > range_v * 0.5
+
+        if len(cross_idx) == 0:
+            pieces = [(out_pts, is_loop and not wrap_drift)]
+        else:
+            pieces = []
+
+            if is_loop:
+                for a, b in zip(cross_idx, cross_idx[1:]):
+                    pieces.append((out_pts[a : b + 1], False))
+
+                wrap_piece = [list(p) for p in out_pts[cross_idx[-1] :]]
+
+                for p in out_pts[1 : cross_idx[0] + 1]:
+                    wrap_piece.append([p[0] + closure_du, p[1] + closure_dv])
+
+                pieces.append((wrap_piece, False))
+            else:
+                bounds = [0] + cross_idx + [len(out_pts) - 1]
+
+                for a, b in zip(bounds, bounds[1:]):
+                    if b > a:
+                        pieces.append((out_pts[a : b + 1], False))
+
+        for piece_pts, piece_loop in pieces:
+            if len(piece_pts) < 2:
+                continue
+
+            mid = piece_pts[len(piece_pts) // 2]
+
+            if closed_u:
+                k_u = math.floor((mid[0] - u0) / range_u)
+
+                if k_u != 0:
+                    for p in piece_pts:
+                        p[0] -= k_u * range_u
+
+            if closed_v:
+                k_v = math.floor((mid[1] - v0) / range_v)
+
+                if k_v != 0:
+                    for p in piece_pts:
+                        p[1] -= k_v * range_v
+
+            pts3 = [surface.point_at(wrap_u(p[0]), wrap_v(p[1])) for p in piece_pts]
+
+            crv3 = _surface_plane_fit_3d(
+                pts3, piece_loop, plane, step, uv_to_3d, uv_to_3d_min, False
+            )
+
+            if not crv3.is_valid():
+                if piece_loop:
+                    crv3 = NurbsCurve.create_interpolated(
+                        pts3, CurveNurbsKnotStyle.ChordPeriodic
+                    )
+                else:
+                    crv3 = NurbsCurve.create_interpolated(pts3)
+
+            if not crv3.is_valid():
+                continue
+
+            pts_uv = [Point(p[0], p[1], 0.0) for p in piece_pts]
+            mp = len(pts_uv)
+            fit_tol_uv = step
+            total_turning = 0.0
+
+            for i in range(1, mp - 1):
+                dx1 = pts_uv[i][0] - pts_uv[i - 1][0]
+                dy1 = pts_uv[i][1] - pts_uv[i - 1][1]
+                dx2 = pts_uv[i + 1][0] - pts_uv[i][0]
+                dy2 = pts_uv[i + 1][1] - pts_uv[i][1]
+                l1 = math.hypot(dx1, dy1)
+                l2 = math.hypot(dx2, dy2)
+
+                if l1 > 1e-14 and l2 > 1e-14:
+                    c = (dx1 * dx2 + dy1 * dy2) / (l1 * l2)
+                    c = max(-1.0, min(1.0, c))
+                    total_turning += math.acos(c)
+
+            chords = [0.0] * mp
+            total_len = 0.0
+
+            for i in range(1, mp):
+                total_len += pts_uv[i].distance(pts_uv[i - 1])
+                chords[i] = total_len
+
+            if piece_loop and mp > 1:
+                total_len += pts_uv[0].distance(pts_uv[mp - 1])
+
+            if total_len > 1e-14:
+                for i in range(1, mp):
+                    chords[i] /= total_len
+
+            target_cvs = max(8, int(total_turning / 0.5) + 6)
+            max_cvs = mp - 1
+            pcurve = NurbsCurve()
+
+            for attempt in range(5):
+                if target_cvs > max_cvs:
+                    break
+
+                pcurve = NurbsCurve.create_fitted(pts_uv, target_cvs, 3, piece_loop)
+
+                if not pcurve.is_valid():
+                    break
+
+                ft0, ft1 = pcurve.domain()
+                max_dev = 0.0
+
+                for i in range(mp):
+                    t = ft0 + (ft1 - ft0) * chords[i]
+                    max_dev = max(max_dev, pcurve.point_at(t).distance(pts_uv[i]))
+
+                if max_dev < fit_tol_uv:
+                    break
+
+                target_cvs = min(target_cvs * 2, max_cvs)
+
+            if not pcurve.is_valid():
+                if piece_loop:
+                    pcurve = NurbsCurve.create_interpolated(
+                        pts_uv, CurveNurbsKnotStyle.ChordPeriodic
+                    )
+                else:
+                    pcurve = NurbsCurve.create_interpolated(pts_uv)
+
+            if not pcurve.is_valid():
+                continue
+
+            crv3.set_domain(0.0, 1.0)
+            pcurve.set_domain(0.0, 1.0)
+
+            vali_tol = max(10.0 * tolerance, fit_tol * 2.0)
+            max_off = 0.0
+
+            for i in range(17):
+                t = i / 16.0
+                pc = pcurve.point_at(t)
+                val, gu, gv = g_and_grad(pc[0], pc[1])
+                max_off = max(max_off, abs(val))
+
+            if max_off > vali_tol and target_cvs * 2 <= max_cvs:
+                refit = NurbsCurve.create_fitted(pts_uv, target_cvs * 2, 3, piece_loop)
+
+                if refit.is_valid():
+                    refit.set_domain(0.0, 1.0)
+                    pcurve = refit
+
+            result.append((crv3, pcurve))
+
+    return result
 
 
 def surface_surface(
@@ -5014,6 +4862,151 @@ def surface_surface(
     return result
 
 
+def _clip_pcurve_to_cutter(target, pc, cutter):
+    """Keep the pcurve sub-segments whose lifted 3D point lies inside the cutter footprint."""
+
+    n = max(pc.cv_count() * 4, 16)
+    d0, d1 = pc.domain()
+    cu0, cu1 = cutter.domain(0)
+    cv0, cv1 = cutter.domain(1)
+    corner_diag = cutter.point_at(cu0, cv0).distance(cutter.point_at(cu1, cv1))
+    on_tol = max(1e-7, corner_diag * 1e-4)
+
+    q00 = cutter.point_at(cu0, cv0)
+    q10 = cutter.point_at(cu1, cv0)
+    q01 = cutter.point_at(cu0, cv1)
+    eu0, eu1, eu2_ = q10[0] - q00[0], q10[1] - q00[1], q10[2] - q00[2]
+    ev0, ev1, ev2_ = q01[0] - q00[0], q01[1] - q00[1], q01[2] - q00[2]
+    eu_sq = eu0 * eu0 + eu1 * eu1 + eu2_ * eu2_
+    ev_sq = ev0 * ev0 + ev1 * ev1 + ev2_ * ev2_
+    q00x, q00y, q00z = q00[0], q00[1], q00[2]
+    fast_planar = eu_sq > 1e-28 and ev_sq > 1e-28
+
+    def gap(t):
+        uv = pc.point_at(t)
+        p3 = target.point_at(uv[0], uv[1])
+
+        if fast_planar:
+            dx = p3[0] - q00x
+            dy = p3[1] - q00y
+            dz = p3[2] - q00z
+            a = (dx * eu0 + dy * eu1 + dz * eu2_) / eu_sq
+            b = (dx * ev0 + dy * ev1 + dz * ev2_) / ev_sq
+
+            if a < 0.0:
+                a = 0.0
+            elif a > 1.0:
+                a = 1.0
+
+            if b < 0.0:
+                b = 0.0
+            elif b > 1.0:
+                b = 1.0
+
+            cx = q00x + a * eu0 + b * ev0
+            cy = q00y + a * eu1 + b * ev1
+            cz = q00z + a * eu2_ + b * ev2_
+
+            return ((p3[0] - cx) ** 2 + (p3[1] - cy) ** 2 + (p3[2] - cz) ** 2) ** 0.5
+
+        return Closest.surface_point(cutter, p3, 0.0, 0.0, 0.0, 0.0)[2]
+
+    def refine(t_in, t_out):
+        for _ in range(20):
+            tm = (t_in + t_out) * 0.5
+
+            if gap(tm) < on_tol:
+                t_in = tm
+            else:
+                t_out = tm
+
+        return t_out
+
+    flags = []
+
+    for i in range(n + 1):
+        t = d0 + (d1 - d0) * i / n
+        flags.append((t, gap(t) < on_tol))
+
+    pieces = []
+    i = 0
+
+    while i <= n:
+        if flags[i][1]:
+            j = i
+
+            while j + 1 <= n and flags[j + 1][1]:
+                j += 1
+
+            ta = flags[i][0] if i == 0 else refine(flags[i][0], flags[i - 1][0])
+            tb = flags[j][0] if j == n else refine(flags[j][0], flags[j + 1][0])
+
+            if tb - ta > (d1 - d0) * 1e-6:
+                piece = pc.duplicate()
+
+                if piece.trim(ta, tb) and piece.is_valid():
+                    pieces.append(piece)
+
+            i = j + 1
+        else:
+            i += 1
+
+    return pieces
+
+
+def cut_curves_on_surface(
+    target: "NurbsSurface", cutter: "NurbsSurface", tolerance: float | None = None
+) -> list[NurbsCurve]:
+    """UV pcurves of the cutter's section on the target, clipped to the cutter footprint."""
+
+    rtol = max(tolerance if (tolerance and tolerance > 0) else 1e-7, 1e-7) * 1e4
+    rt = _recognize_surface(target, rtol)
+
+    if rt is not None and rt[0] == "sphere":
+        cutter_planar = cutter.is_planar(None, 1e-6)
+        out = []
+
+        for triple in surface_surface(target, cutter, tolerance):
+            c3d = triple[0]
+            pcs = _analytic_sphere_pullback(target, rt, c3d)
+
+            if not pcs:
+                pcs = Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance or 0.0)
+
+            if not pcs:
+                pcs = [triple[1]]
+
+            for pc in pcs:
+                if cutter_planar:
+                    out.extend(_clip_pcurve_to_cutter(target, pc, cutter))
+                else:
+                    out.append(pc)
+
+        return out
+
+    if cutter.is_planar(None, 1e-6):
+        cu0, cu1 = cutter.domain(0)
+        cv0, cv1 = cutter.domain(1)
+        mu = (cu0 + cu1) * 0.5
+        mv = (cv0 + cv1) * 0.5
+        origin = cutter.point_at(mu, mv)
+        normal = cutter.normal_at(mu, mv)
+        plane = Plane.from_point_normal(origin, normal)
+        out = []
+
+        for pair in surface_plane_uv(target, plane, tolerance):
+            out.extend(_clip_pcurve_to_cutter(target, pair[1], cutter))
+
+        return out
+
+    return [triple[1] for triple in surface_surface(target, cutter, tolerance)]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Polylines and plane sets
+# ═══════════════════════════════════════════════════════════════════════════
+
+
 def _vectors_nearly_parallel(v0: Vector, v1: Vector, angle_tol: float) -> bool:
     """Whether two vectors are parallel within angle_tol."""
 
@@ -5026,6 +5019,23 @@ def _vectors_nearly_parallel(v0: Vector, v1: Vector, angle_tol: float) -> bool:
     cos_angle = abs((v0[0] * v1[0] + v0[1] * v1[1] + v0[2] * v1[2]) / (m0 * m1))
 
     return cos_angle > math.cos(angle_tol)
+
+
+def plane_plane_plane_check(
+    p0: Plane, p1: Plane, p2: Plane, angle_tol: float
+) -> Point | None:
+    """Three-plane intersection that rejects near-parallel pairs."""
+
+    if _vectors_nearly_parallel(p0.z_axis, p1.z_axis, angle_tol):
+        return None
+
+    if _vectors_nearly_parallel(p0.z_axis, p2.z_axis, angle_tol):
+        return None
+
+    if _vectors_nearly_parallel(p1.z_axis, p2.z_axis, angle_tol):
+        return None
+
+    return plane_plane_plane(p0, p1, p2)
 
 
 def remap(val: float, from1: float, to1: float, from2: float, to2: float) -> float:
@@ -5061,23 +5071,6 @@ def closest_point_on_segment(pt: Point, seg: Line) -> tuple:
     t = max(0.0, min(1.0, t))
 
     return (Point(start[0] + t * dx, start[1] + t * dy, start[2] + t * dz), t)
-
-
-def plane_plane_plane_check(
-    p0: Plane, p1: Plane, p2: Plane, angle_tol: float
-) -> Point | None:
-    """Three-plane intersection that rejects near-parallel pairs."""
-
-    if _vectors_nearly_parallel(p0.z_axis, p1.z_axis, angle_tol):
-        return None
-
-    if _vectors_nearly_parallel(p0.z_axis, p2.z_axis, angle_tol):
-        return None
-
-    if _vectors_nearly_parallel(p1.z_axis, p2.z_axis, angle_tol):
-        return None
-
-    return plane_plane_plane(p0, p1, p2)
 
 
 def plane_4planes(main_plane: Plane, planes: list[Plane]) -> object | None:
@@ -5151,6 +5144,94 @@ def plane_4lines(plane: Plane, l0: Line, l1: Line, l2: Line, l3: Line) -> object
         return None
 
     return Polyline([p0, p1, p2, p3, p0])
+
+
+def line_two_planes(line: Line, p0: Plane, p1: Plane) -> object | None:
+    """Clips a segment to the two plane intersections."""
+
+    new_start = line_plane(line, p0, True)
+    new_end = line_plane(line, p1, True)
+
+    if new_start is None or new_end is None:
+        return None
+
+    return Line(
+        new_start[0], new_start[1], new_start[2], new_end[0], new_end[1], new_end[2]
+    )
+
+
+def polyline_plane(poly: Polyline, plane: Plane) -> tuple | None:
+    """Polyline edge crossings with a plane and their edge indices."""
+
+    n = poly.point_count()
+
+    if n < 2:
+        return None
+
+    points = []
+    edge_ids = []
+
+    for i in range(n - 1):
+        a = poly.get_point(i)
+        b = poly.get_point(i + 1)
+        va = _plane_value_at(plane, a)
+        vb = _plane_value_at(plane, b)
+        a_on = abs(va) < Tolerance.ZERO_TOLERANCE
+        b_on = abs(vb) < Tolerance.ZERO_TOLERANCE
+
+        if a_on and b_on:
+            continue
+
+        if a_on:
+            points.append(a)
+            edge_ids.append(i)
+            continue
+
+        if b_on:
+            if i + 2 == n:
+                front = poly.get_point(0)
+                closes = (
+                    abs(b[0] - front[0]) < Tolerance.ZERO_TOLERANCE
+                    and abs(b[1] - front[1]) < Tolerance.ZERO_TOLERANCE
+                    and abs(b[2] - front[2]) < Tolerance.ZERO_TOLERANCE
+                )
+
+                if not closes:
+                    points.append(b)
+                    edge_ids.append(i)
+
+            continue
+
+        seg = Line(a[0], a[1], a[2], b[0], b[1], b[2])
+        hit = line_plane(seg, plane, True)
+
+        if hit is not None:
+            points.append(hit)
+            edge_ids.append(i)
+
+    if not points:
+        return None
+
+    return (points, edge_ids)
+
+
+def line_line_3d(cutter: Line, seg: Line) -> Point | None:
+    """Closest approach point on the infinite cutter to the segment."""
+
+    result = line_line_parameters(
+        cutter, seg, 0.0, intersect_segments=False, near_parallel_as_closest=False
+    )
+
+    if result is None:
+        return None
+
+    t0, _ = result
+    s = cutter.start()
+    e = cutter.end()
+
+    return Point(
+        s[0] + t0 * (e[0] - s[0]), s[1] + t0 * (e[1] - s[1]), s[2] + t0 * (e[2] - s[2])
+    )
 
 
 def scale_vector_to_distance_of_2planes(
@@ -5570,73 +5651,130 @@ def _offset_ring_2d(ring, delta, concave_notch) -> list[tuple[float, float]]:
     return out
 
 
-def line_two_planes(line: Line, p0: Plane, p1: Plane) -> object | None:
-    """Clips a segment to the two plane intersections."""
+# ═══════════════════════════════════════════════════════════════════════════
+# Polyline booleans
+# ═══════════════════════════════════════════════════════════════════════════
 
-    new_start = line_plane(line, p0, True)
-    new_end = line_plane(line, p1, True)
 
-    if new_start is None or new_end is None:
+def polyline_boolean(a: Polyline, b: Polyline, clip_type: int) -> list[Polyline]:
+    """Boolean of two closed planar polylines, clip_type 0 intersection, 1 union, 2 difference."""
+    return Polyline.boolean_op(a, b, clip_type)
+
+
+def offset_in_3d(polyline: Polyline, plane: Plane, offset: float) -> bool:
+    """Miter offset of a closed polyline in the plane's 2D frame, positive outward, in place."""
+
+    if polyline.point_count() < 3:
+        return False
+
+    origin = polyline.get_point(0)
+    xax = plane.base1()
+    yax = plane.base2()
+    ring = _polyline_to_2d(polyline, origin, xax, yax)
+
+    if len(ring) < 3:
+        return False
+
+    delta = -offset if _signed_area_2d(ring) < 0.0 else offset
+    out = _offset_ring_2d(ring, delta, offset > 0.0)
+
+    if len(out) < 3:
+        return False
+
+    if abs(_signed_area_2d(out)) * 0.5 < 0.0001:
+        return False
+
+    cp = 0
+
+    for i in range(1, len(out)):
+        if _distance_sq_2d(out[i], ring[0]) < _distance_sq_2d(out[cp], ring[0]):
+            cp = i
+
+    out = out[cp:] + out[:cp]
+    polyline.coords = _polyline_to_3d(out, origin, xax, yax).coords
+
+    return True
+
+
+def polyline_boolean_2d_in_plane(
+    polyline0: Polyline,
+    polyline1: Polyline,
+    plane: Plane,
+    intersection_type: int,
+    include_triangles: bool = False,
+    min_area: float = 0.01,
+    collapse_eps: float = 0.0,
+) -> Polyline | None:
+    """Boolean in the plane's 2D frame, intersection_type 0 intersect, 1 union, 2 difference, 3 xor."""
+
+    if polyline0.point_count() < 3 or polyline1.point_count() < 3:
         return None
 
-    return Line(
-        new_start[0], new_start[1], new_start[2], new_end[0], new_end[1], new_end[2]
+    origin = polyline0.get_point(0)
+    xax = plane.base1()
+    yax = plane.base2()
+    flat_origin = Point(0.0, 0.0, 0.0)
+    flat_x = Vector(1.0, 0.0, 0.0)
+    flat_y = Vector(0.0, 1.0, 0.0)
+    a2d = _polyline_to_3d(
+        _polyline_to_2d(polyline0, origin, xax, yax), flat_origin, flat_x, flat_y
+    )
+    b2d = _polyline_to_3d(
+        _polyline_to_2d(polyline1, origin, xax, yax), flat_origin, flat_x, flat_y
     )
 
+    if 0 <= intersection_type <= 2:
+        result_2d = BooleanPolyline.compute(a2d, b2d, intersection_type)
+    elif intersection_type == 3:
+        u = BooleanPolyline.compute(a2d, b2d, 1)
+        inter = BooleanPolyline.compute(a2d, b2d, 0)
 
-def polyline_plane(poly: Polyline, plane: Plane) -> tuple | None:
-    """Polyline edge crossings with a plane and their edge indices."""
+        if not u:
+            return None
 
-    n = poly.point_count()
-
-    if n < 2:
+        result_2d = u if not inter else BooleanPolyline.compute(u[0], inter[0], 2)
+    else:
         return None
 
-    points = []
-    edge_ids = []
-
-    for i in range(n - 1):
-        a = poly.get_point(i)
-        b = poly.get_point(i + 1)
-        va = _plane_value_at(plane, a)
-        vb = _plane_value_at(plane, b)
-        a_on = abs(va) < Tolerance.ZERO_TOLERANCE
-        b_on = abs(vb) < Tolerance.ZERO_TOLERANCE
-
-        if a_on and b_on:
-            continue
-
-        if a_on:
-            points.append(a)
-            edge_ids.append(i)
-            continue
-
-        if b_on:
-            if i + 2 == n:
-                front = poly.get_point(0)
-                closes = (
-                    abs(b[0] - front[0]) < Tolerance.ZERO_TOLERANCE
-                    and abs(b[1] - front[1]) < Tolerance.ZERO_TOLERANCE
-                    and abs(b[2] - front[2]) < Tolerance.ZERO_TOLERANCE
-                )
-
-                if not closes:
-                    points.append(b)
-                    edge_ids.append(i)
-
-            continue
-
-        seg = Line(a[0], a[1], a[2], b[0], b[1], b[2])
-        hit = line_plane(seg, plane, True)
-
-        if hit is not None:
-            points.append(hit)
-            edge_ids.append(i)
-
-    if not points:
+    if not result_2d:
         return None
 
-    return (points, edge_ids)
+    ring = _polyline_to_2d(result_2d[0], flat_origin, flat_x, flat_y)
+
+    if len(ring) < 3:
+        return None
+
+    if collapse_eps > 0.0:
+        eps_sq = collapse_eps * collapse_eps
+        collapsed = []
+
+        for p in ring:
+            if not collapsed or _distance_sq_2d(p, collapsed[-1]) >= eps_sq:
+                collapsed.append(p)
+
+        if (
+            len(collapsed) >= 2
+            and _distance_sq_2d(collapsed[-1], collapsed[0]) < eps_sq
+        ):
+            collapsed.pop()
+
+        ring = collapsed
+
+        if len(ring) < 3:
+            return None
+
+    if len(ring) == 3 and not include_triangles:
+        return None
+
+    if abs(_signed_area_2d(ring)) * 0.5 <= min_area:
+        return None
+
+    return _polyline_to_3d(ring, origin, xax, yax)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Joints
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 def polyline_plane_to_line(
@@ -5764,288 +5902,157 @@ def closed_and_open_paths_2d(
     return Polyline(out_pts), (t0, t1)
 
 
-def line_line_3d(cutter: Line, seg: Line) -> Point | None:
-    """Closest approach point on the infinite cutter to the segment."""
-
-    result = line_line_parameters(
-        cutter, seg, 0.0, intersect_segments=False, near_parallel_as_closest=False
-    )
-
-    if result is None:
-        return None
-
-    t0, _ = result
-    s = cutter.start()
-    e = cutter.end()
-
-    return Point(
-        s[0] + t0 * (e[0] - s[0]), s[1] + t0 * (e[1] - s[1]), s[2] + t0 * (e[2] - s[2])
-    )
+# ═══════════════════════════════════════════════════════════════════════════
+# Elements
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 def face_to_face(
     adjacency: list[int],
-    polylines_list: list[list[Polyline]],
-    planes_list: list[list[Plane]],
+    polylines: list[list[Polyline]],
+    planes: list[list[Plane]],
     coplanar_tolerance: float = 5.0,
 ) -> list[tuple[int, int, int, int, int, Polyline]]:
     """Face-to-face contacts (a, b, face_a, face_b, type, polyline) with type 0 side-side, 1 side-top, 2 top-top."""
 
-    import numpy as np
-
-    n_elems = len(planes_list)
-    face_starts = np.zeros(n_elems + 1, dtype=np.int64)
-
-    for i, planes in enumerate(planes_list):
-        face_starts[i + 1] = face_starts[i] + len(planes)
-
-    total_faces = int(face_starts[-1])
-    face_origins = np.empty((total_faces, 3), dtype=np.float64)
-    face_normals = np.empty((total_faces, 3), dtype=np.float64)
-    k = 0
-
-    for planes in planes_list:
-        for p in planes:
-            o = p.origin
-            n = p.z_axis
-            face_origins[k, 0] = o[0]
-            face_origins[k, 1] = o[1]
-            face_origins[k, 2] = o[2]
-            face_normals[k, 0] = n[0]
-            face_normals[k, 1] = n[1]
-            face_normals[k, 2] = n[2]
-            k += 1
-
-    face_lo = np.empty((total_faces, 3), dtype=np.float64)
-    face_hi = np.empty((total_faces, 3), dtype=np.float64)
-    k = 0
-
-    for faces in polylines_list:
-        for f in faces:
-            c = np.asarray(f.coords, dtype=np.float64).reshape(-1, 3)
-            face_lo[k] = c.min(axis=0) - coplanar_tolerance
-            face_hi[k] = c.max(axis=0) + coplanar_tolerance
-            k += 1
-
-    cos_tol = math.cos(Tolerance.ANGLE_TOLERANCE_DEGREES * TO_RADIANS)
-
     results = []
+    face_boxes = []
 
-    for idx in range(0, len(adjacency), 4):
-        a, b = adjacency[idx], adjacency[idx + 1]
+    for faces in polylines:
+        boxes = []
 
-        a0, a1 = int(face_starts[a]), int(face_starts[a + 1])
-        b0, b1 = int(face_starts[b]), int(face_starts[b + 1])
-        oa = face_origins[a0:a1]
-        na_ = face_normals[a0:a1]
-        ob = face_origins[b0:b1]
-        nb_ = face_normals[b0:b1]
+        for f in faces:
+            bx = [math.inf, math.inf, math.inf, -math.inf, -math.inf, -math.inf]
+            c = f.coords
+            k = 0
 
-        alo = face_lo[a0:a1]
-        ahi = face_hi[a0:a1]
-        blo = face_lo[b0:b1]
-        bhi = face_hi[b0:b1]
-        overlap = np.all(
-            (alo[:, None, :] <= bhi[None, :, :]) & (blo[None, :, :] <= ahi[:, None, :]),
-            axis=2,
-        )
+            while k + 2 < len(c):
+                bx[0] = min(bx[0], c[k])
+                bx[3] = max(bx[3], c[k])
+                bx[1] = min(bx[1], c[k + 1])
+                bx[4] = max(bx[4], c[k + 1])
+                bx[2] = min(bx[2], c[k + 2])
+                bx[5] = max(bx[5], c[k + 2])
+                k += 3
 
-        if not overlap.any():
-            continue
+            for k in range(3):
+                bx[k] -= coplanar_tolerance
+                bx[k + 3] += coplanar_tolerance
 
-        dots = na_ @ nb_.T
-        antiparallel = dots <= -cos_tol
+            boxes.append(bx)
 
-        na_dot_oa = np.einsum("ij,ij->i", na_, oa)  # (na,)
-        nb_dot_ob = np.einsum("ij,ij->i", nb_, ob)  # (nb,)
-        na_dot_ob = na_ @ ob.T
-        nb_dot_oa = nb_ @ oa.T
-        dist0 = np.abs(na_dot_ob - na_dot_oa[:, None])
-        dist1 = np.abs(nb_dot_oa - nb_dot_ob[:, None]).T
-        coplanar_mask = (
-            overlap
-            & antiparallel
-            & (dist0 < coplanar_tolerance)
-            & (dist1 < coplanar_tolerance)
-        )
+        face_boxes.append(boxes)
 
-        if not coplanar_mask.any():
-            continue
+    idx = 0
 
-        ii_arr, jj_arr = np.nonzero(coplanar_mask)
+    while idx + 1 < len(adjacency):
+        a = adjacency[idx]
+        b = adjacency[idx + 1]
+        found = False
+        i = 0
 
-        for k in range(len(ii_arr)):
-            i = int(ii_arr[k])
-            j = int(jj_arr[k])
-            pts_i = polylines_list[a][i].get_points()
+        while i < len(planes[a]) and not found:
+            oa = planes[a][i].origin
+            za = planes[a][i].z_axis
+            ba = face_boxes[a][i]
 
-            if len(pts_i) < 2:
-                continue
+            for j in range(len(planes[b])):
+                bb = face_boxes[b][j]
 
-            edge = Vector(
-                pts_i[1][0] - pts_i[0][0],
-                pts_i[1][1] - pts_i[0][1],
-                pts_i[1][2] - pts_i[0][2],
-            )
-            edge.normalize_self()
-            zax = planes_list[a][i].z_axis
-            yax = zax.cross(edge)
-            yax.normalize_self()
-            pln = Plane(pts_i[0], edge, yax)
-            bools = Polyline.boolean_op(
-                polylines_list[a][i], polylines_list[b][j], 0, plane=pln
-            )
+                if (
+                    ba[0] > bb[3]
+                    or bb[0] > ba[3]
+                    or ba[1] > bb[4]
+                    or bb[1] > ba[4]
+                    or ba[2] > bb[5]
+                    or bb[2] > ba[5]
+                ):
+                    continue
 
-            if not bools or bools[0].point_count() < 3:
-                continue
+                if not Plane.is_coplanar_from_normals(
+                    oa,
+                    za,
+                    planes[b][j].origin,
+                    planes[b][j].z_axis,
+                    False,
+                    coplanar_tolerance,
+                ):
+                    continue
 
-            type_val = (0 if i > 1 else 1) + (0 if j > 1 else 1)
-            jpl = bools[0] if bools[0].is_closed() else bools[0].closed()
-            results.append((a, b, i, j, type_val, jpl))
-            break
+                pts_i = polylines[a][i].get_points()
+                edge = Vector(
+                    pts_i[1][0] - pts_i[0][0],
+                    pts_i[1][1] - pts_i[0][1],
+                    pts_i[1][2] - pts_i[0][2],
+                )
+                edge.normalize_self()
+                zax = za
+                yax = zax.cross(edge)
+                yax.normalize_self()
+                pln = Plane.from_frame(pts_i[0], edge, yax, zax)
+                bools = Polyline.boolean_op(
+                    polylines[a][i], polylines[b][j], 0, plane=pln
+                )
+
+                if not bools or bools[0].point_count() < 3:
+                    continue
+
+                typ = (0 if i > 1 else 1) + (0 if j > 1 else 1)
+                jpl = bools[0] if bools[0].is_closed() else bools[0].closed()
+                results.append((a, b, i, j, typ, jpl))
+                found = True
+                break
+
+            i += 1
+
+        idx += 4
 
     return results
 
 
-def polyline_boolean(a: Polyline, b: Polyline, clip_type: int) -> list[Polyline]:
-    """Boolean of two closed planar polylines, clip_type 0 intersection, 1 union, 2 difference."""
-    return Polyline.boolean_op(a, b, clip_type)
-
-
-def polyline_boolean_2d_in_plane(
-    polyline0: Polyline,
-    polyline1: Polyline,
-    plane: Plane,
-    intersection_type: int,
-    include_triangles: bool = False,
-    min_area: float = 0.01,
-    collapse_eps: float = 0.0,
-) -> Polyline | None:
-    """Boolean in the plane's 2D frame, intersection_type 0 intersect, 1 union, 2 difference, 3 xor."""
-
-    if polyline0.point_count() < 3 or polyline1.point_count() < 3:
-        return None
-
-    origin = polyline0.get_point(0)
-    xax = plane.base1()
-    yax = plane.base2()
-    flat_origin = Point(0.0, 0.0, 0.0)
-    flat_x = Vector(1.0, 0.0, 0.0)
-    flat_y = Vector(0.0, 1.0, 0.0)
-    a2d = _polyline_to_3d(
-        _polyline_to_2d(polyline0, origin, xax, yax), flat_origin, flat_x, flat_y
-    )
-    b2d = _polyline_to_3d(
-        _polyline_to_2d(polyline1, origin, xax, yax), flat_origin, flat_x, flat_y
-    )
-
-    if 0 <= intersection_type <= 2:
-        result_2d = BooleanPolyline.compute(a2d, b2d, intersection_type)
-    elif intersection_type == 3:
-        u = BooleanPolyline.compute(a2d, b2d, 1)
-        inter = BooleanPolyline.compute(a2d, b2d, 0)
-
-        if not u:
-            return None
-
-        result_2d = u if not inter else BooleanPolyline.compute(u[0], inter[0], 2)
-    else:
-        return None
-
-    if not result_2d:
-        return None
-
-    ring = _polyline_to_2d(result_2d[0], flat_origin, flat_x, flat_y)
-
-    if len(ring) < 3:
-        return None
-
-    if collapse_eps > 0.0:
-        eps_sq = collapse_eps * collapse_eps
-        collapsed = []
-
-        for p in ring:
-            if not collapsed or _distance_sq_2d(p, collapsed[-1]) >= eps_sq:
-                collapsed.append(p)
-
-        if (
-            len(collapsed) >= 2
-            and _distance_sq_2d(collapsed[-1], collapsed[0]) < eps_sq
-        ):
-            collapsed.pop()
-
-        ring = collapsed
-
-        if len(ring) < 3:
-            return None
-
-    if len(ring) == 3 and not include_triangles:
-        return None
-
-    if abs(_signed_area_2d(ring)) * 0.5 <= min_area:
-        return None
-
-    return _polyline_to_3d(ring, origin, xax, yax)
-
-
-def offset_in_3d(polyline: Polyline, plane: Plane, offset: float) -> bool:
-    """Miter offset of a closed polyline in the plane's 2D frame, positive outward, in place."""
-
-    if polyline.point_count() < 3:
-        return False
-
-    origin = polyline.get_point(0)
-    xax = plane.base1()
-    yax = plane.base2()
-    ring = _polyline_to_2d(polyline, origin, xax, yax)
-
-    if len(ring) < 3:
-        return False
-
-    delta = -offset if _signed_area_2d(ring) < 0.0 else offset
-    out = _offset_ring_2d(ring, delta, offset > 0.0)
-
-    if len(out) < 3:
-        return False
-
-    if abs(_signed_area_2d(out)) * 0.5 < 0.0001:
-        return False
-
-    cp = 0
-
-    for i in range(1, len(out)):
-        if _distance_sq_2d(out[i], ring[0]) < _distance_sq_2d(out[cp], ring[0]):
-            cp = i
-
-    out = out[cp:] + out[:cp]
-    polyline.coords = _polyline_to_3d(out, origin, xax, yax).coords
-
-    return True
-
-
-def adjacency_search(elements: list["Element"], inflate: float = 5.0) -> list[int]:
+def adjacency_search(elements: list[Element], inflate: float = 5.0) -> list[int]:
     """Adjacent element pairs by BVH broad phase and OBB narrow phase."""
 
-    N = len(elements)
-    aabbs = []
+    n = len(elements)
+    obbs = []
 
-    for elem in elements:
+    for element in elements:
         pts = []
 
-        for pl in elem.polylines:
-            pts.extend(pl.get_points())
+        for pl in element.polylines:
+            for p in pl.get_points():
+                pts.append(p)
 
-        if pts:
-            aabbs.append(AABB.from_points(pts, inflate))
-        else:
-            aabbs.append(AABB.from_point(Point(0, 0, 0), inflate))
+        obbs.append(OBB.from_points(pts, inflate))
 
+    aabbs = []
+
+    for obb in obbs:
+        aabbs.append(obb.aabb())
+
+    ws = 0.0
+
+    for a in aabbs:
+        ws = max(ws, abs(a.cx + a.hx))
+        ws = max(ws, abs(a.cy + a.hy))
+        ws = max(ws, abs(a.cz + a.hz))
+        ws = max(ws, abs(a.cx - a.hx))
+        ws = max(ws, abs(a.cy - a.hy))
+        ws = max(ws, abs(a.cz - a.hz))
+
+    bvh = SpatialBVH()
+    bvh.build_from_aabbs(aabbs, ws * 2)
     adjacency = []
 
-    for i in range(N):
-        for j in range(i + 1, N):
-            if aabbs[i].intersects(aabbs[j]):
-                adjacency.extend([i, j, -1, -1])
+    for i in range(n):
+        hits = bvh.query_aabb(aabbs[i])
+
+        for j in hits:
+            if i < j and obbs[i].collides_with(obbs[j]):
+                adjacency.append(i)
+                adjacency.append(j)
+                adjacency.append(-1)
+                adjacency.append(-1)
 
     return adjacency
 
