@@ -5,6 +5,9 @@ from .plane import Plane
 from .point import Point
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 def _intersect_planes(planes: list[Plane], fallback: Point) -> Point:
     """Least-squares point on the planes, fallback fills any free direction."""
 
@@ -17,13 +20,10 @@ def _intersect_planes(planes: list[Plane], fallback: Point) -> Point:
             plane.a * fallback[0] + plane.b * fallback[1] + plane.c * fallback[2]
         )
 
-        return Point(
-            fallback[0] + t * plane.a,
-            fallback[1] + t * plane.b,
-            fallback[2] + t * plane.c,
-        )
+        return fallback + plane.z_axis * t
 
     eps = 1e-8
+
     lhs = Matrix(3, 3)
     rhs = Matrix(3, 1)
 
@@ -61,11 +61,11 @@ def _boundary_edges(mesh: Mesh) -> list[tuple[int, int]]:
 
     edges = []
 
-    for u, v in mesh.naked_edges(True):
-        if (u, v) in directed:
-            edges.append((u, v))
+    for edge in mesh.naked_edges(True):
+        if edge in directed:
+            edges.append(edge)
         else:
-            edges.append((v, u))
+            edges.append((edge[1], edge[0]))
 
     return edges
 
@@ -82,12 +82,16 @@ class MeshOffset:
             self.bottom = bottom  # Reversed original faces.
             self.sides = sides  # One quad per naked edge.
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Static constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     @staticmethod
     def from_mesh(mesh: Mesh, distance: float) -> Mesh:
         """One closed mesh: reversed bottom, offset top, one quad per naked edge."""
 
         planes = MeshOffset.offset_planes(mesh, distance)
         offsets = MeshOffset.offset_vertices(mesh, planes)
+
         result = Mesh()
         bottom = {}
         top = {}
@@ -109,8 +113,10 @@ class MeshOffset:
             result.add_face(bottom_face)
             result.add_face(top_face)
 
-        for u, v in _boundary_edges(mesh):
-            result.add_face([bottom[u], bottom[v], top[v], top[u]])
+        for edge in _boundary_edges(mesh):
+            result.add_face(
+                [bottom[edge[0]], bottom[edge[1]], top[edge[1]], top[edge[0]]]
+            )
 
         return result
 
@@ -120,6 +126,7 @@ class MeshOffset:
 
         planes = MeshOffset.offset_planes(mesh, distance)
         offsets = MeshOffset.offset_vertices(mesh, planes)
+
         layers = MeshOffset.Layers(Mesh(), Mesh(), Mesh())
         bottom = {}
         top = {}
@@ -144,8 +151,8 @@ class MeshOffset:
         side_bottom = {}
         side_top = {}
 
-        for u, v in _boundary_edges(mesh):
-            for vkey in (u, v):
+        for edge in _boundary_edges(mesh):
+            for vkey in edge:
                 if vkey not in side_bottom:
                     side_bottom[vkey] = layers.sides.add_vertex(mesh.vertex_point(vkey))
 
@@ -153,11 +160,19 @@ class MeshOffset:
                     side_top[vkey] = layers.sides.add_vertex(offsets[vkey])
 
             layers.sides.add_face(
-                [side_bottom[u], side_bottom[v], side_top[v], side_top[u]]
+                [
+                    side_bottom[edge[0]],
+                    side_bottom[edge[1]],
+                    side_top[edge[1]],
+                    side_top[edge[0]],
+                ]
             )
 
         return layers
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Geometry
+    # ═══════════════════════════════════════════════════════════════════════════
     @staticmethod
     def offset_planes(mesh: Mesh, distance: float) -> dict[int, Plane]:
         """Plane of each face translated by distance along its normal, by face key."""

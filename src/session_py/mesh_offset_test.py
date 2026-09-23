@@ -9,7 +9,7 @@ def test_mesh_offset_from_mesh():
     from session_py import MeshOffset
     from session_py import Mesh
     from session_py import Point
-    import copy as copier
+    from copy import deepcopy
 
     points = [
         Point(0, 0, 0),
@@ -19,7 +19,8 @@ def test_mesh_offset_from_mesh():
     ]
     mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
     result = MeshOffset.from_mesh(mesh, 1.0)
-    copy = copier.copy(result)
+    copy = deepcopy(result)
+
     MINI_CHECK(result.is_valid())
     MINI_CHECK(result.is_closed())
     MINI_CHECK(result == copy)
@@ -53,6 +54,7 @@ def test_mesh_offset_from_mesh_grid():
     ]
     mesh = Mesh.from_vertices_and_faces(points, faces)
     result = MeshOffset.from_mesh(mesh, 2.0)
+
     MINI_CHECK(result.is_valid())
     MINI_CHECK(result.is_closed())
     MINI_CHECK(result.number_of_vertices() == 18)
@@ -73,6 +75,7 @@ def test_mesh_offset_from_mesh_layers():
     ]
     mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
     layers = MeshOffset.from_mesh_layers(mesh, 1.0)
+
     MINI_CHECK(layers.bottom.is_valid())
     MINI_CHECK(layers.top.is_valid())
     MINI_CHECK(layers.sides.is_valid())
@@ -97,8 +100,11 @@ def test_mesh_offset_offset_planes():
     ]
     mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
     planes = MeshOffset.offset_planes(mesh, 1.0)
+
     MINI_CHECK(len(planes) == 1)
+
     plane = planes[0]
+
     MINI_CHECK(TOLERANCE.is_close(plane.a, 0.0))
     MINI_CHECK(TOLERANCE.is_close(plane.b, 0.0))
     MINI_CHECK(TOLERANCE.is_close(plane.c, 1.0))
@@ -132,6 +138,7 @@ def test_mesh_offset_offset_vertices():
     mesh = Mesh.from_vertices_and_faces(points, faces)
     planes = MeshOffset.offset_planes(mesh, 2.0)
     offsets = MeshOffset.offset_vertices(mesh, planes)
+
     MINI_CHECK(len(planes) == 4)
     MINI_CHECK(len(offsets) == 9)
 
@@ -159,8 +166,10 @@ def test_mesh_offset_json_roundtrip():
     filename = (
         Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.json"
     )
+
     result.file_json_dump(filename)
     loaded = Mesh.file_json_load(filename)
+
     MINI_CHECK(loaded == result)
     MINI_CHECK(loaded.number_of_vertices() == 8)
     MINI_CHECK(loaded.number_of_faces() == 6)
@@ -184,8 +193,10 @@ def test_mesh_offset_protobuf_roundtrip():
     filename = (
         Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.bin"
     )
+
     result.pb_dump(filename)
     loaded = Mesh.pb_load(filename)
+
     MINI_CHECK(loaded == result)
     MINI_CHECK(loaded.number_of_vertices() == 8)
     MINI_CHECK(loaded.number_of_faces() == 6)
