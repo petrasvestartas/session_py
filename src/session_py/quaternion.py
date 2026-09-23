@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
 import json
 import math
@@ -13,6 +12,7 @@ from .vector import Vector
 if TYPE_CHECKING:
     from pathlib import Path
     from .plane import Plane
+    from .proto import quaternion_pb2
 
 
 class Quaternion:
@@ -20,13 +20,16 @@ class Quaternion:
 
     __slots__ = ("_guid", "name", "scalar", "vector")
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, scalar: float = 1.0, vector: Vector | None = None):
         """Construct from raw components; vector is (i, j, k), not a rotation axis."""
 
-        self._guid = None
-        self.name = "my_quaternion"
-        self.scalar = scalar
-        self.vector = Vector(0.0, 0.0, 0.0) if vector is None else vector.duplicate()
+        self._guid = None  # Lazily minted GUID.
+        self.name = "my_quaternion"  # Quaternion name.
+        self.scalar = scalar  # Scalar part s.
+        self.vector = Vector(0.0, 0.0, 0.0) if vector is None else vector.duplicate()  # Vector part (x, y, z).
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -37,10 +40,13 @@ class Quaternion:
 
         return result
 
-    def duplicate(self) -> "Quaternion":
+    def duplicate(self) -> Quaternion:
         """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -48,6 +54,7 @@ class Quaternion:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -58,22 +65,25 @@ class Quaternion:
         """Set the guid."""
         self._guid = value
 
+    def refresh_guid(self) -> None:
+        """Clear the guid so a fresh one mints lazily on the next read."""
+        self._guid = None
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Static constructors
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
-    def identity() -> "Quaternion":
+    def identity() -> Quaternion:
         """Construct the rotation that does nothing: scalar 1, vector 0."""
         return Quaternion(1.0, Vector(0.0, 0.0, 0.0))
 
     @staticmethod
-    def from_components(scalar: float, vector: Vector) -> "Quaternion":
+    def from_components(scalar: float, vector: Vector) -> Quaternion:
         """Construct from raw components; vector is (i, j, k), not a rotation axis."""
         return Quaternion(scalar, vector)
 
     @staticmethod
-    def from_axis_angle(axis: Vector, angle: float) -> "Quaternion":
+    def from_axis_angle(axis: Vector, angle: float) -> Quaternion:
         """Construct the unit quaternion rotating by angle radians around axis."""
 
         if axis.magnitude() < 1e-10:
@@ -85,7 +95,7 @@ class Quaternion:
         return Quaternion(math.cos(half), ax * math.sin(half))
 
     @staticmethod
-    def from_arc(src: Vector, dst: Vector) -> "Quaternion":
+    def from_arc(src: Vector, dst: Vector) -> Quaternion:
         """Construct the shortest rotation taking direction src to direction dst."""
 
         s = src.normalized()
@@ -107,7 +117,7 @@ class Quaternion:
         return Quaternion(1.0 + dot_val, cross).normalized()
 
     @staticmethod
-    def from_euler(x: float, y: float, z: float) -> "Quaternion":
+    def from_euler(x: float, y: float, z: float) -> Quaternion:
         """Construct the rotation from Euler angles in XYZ convention."""
 
         s1 = math.sin(x * 0.5)
@@ -127,7 +137,7 @@ class Quaternion:
         )
 
     @staticmethod
-    def from_rotation(plane_a: "Plane", plane_b: "Plane") -> "Quaternion":
+    def from_rotation(plane_a: Plane, plane_b: Plane) -> Quaternion:
         """Construct the rotation mapping the frame of plane_a onto the frame of plane_b."""
 
         xa = plane_a.x_axis
@@ -169,6 +179,7 @@ class Quaternion:
 
         r = math.sqrt(s)
         s = 0.5 / r
+
         q = [0.0, 0.0, 0.0]
         q[i] = 0.5 * r
         q[j] = s * (m[i][j] + m[j][i])
@@ -179,9 +190,8 @@ class Quaternion:
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __getitem__(self, index: int) -> float:
-        """Return the mutable component by index (0=scalar, 1=x, 2=y, 3=z)."""
+        """Return the component by index (0=scalar, 1=x, 2=y, 3=z)."""
 
         if index == 0:
             return self.scalar
@@ -229,24 +239,24 @@ class Quaternion:
                 + self.vector * other.scalar
                 + self.vector.cross(other.vector),
             )
+
         return Quaternion(self.scalar * other, self.vector * other)
 
-    def __add__(self, other: "Quaternion") -> "Quaternion":
+    def __add__(self, other: Quaternion) -> Quaternion:
         """Return the component-wise sum."""
         return Quaternion(self.scalar + other.scalar, self.vector + other.vector)
 
-    def __sub__(self, other: "Quaternion") -> "Quaternion":
+    def __sub__(self, other: Quaternion) -> Quaternion:
         """Return the component-wise difference."""
         return Quaternion(self.scalar - other.scalar, self.vector - other.vector)
 
-    def __neg__(self) -> "Quaternion":
+    def __neg__(self) -> Quaternion:
         """Return the negated copy."""
         return Quaternion(-self.scalar, -self.vector)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
     def to_axis_angle(self) -> tuple[Vector, float]:
         """Return the unit axis and angle in radians; (0, 0, 1) and 0 near identity."""
 
@@ -262,12 +272,13 @@ class Quaternion:
 
     def rotate_vector(self, vec: Vector) -> Vector:
         """Return a rotated copy of vec: q * v * q^-1."""
+
         uv = self.vector.cross(vec)
         uuv = self.vector.cross(uv)
 
         return vec + (uv * self.scalar + uuv) * 2.0
 
-    def get_rotation(self) -> "Plane":
+    def get_rotation(self) -> Plane:
         """Return the world XY plane rotated by this quaternion."""
 
         from .plane import Plane
@@ -297,7 +308,7 @@ class Quaternion:
         """Return the squared magnitude without the square root."""
         return self.scalar * self.scalar + self.vector.dot(self.vector)
 
-    def normalized(self) -> "Quaternion":
+    def normalized(self) -> Quaternion:
         """Return a unit length copy; identity when the magnitude is zero."""
 
         mag = self.magnitude()
@@ -310,14 +321,15 @@ class Quaternion:
 
         return q
 
-    def conjugate(self) -> "Quaternion":
+    def conjugate(self) -> Quaternion:
         """Return (s, -v); the inverse of a unit quaternion."""
+
         q = Quaternion(self.scalar, -self.vector)
         q.name = self.name
 
         return q
 
-    def invert(self) -> "Quaternion":
+    def invert(self) -> Quaternion:
         """Return the multiplicative inverse: conjugate over squared magnitude."""
 
         mag2 = self.magnitude_squared()
@@ -330,11 +342,11 @@ class Quaternion:
 
         return q
 
-    def dot(self, other: "Quaternion") -> float:
+    def dot(self, other: Quaternion) -> float:
         """Return the 4D dot product."""
         return self.scalar * other.scalar + self.vector.dot(other.vector)
 
-    def slerp(self, other: "Quaternion", amount: float) -> "Quaternion":
+    def slerp(self, other: Quaternion, amount: float) -> Quaternion:
         """Return the spherical interpolation at constant angular velocity."""
 
         target = other
@@ -353,16 +365,15 @@ class Quaternion:
 
         return (self * scale1 + target * scale2) * (1.0 / math.sin(theta))
 
-    def nlerp(self, other: "Quaternion", amount: float) -> "Quaternion":
+    def nlerp(self, other: Quaternion, amount: float) -> Quaternion:
         """Return the normalized linear interpolation, cheaper than slerp."""
         return (self * (1.0 - amount) + other * amount).normalized()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
-        """Serialize to a JSON object."""
+        """Serialize to an ordered JSON object."""
 
         return {
             "guid": self.guid,
@@ -375,14 +386,12 @@ class Quaternion:
         }
 
     @classmethod
-    def __jsonload__(
-        cls, data: dict, guid: str = None, name: str = None
-    ) -> "Quaternion":
+    def __jsonload__(cls, data: dict, guid: str | None = None, name: str | None = None) -> Quaternion:
         """Deserialize from a JSON object."""
 
         q = cls(data["s"], Vector(data["x"], data["y"], data["z"]))
-        q.guid = guid if guid is not None else data["guid"]
-        q.name = name if name is not None else data["name"]
+        q.guid = guid or data["guid"]
+        q.name = name or data["name"]
 
         return q
 
@@ -391,27 +400,28 @@ class Quaternion:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "Quaternion":
+    def file_json_loads(cls, json_string: str) -> Quaternion:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a JSON file."""
+    def file_json_dump(self, filepath: str | Path) -> None:
+        """Write JSON to a file."""
+
         with open(filepath, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Quaternion":
-        """Read from a JSON file."""
+    def file_json_load(cls, filepath: str | Path) -> Quaternion:
+        """Read JSON from a file."""
+
         with open(filepath) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> quaternion_pb2.Quaternion:
+        """Convert to the protobuf message."""
 
         from .proto import quaternion_pb2
 
@@ -422,44 +432,58 @@ class Quaternion:
         proto.d = self.vector[2]
         proto.name = self.name
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Quaternion":
+    def from_proto(cls, proto: quaternion_pb2.Quaternion) -> Quaternion:
+        """Construct from the protobuf message."""
+
+        q = cls(proto.a, Vector(proto.b, proto.c, proto.d))
+        q.name = proto.name
+
+        return q
+
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> Quaternion:
         """Deserialize from protobuf bytes."""
 
         from .proto import quaternion_pb2
 
         proto = quaternion_pb2.Quaternion()
         proto.ParseFromString(data)
-        q = cls(proto.a, Vector(proto.b, proto.c, proto.d))
-        q.name = proto.name
 
-        return q
+        return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a protobuf file."""
+    def pb_dump(self, filepath: str | Path) -> None:
+        """Write protobuf bytes to a file."""
+
         with open(filepath, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Quaternion":
-        """Read from a protobuf file."""
+    def pb_load(cls, filepath: str | Path) -> Quaternion:
+        """Read protobuf bytes from a file."""
+
         with open(filepath, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "s, x, y, z"."""
+
         prec = Tolerance.ROUNDING
 
         return f"{TOLERANCE.format_number(self.scalar, prec)}, {TOLERANCE.format_number(self.vector[0], prec)}, {TOLERANCE.format_number(self.vector[1], prec)}, {TOLERANCE.format_number(self.vector[2], prec)}"
 
     def __repr__(self) -> str:
         """Return "Quaternion(name, s, x, y, z)"."""
+
         prec = Tolerance.ROUNDING
 
         return f"Quaternion({self.name}, {TOLERANCE.format_number(self.scalar, prec)}, {TOLERANCE.format_number(self.vector[0], prec)}, {TOLERANCE.format_number(self.vector[1], prec)}, {TOLERANCE.format_number(self.vector[2], prec)})"

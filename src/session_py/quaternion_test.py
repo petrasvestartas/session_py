@@ -17,6 +17,7 @@ def test_quaternion_constructor():
     q[1] = 0.0
     q[2] = 1.0
     q[3] = 0.0
+
     s_val = q[0]
     x = q[1]
     y = q[2]
@@ -123,6 +124,7 @@ def test_quaternion_from_axis_angle():
     MINI_CHECK(TOLERANCE.is_close(q.vector[2], math.sin(PI / 4.0)))
 
     zero_axis = Quaternion.from_axis_angle(Vector(0.0, 0.0, 0.0), PI / 2.0)
+
     MINI_CHECK(zero_axis == Quaternion.identity())
 
 
@@ -298,6 +300,7 @@ def test_quaternion_slerp():
 
     antipodal = -Quaternion.identity()
     same_rotation = q1.slerp(antipodal, 0.5)
+
     MINI_CHECK(TOLERANCE.is_close(same_rotation.scalar, 1.0))
     MINI_CHECK(TOLERANCE.is_close(same_rotation.vector.magnitude(), 0.0))
 
@@ -324,13 +327,19 @@ def test_quaternion_json_roundtrip():
     q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), PI / 2.0)
     q.name = "test_quaternion"
 
+    guid = q.guid
     filename = "serialization/test_quaternion.json"
     q.file_json_dump(filename)
+
     loaded = Quaternion.file_json_load(filename)
+    parsed = Quaternion.file_json_loads(q.file_json_dumps())
 
     MINI_CHECK(loaded.name == "test_quaternion")
     MINI_CHECK(TOLERANCE.is_close(loaded.scalar, q.scalar))
     MINI_CHECK(TOLERANCE.is_close(loaded.vector[2], q.vector[2]))
+    MINI_CHECK(parsed == q)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(parsed.guid == guid)
 
 
 @MINI_TEST("Quaternion", "Protobuf Roundtrip")
@@ -343,11 +352,16 @@ def test_quaternion_protobuf_roundtrip():
 
     filename = "serialization/test_quaternion.bin"
     q.pb_dump(filename)
+
     loaded = Quaternion.pb_load(filename)
+    parsed = Quaternion.pb_loads(q.pb_dumps())
+    converted = Quaternion.from_proto(q.to_proto())
 
     MINI_CHECK(loaded.name == "test_quaternion")
     MINI_CHECK(TOLERANCE.is_close(loaded.scalar, q.scalar))
     MINI_CHECK(TOLERANCE.is_close(loaded.vector[2], q.vector[2]))
+    MINI_CHECK(parsed == q)
+    MINI_CHECK(converted == q)
 
 
 if __name__ == "__main__":
