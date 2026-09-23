@@ -12,13 +12,16 @@ if TYPE_CHECKING:
     from .nurbssurface import NurbsSurface
     from .mesh import Mesh
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Helpers
+# ═══════════════════════════════════════════════════════════════════════════
 MAX_SUBS = 24
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Sampling
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _norm(v: Vector) -> float:
     """Euclidean length without the zero gate of magnitude()."""
     return math.sqrt(v.magnitude_squared())
@@ -65,8 +68,6 @@ def _bbox_diagonal(s: NurbsSurface) -> float:
 # ═══════════════════════════════════════════════════════════════════════════
 # Subdivisions
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _span_angle(
     s: NurbsSurface, dir: int, t0: float, t1: float, osp: list[float]
 ) -> float:
@@ -76,6 +77,7 @@ def _span_angle(
 
     for si in range(len(osp) - 1):
         fixed = (osp[si] + osp[si + 1]) * 0.5
+
         first = Vector(0.0, 0.0, 0.0)
         last = Vector(0.0, 0.0, 0.0)
         has_first = False
@@ -99,6 +101,7 @@ def _span_angle(
             continue
 
         dot = max(-1.0, min(1.0, first.dot(last)))
+
         max_angle = max(max_angle, math.acos(dot) * 180.0 / PI)
 
     return max_angle
@@ -120,6 +123,7 @@ def _span_deviation(
         for k in range(1, 4):
             frac = k / 4.0
             pm = _point_along(s, dir, t0 + frac * (t1 - t0), fixed)
+
             max_dev = max(max_dev, _norm(pm - (p0 + (p1 - p0) * frac)))
 
     return max_dev
@@ -141,6 +145,7 @@ def _span_subs(
     for i in range(len(sp) - 1):
         if degree > 1:
             angle = _span_angle(s, dir, sp[i], sp[i + 1], osp)
+
             subs[i] = min(max(math.ceil(angle / max_angle_deg), 1), MAX_SUBS)
 
         dev = _span_deviation(s, dir, sp[i], sp[i + 1], osp)
@@ -167,6 +172,7 @@ def _isocurve_length(
 
     for i in range(1, n + 1):
         next = _point_along(s, dir, sp[0] + i * (sp[-1] - sp[0]) / n, fixed)
+
         length += _norm(next - prev)
         prev = next
 
@@ -223,6 +229,7 @@ def _twist_subs(
             pm = s.point_at((usp[i] + usp[i + 1]) * 0.5, (vsp[j] + vsp[j + 1]) * 0.5)
             p00 = s.point_at(usp[i], vsp[j])
             p11 = s.point_at(usp[i + 1], vsp[j + 1])
+
             max_twist = max(max_twist, _norm(pm - Point.sum(p00, p11) * 0.5))
 
     if max_twist <= twist_tol:
@@ -246,14 +253,13 @@ def _make_odd(subs: list[int]) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Parameters
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _arclen_params(
     s: NurbsSurface, dir: int, n: int, sp: list[float], fixed: float
 ) -> list[float]:
     """n parameters spaced evenly by arc length along the iso-curve at fixed."""
 
     nsample = max(n * 20, 200)
+
     st = [0.0] * (nsample + 1)
     sl = [0.0] * (nsample + 1)
     prev = _point_along(s, dir, sp[0], fixed)
@@ -265,6 +271,7 @@ def _arclen_params(
             continue
 
         next = _point_along(s, dir, st[k], fixed)
+
         sl[k] = sl[k - 1] + _norm(next - prev)
         prev = next
 
@@ -279,6 +286,7 @@ def _arclen_params(
 
         a = j - 1 if j > 0 else 0
         frac = (target - sl[a]) / (sl[j] - sl[a]) if sl[j] > sl[a] else 0.0
+
         params.append(st[a] + frac * (st[j] - st[a]))
 
     params.append(sp[-1])
@@ -307,6 +315,7 @@ def _fix_closed_gap(params: list[float], domain_end: float) -> None:
         return
 
     params.pop()
+
     wrap_gap = domain_end - params[-1]
     max_gap = 0.0
 
@@ -326,12 +335,11 @@ def _fix_closed_gap(params: list[float], domain_end: float) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Vertices and faces
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _add_vertex_uv(s: NurbsSurface, mesh: Mesh, u: float, v: float) -> int:
     """Vertex at S(u, v) tagged with its parameters."""
 
     key = mesh.add_vertex(s.point_at(u, v))
+
     mesh.vertex[key].attributes["u"] = u
     mesh.vertex[key].attributes["v"] = v
 
@@ -402,8 +410,6 @@ def _add_faces(
 # ═══════════════════════════════════════════════════════════════════════════
 # Normals
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _fan_normals(mesh: Mesh) -> list[Vector]:
     """Sum of the unnormalized face normals around each vertex key, faces taken in key order."""
 
@@ -437,8 +443,9 @@ def _set_normals(
     sums = _fan_normals(mesh)
 
     for key, vd in mesh.vertex.items():
-        n = Vector(0.0, 0.0, 1.0)
         fan_length = _norm(sums[key])
+
+        n = Vector(0.0, 0.0, 1.0)
 
         if math.isfinite(fan_length) and fan_length > 0.0:
             n = sums[key] / fan_length
@@ -460,10 +467,10 @@ def _crease_flags(s: NurbsSurface, u: float, v: float) -> int:
     flags = 0
 
     for dir in range(2):
-        start, end = s.domain(dir)
+        domain = s.domain(dir)
         value = uv[dir]
 
-        if value <= start or value >= end:
+        if value <= domain[0] or value >= domain[1]:
             continue
 
         if list(s.m_nurbsknot[dir]).count(value) < s.degree(dir):
@@ -471,8 +478,10 @@ def _crease_flags(s: NurbsSurface, u: float, v: float) -> int:
 
         lo = [u, v]
         hi = [u, v]
+
         lo[dir] = math.nextafter(value, -math.inf)
         hi[dir] = math.nextafter(value, math.inf)
+
         a = s.normal_at(lo[0], lo[1])
         b = s.normal_at(hi[0], hi[1])
         length = math.sqrt(a.magnitude_squared() * b.magnitude_squared())
@@ -522,20 +531,19 @@ def _crease_target(mesh: Mesh, copies: dict, used: set, key: int, side: int) -> 
         return key
 
     target = mesh.add_vertex(mesh.vertex[key].position())
+
     mesh.vertex[target] = copy.deepcopy(mesh.vertex[key])
     copies[identity] = target
 
     return target
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# RemeshNurbsSurfaceGrid
-# ═══════════════════════════════════════════════════════════════════════════
-
-
 class RemeshNurbsSurfaceGrid:
     """Grid mesh of a NURBS surface: spans split by normal turn and chord height, poles fanned, seams closed."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Static constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     @staticmethod
     def from_u_v(s: NurbsSurface, max_u: int, max_v: int) -> Mesh:
         """Grid at 20 degrees and 0.5 percent of the bbox diagonal; max_u and max_v fix the parameter counts when positive."""
@@ -557,9 +565,12 @@ class RemeshNurbsSurfaceGrid:
         vsp = s.get_span_vector(1)
         bbox_diag = _bbox_diagonal(s)
         chord_tol = bbox_diag * chord_factor
+
         u_subs = _span_subs(s, 0, usp, vsp, max_angle_deg, chord_tol)
         v_subs = _span_subs(s, 1, vsp, usp, max_angle_deg, chord_tol)
+
         _balance_subs(s, usp, vsp, u_subs, v_subs)
+
         sing_v0 = s.is_singular(0)
         sing_v1 = s.is_singular(2)
 
@@ -583,6 +594,7 @@ class RemeshNurbsSurfaceGrid:
 
         u_mid = (usp[0] + usp[-1]) * 0.5
         v_mid = (vsp[0] + vsp[-1]) * 0.5
+
         us = (
             _arclen_params(s, 0, max(max_u, 2), usp, v_mid)
             if max_u > 0
@@ -601,6 +613,7 @@ class RemeshNurbsSurfaceGrid:
             _fix_closed_gap(vs, vsp[-1])
 
         nv = len(vs)
+
         mesh = Mesh()
         south = None
         north = None
@@ -614,6 +627,7 @@ class RemeshNurbsSurfaceGrid:
         grid = _add_grid(
             s, mesh, us, vs, 1 if sing_v0 else 0, nv - 1 if sing_v1 else nv
         )
+
         _add_faces(
             mesh,
             grid,
@@ -628,6 +642,9 @@ class RemeshNurbsSurfaceGrid:
 
         return mesh
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Normals
+    # ═══════════════════════════════════════════════════════════════════════════
     @staticmethod
     def _split_crease_normals(s: NurbsSurface, mesh: Mesh) -> None:
         """Split shading vertices at internal C0 knots whose one-sided normals disagree."""
@@ -658,6 +675,7 @@ class RemeshNurbsSurfaceGrid:
 
             center[0] /= len(vertices)
             center[1] /= len(vertices)
+
             face_normal = mesh.face_normal(face_key)
 
             for corner in range(len(vertices)):
@@ -670,6 +688,7 @@ class RemeshNurbsSurfaceGrid:
                     mesh.vertex[key].attributes["u"],
                     mesh.vertex[key].attributes["v"],
                 ]
+
                 side = _crease_side(center, uv, candidates[key])
                 target = _crease_target(mesh, copies, used, key, side)
                 n = s.normal_at(uv[0], uv[1])
@@ -681,6 +700,7 @@ class RemeshNurbsSurfaceGrid:
                         if face_normal is not None and n.dot(face_normal) < 0.0
                         else 1.0
                     )
+
                     mesh.vertex[target].set_normal(
                         sign * n[0] / length, sign * n[1] / length, sign * n[2] / length
                     )
