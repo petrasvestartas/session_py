@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Union
 import copy
 import json
 import math
@@ -12,24 +11,28 @@ from .vector import Vector
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .proto import point_pb2
     from .xform import Xform
 
 
 class Point:
     """A 3D point with display width and color."""
 
-    __slots__ = ("_guid", "name", "width", "pointcolor", "_x", "_y", "_z")
+    __slots__ = ("_guid", "_x", "_y", "_z", "name", "width", "pointcolor")
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0, name: str = "my_point"):
         """Construct from coordinates and a name."""
 
-        self._guid = None
-        self.name = name
-        self.width = 1.0
-        self.pointcolor = Color.black()
-        self._x = x
-        self._y = y
-        self._z = z
+        self._guid = None  # Lazily minted GUID.
+        self._x = x  # X coordinate.
+        self._y = y  # Y coordinate.
+        self._z = z  # Z coordinate.
+        self.name = name  # Point name.
+        self.width = 1.0  # Display width.
+        self.pointcolor = Color.black()  # Display color.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -41,10 +44,13 @@ class Point:
 
         return result
 
-    def duplicate(self) -> "Point":
+    def duplicate(self) -> Point:
         """Copy with a new guid and the same data."""
         return copy.deepcopy(self)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -52,6 +58,7 @@ class Point:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -69,7 +76,6 @@ class Point:
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __getitem__(self, index: int) -> float:
         """Return the coordinate by index (0=x, 1=y, 2=z)."""
 
@@ -115,7 +121,7 @@ class Point:
         """Compare name, coordinates, width and color within rounding."""
         return not self == other
 
-    def __imul__(self, factor: float) -> "Point":
+    def __imul__(self, factor: float) -> Point:
         """Scale in place."""
 
         self._x *= factor
@@ -124,7 +130,7 @@ class Point:
 
         return self
 
-    def __itruediv__(self, factor: float) -> "Point":
+    def __itruediv__(self, factor: float) -> Point:
         """Divide in place."""
 
         self._x /= factor
@@ -133,7 +139,7 @@ class Point:
 
         return self
 
-    def __iadd__(self, other: Vector) -> "Point":
+    def __iadd__(self, other: Vector) -> Point:
         """Translate in place."""
 
         self._x += other[0]
@@ -142,7 +148,7 @@ class Point:
 
         return self
 
-    def __isub__(self, other: Vector) -> "Point":
+    def __isub__(self, other: Vector) -> Point:
         """Translate back in place."""
 
         self._x -= other[0]
@@ -151,40 +157,35 @@ class Point:
 
         return self
 
-    def __mul__(self, factor: float) -> "Point":
+    def __mul__(self, factor: float) -> Point:
         """Return a scaled copy."""
         return Point(self._x * factor, self._y * factor, self._z * factor)
 
-    def __truediv__(self, factor: float) -> "Point":
+    def __truediv__(self, factor: float) -> Point:
         """Return a divided copy."""
         return Point(self._x / factor, self._y / factor, self._z / factor)
 
-    def __add__(self, other: Vector) -> "Point":
+    def __add__(self, other: Vector) -> Point:
         """Return a translated copy."""
         return Point(self._x + other[0], self._y + other[1], self._z + other[2])
 
-    def __sub__(self, other: Union["Point", Vector]) -> Union["Point", Vector]:
+    def __sub__(self, other: Point | Vector) -> Point | Vector:
         """Return a copy translated back by a Vector, or the vector from another Point."""
+
         if isinstance(other, Point):
             return Vector(self._x - other._x, self._y - other._y, self._z - other._z)
 
         return Point(self._x - other[0], self._y - other[1], self._z - other[2])
 
     @staticmethod
-    def sum(p0: "Point", p1: "Point") -> "Point":
+    def sum(p0: Point, p1: Point) -> Point:
         """Return the coordinate-wise sum of two points."""
         return Point(p0[0] + p1[0], p0[1] + p1[1], p0[2] + p1[2])
-
-    @staticmethod
-    def sub(p0: "Point", p1: "Point") -> "Point":
-        """Return the coordinate-wise difference of two points."""
-        return Point(p0[0] - p1[0], p0[1] - p1[1], p0[2] - p1[2])
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def transform(self, xform: "Xform") -> None:
+    def transform(self, xform: Xform) -> None:
         """Transform in place."""
 
         x = self._x
@@ -193,12 +194,14 @@ class Point:
         m = xform.m
         w = m[3] * x + m[7] * y + m[11] * z + m[15]
         w_inv = 1.0 / w if abs(w) > 1e-10 else 1.0
+
         self._x = (m[0] * x + m[4] * y + m[8] * z + m[12]) * w_inv
         self._y = (m[1] * x + m[5] * y + m[9] * z + m[13]) * w_inv
         self._z = (m[2] * x + m[6] * y + m[10] * z + m[14]) * w_inv
 
-    def transformed(self, xform: "Xform") -> "Point":
+    def transformed(self, xform: Xform) -> Point:
         """Return a transformed copy."""
+
         result = self.duplicate()
         result.transform(xform)
 
@@ -207,17 +210,16 @@ class Point:
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
-    def is_ccw(a: "Point", b: "Point", c: "Point") -> bool:
+    def is_ccw(a: Point, b: Point, c: Point) -> bool:
         """Return whether a, b, c turn counter-clockwise in the xy plane."""
         return (c[1] - a[1]) * (b[0] - a[0]) > (b[1] - a[1]) * (c[0] - a[0])
 
-    def mid_point(self, p: "Point") -> "Point":
+    def mid_point(self, p: Point) -> Point:
         """Return the mid point between this point and p."""
         return Point((self._x + p[0]) / 2.0, (self._y + p[1]) / 2.0, (self._z + p[2]) / 2.0)
 
-    def distance(self, p: "Point", double_min: float = 1e-12) -> float:
+    def distance(self, p: Point, double_min: float = 1e-12) -> float:
         """Return the distance to p, scaled to stay finite for large coordinates."""
 
         dx = abs(self._x - p[0])
@@ -240,7 +242,7 @@ class Point:
 
         return 0.0
 
-    def squared_distance(self, p: "Point", double_min: float = 1e-12) -> float:
+    def squared_distance(self, p: Point, double_min: float = 1e-12) -> float:
         """Return the squared distance to p, scaled to stay finite for large coordinates."""
 
         dx = abs(self._x - p[0])
@@ -264,12 +266,12 @@ class Point:
         return 0.0
 
     @staticmethod
-    def lerp(a: "Point", b: "Point", t: float) -> "Point":
+    def lerp(a: Point, b: Point, t: float) -> Point:
         """Return the point at parameter t in [0, 1] between a and b."""
         return a + (b - a) * t
 
     @staticmethod
-    def interpolate(from_pt: "Point", to_pt: "Point", steps: int, kind: int = 0) -> list["Point"]:
+    def interpolate(from_pt: Point, to_pt: Point, steps: int, kind: int = 0) -> list[Point]:
         """Return evenly spaced points between from and to (kind: 0=no endpoints, 1=both, 2=start only)."""
 
         points = []
@@ -286,7 +288,7 @@ class Point:
         return points
 
     @staticmethod
-    def area(points: list["Point"]) -> float:
+    def area(points: list[Point]) -> float:
         """Return the shoelace area of a polygon in the xy plane."""
 
         n = len(points)
@@ -300,7 +302,7 @@ class Point:
         return abs(area) / 2.0
 
     @staticmethod
-    def centroid_quad(vertices: list["Point"]) -> "Point":
+    def centroid_quad(vertices: list[Point]) -> Point:
         """Return the area-weighted centroid of a quadrilateral."""
 
         if len(vertices) != 4:
@@ -314,8 +316,9 @@ class Point:
             p1 = vertices[(i + 1) % 4]
             p2 = vertices[(i + 2) % 4]
             tri_area = abs(p0[0] * (p1[1] - p2[1]) + p1[0] * (p2[1] - p0[1]) + p2[0] * (p0[1] - p1[1])) / 2.0
-            total_area += tri_area
             tri_centroid = Vector((p0[0] + p1[0] + p2[0]) / 3.0, (p0[1] + p1[1] + p2[1]) / 3.0, (p0[2] + p1[2] + p2[2]) / 3.0)
+
+            total_area += tri_area
             centroid_sum += tri_centroid * tri_area
 
         result = centroid_sum / total_area
@@ -323,7 +326,7 @@ class Point:
         return Point(result[0], result[1], result[2])
 
     @staticmethod
-    def centroid(points: list["Point"]) -> "Point":
+    def centroid(points: list[Point]) -> Point:
         """Return the arithmetic mean of points; empty input returns the origin."""
 
         if not points:
@@ -343,7 +346,7 @@ class Point:
         return Point(cx / n, cy / n, cz / n)
 
     @staticmethod
-    def dihedral_angle_deg(p: "Point", q: "Point", r: "Point", s: "Point") -> float:
+    def dihedral_angle_deg(p: Point, q: Point, r: Point, s: Point) -> float:
         """Return the unsigned dihedral angle in degrees of edge pq between half-planes pqr and pqs."""
 
         pq = q - p
@@ -357,22 +360,15 @@ class Point:
         if m1 < Tolerance.ZERO_TOLERANCE or m2 < Tolerance.ZERO_TOLERANCE:
             return 0.0
 
-        cos_t = n1.dot(n2) / (m1 * m2)
-
-        if cos_t > 1.0:
-            cos_t = 1.0
-
-        if cos_t < -1.0:
-            cos_t = -1.0
+        cos_t = max(-1.0, min(1.0, n1.dot(n2) / (m1 * m2)))
 
         return math.acos(cos_t) * (180.0 / 3.141592653589793)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
-        """Serialize to a JSON object."""
+        """Serialize to an ordered JSON object."""
 
         return {
             "guid": self.guid,
@@ -386,14 +382,14 @@ class Point:
         }
 
     @classmethod
-    def __jsonload__(cls, data: dict, guid: str = None, name: str = None) -> "Point":
+    def __jsonload__(cls, data: dict, guid: str | None = None, name: str | None = None) -> Point:
         """Deserialize from a JSON object."""
 
         from .file_encoders import file_decode_node
 
         point = cls(data["x"], data["y"], data["z"])
-        point.guid = guid if guid is not None else data["guid"]
-        point.name = name if name is not None else data["name"]
+        point.guid = guid or data["guid"]
+        point.name = name or data["name"]
         point.pointcolor = file_decode_node(data["pointcolor"])
         point.width = data["width"]
 
@@ -404,56 +400,49 @@ class Point:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, json_string: str) -> "Point":
+    def file_json_loads(cls, json_string: str) -> Point:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a JSON file."""
+    def file_json_dump(self, filepath: str | Path) -> None:
+        """Write JSON to a file."""
+
         with open(filepath, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Point":
-        """Read from a JSON file."""
+    def file_json_load(cls, filepath: str | Path) -> Point:
+        """Read JSON from a file."""
+
         with open(filepath) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Protobuf
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    def to_proto(self) -> point_pb2.Point:
+        """Convert to the protobuf message."""
 
         from .proto import point_pb2
 
         proto = point_pb2.Point()
 
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
 
         proto.name = self.name
         proto.x = self._x
         proto.y = self._y
         proto.z = self._z
         proto.width = self.width
-        proto.pointcolor.name = self.pointcolor.name
-        proto.pointcolor.r = self.pointcolor.r
-        proto.pointcolor.g = self.pointcolor.g
-        proto.pointcolor.b = self.pointcolor.b
-        proto.pointcolor.a = self.pointcolor.a
+        proto.pointcolor.CopyFrom(self.pointcolor.to_proto())
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Point":
-        """Deserialize from protobuf bytes."""
+    def from_proto(cls, proto: point_pb2.Point) -> Point:
+        """Construct from the protobuf message."""
 
-        from .proto import point_pb2
-
-        proto = point_pb2.Point()
-        proto.ParseFromString(data)
         point = cls(proto.x, proto.y, proto.z)
 
         if proto.guid:
@@ -461,37 +450,51 @@ class Point:
 
         point.name = proto.name
         point.width = proto.width
-        point.pointcolor.name = proto.pointcolor.name
-        point.pointcolor.r = proto.pointcolor.r
-        point.pointcolor.g = proto.pointcolor.g
-        point.pointcolor.b = proto.pointcolor.b
-        point.pointcolor.a = proto.pointcolor.a
+        point.pointcolor = Color.from_proto(proto.pointcolor)
 
         return point
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a protobuf file."""
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> Point:
+        """Deserialize from protobuf bytes."""
+
+        from .proto import point_pb2
+
+        proto = point_pb2.Point()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
+    def pb_dump(self, filepath: str | Path) -> None:
+        """Write protobuf bytes to a file."""
+
         with open(filepath, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Point":
-        """Read from a protobuf file."""
+    def pb_load(cls, filepath: str | Path) -> Point:
+        """Read protobuf bytes from a file."""
+
         with open(filepath, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "x, y, z"."""
+
         prec = Tolerance.ROUNDING
 
         return f"{TOLERANCE.format_number(self._x, prec)}, {TOLERANCE.format_number(self._y, prec)}, {TOLERANCE.format_number(self._z, prec)}"
 
     def __repr__(self) -> str:
         """Return "Point(name, x, y, z, Color(...), width)"."""
+
         prec = Tolerance.ROUNDING
 
         return f"Point({self.name}, {TOLERANCE.format_number(self._x, prec)}, {TOLERANCE.format_number(self._y, prec)}, {TOLERANCE.format_number(self._z, prec)}, {repr(self.pointcolor)}, {TOLERANCE.format_number(self.width, prec)})"

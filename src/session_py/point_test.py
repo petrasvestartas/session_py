@@ -6,8 +6,8 @@ from .tolerance import TOLERANCE
 
 @MINI_TEST("Point", "Constructor")
 def test_point_constructor():
-    from session_py import Point
     from session_py import Color
+    from session_py import Point
     from session_py import Vector
 
     p = Point(1.0, 2.0, 3.0)
@@ -28,10 +28,13 @@ def test_point_constructor():
 
     pmult = p.duplicate()
     pmult *= 2.0
+
     pdiv = p.duplicate()
     pdiv /= 2.0
+
     padd = p.duplicate()
     padd += Vector(1.0, 1.0, 1.0)
+
     psub = p.duplicate()
     psub -= Vector(1.0, 1.0, 1.0)
 
@@ -44,7 +47,7 @@ def test_point_constructor():
     p1 = Point(1.0, 2.0, 3.0)
     p2 = Point(4.0, 5.0, 6.0)
     psum = Point.sum(p1, p2)
-    pdif = Point.sub(p2, p1)
+    pdif = p2 - p1
 
     MINI_CHECK(p.name == "my_point")
     MINI_CHECK(p[0] == 10.0 and p[1] == 20.0 and p[2] == 30.0)
@@ -85,17 +88,20 @@ def test_point_transformation():
 
 @MINI_TEST("Point", "Json Roundtrip")
 def test_point_json_roundtrip():
-    from session_py import Point
-    from session_py import Color
     from pathlib import Path
+    from session_py import Color
+    from session_py import Point
 
     p = Point(1.5, 2.5, 3.5, "test_point")
     p.width = 2.0
     p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
 
+    guid = p.guid
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_point.json"
     p.file_json_dump(filename)
+
     loaded = Point.file_json_load(filename)
+    parsed = Point.file_json_loads(p.file_json_dumps())
 
     MINI_CHECK(loaded.name == "test_point")
     MINI_CHECK(loaded[0] == 1.5 and loaded[1] == 2.5 and loaded[2] == 3.5)
@@ -104,22 +110,33 @@ def test_point_json_roundtrip():
     MINI_CHECK(loaded.pointcolor[1] == 0.5)
     MINI_CHECK(loaded.pointcolor[2] == 0.25)
     MINI_CHECK(loaded.pointcolor[3] == 1.0)
+    MINI_CHECK(parsed == p)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(parsed.guid == guid)
 
 
 @MINI_TEST("Point", "Protobuf Roundtrip")
 def test_point_protobuf_roundtrip():
-    from session_py import Point
-    from session_py import Color
     from pathlib import Path
+    from session_py import Color
+    from session_py import Point
 
+    fresh = Point()
+    fresh_proto = fresh.to_proto()
     p = Point(1.5, 2.5, 3.5, "test_point")
     p.width = 2.0
     p.pointcolor = Color(1.0, 0.5, 0.25, 1.0)
 
+    guid = p.guid
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_point.bin"
     p.pb_dump(filename)
-    loaded = Point.pb_load(filename)
 
+    loaded = Point.pb_load(filename)
+    parsed = Point.pb_loads(p.pb_dumps())
+    converted = Point.from_proto(p.to_proto())
+
+    MINI_CHECK(not fresh.has_guid())
+    MINI_CHECK(fresh_proto.guid == "")
     MINI_CHECK(loaded.name == "test_point")
     MINI_CHECK(loaded[0] == 1.5 and loaded[1] == 2.5 and loaded[2] == 3.5)
     MINI_CHECK(loaded.width == 2.0)
@@ -127,6 +144,11 @@ def test_point_protobuf_roundtrip():
     MINI_CHECK(loaded.pointcolor[1] == 0.5)
     MINI_CHECK(loaded.pointcolor[2] == 0.25)
     MINI_CHECK(loaded.pointcolor[3] == 1.0)
+    MINI_CHECK(parsed == p)
+    MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(parsed.guid == guid)
+    MINI_CHECK(converted == p)
+    MINI_CHECK(converted.guid == guid)
 
 
 @MINI_TEST("Point", "Is Ccw")
