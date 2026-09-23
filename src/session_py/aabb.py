@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from .polyline import Polyline
     from .xform import Xform
 
-NUM_SAMPLES = 20
-MAX_ITER = 20
+NUM_SAMPLES = 20  # Samples per span when searching curve extrema.
+MAX_ITER = 20  # Newton iterations per extremum.
 
 
 class AABB:
@@ -23,6 +23,9 @@ class AABB:
 
     __slots__ = ("cx", "cy", "cz", "hx", "hy", "hz")
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(
         self,
         cx: float = 0.0,
@@ -44,7 +47,6 @@ class AABB:
     # ═══════════════════════════════════════════════════════════════════════════
     # Static constructors
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def from_point(point: Point, inflate: float = 0.0) -> "AABB":
         """Construct the box of half-size inflate around point."""
@@ -94,9 +96,7 @@ class AABB:
     @staticmethod
     def from_mesh(mesh: "Mesh", inflate: float = 0.0) -> "AABB":
         """Construct the tight box of the vertices grown by inflate."""
-        vertices, faces = mesh.to_vertices_and_faces()
-
-        return AABB.from_points(vertices, inflate)
+        return AABB.from_points(mesh.to_vertices_and_faces()[0], inflate)
 
     @staticmethod
     def from_pointcloud(pointcloud: "PointCloud", inflate: float = 0.0) -> "AABB":
@@ -120,7 +120,9 @@ class AABB:
 
             return AABB.from_points(points, inflate)
 
-        t0, t1 = curve.domain()
+        t0 = curve.domain_start()
+        t1 = curve.domain_end()
+
         points.append(curve.point_at(t0))
         points.append(curve.point_at(t1))
 
@@ -215,19 +217,19 @@ class AABB:
             if len(deriv) < 3:
                 break
 
-            f = deriv[1][axis]
-            fp = deriv[2][axis]
+            d1 = deriv[1][axis]
+            d2 = deriv[2][axis]
 
-            if abs(f) < 1e-12:
+            if abs(d1) < 1e-12:
                 break
 
-            if abs(fp) > 1e-14:
-                t_new = t_root - f / fp
+            if abs(d2) > 1e-14:
+                t_new = t_root - d1 / d2
 
                 if t_new >= t_lo and t_new <= t_hi:
                     t_root = t_new
                 else:
-                    if f * d_start < 0:
+                    if d1 * d_start < 0:
                         t_hi = t_root
                     else:
                         t_lo = t_root
@@ -241,20 +243,19 @@ class AABB:
             if len(deriv_check) < 2:
                 continue
 
-            f_check = deriv_check[1][axis]
+            d_check = deriv_check[1][axis]
 
-            if f_check * d_start < 0:
+            if d_check * d_start < 0:
                 t_hi = t_root
             else:
                 t_lo = t_root
-                d_start = f_check
+                d_start = d_check
 
         return t_root
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __eq__(self, other) -> bool:
         """Compare center and half-size to 1e-6."""
 
@@ -272,12 +273,11 @@ class AABB:
 
     def __ne__(self, other) -> bool:
         """Compare center and half-size to 1e-6."""
-        return not self.__eq__(other)
+        return not self == other
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
     def min_point(self) -> Point:
         """Return the min corner."""
         return Point(self.cx - self.hx, self.cy - self.hy, self.cz - self.hz)
@@ -315,11 +315,11 @@ class AABB:
     def closest_point(self, pt: Point) -> Point:
         """Return pt clamped to the box."""
 
-        x = max(self.cx - self.hx, min(self.cx + self.hx, pt[0]))
-        y = max(self.cy - self.hy, min(self.cy + self.hy, pt[1]))
-        z = max(self.cz - self.hz, min(self.cz + self.hz, pt[2]))
-
-        return Point(x, y, z)
+        return Point(
+            max(self.cx - self.hx, min(self.cx + self.hx, pt[0])),
+            max(self.cy - self.hy, min(self.cy + self.hy, pt[1])),
+            max(self.cz - self.hz, min(self.cz + self.hz, pt[2])),
+        )
 
     def contains(self, pt: Point) -> bool:
         """Return whether pt is inside or on the box."""
@@ -375,21 +375,21 @@ class AABB:
     def get_edges(self) -> list[Line]:
         """Return the bottom loop, top loop, then the four verticals."""
 
-        c = self.corners()
+        points = self.corners()
 
         return [
-            Line.from_points(c[0], c[1]),
-            Line.from_points(c[1], c[2]),
-            Line.from_points(c[2], c[3]),
-            Line.from_points(c[3], c[0]),
-            Line.from_points(c[4], c[5]),
-            Line.from_points(c[5], c[6]),
-            Line.from_points(c[6], c[7]),
-            Line.from_points(c[7], c[4]),
-            Line.from_points(c[0], c[4]),
-            Line.from_points(c[1], c[5]),
-            Line.from_points(c[2], c[6]),
-            Line.from_points(c[3], c[7]),
+            Line.from_points(points[0], points[1]),
+            Line.from_points(points[1], points[2]),
+            Line.from_points(points[2], points[3]),
+            Line.from_points(points[3], points[0]),
+            Line.from_points(points[4], points[5]),
+            Line.from_points(points[5], points[6]),
+            Line.from_points(points[6], points[7]),
+            Line.from_points(points[7], points[4]),
+            Line.from_points(points[0], points[4]),
+            Line.from_points(points[1], points[5]),
+            Line.from_points(points[2], points[6]),
+            Line.from_points(points[3], points[7]),
         ]
 
     def point_at(self, x: float, y: float, z: float) -> Point:
@@ -398,6 +398,7 @@ class AABB:
 
     def inflate(self, amount: float) -> None:
         """Grow every half-size by amount."""
+
         self.hx += amount
         self.hy += amount
         self.hz += amount
@@ -406,6 +407,7 @@ class AABB:
         """Grow to enclose other; an invalid box contributes nothing."""
 
         merged = AABB.merge(self, other)
+
         self.cx = merged.cx
         self.cy = merged.cy
         self.cz = merged.cz
@@ -420,11 +422,11 @@ class AABB:
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
     # ═══════════════════════════════════════════════════════════════════════════
-
     def transform(self, xform: "Xform") -> None:
         """Replace the box by the box of its eight transformed corners."""
 
         out = self.transformed(xform)
+
         self.cx = out.cx
         self.cy = out.cy
         self.cz = out.cz
@@ -440,21 +442,28 @@ class AABB:
 
         out = AABB.empty()
 
-        for corner in self.corners():
-            p = xform.transform_point(corner)
-            out.union_with_point(p[0], p[1], p[2])
+        for point in self.corners():
+            moved = xform.transform_point(point)
+            out.union_with_point(moved[0], moved[1], moved[2])
 
         return out
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __str__(self) -> str:
         """Return "cx, cy, cz, hx, hy, hz"."""
+
         prec = Tolerance.ROUNDING
 
-        return f"{TOLERANCE.format_number(self.cx, prec)}, {TOLERANCE.format_number(self.cy, prec)}, {TOLERANCE.format_number(self.cz, prec)}, {TOLERANCE.format_number(self.hx, prec)}, {TOLERANCE.format_number(self.hy, prec)}, {TOLERANCE.format_number(self.hz, prec)}"
+        return "{}, {}, {}, {}, {}, {}".format(
+            TOLERANCE.format_number(self.cx, prec),
+            TOLERANCE.format_number(self.cy, prec),
+            TOLERANCE.format_number(self.cz, prec),
+            TOLERANCE.format_number(self.hx, prec),
+            TOLERANCE.format_number(self.hy, prec),
+            TOLERANCE.format_number(self.hz, prec),
+        )
 
     def __repr__(self) -> str:
         """Return "AABB(cx, cy, cz, hx, hy, hz)"."""
