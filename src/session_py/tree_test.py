@@ -91,8 +91,9 @@ def test_treenode_remove():
     parent = TreeNode("parent")
     child = TreeNode("child")
     parent.add(child)
-    parent.remove(child)
+    removed = parent.remove(child)
 
+    MINI_CHECK(removed is child)
     MINI_CHECK(len(parent.children) == 0)
     MINI_CHECK(child.parent is None)
 
