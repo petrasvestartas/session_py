@@ -362,24 +362,98 @@ class Element:
 
         return self._geometry
 
-    def compute_geometry(self, mesh_or_brep: bool = True) -> None:
-        """Write the element's own geometry, features and dimensions onto the slot, a mesh when true, a BRep when false; skipped while the slot already holds that form, and a re-entrant call from inside the computation does nothing."""
+    def element_geometry_mesh(self) -> Mesh:
+        """Return the element's mesh before modifications; empty when no mesh exists."""
+        return self.geometry_mesh()
 
-        if self._computing_geometry or self._geometry_current(mesh_or_brep):
+    def element_geometry_brep(self) -> BRep:
+        """Return the element's BRep before modifications; empty when no BRep exists."""
+        return self.geometry_brep()
+
+    def model_geometry_mesh(self) -> Mesh:
+        """Return the model mesh with in-memory operations applied, cached until invalidation."""
+
+        if self._model_mesh_cache is None:
+            self._model_mesh_cache = self._apply_geometry_ops(
+                self.element_geometry_mesh().duplicate()
+            )
+
+        return self._model_mesh_cache
+
+    def model_geometry_brep(self) -> BRep:
+        """Return the model BRep, cached independently until invalidation."""
+
+        if self._model_brep_cache is None:
+            self._model_brep_cache = self.element_geometry_brep().duplicate()
+
+        return self._model_brep_cache
+
+    def geometry_mesh(self) -> Mesh:
+        """Return the local mesh, computing it on demand; empty when this element has no mesh."""
+
+        from .mesh import Mesh
+
+        self.compute_geometry_mesh()
+
+        return self._geometry if isinstance(self._geometry, Mesh) else Mesh()
+
+    def geometry_brep(self) -> BRep:
+        """Return the local BRep, computing it on demand; empty when this element has no BRep."""
+
+        from .brep import BRep
+
+        self.compute_geometry_brep()
+
+        return self._geometry if isinstance(self._geometry, BRep) else BRep()
+
+    def compute_geometry_mesh(self) -> None:
+        """Write the element's mesh, features and dimensions into the session slot, reusing a current mesh."""
+
+        from .mesh import Mesh
+
+        if self._computing_geometry or (
+            self._geometry_synced and isinstance(self._geometry, Mesh)
+        ):
             return
 
         self._computing_geometry = True
-        self.compute_geometry_impl(mesh_or_brep)
-        self._computing_geometry = False
+
+        try:
+            self._compute_geometry_mesh_impl()
+        finally:
+            self._computing_geometry = False
+
+        self._geometry_synced = True
+
+    def compute_geometry_brep(self) -> None:
+        """Write the element's BRep, features and dimensions into the session slot, reusing a current BRep."""
+
+        from .brep import BRep
+
+        if self._computing_geometry or (
+            self._geometry_synced and isinstance(self._geometry, BRep)
+        ):
+            return
+
+        self._computing_geometry = True
+
+        try:
+            self._compute_geometry_brep_impl()
+        finally:
+            self._computing_geometry = False
+
         self._geometry_synced = True
 
     def geometry_synced(self) -> bool:
-        """Return whether the slot already holds what compute_geometry() would write."""
+        """Return whether the slot already holds what compute_geometry_mesh() would write."""
         return self._geometry_synced
 
     def invalidate_geometry(self) -> None:
         """Mark the slot stale, so the next read computes it again; a domain type overrides this to drop its own caches too."""
+
         self._geometry_synced = False
+        self._model_mesh_cache = None
+        self._model_brep_cache = None
 
     @property
     def has_geometry(self) -> bool:
@@ -425,6 +499,34 @@ class Element:
             geo.transform(xform)
 
         return geo
+
+    def session_geometry_mesh(self, xform: Xform) -> Mesh:
+        """Return the mesh with in-memory operations and placement applied, empty when no mesh exists."""
+
+        from .mesh import Mesh
+
+        local = self.geometry_mesh()
+
+        if not isinstance(self._geometry, Mesh):
+            return Mesh()
+
+        placed = self._apply_geometry_ops(local.duplicate())
+
+        if not xform.is_identity():
+            placed.transform(xform)
+
+        return placed
+
+    def session_geometry_brep(self, xform: Xform) -> BRep:
+        """Return the BRep with placement applied, empty when no BRep exists."""
+
+        local = self.geometry_brep()
+        placed = local.duplicate()
+
+        if not xform.is_identity():
+            placed.transform(xform)
+
+        return placed
 
     @property
     def aabb(self) -> OBB:
@@ -631,6 +733,8 @@ class Element:
         """Drop every cache and mark the element dirty."""
 
         self._is_dirty = True
+        self._model_mesh_cache = None
+        self._model_brep_cache = None
         self._aabb = None
         self._obb = None
         self._collision_mesh = None
@@ -958,30 +1062,18 @@ class Element:
     # Computation
     # ═══════════════════════════════════════════════════════════════════════════
     def _ensure_geometry(self) -> None:
-        """Run compute_geometry() once while the slot is stale, so every reader and the file see the current solid, features and dimensions."""
+        """Run compute_geometry_mesh() once while the slot is stale, so every reader and the file see the current solid, features and dimensions."""
 
         if self._geometry_synced or self._computing_geometry:
             return
 
-        self.compute_geometry()
+        self.compute_geometry_mesh()
 
-    def _geometry_current(self, mesh_or_brep: bool) -> bool:
-        """Return whether the slot already holds the requested form and nothing has invalidated it."""
+    def _compute_geometry_mesh_impl(self) -> None:
+        """Compute the mesh, features and dimensions; a domain type overrides this."""
 
-        from .brep import BRep
-        from .mesh import Mesh
-
-        if not self._geometry_synced:
-            return False
-
-        return (
-            isinstance(self._geometry, Mesh)
-            if mesh_or_brep
-            else isinstance(self._geometry, BRep)
-        )
-
-    def compute_geometry_impl(self, mesh_or_brep: bool) -> None:
-        """Compute the element's own geometry, features and dimensions in the requested form; the base element has none, a domain type overrides it."""
+    def _compute_geometry_brep_impl(self) -> None:
+        """Compute the BRep, features and dimensions; a domain type overrides this."""
 
     def _compute_aabb(self) -> OBB:
         """Compute the axis-aligned box of the placed geometry."""
