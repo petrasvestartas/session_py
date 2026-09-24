@@ -37,6 +37,7 @@ def test_remesh_nurbssurface_grid_singular_planar_normal():
 
             MINI_CHECK(abs(normal[0]) < 1e-12 and abs(normal[2]) < 1e-12)
             MINI_CHECK(abs(abs(normal[1]) - 1.0) < 1e-12)
+
             apex = apex or vertex.z == 1.0
 
     MINI_CHECK(apex)
@@ -128,6 +129,23 @@ def test_remesh_nurbssurface_grid_sphere():
     MINI_CHECK(mesh.is_valid())
     MINI_CHECK(mesh.number_of_vertices() == 191)
     MINI_CHECK(mesh.number_of_faces() == 378)
+
+
+@MINI_TEST("RemeshNurbsSurfaceGrid", "Sphere Few Rows")
+def test_remesh_nurbssurface_grid_sphere_few_rows():
+    from session_py import RemeshNurbsSurfaceGrid
+    from session_py import Primitives
+
+    surface = Primitives.sphere_surface(0, 0, 0, 1.0)
+    one = RemeshNurbsSurfaceGrid.from_u_v(surface, 0, 1)
+    two = RemeshNurbsSurfaceGrid.from_u_v(surface, 0, 2)
+    three = RemeshNurbsSurfaceGrid.from_u_v(surface, 0, 3)
+
+    MINI_CHECK(one.number_of_vertices() == 0)
+    MINI_CHECK(two.number_of_vertices() == 0)
+    MINI_CHECK(three.is_valid())
+    MINI_CHECK(three.number_of_vertices() == 23)
+    MINI_CHECK(three.number_of_faces() == 42)
 
 
 @MINI_TEST("RemeshNurbsSurfaceGrid", "Torus")

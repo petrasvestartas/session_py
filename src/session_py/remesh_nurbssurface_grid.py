@@ -332,6 +332,33 @@ def _fix_closed_gap(params: list[float], domain_end: float) -> None:
         params.append(params[-1] + step)
 
 
+def _grid_params(
+    s: NurbsSurface,
+    dir: int,
+    count: int,
+    sp: list[float],
+    fixed: float,
+    subs: list[int],
+) -> list[float]:
+    """Parameters along dir: arc-length spaced when count is positive, else the span subdivisions; a closed direction made odd and its wrap gap filled."""
+
+    closed = s.is_closed(dir)
+
+    if closed and count == 0:
+        _make_odd(subs)
+
+    params = (
+        _arclen_params(s, dir, max(count, 2), sp, fixed)
+        if count > 0
+        else _span_params(sp, subs)
+    )
+
+    if closed:
+        _fix_closed_gap(params, sp[-1])
+
+    return params
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Vertices and faces
 # ═══════════════════════════════════════════════════════════════════════════
@@ -583,36 +610,15 @@ class RemeshNurbsSurfaceGrid:
             for i in range(len(v_subs)):
                 v_subs[i] = max(v_subs[i], twist)
 
-        closed_u = s.is_closed(0)
-        closed_v = s.is_closed(1)
-
-        if closed_u and max_u == 0:
-            _make_odd(u_subs)
-
-        if closed_v and max_v == 0:
-            _make_odd(v_subs)
-
         u_mid = (usp[0] + usp[-1]) * 0.5
         v_mid = (vsp[0] + vsp[-1]) * 0.5
 
-        us = (
-            _arclen_params(s, 0, max(max_u, 2), usp, v_mid)
-            if max_u > 0
-            else _span_params(usp, u_subs)
-        )
-        vs = (
-            _arclen_params(s, 1, max(max_v, 2), vsp, u_mid)
-            if max_v > 0
-            else _span_params(vsp, v_subs)
-        )
-
-        if closed_u:
-            _fix_closed_gap(us, usp[-1])
-
-        if closed_v:
-            _fix_closed_gap(vs, vsp[-1])
-
+        us = _grid_params(s, 0, max_u, usp, v_mid, u_subs)
+        vs = _grid_params(s, 1, max_v, vsp, u_mid, v_subs)
         nv = len(vs)
+
+        if sing_v0 and sing_v1 and nv < 3:
+            return Mesh()
 
         mesh = Mesh()
         south = None
@@ -632,8 +638,8 @@ class RemeshNurbsSurfaceGrid:
             mesh,
             grid,
             len(us),
-            closed_u,
-            closed_v and not sing_v0 and not sing_v1,
+            s.is_closed(0),
+            s.is_closed(1) and not sing_v0 and not sing_v1,
             south,
             north,
         )
