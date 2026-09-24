@@ -10,11 +10,11 @@ if TYPE_CHECKING:
     from .tree import TreeNode
     from .xform import Xform
 
-CAPACITY = 64
+CAPACITY = 64  # Committed transactions kept; past it the oldest is dropped.
 
 
 def clone(obj: Any) -> Any:
-    """Return a deep copy that keeps the guid, which duplicate() and a bare deepcopy would mint anew; a list of features, and an element's or instance's features, keep theirs too."""
+    """A deep copy that keeps the guid, feature guids included, which `duplicate()` and a bare deepcopy would mint anew."""
 
     snapshot = copy.deepcopy(obj)
 
@@ -64,8 +64,8 @@ class Tombstone:
 
         self.guid = guid  # The object's guid; the clone carries the same one.
         self.obj = obj  # A clone() of the object, never the live instance.
-        self.collection = collection  # The Objects list it lives in, e.g. "points".
-        self.obj_index = obj_index  # Its position in that list, kept for order().
+        self.collection = collection  # The Objects list it lives in: "points", "lines", ... "components".
+        self.obj_index = obj_index  # Its position in that list, so the order() sequence survives a round trip.
         self.xform = xform  # Its local transform, None when none was set.
         self.parent_guid = parent_guid  # Tree parent name, None when added without one.
         self.index = index  # Its position among the parent's children.
@@ -85,25 +85,26 @@ class Tombstone:
 class AddOp(Tombstone):
     """An object entered the session; undo detaches it, redo attaches the kit again."""
 
-    kind = "add"
+    kind = "add"  # Always "add".
 
 
 class RemoveOp(Tombstone):
     """An object left the session; the kit is what brings it back on undo."""
 
-    kind = "remove"
+    kind = "remove"  # Always "remove".
 
 
 class ReplaceOp:
     """The object under `guid` was swapped: absolute before/after snapshots, never deltas."""
 
-    kind = "replace"
+    kind = "replace"  # Always "replace".
 
     def __init__(self, guid: str, before: Any, after: Any):
         """Construct from the guid and the before and after snapshots."""
-        self.guid = guid
-        self.before = before
-        self.after = after
+
+        self.guid = guid  # The object's guid.
+        self.before = before  # Snapshot before the swap.
+        self.after = after  # Snapshot after the swap.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
@@ -115,15 +116,16 @@ class ReplaceOp:
 
 
 class XformOp:
-    """The local transform under `guid` changed; nullopt on either side means "none set"."""
+    """The local transform under `guid` changed; None on either side means "none set"."""
 
-    kind = "xform"
+    kind = "xform"  # Always "xform".
 
     def __init__(self, guid: str, before: Xform | None, after: Xform | None):
         """Construct from the guid and the before and after transforms."""
-        self.guid = guid
-        self.before = before
-        self.after = after
+
+        self.guid = guid  # The object's guid.
+        self.before = before  # Transform before the change.
+        self.after = after  # Transform after the change.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
@@ -137,13 +139,14 @@ class XformOp:
 class DefinitionOp:
     """A definition added (None before), removed (None after) or replaced."""
 
-    kind = "definition"
+    kind = "definition"  # Always "definition".
 
     def __init__(self, guid: str, before: Any | None, after: Any | None):
         """Construct from the guid and the before and after snapshots."""
-        self.guid = guid
-        self.before = before
-        self.after = after
+
+        self.guid = guid  # The definition's guid.
+        self.before = before  # Snapshot before, None when it was added.
+        self.after = after  # Snapshot after, None when it was removed.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
@@ -159,8 +162,9 @@ class Transaction:
 
     def __init__(self, label: str = "my_transaction"):
         """Construct an empty transaction with a label."""
-        self.label = label
-        self.ops: list = []
+
+        self.label = label  # What the step did.
+        self.ops: list = []  # Ops in the order they happened.
 
     def __str__(self) -> str:
         """Return a string representation of the transaction."""
@@ -181,10 +185,14 @@ class History:
 
     def __init__(self):
         """Construct an empty history."""
+
         self.undo_stack: list[Transaction] = []  # Committed, oldest first; capped.
         self.redo_stack: list[Transaction] = []  # Undone, cleared on the next commit.
         self.current: Transaction | None = None  # Open transaction, None when closed.
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def can_undo(self) -> bool:
         """Return whether a committed transaction can be undone."""
         return len(self.undo_stack) > 0
@@ -197,8 +205,12 @@ class History:
         """Return the number of committed transactions."""
         return len(self.undo_stack)
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Transactions
+    # ═══════════════════════════════════════════════════════════════════════════
     def begin(self, label: str) -> None:
         """Open a transaction; an already open one is committed first so no op is lost."""
+
         self.commit()
         self.current = Transaction(label)
 
@@ -219,6 +231,7 @@ class History:
 
     def record(self, op: Any) -> None:
         """Append an op to the open transaction; a no-op when none is open."""
+
         if self.current is None:
             return
 
@@ -260,6 +273,7 @@ class History:
 
     def clear(self) -> None:
         """Drop every transaction, open or committed."""
+
         self.undo_stack.clear()
         self.redo_stack.clear()
         self.current = None
@@ -273,10 +287,10 @@ class History:
             session._attach(op)
         elif op.kind == "replace":
             session._swap(op.guid, clone(op.before))
-        elif op.kind == "definition":
-            session._define(op.guid, None if op.before is None else clone(op.before))
         elif op.kind == "xform":
             session._place(op.guid, op.before)
+        elif op.kind == "definition":
+            session._define(op.guid, None if op.before is None else clone(op.before))
 
     def _apply(self, op: Any, session: Session) -> None:
         """Redo one op against the session."""
@@ -287,11 +301,14 @@ class History:
             session._detach(op.guid)
         elif op.kind == "replace":
             session._swap(op.guid, clone(op.after))
-        elif op.kind == "definition":
-            session._define(op.guid, None if op.after is None else clone(op.after))
         elif op.kind == "xform":
             session._place(op.guid, op.after)
+        elif op.kind == "definition":
+            session._define(op.guid, None if op.after is None else clone(op.after))
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
     def __str__(self) -> str:
         """Return a string representation of the history."""
         return f"History({len(self.undo_stack)} undo, {len(self.redo_stack)} redo)"

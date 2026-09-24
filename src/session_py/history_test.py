@@ -21,7 +21,8 @@ def test_history_constructor():
 
 @MINI_TEST("History", "Begin Commit")
 def test_history_begin_commit():
-    from session_py import Point, Session
+    from session_py import Point
+    from session_py import Session
 
     session = Session()
     history = session.history
@@ -43,7 +44,8 @@ def test_history_begin_commit():
 
 @MINI_TEST("History", "Undo Redo")
 def test_history_undo_redo():
-    from session_py import Point, Session
+    from session_py import Point
+    from session_py import Session
 
     session = Session()
     point = Point(1.0, 2.0, 3.0)
@@ -52,6 +54,7 @@ def test_history_undo_redo():
     session.history.begin("add")
     session.add_point(point)
     session.history.commit()
+
     undone = session.history.undo(session)
     absent = guid not in session.lookup
     redone = session.history.redo(session)
@@ -67,16 +70,19 @@ def test_history_undo_redo():
 
 @MINI_TEST("History", "Clear")
 def test_history_clear():
-    from session_py import Point, Session
+    from session_py import Point
+    from session_py import Session
 
     session = Session()
 
     session.history.begin("a")
     session.add_point(Point(0.0, 0.0, 0.0))
     session.history.commit()
+
     session.history.begin("b")
     session.add_point(Point(1.0, 0.0, 0.0))
     session.history.commit()
+
     session.history.undo(session)
     session.history.clear()
 
@@ -88,7 +94,8 @@ def test_history_clear():
 
 @MINI_TEST("History", "Undo Definition")
 def test_history_undo_definition():
-    from session_py import Point, Session
+    from session_py import Point
+    from session_py import Session
 
     session = Session()
     point = Point(1.0, 2.0, 3.0)
@@ -97,12 +104,15 @@ def test_history_undo_definition():
     session.begin("define")
     session.add_definition(point)
     session.commit()
+
     session.begin("replace")
     session.replace_definition(guid, Point(9.0, 9.0, 9.0))
     session.commit()
+
     session.begin("remove")
     session.remove_definition(guid)
     session.commit()
+
     removed = guid not in session.definition_lookup
     session.undo()
     replaced = session.definition_lookup[guid][0]
