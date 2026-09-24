@@ -195,10 +195,14 @@ def _bilinear_patch(p00: Point, p10: Point, p01: Point, p11: Point) -> NurbsSurf
     """Bilinear planar patch: u runs p00 -> p10, v runs p00 -> p01, natural normal = u x v"""
 
     srf = NurbsSurface(3, False, 2, 2, 2, 2)
-    srf.set_cv(0, 0, p00)
-    srf.set_cv(1, 0, p10)
-    srf.set_cv(0, 1, p01)
-    srf.set_cv(1, 1, p11)
+
+    if (
+        not srf.set_cv(0, 0, p00)
+        or not srf.set_cv(1, 0, p10)
+        or not srf.set_cv(0, 1, p01)
+        or not srf.set_cv(1, 1, p11)
+    ):
+        return NurbsSurface()
 
     return srf
 
@@ -227,7 +231,8 @@ def _project_to_patch(crv: NurbsCurve, srf: NurbsSurface) -> NurbsCurve:
     c2 = NurbsCurve(3, crv.is_rational(), crv.order(), crv.cv_count())
 
     for i in range(crv.nurbsknot_count()):
-        c2.set_nurbsknot(i, crv.nurbsknot(i))
+        if not c2.set_nurbsknot(i, crv.nurbsknot(i)):
+            return NurbsCurve()
 
     for i in range(crv.cv_count()):
         wx, wy, wz, w = crv.get_cv_4d(i)
@@ -235,10 +240,14 @@ def _project_to_patch(crv: NurbsCurve, srf: NurbsSurface) -> NurbsCurve:
         u = d.dot(eu) / eu2
         v = d.dot(ev) / ev2
 
-        if crv.is_rational():
+        written = (
             c2.set_cv_4d(i, u * w, v * w, 0.0, w)
-        else:
-            c2.set_cv(i, Point(u, v, 0.0))
+            if crv.is_rational()
+            else c2.set_cv(i, Point(u, v, 0.0))
+        )
+
+        if not written:
+            return NurbsCurve()
 
     return c2
 
@@ -1534,10 +1543,49 @@ def _tag_loop_vertices(mesh: Mesh, loops: TrimLoops, normal: Vector) -> None:
             vd.attributes[f"boundary/{hit[0]}/{hit[1]}"] = 1.0
 
 
+def _add_ring_faces(
+    mesh: Mesh,
+    border: list[Point],
+    holes: list[list[Point]],
+    border_2d: list[Point],
+    holes_2d: list[list[Point]],
+) -> None:
+    """Add the border and hole vertices and the CDT triangles of their 2D rings, degenerate triangles skipped"""
+
+    from .remesh_cdt import cdt_triangulate
+
+    vkeys = []
+
+    for p in border:
+        vkeys.append(mesh.add_vertex(p))
+
+    for hole in holes:
+        for p in hole:
+            vkeys.append(mesh.add_vertex(p))
+
+    for t in cdt_triangulate(border_2d, holes_2d):
+        if t[0] != t[1] and t[1] != t[2] and t[2] != t[0]:
+            mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+
+
+def _wind_to_normal(mesh: Mesh, normal: Vector) -> None:
+    """Flip the mesh when its first face winds against the normal"""
+
+    if not mesh.face:
+        return
+
+    fverts = next(iter(mesh.face.values()))
+    a = mesh.vertex[fverts[0]].position()
+    b = mesh.vertex[fverts[1]].position()
+    c = mesh.vertex[fverts[2]].position()
+
+    if (b - a).cross(c - a).dot(normal) < 0.0:
+        mesh.flip()
+
+
 def _planar_loops_mesh(srf: NurbsSurface, loops: TrimLoops) -> Mesh:
     """Phase 3 for a planar face: the sampled loops triangulated as one polygon with holes, wound to the surface normal, every loop vertex tagged boundary/{loop}/{sample} as mesh_loops does; no grid, no surface evaluation"""
 
-    from .remesh_cdt import _cdt_triangulate
     from .remesh_cdt import _project_2d
     from .remesh_cdt import _signed_area
 
@@ -1576,32 +1624,12 @@ def _planar_loops_mesh(srf: NurbsSurface, loops: TrimLoops) -> Mesh:
         holes.append(hole)
         holes_2d.append(hole_2d)
 
-    vkeys = []
-
-    for p in border:
-        vkeys.append(mesh.add_vertex(p))
-
-    for hole in holes:
-        for p in hole:
-            vkeys.append(mesh.add_vertex(p))
-
-    for t in _cdt_triangulate(border_2d, holes_2d):
-        if t[0] != t[1] and t[1] != t[2] and t[2] != t[0]:
-            mesh.add_face([vkeys[t[0]], vkeys[t[1]], vkeys[t[2]]])
+    _add_ring_faces(mesh, border, holes, border_2d, holes_2d)
 
     u0, u1 = srf.domain(0)
     v0, v1 = srf.domain(1)
     normal = srf.normal_at(0.5 * (u0 + u1), 0.5 * (v0 + v1))
-
-    if mesh.face:
-        fverts = next(iter(mesh.face.values()))
-        a = mesh.vertex[fverts[0]].position()
-        b = mesh.vertex[fverts[1]].position()
-        c = mesh.vertex[fverts[2]].position()
-
-        if (b - a).cross(c - a).dot(normal) < 0.0:
-            mesh.flip()
-
+    _wind_to_normal(mesh, normal)
     _tag_loop_vertices(mesh, loops, normal)
 
     return mesh

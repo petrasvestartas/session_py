@@ -27,7 +27,7 @@ from .line import Line
 from .plane import Plane
 from .polyline import Polyline
 from .spatial_bvh import SpatialBVH
-from .remesh_cdt import _cdt_triangulate
+from .remesh_cdt import cdt_triangulate
 
 
 class ColorMode(Enum):
@@ -346,7 +346,7 @@ def _planar_cdt(pts: list[Point]) -> list:
             )
         )
 
-    return _cdt_triangulate(bpts, [])
+    return cdt_triangulate(bpts, [])
 
 
 def _signed_area_2d(pts: list[tuple[float, float]]) -> float:
@@ -716,7 +716,7 @@ def _loft_cap_triangles(
 
         holes_2d.append(hole)
 
-    tris = _cdt_triangulate(border_2d, holes_2d)
+    tris = cdt_triangulate(border_2d, holes_2d)
     tri_list = []
 
     for t in tris:
@@ -1822,7 +1822,7 @@ def _cut_triangulation(piece: _CutFace, points: dict[int, Point]) -> list[list[i
 
     triangles = []
 
-    for t in _cdt_triangulate(rings_2d[0], rings_2d[1:]):
+    for t in cdt_triangulate(rings_2d[0], rings_2d[1:]):
         triangles.append([flat[t[0]], flat[t[1]], flat[t[2]]])
 
     _loft_fix_collinear(triangles, piece.rings[0])
@@ -2418,7 +2418,7 @@ class Mesh:
         for b in bpts:
             bpts2d.append(Point(b[0], b[1], 0.0))
 
-        tris = _cdt_triangulate(bpts2d, [])
+        tris = cdt_triangulate(bpts2d, [])
         tri_list = []
 
         for t in tris:

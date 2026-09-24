@@ -1101,6 +1101,7 @@ def test_brep_face_polylines_box():
 
         normal_sign = 1 if n[axis] > 0.0 else 0
         MINI_CHECK(not seen[axis][normal_sign])
+
         seen[axis][normal_sign] = True
 
     for a in range(3):
@@ -1141,6 +1142,7 @@ def test_brep_face_polylines_ignores_holes():
                 or abs(abs(pt[2]) - 1.0) < 1e-6
             )
             MINI_CHECK(on_bounds)
+
             radius_to_z_axis = math.sqrt(pt[0] * pt[0] + pt[1] * pt[1])
             MINI_CHECK(radius_to_z_axis > 1.0 + 1e-6)
 

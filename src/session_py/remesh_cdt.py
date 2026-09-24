@@ -1394,7 +1394,7 @@ def _build_mesh(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _cdt_triangulate(border_2d, holes_2d) -> list[tuple[int, int, int]]:
+def cdt_triangulate(border_2d, holes_2d) -> list[tuple[int, int, int]]:
     """Triangle index triples of a counter-clockwise 2D border with clockwise holes into the flat list [border..., hole0..., hole1...]."""
 
     scale = _cdt_scale(border_2d, holes_2d)
@@ -1447,7 +1447,7 @@ class RemeshCDT:
 
             holes_2d.append(hole_2d)
 
-        return _cdt_triangulate(border_2d, holes_2d)
+        return cdt_triangulate(border_2d, holes_2d)
 
     @staticmethod
     def from_polylines(
@@ -1508,4 +1508,4 @@ class RemeshCDT:
 
             holes_2d.append(hole_2d)
 
-        return _build_mesh(border, holes, _cdt_triangulate(border_2d, holes_2d))
+        return _build_mesh(border, holes, cdt_triangulate(border_2d, holes_2d))
