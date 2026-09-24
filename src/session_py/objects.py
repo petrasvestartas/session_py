@@ -1,11 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from typing import Union
-
-if TYPE_CHECKING:
-    from .proto import objects_pb2
-    from pathlib import Path
-
+import copy
+import json
+import uuid
 from .point import Point
 from .line import Line
 from .plane import Plane
@@ -18,23 +15,84 @@ from .nurbssurface import NurbsSurface
 from .brep import BRep
 from .element import Element
 from .instance_ref import InstanceRef
-import json
-import uuid
+
+if TYPE_CHECKING:
+    from pathlib import Path
+    from .proto import objects_pb2
+
+
+def _clone_list(items: list, memo: dict) -> list:
+    """One list, duplicated: new list, new objects, same guids."""
+
+    out = []
+
+    for item in items:
+        clone = copy.deepcopy(item, memo)
+
+        if item.has_guid():
+            clone.guid = item.guid
+
+        out.append(clone)
+
+    return out
+
+
+def _dump_list(items: list) -> list:
+    """Serialize every object of a list to JSON."""
+
+    out = []
+
+    for item in items:
+        out.append(item.__jsondump__())
+
+    return out
+
+
+def _load_list(data: dict, key: str) -> list:
+    """Load every object under key, keeping guids."""
+
+    from .file_encoders import file_decode_node
+
+    out = []
+
+    for item in data.get(key, []):
+        out.append(file_decode_node(item))
+
+    return out
+
+
+def _dump_pb_list(items: list, repeated) -> None:
+    """Convert every object of a list into a repeated proto field."""
+
+    for item in items:
+        repeated.add().CopyFrom(item.to_proto())
+
+
+def _load_pb_list(repeated, cls) -> list:
+    """Load every message of a repeated proto field, keeping guids."""
+
+    out = []
+
+    for item in repeated:
+        out.append(cls.from_proto(item))
+
+    return out
 
 
 class Component:
     """A custom domain object stored generically in a Session; every field except type/guid/name lives in extra."""
 
-    def __init__(
-        self, type_name: str = "", name: str = "my_component", extra: dict | None = None
-    ):
-        """Construct from type name, name and custom fields."""
+    def __init__(self):
+        """Construct an empty component."""
 
-        self._guid = None
-        self.type_name = type_name  # Class name, e.g. "FloorBuilder".
-        self.name = name  # Human-readable name.
-        self.extra = extra if extra is not None else {}  # All custom fields.
+        self._guid = None  # Lazily minted GUID.
+        self.type_name = ""  # Class name, e.g. "FloorBuilder".
+        self.name = "my_component"  # Human-readable name.
+        self.extra = {}  # All custom fields.
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -42,6 +100,7 @@ class Component:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -52,35 +111,43 @@ class Component:
         """Set the guid."""
         self._guid = value
 
-    def __jsondump__(self):
+    # ═══════════════════════════════════════════════════════════════════════════
+    # JSON
+    # ═══════════════════════════════════════════════════════════════════════════
+    def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
         data = dict(self.extra)
-        data["type"] = self.type_name
         data["guid"] = self.guid
         data["name"] = self.name
+        data["type"] = self.type_name
 
-        return data
+        return dict(sorted(data.items()))
 
     @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> Component:
         """Deserialize from a JSON object."""
 
         component = cls()
-        component.type_name = data.get("type", "")
         component.guid = (
             guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         )
         component.name = name if name is not None else data.get("name", "my_component")
+        component.type_name = data.get("type", "")
         component.extra = dict(data)
-        component.extra.pop("type", None)
         component.extra.pop("guid", None)
         component.extra.pop("name", None)
+        component.extra.pop("type", None)
 
         return component
 
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
+    def to_proto(self) -> objects_pb2.Component:
+        """Convert to the protobuf message."""
 
         from .proto import objects_pb2
 
@@ -90,47 +157,93 @@ class Component:
         proto.name = self.name
         proto.json_data = json.dumps(self.extra)
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Component":
+    def from_proto(cls, proto: objects_pb2.Component) -> Component:
+        """Construct from the protobuf message."""
+
+        component = cls()
+        component.type_name = proto.type_name
+        component.guid = proto.guid
+        component.name = proto.name
+
+        if proto.json_data:
+            component.extra = json.loads(proto.json_data)
+
+        return component
+
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> Component:
         """Deserialize from protobuf bytes."""
 
         from .proto import objects_pb2
 
         proto = objects_pb2.Component()
         proto.ParseFromString(data)
-        component = cls()
-        component.type_name = proto.type_name
-        component.guid = proto.guid
-        component.name = proto.name
-        component.extra = json.loads(proto.json_data) if proto.json_data else {}
 
-        return component
+        return cls.from_proto(proto)
 
 
 class Objects:
     """A collection of geometry objects."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, name: str = "my_objects"):
         """Construct an empty collection with every list allocated."""
 
-        self._guid = None
+        self._guid = None  # Lazily minted GUID.
         self.name = name  # The name of the collection.
-        self.points: list[Point] = []
-        self.lines: list[Line] = []
-        self.planes: list[Plane] = []
-        self.bboxes: list[OBB] = []
-        self.polylines: list[Polyline] = []
-        self.pointclouds: list[PointCloud] = []
-        self.meshes: list[Mesh] = []
-        self.nurbscurves: list[NurbsCurve] = []
-        self.nurbssurfaces: list[NurbsSurface] = []
-        self.breps: list[BRep] = []
-        self.elements: list[Element] = []
-        self.components: list[Component] = []
-        self.instances: list[InstanceRef] = []  # Each places a Session definition.
+        self.points: list[Point] = []  # Points.
+        self.lines: list[Line] = []  # Lines.
+        self.planes: list[Plane] = []  # Planes.
+        self.bboxes: list[OBB] = []  # Bounding boxes.
+        self.polylines: list[Polyline] = []  # Polylines.
+        self.pointclouds: list[PointCloud] = []  # Point clouds.
+        self.meshes: list[Mesh] = []  # Meshes.
+        self.nurbscurves: list[NurbsCurve] = []  # NURBS curves.
+        self.nurbssurfaces: list[NurbsSurface] = []  # NURBS surfaces.
+        self.breps: list[BRep] = []  # BReps.
+        self.elements: list[Element] = []  # Elements.
+        self.components: list[Component] = []  # Components.
+        self.instances: list[
+            InstanceRef
+        ] = []  # Instances, each placing a definition of Session.definitions by guid.
 
+    def __deepcopy__(self, memo):
+        """Copy every list and every object in it, guids included, so a Session's indexes still match."""
+
+        result = Objects(self.name)
+
+        if self.has_guid():
+            result.guid = self.guid
+
+        result.points = _clone_list(self.points, memo)
+        result.lines = _clone_list(self.lines, memo)
+        result.planes = _clone_list(self.planes, memo)
+        result.bboxes = _clone_list(self.bboxes, memo)
+        result.polylines = _clone_list(self.polylines, memo)
+        result.pointclouds = _clone_list(self.pointclouds, memo)
+        result.meshes = _clone_list(self.meshes, memo)
+        result.nurbscurves = _clone_list(self.nurbscurves, memo)
+        result.nurbssurfaces = _clone_list(self.nurbssurfaces, memo)
+        result.breps = _clone_list(self.breps, memo)
+        result.elements = _clone_list(self.elements, memo)
+        result.components = copy.deepcopy(self.components, memo)
+        result.instances = _clone_list(self.instances, memo)
+        memo[id(self)] = result
+
+        return result
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Accessors
+    # ═══════════════════════════════════════════════════════════════════════════
     def has_guid(self) -> bool:
         """Return whether the lazy guid has been created."""
         return self._guid is not None
@@ -138,6 +251,7 @@ class Objects:
     @property
     def guid(self) -> str:
         """Return the guid, creating it on first access."""
+
         if self._guid is None:
             self._guid = str(uuid.uuid4())
 
@@ -148,71 +262,57 @@ class Objects:
         """Set the guid."""
         self._guid = value
 
-    def __str__(self):
-        """Return a string representation of the collection."""
-        return f"Objects(name={self.name}, guid={self.guid}, points={len(self.points)})"
-
-    def __repr__(self):
-        """Return a string representation of the collection for debugging."""
-        return str(self)
-
     # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization
+    # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
-    def __jsondump__(self):
+    def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
         return {
-            "type": "Objects",
+            "bboxes": _dump_list(self.bboxes),
+            "breps": _dump_list(self.breps),
+            "components": _dump_list(self.components),
+            "elements": _dump_list(self.elements),
             "guid": self.guid,
+            "instances": _dump_list(self.instances),
+            "lines": _dump_list(self.lines),
+            "meshes": _dump_list(self.meshes),
             "name": self.name,
-            "bboxes": [b.__jsondump__() for b in self.bboxes],
-            "breps": [b.__jsondump__() for b in self.breps],
-            "components": [c.__jsondump__() for c in self.components],
-            "elements": [e.__jsondump__() for e in self.elements],
-            "instances": [i.__jsondump__() for i in self.instances],
-            "lines": [l.__jsondump__() for l in self.lines],
-            "meshes": [m.__jsondump__() for m in self.meshes],
-            "nurbscurves": [nc.__jsondump__() for nc in self.nurbscurves],
-            "nurbssurfaces": [ns.__jsondump__() for ns in self.nurbssurfaces],
-            "planes": [pl.__jsondump__() for pl in self.planes],
-            "pointclouds": [pc.__jsondump__() for pc in self.pointclouds],
-            "points": [p.__jsondump__() for p in self.points],
-            "polylines": [pl.__jsondump__() for pl in self.polylines],
+            "nurbscurves": _dump_list(self.nurbscurves),
+            "nurbssurfaces": _dump_list(self.nurbssurfaces),
+            "planes": _dump_list(self.planes),
+            "pointclouds": _dump_list(self.pointclouds),
+            "points": _dump_list(self.points),
+            "polylines": _dump_list(self.polylines),
+            "type": "Objects",
         }
 
     @classmethod
-    def __jsonload__(cls, data, guid=None, name=None):
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> Objects:
         """Deserialize from a JSON object."""
-
-        from .file_encoders import file_decode_node
 
         objects = cls(name if name is not None else data.get("name", "my_objects"))
         objects.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
-        objects.bboxes = [file_decode_node(b) for b in data.get("bboxes", [])]
-        objects.breps = [file_decode_node(b) for b in data.get("breps", [])]
-        objects.components = [
-            Component.__jsonload__(c) for c in data.get("components", [])
-        ]
-        objects.elements = [file_decode_node(e) for e in data.get("elements", [])]
-        objects.instances = [
-            InstanceRef.__jsonload__(i) for i in data.get("instances", [])
-        ]
-        objects.lines = [file_decode_node(l) for l in data.get("lines", [])]
-        objects.meshes = [file_decode_node(m) for m in data.get("meshes", [])]
-        objects.nurbscurves = [
-            file_decode_node(nc) for nc in data.get("nurbscurves", [])
-        ]
-        objects.nurbssurfaces = [
-            file_decode_node(ns) for ns in data.get("nurbssurfaces", [])
-        ]
-        objects.planes = [file_decode_node(pl) for pl in data.get("planes", [])]
-        objects.pointclouds = [
-            file_decode_node(pc) for pc in data.get("pointclouds", [])
-        ]
-        objects.points = [file_decode_node(p) for p in data.get("points", [])]
-        objects.polylines = [file_decode_node(pl) for pl in data.get("polylines", [])]
+        objects.bboxes = _load_list(data, "bboxes")
+        objects.breps = _load_list(data, "breps")
+        objects.elements = _load_list(data, "elements")
+
+        for instance in data.get("instances", []):
+            objects.instances.append(InstanceRef.__jsonload__(instance))
+
+        objects.lines = _load_list(data, "lines")
+        objects.meshes = _load_list(data, "meshes")
+        objects.nurbscurves = _load_list(data, "nurbscurves")
+        objects.nurbssurfaces = _load_list(data, "nurbssurfaces")
+        objects.planes = _load_list(data, "planes")
+        objects.pointclouds = _load_list(data, "pointclouds")
+        objects.points = _load_list(data, "points")
+        objects.polylines = _load_list(data, "polylines")
+
+        for component in data.get("components", []):
+            objects.components.append(Component.__jsonload__(component))
 
         return objects
 
@@ -221,23 +321,28 @@ class Objects:
         return json.dumps(self.__jsondump__())
 
     @classmethod
-    def file_json_loads(cls, s: str) -> "Objects":
+    def file_json_loads(cls, json_string: str) -> Objects:
         """Deserialize from a JSON string."""
-        return cls.__jsonload__(json.loads(s))
+        return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: Union[str, "Path"]) -> None:
+    def file_json_dump(self, filepath: str | Path) -> None:
         """Write to a JSON file."""
-        with open(filepath, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
+
+        with open(filepath, "w") as file:
+            json.dump(self.__jsondump__(), file, indent=4)
 
     @classmethod
-    def file_json_load(cls, filepath: Union[str, "Path"]) -> "Objects":
+    def file_json_load(cls, filepath: str | Path) -> Objects:
         """Read from a JSON file."""
-        with open(filepath) as f:
-            return cls.__jsonload__(json.load(f))
 
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+        with open(filepath) as file:
+            return cls.__jsonload__(json.load(file))
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
+    def to_proto(self) -> objects_pb2.Objects:
+        """Convert to the protobuf message."""
 
         from .proto import objects_pb2
 
@@ -245,101 +350,60 @@ class Objects:
         proto.name = self.name
 
         if self.has_guid():
-            proto.guid = self._guid
+            proto.guid = self.guid
 
-        for p in self.points:
-            proto.points.add().ParseFromString(p.pb_dumps())
+        _dump_pb_list(self.points, proto.points)
+        _dump_pb_list(self.lines, proto.lines)
+        _dump_pb_list(self.planes, proto.planes)
+        _dump_pb_list(self.bboxes, proto.bboxes)
+        _dump_pb_list(self.polylines, proto.polylines)
+        _dump_pb_list(self.pointclouds, proto.pointclouds)
+        _dump_pb_list(self.meshes, proto.meshes)
+        _dump_pb_list(self.nurbscurves, proto.nurbscurves)
+        _dump_pb_list(self.nurbssurfaces, proto.nurbssurfaces)
+        _dump_pb_list(self.breps, proto.breps)
+        _dump_pb_list(self.elements, proto.elements)
+        _dump_pb_list(self.components, proto.components)
+        _dump_pb_list(self.instances, proto.instances)
 
-        for l in self.lines:
-            proto.lines.add().ParseFromString(l.pb_dumps())
-
-        for pl in self.planes:
-            proto.planes.add().ParseFromString(pl.pb_dumps())
-
-        for b in self.bboxes:
-            proto.bboxes.add().ParseFromString(b.pb_dumps())
-
-        for pl in self.polylines:
-            proto.polylines.add().CopyFrom(pl.to_proto())
-
-        for pc in self.pointclouds:
-            proto.pointclouds.add().ParseFromString(pc.pb_dumps())
-
-        for m in self.meshes:
-            proto.meshes.add().CopyFrom(m.to_proto())
-
-        for nc in self.nurbscurves:
-            proto.nurbscurves.add().CopyFrom(nc.to_proto())
-
-        for ns in self.nurbssurfaces:
-            proto.nurbssurfaces.add().CopyFrom(ns.to_proto())
-
-        for b in self.breps:
-            proto.breps.add().ParseFromString(b.pb_dumps())
-
-        for e in self.elements:
-            proto.elements.add().ParseFromString(e.pb_dumps())
-
-        for c in self.components:
-            proto.components.add().ParseFromString(c.pb_dumps())
-
-        for i in self.instances:
-            proto.instances.add().ParseFromString(i.pb_dumps())
-
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def from_proto(cls, proto: "objects_pb2.Objects") -> "Objects":
-        """Construct from a decoded proto message."""
+    def from_proto(cls, proto: objects_pb2.Objects) -> Objects:
+        """Construct from the protobuf message; elements load through the polymorphic registry."""
 
         objects = cls(proto.name)
 
         if proto.guid:
             objects.guid = proto.guid
 
-        for p in proto.points:
-            objects.points.append(Point.pb_loads(p.SerializeToString()))
+        objects.points = _load_pb_list(proto.points, Point)
+        objects.lines = _load_pb_list(proto.lines, Line)
+        objects.planes = _load_pb_list(proto.planes, Plane)
+        objects.bboxes = _load_pb_list(proto.bboxes, OBB)
+        objects.polylines = _load_pb_list(proto.polylines, Polyline)
+        objects.pointclouds = _load_pb_list(proto.pointclouds, PointCloud)
+        objects.meshes = _load_pb_list(proto.meshes, Mesh)
+        objects.nurbscurves = _load_pb_list(proto.nurbscurves, NurbsCurve)
+        objects.nurbssurfaces = _load_pb_list(proto.nurbssurfaces, NurbsSurface)
+        objects.breps = _load_pb_list(proto.breps, BRep)
 
-        for l in proto.lines:
-            objects.lines.append(Line.pb_loads(l.SerializeToString()))
+        for element in proto.elements:
+            objects.elements.append(
+                Element.pb_loads_polymorphic(element.SerializeToString())
+            )
 
-        for pl in proto.planes:
-            objects.planes.append(Plane.pb_loads(pl.SerializeToString()))
-
-        for b in proto.bboxes:
-            objects.bboxes.append(OBB.pb_loads(b.SerializeToString()))
-
-        for pl in proto.polylines:
-            objects.polylines.append(Polyline.pb_loads(pl.SerializeToString()))
-
-        for pc in proto.pointclouds:
-            objects.pointclouds.append(PointCloud.pb_loads(pc.SerializeToString()))
-
-        for m in proto.meshes:
-            objects.meshes.append(Mesh.from_proto(m))
-
-        for nc in proto.nurbscurves:
-            objects.nurbscurves.append(NurbsCurve.pb_loads(nc.SerializeToString()))
-
-        for ns in proto.nurbssurfaces:
-            objects.nurbssurfaces.append(NurbsSurface.from_proto(ns))
-
-        for b in proto.breps:
-            objects.breps.append(BRep.pb_loads(b.SerializeToString()))
-
-        for e in proto.elements:
-            objects.elements.append(Element.pb_loads_polymorphic(e.SerializeToString()))
-
-        for c in proto.components:
-            objects.components.append(Component.pb_loads(c.SerializeToString()))
-
-        for i in proto.instances:
-            objects.instances.append(InstanceRef.from_proto(i))
+        objects.components = _load_pb_list(proto.components, Component)
+        objects.instances = _load_pb_list(proto.instances, InstanceRef)
 
         return objects
 
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
     @classmethod
-    def pb_loads(cls, data: bytes) -> "Objects":
+    def pb_loads(cls, data: bytes) -> Objects:
         """Deserialize from protobuf bytes."""
 
         from .proto import objects_pb2
@@ -349,13 +413,26 @@ class Objects:
 
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+    def pb_dump(self, filepath: str | Path) -> None:
         """Write to a protobuf file."""
-        with open(filepath, "wb") as f:
-            f.write(self.pb_dumps())
+
+        with open(filepath, "wb") as file:
+            file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Objects":
+    def pb_load(cls, filepath: str | Path) -> Objects:
         """Read from a protobuf file."""
-        with open(filepath, "rb") as f:
-            return cls.pb_loads(f.read())
+
+        with open(filepath, "rb") as file:
+            return cls.pb_loads(file.read())
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
+    def __str__(self) -> str:
+        """Return "Objects(name=..., guid=..., points=...)"."""
+        return f"Objects(name={self.name}, guid={self.guid}, points={len(self.points)})"
+
+    def __repr__(self) -> str:
+        """Return "Objects(name=..., guid=..., points=...)"."""
+        return str(self)
