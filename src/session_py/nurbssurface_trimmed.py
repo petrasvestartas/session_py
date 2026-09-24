@@ -125,6 +125,45 @@ def _refine_crossing(
     return u, v
 
 
+def _span_turn(srf: NurbsSurface, dir: int, t0: float, t1: float, smid: float) -> float:
+    """Normal turn in degrees along dir over [t0, t1] on the line smid of the other direction, summed over four steps."""
+
+    ma = 0.0
+    pn = Vector(0.0, 0.0, 0.0)
+
+    for k in range(5):
+        t = t0 + k * (t1 - t0) / 4.0
+        nm = srf.normal_at(t, smid) if dir == 0 else srf.normal_at(smid, t)
+
+        if k > 0:
+            d = max(-1.0, min(1.0, pn.dot(nm)))
+            ma += math.acos(d) * 180.0 / PI
+
+        pn = nm
+
+    return ma
+
+
+def _span_deviation(srf: NurbsSurface, dir: int, t0: float, t1: float, smid: float) -> float:
+    """Largest distance of the quarter points along dir over [t0, t1] on the line smid from their chord."""
+
+    p0 = _eval3(srf, t0, smid) if dir == 0 else _eval3(srf, smid, t0)
+    p1 = _eval3(srf, t1, smid) if dir == 0 else _eval3(srf, smid, t1)
+    dev = 0.0
+
+    for k in range(1, 4):
+        fr = k / 4.0
+        tm = t0 + fr * (t1 - t0)
+        pm = _eval3(srf, tm, smid) if dir == 0 else _eval3(srf, smid, tm)
+        lx = p0[0] + fr * (p1[0] - p0[0])
+        ly = p0[1] + fr * (p1[1] - p0[1])
+        lz = p0[2] + fr * (p1[2] - p0[2])
+        dd = math.sqrt((pm[0] - lx) ** 2 + (pm[1] - ly) ** 2 + (pm[2] - lz) ** 2)
+        dev = max(dev, dd)
+
+    return dev
+
+
 def _span_subdivisions(
     srf: NurbsSurface,
     dir: int,
@@ -145,34 +184,10 @@ def _span_subdivisions(
         t1 = sp[i + 1]
 
         if deg > 1:
-            ma = 0.0
-            pn = Vector(0.0, 0.0, 0.0)
-
-            for k in range(5):
-                t = t0 + k * (t1 - t0) / 4.0
-                nm = srf.normal_at(t, smid) if dir == 0 else srf.normal_at(smid, t)
-
-                if k > 0:
-                    d = max(-1.0, min(1.0, pn.dot(nm)))
-                    ma += math.acos(d) * 180.0 / PI
-
-                pn = nm
-
+            ma = _span_turn(srf, dir, t0, t1, smid)
             subs[i] = max(subs[i], max(1, min(math.ceil(ma / max_angle_deg), 64)))
 
-        p0 = _eval3(srf, t0, smid) if dir == 0 else _eval3(srf, smid, t0)
-        p1 = _eval3(srf, t1, smid) if dir == 0 else _eval3(srf, smid, t1)
-        dev = 0.0
-
-        for k in range(1, 4):
-            fr = k / 4.0
-            tm = t0 + fr * (t1 - t0)
-            pm = _eval3(srf, tm, smid) if dir == 0 else _eval3(srf, smid, tm)
-            lx = p0[0] + fr * (p1[0] - p0[0])
-            ly = p0[1] + fr * (p1[1] - p0[1])
-            lz = p0[2] + fr * (p1[2] - p0[2])
-            dd = math.sqrt((pm[0] - lx) ** 2 + (pm[1] - ly) ** 2 + (pm[2] - lz) ** 2)
-            dev = max(dev, dd)
+        dev = _span_deviation(srf, dir, t0, t1, smid)
 
         if dev > chord_tol:
             subs[i] = max(subs[i], min(math.ceil(math.sqrt(dev / chord_tol)), 64))
@@ -192,6 +207,26 @@ def _span_parameters(sp: list[float], subs: list[int]) -> list[float]:
     out.append(sp[-1])
 
     return out
+
+
+def _span_grid(
+    srf: NurbsSurface, max_angle_deg: float, chord_tol: float
+) -> tuple[list[float], list[float]] | None:
+    """Span-adaptive grid parameters in u and v; none when the surface has no span in a direction."""
+
+    usp = srf.get_span_vector(0)
+    vsp = srf.get_span_vector(1)
+
+    if len(usp) < 2 or len(vsp) < 2:
+        return None
+
+    us = _span_parameters(usp, _span_subdivisions(srf, 0, usp, vsp, srf.degree(0), max_angle_deg, chord_tol))
+    vs = _span_parameters(vsp, _span_subdivisions(srf, 1, vsp, usp, srf.degree(1), max_angle_deg, chord_tol))
+
+    if len(us) < 2 or len(vs) < 2:
+        return None
+
+    return us, vs
 
 
 def _unit3(n: Vector) -> list[float] | None:
@@ -287,24 +322,6 @@ def _project_to_uv(
     return Point(d.dot(u_axis) / u_len2, d.dot(v_axis) / v_len2, 0.0)
 
 
-def _snap_to_border(
-    p: list[float], u0: float, u1: float, v0: float, v1: float, snap_uv: float
-) -> None:
-    """Snap a UV point onto the domain border when within snap_uv of it."""
-
-    if abs(p[0] - u0) < snap_uv:
-        p[0] = u0
-
-    if abs(p[0] - u1) < snap_uv:
-        p[0] = u1
-
-    if abs(p[1] - v0) < snap_uv:
-        p[1] = v0
-
-    if abs(p[1] - v1) < snap_uv:
-        p[1] = v1
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # VertexWelder
 # ═══════════════════════════════════════════════════════════════════════════
@@ -357,6 +374,123 @@ class _VertexWelder:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Plane clipping
+# ═══════════════════════════════════════════════════════════════════════════
+def _clip_cell(
+    welder: _VertexWelder,
+    srf: NurbsSurface,
+    q: list[float],
+    n: list[float],
+    cu: list[float],
+    cv: list[float],
+    fc: list[float],
+) -> list[int]:
+    """Welded polygon of the part of a grid cell where the field is <= 0: kept corners and Newton-refined edge crossings in order."""
+
+    inn = [fc[0] <= 0, fc[1] <= 0, fc[2] <= 0, fc[3] <= 0]
+    poly = []
+
+    for k in range(4):
+        kn = (k + 1) % 4
+
+        if inn[k]:
+            poly.append(welder.weld_surface(srf, cu[k], cv[k]))
+
+        if inn[k] != inn[kn]:
+            t = fc[k] / (fc[k] - fc[kn]) if abs(fc[k] - fc[kn]) > 1e-30 else 0.5
+            u = cu[k] + (cu[kn] - cu[k]) * t
+            v = cv[k] + (cv[kn] - cv[k]) * t
+            u, v = _refine_crossing(srf, q, n, u, v)
+            poly.append(welder.weld_surface(srf, u, v))
+
+    return poly
+
+
+def _add_fan(mesh: Mesh, poly: list[int]) -> None:
+    """Fan a welded polygon into the mesh from its first vertex, skipping triangles with a repeated vertex."""
+
+    for t in range(1, len(poly) - 1):
+        a = poly[0]
+        b = poly[t]
+        c = poly[t + 1]
+
+        if a == b or b == c or c == a:
+            continue
+
+        mesh.add_face([a, b, c])
+
+
+def _grid_triangles(us: list[float], vs: list[float]) -> list[list[tuple[float, float]]]:
+    """Two UV triangles per cell of the grid us x vs."""
+
+    tris = []
+
+    for i in range(len(us) - 1):
+        for j in range(len(vs) - 1):
+            a = (us[i], vs[j])
+            b = (us[i + 1], vs[j])
+            c = (us[i + 1], vs[j + 1])
+            d = (us[i], vs[j + 1])
+            tris.append([a, b, c])
+            tris.append([a, c, d])
+
+    return tris
+
+
+def _clip_triangles(
+    srf: NurbsSurface, q: list[float], n: list[float], tris: list[list[tuple[float, float]]]
+) -> list[list[tuple[float, float]]]:
+    """UV triangles clipped to the half (S-q).n <= 1e-9, each kept part fanned from its first corner."""
+
+    eps = 1e-9
+    nxt = []
+
+    for t in tris:
+        poly = []
+
+        for e in range(3):
+            p = t[e]
+            r = t[(e + 1) % 3]
+            fp = _plane_field(srf, q, n, p[0], p[1])
+            fr = _plane_field(srf, q, n, r[0], r[1])
+            pin = fp <= eps
+            rin = fr <= eps
+
+            if pin:
+                poly.append(p)
+
+            if pin != rin:
+                tt = fp / (fp - fr) if abs(fp - fr) > 1e-30 else 0.5
+                cu = p[0] + (r[0] - p[0]) * tt
+                cv = p[1] + (r[1] - p[1]) * tt
+                poly.append(_refine_crossing(srf, q, n, cu, cv))
+
+        for w in range(1, len(poly) - 1):
+            nxt.append([poly[0], poly[w], poly[w + 1]])
+
+    return nxt
+
+
+def _weld_triangles(srf: NurbsSurface, tris: list[list[tuple[float, float]]], weld_tol: float) -> Mesh:
+    """Mesh of UV triangles lifted onto the surface, seams welded within weld_tol, degenerate faces skipped."""
+
+    result = Mesh()
+    welder = _VertexWelder(result, weld_tol, weld_tol)
+
+    for t in tris:
+        a = welder.weld_surface(srf, t[0][0], t[0][1])
+        b = welder.weld_surface(srf, t[1][0], t[1][1])
+        c = welder.weld_surface(srf, t[2][0], t[2][1])
+
+        if a == b or b == c or c == a:
+            continue
+
+        result.add_face([a, b, c])
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # UVGraph
 # ═══════════════════════════════════════════════════════════════════════════
 class _UVVertexPool:
@@ -395,7 +529,437 @@ class _UVVertexPool:
         return vk
 
 
-def _cycle_area(cycle: list[int], hes: list, verts: list[list[float]]) -> float:
+class _SplitDomain:
+    """UV domain of the split surface and the distance under which UV points snap together."""
+
+    __slots__ = ("u0", "u1", "v0", "v1", "snap")
+
+    def __init__(self, u0: float, u1: float, v0: float, v1: float, snap: float):
+        """Construct from the domain bounds and the snap distance."""
+
+        self.u0 = u0  # Start of the u domain.
+        self.u1 = u1  # End of the u domain.
+        self.v0 = v0  # Start of the v domain.
+        self.v1 = v1  # End of the v domain.
+        self.snap = snap  # Snap distance in UV.
+
+
+def _split_domain(srf: NurbsSurface, tolerance: float) -> _SplitDomain:
+    """Domain of the surface with the snap distance: tolerance carried from 3D into UV, else 1e-7 of the shorter side."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    range_u = u1 - u0
+    range_v = v1 - v0
+
+    spans_u = srf.get_span_vector(0)
+    spans_v = srf.get_span_vector(1)
+    nu = max(len(spans_u) - 1, 1) * 4
+    nv = max(len(spans_v) - 1, 1) * 4
+    du = range_u / nu
+    dv = range_v / nv
+    mu = (u0 + u1) * 0.5
+    mv = (v0 + v1) * 0.5
+    pmid = srf.point_at(mu, mv)
+    uv_to_3d_u = pmid.distance(srf.point_at(min(mu + du, u1), mv)) / du
+    uv_to_3d_v = pmid.distance(srf.point_at(mu, min(mv + dv, v1))) / dv
+    uv_to_3d = max(uv_to_3d_u, uv_to_3d_v)
+
+    if uv_to_3d < 1e-10:
+        uv_to_3d = 1.0
+
+    if tolerance > 0.0:
+        return _SplitDomain(u0, u1, v0, v1, max(1e-9, tolerance / uv_to_3d))
+
+    return _SplitDomain(u0, u1, v0, v1, min(range_u, range_v) * 1e-7)
+
+
+def _snap_to_border(p: list[float], dom: _SplitDomain) -> None:
+    """Snap a UV point onto the domain border when within the snap distance of it."""
+
+    if abs(p[0] - dom.u0) < dom.snap:
+        p[0] = dom.u0
+
+    if abs(p[0] - dom.u1) < dom.snap:
+        p[0] = dom.u1
+
+    if abs(p[1] - dom.v0) < dom.snap:
+        p[1] = dom.v0
+
+    if abs(p[1] - dom.v1) < dom.snap:
+        p[1] = dom.v1
+
+
+def _refine_samples(crv: NurbsCurve, entries: list[list[float]], samp_tol: float) -> int:
+    """One pass inserting the parameter midpoint of every chord farther than samp_tol from the curve; the count inserted."""
+
+    inserted = 0
+    i = 0
+
+    while i < len(entries) - 1:
+        a = entries[i]
+        b = entries[i + 1]
+        tm = (a[0] + b[0]) * 0.5
+        pm = crv.point_at(tm)
+        exu = b[1] - a[1]
+        exv = b[2] - a[2]
+        l2 = exu * exu + exv * exv
+        dev = 0.0
+
+        if l2 > 1e-30:
+            s = ((pm[0] - a[1]) * exu + (pm[1] - a[2]) * exv) / l2
+            cx = a[1] + s * exu
+            cy = a[2] + s * exv
+            dev = math.hypot(pm[0] - cx, pm[1] - cy)
+
+        if dev > samp_tol and len(entries) < 4096:
+            entries.insert(i + 1, [tm, pm[0], pm[1]])
+            inserted += 1
+            i += 2
+        else:
+            i += 1
+
+    return inserted
+
+
+def _sample_pcurve(crv: NurbsCurve, samp_tol: float) -> list[list[float]]:
+    """Samples (t, u, v) of a pcurve: uniform in t, then up to six passes of chord refinement."""
+
+    ct0, ct1 = crv.domain()
+    n = min(max(crv.cv_count() * 4, 16), 2048)
+    entries = []
+
+    for i in range(n + 1):
+        t = ct0 + (ct1 - ct0) * i / n
+        p = crv.point_at(t)
+        entries.append([t, p[0], p[1]])
+
+    for depth in range(6):
+        if _refine_samples(crv, entries, samp_tol) == 0:
+            break
+
+    return entries
+
+
+def _clamp_samples(entries: list[list[float]], cidx: int, dom: _SplitDomain) -> dict:
+    """Polyline of pcurve cidx from its samples: clamped into the domain, snapped to the border, repeats dropped."""
+
+    poly = {"cidx": cidx, "pts": [], "ts": []}
+
+    for t, pu, pv in entries:
+        p = [min(max(pu, dom.u0), dom.u1), min(max(pv, dom.v0), dom.v1)]
+        _snap_to_border(p, dom)
+
+        if poly["pts"] and abs(p[0] - poly["pts"][-1][0]) < 1e-15 and abs(p[1] - poly["pts"][-1][1]) < 1e-15:
+            continue
+
+        poly["pts"].append(p)
+        poly["ts"].append(t)
+
+    return poly
+
+
+def _on_border(pts: list[list[float]], dom: _SplitDomain) -> bool:
+    """True when every point lies within the snap distance of one domain side."""
+
+    on_u0 = True
+    on_u1 = True
+    on_v0 = True
+    on_v1 = True
+
+    for p in pts:
+        if abs(p[0] - dom.u0) >= dom.snap:
+            on_u0 = False
+
+        if abs(p[0] - dom.u1) >= dom.snap:
+            on_u1 = False
+
+        if abs(p[1] - dom.v0) >= dom.snap:
+            on_v0 = False
+
+        if abs(p[1] - dom.v1) >= dom.snap:
+            on_v1 = False
+
+    return on_u0 or on_u1 or on_v0 or on_v1
+
+
+def _polyline_length(pts: list[list[float]]) -> float:
+    """Length of a UV polyline."""
+
+    ext = 0.0
+
+    for k in range(1, len(pts)):
+        ext += math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1])
+
+    return ext
+
+
+def _uv_polylines(pcurves: list[NurbsCurve], dom: _SplitDomain) -> list[dict]:
+    """Polylines of the valid pcurves that neither hug the border nor fall short of min_ext, then the four domain sides."""
+
+    range_u = dom.u1 - dom.u0
+    range_v = dom.v1 - dom.v0
+    samp_tol = max(range_u, range_v) * 2e-5
+    min_ext = max(dom.snap * 8.0, min(range_u, range_v) * 1e-5)
+    polylines = []
+
+    for cidx, crv in enumerate(pcurves):
+        if not crv.is_valid():
+            continue
+
+        poly = _clamp_samples(_sample_pcurve(crv, samp_tol), cidx, dom)
+
+        if len(poly["pts"]) >= 2 and not _on_border(poly["pts"], dom) and _polyline_length(poly["pts"]) >= min_ext:
+            polylines.append(poly)
+
+    polylines.append({"cidx": -1, "pts": [[dom.u0, dom.v0], [dom.u1, dom.v0]], "ts": [dom.u0, dom.u1]})
+    polylines.append({"cidx": -2, "pts": [[dom.u1, dom.v0], [dom.u1, dom.v1]], "ts": [dom.v0, dom.v1]})
+    polylines.append({"cidx": -3, "pts": [[dom.u1, dom.v1], [dom.u0, dom.v1]], "ts": [dom.u1, dom.u0]})
+    polylines.append({"cidx": -4, "pts": [[dom.u0, dom.v1], [dom.u0, dom.v0]], "ts": [dom.v1, dom.v0]})
+
+    return polylines
+
+
+def _uv_bounds(pts: list[list[float]]) -> list[float]:
+    """UV bounds (umin, umax, vmin, vmax) of a polyline."""
+
+    bounds = [pts[0][0], pts[0][0], pts[0][1], pts[0][1]]
+
+    for p in pts:
+        bounds[0] = min(bounds[0], p[0])
+        bounds[1] = max(bounds[1], p[0])
+        bounds[2] = min(bounds[2], p[1])
+        bounds[3] = max(bounds[3], p[1])
+
+    return bounds
+
+
+def _boxes_overlap(A: dict, B: dict, snap: float) -> bool:
+    """True when the bounds of B meet the bounds of A grown by snap."""
+
+    a = _uv_bounds(A["pts"])
+    b = _uv_bounds(B["pts"])
+
+    return not (b[0] > a[1] + snap or b[1] < a[0] - snap or b[2] > a[3] + snap or b[3] < a[2] - snap)
+
+
+def _border_parameter(cidx: int, hp: list[float]) -> float:
+    """Parameter of a point along domain side cidx: u on the bottom and top sides, v on the left and right."""
+    return hp[0] if cidx in (-1, -3) else hp[1]
+
+
+def _crossing_point(
+    acidx: int,
+    ta: float,
+    bcidx: int,
+    tb: float,
+    hit: list[float],
+    pcurves: list[NurbsCurve],
+    dom: _SplitDomain,
+) -> tuple[list[float], float, float]:
+    """UV point of a crossing moved onto its pcurves, Newton-refined when both are pcurves, snapped to the border; ta and tb follow it."""
+
+    hp = [hit[0], hit[1]]
+
+    if acidx >= 0 and bcidx >= 0:
+        ta, tb = _newton_curve_curve(pcurves[acidx], ta, pcurves[bcidx], tb, dom.snap * 0.01)
+
+    if acidx >= 0:
+        pa = pcurves[acidx].point_at(ta)
+        hp = [pa[0], pa[1]]
+    elif bcidx >= 0:
+        pb = pcurves[bcidx].point_at(tb)
+        hp = [pb[0], pb[1]]
+
+    _snap_to_border(hp, dom)
+
+    if bcidx < 0:
+        tb = _border_parameter(bcidx, hp)
+
+    if acidx < 0:
+        ta = _border_parameter(acidx, hp)
+
+    return hp, ta, tb
+
+
+def _add_crossings(
+    polylines: list[dict],
+    pi: int,
+    pj: int,
+    pcurves: list[NurbsCurve],
+    dom: _SplitDomain,
+    splits: dict,
+) -> None:
+    """Crossings of polylines pi and pj as events (fraction, u, v, parameter) on each crossed segment."""
+
+    A = polylines[pi]
+    B = polylines[pj]
+
+    for ia in range(len(A["pts"]) - 1):
+        for ib in range(len(B["pts"]) - 1):
+            hit = _segment_intersection(A["pts"][ia], A["pts"][ia + 1], B["pts"][ib], B["pts"][ib + 1])
+
+            if hit is None:
+                continue
+
+            s, t = hit
+            ta = A["ts"][ia] + (A["ts"][ia + 1] - A["ts"][ia]) * s
+            tb = B["ts"][ib] + (B["ts"][ib + 1] - B["ts"][ib]) * t
+            hu = A["pts"][ia][0] + (A["pts"][ia + 1][0] - A["pts"][ia][0]) * s
+            hv = A["pts"][ia][1] + (A["pts"][ia + 1][1] - A["pts"][ia][1]) * s
+            hp, ta, tb = _crossing_point(A["cidx"], ta, B["cidx"], tb, [hu, hv], pcurves, dom)
+            splits.setdefault((pi, ia), []).append((s, hp[0], hp[1], ta))
+            splits.setdefault((pj, ib), []).append((t, hp[0], hp[1], tb))
+
+
+def _polyline_crossings(polylines: list[dict], pcurves: list[NurbsCurve], dom: _SplitDomain) -> dict:
+    """Crossing events of every pair of overlapping polylines with at least one pcurve, keyed by (polyline, segment)."""
+
+    splits = {}
+
+    for pi in range(len(polylines)):
+        for pj in range(pi + 1, len(polylines)):
+            if (polylines[pi]["cidx"] >= 0 or polylines[pj]["cidx"] >= 0) and _boxes_overlap(
+                polylines[pi], polylines[pj], dom.snap
+            ):
+                _add_crossings(polylines, pi, pj, pcurves, dom, splits)
+
+    return splits
+
+
+def _split_edges(polylines: list[dict], splits: dict, pool: _UVVertexPool) -> list[dict]:
+    """Graph edges along every polyline between consecutive pool vertices, its crossings inserted in order."""
+
+    edges = []
+
+    for pi, poly in enumerate(polylines):
+        chain = []
+
+        for i in range(len(poly["pts"])):
+            chain.append((pool.id(poly["pts"][i]), poly["ts"][i]))
+
+            if i < len(poly["pts"]) - 1 and (pi, i) in splits:
+                for frac, hu, hv, tc in sorted(splits[(pi, i)]):
+                    chain.append((pool.id([hu, hv]), tc))
+
+        for i in range(len(chain) - 1):
+            a, ta = chain[i]
+            b, tb = chain[i + 1]
+
+            if a == b:
+                continue
+
+            edges.append({"a": a, "b": b, "cidx": poly["cidx"], "ta": ta, "tb": tb})
+
+    return edges
+
+
+def _prune_dangling(edges: list[dict]) -> list[dict]:
+    """Edges left after repeatedly dropping every edge with an end of degree one."""
+
+    alive = [True] * len(edges)
+    changed = True
+
+    for _ in range(len(edges) + 1):
+        if not changed:
+            break
+
+        changed = False
+        degree = {}
+
+        for ei, e in enumerate(edges):
+            if not alive[ei]:
+                continue
+
+            degree[e["a"]] = degree.get(e["a"], 0) + 1
+            degree[e["b"]] = degree.get(e["b"], 0) + 1
+
+        for ei, e in enumerate(edges):
+            if not alive[ei]:
+                continue
+
+            if degree.get(e["a"], 0) == 1 or degree.get(e["b"], 0) == 1:
+                alive[ei] = False
+                changed = True
+
+    live_edges = []
+
+    for ei in range(len(edges)):
+        if alive[ei]:
+            live_edges.append(edges[ei])
+
+    return live_edges
+
+
+def _half_edges(edges: list[dict]) -> list[list[int]]:
+    """Two opposite half-edges [tail, head, edge, forward] per edge, the forward one at the even index."""
+
+    hes = []
+
+    for ei, e in enumerate(edges):
+        hes.append([e["a"], e["b"], ei, 1])
+        hes.append([e["b"], e["a"], ei, 0])
+
+    return hes
+
+
+def _next_half_edges(hes: list[list[int]], verts: list[list[float]]) -> list[int]:
+    """Successor of every half-edge around its face: the twin of an outgoing half-edge continues with its predecessor in the angle-sorted fan."""
+
+    out_map = []
+
+    for vid in range(len(verts)):
+        out_map.append([])
+
+    for hi in range(len(hes)):
+        out_map[hes[hi][0]].append(hi)
+
+    for vid in range(len(out_map)):
+        fan = []
+
+        for hi in out_map[vid]:
+            angle = math.atan2(verts[hes[hi][1]][1] - verts[vid][1], verts[hes[hi][1]][0] - verts[vid][0])
+            fan.append((angle, hi))
+
+        fan.sort()
+
+        for k in range(len(fan)):
+            out_map[vid][k] = fan[k][1]
+
+    next_he = [-1] * len(hes)
+
+    for outs in out_map:
+        for pos in range(len(outs)):
+            next_he[outs[pos] ^ 1] = outs[(pos + len(outs) - 1) % len(outs)]
+
+    return next_he
+
+
+def _face_cycles(next_he: list[int]) -> list[list[int]]:
+    """Cycles of at least two half-edges traced through next_he, each half-edge in one cycle."""
+
+    visited = [False] * len(next_he)
+    faces = []
+
+    for hi in range(len(next_he)):
+        if visited[hi]:
+            continue
+
+        cycle = []
+        cur = hi
+
+        while cur >= 0 and not visited[cur]:
+            visited[cur] = True
+            cycle.append(cur)
+            cur = next_he[cur]
+
+        if len(cycle) >= 2:
+            faces.append(cycle)
+
+    return faces
+
+
+def _cycle_area(cycle: list[int], hes: list[list[int]], verts: list[list[float]]) -> float:
     """Signed area of a half-edge cycle."""
 
     s = 0.0
@@ -408,9 +972,47 @@ def _cycle_area(cycle: list[int], hes: list, verts: list[list[float]]) -> float:
     return s * 0.5
 
 
-def _point_in_cycle(
-    p: list[float], cycle: list[int], hes: list, verts: list[list[float]]
-) -> bool:
+def _touches_border(cycle: list[int], hes: list[list[int]], border_vids: set[int]) -> bool:
+    """True when a cycle passes through a vertex of the domain border."""
+
+    for hi in cycle:
+        if hes[hi][0] in border_vids:
+            return True
+
+    return False
+
+
+def _classify_faces(
+    faces: list[list[int]],
+    hes: list[list[int]],
+    verts: list[list[float]],
+    edges: list[dict],
+    snap: float,
+) -> tuple[list[tuple[list[int], float]], list[list[int]]]:
+    """Face cycles by orientation: counter-clockwise faces with their area, clockwise holes clear of the domain border."""
+
+    border_vids = set()
+
+    for e in edges:
+        if e["cidx"] < 0:
+            border_vids.add(e["a"])
+            border_vids.add(e["b"])
+
+    pos_faces = []
+    neg_faces = []
+
+    for cycle in faces:
+        area = _cycle_area(cycle, hes, verts)
+
+        if area > snap * snap:
+            pos_faces.append((cycle, area))
+        elif area < -snap * snap and not _touches_border(cycle, hes, border_vids):
+            neg_faces.append(cycle)
+
+    return pos_faces, neg_faces
+
+
+def _point_in_cycle(p: list[float], cycle: list[int], hes: list[list[int]], verts: list[list[float]]) -> bool:
     """Even-odd test of p against a half-edge cycle."""
 
     inside = False
@@ -419,23 +1021,64 @@ def _point_in_cycle(
         a = verts[hes[hi][0]]
         b = verts[hes[hi][1]]
 
-        if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (
-            b[1] - a[1]
-        ) + a[0]:
+        if (a[1] > p[1]) != (b[1] > p[1]) and p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]:
             inside = not inside
 
     return inside
 
 
-def _cycle_to_segments(
-    cycle: list[int], hes: list, verts: list[list[float]], pcurves: list[NurbsCurve]
-) -> list[NurbsCurve]:
-    """Pieces of a cycle: trimmed pcurve runs, straight UV segments where a run cannot be cut."""
+def _same_vertices(a: list[int], b: list[int], hes: list[list[int]]) -> bool:
+    """True when two cycles pass through the same set of vertices."""
+
+    a_vids = set()
+    b_vids = set()
+
+    for hi in a:
+        a_vids.add(hes[hi][0])
+
+    for hi in b:
+        b_vids.add(hes[hi][0])
+
+    return a_vids == b_vids
+
+
+def _assign_holes(
+    neg_faces: list[list[int]],
+    pos_faces: list[tuple[list[int], float]],
+    hes: list[list[int]],
+    verts: list[list[float]],
+) -> list[list[list[int]]]:
+    """Holes per positive face: each hole goes to the smallest face that contains it and is not its own vertex ring."""
+
+    holes_of = []
+
+    for fi in range(len(pos_faces)):
+        holes_of.append([])
+
+    for cycle in neg_faces:
+        sample = verts[hes[cycle[0]][0]]
+        best = -1
+        best_area = float("inf")
+
+        for fi, (fc, area) in enumerate(pos_faces):
+            if area < best_area and _point_in_cycle(sample, fc, hes, verts) and not _same_vertices(cycle, fc, hes):
+                best = fi
+                best_area = area
+
+        if best >= 0:
+            holes_of[best].append(cycle)
+
+    return holes_of
+
+
+def _cycle_runs(cycle: list[int], hes: list[list[int]], edges: list[dict]) -> list[dict]:
+    """Runs of a cycle: consecutive half-edges on one pcurve merged."""
 
     runs = []
 
     for hi in cycle:
-        tail, head, e, fwd = hes[hi]
+        tail, head, eidx, fwd = hes[hi]
+        e = edges[eidx]
         ta = e["ta"] if fwd else e["tb"]
         tb = e["tb"] if fwd else e["ta"]
 
@@ -445,58 +1088,90 @@ def _cycle_to_segments(
         else:
             runs.append({"cidx": e["cidx"], "va": tail, "vb": head, "ta": ta, "tb": tb})
 
+    return runs
+
+
+def _run_piece(run: dict, pcurves: list[NurbsCurve]) -> NurbsCurve | None:
+    """Pcurve piece of a run, trimmed to its parameters and oriented along it; none when the run cannot be cut."""
+
+    if run["cidx"] < 0:
+        return None
+
+    crv = pcurves[run["cidx"]]
+    c0, c1 = crv.domain()
+    lo = max(c0, min(run["ta"], run["tb"]))
+    hi_ = min(c1, max(run["ta"], run["tb"]))
+    piece = crv.duplicate()
+
+    if hi_ - lo < (c1 - c0) - 1e-12 and hi_ - lo > 1e-14:
+        if not piece.trim(lo, hi_):
+            return None
+    elif hi_ - lo <= 1e-14 and not (run["va"] == run["vb"] and piece.is_closed()):
+        return None
+
+    if not piece.is_valid():
+        return None
+
+    if run["ta"] > run["tb"] and not piece.reverse():
+        return None
+
+    return piece
+
+
+def _cycle_to_segments(
+    cycle: list[int],
+    hes: list[list[int]],
+    edges: list[dict],
+    verts: list[list[float]],
+    pcurves: list[NurbsCurve],
+) -> list[NurbsCurve]:
+    """Pieces of a cycle: trimmed pcurve runs, straight UV segments where a run cannot be cut."""
+
     pieces = []
 
-    for run in runs:
-        made = False
+    for run in _cycle_runs(cycle, hes, edges):
+        piece = _run_piece(run, pcurves)
 
-        if run["cidx"] >= 0:
-            crv = pcurves[run["cidx"]]
-            c0, c1 = crv.domain()
-            lo = max(c0, min(run["ta"], run["tb"]))
-            hi_ = min(c1, max(run["ta"], run["tb"]))
-            piece = crv.duplicate()
-            piece_ok = True
+        if piece is not None:
+            pieces.append(piece)
+            continue
 
-            if hi_ - lo < (c1 - c0) - 1e-12 and hi_ - lo > 1e-14:
-                if not piece.trim(lo, hi_):
-                    piece_ok = False
-            elif hi_ - lo <= 1e-14 and not (
-                run["va"] == run["vb"] and piece.is_closed()
-            ):
-                piece_ok = False
+        pa = verts[run["va"]]
+        pb = verts[run["vb"]]
 
-            if piece_ok and piece.is_valid():
-                if run["ta"] > run["tb"]:
-                    piece.reverse()
-
-                pieces.append(piece)
-                made = True
-
-        if not made:
-            pa = verts[run["va"]]
-            pb = verts[run["vb"]]
-
-            if math.hypot(pb[0] - pa[0], pb[1] - pa[1]) > 1e-14:
-                seg_pts = [
-                    Point(pa[0], pa[1], 0.0),
-                    Point(pb[0], pb[1], 0.0),
-                ]
-                pieces.append(NurbsCurve.create(False, 1, seg_pts))
+        if math.hypot(pb[0] - pa[0], pb[1] - pa[1]) > 1e-14:
+            pieces.append(NurbsCurve.create(False, 1, [Point(pa[0], pa[1], 0.0), Point(pb[0], pb[1], 0.0)]))
 
     return pieces
 
 
+def _close_curve(curve: NurbsCurve, tol: float) -> bool:
+    """Close a curve whose ends lie within tol by moving its last control point onto the first; true when it ends closed."""
+
+    if curve.is_closed():
+        return True
+
+    if curve.point_at_start().distance(curve.point_at_end()) > tol:
+        return False
+
+    last = curve.cv_count() - 1
+    x, y, z, w = curve.get_cv_4d(0)
+    xe, ye, ze, we = curve.get_cv_4d(last)
+
+    return curve.set_cv_4d(last, x, y, z, we) and curve.is_closed()
+
+
 def _cycle_to_loop(
     cycle: list[int],
-    hes: list,
+    hes: list[list[int]],
+    edges: list[dict],
     verts: list[list[float]],
     pcurves: list[NurbsCurve],
     snap_uv: float,
 ) -> NurbsCurve:
     """Closed loop of a cycle: the joined pieces when they close, else the polygon through its vertices."""
 
-    pieces = _cycle_to_segments(cycle, hes, verts, pcurves)
+    pieces = _cycle_to_segments(cycle, hes, edges, verts, pcurves)
 
     if not pieces:
         return NurbsCurve()
@@ -504,19 +1179,8 @@ def _cycle_to_loop(
     join_tol = snap_uv * 4.0
     joined = NurbsCurve.join(pieces, join_tol)
 
-    if len(joined) == 1 and joined[0].is_valid():
-        J = joined[0]
-
-        if (
-            not J.is_closed()
-            and J.point_at_start().distance(J.point_at_end()) <= join_tol
-        ):
-            x, y, z, w = J.get_cv_4d(0)
-            xe, ye, ze, we = J.get_cv_4d(J.cv_count() - 1)
-            J.set_cv_4d(J.cv_count() - 1, x, y, z, we)
-
-        if J.is_closed():
-            return J
+    if len(joined) == 1 and joined[0].is_valid() and _close_curve(joined[0], join_tol):
+        return joined[0]
 
     loop_pts = []
 
@@ -574,6 +1238,8 @@ class _Delaunay2D:
         self.triangles = []  # Triangle pool, dead ones flagged.
         self.edge_map = {}  # Hull edge -> (triangle, edge index).
         self.last_found = 0  # Triangle the last locate ended in.
+        self._visit_epoch = 0  # Stamp of the current search.
+        self._visit_stamp = []  # Last search stamp per triangle.
         self.vertices.append(_Vertex2D(cx - scale * d, cy - scale * d))
         self.vertices.append(_Vertex2D(cx + scale * d, cy - scale * d))
         self.vertices.append(_Vertex2D(cx, cy + scale * d))
@@ -696,90 +1362,114 @@ class _Delaunay2D:
         """Insert a point and return its vertex index, the existing one when coincident."""
 
         start = self._locate(x, y, self.last_found)
+        existing = self._find_coincident(start, x, y)
 
-        if start >= 0:
-            t = self.triangles[start]
-
-            for k in range(3):
-                vi2 = t.v[k]
-                ddx = self.vertices[vi2].x - x
-                ddy = self.vertices[vi2].y - y
-
-                if ddx * ddx + ddy * ddy < 1e-12:
-                    return vi2
+        if existing >= 0:
+            return existing
 
         vi = len(self.vertices)
         self.vertices.append(_Vertex2D(x, y))
-        bad = []
-        visited = set()
-
-        if start >= 0:
-            bad.append(start)
-            visited.add(start)
-
-        bfs_front = 0
-
-        while bfs_front < len(bad):
-            ti = bad[bfs_front]
-            bfs_front += 1
-
-            if not self.triangles[ti].alive:
-                continue
-
-            v0, v1, v2 = self.triangles[ti].v
-            ax = self.vertices[v0].x
-            ay = self.vertices[v0].y
-            bx = self.vertices[v1].x
-            by = self.vertices[v1].y
-            cx = self.vertices[v2].x
-            cy = self.vertices[v2].y
-            o = self._orient2d(ax, ay, bx, by, cx, cy)
-
-            if o > 0:
-                ic = self._in_circumcircle(ax, ay, bx, by, cx, cy, x, y)
-            else:
-                ic = self._in_circumcircle(ax, ay, cx, cy, bx, by, x, y)
-
-            if ic > 0:
-                for k in range(3):
-                    if self.triangles[ti].constrained[k]:
-                        continue
-
-                    nb = self.triangles[ti].adj[k]
-
-                    if nb >= 0 and nb not in visited:
-                        visited.add(nb)
-                        bad.append(nb)
-
-        kept = []
-
-        for ti in bad:
-            if not self.triangles[ti].alive:
-                continue
-
-            v0, v1, v2 = self.triangles[ti].v
-            ax = self.vertices[v0].x
-            ay = self.vertices[v0].y
-            bx = self.vertices[v1].x
-            by = self.vertices[v1].y
-            cx = self.vertices[v2].x
-            cy = self.vertices[v2].y
-            o = self._orient2d(ax, ay, bx, by, cx, cy)
-
-            if o > 0:
-                ic = self._in_circumcircle(ax, ay, bx, by, cx, cy, x, y)
-            else:
-                ic = self._in_circumcircle(ax, ay, cx, cy, bx, by, x, y)
-
-            if ic > 0:
-                kept.append(ti)
-
-        bad = kept
+        bad = self._collect_cavity(start, x, y)
 
         if not bad:
             self.vertices.pop()
 
             return -1
+
+        self._fill_cavity(vi, bad, self._cavity_polygon(bad))
+        self.last_found = len(self.triangles) - 1
+
+        return vi
+
+    def _vertex_index(self, ti, v):
+        """Corner of triangle ti holding vertex v, -1 when none does."""
+
+        for k in range(3):
+            if self.triangles[ti].v[k] == v:
+                return k
+
+        return -1
+
+    def _opposite_vertex(self, ti, nb):
+        """Vertex of triangle ti across its edge shared with triangle nb, -1 when they are not neighbours."""
+
+        for k in range(3):
+            if self.triangles[ti].adj[k] == nb:
+                return self.triangles[ti].v[k]
+
+        return -1
+
+    def _find_coincident(self, start, x, y):
+        """Vertex of triangle start within 1e-6 of (x, y), -1 when none."""
+
+        if start < 0 or not self.triangles[start].alive:
+            return -1
+
+        for vi in self.triangles[start].v:
+            ddx = self.vertices[vi].x - x
+            ddy = self.vertices[vi].y - y
+
+            if ddx * ddx + ddy * ddy < 1e-12:
+                return vi
+
+        return -1
+
+    def _circumcircle_contains(self, ti, x, y):
+        """True when (x, y) lies inside the circumcircle of triangle ti."""
+
+        v0, v1, v2 = self.triangles[ti].v
+        ax = self.vertices[v0].x
+        ay = self.vertices[v0].y
+        bx = self.vertices[v1].x
+        by = self.vertices[v1].y
+        cx = self.vertices[v2].x
+        cy = self.vertices[v2].y
+        o = self._orient2d(ax, ay, bx, by, cx, cy)
+
+        if o > 0:
+            ic = self._in_circumcircle(ax, ay, bx, by, cx, cy, x, y)
+        else:
+            ic = self._in_circumcircle(ax, ay, cx, cy, bx, by, x, y)
+
+        return ic > 0
+
+    def _collect_cavity(self, start, x, y):
+        """Triangles whose circumcircle holds (x, y), grown from start across unconstrained edges."""
+
+        self._visit_epoch += 1
+
+        if len(self._visit_stamp) < len(self.triangles) + 64:
+            self._visit_stamp.extend([0] * (len(self.triangles) + 64 - len(self._visit_stamp)))
+
+        bad = []
+
+        if start >= 0:
+            bad.append(start)
+            self._visit_stamp[start] = self._visit_epoch
+
+        front = 0
+
+        while front < len(bad):
+            ti = bad[front]
+            front += 1
+
+            if not self.triangles[ti].alive or not self._circumcircle_contains(ti, x, y):
+                bad[front - 1] = -1
+                continue
+
+            for k in range(3):
+                nb = self.triangles[ti].adj[k]
+
+                if self.triangles[ti].constrained[k] or nb < 0 or self._visit_stamp[nb] == self._visit_epoch:
+                    continue
+
+                self._visit_stamp[nb] = self._visit_epoch
+                bad.append(nb)
+
+        return [ti for ti in bad if ti >= 0]
+
+    def _cavity_polygon(self, bad):
+        """Edges of the bad triangles that face a good neighbour or the hull."""
 
         bad_set = set(bad)
         polygon = []
@@ -791,9 +1481,12 @@ class _Delaunay2D:
                 nb = t.adj[k]
 
                 if nb < 0 or nb not in bad_set:
-                    polygon.append(
-                        (t.v[(k + 1) % 3], t.v[(k + 2) % 3], t.constrained[k])
-                    )
+                    polygon.append((t.v[(k + 1) % 3], t.v[(k + 2) % 3], t.constrained[k]))
+
+        return polygon
+
+    def _fill_cavity(self, vi, bad, polygon):
+        """Replace the bad triangles by a fan from vertex vi to the polygon edges."""
 
         for ti in bad:
             self._unregister_edges(ti)
@@ -824,15 +1517,32 @@ class _Delaunay2D:
             self.triangles.append(tri)
             self._register_edges(new_ti)
 
-        self.last_found = len(self.triangles) - 1
-
-        return vi
-
     def insert_constraint(self, v0: int, v1: int) -> None:
         """Force the edge v0-v1 into the triangulation by flipping the edges it crosses."""
 
-        if v0 == v1:
+        if v0 == v1 or self._constrain_existing(v0, v1):
             return
+
+        start_ti = self._first_triangle_at(v0)
+
+        if start_ti < 0:
+            return
+
+        it, ivl, ivr = self._first_crossed(start_ti, v0, v1)
+
+        if it < 0:
+            return
+
+        poly_l = [v0, ivl]
+        poly_r = [v0, ivr]
+        intersected = [it]
+        self._walk_crossed(v0, v1, ivl, ivr, poly_l, poly_r, intersected)
+        poly_l.append(v1)
+        poly_r.append(v1)
+        self._retriangulate(v0, v1, poly_l, poly_r, intersected)
+
+    def _constrain_existing(self, v0, v1):
+        """Mark v0-v1 constrained when it already is a triangle edge; false when it is not."""
 
         for ti in range(len(self.triangles)):
             if not self.triangles[ti].alive:
@@ -842,71 +1552,56 @@ class _Delaunay2D:
                 e0 = self.triangles[ti].v[(k + 1) % 3]
                 e1 = self.triangles[ti].v[(k + 2) % 3]
 
-                if (e0 == v0 and e1 == v1) or (e0 == v1 and e1 == v0):
-                    self.triangles[ti].constrained[k] = True
-                    nb = self.triangles[ti].adj[k]
+                if not ((e0 == v0 and e1 == v1) or (e0 == v1 and e1 == v0)):
+                    continue
 
-                    if nb >= 0 and self.triangles[nb].alive:
-                        for kk in range(3):
-                            if self.triangles[nb].adj[kk] == ti:
-                                self.triangles[nb].constrained[kk] = True
-                                break
+                self.triangles[ti].constrained[k] = True
+                nb = self.triangles[ti].adj[k]
 
-                    return
+                if nb >= 0 and self.triangles[nb].alive:
+                    for kk in range(3):
+                        if self.triangles[nb].adj[kk] == ti:
+                            self.triangles[nb].constrained[kk] = True
+                            break
 
-        start_ti = -1
+                return True
 
-        for i in range(len(self.triangles) - 1, -1, -1):
-            if not self.triangles[i].alive:
-                continue
+        return False
 
-            for k in range(3):
-                if self.triangles[i].v[k] == v0:
-                    start_ti = i
-                    break
+    def _first_triangle_at(self, v):
+        """Lowest live triangle with vertex v, -1 when none."""
 
-        if start_ti < 0:
-            return
+        for ti in range(len(self.triangles)):
+            if self.triangles[ti].alive and self._has_vertex(ti, v):
+                return ti
+
+        return -1
+
+    def _first_crossed(self, start_ti, v0, v1):
+        """Triangle around v0 whose opposite edge the segment v0-v1 crosses, with that edge's left and right ends; -1 when none."""
 
         ax = self.vertices[v0].x
         ay = self.vertices[v0].y
         bx = self.vertices[v1].x
         by = self.vertices[v1].y
-        ivl = -1
-        ivr = -1
-        it = -1
         ti = start_ti
-        walk_guard = len(self.triangles) + 4
 
-        for _ in range(walk_guard):
+        for _ in range(len(self.triangles) + 4):
             if not self.triangles[ti].alive:
                 break
 
-            k_v0 = -1
+            k = self._vertex_index(ti, v0)
 
-            for i in range(3):
-                if self.triangles[ti].v[i] == v0:
-                    k_v0 = i
-                    break
-
-            if k_v0 < 0:
+            if k < 0:
                 break
 
-            k = k_v0
             ip2 = self.triangles[ti].v[(k + 1) % 3]
             ip1 = self.triangles[ti].v[(k + 2) % 3]
-            op2 = self._orient2d(
-                ax, ay, bx, by, self.vertices[ip2].x, self.vertices[ip2].y
-            )
-            op1 = self._orient2d(
-                ax, ay, bx, by, self.vertices[ip1].x, self.vertices[ip1].y
-            )
+            op2 = self._orient2d(ax, ay, bx, by, self.vertices[ip2].x, self.vertices[ip2].y)
+            op1 = self._orient2d(ax, ay, bx, by, self.vertices[ip1].x, self.vertices[ip1].y)
 
             if op2 < 0 and op1 >= 0:
-                ivl = ip1
-                ivr = ip2
-                it = ti
-                break
+                return ti, ip1, ip2
 
             nxt = self.triangles[ti].adj[(k + 1) % 3]
 
@@ -915,26 +1610,23 @@ class _Delaunay2D:
 
             ti = nxt
 
-        if it < 0:
-            return
+        return -1, -1, -1
 
-        poly_l = [v0, ivl]
-        poly_r = [v0, ivr]
-        intersected = [it]
+    def _walk_crossed(self, v0, v1, ivl, ivr, poly_l, poly_r, intersected):
+        """Walk the triangles crossed by v0-v1 from intersected[0], collecting the vertices left and right of it."""
+
+        ax = self.vertices[v0].x
+        ay = self.vertices[v0].y
+        bx = self.vertices[v1].x
+        by = self.vertices[v1].y
         iv = v0
-        cur_it = it
-        cross_guard = len(self.triangles) * 2 + 8
+        cur_it = intersected[0]
 
-        for _ in range(cross_guard):
+        for _ in range(len(self.triangles) * 2 + 8):
             if self._has_vertex(cur_it, v1):
                 break
 
-            k_iv = -1
-
-            for i in range(3):
-                if self.triangles[cur_it].v[i] == iv:
-                    k_iv = i
-                    break
+            k_iv = self._vertex_index(cur_it, iv)
 
             if k_iv < 0:
                 break
@@ -944,19 +1636,12 @@ class _Delaunay2D:
             if i_topo < 0 or not self.triangles[i_topo].alive:
                 break
 
-            i_vopo = -1
-
-            for k in range(3):
-                if self.triangles[i_topo].adj[k] == cur_it:
-                    i_vopo = self.triangles[i_topo].v[k]
-                    break
+            i_vopo = self._opposite_vertex(i_topo, cur_it)
 
             if i_vopo < 0:
                 break
 
-            o = self._orient2d(
-                ax, ay, bx, by, self.vertices[i_vopo].x, self.vertices[i_vopo].y
-            )
+            o = self._orient2d(ax, ay, bx, by, self.vertices[i_vopo].x, self.vertices[i_vopo].y)
 
             if o < 0:
                 if i_vopo != v1:
@@ -974,19 +1659,26 @@ class _Delaunay2D:
             intersected.append(i_topo)
             cur_it = i_topo
 
-        poly_l.append(v1)
-        poly_r.append(v1)
-        first_new = len(self.triangles)
+    def _retriangulate(self, v0, v1, poly_l, poly_r, intersected):
+        """Replace the crossed triangles by the two fans on either side of v0-v1 and constrain it."""
 
         for ti in intersected:
             self._unregister_edges(ti)
             self.triangles[ti].alive = False
 
-        for i in range(max(len(poly_l) - 2, 0)):
+        first_new = len(self.triangles)
+
+        for i in range(len(poly_l) - 2):
             self._add_triangle(v1, poly_l[i + 1], poly_l[i])
 
-        for i in range(1, max(len(poly_r) - 1, 1)):
+        for i in range(1, len(poly_r) - 1):
             self._add_triangle(v0, poly_r[i], poly_r[i + 1])
+
+        self._inherit_constraints(first_new)
+        self._mark_edge(v0, v1)
+
+    def _inherit_constraints(self, first_new):
+        """Constrain every edge of a triangle from first_new on that its older neighbour holds constrained."""
 
         for new_ti in range(first_new, len(self.triangles)):
             if not self.triangles[new_ti].alive:
@@ -999,12 +1691,12 @@ class _Delaunay2D:
                     continue
 
                 for kk in range(3):
-                    if (
-                        self.triangles[nb].adj[kk] == new_ti
-                        and self.triangles[nb].constrained[kk]
-                    ):
+                    if self.triangles[nb].adj[kk] == new_ti and self.triangles[nb].constrained[kk]:
                         self.triangles[new_ti].constrained[k] = True
                         break
+
+    def _mark_edge(self, v0, v1):
+        """Mark the edge v0-v1 constrained in every live triangle that has it."""
 
         for ti in range(len(self.triangles)):
             if not self.triangles[ti].alive:
@@ -1097,6 +1789,472 @@ class _Delaunay2D:
                 result.append((a, c, b))
 
         return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Triangulation
+# ═══════════════════════════════════════════════════════════════════════════
+def _loop_points(crv: NurbsCurve) -> list[Point]:
+    """Loop polygon in UV before refinement: the control points of a polyline, else samples, the closing repeat dropped."""
+
+    raw = []
+
+    if crv.degree() <= 1 and not crv.is_rational():
+        for i in range(crv.cv_count()):
+            raw.append(crv.get_cv(i))
+    else:
+        n = min(max(crv.cv_count() * 4, 16), 2048)
+        raw = crv.divide_by_count(n)[0]
+
+    while len(raw) > 1:
+        dx = raw[0][0] - raw[-1][0]
+        dy = raw[0][1] - raw[-1][1]
+
+        if dx * dx + dy * dy < 1e-20:
+            raw.pop()
+        else:
+            break
+
+    return raw
+
+
+def _subdivide_edge(srf: NurbsSurface, start: Point, end: Point, deflection: float, out: list[Point]) -> None:
+    """Append the UV points of the edge start-end without end, halved up to six times until each 3D chord is within deflection."""
+
+    stack = [(start, end, 0)]
+
+    while stack:
+        a, b, depth = stack.pop()
+        mu = (a[0] + b[0]) * 0.5
+        mv = (a[1] + b[1]) * 0.5
+        pa = srf.point_at(a[0], a[1])
+        pm = srf.point_at(mu, mv)
+        edge = srf.point_at(b[0], b[1]) - pa
+        l2 = edge.magnitude_squared()
+
+        if l2 > 1e-30:
+            t = (pm - pa).dot(edge) / l2
+            dev = math.sqrt((pm - (pa + edge * t)).magnitude_squared())
+        else:
+            dev = math.sqrt((pm - pa).magnitude_squared())
+
+        if dev > deflection and depth < 6:
+            stack.append((Point(mu, mv, 0.0), b, depth + 1))
+            stack.append((a, Point(mu, mv, 0.0), depth + 1))
+        else:
+            out.append(a)
+
+
+def _find_crease_knots(surface: NurbsSurface) -> list[list[float]]:
+    """Interior knots per direction whose multiplicity reaches the degree: the C0 lines of the surface."""
+
+    crease_knots = [[], []]
+
+    for direction in range(2):
+        domain = surface.domain(direction)
+        knots = surface.m_nurbsknot[direction]
+
+        for knot in knots:
+            if knot <= domain[0] or knot >= domain[1] or knot in crease_knots[direction]:
+                continue
+
+            multiplicity = 0
+
+            for value in knots:
+                if value == knot:
+                    multiplicity += 1
+
+            if multiplicity >= surface.degree(direction):
+                crease_knots[direction].append(knot)
+
+    return crease_knots
+
+
+def _loop_bounds(pts: list[Point]) -> list[float]:
+    """UV bounds (umin, vmin, umax, vmax) of a loop polygon."""
+
+    bounds = [1e30, 1e30, -1e30, -1e30]
+
+    for p in pts:
+        if p[0] < bounds[0]:
+            bounds[0] = p[0]
+
+        if p[1] < bounds[1]:
+            bounds[1] = p[1]
+
+        if p[0] > bounds[2]:
+            bounds[2] = p[0]
+
+        if p[1] > bounds[3]:
+            bounds[3] = p[1]
+
+    return bounds
+
+
+def _insert_loop_edge(
+    dt: _Delaunay2D,
+    pts: list[Point],
+    vis: list[int],
+    li: int,
+    i: int,
+    crease_knots: list[list[float]],
+    boundary_intervals: dict,
+) -> None:
+    """Constrain loop edge i in pieces cut where it crosses a crease knot line, each crossing inserted and recorded."""
+
+    j = (i + 1) % len(vis)
+    events = [(0.0, vis[i]), (1.0, vis[j])]
+
+    for direction in range(2):
+        delta = pts[j][direction] - pts[i][direction]
+
+        if delta == 0.0:
+            continue
+
+        for knot in crease_knots[direction]:
+            t = (knot - pts[i][direction]) / delta
+
+            if t <= 0.0 or t >= 1.0:
+                continue
+
+            uv = [pts[i][0] + t * (pts[j][0] - pts[i][0]), pts[i][1] + t * (pts[j][1] - pts[i][1])]
+            uv[direction] = knot
+            vi = dt.insert(uv[0], uv[1])
+
+            if vi >= 0:
+                boundary_intervals[vi] = (li, i, t)
+
+            events.append((t, vi))
+
+    events.sort()
+
+    for k in range(1, len(events)):
+        if events[k - 1][1] >= 0 and events[k][1] >= 0 and events[k - 1][1] != events[k][1]:
+            dt.insert_constraint(events[k - 1][1], events[k][1])
+
+
+def _insert_loops(
+    dt: _Delaunay2D, loops_uv: list[list[Point]], crease_knots: list[list[float]], boundary_intervals: dict
+) -> list[list[int]]:
+    """Insert each loop's vertices, then constrain its edges; the vertex index of every loop sample."""
+
+    loop_vids = []
+
+    for li, pts in enumerate(loops_uv):
+        vis = []
+
+        for p in pts:
+            vis.append(dt.insert(p[0], p[1]))
+
+        for i in range(len(vis)):
+            _insert_loop_edge(dt, pts, vis, li, i, crease_knots, boundary_intervals)
+
+        loop_vids.append(vis)
+
+    return loop_vids
+
+
+def _insert_crease_lines(dt: _Delaunay2D, loops_uv: list[list[Point]], crease_knots: list[list[float]]) -> None:
+    """Insert the crease knot crossings inside the loops and constrain each knot line between consecutive vertices on it."""
+
+    for u in crease_knots[0]:
+        for v in crease_knots[1]:
+            if _inside_loops(u, v, loops_uv):
+                dt.insert(u, v)
+
+    for direction in range(2):
+        for knot in crease_knots[direction]:
+            nodes = []
+
+            for vi, vertex in enumerate(dt.vertices):
+                uv = [vertex.x, vertex.y]
+
+                if uv[direction] == knot:
+                    nodes.append((uv[1 - direction], vi))
+
+            nodes.sort()
+
+            for k in range(1, len(nodes)):
+                uv = [knot, knot]
+                uv[1 - direction] = (nodes[k - 1][0] + nodes[k][0]) * 0.5
+
+                if _inside_loops(uv[0], uv[1], loops_uv):
+                    dt.insert_constraint(nodes[k - 1][1], nodes[k][1])
+
+
+def _min_normal_dot(
+    surface: NurbsSurface,
+    crease_knots: list[list[float]],
+    center: tuple[float, float],
+    a: _Vertex2D,
+    b: _Vertex2D,
+    c: _Vertex2D,
+) -> float:
+    """Smallest dot product between the crease-side normals at the corners of triangle abc around its centroid."""
+
+    na = _crease_side_normal(surface, crease_knots, center, [a.x, a.y])
+    nb = _crease_side_normal(surface, crease_knots, center, [b.x, b.y])
+    nc2 = _crease_side_normal(surface, crease_knots, center, [c.x, c.y])
+    d1 = na.dot(nb)
+    d2 = nb.dot(nc2)
+    d3 = na.dot(nc2)
+
+    return min(d1, min(d2, d3))
+
+
+def _refinement_points(
+    dt: _Delaunay2D,
+    surface: NurbsSurface,
+    loops_uv: list[list[Point]],
+    crease_knots: list[list[float]],
+    deflection: float,
+    cos_max_angle: float,
+) -> list[tuple[float, float]]:
+    """Centroids of the live triangles inside the loops whose chord leaves deflection or whose corner normals turn past the angle bound."""
+
+    to_insert = []
+
+    for tri in dt.triangles:
+        if not tri.alive:
+            continue
+
+        a = dt.vertices[tri.v[0]]
+        b = dt.vertices[tri.v[1]]
+        c = dt.vertices[tri.v[2]]
+        cu = (a.x + b.x + c.x) / 3.0
+        cv = (a.y + b.y + c.y) / 3.0
+
+        if not _inside_loops(cu, cv, loops_uv):
+            continue
+
+        pa = surface.point_at(a.x, a.y)
+        pb = surface.point_at(b.x, b.y)
+        pc = surface.point_at(c.x, c.y)
+        pm = surface.point_at(cu, cv)
+        n = (pb - pa).cross(pc - pa)
+        nl = math.sqrt(n.magnitude_squared())
+
+        if nl < 1e-30:
+            continue
+
+        dev = abs((pm - pa).dot(n) / nl)
+
+        if dev > deflection or _min_normal_dot(surface, crease_knots, (cu, cv), a, b, c) < cos_max_angle:
+            to_insert.append((cu, cv))
+
+    return to_insert
+
+
+def _refine(
+    dt: _Delaunay2D,
+    surface: NurbsSurface,
+    loops_uv: list[list[Point]],
+    crease_knots: list[list[float]],
+    deflection: float,
+    cos_max_angle: float,
+) -> None:
+    """Insert refinement centroids for up to eight rounds, until none is needed or the vertex cap is hit."""
+
+    MAX_ITERS = 8
+    MAX_VERTS = 200000
+
+    for _iter in range(MAX_ITERS):
+        to_insert = _refinement_points(dt, surface, loops_uv, crease_knots, deflection, cos_max_angle)
+
+        if not to_insert:
+            break
+
+        for cu, cv in to_insert:
+            if len(dt.vertices) >= MAX_VERTS:
+                break
+
+            dt.insert(cu, cv)
+
+        if len(dt.vertices) >= MAX_VERTS:
+            break
+
+
+def _trim_outside(dt: _Delaunay2D, loops_uv: list[list[Point]]) -> None:
+    """Drop the super triangle and every triangle whose centroid lies outside the loops."""
+
+    dt.cleanup()
+
+    for tri in dt.triangles:
+        if not tri.alive:
+            continue
+
+        v0, v1, v2 = tri.v
+        cu = (dt.vertices[v0].x + dt.vertices[v1].x + dt.vertices[v2].x) / 3.0
+        cv = (dt.vertices[v0].y + dt.vertices[v1].y + dt.vertices[v2].y) / 3.0
+
+        if not _inside_loops(cu, cv, loops_uv):
+            tri.alive = False
+
+
+def _crosses_crease(tris: list[tuple[int, int, int]], dt: _Delaunay2D, crease_knots: list[list[float]]) -> bool:
+    """True when a triangle spans a crease knot line in either direction."""
+
+    for tri in tris:
+        for direction in range(2):
+            low = math.inf
+            high = -math.inf
+
+            for vi in tri:
+                value = dt.vertices[vi].x if direction == 0 else dt.vertices[vi].y
+                low = min(low, value)
+                high = max(high, value)
+
+            for knot in crease_knots[direction]:
+                if low < knot < high:
+                    return True
+
+    return False
+
+
+def _given_points(count: int, loops: TrimLoops, loop_vids: list[list[int]]) -> list[tuple[int, int] | None]:
+    """Loop and sample of the 3D point given for each triangulation vertex, none where none is."""
+
+    given = [None] * count
+
+    for li, vids in enumerate(loop_vids):
+        if li >= len(loops.xyz):
+            break
+
+        for k, vi in enumerate(vids):
+            if vi >= 0 and k < len(loops.xyz[li]):
+                given[vi] = (li, k)
+
+    return given
+
+
+def _vertex_point(
+    surface: NurbsSurface,
+    dt: _Delaunay2D,
+    vi: int,
+    loops: TrimLoops,
+    given: list[tuple[int, int] | None],
+    boundary_intervals: dict,
+) -> Point:
+    """3D point of triangulation vertex vi: its given loop point, the loop chord at a knot crossing, else the surface point."""
+
+    if given[vi] is not None:
+        return loops.xyz[given[vi][0]][given[vi][1]]
+
+    if vi in boundary_intervals and loops.xyz:
+        li, segment, t = boundary_intervals[vi]
+        a = loops.xyz[li][segment]
+        b = loops.xyz[li][(segment + 1) % len(loops.xyz[li])]
+
+        return a + (b - a) * t
+
+    return surface.point_at(dt.vertices[vi].x, dt.vertices[vi].y)
+
+
+def _weld_vertices(
+    welder: _VertexWelder,
+    surface: NurbsSurface,
+    dt: _Delaunay2D,
+    tris: list[tuple[int, int, int]],
+    loops: TrimLoops,
+    loop_vids: list[list[int]],
+    boundary_intervals: dict,
+) -> list[int | None]:
+    """Welded mesh vertex of every triangulation vertex a triangle uses, none for the others."""
+
+    given = _given_points(len(dt.vertices), loops, loop_vids)
+    vert_map = [None] * len(dt.vertices)
+
+    for tri in tris:
+        for vi in tri:
+            if vert_map[vi] is None:
+                vert_map[vi] = welder.weld(_vertex_point(surface, dt, vi, loops, given, boundary_intervals))
+
+    return vert_map
+
+
+def _add_faces(mesh: Mesh, tris: list[tuple[int, int, int]], vert_map: list[int | None]) -> None:
+    """One face per triangle over its welded vertices, collapsed ones skipped."""
+
+    for a, b, c in tris:
+        v0 = vert_map[a]
+        v1 = vert_map[b]
+        v2 = vert_map[c]
+
+        if v0 == v1 or v1 == v2 or v2 == v0:
+            continue
+
+        mesh.add_face([v0, v1, v2])
+
+
+def _fan_normals(mesh: Mesh) -> dict:
+    """Area-weighted sum of the face normals around each mesh vertex."""
+
+    fan = {}
+
+    for fk in sorted(mesh.face):
+        verts = mesh.face[fk]
+        a = mesh.vertex[verts[0]].position()
+        b = mesh.vertex[verts[1]].position()
+        c = mesh.vertex[verts[2]].position()
+        n = (b - a).cross(c - a)
+
+        for vk in verts:
+            if vk not in fan:
+                fan[vk] = Vector(0.0, 0.0, 0.0)
+
+            fan[vk] += n
+
+    return fan
+
+
+def _set_vertex_normals(mesh: Mesh, surface: NurbsSurface, dt: _Delaunay2D, vert_map: list[int | None]) -> None:
+    """Normal of every used vertex from the surface derivatives, the fan normal where they degenerate, and its u and v."""
+
+    fan = _fan_normals(mesh)
+
+    for vi in range(len(vert_map)):
+        if vert_map[vi] is None:
+            continue
+
+        u = dt.vertices[vi].x
+        v = dt.vertices[vi].y
+        derivatives = surface.evaluate(u, v, 1)
+        nrm = Vector(0.0, 0.0, 0.0)
+
+        if len(derivatives) >= 3:
+            nrm = derivatives[2].cross(derivatives[1])
+
+        nl = math.sqrt(nrm.magnitude_squared())
+
+        if math.isfinite(nl) and nl > 0.0:
+            nrm = nrm / nl
+        else:
+            f = fan.get(vert_map[vi], Vector(0.0, 0.0, 1.0))
+            fl = math.sqrt(f.magnitude_squared())
+            nrm = f / fl if math.isfinite(fl) and fl > 0.0 else Vector(0.0, 0.0, 1.0)
+
+        vd = mesh.vertex[vert_map[vi]]
+        vd.set_normal(nrm[0], nrm[1], nrm[2])
+        vd.attributes["u"] = u
+        vd.attributes["v"] = v
+
+
+def _tag_boundary(mesh: Mesh, loop_vids: list[list[int]], boundary_intervals: dict, vert_map: list[int | None]) -> None:
+    """Tag loop vertices boundary/{loop}/{sample} and knot crossings boundary_interval/{loop}/{segment} with their chord parameter."""
+
+    for li, vids in enumerate(loop_vids):
+        for k, vi in enumerate(vids):
+            key = f"boundary/{li}/{k}"
+
+            if vi >= 0 and vert_map[vi] is not None:
+                mesh.vertex[vert_map[vi]].attributes[key] = 1.0
+
+    for vi in sorted(boundary_intervals):
+        li, segment, t = boundary_intervals[vi]
+        key = f"boundary_interval/{li}/{segment}"
+
+        if vert_map[vi] is not None:
+            mesh.vertex[vert_map[vi]].attributes[key] = t
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1212,436 +2370,37 @@ class NurbsSurfaceTrimmed:
         if not srf.is_valid():
             return []
 
-        u0, u1 = srf.domain(0)
-        v0, v1 = srf.domain(1)
-        range_u = u1 - u0
-        range_v = v1 - v0
-
-        spans_u = srf.get_span_vector(0)
-        spans_v = srf.get_span_vector(1)
-        nu = max(len(spans_u) - 1, 1) * 4
-        nv = max(len(spans_v) - 1, 1) * 4
-        du = range_u / nu
-        dv = range_v / nv
-        mu = (u0 + u1) * 0.5
-        mv = (v0 + v1) * 0.5
-        pmid = srf.point_at(mu, mv)
-        uv_to_3d_u = pmid.distance(srf.point_at(min(mu + du, u1), mv)) / du
-        uv_to_3d_v = pmid.distance(srf.point_at(mu, min(mv + dv, v1))) / dv
-        uv_to_3d = max(uv_to_3d_u, uv_to_3d_v)
-
-        if uv_to_3d < 1e-10:
-            uv_to_3d = 1.0
-
-        if tolerance > 0.0:
-            snap_uv = max(1e-9, tolerance / uv_to_3d)
-        else:
-            snap_uv = min(range_u, range_v) * 1e-7
-
-        samp_tol = max(range_u, range_v) * 2e-5
-        polylines = []
-
-        for cidx, crv in enumerate(pcurves):
-            if not crv.is_valid():
-                continue
-
-            ct0, ct1 = crv.domain()
-            entries = []
-            n = min(max(crv.cv_count() * 4, 16), 2048)
-
-            for i in range(n + 1):
-                t = ct0 + (ct1 - ct0) * i / n
-                p = crv.point_at(t)
-                entries.append([t, p[0], p[1]])
-
-            depth = 0
-
-            while depth < 6:
-                inserted = 0
-                i = 0
-
-                while i < len(entries) - 1:
-                    a = entries[i]
-                    b = entries[i + 1]
-                    tm = (a[0] + b[0]) * 0.5
-                    pm = crv.point_at(tm)
-                    exu = b[1] - a[1]
-                    exv = b[2] - a[2]
-                    l2 = exu * exu + exv * exv
-
-                    if l2 > 1e-30:
-                        s = ((pm[0] - a[1]) * exu + (pm[1] - a[2]) * exv) / l2
-                        cx = a[1] + s * exu
-                        cy = a[2] + s * exv
-                        dev = math.hypot(pm[0] - cx, pm[1] - cy)
-                    else:
-                        dev = 0.0
-
-                    if dev > samp_tol and len(entries) < 4096:
-                        entries.insert(i + 1, [tm, pm[0], pm[1]])
-                        inserted += 1
-                        i += 2
-                    else:
-                        i += 1
-
-                if inserted == 0:
-                    break
-
-                depth += 1
-
-            pts = []
-            ts = []
-
-            for t, pu, pv in entries:
-                p = [min(max(pu, u0), u1), min(max(pv, v0), v1)]
-                _snap_to_border(p, u0, u1, v0, v1, snap_uv)
-
-                if (
-                    pts
-                    and abs(p[0] - pts[-1][0]) < 1e-15
-                    and abs(p[1] - pts[-1][1]) < 1e-15
-                ):
-                    continue
-
-                pts.append(p)
-                ts.append(t)
-
-            if len(pts) < 2:
-                continue
-
-            on_u0 = True
-            on_u1 = True
-            on_v0 = True
-            on_v1 = True
-
-            for p in pts:
-                if abs(p[0] - u0) >= snap_uv:
-                    on_u0 = False
-
-                if abs(p[0] - u1) >= snap_uv:
-                    on_u1 = False
-
-                if abs(p[1] - v0) >= snap_uv:
-                    on_v0 = False
-
-                if abs(p[1] - v1) >= snap_uv:
-                    on_v1 = False
-
-            if on_u0 or on_u1 or on_v0 or on_v1:
-                continue
-
-            polylines.append({"cidx": cidx, "pts": pts, "ts": ts})
-
-        polylines.append({"cidx": -1, "pts": [[u0, v0], [u1, v0]], "ts": [u0, u1]})
-        polylines.append({"cidx": -2, "pts": [[u1, v0], [u1, v1]], "ts": [v0, v1]})
-        polylines.append({"cidx": -3, "pts": [[u1, v1], [u0, v1]], "ts": [u1, u0]})
-        polylines.append({"cidx": -4, "pts": [[u0, v1], [u0, v0]], "ts": [v1, v0]})
-
-        min_ext = max(snap_uv * 8.0, min(range_u, range_v) * 1e-5)
-        kept = []
-
-        for poly in polylines:
-            ext = 0.0
-
-            for k in range(1, len(poly["pts"])):
-                ext += math.hypot(
-                    poly["pts"][k][0] - poly["pts"][k - 1][0],
-                    poly["pts"][k][1] - poly["pts"][k - 1][1],
-                )
-
-            if poly["cidx"] < 0 or ext >= min_ext:
-                kept.append(poly)
-
-        polylines = kept
-
-        splits = {}
-
-        for pi in range(len(polylines)):
-            for pj in range(pi + 1, len(polylines)):
-                A = polylines[pi]
-                B = polylines[pj]
-
-                if A["cidx"] < 0 and B["cidx"] < 0:
-                    continue
-
-                aminu = A["pts"][0][0]
-                amaxu = A["pts"][0][0]
-                aminv = A["pts"][0][1]
-                amaxv = A["pts"][0][1]
-
-                for p in A["pts"]:
-                    aminu = min(aminu, p[0])
-                    amaxu = max(amaxu, p[0])
-                    aminv = min(aminv, p[1])
-                    amaxv = max(amaxv, p[1])
-
-                aminu -= snap_uv
-                amaxu += snap_uv
-                aminv -= snap_uv
-                amaxv += snap_uv
-                bminu = B["pts"][0][0]
-                bmaxu = B["pts"][0][0]
-                bminv = B["pts"][0][1]
-                bmaxv = B["pts"][0][1]
-
-                for p in B["pts"]:
-                    bminu = min(bminu, p[0])
-                    bmaxu = max(bmaxu, p[0])
-                    bminv = min(bminv, p[1])
-                    bmaxv = max(bmaxv, p[1])
-
-                if bminu > amaxu or bmaxu < aminu or bminv > amaxv or bmaxv < aminv:
-                    continue
-
-                for ia in range(len(A["pts"]) - 1):
-                    for ib in range(len(B["pts"]) - 1):
-                        hit = _segment_intersection(
-                            A["pts"][ia],
-                            A["pts"][ia + 1],
-                            B["pts"][ib],
-                            B["pts"][ib + 1],
-                        )
-
-                        if hit is None:
-                            continue
-
-                        s, t = hit
-                        ta = A["ts"][ia] + (A["ts"][ia + 1] - A["ts"][ia]) * s
-                        tb = B["ts"][ib] + (B["ts"][ib + 1] - B["ts"][ib]) * t
-                        hu = (
-                            A["pts"][ia][0]
-                            + (A["pts"][ia + 1][0] - A["pts"][ia][0]) * s
-                        )
-                        hv = (
-                            A["pts"][ia][1]
-                            + (A["pts"][ia + 1][1] - A["pts"][ia][1]) * s
-                        )
-
-                        if A["cidx"] >= 0 and B["cidx"] >= 0:
-                            ta, tb = _newton_curve_curve(
-                                pcurves[A["cidx"]],
-                                ta,
-                                pcurves[B["cidx"]],
-                                tb,
-                                snap_uv * 0.01,
-                            )
-                            pa = pcurves[A["cidx"]].point_at(ta)
-                            hu, hv = pa[0], pa[1]
-                        elif A["cidx"] >= 0:
-                            pa = pcurves[A["cidx"]].point_at(ta)
-                            hu, hv = pa[0], pa[1]
-                        elif B["cidx"] >= 0:
-                            pb = pcurves[B["cidx"]].point_at(tb)
-                            hu, hv = pb[0], pb[1]
-
-                        hp = [hu, hv]
-                        _snap_to_border(hp, u0, u1, v0, v1, snap_uv)
-
-                        if B["cidx"] < 0:
-                            if B["cidx"] in (-1, -3):
-                                tb = hp[0]
-                            else:
-                                tb = hp[1]
-
-                        if A["cidx"] < 0:
-                            if A["cidx"] in (-1, -3):
-                                ta = hp[0]
-                            else:
-                                ta = hp[1]
-
-                        splits.setdefault((pi, ia), []).append((s, hp[0], hp[1], ta))
-                        splits.setdefault((pj, ib), []).append((t, hp[0], hp[1], tb))
-
-        pool = _UVVertexPool(snap_uv)
-        edges = []
-
-        for pi, poly in enumerate(polylines):
-            chain = []
-
-            for i in range(len(poly["pts"])):
-                chain.append((pool.id(poly["pts"][i]), poly["ts"][i]))
-
-                if i < len(poly["pts"]) - 1 and (pi, i) in splits:
-                    evs = sorted(splits[(pi, i)])
-
-                    for frac, hu, hv, tc in evs:
-                        chain.append((pool.id([hu, hv]), tc))
-
-            for i in range(len(chain) - 1):
-                a, ta = chain[i]
-                b, tb = chain[i + 1]
-
-                if a == b:
-                    continue
-
-                edges.append({"a": a, "b": b, "cidx": poly["cidx"], "ta": ta, "tb": tb})
-
-        alive = [True] * len(edges)
-        changed = True
-
-        for _ in range(len(edges) + 1):
-            if not changed:
-                break
-
-            changed = False
-            degree = {}
-
-            for ei, e in enumerate(edges):
-                if not alive[ei]:
-                    continue
-
-                degree[e["a"]] = degree.get(e["a"], 0) + 1
-                degree[e["b"]] = degree.get(e["b"], 0) + 1
-
-            for ei, e in enumerate(edges):
-                if not alive[ei]:
-                    continue
-
-                if degree.get(e["a"], 0) == 1 or degree.get(e["b"], 0) == 1:
-                    alive[ei] = False
-                    changed = True
-
-        live_edges = []
-
-        for ei in range(len(edges)):
-            if alive[ei]:
-                live_edges.append(edges[ei])
+        dom = _split_domain(srf, tolerance)
+        polylines = _uv_polylines(pcurves, dom)
+        pool = _UVVertexPool(dom.snap)
+        splits = _polyline_crossings(polylines, pcurves, dom)
+        live_edges = _prune_dangling(_split_edges(polylines, splits, pool))
 
         if not live_edges:
             return []
 
         verts = pool.verts
-        hes = []
-
-        for e in live_edges:
-            hes.append([e["a"], e["b"], e, 1])
-            hes.append([e["b"], e["a"], e, 0])
-
-        out_map = []
-
-        for vid in range(len(verts)):
-            out_map.append([])
-
-        for hi in range(len(hes)):
-            out_map[hes[hi][0]].append(hi)
-
-        for vid in range(len(out_map)):
-            fan = []
-
-            for hi in out_map[vid]:
-                fan.append((math.atan2(verts[hes[hi][1]][1] - verts[vid][1], verts[hes[hi][1]][0] - verts[vid][0]), hi))
-
-            fan.sort()
-
-            for k in range(len(fan)):
-                out_map[vid][k] = fan[k][1]
-
-        next_he = [-1] * len(hes)
-
-        for vid in range(len(out_map)):
-            outs = out_map[vid]
-
-            for pos in range(len(outs)):
-                hi = outs[pos]
-                tw = hi ^ 1
-                nxt = outs[(pos + len(outs) - 1) % len(outs)]
-                next_he[tw] = nxt
-
-        visited = [False] * len(hes)
-        faces = []
-
-        for hi in range(len(hes)):
-            if visited[hi]:
-                continue
-
-            cycle = []
-            cur = hi
-
-            while cur >= 0 and not visited[cur]:
-                visited[cur] = True
-                cycle.append(cur)
-                cur = next_he[cur]
-
-            if len(cycle) >= 2:
-                faces.append(cycle)
-
-        border_vids = set()
-
-        for e in live_edges:
-            if e["cidx"] < 0:
-                border_vids.add(e["a"])
-                border_vids.add(e["b"])
-
-        pos_faces = []
-        neg_faces = []
-
-        for cycle in faces:
-            area = _cycle_area(cycle, hes, verts)
-
-            if area > snap_uv * snap_uv:
-                pos_faces.append((cycle, area))
-            elif area < -snap_uv * snap_uv:
-                touches_border = False
-
-                for hi in cycle:
-                    if hes[hi][0] in border_vids:
-                        touches_border = True
-                        break
-
-                if not touches_border:
-                    neg_faces.append(cycle)
-
-        holes_of = []
-
-        for fi in range(len(pos_faces)):
-            holes_of.append([])
-
-        for cycle in neg_faces:
-            sample = verts[hes[cycle[0]][0]]
-            best = -1
-            best_area = float("inf")
-
-            for fi, (fc, area) in enumerate(pos_faces):
-                if area < best_area and _point_in_cycle(sample, fc, hes, verts):
-                    hole_vids = set()
-                    face_vids = set()
-
-                    for hi in cycle:
-                        hole_vids.add(hes[hi][0])
-
-                    for hi in fc:
-                        face_vids.add(hes[hi][0])
-
-                    if hole_vids == face_vids:
-                        continue
-
-                    best = fi
-                    best_area = area
-
-            if best >= 0:
-                holes_of[best].append(cycle)
-
+        hes = _half_edges(live_edges)
+        faces = _face_cycles(_next_half_edges(hes, verts))
+        pos_faces, neg_faces = _classify_faces(faces, hes, verts, live_edges, dom.snap)
+        holes_of = _assign_holes(neg_faces, pos_faces, hes, verts)
         result = []
 
         for fi, (cycle, area) in enumerate(pos_faces):
-            outer = _cycle_to_loop(cycle, hes, verts, pcurves, snap_uv)
+            outer = _cycle_to_loop(cycle, hes, live_edges, verts, pcurves, dom.snap)
 
-            if not outer.is_valid():
+            if not outer.is_valid() or (_loop_signed_area(outer) < 0.0 and not outer.reverse()):
                 continue
-
-            if _loop_signed_area(outer) < 0.0:
-                outer.reverse()
 
             ts = NurbsSurfaceTrimmed.create(srf, outer)
 
             for hole_cycle in holes_of[fi]:
-                hole = _cycle_to_loop(hole_cycle, hes, verts, pcurves, snap_uv)
+                hole = _cycle_to_loop(hole_cycle, hes, live_edges, verts, pcurves, dom.snap)
 
-                if hole.is_valid():
-                    if _loop_signed_area(hole) > 0.0:
-                        hole.reverse()
+                if not hole.is_valid() or (_loop_signed_area(hole) > 0.0 and not hole.reverse()):
+                    continue
 
-                    ts.add_inner_loop(hole)
+                ts.add_inner_loop(hole)
 
             result.append(ts)
 
@@ -1687,7 +2446,7 @@ class NurbsSurfaceTrimmed:
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
     def __eq__(self, other) -> bool:
-        """Compare name, width, color and surface; guid and loops ignored."""
+        """Compare name, width, color, surface and trim loops; guid ignored."""
 
         if not isinstance(other, NurbsSurfaceTrimmed):
             return False
@@ -1704,10 +2463,13 @@ class NurbsSurfaceTrimmed:
         if self.m_surface != other.m_surface:
             return False
 
-        return True
+        if self.m_outer_loop != other.m_outer_loop:
+            return False
+
+        return self.m_inner_loops == other.m_inner_loops
 
     def __ne__(self, other) -> bool:
-        """Compare name, width, color and surface; guid and loops ignored."""
+        """Compare name, width, color, surface and trim loops; guid ignored."""
         return not self.__eq__(other)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1904,39 +2666,19 @@ class NurbsSurfaceTrimmed:
             return srf.mesh()
 
         q = [q0[0], q0[1], q0[2]]
-
-        usp = srf.get_span_vector(0)
-        vsp = srf.get_span_vector(1)
-
-        if len(usp) < 2 or len(vsp) < 2:
-            return srf.mesh()
-
         bbox_diag = self._bbox_diagonal()
-        chord_tol = bbox_diag * chord_factor
-        us = _span_parameters(
-            usp,
-            _span_subdivisions(
-                srf, 0, usp, vsp, srf.degree(0), max_angle_deg, chord_tol
-            ),
-        )
-        vs = _span_parameters(
-            vsp,
-            _span_subdivisions(
-                srf, 1, vsp, usp, srf.degree(1), max_angle_deg, chord_tol
-            ),
-        )
-        nu = len(us)
-        nv = len(vs)
+        grid = _span_grid(srf, max_angle_deg, bbox_diag * chord_factor)
 
-        if nu < 2 or nv < 2:
+        if grid is None:
             return srf.mesh()
 
+        us, vs = grid
         field = []
 
-        for i in range(nu):
+        for i in range(len(us)):
             row = []
 
-            for j in range(nv):
+            for j in range(len(vs)):
                 row.append(_plane_field(srf, q, n, us[i], vs[j]))
 
             field.append(row)
@@ -1945,50 +2687,12 @@ class NurbsSurfaceTrimmed:
         weld_tol = bbox_diag * 1e-5
         welder = _VertexWelder(result, weld_tol, weld_tol)
 
-        for i in range(nu - 1):
-            for j in range(nv - 1):
+        for i in range(len(us) - 1):
+            for j in range(len(vs) - 1):
                 cu = [us[i], us[i + 1], us[i + 1], us[i]]
                 cv = [vs[j], vs[j], vs[j + 1], vs[j + 1]]
                 fc = [field[i][j], field[i + 1][j], field[i + 1][j + 1], field[i][j + 1]]
-                inn = [fc[0] <= 0, fc[1] <= 0, fc[2] <= 0, fc[3] <= 0]
-                cnt = (
-                    (1 if inn[0] else 0)
-                    + (1 if inn[1] else 0)
-                    + (1 if inn[2] else 0)
-                    + (1 if inn[3] else 0)
-                )
-
-                if cnt == 0:
-                    continue
-
-                poly = []
-
-                for k in range(4):
-                    kn = (k + 1) % 4
-
-                    if inn[k]:
-                        poly.append(welder.weld_surface(srf, cu[k], cv[k]))
-
-                    if inn[k] != inn[kn]:
-                        t = (
-                            fc[k] / (fc[k] - fc[kn])
-                            if abs(fc[k] - fc[kn]) > 1e-30
-                            else 0.5
-                        )
-                        u = cu[k] + (cu[kn] - cu[k]) * t
-                        v = cv[k] + (cv[kn] - cv[k]) * t
-                        u, v = _refine_crossing(srf, q, n, u, v)
-                        poly.append(welder.weld_surface(srf, u, v))
-
-                for t in range(1, len(poly) - 1):
-                    a = poly[0]
-                    b = poly[t]
-                    c = poly[t + 1]
-
-                    if a == b or b == c or c == a:
-                        continue
-
-                    result.add_face([a, b, c])
+                _add_fan(result, _clip_cell(welder, srf, q, n, cu, cv, fc))
 
         if not result.face:
             return srf.mesh()
@@ -2017,73 +2721,16 @@ class NurbsSurfaceTrimmed:
         if not pl:
             return srf.mesh()
 
-        usp = srf.get_span_vector(0)
-        vsp = srf.get_span_vector(1)
-
-        if len(usp) < 2 or len(vsp) < 2:
-            return srf.mesh()
-
         bbox_diag = self._bbox_diagonal()
-        chord_tol = bbox_diag * chord_factor
-        us = _span_parameters(
-            usp,
-            _span_subdivisions(
-                srf, 0, usp, vsp, srf.degree(0), max_angle_deg, chord_tol
-            ),
-        )
-        vs = _span_parameters(
-            vsp,
-            _span_subdivisions(
-                srf, 1, vsp, usp, srf.degree(1), max_angle_deg, chord_tol
-            ),
-        )
-        nu = len(us)
-        nv = len(vs)
+        grid = _span_grid(srf, max_angle_deg, bbox_diag * chord_factor)
 
-        if nu < 2 or nv < 2:
+        if grid is None:
             return srf.mesh()
 
-        tris = []
+        tris = _grid_triangles(grid[0], grid[1])
 
-        for i in range(nu - 1):
-            for j in range(nv - 1):
-                a = (us[i], vs[j])
-                b = (us[i + 1], vs[j])
-                c = (us[i + 1], vs[j + 1])
-                d = (us[i], vs[j + 1])
-                tris.append([a, b, c])
-                tris.append([a, c, d])
-
-        eps = 1e-9
-
-        for k in range(len(pl)):
-            q, n = pl[k]
-            nxt = []
-
-            for t in tris:
-                poly = []
-
-                for e in range(3):
-                    p = t[e]
-                    r = t[(e + 1) % 3]
-                    fp = _plane_field(srf, q, n, p[0], p[1])
-                    fr = _plane_field(srf, q, n, r[0], r[1])
-                    pin = fp <= eps
-                    rin = fr <= eps
-
-                    if pin:
-                        poly.append(p)
-
-                    if pin != rin:
-                        tt = fp / (fp - fr) if abs(fp - fr) > 1e-30 else 0.5
-                        cu = p[0] + (r[0] - p[0]) * tt
-                        cv = p[1] + (r[1] - p[1]) * tt
-                        poly.append(_refine_crossing(srf, q, n, cu, cv))
-
-                for w in range(1, len(poly) - 1):
-                    nxt.append([poly[0], poly[w], poly[w + 1]])
-
-            tris = nxt
+        for q, n in pl:
+            tris = _clip_triangles(srf, q, n, tris)
 
             if not tris:
                 break
@@ -2091,24 +2738,9 @@ class NurbsSurfaceTrimmed:
         if not tris:
             return Mesh()
 
-        result = Mesh()
-        weld_tol = bbox_diag * 1e-5
-        welder = _VertexWelder(result, weld_tol, weld_tol)
+        result = _weld_triangles(srf, tris, bbox_diag * 1e-5)
 
-        for t in tris:
-            a = welder.weld_surface(srf, t[0][0], t[0][1])
-            b = welder.weld_surface(srf, t[1][0], t[1][1])
-            c = welder.weld_surface(srf, t[2][0], t[2][1])
-
-            if a == b or b == c or c == a:
-                continue
-
-            result.add_face([a, b, c])
-
-        if not result.face:
-            return Mesh()
-
-        return result
+        return result if result.face else Mesh()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
@@ -2317,23 +2949,7 @@ class NurbsSurfaceTrimmed:
     def _discretize_loop(self, crv: NurbsCurve, deflection: float) -> list[Point]:
         """UV polygon of a trim loop: control points or samples, each edge split until its 3D chord is within deflection."""
 
-        raw = []
-
-        if crv.degree() <= 1 and not crv.is_rational():
-            for i in range(crv.cv_count()):
-                raw.append(crv.get_cv(i))
-        else:
-            n = min(max(crv.cv_count() * 4, 16), 2048)
-            raw = crv.divide_by_count(n)[0]
-
-        while len(raw) > 1:
-            dx = raw[0][0] - raw[-1][0]
-            dy = raw[0][1] - raw[-1][1]
-
-            if dx * dx + dy * dy < 1e-20:
-                raw.pop()
-            else:
-                break
+        raw = _loop_points(crv)
 
         if len(raw) < 2:
             return raw
@@ -2341,28 +2957,7 @@ class NurbsSurfaceTrimmed:
         out = []
 
         for i in range(len(raw)):
-            stack = [(raw[i], raw[(i + 1) % len(raw)], 0)]
-
-            while stack:
-                a, b, depth = stack.pop()
-                mu = (a[0] + b[0]) * 0.5
-                mv = (a[1] + b[1]) * 0.5
-                pa = self.m_surface.point_at(a[0], a[1])
-                pm = self.m_surface.point_at(mu, mv)
-                edge = self.m_surface.point_at(b[0], b[1]) - pa
-                l2 = edge.magnitude_squared()
-
-                if l2 > 1e-30:
-                    t = (pm - pa).dot(edge) / l2
-                    dev = math.sqrt((pm - (pa + edge * t)).magnitude_squared())
-                else:
-                    dev = math.sqrt((pm - pa).magnitude_squared())
-
-                if dev > deflection and depth < 6:
-                    stack.append((Point(mu, mv, 0.0), b, depth + 1))
-                    stack.append((a, Point(mu, mv, 0.0), depth + 1))
-                else:
-                    out.append(a)
+            _subdivide_edge(self.m_surface, raw[i], raw[(i + 1) % len(raw)], deflection, out)
 
         return out
 
@@ -2376,320 +2971,34 @@ class NurbsSurfaceTrimmed:
         if not loops.uv or len(loops.uv[0]) < 3:
             return self.m_surface.mesh()
 
-        outer_uv = loops.uv[0]
         bbox_diag = self._bbox_diagonal()
         deflection = bbox_diag * chord_factor
         cos_max_angle = math.cos(min(max(max_angle_deg, 0.1), 179.0) * PI / 180.0)
+        crease_knots = _find_crease_knots(self.m_surface)
+        bounds = _loop_bounds(loops.uv[0])
 
-        bb_umin = 1e30
-        bb_vmin = 1e30
-        bb_umax = -1e30
-        bb_vmax = -1e30
-
-        for p in outer_uv:
-            if p[0] < bb_umin:
-                bb_umin = p[0]
-
-            if p[1] < bb_vmin:
-                bb_vmin = p[1]
-
-            if p[0] > bb_umax:
-                bb_umax = p[0]
-
-            if p[1] > bb_vmax:
-                bb_vmax = p[1]
-
-        crease_knots = [[], []]
-
-        for direction in range(2):
-            domain = self.m_surface.domain(direction)
-            knots = self.m_surface.m_nurbsknot[direction]
-
-            for knot in knots:
-                if knot <= domain[0] or knot >= domain[1] or knot in crease_knots[direction]:
-                    continue
-
-                multiplicity = 0
-
-                for value in knots:
-                    if value == knot:
-                        multiplicity += 1
-
-                if multiplicity >= self.m_surface.degree(direction):
-                    crease_knots[direction].append(knot)
-
-        dt = _Delaunay2D(bb_umin, bb_vmin, bb_umax, bb_vmax)
-        loop_vids = []
+        dt = _Delaunay2D(bounds[0], bounds[1], bounds[2], bounds[3])
         boundary_intervals = {}
-
-        for li, pts in enumerate(loops.uv):
-            vis = []
-
-            for p in pts:
-                vis.append(dt.insert(p[0], p[1]))
-
-            for i in range(len(vis)):
-                j = (i + 1) % len(vis)
-                events = [(0.0, vis[i]), (1.0, vis[j])]
-
-                for direction in range(2):
-                    delta = pts[j][direction] - pts[i][direction]
-
-                    if delta == 0.0:
-                        continue
-
-                    for knot in crease_knots[direction]:
-                        t = (knot - pts[i][direction]) / delta
-
-                        if t <= 0.0 or t >= 1.0:
-                            continue
-
-                        uv = [
-                            pts[i][0] + t * (pts[j][0] - pts[i][0]),
-                            pts[i][1] + t * (pts[j][1] - pts[i][1]),
-                        ]
-                        uv[direction] = knot
-                        vi = dt.insert(uv[0], uv[1])
-
-                        if vi >= 0:
-                            boundary_intervals[vi] = (li, i, t)
-
-                        events.append((t, vi))
-
-                events.sort()
-
-                for k in range(1, len(events)):
-                    if (
-                        events[k - 1][1] >= 0
-                        and events[k][1] >= 0
-                        and events[k - 1][1] != events[k][1]
-                    ):
-                        dt.insert_constraint(events[k - 1][1], events[k][1])
-
-            loop_vids.append(vis)
-
-        for u in crease_knots[0]:
-            for v in crease_knots[1]:
-                if _inside_loops(u, v, loops.uv):
-                    dt.insert(u, v)
-
-        for direction in range(2):
-            for knot in crease_knots[direction]:
-                nodes = []
-
-                for vi, vertex in enumerate(dt.vertices):
-                    uv = [vertex.x, vertex.y]
-
-                    if uv[direction] == knot:
-                        nodes.append((uv[1 - direction], vi))
-
-                nodes.sort()
-
-                for k in range(1, len(nodes)):
-                    uv = [knot, knot]
-                    uv[1 - direction] = (nodes[k - 1][0] + nodes[k][0]) * 0.5
-
-                    if _inside_loops(uv[0], uv[1], loops.uv):
-                        dt.insert_constraint(nodes[k - 1][1], nodes[k][1])
+        loop_vids = _insert_loops(dt, loops.uv, crease_knots, boundary_intervals)
+        _insert_crease_lines(dt, loops.uv, crease_knots)
 
         for p in loops.interior_uv:
             if _inside_loops(p[0], p[1], loops.uv):
                 dt.insert(p[0], p[1])
 
-        MAX_ITERS = 8
-        MAX_VERTS = 200000
-        iters = MAX_ITERS
-
-        for _iter in range(iters):
-            to_insert = []
-
-            for tri in dt.triangles:
-                if not tri.alive:
-                    continue
-
-                a = dt.vertices[tri.v[0]]
-                b = dt.vertices[tri.v[1]]
-                c = dt.vertices[tri.v[2]]
-                cu = (a.x + b.x + c.x) / 3.0
-                cv = (a.y + b.y + c.y) / 3.0
-
-                if not _inside_loops(cu, cv, loops.uv):
-                    continue
-
-                pa = self.m_surface.point_at(a.x, a.y)
-                pb = self.m_surface.point_at(b.x, b.y)
-                pc = self.m_surface.point_at(c.x, c.y)
-                pm = self.m_surface.point_at(cu, cv)
-                n = (pb - pa).cross(pc - pa)
-                nl = math.sqrt(n.magnitude_squared())
-
-                if nl < 1e-30:
-                    continue
-
-                dev = abs((pm - pa).dot(n) / nl)
-                refine = dev > deflection
-
-                if not refine:
-                    na = _crease_side_normal(
-                        self.m_surface, crease_knots, (cu, cv), [a.x, a.y]
-                    )
-                    nb = _crease_side_normal(
-                        self.m_surface, crease_knots, (cu, cv), [b.x, b.y]
-                    )
-                    nc2 = _crease_side_normal(
-                        self.m_surface, crease_knots, (cu, cv), [c.x, c.y]
-                    )
-                    d1 = na.dot(nb)
-                    d2 = nb.dot(nc2)
-                    d3 = na.dot(nc2)
-                    mind = min(d1, min(d2, d3))
-
-                    if mind < cos_max_angle:
-                        refine = True
-
-                if refine:
-                    to_insert.append((cu, cv))
-
-            if not to_insert:
-                break
-
-            for cu, cv in to_insert:
-                if len(dt.vertices) >= MAX_VERTS:
-                    break
-
-                dt.insert(cu, cv)
-
-            if len(dt.vertices) >= MAX_VERTS:
-                break
-
-        dt.cleanup()
-
-        for ti in range(len(dt.triangles)):
-            if not dt.triangles[ti].alive:
-                continue
-
-            v0, v1, v2 = dt.triangles[ti].v
-            cu = (dt.vertices[v0].x + dt.vertices[v1].x + dt.vertices[v2].x) / 3.0
-            cv = (dt.vertices[v0].y + dt.vertices[v1].y + dt.vertices[v2].y) / 3.0
-
-            if not _inside_loops(cu, cv, loops.uv):
-                dt.triangles[ti].alive = False
-
+        _refine(dt, self.m_surface, loops.uv, crease_knots, deflection, cos_max_angle)
+        _trim_outside(dt, loops.uv)
         tris = dt.get_triangles()
 
-        if not tris:
+        if not tris or _crosses_crease(tris, dt, crease_knots):
             return Mesh()
 
-        for tri in tris:
-            for direction in range(2):
-                low = math.inf
-                high = -math.inf
-
-                for vi in tri:
-                    value = dt.vertices[vi].x if direction == 0 else dt.vertices[vi].y
-                    low = min(low, value)
-                    high = max(high, value)
-
-                for knot in crease_knots[direction]:
-                    if low < knot < high:
-                        return Mesh()
-
-        nverts = len(dt.vertices)
-        given = [None] * nverts
-
-        for li, vids in enumerate(loop_vids):
-            if li >= len(loops.xyz):
-                break
-
-            for k, vi in enumerate(vids):
-                if vi >= 0 and k < len(loops.xyz[li]):
-                    given[vi] = (li, k)
-
         result = Mesh()
-        vert_map = [None] * nverts
-        weld_tol = bbox_diag * 1e-5 if not loops.xyz else 0.0
-        welder = _VertexWelder(result, weld_tol, bbox_diag * 1e-5)
-
-        for tri in tris:
-            for vi in tri:
-                if vert_map[vi] is not None:
-                    continue
-
-                if given[vi] is not None:
-                    p = loops.xyz[given[vi][0]][given[vi][1]]
-                elif vi in boundary_intervals and loops.xyz:
-                    li, segment, t = boundary_intervals[vi]
-                    a = loops.xyz[li][segment]
-                    b = loops.xyz[li][(segment + 1) % len(loops.xyz[li])]
-                    p = a + (b - a) * t
-                else:
-                    p = self.m_surface.point_at(dt.vertices[vi].x, dt.vertices[vi].y)
-
-                vert_map[vi] = welder.weld(p)
-
-        for a, b, c in tris:
-            v0 = vert_map[a]
-            v1 = vert_map[b]
-            v2 = vert_map[c]
-
-            if v0 == v1 or v1 == v2 or v2 == v0:
-                continue
-
-            result.add_face([v0, v1, v2])
-
-        fan = {}
-
-        for fk in sorted(result.face):
-            verts = result.face[fk]
-            a = result.vertex[verts[0]].position()
-            b = result.vertex[verts[1]].position()
-            c = result.vertex[verts[2]].position()
-            n = (b - a).cross(c - a)
-
-            for vk in verts:
-                if vk not in fan:
-                    fan[vk] = Vector(0.0, 0.0, 0.0)
-
-                fan[vk] += n
-
-        for vi in range(nverts):
-            if vert_map[vi] is not None:
-                u = dt.vertices[vi].x
-                v = dt.vertices[vi].y
-                derivatives = self.m_surface.evaluate(u, v, 1)
-                nrm = Vector(0.0, 0.0, 0.0)
-
-                if len(derivatives) >= 3:
-                    nrm = derivatives[2].cross(derivatives[1])
-
-                nl = math.sqrt(nrm.magnitude_squared())
-
-                if math.isfinite(nl) and nl > 0.0:
-                    nrm = nrm / nl
-                else:
-                    f = fan.get(vert_map[vi], Vector(0.0, 0.0, 1.0))
-                    fl = math.sqrt(f.magnitude_squared())
-                    nrm = f / fl if math.isfinite(fl) and fl > 0.0 else Vector(0.0, 0.0, 1.0)
-
-                vd = result.vertex[vert_map[vi]]
-                vd.set_normal(nrm[0], nrm[1], nrm[2])
-                vd.attributes["u"] = u
-                vd.attributes["v"] = v
-
-        for li, vids in enumerate(loop_vids):
-            for k, vi in enumerate(vids):
-                key = f"boundary/{li}/{k}"
-
-                if vi >= 0 and vert_map[vi] is not None:
-                    result.vertex[vert_map[vi]].attributes[key] = 1.0
-
-        for vi in sorted(boundary_intervals):
-            li, segment, t = boundary_intervals[vi]
-            key = f"boundary_interval/{li}/{segment}"
-
-            if vert_map[vi] is not None:
-                result.vertex[vert_map[vi]].attributes[key] = t
-
+        welder = _VertexWelder(result, bbox_diag * 1e-5 if not loops.xyz else 0.0, bbox_diag * 1e-5)
+        vert_map = _weld_vertices(welder, self.m_surface, dt, tris, loops, loop_vids, boundary_intervals)
+        _add_faces(result, tris, vert_map)
+        _set_vertex_normals(result, self.m_surface, dt, vert_map)
+        _tag_boundary(result, loop_vids, boundary_intervals, vert_map)
         RemeshNurbsSurfaceGrid._split_crease_normals(self.m_surface, result)
 
         return result

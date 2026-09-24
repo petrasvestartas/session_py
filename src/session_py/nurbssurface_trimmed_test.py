@@ -31,12 +31,14 @@ def test_nurbssurface_trimmed_singular_planar_normal():
     loops.uv = [[Point(0, 0, 0), Point(1, 0, 0), Point(1, 1, 0), Point(0, 1, 0)]]
     mesh = trimmed.mesh_loops(loops, 5.0, 0.001)
     MINI_CHECK(bool(mesh.face))
+
     apex = False
 
     for vertex in mesh.vertex.values():
         normal = vertex.normal()
         MINI_CHECK(abs(normal[0]) < 1e-12 and abs(normal[2]) < 1e-12)
         MINI_CHECK(abs(abs(normal[1]) - 1.0) < 1e-12)
+
         apex = apex or vertex.z == 1.0
 
     MINI_CHECK(apex)
@@ -84,6 +86,7 @@ def test_nurbssurface_trimmed_crease_loops():
     ]
     mesh = ts.mesh_loops(loops, 20.0, 0.005)
     MINI_CHECK(len(mesh.vertex) == 16 and len(mesh.face) == 12)
+
     flat = 0
     tilted = 0
 
@@ -98,6 +101,7 @@ def test_nurbssurface_trimmed_crease_loops():
                 interval = True
 
         MINI_CHECK(interval and vd.z == 0.0)
+
         normal = vd.normal()
 
         if abs(normal[0]) < 1e-12:
@@ -122,6 +126,7 @@ def test_nurbssurface_trimmed_crease_loops():
             v += mesh.vertex[vkey].attributes["v"]
 
         MINI_CHECK(not (low < 1.0 and high > 1.0))
+
         u /= 3
         v /= 3
         MINI_CHECK(not (u > 0.8 and u < 1.2 and v > 0.4 and v < 0.6))
@@ -190,6 +195,7 @@ def test_nurbssurface_trimmed_mesh_loops():
                 for vd in mesh.vertex.values():
                     if key in vd.attributes:
                         MINI_CHECK(vd.x == p[0] and vd.y == p[1] and vd.z == p[2])
+
                         found = True
                         break
 
@@ -241,6 +247,8 @@ def test_nurbssurface_trimmed_constructor():
     srepr = repr(ts)
 
     tscopy = ts.duplicate()
+    tshole = ts.duplicate()
+    tshole.add_inner_loop(outer)
 
     MINI_CHECK(ts.is_valid())
     MINI_CHECK(ts.is_trimmed())
@@ -251,6 +259,7 @@ def test_nurbssurface_trimmed_constructor():
     MINI_CHECK(tscopy.is_valid())
     MINI_CHECK(tscopy.guid != ts.guid)
     MINI_CHECK(tscopy == ts)
+    MINI_CHECK(tshole != ts)
 
 
 @MINI_TEST("NurbsSurfaceTrimmed", "Constructor Planar")
