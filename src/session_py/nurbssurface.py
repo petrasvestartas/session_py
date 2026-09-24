@@ -48,6 +48,94 @@ def _binomial(n: int, k: int) -> float:
     return r
 
 
+def _is_rational_weights(weights: list[list[float]]) -> bool:
+    """True when any weight differs from one."""
+
+    for row in weights:
+        for w in row:
+            if abs(w - 1.0) > Tolerance.ZERO_TOLERANCE:
+                return True
+
+    return False
+
+
+def _basis_table(knot, degree: int, base: int, t: float) -> list[list[float]]:
+    """Triangular table of basis values and knot differences (Piegl & Tiller A2.3)."""
+
+    order = degree + 1
+    ndu = [[0.0] * order for _ in range(order)]
+    ndu[0][0] = 1.0
+    left = [0.0] * order
+    right = [0.0] * order
+
+    for j in range(1, degree + 1):
+        left[j] = t - knot[base - j]
+        right[j] = knot[base + j - 1] - t
+        saved = 0.0
+
+        for r in range(j):
+            ndu[j][r] = right[r + 1] + left[j - r]
+            temp = ndu[r][j - 1] / ndu[j][r]
+            ndu[r][j] = saved + right[r + 1] * temp
+            saved = left[j - r] * temp
+
+        ndu[j][j] = saved
+
+    return ndu
+
+
+def _basis_table_derivatives(
+    ndu: list[list[float]], degree: int, deriv_order: int
+) -> list[list[float]]:
+    """Basis derivatives ders[k][j] from the triangular table (Piegl & Tiller A2.3)."""
+
+    order = degree + 1
+    ders = [[0.0] * order for _ in range(deriv_order + 1)]
+
+    for j in range(degree + 1):
+        ders[0][j] = ndu[j][degree]
+
+    a = [[0.0] * order for _ in range(2)]
+
+    for r in range(degree + 1):
+        s1 = 0
+        s2 = 1
+        a[0][0] = 1.0
+
+        for k in range(1, deriv_order + 1):
+            d = 0.0
+            rk = r - k
+            pk = degree - k
+
+            if r >= k:
+                a[s2][0] = a[s1][0] / ndu[pk + 1][rk]
+                d = a[s2][0] * ndu[rk][pk]
+
+            j1 = 1 if rk >= -1 else -rk
+            j2 = k - 1 if r - 1 <= pk else degree - r
+
+            for j in range(j1, j2 + 1):
+                a[s2][j] = (a[s1][j] - a[s1][j - 1]) / ndu[pk + 1][rk + j]
+                d += a[s2][j] * ndu[rk + j][pk]
+
+            if r <= pk:
+                a[s2][k] = -a[s1][k - 1] / ndu[pk + 1][r]
+                d += a[s2][k] * ndu[r][pk]
+
+            ders[k][r] = d
+            s1, s2 = s2, s1
+
+    factor = float(degree)
+
+    for k in range(1, deriv_order + 1):
+        for j in range(degree + 1):
+            ders[k][j] *= factor
+
+        factor *= degree - k
+
+    return ders
+
+
 def _surface_aabb(srf: NurbsSurface) -> tuple[list[float], list[float]]:
     """Bounding box of a 7 x 7 sample of the surface."""
 
@@ -251,13 +339,7 @@ class NurbsSurface:
         if len(knots_u) != len(mults_u) or len(knots_v) != len(mults_v):
             return NurbsSurface()
 
-        rational = False
-
-        for row in weights:
-            for w in row:
-                if abs(w - 1.0) > Tolerance.ZERO_TOLERANCE:
-                    rational = True
-
+        rational = _is_rational_weights(weights)
         full_u = _expand_nurbsknots(knots_u, mults_u)
         full_v = _expand_nurbsknots(knots_v, mults_v)
         kc_u = order_u + nu - 2
@@ -1163,7 +1245,7 @@ class NurbsSurface:
         return results
 
     def evaluate(self, u: float, v: float, num_derivs: int = 0) -> list[Vector]:
-        """Return the point and partials up to num_derivs (max 2) in (k, l) loop order: [S, Sv, Svv, Su, Suv, Suu]."""
+        """Return the point and partials up to num_derivs (max 2) in (k, m) loop order: [S, Sv, Svv, Su, Suv, Suu]."""
 
         result = []
 
@@ -1179,12 +1261,12 @@ class NurbsSurface:
         skl = []
 
         for k in range(n + 1):
-            for l in range(n - k + 1):
+            for m in range(n - k + 1):
                 total = [0.0] * size
 
                 for i in range(self.m_order[0]):
                     for j in range(self.m_order[1]):
-                        c = ders_u[k][i] * ders_v[l][j]
+                        c = ders_u[k][i] * ders_v[m][j]
                         cv_ptr = self.cv(span_u + i, span_v + j)
 
                         for d in range(size):
@@ -1577,7 +1659,7 @@ class NurbsSurface:
             if key not in data:
                 return surface
 
-        surface.create_raw(
+        created = surface.create_raw(
             int(data["dimension"]),
             bool(data.get("is_rational", False)),
             int(data["order_u"]),
@@ -1585,15 +1667,6 @@ class NurbsSurface:
             int(data["cv_count_u"]),
             int(data["cv_count_v"]),
         )
-
-        if "nurbsknots_u" in data:
-            surface.m_nurbsknot[0] = np.array(data["nurbsknots_u"], dtype=np.float64)
-
-        if "nurbsknots_v" in data:
-            surface.m_nurbsknot[1] = np.array(data["nurbsknots_v"], dtype=np.float64)
-
-        if "control_points" in data:
-            surface.m_cv = np.array(data["control_points"], dtype=np.float64)
 
         surface.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         surface.name = name if name is not None else data.get("name", "my_nurbssurface")
@@ -1604,6 +1677,18 @@ class NurbsSurface:
 
         if data.get("mesh"):
             surface.m_mesh = Mesh.__jsonload__(data["mesh"])
+
+        if not created:
+            return surface
+
+        if "nurbsknots_u" in data:
+            surface.m_nurbsknot[0] = np.array(data["nurbsknots_u"], dtype=np.float64)
+
+        if "nurbsknots_v" in data:
+            surface.m_nurbsknot[1] = np.array(data["nurbsknots_v"], dtype=np.float64)
+
+        if "control_points" in data:
+            surface.m_cv = np.array(data["control_points"], dtype=np.float64)
 
         return surface
 
@@ -1670,7 +1755,8 @@ class NurbsSurface:
     def from_proto(cls, proto: nurbssurface_pb2.NurbsSurface) -> NurbsSurface:
         """Construct from the protobuf message."""
 
-        surface = cls(
+        surface = cls()
+        created = surface.create_raw(
             proto.dimension,
             proto.is_rational,
             proto.order_u,
@@ -1683,6 +1769,16 @@ class NurbsSurface:
             surface.guid = proto.guid
 
         surface.name = proto.name
+        surface.width = proto.width
+        surface.pointcolors = _colors_from_proto(proto.pointcolors)
+        surface.facecolors = _colors_from_proto(proto.facecolors)
+        surface.linecolors = _colors_from_proto(proto.linecolors)
+
+        if proto.HasField("cached_mesh") and len(proto.cached_mesh.vertices) > 0:
+            surface.m_mesh = Mesh.from_proto(proto.cached_mesh)
+
+        if not created:
+            return surface
 
         for i in range(min(len(proto.nurbsknots_u), len(surface.m_nurbsknot[0]))):
             surface.m_nurbsknot[0][i] = proto.nurbsknots_u[i]
@@ -1702,14 +1798,6 @@ class NurbsSurface:
                 for d in range(size):
                     if src + d < len(proto.cvs):
                         dst[d] = proto.cvs[src + d]
-
-        surface.width = proto.width
-        surface.pointcolors = _colors_from_proto(proto.pointcolors)
-        surface.facecolors = _colors_from_proto(proto.facecolors)
-        surface.linecolors = _colors_from_proto(proto.linecolors)
-
-        if proto.HasField("cached_mesh") and len(proto.cached_mesh.vertices) > 0:
-            surface.m_mesh = Mesh.from_proto(proto.cached_mesh)
 
         return surface
 
@@ -1852,76 +1940,16 @@ class NurbsSurface:
         degree = order - 1
         knot = self.m_nurbsknot[dir]
         base = span + degree
-        ders = [[0.0] * order for _ in range(deriv_order + 1)]
 
         if knot[base - 1] == knot[base]:
-            return ders
+            return [[0.0] * order for _ in range(deriv_order + 1)]
 
-        ndu = [[0.0] * order for _ in range(order)]
-        ndu[0][0] = 1.0
-        left = [0.0] * order
-        right = [0.0] * order
-
-        for j in range(1, degree + 1):
-            left[j] = t - knot[base - j]
-            right[j] = knot[base + j - 1] - t
-            saved = 0.0
-
-            for r in range(j):
-                ndu[j][r] = right[r + 1] + left[j - r]
-                temp = ndu[r][j - 1] / ndu[j][r]
-                ndu[r][j] = saved + right[r + 1] * temp
-                saved = left[j - r] * temp
-
-            ndu[j][j] = saved
-
-        for j in range(degree + 1):
-            ders[0][j] = ndu[j][degree]
-
-        a = [[0.0] * order for _ in range(2)]
-
-        for r in range(degree + 1):
-            s1 = 0
-            s2 = 1
-            a[0][0] = 1.0
-
-            for k in range(1, deriv_order + 1):
-                d = 0.0
-                rk = r - k
-                pk = degree - k
-
-                if r >= k:
-                    a[s2][0] = a[s1][0] / ndu[pk + 1][rk]
-                    d = a[s2][0] * ndu[rk][pk]
-
-                j1 = 1 if rk >= -1 else -rk
-                j2 = k - 1 if r - 1 <= pk else degree - r
-
-                for j in range(j1, j2 + 1):
-                    a[s2][j] = (a[s1][j] - a[s1][j - 1]) / ndu[pk + 1][rk + j]
-                    d += a[s2][j] * ndu[rk + j][pk]
-
-                if r <= pk:
-                    a[s2][k] = -a[s1][k - 1] / ndu[pk + 1][r]
-                    d += a[s2][k] * ndu[r][pk]
-
-                ders[k][r] = d
-                s1, s2 = s2, s1
-
-        factor = float(degree)
-
-        for k in range(1, deriv_order + 1):
-            for j in range(degree + 1):
-                ders[k][j] *= factor
-
-            factor *= degree - k
-
-        return ders
+        return _basis_table_derivatives(_basis_table(knot, degree, base, t), degree, deriv_order)
 
     def _rational_derivatives(
         self, skl: list[list[float]], num_derivs: int
     ) -> list[Vector]:
-        """Apply the rational quotient rule to homogeneous partials in (k, l) loop order (Piegl & Tiller A4.4)."""
+        """Apply the rational quotient rule to homogeneous partials in (k, m) loop order (Piegl & Tiller A4.4)."""
 
         result = []
         n = num_derivs
@@ -1931,8 +1959,8 @@ class NurbsSurface:
             return [Vector(0, 0, 0) for _ in range(len(skl))]
 
         for k in range(n + 1):
-            for l in range(n - k + 1):
-                s = skl[k * (n + 1) - k * (k - 1) // 2 + l]
+            for m in range(n - k + 1):
+                s = skl[k * (n + 1) - k * (k - 1) // 2 + m]
                 a = Vector(
                     s[0],
                     s[1] if self.m_dim > 1 else 0.0,
@@ -1940,18 +1968,18 @@ class NurbsSurface:
                 )
 
                 for i in range(k + 1):
-                    for j in range(l + 1):
+                    for j in range(m + 1):
                         if i == 0 and j == 0:
                             continue
 
                         c = (
                             _binomial(k, i)
-                            * _binomial(l, j)
+                            * _binomial(m, j)
                             * skl[i * (n + 1) - i * (i - 1) // 2 + j][self.m_dim]
                         )
                         a -= (
                             result[
-                                (k - i) * (n + 1) - (k - i) * (k - i - 1) // 2 + (l - j)
+                                (k - i) * (n + 1) - (k - i) * (k - i - 1) // 2 + (m - j)
                             ]
                             * c
                         )
@@ -2090,8 +2118,7 @@ class NurbsSurface:
             return False
 
         srf = NurbsSurface()
-
-        if dir == 0:
+        created = (
             srf.create_raw(
                 self.m_dim,
                 self.m_is_rat != 0,
@@ -2100,8 +2127,8 @@ class NurbsSurface:
                 crv.m_cv_count,
                 self.m_cv_count[1],
             )
-        else:
-            srf.create_raw(
+            if dir == 0
+            else srf.create_raw(
                 self.m_dim,
                 self.m_is_rat != 0,
                 self.m_order[0],
@@ -2109,6 +2136,10 @@ class NurbsSurface:
                 self.m_cv_count[0],
                 crv.m_cv_count,
             )
+        )
+
+        if not created:
+            return False
 
         srf.m_nurbsknot[dir] = crv.m_nurbsknot.copy()
         srf.m_nurbsknot[other] = self.m_nurbsknot[other].copy()

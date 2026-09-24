@@ -30,8 +30,6 @@ def test_nurbssurface_constructor():
 
     s = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    m = s.mesh()
-
     p, v, uv = s.divide_by_count_points(4, 6)
 
     sstr = str(s)
@@ -40,7 +38,7 @@ def test_nurbssurface_constructor():
     scopy = s.duplicate()
     sother = NurbsSurface.create(False, False, 3, 3, 4, 4, points)
 
-    MINI_CHECK(s.is_valid() == True)
+    MINI_CHECK(s.is_valid())
     MINI_CHECK(s.cv_count(0) == 4)
     MINI_CHECK(s.cv_count(1) == 4)
     MINI_CHECK(s.cv_count() == 16)
@@ -115,12 +113,15 @@ def test_nurbssurface_create_from_parameters():
     s = NurbsSurface.create_from_parameters(
         grid, w, [0, 1], [0, 1], [4, 4], [4, 4], 3, 3
     )
+
     MINI_CHECK(s.is_valid())
     MINI_CHECK(s.degree(0) == 3 and s.degree(1) == 3)
     MINI_CHECK(s.cv_count(0) == 4 and s.cv_count(1) == 4)
     MINI_CHECK(not s.is_rational())
+
     u0, u1 = s.domain(0)
     v0, v1 = s.domain(1)
+
     MINI_CHECK(abs(u0) < 1e-12 and abs(u1 - 1.0) < 1e-12)
     MINI_CHECK(abs(v0) < 1e-12 and abs(v1 - 1.0) < 1e-12)
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.0, 0.0), Point(0, 0, 0)))
@@ -129,14 +130,18 @@ def test_nurbssurface_create_from_parameters():
     MINI_CHECK(TOLERANCE.is_point_close(s.point_at(0.37, 0.41), Point(1.11, 1.23, 1.01496402)))
 
     fr = s.frame_at(0.3, 0.4)
+
     MINI_CHECK(TOLERANCE.is_point_close(fr.origin, s.point_at(0.3, 0.4)))
+
     n = s.normal_at(0.3, 0.4)
     za = fr.z_axis
+
     MINI_CHECK(abs(za[0] - n[0]) < 1e-9 and abs(za[1] - n[1]) < 1e-9 and abs(za[2] - n[2]) < 1e-9)
 
     from session_py import Line
 
     hits = s.intersections_with_line(Line(1.5, 1.5, -5, 1.5, 1.5, 5))
+
     MINI_CHECK(len(hits) == 1)
     MINI_CHECK(TOLERANCE.is_point_close(hits[0], Point(1.5, 1.5, 1.125)))
 
@@ -155,7 +160,7 @@ def test_booleans_queries():
 
     is_rational = s.is_rational()
 
-    is_closed = s.is_closed(0) == True and s.is_closed(1) == False
+    is_closed = s.is_closed(0) and not s.is_closed(1)
 
     is_periodic = s.is_periodic(0) and s.is_periodic(1)
 
@@ -263,16 +268,19 @@ def test_control_vertices_access():
     cv_arr = s.cv(0, 0)
 
     MINI_CHECK(cv_arr[2] == 0)
+
     cv_arr[2] = 10.0
     MINI_CHECK(cv_arr[2] == 10)
 
     cv = s.get_cv(0, 0)
     MINI_CHECK(cv == Point(0, 0, 10))
+
     ok, x, y, z, w = s.get_cv_4d(0, 0)
     MINI_CHECK(x == 0 and y == 0 and z == 10 and w == 1)
 
     s.set_cv(0, 0, Point(0, 0, 5))
     MINI_CHECK(s.get_cv(0, 0) == Point(0, 0, 5))
+
     s.set_cv_4d(0, 0, 0, 0, 4, 0.5)
     MINI_CHECK(s.get_cv(0, 0) == Point(0, 0, 8))
     MINI_CHECK(s.cv(0, 0)[2] == 4)
@@ -324,6 +332,7 @@ def test_nurbsknot_access():
     is_set = s.set_nurbsknot(0, 2, 0.5)
     MINI_CHECK(is_set)
     MINI_CHECK(s.nurbsknot(0, 2) == 0.5)
+
     is_set = s.set_nurbsknot(0, 2, 0.0)
     MINI_CHECK(is_set)
 
@@ -624,6 +633,7 @@ def test_modification():
     s_rat.make_rational()
     s_rat.set_weight(2, 2, 3.0)
     MINI_CHECK(s.point_at(0.5, 0.5) != s_rat.point_at(0.5, 0.5))
+
     s_rat.make_non_rational()
     MINI_CHECK(s.point_at(0.5, 0.5) == s_rat.point_at(0.5, 0.5))
 
@@ -891,8 +901,9 @@ def test_nurbssurface_split_by_plane():
     MINI_CHECK(len(parts) == 2)
 
     for ts in parts:
-        MINI_CHECK(ts.is_trimmed())
         m = ts.mesh_q(20.0, 0.005)
+
+        MINI_CHECK(ts.is_trimmed())
         MINI_CHECK(m.number_of_faces() > 0)
 
     sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 1.0)
@@ -980,8 +991,9 @@ def test_nurbssurface_split_by_surface():
     MINI_CHECK(len(parts) == 2)
 
     for ts in parts:
-        MINI_CHECK(ts.is_trimmed())
         m = ts.mesh_q(20.0, 0.005)
+
+        MINI_CHECK(ts.is_trimmed())
         MINI_CHECK(m.number_of_faces() > 0)
 
 
@@ -1012,8 +1024,9 @@ def test_nurbssurface_split_by_brep():
     MINI_CHECK(len(parts) == 2)
 
     for ts in parts:
-        MINI_CHECK(ts.is_trimmed())
         m = ts.mesh_q(20.0, 0.005)
+
+        MINI_CHECK(ts.is_trimmed())
         MINI_CHECK(m.number_of_faces() > 0)
 
 
