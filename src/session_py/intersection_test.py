@@ -1682,6 +1682,50 @@ def test_intersection_cut_curves_slanted_cutter():
     MINI_CHECK(distance_slanted(p) < 1e-3)
 
 
+@MINI_TEST("Intersection", "Cut Curves Plane Trapezoid")
+def test_intersection_cut_curves_plane_trapezoid():
+    from session_py import intersection
+    from session_py import Point
+
+    trapezoid = bilinear(
+        Point(-3.0, -3.0, 0.0),
+        Point(-1.0, 3.0, 0.0),
+        Point(3.0, -3.0, 0.0),
+        Point(7.0, 3.0, 0.0),
+    )
+    wall = bilinear(
+        Point(6.0, -5.0, -1.0),
+        Point(6.0, 5.0, -1.0),
+        Point(6.0, -5.0, 1.0),
+        Point(6.0, 5.0, 1.0),
+    )
+    target_cuts = intersection.cut_curves_on_surface(trapezoid, wall)
+    cutter_cuts = intersection.cut_curves_on_surface(wall, trapezoid)
+
+    MINI_CHECK(len(target_cuts) == 1)
+    MINI_CHECK(len(cutter_cuts) == 1)
+
+    target_domain = target_cuts[0].domain()
+    target_uv0 = target_cuts[0].point_at(target_domain[0])
+    target_uv1 = target_cuts[0].point_at(target_domain[1])
+    target_p0 = trapezoid.point_at(target_uv0[0], target_uv0[1])
+    target_p1 = trapezoid.point_at(target_uv1[0], target_uv1[1])
+
+    MINI_CHECK(abs(target_p0[0] - 6.0) < 1e-3)
+    MINI_CHECK(abs(target_p1[0] - 6.0) < 1e-3)
+    MINI_CHECK(abs(min(target_p0[1], target_p1[1]) - 1.5) < 1e-3)
+    MINI_CHECK(abs(max(target_p0[1], target_p1[1]) - 3.0) < 1e-3)
+
+    cutter_domain = cutter_cuts[0].domain()
+    cutter_uv0 = cutter_cuts[0].point_at(cutter_domain[0])
+    cutter_uv1 = cutter_cuts[0].point_at(cutter_domain[1])
+    cutter_p0 = wall.point_at(cutter_uv0[0], cutter_uv0[1])
+    cutter_p1 = wall.point_at(cutter_uv1[0], cutter_uv1[1])
+
+    MINI_CHECK(abs(min(cutter_p0[1], cutter_p1[1]) - 1.5) < 1e-3)
+    MINI_CHECK(abs(max(cutter_p0[1], cutter_p1[1]) - 3.0) < 1e-3)
+
+
 @MINI_TEST("Intersection", "Remap")
 def test_intersection_remap():
     from session_py import intersection

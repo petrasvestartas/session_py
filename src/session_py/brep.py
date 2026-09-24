@@ -1838,10 +1838,12 @@ def _face_to_json(f: BRepFace) -> dict:
 def _face_from_json(f: dict) -> BRepFace:
     """Face of a JSON object"""
 
+    from .file_encoders import file_decode_node
+
     bf = BRepFace()
 
     if "facecolor" in f:
-        bf.facecolor = Color.__jsonload__(f["facecolor"])
+        bf.facecolor = file_decode_node(f["facecolor"])
 
     bf.surface_index = f["surface_index"]
     bf.tolerance = f["tolerance"]
@@ -2973,22 +2975,24 @@ class BRep:
     def __jsonload__(cls, data, guid=None, name=None) -> BRep:
         """Deserialize from a JSON object."""
 
+        from .file_encoders import file_decode_node
+
         b = cls()
         b.guid = guid if guid is not None else data.get("guid", b.guid)
         b.name = name if name is not None else data.get("name", "my_brep")
         b.width = data.get("width", 1.0)
 
         if "surfacecolor" in data:
-            b.surfacecolor = Color.__jsonload__(data["surfacecolor"])
+            b.surfacecolor = file_decode_node(data["surfacecolor"])
 
         for c in data.get("curves_2d", []):
-            b.m_curves_2d.append(NurbsCurve.__jsonload__(c))
+            b.m_curves_2d.append(file_decode_node(c))
 
         for c in data.get("curves_3d", []):
-            b.m_curves_3d.append(NurbsCurve.__jsonload__(c))
+            b.m_curves_3d.append(file_decode_node(c))
 
         for s in data.get("surfaces", []):
-            b.m_surfaces.append(NurbsSurface.__jsonload__(s))
+            b.m_surfaces.append(file_decode_node(s))
 
         for v in data.get("vertices", []):
             b.m_vertices.append(

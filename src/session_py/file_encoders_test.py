@@ -316,6 +316,195 @@ def test_decode_instance_ref():
     MINI_CHECK(TOLERANCE.is_close(loaded[12], 1.0))
 
 
+@MINI_TEST("FileEncoders", "Decode Element Feature")
+def test_decode_element_feature():
+    from session_py import ElementFeature
+    from session_py import Point
+    from session_py import Polyline
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    outline = Polyline(
+        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    )
+    feature = ElementFeature("cut", 2, [outline], "notch")
+    json_str = file_json_dumps(feature)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.feature_type == "cut")
+    MINI_CHECK(loaded.face_index == 2)
+    MINI_CHECK(len(loaded.outlines) == 1)
+    MINI_CHECK(loaded.outlines[0].point_count() == 3)
+
+
+@MINI_TEST("FileEncoders", "Decode Component")
+def test_decode_component():
+    from session_py import Component
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    component = Component()
+    component.type_name = "FloorBuilder"
+    component.name = "floor"
+    component.extra["height"] = 650
+    json_str = file_json_dumps(component)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.type_name == "FloorBuilder")
+    MINI_CHECK(loaded.name == "floor")
+    MINI_CHECK(loaded.extra["height"] == 650)
+
+
+@MINI_TEST("FileEncoders", "Decode Nurbs Surface Trimmed")
+def test_decode_nurbs_surface_trimmed():
+    from session_py import NurbsCurve
+    from session_py import NurbsSurface
+    from session_py import NurbsSurfaceTrimmed
+    from session_py import Point
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    surface = NurbsSurface(3, False, 2, 2, 2, 2)
+    surface.set_cv(0, 0, Point(0.0, 0.0, 0.0))
+    surface.set_cv(1, 0, Point(5.0, 0.0, 0.0))
+    surface.set_cv(0, 1, Point(0.0, 5.0, 0.0))
+    surface.set_cv(1, 1, Point(5.0, 5.0, 0.0))
+
+    outer = NurbsCurve.create(
+        True,
+        1,
+        [
+            Point(0.1, 0.1, 0.0),
+            Point(0.9, 0.1, 0.0),
+            Point(0.9, 0.9, 0.0),
+            Point(0.1, 0.9, 0.0),
+        ],
+    )
+    inner = NurbsCurve.create(
+        True,
+        1,
+        [Point(0.4, 0.4, 0.0), Point(0.6, 0.4, 0.0), Point(0.6, 0.6, 0.0)],
+    )
+
+    trimmed = NurbsSurfaceTrimmed.create(surface, outer)
+    trimmed.add_inner_loop(inner)
+    trimmed.name = "trimmed"
+    json_str = file_json_dumps(trimmed)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.name == "trimmed")
+    MINI_CHECK(loaded.is_trimmed())
+    MINI_CHECK(loaded.inner_loop_count() == 1)
+
+
+@MINI_TEST("FileEncoders", "Decode Nurbs Surface")
+def test_decode_nurbs_surface():
+    from session_py import NurbsSurface
+    from session_py import Point
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    surface = NurbsSurface(3, False, 2, 2, 2, 2)
+    surface.set_cv(0, 0, Point(0.0, 0.0, 0.0))
+    surface.set_cv(1, 0, Point(5.0, 0.0, 0.0))
+    surface.set_cv(0, 1, Point(0.0, 5.0, 0.0))
+    surface.set_cv(1, 1, Point(5.0, 5.0, 0.0))
+    mesh = surface.mesh()
+    json_str = file_json_dumps(surface)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.mesh().number_of_vertices() == mesh.number_of_vertices())
+    MINI_CHECK(loaded.cv_count(0) == 2)
+    MINI_CHECK(loaded.cv_count(1) == 2)
+
+
+@MINI_TEST("FileEncoders", "Decode BRep")
+def test_decode_brep():
+    from session_py import BRep
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    brep = BRep.create_box(1.0, 2.0, 3.0)
+    json_str = file_json_dumps(brep)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.face_count() == 6)
+
+
+@MINI_TEST("FileEncoders", "Decode Element")
+def test_decode_element():
+    from session_py import Element
+    from session_py import ElementFeature
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Polyline
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    mesh = Mesh.from_vertices_and_faces(
+        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)], [[0, 1, 2]]
+    )
+    outline = Polyline(
+        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    )
+
+    element = Element(mesh, "plate")
+    element.add_feature(ElementFeature("cut", 0, [outline], "notch"))
+    json_str = file_json_dumps(element)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.name == "plate")
+    MINI_CHECK(loaded.features_count == 1)
+
+
+@MINI_TEST("FileEncoders", "Decode Objects")
+def test_decode_objects():
+    from session_py import Component
+    from session_py import ElementFeature
+    from session_py import InstanceRef
+    from session_py import Objects
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Xform
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    component = Component()
+    component.type_name = "FloorBuilder"
+    outline = Polyline(
+        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    )
+    instance = InstanceRef("def-abc", Xform.translation(1.0, 2.0, 3.0))
+    instance.features.append(ElementFeature("drill", 0, [outline], "hole"))
+
+    objects = Objects()
+    objects.points.append(Point(1.0, 2.0, 3.0))
+    objects.components.append(component)
+    objects.instances.append(instance)
+    json_str = file_json_dumps(objects)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(len(loaded.points) == 1)
+    MINI_CHECK(len(loaded.components) == 1)
+    MINI_CHECK(len(loaded.instances) == 1)
+    MINI_CHECK(len(loaded.instances[0].features) == 1)
+
+
+@MINI_TEST("FileEncoders", "Decode Tolerance")
+def test_decode_tolerance():
+    from session_py import Tolerance
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    tolerance = Tolerance("MM")
+    tolerance.set_absolute(0.01)
+    json_str = file_json_dumps(tolerance)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.unit() == "MM")
+    MINI_CHECK(TOLERANCE.is_close(loaded.absolute(), 0.01))
+
+
 @MINI_TEST("FileEncoders", "List In List In List")
 def test_list_in_list_in_list():
     import json

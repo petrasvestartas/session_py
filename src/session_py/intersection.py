@@ -4340,6 +4340,91 @@ def _face_frame(s):
     )
 
 
+def _boundary_steps(s, direction):
+    """Boundary samples per side in one direction: cv_count - 1 when linear, else 4 * cv_count."""
+    return (
+        s.cv_count(direction) - 1
+        if s.degree(direction) == 1
+        else 4 * s.cv_count(direction)
+    )
+
+
+def _cutter_boundary(cutter):
+    """Surface boundary in loop order, each side split into boundary_steps pieces."""
+
+    cu0, cu1 = cutter.domain(0)
+    cv0, cv1 = cutter.domain(1)
+    nu = _boundary_steps(cutter, 0)
+    nv = _boundary_steps(cutter, 1)
+    points = []
+
+    for i in range(nu):
+        points.append(cutter.point_at(cu0 + (cu1 - cu0) * i / nu, cv0))
+
+    for i in range(nv):
+        points.append(cutter.point_at(cu1, cv0 + (cv1 - cv0) * i / nv))
+
+    for i in range(nu, 0, -1):
+        points.append(cutter.point_at(cu0 + (cu1 - cu0) * i / nu, cv1))
+
+    for i in range(nv, 0, -1):
+        points.append(cutter.point_at(cu0, cv0 + (cv1 - cv0) * i / nv))
+
+    return points
+
+
+def _boundary_outline(s):
+    """Boundary polygon of a surface in the plane through it, empty without area: (outline, frame)."""
+
+    boundary = _cutter_boundary(s)
+    normal = Vector(0.0, 0.0, 0.0)
+
+    for i in range(1, len(boundary) - 1):
+        normal += (boundary[i] - boundary[0]).cross(boundary[i + 1] - boundary[0])
+
+    if normal.magnitude() < 1e-14:
+        return Polyline(), Plane()
+
+    frame = Plane.from_point_normal(boundary[0], normal)
+    outline = Polyline()
+
+    for p in boundary:
+        d = p - frame.origin
+        outline.add_point(Point(d.dot(frame.x_axis), d.dot(frame.y_axis), 0.0))
+
+    return outline, frame
+
+
+def _is_parallelogram_face(s, f):
+    """Whether the surface is the parallelogram of its corner frame, mapped affinely, checked on the boundary grid."""
+
+    if abs(f.det) < 1e-18:
+        return False
+
+    cu0, cu1 = s.domain(0)
+    cv0, cv1 = s.domain(1)
+    nu = _boundary_steps(s, 0)
+    nv = _boundary_steps(s, 1)
+    tol = 1e-9 * math.sqrt(f.exx + f.eyy)
+
+    for i in range(nu + 1):
+        a = i / nu
+
+        for j in range(nv + 1):
+            b = j / nv
+            p = s.point_at(cu0 + (cu1 - cu0) * a, cv0 + (cv1 - cv0) * b)
+            q = Point(
+                f.o[0] + a * f.eu[0] + b * f.ev[0],
+                f.o[1] + a * f.eu[1] + b * f.ev[1],
+                f.o[2] + a * f.eu[2] + b * f.ev[2],
+            )
+
+            if p.distance(q) > tol:
+                return False
+
+    return True
+
+
 def _clip_axis(c, d, t0, t1):
     """Narrow [t0, t1] to where c + t d lies in [0, 1]; ok is false when d is zero and c is outside."""
 
@@ -4355,13 +4440,8 @@ def _clip_axis(c, d, t0, t1):
     return True, max(t0, ta), min(t1, tb)
 
 
-def _clip_line_to_face(s, anchor, direction, tmin, tmax):
-    """Narrow [tmin, tmax] to the part of the line inside the face: (ok, tmin, tmax, empty)."""
-
-    f = _face_frame(s)
-
-    if abs(f.det) < 1e-18:
-        return False, tmin, tmax, False
+def _clip_line_to_face(f, anchor, direction, tmin, tmax):
+    """Narrow [tmin, tmax] to the part of the line inside the parallelogram of the frame: (ok, tmin, tmax, empty)."""
 
     a0, b0 = f.fraction([anchor[0] - f.o[0], anchor[1] - f.o[1], anchor[2] - f.o[2]])
     da, db = f.fraction(direction)
@@ -4378,8 +4458,78 @@ def _clip_line_to_face(s, anchor, direction, tmin, tmax):
     return True, max(tmin, t0), min(tmax, t1), False
 
 
-def _ssi_plane_plane(sa, pa, sb, pb):
-    """Exact plane-plane line clipped to both finite faces: (curve or None, empty)."""
+def _clip_line_to_outline(s, anchor, direction, spans):
+    """Parameter spans of the line inside the boundary polygon of the face; false when the polygon has no area."""
+
+    outline, frame = _boundary_outline(s)
+
+    if outline.point_count() == 0:
+        return False
+
+    offset = Point(anchor[0], anchor[1], anchor[2]) - frame.origin
+    line_direction = Vector(direction[0], direction[1], direction[2])
+    ax = offset.dot(frame.x_axis)
+    ay = offset.dot(frame.y_axis)
+    dx = line_direction.dot(frame.x_axis)
+    dy = line_direction.dot(frame.y_axis)
+    n = outline.point_count()
+    ts = []
+
+    for i in range(n):
+        a = outline[i]
+        b = outline[(i + 1) % n]
+        ex = b[0] - a[0]
+        ey = b[1] - a[1]
+        denom = dx * ey - dy * ex
+
+        if abs(denom) < 1e-15:
+            continue
+
+        wx = a[0] - ax
+        wy = a[1] - ay
+        along = (wx * dy - wy * dx) / denom
+
+        if along >= -1e-12 and along <= 1.0 + 1e-12:
+            ts.append((wx * ey - wy * ex) / denom)
+
+    ts.sort()
+
+    for i in range(len(ts) - 1):
+        mid = 0.5 * (ts[i] + ts[i + 1])
+
+        if ts[i + 1] - ts[i] <= 1e-9 or not outline.point_in_polygon_2d(
+            Point(ax + mid * dx, ay + mid * dy, 0.0)
+        ):
+            continue
+
+        if spans and ts[i] - spans[-1][1] <= 1e-9:
+            spans[-1] = (spans[-1][0], ts[i + 1])
+        else:
+            spans.append((ts[i], ts[i + 1]))
+
+    return True
+
+
+def _clip_line_to_face_spans(s, anchor, direction, spans):
+    """Parameter spans of the line inside the face, its corner parallelogram, else its boundary polygon: (ok, empty)."""
+
+    f = _face_frame(s)
+
+    if not _is_parallelogram_face(s, f):
+        return _clip_line_to_outline(s, anchor, direction, spans), False
+
+    ok, tmin, tmax, empty = _clip_line_to_face(f, anchor, direction, -1e300, 1e300)
+
+    if not ok:
+        return False, empty
+
+    spans.append((tmin, tmax))
+
+    return True, False
+
+
+def _ssi_plane_plane(sa, pa, sb, pb, out):
+    """Exact plane-plane line clipped to both finite faces: (hit, empty)."""
 
     na = _ssi_unit(pa.p2)
     nb = _ssi_unit(pb.p2)
@@ -4387,7 +4537,7 @@ def _ssi_plane_plane(sa, pa, sb, pb):
     vl = math.sqrt(_ssi_dot(v, v))
 
     if vl < 1e-9:
-        return None, False
+        return False, False
 
     da = _ssi_dot(na, pa.p1)
     db = _ssi_dot(nb, pb.p1)
@@ -4400,32 +4550,43 @@ def _ssi_plane_plane(sa, pa, sb, pb):
         (da * nb_x_v[2] + db * v_x_na[2]) * inv,
     ]
     direction = [v[0] / vl, v[1] / vl, v[2] / vl]
-    tmin = -1e300
-    tmax = 1e300
+    spans_a = []
+    spans_b = []
+    ok, empty = _clip_line_to_face_spans(sa, anchor, direction, spans_a)
 
-    for srf in (sa, sb):
-        ok, tmin, tmax, empty = _clip_line_to_face(srf, anchor, direction, tmin, tmax)
+    if not ok:
+        return False, empty
 
-        if not ok:
-            return None, empty
+    ok, empty = _clip_line_to_face_spans(sb, anchor, direction, spans_b)
 
-    if tmax - tmin <= 1e-9:
-        return None, True
+    if not ok:
+        return False, empty
 
-    start = Point(
-        anchor[0] + tmin * direction[0],
-        anchor[1] + tmin * direction[1],
-        anchor[2] + tmin * direction[2],
-    )
-    end = Point(
-        anchor[0] + tmax * direction[0],
-        anchor[1] + tmax * direction[1],
-        anchor[2] + tmax * direction[2],
-    )
-    c3 = NurbsCurve.create(False, 1, [start, end])
-    c3.set_domain(0.0, 1.0)
+    for span_a in spans_a:
+        for span_b in spans_b:
+            tmin = max(span_a[0], span_b[0])
+            tmax = min(span_a[1], span_b[1])
 
-    return c3, False
+            if tmax - tmin <= 1e-9:
+                continue
+
+            start = Point(
+                anchor[0] + tmin * direction[0],
+                anchor[1] + tmin * direction[1],
+                anchor[2] + tmin * direction[2],
+            )
+            end = Point(
+                anchor[0] + tmax * direction[0],
+                anchor[1] + tmax * direction[1],
+                anchor[2] + tmax * direction[2],
+            )
+            c3 = NurbsCurve.create(False, 1, [start, end])
+            c3.set_domain(0.0, 1.0)
+            out.append(c3)
+
+    empty = len(out) == 0
+
+    return not empty, empty
 
 
 class _AnalyticResult:
@@ -4570,12 +4731,42 @@ def _bisect_height_v(srf, um, v0, v1, hc, origin, axis):
     return 0.5 * (va + vb)
 
 
+def _inverted_plane_pcurve(srf, f, c3d):
+    """Pcurve on a planar face that is not its corner parallelogram: a polyline through 65 inverted points, invalid when the curve leaves the face."""
+
+    t0, t1 = c3d.domain()
+    tol = 1e-6 * math.sqrt(f.exx + f.eyy)
+    uvs = []
+
+    for i in range(65):
+        p = c3d.point_at(t0 + (t1 - t0) * i / 64.0)
+        closest = Closest.surface_point(srf, p, 0.0, 0.0, 0.0, 0.0)
+
+        if closest[2] > tol:
+            return NurbsCurve()
+
+        uvs.append(Point(closest[0], closest[1], 0.0))
+
+    pc = NurbsCurve.create(False, 1, uvs)
+
+    if not pc.set_domain(t0, t1):
+        return NurbsCurve()
+
+    return pc
+
+
 def _plane_pcurve(srf, c3d):
-    """Plane pcurve: the curve's control points mapped to the face's bilinear parameters."""
+    """Plane pcurve: inverted points on a face that is not its corner parallelogram, else the control points mapped to its parameters."""
 
     u0, u1 = srf.domain(0)
     v0, v1 = srf.domain(1)
     f = _face_frame(srf)
+
+    if not _is_parallelogram_face(srf, f):
+        inverted = _inverted_plane_pcurve(srf, f, c3d)
+
+        if inverted.is_valid():
+            return inverted
 
     if abs(f.det) < 1e-18:
         return NurbsCurve()
@@ -6170,11 +6361,9 @@ def _analytic_curves(a, ra, b, rb, out):
     """Exact 3D sections of two recognized surfaces; false when the pair is not analytic."""
 
     if ra.kind == _RecogSurface.PLANE and rb.kind == _RecogSurface.PLANE:
-        c3, empty = _ssi_plane_plane(a, ra, b, rb)
+        hit, empty = _ssi_plane_plane(a, ra, b, rb, out)
 
-        if c3 is not None:
-            out.append(c3)
-
+        if hit:
             return True
 
         return empty
@@ -7526,30 +7715,6 @@ def surface_surface(
     return _marched_section_triples(a, b, tolerance)
 
 
-def _cutter_boundary(cutter):
-    """Cutter boundary in loop order, each side split into cv_count - 1 pieces when linear, else 4 * cv_count."""
-
-    cu0, cu1 = cutter.domain(0)
-    cv0, cv1 = cutter.domain(1)
-    nu = cutter.cv_count(0) - 1 if cutter.degree(0) == 1 else 4 * cutter.cv_count(0)
-    nv = cutter.cv_count(1) - 1 if cutter.degree(1) == 1 else 4 * cutter.cv_count(1)
-    points = []
-
-    for i in range(nu):
-        points.append(cutter.point_at(cu0 + (cu1 - cu0) * i / nu, cv0))
-
-    for i in range(nv):
-        points.append(cutter.point_at(cu1, cv0 + (cv1 - cv0) * i / nv))
-
-    for i in range(nu, 0, -1):
-        points.append(cutter.point_at(cu0 + (cu1 - cu0) * i / nu, cv1))
-
-    for i in range(nv, 0, -1):
-        points.append(cutter.point_at(cu0, cv0 + (cv1 - cv0) * i / nv))
-
-    return points
-
-
 class _CutterGap:
     """Distance from a pcurve's lifted point to the cutter: clamped in the corner frame of a rectangle, else to the boundary polygon."""
 
@@ -7595,25 +7760,8 @@ class _CutterGap:
             and parallelogram
         )  # Whether the cutter is a 2 x 2 rectangle.
 
-        if self.rectangle:
-            return
-
-        boundary = _cutter_boundary(cutter)
-        normal = Vector(0.0, 0.0, 0.0)
-
-        for i in range(1, len(boundary) - 1):
-            normal += (boundary[i] - boundary[0]).cross(boundary[i + 1] - boundary[0])
-
-        if normal.magnitude() < 1e-14:
-            return
-
-        self.frame = Plane.from_point_normal(boundary[0], normal)
-
-        for p in boundary:
-            d = p - self.frame.origin
-            self.outline.add_point(
-                Point(d.dot(self.frame.x_axis), d.dot(self.frame.y_axis), 0.0)
-            )
+        if not self.rectangle:
+            self.outline, self.frame = _boundary_outline(cutter)
 
     def gap(self, t):
         """Distance to the cutter at pcurve parameter t."""

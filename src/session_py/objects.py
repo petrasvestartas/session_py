@@ -298,10 +298,7 @@ class Objects:
         objects.bboxes = _load_list(data, "bboxes")
         objects.breps = _load_list(data, "breps")
         objects.elements = _load_list(data, "elements")
-
-        for instance in data.get("instances", []):
-            objects.instances.append(InstanceRef.__jsonload__(instance))
-
+        objects.instances = _load_list(data, "instances")
         objects.lines = _load_list(data, "lines")
         objects.meshes = _load_list(data, "meshes")
         objects.nurbscurves = _load_list(data, "nurbscurves")
@@ -312,7 +309,10 @@ class Objects:
         objects.polylines = _load_list(data, "polylines")
 
         for component in data.get("components", []):
-            objects.components.append(Component.__jsonload__(component))
+            if not isinstance(component, Component):
+                component = Component.__jsonload__(component)
+
+            objects.components.append(component)
 
         return objects
 

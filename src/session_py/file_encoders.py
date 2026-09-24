@@ -7,7 +7,9 @@ import json
 _CLASS_MODULE_MAP = {
     "Vertex": "graph",
     "Edge": "graph",
+    "ElementFeature": "element",
     "InstanceRef": "instance_ref",
+    "NurbsSurfaceTrimmed": "nurbssurface_trimmed",
     "TreeNode": "tree",
 }
 
@@ -110,16 +112,21 @@ def _get_class_from_name(class_name: str):
 
 
 def _decode_typed(node: dict) -> Any:
-    """Rebuild a geometry object from a dict with a "type" field, or return the dict."""
+    """Rebuild a geometry object from a dict with a "type" field, a Component for an unknown type with a guid and name, or return the dict."""
 
     try:
         class_name = node["type"].rsplit("/", 1)[-1]
         cls = _get_class_from_name(class_name)
 
+        if cls is None and "guid" in node and "name" in node:
+            from .objects import Component
+
+            cls = Component
+
         if cls is None or not hasattr(cls, "__jsonload__"):
             return node
 
-        return cls.__jsonload__(node, node.get("guid"), node.get("name"))
+        return cls.__jsonload__(node)
     except Exception:
         return node
 

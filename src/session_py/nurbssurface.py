@@ -1653,6 +1653,8 @@ class NurbsSurface:
     ) -> NurbsSurface:
         """Deserialize from a JSON object."""
 
+        from .file_encoders import file_decode_node
+
         surface = cls()
 
         for key in ["dimension", "order_u", "order_v", "cv_count_u", "cv_count_v"]:
@@ -1676,7 +1678,7 @@ class NurbsSurface:
         surface.linecolors = _colors_from_json(data, "linecolors")
 
         if data.get("mesh"):
-            surface.m_mesh = Mesh.__jsonload__(data["mesh"])
+            surface.m_mesh = file_decode_node(data["mesh"])
 
         if not created:
             return surface

@@ -147,7 +147,7 @@ class ElementFeature:
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from a JSON object."""
 
-        from .polyline import Polyline
+        from .file_encoders import file_decode_node
 
         f = cls()
         f.face_index = data.get("face_index", -1)
@@ -161,7 +161,7 @@ class ElementFeature:
         f.name = name if name is not None else data.get("name", "")
 
         for o in data.get("outlines", []):
-            f.outlines.append(Polyline.__jsonload__(o))
+            f.outlines.append(file_decode_node(o))
 
         f.visible = data.get("visible", True)
 
@@ -819,19 +819,17 @@ class Element:
     def __jsonload__(cls, data, guid=None, name=None):
         """Deserialize from a JSON object."""
 
-        from .brep import BRep
-        from .mesh import Mesh
-        from .vector import Vector
+        from .file_encoders import file_decode_node
 
         elem = cls()
         geo_type = data.get("geometry_type", "None")
         geo_data = data.get("geometry_data")
 
         if geo_type == "Mesh" and geo_data is not None:
-            elem._geometry = Mesh.__jsonload__(geo_data)
+            elem._geometry = file_decode_node(geo_data)
 
         if geo_type == "BRep" and geo_data is not None:
-            elem._geometry = BRep.__jsonload__(geo_data)
+            elem._geometry = file_decode_node(geo_data)
 
         g = guid if guid is not None else data.get("guid", "")
 
@@ -842,16 +840,16 @@ class Element:
         dims = data.get("dimensions")
 
         if dims is not None:
-            elem._dimensions = Vector.__jsonload__(dims)
+            elem._dimensions = file_decode_node(dims)
 
         elem._element_type = data.get("element_type", "")
         elem._element_data = _from_hex(data.get("element_data", ""))
 
         for f in data.get("features", []):
-            elem._features.append(ElementFeature.__jsonload__(f))
+            elem._features.append(file_decode_node(f))
 
         for v in data.get("insertion_vectors", []):
-            elem._insertion_vectors.append(Vector.__jsonload__(v))
+            elem._insertion_vectors.append(file_decode_node(v))
 
         return elem
 

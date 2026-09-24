@@ -2768,32 +2768,36 @@ class NurbsSurfaceTrimmed:
         return data
 
     @classmethod
-    def __jsonload__(cls, data: dict) -> NurbsSurfaceTrimmed:
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> NurbsSurfaceTrimmed:
         """Deserialize from a JSON object."""
 
+        from .file_encoders import file_decode_node
+
         ts = cls()
+        g = guid if guid is not None else data.get("guid", "")
 
-        if "guid" in data:
-            ts.guid = data["guid"]
+        if g:
+            ts.guid = g
 
-        if "name" in data:
-            ts.name = data["name"]
+        ts.name = name if name is not None else data.get("name", ts.name)
 
         if "width" in data:
             ts.width = data["width"]
 
         if "surfacecolor" in data:
-            ts.surfacecolor = Color.__jsonload__(data["surfacecolor"])
+            ts.surfacecolor = file_decode_node(data["surfacecolor"])
 
         if "surface" in data:
-            ts.m_surface = NurbsSurface.__jsonload__(data["surface"])
+            ts.m_surface = file_decode_node(data["surface"])
 
         if "outer_loop" in data:
-            ts.m_outer_loop = NurbsCurve.__jsonload__(data["outer_loop"])
+            ts.m_outer_loop = file_decode_node(data["outer_loop"])
 
         if "inner_loops" in data:
             for loop_data in data["inner_loops"]:
-                ts.m_inner_loops.append(NurbsCurve.__jsonload__(loop_data))
+                ts.m_inner_loops.append(file_decode_node(loop_data))
 
         return ts
 

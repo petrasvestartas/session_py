@@ -186,7 +186,7 @@ class InstanceRef:
         ref.name = name if name is not None else data["name"]
 
         for feature in data.get("features", []):
-            ref.features.append(ElementFeature.__jsonload__(feature))
+            ref.features.append(file_decode_node(feature))
 
         return ref
 
