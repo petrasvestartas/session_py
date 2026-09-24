@@ -213,7 +213,9 @@ def _parse_params(c: Cursor, depth: int) -> list[StepParam]:
     """Read a parenthesised parameter list, recursing one level deeper."""
 
     out = []
-    _consume(c, "(")
+
+    if not _consume(c, "("):
+        return out
 
     while c.p < c.end:
         _skip_ws(c)
@@ -227,7 +229,8 @@ def _parse_params(c: Cursor, depth: int) -> list[StepParam]:
         if c.p < c.end and c.s[c.p] == ",":
             c.p += 1
 
-    _consume(c, ")")
+    if c.p < c.end:
+        c.p += 1
 
     return out
 
@@ -378,7 +381,9 @@ def _parse_step_string(content: str, sf: StepFile) -> None:
 
                 ent.parts.append(_parse_sub_entity(c))
 
-            _consume(c, ")")
+            if not _consume(c, ")"):
+                _skip_statement(c)
+                continue
         else:
             ent.parts.append(_parse_sub_entity(c))
 
@@ -552,6 +557,117 @@ def _last_flag(params: list[StepParam], fallback: bool) -> bool:
             out = p.str == "T"
 
     return out
+
+
+class CurveParams:
+    """Degree, control point ids and knots of a B-spline curve entity."""
+
+    def __init__(self):
+        """Construct empty."""
+
+        self.degree = 0  # Polynomial degree.
+        self.pt_refs = []  # CARTESIAN_POINT ids.
+        self.mults = []  # Knot multiplicities.
+        self.knots = []  # Distinct knot values.
+
+
+class SurfaceParams:
+    """Degrees, control point id grid and knots of a B-spline surface entity."""
+
+    def __init__(self):
+        """Construct empty."""
+
+        self.u_deg = 0  # Degree in u.
+        self.v_deg = 0  # Degree in v.
+        self.ctrl_pts = []  # CARTESIAN_POINT ids, rows along u.
+        self.u_mults = []  # Knot multiplicities in u.
+        self.v_mults = []  # Knot multiplicities in v.
+        self.u_knots = []  # Distinct knot values in u.
+        self.v_knots = []  # Distinct knot values in v.
+
+
+def _curve_params(e: StepEntity) -> CurveParams | None:
+    """B_SPLINE_CURVE_WITH_KNOTS parameters, simple or split across a complex instance; none when missing, short or empty."""
+
+    bsc = e.find("B_SPLINE_CURVE_WITH_KNOTS")
+
+    if bsc is None:
+        return None
+
+    base = e.find("B_SPLINE_CURVE")
+    cp = CurveParams()
+
+    if base is None:
+        pp = bsc.params
+
+        if len(pp) < 8:
+            return None
+
+        cp.degree = int(pp[1].num)
+        cp.pt_refs = _all_refs(pp[2].list)
+        cp.mults = _int_list(pp[6])
+        cp.knots = _dbl_list(pp[7])
+    else:
+        bp = base.params
+        kp = bsc.params
+
+        if len(bp) < 2 or len(kp) < 2:
+            return None
+
+        cp.degree = int(bp[0].num)
+        cp.pt_refs = _all_refs(bp[1].list)
+        cp.mults = _int_list(kp[0])
+        cp.knots = _dbl_list(kp[1])
+
+    if not cp.pt_refs or not cp.mults or not cp.knots:
+        return None
+
+    return cp
+
+
+def _surface_params(e: StepEntity) -> SurfaceParams | None:
+    """B_SPLINE_SURFACE_WITH_KNOTS parameters, simple or split across a complex instance; none when missing, short or empty."""
+
+    bss = e.find("B_SPLINE_SURFACE_WITH_KNOTS")
+
+    if bss is None:
+        return None
+
+    base = e.find("B_SPLINE_SURFACE")
+    sp = SurfaceParams()
+
+    if base is None:
+        pp = bss.params
+
+        if len(pp) < 12:
+            return None
+
+        sp.u_deg = int(pp[1].num)
+        sp.v_deg = int(pp[2].num)
+        sp.ctrl_pts = _ref_list_list(pp[3])
+        sp.u_mults = _int_list(pp[8])
+        sp.v_mults = _int_list(pp[9])
+        sp.u_knots = _dbl_list(pp[10])
+        sp.v_knots = _dbl_list(pp[11])
+    else:
+        bp = base.params
+        kp = bss.params
+
+        if len(bp) < 3 or len(kp) < 4:
+            return None
+
+        sp.u_deg = int(bp[0].num)
+        sp.v_deg = int(bp[1].num)
+        sp.ctrl_pts = _ref_list_list(bp[2])
+        sp.u_mults = _int_list(kp[0])
+        sp.v_mults = _int_list(kp[1])
+        sp.u_knots = _dbl_list(kp[2])
+        sp.v_knots = _dbl_list(kp[3])
+
+    if not sp.ctrl_pts or not sp.ctrl_pts[0] or not sp.u_mults or not sp.v_mults:
+        return None
+
+    return sp
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1164,6 +1280,18 @@ class StepReader:
 
         return pt
 
+    def get_vertex_point(self, id_: int) -> Point | None:
+        """Read the CARTESIAN_POINT of a VERTEX_POINT, none when missing."""
+
+        e = self.get(id_)
+        sub = e.find("VERTEX_POINT") if e is not None else None
+        ref = _first_ref(sub.params) if sub is not None else -1
+
+        if ref < 0:
+            return None
+
+        return self.get_point(ref)
+
     def get_direction(self, id_: int) -> Vector:
         """Read a DIRECTION as a unit vector, caching by id."""
 
@@ -1228,47 +1356,20 @@ class StepReader:
         """B_SPLINE_CURVE_WITH_KNOTS, simple or complex with RATIONAL_B_SPLINE_CURVE; invalid when malformed."""
 
         e = self.get(id_)
-        bsc = e.find("B_SPLINE_CURVE_WITH_KNOTS") if e is not None else None
+        cp = _curve_params(e) if e is not None else None
 
-        if bsc is None:
+        if cp is None:
             return NurbsCurve()
 
-        base = e.find("B_SPLINE_CURVE")
-        rat = e.find("RATIONAL_B_SPLINE_CURVE")
-
-        if base is None:
-            pp = bsc.params
-
-            if len(pp) < 8:
-                return NurbsCurve()
-
-            degree = int(pp[1].num)
-            pt_refs = _all_refs(pp[2].list)
-            mults = _int_list(pp[6])
-            knots = _dbl_list(pp[7])
-        else:
-            bp = base.params
-            kp = bsc.params
-
-            if len(bp) < 2 or len(kp) < 2:
-                return NurbsCurve()
-
-            degree = int(bp[0].num)
-            pt_refs = _all_refs(bp[1].list)
-            mults = _int_list(kp[0])
-            knots = _dbl_list(kp[1])
-
-        if not pt_refs or not mults or not knots:
-            return NurbsCurve()
-
-        order = degree + 1
-        cv_count = len(pt_refs)
-        full = _expand_knots(knots, mults)
+        order = cp.degree + 1
+        cv_count = len(cp.pt_refs)
+        full = _expand_knots(cp.knots, cp.mults)
 
         if len(full) != cv_count + order:
             return NurbsCurve()
 
         internal = _internal_from_full(full)
+        rat = e.find("RATIONAL_B_SPLINE_CURVE")
         is_rat = rat is not None
         weights = _dbl_list(rat.params[0]) if is_rat and rat.params else []
         nc = NurbsCurve(3, is_rat, order, cv_count)
@@ -1279,7 +1380,7 @@ class StepReader:
         nc.m_nurbsknot = np.array(internal, dtype=np.float64)
 
         for i in range(cv_count):
-            pt = self.get_point(pt_refs[i])
+            pt = self.get_point(cp.pt_refs[i])
             w = weights[i] if is_rat and i < len(weights) else 1.0
 
             if not nc.set_cv_4d(i, w * pt[0], w * pt[1], w * pt[2], w):
@@ -1291,62 +1392,29 @@ class StepReader:
         """B_SPLINE_SURFACE_WITH_KNOTS, simple or complex with RATIONAL_B_SPLINE_SURFACE; invalid when malformed."""
 
         e = self.get(id_)
-        bss = e.find("B_SPLINE_SURFACE_WITH_KNOTS") if e is not None else None
+        sp = _surface_params(e) if e is not None else None
 
-        if bss is None:
+        if sp is None:
             return NurbsSurface()
 
-        base = e.find("B_SPLINE_SURFACE")
+        cv_u = len(sp.ctrl_pts)
+        cv_v = len(sp.ctrl_pts[0])
+        full_u = _expand_knots(sp.u_knots, sp.u_mults)
+        full_v = _expand_knots(sp.v_knots, sp.v_mults)
+
+        if len(full_u) != cv_u + sp.u_deg + 1 or len(full_v) != cv_v + sp.v_deg + 1:
+            return NurbsSurface()
+
         rat = e.find("RATIONAL_B_SPLINE_SURFACE")
-
-        if base is None:
-            pp = bss.params
-
-            if len(pp) < 12:
-                return NurbsSurface()
-
-            u_deg = int(pp[1].num)
-            v_deg = int(pp[2].num)
-            ctrl_pts = _ref_list_list(pp[3])
-            u_mults = _int_list(pp[8])
-            v_mults = _int_list(pp[9])
-            u_knots = _dbl_list(pp[10])
-            v_knots = _dbl_list(pp[11])
-        else:
-            bp = base.params
-            kp = bss.params
-
-            if len(bp) < 3 or len(kp) < 4:
-                return NurbsSurface()
-
-            u_deg = int(bp[0].num)
-            v_deg = int(bp[1].num)
-            ctrl_pts = _ref_list_list(bp[2])
-            u_mults = _int_list(kp[0])
-            v_mults = _int_list(kp[1])
-            u_knots = _dbl_list(kp[2])
-            v_knots = _dbl_list(kp[3])
-
-        if not ctrl_pts or not ctrl_pts[0] or not u_mults or not v_mults:
-            return NurbsSurface()
-
-        cv_u = len(ctrl_pts)
-        cv_v = len(ctrl_pts[0])
-        full_u = _expand_knots(u_knots, u_mults)
-        full_v = _expand_knots(v_knots, v_mults)
-
-        if len(full_u) != cv_u + u_deg + 1 or len(full_v) != cv_v + v_deg + 1:
-            return NurbsSurface()
-
         is_rat = rat is not None
         weights = _dbl_list_list(rat.params[0]) if is_rat and rat.params else []
-        srf = NurbsSurface(3, is_rat, u_deg + 1, v_deg + 1, cv_u, cv_v)
+        srf = NurbsSurface(3, is_rat, sp.u_deg + 1, sp.v_deg + 1, cv_u, cv_v)
         srf.m_nurbsknot[0] = np.array(_internal_from_full(full_u), dtype=np.float64)
         srf.m_nurbsknot[1] = np.array(_internal_from_full(full_v), dtype=np.float64)
 
         for u in range(cv_u):
-            for v in range(min(cv_v, len(ctrl_pts[u]))):
-                pt = self.get_point(ctrl_pts[u][v])
+            for v in range(min(cv_v, len(sp.ctrl_pts[u]))):
+                pt = self.get_point(sp.ctrl_pts[u][v])
                 w = (
                     weights[u][v]
                     if is_rat and u < len(weights) and v < len(weights[u])
@@ -2003,6 +2071,49 @@ def _analytic_window(loops: list[Loop], an: AnFace) -> Window | None:
     return w
 
 
+def _st_start(an: AnFace, lp: Loop, ordered: list[Point]) -> tuple[float, float, bool]:
+    """Canonical (s, t) where the loop left off: the end of its last edge, else the first sample that projects; false when neither exists."""
+
+    if lp.edges and lp.edges[-1].uv:
+        pe = lp.edges[-1]
+        q = pe.uv[0] if pe.reversed else pe.uv[-1]
+
+        return q[0], q[1], True
+
+    for k in range(len(ordered)):
+        s, t, ok = _an_st_of(an, ordered[k])
+
+        if ok:
+            return s, t, True
+
+    return 0.0, 0.0, False
+
+
+def _st_unwrapped(
+    an: AnFace, ordered: list[Point], ps: float, pt: float, have_prev: bool
+) -> list[Point]:
+    """Canonical (s, t) of 3D samples, s (and t on a torus) shifted by whole turns next to the sample before, the first next to (ps, pt)."""
+
+    st = []
+
+    for k in range(len(ordered)):
+        s, t, ok = _an_st_of(an, ordered[k])
+
+        if not ok and (k > 0 or have_prev):
+            s = st[-1][0] if k > 0 else ps
+
+        rs = st[-1][0] if k > 0 else (ps if have_prev else s)
+        s -= 2 * PI * _round_half_away((s - rs) / (2 * PI))
+
+        if an.kind == 5:
+            rt = st[-1][1] if k > 0 else (pt if have_prev else t)
+            t -= 2 * PI * _round_half_away((t - rt) / (2 * PI))
+
+        st.append(Point(s, t, 0.0))
+
+    return st
+
+
 class BRepBuilder:
     """BRep of one STEP shell, built face by face."""
 
@@ -2085,11 +2196,8 @@ class BRepBuilder:
         if vp_id in self.vmap:
             return self.vmap[vp_id]
 
-        e = self.r.get(vp_id)
-        sub = e.find("VERTEX_POINT") if e is not None else None
-        ref = _first_ref(sub.params) if sub is not None else -1
-        pt = self.r.get_point(ref) if ref >= 0 else Point(0, 0, 0)
-        idx = self.brep.add_vertex(pt)
+        pt = self.r.get_vertex_point(vp_id)
+        idx = self.brep.add_vertex(pt if pt is not None else Point(0, 0, 0))
         self.vmap[vp_id] = idx
 
         return idx
@@ -2165,46 +2273,8 @@ class BRepBuilder:
         if rev:
             ordered.reverse()
 
-        ps = 0.0
-        pt = 0.0
-        have_prev = False
-
-        if lp.edges and lp.edges[-1].uv:
-            pe = lp.edges[-1]
-            q = pe.uv[0] if pe.reversed else pe.uv[-1]
-            ps = q[0]
-            pt = q[1]
-            have_prev = True
-
-        for k in range(len(ordered)):
-            if have_prev:
-                break
-
-            s2, t2, ok2 = _an_st_of(an, ordered[k])
-
-            if not ok2:
-                continue
-
-            ps = s2
-            pt = t2
-            have_prev = True
-
-        st = []
-
-        for k in range(len(ordered)):
-            s, t, ok = _an_st_of(an, ordered[k])
-
-            if not ok and (k > 0 or have_prev):
-                s = st[-1][0] if k > 0 else ps
-
-            rs = st[-1][0] if k > 0 else (ps if have_prev else s)
-            s -= 2 * PI * _round_half_away((s - rs) / (2 * PI))
-
-            if an.kind == 5:
-                rt = st[-1][1] if k > 0 else (pt if have_prev else t)
-                t -= 2 * PI * _round_half_away((t - rt) / (2 * PI))
-
-            st.append(Point(s, t, 0.0))
+        ps, pt, have_prev = _st_start(an, lp, ordered)
+        st = _st_unwrapped(an, ordered, ps, pt, have_prev)
 
         if rev:
             st.reverse()
@@ -2370,11 +2440,9 @@ class BRepBuilder:
     def step_point_of(self, vp_id: int) -> Point:
         """Point of a VERTEX_POINT, far away when missing."""
 
-        e = self.r.get(vp_id)
-        sub = e.find("VERTEX_POINT") if e is not None else None
-        ref = _first_ref(sub.params) if sub is not None else -1
+        pt = self.r.get_vertex_point(vp_id)
 
-        return self.r.get_point(ref) if ref >= 0 else Point(1e300, 1e300, 1e300)
+        return pt if pt is not None else Point(1e300, 1e300, 1e300)
 
     def topo_vertex_at(self, vl_vertex_ids: list[int], q: Point, tol: float) -> int:
         """The file vertex at q when one of the given VERTEX_POINTs sits there, else a new vertex."""
@@ -2385,26 +2453,89 @@ class BRepBuilder:
 
         return self.brep.add_vertex(q)
 
+    def vertex_loop_surface(self, surface_ref: int) -> NurbsSurface:
+        """Kernel surface of a VERTEX_LOOP face: the whole sphere or torus, the B-spline itself, invalid otherwise."""
+
+        an = self.r.get_analytic_srf(surface_ref)
+
+        if an.kind == 4:
+            return _build_analytic_nurbs(an, 0, 4, 0, 0, -1, 2)
+
+        if an.kind == 5:
+            return _build_analytic_nurbs(an, 0, 4, 0, 0, 0, 4)
+
+        if an.kind == 0:
+            return self.r.get_nurbs_surface(surface_ref)
+
+        return NurbsSurface()
+
+    def pole_wire(
+        self,
+        srf: NurbsSurface,
+        grid: list[Point],
+        vl_vertex_ids: list[int],
+        tol: float,
+    ) -> list[PendingEdge]:
+        """Wire of a sphere-like surface: a degenerated edge at each pole and the seam used both ways; empty when the seam is invalid."""
+
+        u0, u1 = srf.domain(0)
+        v0, v1 = srf.domain(1)
+        v_lo = self.topo_vertex_at(vl_vertex_ids, grid[0], tol)
+        v_hi = self.topo_vertex_at(vl_vertex_ids, grid[NS - 1], tol)
+        seam = srf.iso_curve(1, u0)
+
+        if not seam.is_valid():
+            return []
+
+        ei_seam = self.brep.add_edge(self.brep.add_curve_3d(seam), v_lo, v_hi)
+        ei_lo = self.brep.add_edge(-1, v_lo, v_lo)
+        ei_hi = self.brep.add_edge(-1, v_hi, v_hi)
+
+        return [
+            PendingEdge(ei_lo, False, _uv_line(u0, v0, u1, v0)),
+            PendingEdge(ei_seam, False, _uv_line(u1, v0, u1, v1)),
+            PendingEdge(ei_hi, False, _uv_line(u1, v1, u0, v1)),
+            PendingEdge(ei_seam, True, _uv_line(u0, v1, u0, v0)),
+        ]
+
+    def seam_wire(
+        self,
+        srf: NurbsSurface,
+        grid: list[Point],
+        vl_vertex_ids: list[int],
+        tol: float,
+    ) -> list[PendingEdge]:
+        """Wire of a torus-like surface: the u seam and the v seam each used both ways; empty when a seam is invalid."""
+
+        u0, u1 = srf.domain(0)
+        v0, v1 = srf.domain(1)
+        vtx = self.topo_vertex_at(vl_vertex_ids, grid[0], tol)
+        c_u = srf.iso_curve(1, u0)
+        c_v = srf.iso_curve(0, v0)
+
+        if not c_u.is_valid() or not c_v.is_valid():
+            return []
+
+        ei_u = self.brep.add_edge(self.brep.add_curve_3d(c_u), vtx, vtx)
+        ei_v = self.brep.add_edge(self.brep.add_curve_3d(c_v), vtx, vtx)
+
+        return [
+            PendingEdge(ei_v, False, _uv_line(u0, v0, u1, v0)),
+            PendingEdge(ei_u, False, _uv_line(u1, v0, u1, v1)),
+            PendingEdge(ei_v, True, _uv_line(u1, v1, u0, v1)),
+            PendingEdge(ei_u, True, _uv_line(u0, v1, u0, v0)),
+        ]
+
     def add_face_vertex_loop(
         self, vl_vertex_ids: list[int], surface_ref: int, same_sense: bool
     ) -> bool:
         """Face bounded only by VERTEX_LOOPs: the whole surface, with seam and pole edges read off the surface (sphere-like or torus-like)."""
 
-        an = self.r.get_analytic_srf(surface_ref)
-        srf = NurbsSurface()
-
-        if an.kind == 4:
-            srf = _build_analytic_nurbs(an, 0, 4, 0, 0, -1, 2)
-        elif an.kind == 5:
-            srf = _build_analytic_nurbs(an, 0, 4, 0, 0, 0, 4)
-        elif an.kind == 0:
-            srf = self.r.get_nurbs_surface(surface_ref)
+        srf = self.vertex_loop_surface(surface_ref)
 
         if not srf.is_valid():
             return False
 
-        u0, u1 = srf.domain(0)
-        v0, v1 = srf.domain(1)
         grid = _surface_grid(srf, NS)
         tol = _grid_scale(grid) * 1e-7
 
@@ -2420,37 +2551,14 @@ class BRepBuilder:
             return False
 
         si = self.brep.add_surface(srf)
-        wire = []
+        wire = (
+            self.pole_wire(srf, grid, vl_vertex_ids, tol)
+            if degen_v0 and degen_v1
+            else self.seam_wire(srf, grid, vl_vertex_ids, tol)
+        )
 
-        if degen_v0 and degen_v1:
-            v_lo = self.topo_vertex_at(vl_vertex_ids, grid[0], tol)
-            v_hi = self.topo_vertex_at(vl_vertex_ids, grid[NS - 1], tol)
-            seam = srf.iso_curve(1, u0)
-
-            if not seam.is_valid():
-                return False
-
-            ei_seam = self.brep.add_edge(self.brep.add_curve_3d(seam), v_lo, v_hi)
-            ei_lo = self.brep.add_edge(-1, v_lo, v_lo)
-            ei_hi = self.brep.add_edge(-1, v_hi, v_hi)
-            wire.append(PendingEdge(ei_lo, False, _uv_line(u0, v0, u1, v0)))
-            wire.append(PendingEdge(ei_seam, False, _uv_line(u1, v0, u1, v1)))
-            wire.append(PendingEdge(ei_hi, False, _uv_line(u1, v1, u0, v1)))
-            wire.append(PendingEdge(ei_seam, True, _uv_line(u0, v1, u0, v0)))
-        else:
-            vtx = self.topo_vertex_at(vl_vertex_ids, grid[0], tol)
-            c_u = srf.iso_curve(1, u0)
-            c_v = srf.iso_curve(0, v0)
-
-            if not c_u.is_valid() or not c_v.is_valid():
-                return False
-
-            ei_u = self.brep.add_edge(self.brep.add_curve_3d(c_u), vtx, vtx)
-            ei_v = self.brep.add_edge(self.brep.add_curve_3d(c_v), vtx, vtx)
-            wire.append(PendingEdge(ei_v, False, _uv_line(u0, v0, u1, v0)))
-            wire.append(PendingEdge(ei_u, False, _uv_line(u1, v0, u1, v1)))
-            wire.append(PendingEdge(ei_v, True, _uv_line(u1, v1, u0, v1)))
-            wire.append(PendingEdge(ei_u, True, _uv_line(u0, v1, u0, v0)))
+        if not wire:
+            return False
 
         self.finish_face(si, not same_sense, [wire])
 
@@ -2876,7 +2984,8 @@ class StepWriter:
         if crv3d < 0:
             return -1
 
-        self.write_nurbs_curve(loop_2d)
+        if self.write_nurbs_curve(loop_2d) < 0:
+            return -1
 
         ec = self.write_raw(f"EDGE_CURVE('',#{v0},#{v0},#{crv3d},.T.)")
         oe = self.write_raw(f"ORIENTED_EDGE('',*,*,#{ec},.T.)")
@@ -3176,10 +3285,16 @@ def _vertex_diagonal(brep: BRep) -> float:
     return lo.distance(hi)
 
 
-def _write_step_string(content: str, filepath: str) -> None:
-    """Write the STEP text to a file."""
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(content)
+def _write_step_string(content: str, filepath: str) -> bool:
+    """Write the STEP text to a file; false when it cannot be written."""
+
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+    except OSError:
+        return False
+
+    return True
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3249,8 +3364,10 @@ def _trimmed_outer_loop(r: StepReader, bound_refs: list[int]) -> NurbsCurve:
             if len(ecr) < 3:
                 continue
 
-            vs = r.get_point(ecr[0])
-            ve = r.get_point(ecr[1])
+            start = r.get_vertex_point(ecr[0])
+            end = r.get_vertex_point(ecr[1])
+            vs = start if start is not None else Point(0, 0, 0)
+            ve = end if end is not None else Point(0, 0, 0)
 
             for s in r.sample_curve(ecr[2], vs, ve, 8):
                 uv_pts.append(Point(s[0], s[1], 0.0))
@@ -3329,32 +3446,32 @@ def read_file_step_breps(filepath: str) -> list[BRep]:
     return out
 
 
-def write_file_step_nurbscurves(curves: list[NurbsCurve], filepath: str) -> None:
-    """One file holding the curves as bare B_SPLINE_CURVE_WITH_KNOTS entities."""
+def write_file_step_nurbscurves(curves: list[NurbsCurve], filepath: str) -> bool:
+    """One file holding the curves as bare B_SPLINE_CURVE_WITH_KNOTS entities; false when the file cannot be written."""
 
     w = StepWriter()
 
     for nc in curves:
         w.write_nurbs_curve(nc)
 
-    _write_step_string(w.emit(), filepath)
+    return _write_step_string(w.emit(), filepath)
 
 
-def write_file_step_nurbssurfaces(surfaces: list[NurbsSurface], filepath: str) -> None:
-    """One file holding the surfaces as bare B_SPLINE_SURFACE_WITH_KNOTS entities."""
+def write_file_step_nurbssurfaces(surfaces: list[NurbsSurface], filepath: str) -> bool:
+    """One file holding the surfaces as bare B_SPLINE_SURFACE_WITH_KNOTS entities; false when the file cannot be written."""
 
     w = StepWriter()
 
     for srf in surfaces:
         w.write_nurbs_surface(srf)
 
-    _write_step_string(w.emit(), filepath)
+    return _write_step_string(w.emit(), filepath)
 
 
 def write_file_step_nurbssurfaces_trimmed(
     trimmed: list[NurbsSurfaceTrimmed], filepath: str
-) -> None:
-    """One file holding the trimmed surfaces as ADVANCED_FACEs of an open shell."""
+) -> bool:
+    """One file holding the trimmed surfaces as ADVANCED_FACEs of an open shell; false when the file cannot be written."""
 
     w = StepWriter()
     face_ids = []
@@ -3372,11 +3489,11 @@ def write_file_step_nurbssurfaces_trimmed(
         bodies.append(body)
 
     w.finish_product(bodies, False, "trimmed")
-    _write_step_string(w.emit(), filepath)
+    return _write_step_string(w.emit(), filepath)
 
 
-def write_file_step_brep(brep: BRep, filepath: str) -> None:
-    """One AP214 file holding the brep, one body per shell."""
+def write_file_step_brep(brep: BRep, filepath: str) -> bool:
+    """One AP214 file holding the brep, one body per shell; false when the file cannot be written."""
 
     w = StepWriter()
     bodies = []
@@ -3396,11 +3513,11 @@ def write_file_step_brep(brep: BRep, filepath: str) -> None:
         brep.name if brep.name else "brep",
         _vertex_diagonal(brep) * 1e-4,
     )
-    _write_step_string(w.emit(), filepath)
+    return _write_step_string(w.emit(), filepath)
 
 
-def write_file_step_breps(breps: list[BRep], name: str, filepath: str) -> None:
-    """One AP214 file holding several breps side by side, each face colored from its brep's surfacecolor."""
+def write_file_step_breps(breps: list[BRep], name: str, filepath: str) -> bool:
+    """One AP214 file holding several breps side by side, each face colored from its brep's surfacecolor; false when the file cannot be written."""
 
     w = StepWriter()
     bodies = []
@@ -3428,4 +3545,4 @@ def write_file_step_breps(breps: list[BRep], name: str, filepath: str) -> None:
                 styled.append(w.write_raw(f"STYLED_ITEM('',(#{psa}),#{fid})"))
 
     w.finish_product(bodies, any_closed, name, diag * 1e-4, styled)
-    _write_step_string(w.emit(), filepath)
+    return _write_step_string(w.emit(), filepath)
