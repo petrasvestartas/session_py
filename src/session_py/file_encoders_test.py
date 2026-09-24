@@ -284,6 +284,38 @@ def test_decode_dict():
     MINI_CHECK(TOLERANCE.is_close(loaded_vec[0], 1.0))
 
 
+@MINI_TEST("FileEncoders", "Decode Mesh")
+def test_decode_mesh():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    mesh = Mesh.from_vertices_and_faces(
+        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0)], [[0, 1, 2]]
+    )
+    json_str = file_json_dumps(mesh)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.number_of_vertices() == 3)
+    MINI_CHECK(loaded.number_of_faces() == 1)
+
+
+@MINI_TEST("FileEncoders", "Decode Instance Ref")
+def test_decode_instance_ref():
+    from session_py import InstanceRef
+    from session_py import Xform
+    from session_py.file_encoders import file_json_dumps
+    from session_py.file_encoders import file_json_loads
+
+    instance = InstanceRef("def-abc", Xform.translation(1.0, 2.0, 3.0))
+    json_str = file_json_dumps(instance)
+    loaded = file_json_loads(json_str)
+
+    MINI_CHECK(loaded.definition_guid == "def-abc")
+    MINI_CHECK(TOLERANCE.is_close(loaded[12], 1.0))
+
+
 @MINI_TEST("FileEncoders", "List In List In List")
 def test_list_in_list_in_list():
     import json

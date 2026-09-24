@@ -7,6 +7,7 @@ import json
 _CLASS_MODULE_MAP = {
     "Vertex": "graph",
     "Edge": "graph",
+    "InstanceRef": "instance_ref",
     "TreeNode": "tree",
 }
 

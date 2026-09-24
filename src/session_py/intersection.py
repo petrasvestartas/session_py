@@ -7526,11 +7526,35 @@ def surface_surface(
     return _marched_section_triples(a, b, tolerance)
 
 
+def _cutter_boundary(cutter):
+    """Cutter boundary in loop order, each side split into cv_count - 1 pieces when linear, else 4 * cv_count."""
+
+    cu0, cu1 = cutter.domain(0)
+    cv0, cv1 = cutter.domain(1)
+    nu = cutter.cv_count(0) - 1 if cutter.degree(0) == 1 else 4 * cutter.cv_count(0)
+    nv = cutter.cv_count(1) - 1 if cutter.degree(1) == 1 else 4 * cutter.cv_count(1)
+    points = []
+
+    for i in range(nu):
+        points.append(cutter.point_at(cu0 + (cu1 - cu0) * i / nu, cv0))
+
+    for i in range(nv):
+        points.append(cutter.point_at(cu1, cv0 + (cv1 - cv0) * i / nv))
+
+    for i in range(nu, 0, -1):
+        points.append(cutter.point_at(cu0 + (cu1 - cu0) * i / nu, cv1))
+
+    for i in range(nv, 0, -1):
+        points.append(cutter.point_at(cu0, cv0 + (cv1 - cv0) * i / nv))
+
+    return points
+
+
 class _CutterGap:
-    """Distance from a pcurve's lifted point to the cutter, projected onto the corner frame when it is not degenerate."""
+    """Distance from a pcurve's lifted point to the cutter: clamped in the corner frame of a rectangle, else to the boundary polygon."""
 
     def __init__(self, target, pc, cutter):
-        """Corner frame of the cutter."""
+        """Corner frame and boundary polygon of the cutter."""
 
         cu0, cu1 = cutter.domain(0)
         cv0, cv1 = cutter.domain(1)
@@ -7540,6 +7564,7 @@ class _CutterGap:
         self.q00 = cutter.point_at(cu0, cv0)  # Cutter corner at (u0, v0).
         q10 = cutter.point_at(cu1, cv0)
         q01 = cutter.point_at(cu0, cv1)
+        q11 = cutter.point_at(cu1, cv1)
         q00 = self.q00
         self.eu = Vector(
             q10[0] - q00[0], q10[1] - q00[1], q10[2] - q00[2]
@@ -7555,9 +7580,40 @@ class _CutterGap:
         self.ev2 = (
             ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2]
         )  # Squared length of ev.
-        self.fast_planar = (
-            self.eu2 > 1e-28 and self.ev2 > 1e-28
-        )  # Whether both edges are usable.
+        self.frame = Plane()  # Plane of the boundary polygon.
+        self.outline = Polyline()  # Boundary polygon in the frame, empty without area.
+        square = abs(eu.dot(ev)) <= 1e-9 * math.sqrt(self.eu2 * self.ev2)
+        parallelogram = q11.distance(q00 + eu + ev) <= 1e-9 * math.sqrt(
+            self.eu2 + self.ev2
+        )
+        bilinear = cutter.cv_count(0) == 2 and cutter.cv_count(1) == 2
+        self.rectangle = (
+            self.eu2 > 1e-28
+            and self.ev2 > 1e-28
+            and bilinear
+            and square
+            and parallelogram
+        )  # Whether the cutter is a 2 x 2 rectangle.
+
+        if self.rectangle:
+            return
+
+        boundary = _cutter_boundary(cutter)
+        normal = Vector(0.0, 0.0, 0.0)
+
+        for i in range(1, len(boundary) - 1):
+            normal += (boundary[i] - boundary[0]).cross(boundary[i + 1] - boundary[0])
+
+        if normal.magnitude() < 1e-14:
+            return
+
+        self.frame = Plane.from_point_normal(boundary[0], normal)
+
+        for p in boundary:
+            d = p - self.frame.origin
+            self.outline.add_point(
+                Point(d.dot(self.frame.x_axis), d.dot(self.frame.y_axis), 0.0)
+            )
 
     def gap(self, t):
         """Distance to the cutter at pcurve parameter t."""
@@ -7565,8 +7621,16 @@ class _CutterGap:
         uv = self.pc.point_at(t)
         p3 = self.target.point_at(uv[0], uv[1])
 
-        if not self.fast_planar:
+        if self.rectangle:
+            return self.rectangle_gap(p3)
+
+        if self.outline.point_count() == 0:
             return Closest.surface_point(self.cutter, p3, 0.0, 0.0, 0.0, 0.0)[2]
+
+        return self.outline_gap(p3)
+
+    def rectangle_gap(self, p3):
+        """Distance from p3 to the rectangle spanned by eu and ev."""
 
         q00 = self.q00
         eu = self.eu
@@ -7587,6 +7651,39 @@ class _CutterGap:
             + (p3[1] - cy) * (p3[1] - cy)
             + (p3[2] - cz) * (p3[2] - cz)
         )
+
+    def outline_gap(self, p3):
+        """Distance from p3 to the region inside the boundary polygon."""
+
+        d = p3 - self.frame.origin
+        p = Point(
+            d.dot(self.frame.x_axis),
+            d.dot(self.frame.y_axis),
+            d.dot(self.frame.z_axis),
+        )
+
+        if self.outline.point_in_polygon_2d(p):
+            return abs(p[2])
+
+        n = self.outline.point_count()
+        d2 = sys.float_info.max
+
+        for i in range(n):
+            a = self.outline[i]
+            b = self.outline[(i + 1) % n]
+            ex = b[0] - a[0]
+            ey = b[1] - a[1]
+            len2 = ex * ex + ey * ey
+            s = 0.0
+
+            if len2 > 0.0:
+                s = min(max(((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / len2, 0.0), 1.0)
+
+            dx = p[0] - a[0] - s * ex
+            dy = p[1] - a[1] - s * ey
+            d2 = min(d2, dx * dx + dy * dy)
+
+        return math.sqrt(d2 + p[2] * p[2])
 
 
 def _refine_footprint_edge(g, t_in, t_out, edge_tol):

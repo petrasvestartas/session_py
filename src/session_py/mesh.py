@@ -5444,6 +5444,8 @@ class Mesh:
     ) -> "Mesh":
         """Deserialize from a JSON object."""
 
+        from .file_encoders import file_decode_node
+
         mesh = cls()
 
         if "guid" in data:
@@ -5498,7 +5500,7 @@ class Mesh:
             mesh._widths = list(data["widths"])
 
         if "objectcolor" in data:
-            mesh._objectcolor = Color.__jsonload__(data["objectcolor"])
+            mesh._objectcolor = file_decode_node(data["objectcolor"])
 
         if "color_mode" in data:
             mesh.color_mode = (

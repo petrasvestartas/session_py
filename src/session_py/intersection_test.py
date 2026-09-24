@@ -140,6 +140,11 @@ def distance_square(p):
     )
 
 
+def distance_slanted(p):
+    """Distance from the plane through the slanted cutter."""
+    return abs(-2.0 * p[0] + p[1] + 10.0 * p[2] - 3.0) / math.sqrt(105.0)
+
+
 @MINI_TEST("Intersection", "Line Line")
 def test_intersection_line_line():
     from session_py import intersection
@@ -1650,6 +1655,31 @@ def test_intersection_cut_curves_on_surface_torus():
 
     for pc in cuts:
         MINI_CHECK(lifted_distance(pc, torus, distance_wall) < 1e-5)
+
+
+@MINI_TEST("Intersection", "Cut Curves Slanted Cutter")
+def test_intersection_cut_curves_slanted_cutter():
+    from session_py import intersection
+    from session_py import Point
+    from session_py import Primitives
+
+    cone = Primitives.cone_surface(0.0, 0.0, 0.0, 1.5, 3.0)
+    slanted = bilinear(
+        Point(-3.0, -3.0, 0.0),
+        Point(-3.0, 3.0, -0.6),
+        Point(3.0, -3.0, 1.2),
+        Point(3.0, 3.0, 0.6),
+    )
+    cuts = intersection.cut_curves_on_surface(cone, slanted)
+
+    MINI_CHECK(len(cuts) == 2)
+
+    domain = cuts[0].domain()
+    uv = cuts[0].point_at((domain[0] + domain[1]) * 0.5)
+    p = cone.point_at(uv[0], uv[1])
+
+    MINI_CHECK(distance_cone(p) < 1e-3)
+    MINI_CHECK(distance_slanted(p) < 1e-3)
 
 
 @MINI_TEST("Intersection", "Remap")
