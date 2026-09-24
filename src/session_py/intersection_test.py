@@ -109,7 +109,9 @@ def test_intersection_line_line_parameters():
     result = intersection.line_line_parameters(line0, line1, Tolerance.APPROXIMATION)
 
     MINI_CHECK(result is not None)
+
     t0, t1 = result
+
     MINI_CHECK(TOLERANCE.is_close(t0, 0.5))
     MINI_CHECK(TOLERANCE.is_close(t1, 0.5))
 
@@ -125,7 +127,9 @@ def test_intersection_line_line_parameters_endpoints():
     result = intersection.line_line_parameters(line0, line1, Tolerance.APPROXIMATION)
 
     MINI_CHECK(result is not None)
+
     t0, t1 = result
+
     MINI_CHECK(TOLERANCE.is_close(t0, 0.0))
     MINI_CHECK(TOLERANCE.is_close(t1, 0.0))
 
@@ -143,7 +147,9 @@ def test_intersection_line_line_parameters_infinite():
     )
 
     MINI_CHECK(result is not None)
+
     t0, t1 = result
+
     MINI_CHECK(TOLERANCE.is_close(t0, 2.0))
 
 
@@ -165,7 +171,9 @@ def test_intersection_plane_plane():
     output = intersection.plane_plane(plane0, plane1)
 
     MINI_CHECK(output is not None)
+
     line_dir = output.to_vector()
+
     MINI_CHECK(abs(abs(line_dir[0]) - 1.0) < 1e-4)
     MINI_CHECK(abs(line_dir[1]) < 1e-4)
     MINI_CHECK(abs(line_dir[2]) < 1e-4)
@@ -355,141 +363,176 @@ def test_intersection_plane_plane_plane_parallel():
 def test_intersection_ray_box():
     from session_py import intersection
     from session_py import OBB
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    box = OBB.from_points(
-        [
-            Point(-1.0, -1.0, -1.0),
-            Point(1.0, 1.0, 1.0),
-        ]
+    center = Point(0.0, 0.0, 0.0)
+    x_axis = Vector(1.0, 0.0, 0.0)
+    y_axis = Vector(0.0, 1.0, 0.0)
+    z_axis = Vector(0.0, 0.0, 1.0)
+    half_size = Vector(1.0, 1.0, 1.0)
+    box = OBB(center, x_axis, y_axis, z_axis, half_size)
+
+    origin = Point(-5.0, 0.0, 0.0)
+    direction = Vector(1.0, 0.0, 0.0)
+
+    result, tmin, tmax = intersection.ray_box_parameters(
+        origin, direction, box, 0.0, 100.0
     )
-    line = Line(-5.0, 0.0, 0.0, -4.0, 0.0, 0.0)
-    points = intersection.ray_box(line, box, 0.0, 100.0)
 
-    MINI_CHECK(points is not None)
-    MINI_CHECK(abs(points[0][0] - (-1.0)) < 1e-4)
-    MINI_CHECK(abs(points[1][0] - 1.0) < 1e-4)
+    MINI_CHECK(result)
+    MINI_CHECK(abs(tmin - 4.0) < 1e-4)
+    MINI_CHECK(abs(tmax - 6.0) < 1e-4)
 
 
 @MINI_TEST("Intersection", "Ray Box Miss")
 def test_intersection_ray_box_miss():
     from session_py import intersection
     from session_py import OBB
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    box = OBB.from_points(
-        [
-            Point(-1.0, -1.0, -1.0),
-            Point(1.0, 1.0, 1.0),
-        ]
+    center = Point(0.0, 0.0, 0.0)
+    x_axis = Vector(1.0, 0.0, 0.0)
+    y_axis = Vector(0.0, 1.0, 0.0)
+    z_axis = Vector(0.0, 0.0, 1.0)
+    half_size = Vector(1.0, 1.0, 1.0)
+    box = OBB(center, x_axis, y_axis, z_axis, half_size)
+
+    origin = Point(-5.0, 5.0, 0.0)
+    direction = Vector(1.0, 0.0, 0.0)
+
+    result, _tmin, _tmax = intersection.ray_box_parameters(
+        origin, direction, box, 0.0, 100.0
     )
-    line = Line(-5.0, 5.0, 0.0, -4.0, 5.0, 0.0)
-    points = intersection.ray_box(line, box, 0.0, 100.0)
 
-    MINI_CHECK(points is None)
+    MINI_CHECK(not result)
 
 
 @MINI_TEST("Intersection", "Ray Sphere")
 def test_intersection_ray_sphere():
     from session_py import intersection
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    line = Line(-5.0, 0.0, 0.0, -4.0, 0.0, 0.0)
+    origin = Point(-5.0, 0.0, 0.0)
+    direction = Vector(1.0, 0.0, 0.0)
     center = Point(0.0, 0.0, 0.0)
     radius = 2.0
-    points = intersection.ray_sphere(line, center, radius)
 
-    MINI_CHECK(points is not None)
-    MINI_CHECK(len(points) == 2)
-    MINI_CHECK(abs(points[0][0] - (-2.0)) < 1e-4)
-    MINI_CHECK(abs(points[1][0] - 2.0) < 1e-4)
+    hits, t0, t1 = intersection.ray_sphere_parameters(origin, direction, center, radius)
+
+    MINI_CHECK(hits == 2)
+    MINI_CHECK(abs(t0 - 3.0) < 1e-4)
+    MINI_CHECK(abs(t1 - 7.0) < 1e-4)
 
 
 @MINI_TEST("Intersection", "Ray Sphere Tangent")
 def test_intersection_ray_sphere_tangent():
     from session_py import intersection
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    line = Line(-5.0, 2.0, 0.0, -4.0, 2.0, 0.0)
+    origin = Point(-5.0, 2.0, 0.0)
+    direction = Vector(1.0, 0.0, 0.0)
     center = Point(0.0, 0.0, 0.0)
     radius = 2.0
-    points = intersection.ray_sphere(line, center, radius)
 
-    MINI_CHECK(points is not None)
-    MINI_CHECK(len(points) == 1)
-    MINI_CHECK(abs(points[0][0] - 0.0) < 1e-4)
+    hits, t0, _t1 = intersection.ray_sphere_parameters(
+        origin, direction, center, radius
+    )
+
+    MINI_CHECK(hits == 1)
+    MINI_CHECK(abs(t0 - 5.0) < 1e-4)
 
 
 @MINI_TEST("Intersection", "Ray Sphere Miss")
 def test_intersection_ray_sphere_miss():
     from session_py import intersection
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    line = Line(-5.0, 5.0, 0.0, -4.0, 5.0, 0.0)
+    origin = Point(-5.0, 5.0, 0.0)
+    direction = Vector(1.0, 0.0, 0.0)
     center = Point(0.0, 0.0, 0.0)
     radius = 2.0
-    points = intersection.ray_sphere(line, center, radius)
 
-    MINI_CHECK(points is None)
+    hits, _t0, _t1 = intersection.ray_sphere_parameters(
+        origin, direction, center, radius
+    )
+
+    MINI_CHECK(hits == 0)
 
 
 @MINI_TEST("Intersection", "Ray Triangle")
 def test_intersection_ray_triangle():
     from session_py import intersection
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    line = Line(0.5, 0.5, -1.0, 0.5, 0.5, 0.0)
+    origin = Point(0.5, 0.5, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
     v0 = Point(0.0, 0.0, 0.0)
     v1 = Point(1.0, 0.0, 0.0)
     v2 = Point(0.0, 1.0, 0.0)
-    result = intersection.ray_triangle(line, v0, v1, v2, 1e-6)
 
-    MINI_CHECK(result is not None)
-    MINI_CHECK(abs(result[2] - 0.0) < 1e-4)
+    result, t, _u, _v, parallel = intersection.ray_triangle_parameters(
+        origin, direction, v0, v1, v2, 1e-6
+    )
+
+    MINI_CHECK(result)
+    MINI_CHECK(not parallel)
+    MINI_CHECK(abs(t - 1.0) < 1e-4)
 
 
 @MINI_TEST("Intersection", "Ray Triangle Miss")
 def test_intersection_ray_triangle_miss():
     from session_py import intersection
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    line = Line(2.0, 2.0, -1.0, 2.0, 2.0, 0.0)
+    origin = Point(2.0, 2.0, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
     v0 = Point(0.0, 0.0, 0.0)
     v1 = Point(1.0, 0.0, 0.0)
     v2 = Point(0.0, 1.0, 0.0)
-    result = intersection.ray_triangle(line, v0, v1, v2, 1e-6)
 
-    MINI_CHECK(result is None)
+    result, _t, _u, _v, _parallel = intersection.ray_triangle_parameters(
+        origin, direction, v0, v1, v2, 1e-6
+    )
+
+    MINI_CHECK(not result)
 
 
 @MINI_TEST("Intersection", "Ray Triangle Parallel")
 def test_intersection_ray_triangle_parallel():
     from session_py import intersection
-    from session_py import Line
     from session_py import Point
+    from session_py import Vector
 
-    line = Line(0.5, 0.5, -1.0, 1.5, 0.5, -1.0)
+    origin = Point(0.5, 0.5, -1.0)
+    direction = Vector(1.0, 0.0, 0.0)
+
     v0 = Point(0.0, 0.0, 0.0)
     v1 = Point(1.0, 0.0, 0.0)
     v2 = Point(0.0, 1.0, 0.0)
-    result = intersection.ray_triangle(line, v0, v1, v2, 1e-6)
 
-    MINI_CHECK(result is None)
+    result, _t, _u, _v, parallel = intersection.ray_triangle_parameters(
+        origin, direction, v0, v1, v2, 1e-6
+    )
+
+    MINI_CHECK(not result)
+    MINI_CHECK(parallel)
 
 
 @MINI_TEST("Intersection", "Ray Mesh")
 def test_intersection_ray_mesh():
     from session_py import intersection
-    from session_py import Line
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
 
     polygons = [
         [
@@ -505,21 +548,25 @@ def test_intersection_ray_mesh():
             Point(0.0, 1.0, 1.0),
         ],
     ]
-    mesh = Mesh.from_polylines(polygons)
-    line = Line(0.5, 0.5, -1.0, 0.5, 0.5, 0.0)
-    hits = intersection.ray_mesh(line, mesh, 1e-6, True)
 
-    MINI_CHECK(hits is not None)
+    mesh = Mesh.from_polylines(polygons)
+
+    origin = Point(0.5, 0.5, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
+    result, hits = intersection.ray_mesh_hits(origin, direction, mesh, True)
+
+    MINI_CHECK(result)
     MINI_CHECK(len(hits) >= 1)
-    MINI_CHECK(abs(hits[0][2] - 0.0) < 1e-3)
+    MINI_CHECK(abs(hits[0].t - 1.0) < 1e-3)
 
 
 @MINI_TEST("Intersection", "Ray Mesh First")
 def test_intersection_ray_mesh_first():
     from session_py import intersection
-    from session_py import Line
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
 
     polygons = [
         [
@@ -535,20 +582,24 @@ def test_intersection_ray_mesh_first():
             Point(0.0, 1.0, 1.0),
         ],
     ]
-    mesh = Mesh.from_polylines(polygons)
-    line = Line(0.5, 0.5, -1.0, 0.5, 0.5, 0.0)
-    hits = intersection.ray_mesh(line, mesh, 1e-6, False)
 
-    MINI_CHECK(hits is not None)
+    mesh = Mesh.from_polylines(polygons)
+
+    origin = Point(0.5, 0.5, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
+    result, hits = intersection.ray_mesh_hits(origin, direction, mesh, False)
+
+    MINI_CHECK(result)
     MINI_CHECK(len(hits) == 1)
 
 
 @MINI_TEST("Intersection", "Ray Mesh Miss")
 def test_intersection_ray_mesh_miss():
     from session_py import intersection
-    from session_py import Line
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
 
     polygons = [
         [
@@ -558,19 +609,24 @@ def test_intersection_ray_mesh_miss():
             Point(0.0, 1.0, 0.0),
         ],
     ]
-    mesh = Mesh.from_polylines(polygons)
-    line = Line(5.0, 5.0, -1.0, 5.0, 5.0, 0.0)
-    hits = intersection.ray_mesh(line, mesh, 1e-6, True)
 
-    MINI_CHECK(hits is None)
+    mesh = Mesh.from_polylines(polygons)
+
+    origin = Point(5.0, 5.0, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
+    result, hits = intersection.ray_mesh_hits(origin, direction, mesh, True)
+
+    MINI_CHECK(not result)
+    MINI_CHECK(len(hits) == 0)
 
 
 @MINI_TEST("Intersection", "Ray Mesh Bvh")
 def test_intersection_ray_mesh_bvh():
     from session_py import intersection
-    from session_py import Line
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
 
     polygons = [
         [
@@ -586,21 +642,25 @@ def test_intersection_ray_mesh_bvh():
             Point(0.0, 1.0, 1.0),
         ],
     ]
-    mesh = Mesh.from_polylines(polygons)
-    line = Line(0.5, 0.5, -1.0, 0.5, 0.5, 0.0)
-    hits = intersection.ray_mesh_bvh(line, mesh, 1e-6, True)
 
-    MINI_CHECK(hits is not None)
+    mesh = Mesh.from_polylines(polygons)
+
+    origin = Point(0.5, 0.5, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
+    result, hits = intersection.ray_mesh_bvh_hits(origin, direction, mesh, True)
+
+    MINI_CHECK(result)
     MINI_CHECK(len(hits) >= 1)
-    MINI_CHECK(abs(hits[0][2] - 0.0) < 1e-3)
+    MINI_CHECK(abs(hits[0].t - 1.0) < 1e-3)
 
 
 @MINI_TEST("Intersection", "Ray Mesh Bvh First")
 def test_intersection_ray_mesh_bvh_first():
     from session_py import intersection
-    from session_py import Line
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
 
     polygons = [
         [
@@ -616,20 +676,24 @@ def test_intersection_ray_mesh_bvh_first():
             Point(0.0, 1.0, 1.0),
         ],
     ]
-    mesh = Mesh.from_polylines(polygons)
-    line = Line(0.5, 0.5, -1.0, 0.5, 0.5, 0.0)
-    hits = intersection.ray_mesh_bvh(line, mesh, 1e-6, False)
 
-    MINI_CHECK(hits is not None)
+    mesh = Mesh.from_polylines(polygons)
+
+    origin = Point(0.5, 0.5, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
+    result, hits = intersection.ray_mesh_bvh_hits(origin, direction, mesh, False)
+
+    MINI_CHECK(result)
     MINI_CHECK(len(hits) == 1)
 
 
 @MINI_TEST("Intersection", "Ray Mesh Bvh Miss")
 def test_intersection_ray_mesh_bvh_miss():
     from session_py import intersection
-    from session_py import Line
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
 
     polygons = [
         [
@@ -639,19 +703,24 @@ def test_intersection_ray_mesh_bvh_miss():
             Point(0.0, 1.0, 0.0),
         ],
     ]
-    mesh = Mesh.from_polylines(polygons)
-    line = Line(5.0, 5.0, -1.0, 5.0, 5.0, 0.0)
-    hits = intersection.ray_mesh_bvh(line, mesh, 1e-6, True)
 
-    MINI_CHECK(hits is None)
+    mesh = Mesh.from_polylines(polygons)
+
+    origin = Point(5.0, 5.0, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
+    result, hits = intersection.ray_mesh_bvh_hits(origin, direction, mesh, True)
+
+    MINI_CHECK(not result)
+    MINI_CHECK(len(hits) == 0)
 
 
 @MINI_TEST("Intersection", "Ray Mesh Bvh Vs Naive")
 def test_intersection_ray_mesh_bvh_vs_naive():
     from session_py import intersection
-    from session_py import Line
     from session_py import Mesh
     from session_py import Point
+    from session_py import Vector
 
     polygons = []
 
@@ -659,6 +728,7 @@ def test_intersection_ray_mesh_bvh_vs_naive():
         for j in range(10):
             x = float(i)
             y = float(j)
+
             polygons.append(
                 [
                     Point(x, y, 0.0),
@@ -669,20 +739,20 @@ def test_intersection_ray_mesh_bvh_vs_naive():
             )
 
     mesh = Mesh.from_polylines(polygons)
-    line = Line(5.5, 5.5, -1.0, 5.5, 5.5, 0.0)
-    hits_naive = intersection.ray_mesh(line, mesh, 1e-6, True)
-    hits_bvh = intersection.ray_mesh_bvh(line, mesh, 1e-6, True)
-    result_naive = hits_naive is not None
-    result_bvh = hits_bvh is not None
+
+    origin = Point(5.5, 5.5, -1.0)
+    direction = Vector(0.0, 0.0, 1.0)
+
+    result_naive, hits_naive = intersection.ray_mesh_hits(origin, direction, mesh, True)
+
+    result_bvh, hits_bvh = intersection.ray_mesh_bvh_hits(origin, direction, mesh, True)
 
     MINI_CHECK(result_naive == result_bvh)
-    naive_count = len(hits_naive) if hits_naive else 0
-    bvh_count = len(hits_bvh) if hits_bvh else 0
+    MINI_CHECK(len(hits_naive) == len(hits_bvh))
 
-    MINI_CHECK(naive_count == bvh_count)
-
-    if hits_naive and hits_bvh:
-        MINI_CHECK(abs(hits_naive[0][2] - hits_bvh[0][2]) < 1e-4)
+    if hits_naive:
+        MINI_CHECK(abs(hits_naive[0].t - hits_bvh[0].t) < 1e-4)
+        MINI_CHECK(hits_naive[0].face_index == hits_bvh[0].face_index)
 
 
 @MINI_TEST("Intersection", "Ray Box Real World")
@@ -770,6 +840,14 @@ def test_intersection_curve_plane():
         MINI_CHECK(abs(p[0] - 1.0) < 1e-9)
         MINI_CHECK(abs(abs(p[1]) - math.sqrt(3.0)) < 1e-9)
 
+    offset = 1.98 / math.sqrt(2.0)
+    diagonal = Plane.from_point_normal(
+        Point(offset, offset, 0.0), Vector(1.0, 1.0, 0.0)
+    )
+    hidden = intersection.curve_plane(circle, diagonal)
+
+    MINI_CHECK(len(hidden) == 2)
+
 
 @MINI_TEST("Intersection", "Curve Plane Bezier Clipping")
 def test_intersection_curve_plane_bezier_clipping():
@@ -790,6 +868,12 @@ def test_intersection_curve_plane_bezier_clipping():
     for t in params:
         MINI_CHECK(abs(circle.point_at(t)[0] - 1.0) < 1e-9)
 
+    unit = Primitives.circle(0.0, 0.0, 0.0, 1.0)
+    tilted = Plane.from_point_normal(Point(0.0, 0.0, 0.2), Vector(0.3, 0.1, 1.0))
+    roots = intersection.curve_plane_bezier_clipping(unit, tilted)
+
+    MINI_CHECK(len(roots) == 2)
+
 
 @MINI_TEST("Intersection", "Curve Plane Algebraic")
 def test_intersection_curve_plane_algebraic():
@@ -797,6 +881,7 @@ def test_intersection_curve_plane_algebraic():
     from session_py import NurbsCurve
     from session_py import Plane
     from session_py import Point
+    from session_py import Primitives
     from session_py import Vector
 
     curve = NurbsCurve.create(
@@ -819,6 +904,11 @@ def test_intersection_curve_plane_algebraic():
     MINI_CHECK(abs(curve.point_at(params[0])[0] - 1.0) < 1e-9)
     MINI_CHECK(abs(curve.point_at(params[0])[1] - 4.0 / 3.0) < 1e-9)
 
+    circle = Primitives.circle(0.0, 0.0, 0.0, 2.0)
+    circle_params = intersection.curve_plane_algebraic(circle, plane)
+
+    MINI_CHECK(len(circle_params) == 2)
+
 
 @MINI_TEST("Intersection", "Curve Plane Production")
 def test_intersection_curve_plane_production():
@@ -837,7 +927,7 @@ def test_intersection_curve_plane_production():
     MINI_CHECK(len(params) == 2)
 
     for t in params:
-        MINI_CHECK(abs(circle.point_at(t)[0] - 1.0) < 1e-4)
+        MINI_CHECK(abs(circle.point_at(t)[0] - 1.0) < 1e-9)
 
 
 @MINI_TEST("Intersection", "Curve Closest Point")
@@ -876,6 +966,7 @@ def test_intersection_surface_plane():
 
     MINI_CHECK(len(curves) == 1)
     MINI_CHECK(curves[0].is_valid())
+
     t0, t1 = curves[0].domain()
 
     for i in range(11):
@@ -909,6 +1000,7 @@ def test_intersection_surface_plane_curved():
     MINI_CHECK(len(curves) >= 1)
     MINI_CHECK(curves[0].is_valid())
     MINI_CHECK(curves[0].degree() == 3)
+
     t0, t1 = curves[0].domain()
 
     for i in range(11):
@@ -951,12 +1043,16 @@ def test_intersection_surface_plane_uv():
     pairs = intersection.surface_plane_uv(cyl, plane)
 
     MINI_CHECK(len(pairs) == 1)
+
     curve3 = pairs[0][0]
     pcurve = pairs[0][1]
+
     MINI_CHECK(curve3.is_valid())
     MINI_CHECK(pcurve.is_valid())
     MINI_CHECK(curve3.is_closed())
+
     u0, u1 = cyl.domain(0)
+
     MINI_CHECK(
         abs(pcurve.point_at(0.0)[0] - u1) < 1e-9
         or abs(pcurve.point_at(0.0)[0] - u0) < 1e-9
@@ -965,6 +1061,7 @@ def test_intersection_surface_plane_uv():
         abs(pcurve.point_at(1.0)[0] - u1) < 1e-9
         or abs(pcurve.point_at(1.0)[0] - u0) < 1e-9
     )
+
     pn = plane.z_axis
     po = plane.origin
     max_off = 0.0
@@ -984,6 +1081,7 @@ def test_intersection_surface_plane_uv():
     pairs2 = intersection.surface_plane_uv(torus, plane2)
 
     MINI_CHECK(len(pairs2) == 2)
+
     tu0, tu1 = torus.domain(0)
     tv0, tv1 = torus.domain(1)
     inside = True
@@ -1028,7 +1126,9 @@ def test_intersection_surface_surface():
     flat_triples = intersection.surface_surface(flat, cyl)
 
     MINI_CHECK(len(flat_triples) == 1)
+
     c3, pa, pb = flat_triples[0]
+
     MINI_CHECK(c3.is_valid() and pa.is_valid() and pb.is_valid())
     MINI_CHECK(c3.is_closed())
     MINI_CHECK(lies_on_curve(c3, pa, flat) < 0.05)
@@ -1039,6 +1139,7 @@ def test_intersection_surface_surface():
     triples = intersection.surface_surface(sphere, cyl2)
 
     MINI_CHECK(len(triples) >= 2)
+
     clean = 0
 
     for c3, pa, pb in triples:
@@ -1048,6 +1149,39 @@ def test_intersection_surface_surface():
             clean += 1
 
     MINI_CHECK(clean >= 2)
+
+    sphere2 = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
+
+    flat04 = NurbsSurface.create(
+        False,
+        False,
+        1,
+        1,
+        2,
+        2,
+        [
+            Point(-3.0, -3.0, 0.4),
+            Point(-3.0, 3.0, 0.4),
+            Point(3.0, -3.0, 0.4),
+            Point(3.0, 3.0, 0.4),
+        ],
+    )
+
+    ex_triples = intersection.surface_surface(sphere2, flat04)
+
+    MINI_CHECK(len(ex_triples) == 1)
+
+    ex_c3 = ex_triples[0][0]
+    expected_r = math.sqrt(3.84)
+    max_dev = 0.0
+
+    for j in range(257):
+        p = ex_c3.point_at(j / 256.0)
+        rr = math.sqrt(p[0] * p[0] + p[1] * p[1])
+        max_dev = max(max_dev, abs(rr - expected_r))
+        max_dev = max(max_dev, abs(p[2] - 0.4))
+
+    MINI_CHECK(max_dev < 1e-9)
 
 
 @MINI_TEST("Intersection", "Surface Surface Accuracy")
@@ -1060,6 +1194,7 @@ def test_intersection_surface_surface_accuracy():
     sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
     cyl = Primitives.cylinder_surface(1.3, 0.0, -3.0, 0.3, 6.0)
     tr = intersection.surface_surface(sphere, cyl)
+
     MINI_CHECK(len(tr) >= 2)
 
     for c3, pa, pb in tr:
@@ -1067,6 +1202,7 @@ def test_intersection_surface_surface_accuracy():
 
     sphere2 = Primitives.sphere_surface(2.0, 0.0, 0.0, 2.0)
     tr2 = intersection.surface_surface(sphere, sphere2)
+
     MINI_CHECK(len(tr2) >= 1)
 
     for c3, pa, pb in tr2:
@@ -1088,6 +1224,7 @@ def test_intersection_surface_surface_accuracy():
         ],
     )
     tr3 = intersection.surface_surface(torus, flat)
+
     MINI_CHECK(len(tr3) == 2)
 
     for c3, pa, pb in tr3:
@@ -1210,6 +1347,7 @@ def test_intersection_plane_4planes():
 
     first = result.get_point(0)
     last = result.get_point(4)
+
     MINI_CHECK(abs(first[0] - last[0]) < 1e-6)
     MINI_CHECK(abs(first[1] - last[1]) < 1e-6)
 
@@ -1315,7 +1453,9 @@ def test_intersection_polyline_plane():
     result = intersection.polyline_plane(poly, plane)
 
     MINI_CHECK(result is not None)
+
     pts, indices = result
+
     MINI_CHECK(len(pts) == 2)
 
     for p in pts:
@@ -1473,6 +1613,7 @@ def test_intersection_polyline_plane_to_line():
     )
     pln = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
     out = polyline_plane_to_line(poly, pln, Point(0.0, 0.0, 0.0))
+
     MINI_CHECK(out is not None)
     MINI_CHECK(TOLERANCE.is_close(out.start()[0], 0.0))
     MINI_CHECK(TOLERANCE.is_close(out.end()[0], 4.0))
@@ -1491,6 +1632,7 @@ def test_intersection_quad_from_line_top_bottom_planes():
     plane0 = Plane.from_point_normal(Point(0.0, -2.0, 0.0), Vector(0.0, 1.0, 0.0))
     plane1 = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
     out = quad_from_line_top_bottom_planes(face, line, plane0, plane1)
+
     MINI_CHECK(out is not None)
     MINI_CHECK(out.point_count() == 5)
     MINI_CHECK(TOLERANCE.is_close(abs(out.get_point(0)[1]), 2.0))
@@ -1509,8 +1651,11 @@ def test_intersection_orthogonal_vector_between_two_plane_pairs():
     pp10 = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
     pp11 = Plane.from_point_normal(Point(4.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
     out = orthogonal_vector_between_two_plane_pairs(pp00, pp10, pp11)
+
     MINI_CHECK(out is not None)
+
     mag = (out[0] * out[0] + out[1] * out[1] + out[2] * out[2]) ** 0.5
+
     MINI_CHECK(TOLERANCE.is_close(mag, 4.0))
     MINI_CHECK(TOLERANCE.is_close(out[1], 0.0))
     MINI_CHECK(TOLERANCE.is_close(out[2], 0.0))
@@ -1540,13 +1685,18 @@ def test_intersection_closed_and_open_paths_2d():
     )
     pln = Plane.xy_plane()
     result = closed_and_open_paths_2d(plate, joint, pln)
+
     MINI_CHECK(result is not None)
+
     out, (t0, t1) = result
+
     MINI_CHECK(out.point_count() == 2)
     MINI_CHECK(TOLERANCE.is_close(out.get_point(0)[1], 5.0))
     MINI_CHECK(TOLERANCE.is_close(out.get_point(1)[1], 5.0))
+
     t_lo = min(t0, t1)
     t_hi = max(t0, t1)
+
     MINI_CHECK(TOLERANCE.is_close(t_lo, 1.5))
     MINI_CHECK(TOLERANCE.is_close(t_hi, 3.5))
 
@@ -1701,7 +1851,9 @@ def test_intersection_line_line_classified():
     result = line_line_classified(s0, s1, 1, 1, 0, 0, 0.5)
 
     MINI_CHECK(result is not None)
+
     p0, p1, v0, v1, normal, type0, type1, is_parallel = result
+
     MINI_CHECK(not is_parallel)
     MINI_CHECK(abs(p0[0]) < 1e-6)
     MINI_CHECK(abs(p0[1]) < 1e-6)
@@ -1714,7 +1866,9 @@ def test_intersection_line_line_classified():
     result2 = line_line_classified(e0, e1, 1, 1, 0, 0, 0.5)
 
     MINI_CHECK(result2 is not None)
+
     p0, p1, v0, v1, normal, type0, type1, is_parallel = result2
+
     MINI_CHECK(not type0)
     MINI_CHECK(not type1)
     MINI_CHECK(abs(p0[0]) < 1e-6)
@@ -1725,7 +1879,9 @@ def test_intersection_line_line_classified():
     result3 = line_line_classified(q0, q1, 1, 1, 0, 0, 0.5)
 
     MINI_CHECK(result3 is not None)
+
     p0, p1, v0, v1, normal, type0, type1, is_parallel = result3
+
     MINI_CHECK(is_parallel)
     MINI_CHECK(not type0)
     MINI_CHECK(not type1)

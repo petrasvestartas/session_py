@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+import functools
 import math
+import sys
 from .boolean_polyline import BooleanPolyline
 from .closest import Closest
 from .line import Line
@@ -45,6 +47,36 @@ def line_line(line0: Line, line1: Line, tolerance: float) -> Point | None:
     return Point((p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5, (p0[2] + p1[2]) * 0.5)
 
 
+def _shared_endpoint_parameters(line0: Line, line1: Line) -> tuple[float, float] | None:
+    """Parameters (0 or 1) of an exactly shared endpoint of two segments, or None."""
+
+    ends0 = [line0.start(), line0.end()]
+    ends1 = [line1.start(), line1.end()]
+
+    for i in range(2):
+        for j in range(2):
+            if (
+                ends0[i][0] == ends1[j][0]
+                and ends0[i][1] == ends1[j][1]
+                and ends0[i][2] == ends1[j][2]
+            ):
+                return (float(i), float(j))
+
+    return None
+
+
+def _clamp_unit(t: float) -> float:
+    """Clamp a parameter to [0, 1]."""
+
+    if t < 0.0:
+        return 0.0
+
+    if t > 1.0:
+        return 1.0
+
+    return t
+
+
 def line_line_parameters(
     line0: Line,
     line1: Line,
@@ -54,26 +86,14 @@ def line_line_parameters(
 ) -> tuple[float, float] | None:
     """Parameters of closest approach of two lines, clamped to the segments when requested."""
 
-    p0_start = line0.start()
-    p0_end = line0.end()
-    p1_start = line1.start()
-    p1_end = line1.end()
+    shared = _shared_endpoint_parameters(line0, line1)
 
-    if p0_start == p1_start:
-        return (0.0, 0.0)
-
-    if p0_start == p1_end:
-        return (0.0, 1.0)
-
-    if p0_end == p1_start:
-        return (1.0, 0.0)
-
-    if p0_end == p1_end:
-        return (1.0, 1.0)
+    if shared is not None:
+        return shared
 
     A = line0.to_vector()
     B = line1.to_vector()
-    C = p1_start - p0_start
+    C = line1.start() - line0.start()
 
     AA = A.dot(A)
     BB = B.dot(B)
@@ -82,43 +102,26 @@ def line_line_parameters(
     BC = B.dot(C)
 
     det = AA * BB - AB * AB
+    zero_tol = max(AA, BB) * sys.float_info.epsilon
+    parallel = abs(det) < zero_tol
 
-    zero_tol = max(AA, BB) * 1e-15
+    if parallel and not near_parallel_as_closest:
+        return None
 
-    if abs(det) < zero_tol:
-        if not near_parallel_as_closest:
-            return None
-
+    if parallel:
         t0 = (AC / AA) if AA > 0.0 else 0.0
         t1 = ((BC + t0 * AB) / BB) if BB > 0.0 else 0.0
-
-        if intersect_segments:
-            t0 = max(0.0, min(1.0, t0))
-            t1 = max(0.0, min(1.0, t1))
-
-        if tolerance > 0.0:
-            pt0 = line0.point_at(t0)
-            pt1 = line1.point_at(t1)
-
-            if pt0.distance(pt1) > tolerance:
-                return None
-
-        return (t0, t1)
-
-    inv_det = 1.0 / det
-    t0 = (BB * AC - AB * BC) * inv_det
-    t1 = (AB * AC - AA * BC) * inv_det
+    else:
+        inv_det = 1.0 / det
+        t0 = (BB * AC - AB * BC) * inv_det
+        t1 = (AB * AC - AA * BC) * inv_det
 
     if intersect_segments:
-        t0 = max(0.0, min(1.0, t0))
-        t1 = max(0.0, min(1.0, t1))
+        t0 = _clamp_unit(t0)
+        t1 = _clamp_unit(t1)
 
-    if tolerance > 0.0:
-        pt0 = line0.point_at(t0)
-        pt1 = line1.point_at(t1)
-
-        if pt0.distance(pt1) > tolerance:
-            return None
+    if tolerance > 0.0 and line0.point_at(t0).distance(line1.point_at(t1)) > tolerance:
+        return None
 
     return (t0, t1)
 
@@ -257,33 +260,52 @@ def plane_plane_plane(plane0: Plane, plane1: Plane, plane2: Plane) -> Point | No
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def ray_box(line: Line, box: OBB, t0: float, t1: float) -> list[Point] | None:
-    """Ray-box slab test returning the entry and exit parameters."""
+class RayHit:
+    """Ray-mesh hit."""
 
-    origin = line.start()
-    direction = line.to_vector()
+    def __init__(
+        self,
+        t: float = 0.0,
+        point: Point | None = None,
+        u: float = 0.0,
+        v: float = 0.0,
+        face_index: int = -1,
+    ):
+        self.t = t  # Parameter along the ray.
+        self.point = point if point is not None else Point()  # Hit point.
+        self.u = u  # Barycentric u.
+        self.v = v  # Barycentric v.
+        self.face_index = face_index  # Hit face.
+
+
+def ray_box_parameters(
+    origin: Point, direction: Vector, box: OBB, t0: float, t1: float
+) -> tuple[bool, float, float]:
+    """Ray-box slab test returning the entry and exit parameters."""
 
     box_min = box.min_point()
     box_max = box.max_point()
 
-    inv_dir_x = 1.0 / direction[0] if direction[0] != 0.0 else float("inf")
-    inv_dir_y = 1.0 / direction[1] if direction[1] != 0.0 else float("inf")
-    inv_dir_z = 1.0 / direction[2] if direction[2] != 0.0 else float("inf")
+    inv_dir = Vector(
+        1.0 / direction[0] if direction[0] != 0.0 else sys.float_info.max,
+        1.0 / direction[1] if direction[1] != 0.0 else sys.float_info.max,
+        1.0 / direction[2] if direction[2] != 0.0 else sys.float_info.max,
+    )
 
-    tx1 = (box_min[0] - origin[0]) * inv_dir_x
-    tx2 = (box_max[0] - origin[0]) * inv_dir_x
+    tx1 = (box_min[0] - origin[0]) * inv_dir[0]
+    tx2 = (box_max[0] - origin[0]) * inv_dir[0]
 
     tmin = min(tx1, tx2)
     tmax = max(tx1, tx2)
 
-    ty1 = (box_min[1] - origin[1]) * inv_dir_y
-    ty2 = (box_max[1] - origin[1]) * inv_dir_y
+    ty1 = (box_min[1] - origin[1]) * inv_dir[1]
+    ty2 = (box_max[1] - origin[1]) * inv_dir[1]
 
     tmin = max(tmin, min(ty1, ty2))
     tmax = min(tmax, max(ty1, ty2))
 
-    tz1 = (box_min[2] - origin[2]) * inv_dir_z
-    tz2 = (box_max[2] - origin[2]) * inv_dir_z
+    tz1 = (box_min[2] - origin[2]) * inv_dir[2]
+    tz2 = (box_max[2] - origin[2]) * inv_dir[2]
 
     tmin = max(tmin, min(tz1, tz2))
     tmax = min(tmax, max(tz1, tz2))
@@ -291,238 +313,272 @@ def ray_box(line: Line, box: OBB, t0: float, t1: float) -> list[Point] | None:
     tmin = max(tmin, t0)
     tmax = min(tmax, t1)
 
-    if tmax < tmin:
+    return (tmax >= tmin, tmin, tmax)
+
+
+def ray_box(line: Line, box: OBB, t0: float, t1: float) -> list[Point] | None:
+    """Line-box entry and exit points."""
+
+    origin = line.start()
+    direction = line.to_vector()
+
+    hit, tmin, tmax = ray_box_parameters(origin, direction, box, t0, t1)
+
+    if not hit:
         return None
 
     entry = origin + direction * tmin
-
     exit_point = origin + direction * tmax
 
     return [entry, exit_point]
 
 
-def ray_sphere(line: Line, center: Point, radius: float) -> list[Point] | None:
+def ray_sphere_parameters(
+    origin: Point, direction: Vector, center: Point, radius: float
+) -> tuple[int, float, float]:
     """Ray-sphere parameters, returning the hit count."""
 
-    origin = line.start()
-    direction = line.to_vector()
-
-    o_x = origin[0] - center[0]
-    o_y = origin[1] - center[1]
-    o_z = origin[2] - center[2]
-
-    a = (
-        direction[0] * direction[0]
-        + direction[1] * direction[1]
-        + direction[2] * direction[2]
-    )
-    b = 2.0 * (direction[0] * o_x + direction[1] * o_y + direction[2] * o_z)
-    c = o_x * o_x + o_y * o_y + o_z * o_z - radius * radius
-
+    offset = origin - center
+    a = direction.dot(direction)
+    b = 2.0 * direction.dot(offset)
+    c = offset.dot(offset) - (radius * radius)
     disc = b * b - 4.0 * a * c
 
     if disc < 0.0:
-        return None
+        return (0, 0.0, 0.0)
 
-    dist_sqrt = disc**0.5
-
-    if b < 0.0:
-        q = (-b - dist_sqrt) / 2.0
-    else:
-        q = (-b + dist_sqrt) / 2.0
+    root = math.sqrt(disc)
+    q = (-b - root) / 2.0 if b < 0.0 else (-b + root) / 2.0
 
     t0 = q / a
     t1 = c / q
 
+    if t1 == t0:
+        return (1, t0, t1)
+
     if t0 > t1:
         t0, t1 = t1, t0
 
-    points = []
+    return (2, t0, t1)
 
-    p0 = Point(
-        origin[0] + direction[0] * t0,
-        origin[1] + direction[1] * t0,
-        origin[2] + direction[2] * t0,
-    )
-    points.append(p0)
 
-    if abs(t1 - t0) > 1e-10:
-        p1 = Point(
-            origin[0] + direction[0] * t1,
-            origin[1] + direction[1] * t1,
-            origin[2] + direction[2] * t1,
-        )
-        points.append(p1)
+def ray_sphere(line: Line, center: Point, radius: float) -> list[Point] | None:
+    """Line-sphere hit points."""
+
+    origin = line.start()
+    direction = line.to_vector()
+
+    hits, t0, t1 = ray_sphere_parameters(origin, direction, center, radius)
+
+    if hits == 0:
+        return None
+
+    points = [origin + direction * t0]
+
+    if hits == 2:
+        points.append(origin + direction * t1)
 
     return points
+
+
+def ray_triangle_parameters(
+    origin: Point,
+    direction: Vector,
+    v0: Point,
+    v1: Point,
+    v2: Point,
+    epsilon: float,
+) -> tuple[bool, float, float, float, bool]:
+    """Moller-Trumbore ray-triangle test returning (hit, t, u, v, parallel)."""
+
+    edge1 = v1 - v0
+    edge2 = v2 - v0
+    pvec = direction.cross(edge2)
+
+    det = edge1.dot(pvec)
+
+    if det > -epsilon and det < epsilon:
+        return (False, 0.0, 0.0, 0.0, True)
+
+    inv_det = 1.0 / det
+
+    tvec = origin - v0
+    u = tvec.dot(pvec) * inv_det
+
+    if u < 0.0 - epsilon or u > 1.0 + epsilon:
+        return (False, 0.0, u, 0.0, False)
+
+    qvec = tvec.cross(edge1)
+    v = direction.dot(qvec) * inv_det
+
+    if v < 0.0 - epsilon or u + v > 1.0 + epsilon:
+        return (False, 0.0, u, v, False)
+
+    t = edge2.dot(qvec) * inv_det
+
+    return (True, t, u, v, False)
 
 
 def ray_triangle(
     line: Line, v0: Point, v1: Point, v2: Point, epsilon: float
 ) -> Point | None:
-    """Moller-Trumbore ray-triangle test."""
+    """Line-triangle hit point."""
 
     origin = line.start()
     direction = line.to_vector()
 
-    edge1_x = v1[0] - v0[0]
-    edge1_y = v1[1] - v0[1]
-    edge1_z = v1[2] - v0[2]
+    hit, t, _, _, _ = ray_triangle_parameters(origin, direction, v0, v1, v2, epsilon)
 
-    edge2_x = v2[0] - v0[0]
-    edge2_y = v2[1] - v0[1]
-    edge2_z = v2[2] - v0[2]
-
-    pvec_x = direction[1] * edge2_z - direction[2] * edge2_y
-    pvec_y = direction[2] * edge2_x - direction[0] * edge2_z
-    pvec_z = direction[0] * edge2_y - direction[1] * edge2_x
-
-    det = edge1_x * pvec_x + edge1_y * pvec_y + edge1_z * pvec_z
-
-    if -epsilon < det < epsilon:
+    if not hit:
         return None
-
-    inv_det = 1.0 / det
-
-    tvec_x = origin[0] - v0[0]
-    tvec_y = origin[1] - v0[1]
-    tvec_z = origin[2] - v0[2]
-
-    u = (tvec_x * pvec_x + tvec_y * pvec_y + tvec_z * pvec_z) * inv_det
-
-    if u < -epsilon or u > 1.0 + epsilon:
-        return None
-
-    qvec_x = tvec_y * edge1_z - tvec_z * edge1_y
-    qvec_y = tvec_z * edge1_x - tvec_x * edge1_z
-    qvec_z = tvec_x * edge1_y - tvec_y * edge1_x
-
-    v = (
-        direction[0] * qvec_x + direction[1] * qvec_y + direction[2] * qvec_z
-    ) * inv_det
-
-    if v < -epsilon or u + v > 1.0 + epsilon:
-        return None
-
-    t = (edge2_x * qvec_x + edge2_y * qvec_y + edge2_z * qvec_z) * inv_det
 
     return origin + direction * t
 
 
-def _mesh_triangles(mesh: Mesh) -> list[tuple[Point, Point, Point]]:
-    """Return the fan triangles of every mesh face."""
+def _ray_hit_before(a: RayHit, b: RayHit) -> bool:
+    """Whether hit a sorts before hit b: smaller t, ties within 1e-6 broken by the lower face index."""
+
+    eps = 1e-6
+    dt = a.t - b.t
+
+    if abs(dt) <= eps:
+        return a.face_index < b.face_index
+
+    return a.t < b.t
+
+
+def _ray_hit_order(a: RayHit, b: RayHit) -> int:
+    """Three-way comparison built on _ray_hit_before."""
+
+    if _ray_hit_before(a, b):
+        return -1
+
+    if _ray_hit_before(b, a):
+        return 1
+
+    return 0
+
+
+def _sort_ray_hits(hits: list[RayHit], find_all: bool) -> bool:
+    """Sorts hits by t and keeps only the nearest unless find_all; false when there is none."""
+
+    if not hits:
+        return False
+
+    hits.sort(key=functools.cmp_to_key(_ray_hit_order))
+
+    if not find_all:
+        del hits[1:]
+
+    return True
+
+
+def ray_mesh_hits(
+    origin: Point,
+    direction: Vector,
+    mesh: Mesh,
+    find_all: bool = False,
+    epsilon: float = Tolerance.ZERO_TOLERANCE,
+) -> tuple[bool, list[RayHit]]:
+    """Ray-mesh hits by brute force sorted by t, only the nearest unless find_all."""
+
+    hits: list[RayHit] = []
 
     vertices, faces = mesh.to_vertices_and_faces()
-    tris: list[tuple[Point, Point, Point]] = []
 
-    for face in faces:
+    for i in range(len(faces)):
+        face = faces[i]
+
         if len(face) < 3:
             continue
 
-        v0 = vertices[face[0]]
+        for j in range(1, len(face) - 1):
+            v0 = vertices[face[0]]
+            v1 = vertices[face[j]]
+            v2 = vertices[face[j + 1]]
 
-        for i in range(1, len(face) - 1):
-            v1 = vertices[face[i]]
-            v2 = vertices[face[i + 1]]
-            tris.append((v0, v1, v2))
+            hit, t, u, v, _ = ray_triangle_parameters(
+                origin, direction, v0, v1, v2, epsilon
+            )
 
-    return tris
+            if not hit or t < 0.0:
+                continue
+
+            hits.append(RayHit(t, origin + direction * t, u, v, i))
+
+    return (_sort_ray_hits(hits, find_all), hits)
+
+
+def ray_mesh_bvh_hits(
+    origin: Point,
+    direction: Vector,
+    mesh: Mesh,
+    find_all: bool = False,
+    epsilon: float = Tolerance.ZERO_TOLERANCE,
+) -> tuple[bool, list[RayHit]]:
+    """Ray-mesh hits through the mesh's triangle BVH sorted by t, only the nearest unless find_all."""
+
+    hits: list[RayHit] = []
+
+    candidates: list[int] = []
+
+    if not mesh.triangle_bvh_ray_cast(origin, direction, candidates, find_all):
+        return (False, hits)
+
+    for tri_id in candidates:
+        found, face_idx, _, v0, v1, v2 = mesh.get_triangle_by_id(tri_id)
+
+        if not found:
+            continue
+
+        hit, t, u, v, _ = ray_triangle_parameters(
+            origin, direction, v0, v1, v2, epsilon
+        )
+
+        if not hit or t < 0.0:
+            continue
+
+        hits.append(RayHit(t, origin + direction * t, u, v, face_idx))
+
+    return (_sort_ray_hits(hits, find_all), hits)
 
 
 def ray_mesh(
-    line: Line, mesh: Mesh, epsilon: float = 1e-6, find_all: bool = True
-) -> list[Point] | None:
-    """Ray-mesh hits by brute force, sorted by t."""
+    line: Line, mesh: Mesh, epsilon: float, find_all: bool = False
+) -> list[Point]:
+    """Line-mesh hit points by brute force sorted by t, only the nearest unless find_all."""
 
-    tris = _mesh_triangles(mesh)
+    result: list[Point] = []
 
-    if not tris:
-        return None
+    found, hits = ray_mesh_hits(line.start(), line.to_vector(), mesh, find_all, epsilon)
 
-    hits: list[tuple[float, Point]] = []
-    origin = line.start()
-    direction = line.to_vector().normalized()
+    if not found:
+        return result
 
-    for v0, v1, v2 in tris:
-        p = ray_triangle(line, v0, v1, v2, epsilon)
+    for hit in hits:
+        result.append(hit.point)
 
-        if p is None:
-            continue
-
-        t = (
-            (p[0] - origin[0]) * direction[0]
-            + (p[1] - origin[1]) * direction[1]
-            + (p[2] - origin[2]) * direction[2]
-        )
-
-        if t >= 0.0:
-            hits.append((t, p))
-
-    if not hits:
-        return None
-
-    hits.sort(key=lambda tp: tp[0])
-
-    if find_all:
-        return [p for _, p in hits]
-    else:
-        return [hits[0][1]]
+    return result
 
 
 def ray_mesh_bvh(
-    line: Line, mesh: Mesh, epsilon: float = 1e-6, find_all: bool = True
-) -> list[Point] | None:
-    """Ray-mesh hits through the mesh's triangle BVH, sorted by t."""
+    line: Line, mesh: Mesh, epsilon: float, find_all: bool = False
+) -> list[Point]:
+    """Line-mesh hit points through the mesh's triangle BVH sorted by t, only the nearest unless find_all."""
 
-    tris = _mesh_triangles(mesh)
+    result: list[Point] = []
 
-    if not tris:
-        return None
-
-    tri_boxes: list[OBB] = []
-
-    for v0, v1, v2 in tris:
-        tri_boxes.append(OBB.from_points([v0, v1, v2]))
-
-    world_size = SpatialBVH.compute_world_size(tri_boxes)
-    bvh = SpatialBVH.from_boxes(tri_boxes, world_size)
-
-    origin = line.start()
-    direction = line.to_vector().normalized()
-    candidate_ids: list[int] = []
-    found = bvh.ray_cast(origin, direction, candidate_ids, True)
+    found, hits = ray_mesh_bvh_hits(
+        line.start(), line.to_vector(), mesh, find_all, epsilon
+    )
 
     if not found:
-        return None
+        return result
 
-    hits: list[tuple[float, Point]] = []
+    for hit in hits:
+        result.append(hit.point)
 
-    for idx in candidate_ids:
-        if 0 <= idx < len(tris):
-            v0, v1, v2 = tris[idx]
-            p = ray_triangle(line, v0, v1, v2, epsilon)
-
-            if p is None:
-                continue
-
-            t = (
-                (p[0] - origin[0]) * direction[0]
-                + (p[1] - origin[1]) * direction[1]
-                + (p[2] - origin[2]) * direction[2]
-            )
-
-            if t >= 0.0:
-                hits.append((t, p))
-
-    if not hits:
-        return None
-
-    hits.sort(key=lambda tp: tp[0])
-
-    if find_all:
-        return [p for _, p in hits]
-    else:
-        return [hits[0][1]]
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -548,6 +604,58 @@ def _curve_signed_distance_to_plane(pt, plane):
     v = pt - plane.origin
 
     return v.dot(plane.z_axis)
+
+
+def _curve_plane_slope(curve, plane, t):
+    """Rate of change of the signed plane distance with the curve parameter."""
+
+    derivs = curve.evaluate(t, 1)
+
+    return derivs[1].dot(plane.z_axis)
+
+
+def _append_unique(values, t, tolerance):
+    """Appends t unless a value within tolerance is already present."""
+
+    for existing in values:
+        if abs(existing - t) < tolerance:
+            return
+
+    values.append(t)
+
+
+def _curve_plane_newton_bracket(curve, plane, tolerance, a, b):
+    """Newton for the plane crossing in [a, b] from the midpoint as (converged, t), bisecting whenever a step is flat or leaves the bracket."""
+
+    f_a = _curve_signed_distance_to_plane(curve.point_at(a), plane)
+    t = (a + b) * 0.5
+
+    for _ in range(10):
+        f = _curve_signed_distance_to_plane(curve.point_at(t), plane)
+
+        if abs(f) < tolerance:
+            return True, t
+
+        df = _curve_plane_slope(curve, plane, t)
+        flat = abs(df) < 1e-14
+        t_new = t if flat else t - f / df
+
+        if flat or t_new < a or t_new > b:
+            if f * f_a < 0:
+                b = t
+            else:
+                a = t
+                f_a = f
+
+            t = (a + b) * 0.5
+            continue
+
+        if abs(t_new - t) < tolerance:
+            return True, t_new
+
+        t = t_new
+
+    return False, t
 
 
 def _curve_find_root_bisection(curve, plane, t0, t1, tolerance):
@@ -589,10 +697,9 @@ def _curve_refine_intersection_newton(curve, plane, t, tolerance):
 
     for _ in range(max_iterations):
         pt = curve.point_at(t)
-        tangent = curve.tangent_at(t)
 
         f = _curve_signed_distance_to_plane(pt, plane)
-        df = tangent.dot(plane.z_axis)
+        df = _curve_plane_slope(curve, plane, t)
 
         if abs(f) < tolerance:
             return t
@@ -641,9 +748,8 @@ def _curve_plane_clip(curve, plane, tolerance, ta, tb, depth, results):
 
             for _ in range(10):
                 pt = curve.point_at(t)
-                tangent = curve.tangent_at(t)
                 f = _curve_signed_distance_to_plane(pt, plane)
-                df = tangent.dot(plane.z_axis)
+                df = _curve_plane_slope(curve, plane, t)
 
                 if abs(df) < 1e-12:
                     break
@@ -742,46 +848,10 @@ def _curve_plane_subdivide_algebraic(curve, plane, tolerance, a, b, depth, resul
     deviation = abs((p_mid - p_a).cross(line_dir).magnitude())
 
     if deviation < tolerance * 10.0 or (b - a) < tolerance * 10.0:
-        t = mid_t
-        converged = False
+        converged, t = _curve_plane_newton_bracket(curve, plane, tolerance, a, b)
 
-        for _ in range(10):
-            p = curve.point_at(t)
-            f = normal.dot(p - plane.origin)
-
-            if abs(f) < tolerance:
-                converged = True
-                break
-
-            tangent = curve.tangent_at(t)
-            df = normal.dot(tangent)
-
-            if abs(df) < 1e-14:
-                t = (a + b) * 0.5
-                break
-
-            t_new = t - f / df
-
-            if t_new < a or t_new > b:
-                t_new = (a + b) * 0.5
-
-            if abs(t_new - t) < tolerance:
-                t = t_new
-                converged = True
-                break
-
-            t = t_new
-
-        if converged and t >= a and t <= b:
-            is_duplicate = False
-
-            for existing in results:
-                if abs(existing - t) < tolerance * 10.0:
-                    is_duplicate = True
-                    break
-
-            if not is_duplicate:
-                results.append(t)
+        if converged and a <= t <= b:
+            _append_unique(results, t, tolerance * 10.0)
     else:
         _curve_plane_subdivide_algebraic(
             curve, plane, tolerance, a, mid_t, depth + 1, results
@@ -826,52 +896,10 @@ def _curve_plane_subdivide_production(curve, plane, tolerance, a, b, depth, resu
         return
 
     if _curve_nearly_linear(curve, tolerance, a, b) or (b - a) < tolerance * 10.0:
-        t = (a + b) * 0.5
-        converged = False
+        converged, t = _curve_plane_newton_bracket(curve, plane, tolerance, a, b)
 
-        for _ in range(10):
-            p = curve.point_at(t)
-            f = normal.dot(p - plane.origin)
-
-            if abs(f) < tolerance:
-                converged = True
-                break
-
-            tangent = curve.tangent_at(t)
-            df = normal.dot(tangent)
-
-            if abs(df) < 1e-14:
-                if f * f_a < 0:
-                    b = t
-                else:
-                    a = t
-                    f_a = f
-
-                t = (a + b) * 0.5
-                continue
-
-            t_new = t - f / df
-
-            if t_new < a or t_new > b:
-                t_new = (a + b) * 0.5
-
-            if abs(t_new - t) < tolerance:
-                t = t_new
-                converged = True
-                break
-
-            t = t_new
-
-        if converged and t >= a and t <= b:
-            is_duplicate = False
-
-            for existing in results:
-                if abs(existing - t) < tolerance * 10.0:
-                    is_duplicate = True
-                    break
-
-            if not is_duplicate:
-                results.append(t)
+        if converged and a <= t <= b:
+            _append_unique(results, t, tolerance * 10.0)
     else:
         mid = (a + b) * 0.5
         _curve_plane_subdivide_production(
@@ -887,20 +915,40 @@ def _curve_plane_subdivide_production(curve, plane, tolerance, a, b, depth, resu
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def curve_plane(
-    curve: NurbsCurve, plane: Plane, tolerance: float | None = None
-) -> list[float]:
-    """Curve-plane intersection parameters by sampling, bisection and Newton refinement."""
+def _append_parameter(params: list[float], t: float, tolerance: float) -> None:
+    """Appends t unless it lies within tolerance of the last parameter."""
 
-    intersections = []
+    if not params or abs(params[-1] - t) >= tolerance:
+        params.append(t)
 
-    if not curve.is_valid():
-        return intersections
 
-    if tolerance is None or tolerance <= 0.0:
-        tolerance = Tolerance.ZERO_TOLERANCE
+def _curve_plane_hidden_pairs(curve, plane, tolerance, t0, t1, intersections):
+    """Crossing pairs hidden inside a span whose ends lie on one side, found on degree * 2 sub-intervals."""
 
-    t_start, t_end = curve.domain()
+    count = curve.degree() * 2
+    dt = (t1 - t0) / count
+
+    for i in range(count):
+        s0 = t0 + i * dt
+        s1 = t0 + (i + 1) * dt
+        d0 = _curve_signed_distance_to_plane(curve.point_at(s0), plane)
+        d1 = _curve_signed_distance_to_plane(curve.point_at(s1), plane)
+
+        if d0 * d1 < 0:
+            found, t_intersection = _curve_find_root_bisection(
+                curve, plane, s0, s1, tolerance
+            )
+
+            if found:
+                t_intersection = _curve_refine_intersection_newton(
+                    curve, plane, t_intersection, tolerance
+                )
+                intersections.append(t_intersection)
+
+
+def _curve_plane_spans(curve, plane, tolerance, intersections):
+    """Crossings inside each knot span, plus span starts and the curve end lying on the plane."""
+
     span_params = curve.get_span_vector()
 
     for i in range(len(span_params) - 1):
@@ -924,67 +972,73 @@ def curve_plane(
                 )
                 intersections.append(t_intersection)
         elif abs(d0) < tolerance:
-            add = True
+            _append_parameter(intersections, t0, tolerance)
+        elif curve.degree() > 1:
+            _curve_plane_hidden_pairs(curve, plane, tolerance, t0, t1, intersections)
 
-            if intersections and abs(intersections[-1] - t0) < tolerance:
-                add = False
+    t_end = curve.domain()[1]
 
-            if add:
-                intersections.append(t0)
+    if abs(_curve_signed_distance_to_plane(curve.point_at(t_end), plane)) < tolerance:
+        _append_parameter(intersections, t_end, tolerance)
 
-    d_end = _curve_signed_distance_to_plane(curve.point_at(t_end), plane)
 
-    if abs(d_end) < tolerance:
-        add = True
+def _curve_plane_samples(curve, plane, tolerance, intersections):
+    """Extra crossings of a high-degree curve found on degree * 4 uniform samples."""
 
-        if intersections and abs(intersections[-1] - t_end) < tolerance:
-            add = False
+    t_start, t_end = curve.domain()
+    num_samples = curve.degree() * 4
+    dt = (t_end - t_start) / num_samples
 
-        if add:
-            intersections.append(t_end)
+    for i in range(num_samples):
+        t0 = t_start + i * dt
+        t1 = t_start + (i + 1) * dt
+        d0 = _curve_signed_distance_to_plane(curve.point_at(t0), plane)
+        d1 = _curve_signed_distance_to_plane(curve.point_at(t1), plane)
+        crossing = False
+
+        if d0 * d1 < 0:
+            crossing, t_intersection = _curve_find_root_bisection(
+                curve, plane, t0, t1, tolerance
+            )
+
+        if not crossing:
+            continue
+
+        is_new = True
+
+        for existing in intersections:
+            if abs(existing - t_intersection) < tolerance * 2.0:
+                is_new = False
+                break
+
+        if is_new:
+            t_intersection = _curve_refine_intersection_newton(
+                curve, plane, t_intersection, tolerance
+            )
+            intersections.append(t_intersection)
+
+
+def curve_plane(
+    curve: NurbsCurve, plane: Plane, tolerance: float | None = None
+) -> list[float]:
+    """Curve-plane intersection parameters by sampling, bisection and Newton refinement."""
+
+    intersections = []
+
+    if not curve.is_valid():
+        return intersections
+
+    if tolerance is None or tolerance <= 0.0:
+        tolerance = Tolerance.ZERO_TOLERANCE
+
+    _curve_plane_spans(curve, plane, tolerance, intersections)
 
     if curve.degree() > 3 and len(intersections) < curve.degree():
-        num_samples = curve.degree() * 4
-        dt = (t_end - t_start) / num_samples
-
-        for i in range(num_samples):
-            t0 = t_start + i * dt
-            t1 = t_start + (i + 1) * dt
-
-            d0 = _curve_signed_distance_to_plane(curve.point_at(t0), plane)
-            d1 = _curve_signed_distance_to_plane(curve.point_at(t1), plane)
-
-            if d0 * d1 < 0:
-                found, t_intersection = _curve_find_root_bisection(
-                    curve, plane, t0, t1, tolerance
-                )
-
-                if found:
-                    is_new = True
-
-                    for existing in intersections:
-                        if abs(existing - t_intersection) < tolerance * 2.0:
-                            is_new = False
-                            break
-
-                    if is_new:
-                        t_intersection = _curve_refine_intersection_newton(
-                            curve, plane, t_intersection, tolerance
-                        )
-                        intersections.append(t_intersection)
+        _curve_plane_samples(curve, plane, tolerance, intersections)
 
     intersections.sort()
 
-    if len(intersections) > 1:
-        unique_results = [intersections[0]]
-
-        for i in range(1, len(intersections)):
-            if abs(intersections[i] - unique_results[-1]) >= tolerance * 2.0:
-                unique_results.append(intersections[i])
-
-        intersections = unique_results
-
-    return intersections
+    return _unique_sorted(intersections, tolerance * 2.0)
 
 
 def curve_plane_points(
@@ -1013,7 +1067,7 @@ def curve_plane_bezier_clipping(
     _curve_plane_clip(curve, plane, tolerance, t0, t1, 0, results)
     results.sort()
 
-    return _unique_sorted(results, tolerance * 2.0)
+    return _unique_sorted(results, tolerance * 10.0)
 
 
 def curve_plane_algebraic(
@@ -1094,347 +1148,846 @@ def curve_closest_point(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _surface_plane_traces(surface, plane, tolerance):
-    """Seed and trace surface/plane intersection curves in UV space."""
+class _SurfacePlaneTrace:
+    """One traced surface-plane curve in parameter space."""
 
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    range_u = u1 - u0
-    range_v = v1 - v0
-    closed_u = surface.is_closed(0)
-    closed_v = surface.is_closed(1)
+    def __init__(self, uv_trace, uv_unwrapped, is_loop):
+        self.uv_trace = uv_trace  # Traced (u, v) samples.
+        self.uv_unwrapped = uv_unwrapped  # Samples with seam wraps undone.
+        self.is_loop = is_loop  # Whether the trace closes on itself.
 
-    def wrap_u(u):
-        if closed_u:
-            t = math.fmod(u - u0, range_u)
+
+class _SurfacePlaneTraceResult:
+    """All traces of one surface-plane section with the scales used."""
+
+    def __init__(self, traces, step, uv_to_3d, uv_to_3d_min):
+        self.traces = traces  # Traced curves.
+        self.step = step  # uv step used.
+        self.uv_to_3d = uv_to_3d  # Largest uv-to-3D scale seen.
+        self.uv_to_3d_min = uv_to_3d_min  # Smallest uv-to-3D scale seen.
+
+
+class _SurfacePlaneSeed:
+    """Grid crossing of the surface-plane distance, the start of one trace."""
+
+    def __init__(self, u, v, used):
+        self.u = u  # Seed u.
+        self.v = v  # Seed v.
+        self.used = used  # Whether a trace already passed the seed.
+
+
+class _SurfacePlaneField:
+    """Signed surface-plane distance over the surface's UV domain with the tracing scales."""
+
+    def __init__(self, surface, plane, tolerance):
+        """Sample the domain and derive the tracing scales."""
+
+        self.surface = surface  # Traced surface.
+        self.pn = plane.z_axis  # Plane normal.
+        self.p0 = plane.origin  # Plane origin.
+        self.tolerance = tolerance  # Newton tolerance.
+        self.u0, self.u1 = surface.domain(0)  # Domain in u.
+        self.v0, self.v1 = surface.domain(1)  # Domain in v.
+        self.range_u = self.u1 - self.u0  # Domain length in u.
+        self.range_v = self.v1 - self.v0  # Domain length in v.
+        self.closed_u = surface.is_closed(0)  # Whether u wraps around a seam.
+        self.closed_v = surface.is_closed(1)  # Whether v wraps around a seam.
+
+        spans_u = surface.get_span_vector(0)
+        spans_v = surface.get_span_vector(1)
+        self.nu = max(len(spans_u) - 1, 1) * 4  # Grid cells in u.
+        self.nv = max(len(spans_v) - 1, 1) * 4  # Grid cells in v.
+        self.du = self.range_u / self.nu  # Grid cell size in u.
+        self.dv = self.range_v / self.nv  # Grid cell size in v.
+
+        du = self.du
+        dv = self.dv
+        mu = (self.u0 + self.u1) * 0.5
+        mv = (self.v0 + self.v1) * 0.5
+        pmid = self.point((mu, mv))
+        uv_to_3d_u = pmid.distance(self.point((self.wrap_u(mu + du), mv))) / du
+        uv_to_3d_v = pmid.distance(self.point((mu, self.wrap_v(mv + dv)))) / dv
+        self.uv_to_3d = max(uv_to_3d_u, uv_to_3d_v)  # Largest uv-to-3D scale.
+        self.uv_to_3d_min = min(uv_to_3d_u, uv_to_3d_v)  # Smallest uv-to-3D scale.
+
+        if self.uv_to_3d < 1e-10:
+            self.uv_to_3d = 1.0
+
+        if self.uv_to_3d_min < 1e-10:
+            self.uv_to_3d_min = 1.0
+
+        self.step = min(du, dv) * 0.25  # Marching step in uv.
+        self.max_steps = self.nu * self.nv * 32  # Marching step cap per direction.
+        self.close_tol_3d = (
+            self.step * 4.0 * self.uv_to_3d_min
+        )  # 3D distance that closes a loop.
+        self.consume_tol_3d = (
+            self.step * self.uv_to_3d * 2.0
+        )  # 3D distance that consumes a seed.
+        self.join_tol = (
+            max(du, dv) * self.uv_to_3d * 1.5
+        )  # 3D distance that joins two traces.
+
+    def wrap_u(self, u):
+        """Wrap u across a closed seam or clamp it to the domain."""
+
+        if self.closed_u:
+            t = math.fmod(u - self.u0, self.range_u)
 
             if t < 0:
-                t += range_u
+                t += self.range_u
 
-            return u0 + t
+            return self.u0 + t
 
-        return max(u0, min(u, u1))
+        return max(self.u0, min(u, self.u1))
 
-    def wrap_v(v):
-        if closed_v:
-            t = math.fmod(v - v0, range_v)
+    def wrap_v(self, v):
+        """Wrap v across a closed seam or clamp it to the domain."""
+
+        if self.closed_v:
+            t = math.fmod(v - self.v0, self.range_v)
 
             if t < 0:
-                t += range_v
+                t += self.range_v
 
-            return v0 + t
+            return self.v0 + t
 
-        return max(v0, min(v, v1))
+        return max(self.v0, min(v, self.v1))
 
-    pn = plane.z_axis
-    p0 = plane.origin
+    def value(self, u, v):
+        """Signed plane distance at (u, v)."""
 
-    def g(u, v):
-        p = surface.point_at(wrap_u(u), wrap_v(v))
+        p = self.point((self.wrap_u(u), self.wrap_v(v)))
+        p0 = self.p0
+        pn = self.pn
 
         return (p[0] - p0[0]) * pn[0] + (p[1] - p0[1]) * pn[1] + (p[2] - p0[2]) * pn[2]
 
-    def g_and_grad(u, v):
-        derivs = surface.evaluate(wrap_u(u), wrap_v(v), 1)
+    def value_and_gradient(self, u, v):
+        """Signed plane distance and its uv gradient at (u, v)."""
+
+        derivs = self.surface.evaluate(self.wrap_u(u), self.wrap_v(v), 1)
         S = derivs[0]
         Su = derivs[2]
         Sv = derivs[1]
+        p0 = self.p0
+        pn = self.pn
         val = (S[0] - p0[0]) * pn[0] + (S[1] - p0[1]) * pn[1] + (S[2] - p0[2]) * pn[2]
         gu = Su[0] * pn[0] + Su[1] * pn[1] + Su[2] * pn[2]
         gv = Sv[0] * pn[0] + Sv[1] * pn[1] + Sv[2] * pn[2]
 
         return val, gu, gv
 
-    def newton_correct(uv):
-        u, v = uv
+    def newton_correct(self, u, v):
+        """Newton-project (u, v) onto the zero set as (converged, u, v)."""
 
         for _ in range(10):
-            val, gu, gv = g_and_grad(u, v)
+            val, gu, gv = self.value_and_gradient(u, v)
 
-            if abs(val) < tolerance:
-                uv[0], uv[1] = u, v
-
-                return True
+            if abs(val) < self.tolerance:
+                return True, u, v
 
             mag2 = gu * gu + gv * gv
 
             if mag2 < 1e-28:
-                uv[0], uv[1] = u, v
-
-                return False
+                return False, u, v
 
             u -= val * gu / mag2
             v -= val * gv / mag2
-            u = wrap_u(u)
-            v = wrap_v(v)
+            u = self.wrap_u(u)
+            v = self.wrap_v(v)
 
-        uv[0], uv[1] = u, v
+        return abs(self.value(u, v)) < self.tolerance * 10.0, u, v
 
-        return abs(g(u, v)) < tolerance * 10.0
+    def tangent(self, u, v, direction):
+        """Unit uv tangent of the zero set at (u, v) in direction, or None."""
 
-    spans_u = surface.get_span_vector(0)
-    spans_v = surface.get_span_vector(1)
-    nu = max(len(spans_u) - 1, 1) * 4
-    nv = max(len(spans_v) - 1, 1) * 4
-    du = range_u / nu
-    dv = range_v / nv
+        _, gu, gv = self.value_and_gradient(u, v)
+        mag = math.hypot(gu, gv)
 
-    mu = (u0 + u1) * 0.5
-    mv = (v0 + v1) * 0.5
-    pmid = surface.point_at(mu, mv)
-    uv_to_3d_u = pmid.distance(surface.point_at(wrap_u(mu + du), mv)) / du
-    uv_to_3d_v = pmid.distance(surface.point_at(mu, wrap_v(mv + dv))) / dv
-    uv_to_3d = max(uv_to_3d_u, uv_to_3d_v)
-    uv_to_3d_min = min(uv_to_3d_u, uv_to_3d_v)
+        if mag < 1e-14:
+            return None
 
-    if uv_to_3d < 1e-10:
-        uv_to_3d = 1.0
+        return (-gv / mag * direction, gu / mag * direction)
 
-    if uv_to_3d_min < 1e-10:
-        uv_to_3d_min = 1.0
+    def point(self, q):
+        """Surface point at a uv sample."""
 
-    cols = nv + 1
-    dist = [0.0] * ((nu + 1) * cols)
+        return self.surface.point_at(q[0], q[1])
 
-    for i in range(nu + 1):
-        u = u0 + du * i
+    def seam_newton(self, cu, cv, axis):
+        """Newton-slide (cu, cv) along one seam line, axis 0 moving v and axis 1 moving u."""
 
-        for j in range(nv + 1):
-            v = v0 + dv * j
-            d = g(u, v)
+        for _ in range(10):
+            val, gu, gv = self.value_and_gradient(cu, cv)
+
+            if abs(val) < self.tolerance:
+                break
+
+            if axis == 0:
+                if abs(gv) < 1e-14:
+                    break
+
+                cv = cv - val / gv
+            else:
+                if abs(gu) < 1e-14:
+                    break
+
+                cu = cu - val / gu
+
+        return cu, cv
+
+    def polish(self, u, v):
+        """Newton-project (u, v) onto the zero set to 1e-12 as (converged, u, v)."""
+
+        for _ in range(8):
+            val, gu, gv = self.value_and_gradient(u, v)
+
+            if abs(val) < 1e-12:
+                return True, u, v
+
+            mag2 = gu * gu + gv * gv
+
+            if mag2 < 1e-28:
+                return False, u, v
+
+            u -= val * gu / mag2
+            v -= val * gv / mag2
+
+        return True, u, v
+
+
+def _surface_plane_grid(field):
+    """Signed plane distance on the (nu + 1) x (nv + 1) grid, exact zeros nudged negative."""
+
+    cols = field.nv + 1
+    dist = [0.0] * ((field.nu + 1) * cols)
+
+    for i in range(field.nu + 1):
+        u = field.u0 + field.du * i
+
+        for j in range(field.nv + 1):
+            v = field.v0 + field.dv * j
+            d = field.value(u, v)
 
             if d == 0.0:
                 d = -1e-14
 
             dist[i * cols + j] = d
 
+    return dist
+
+
+def _surface_plane_seeds(field, dist):
+    """Newton-corrected sign changes along the grid edges, near duplicates marked used."""
+
     seeds = []
+    cols = field.nv + 1
+    h_jmax = field.nv - 1 if field.closed_v else field.nv
 
-    h_jmax = nv - 1 if closed_v else nv
-
-    for i in range(nu):
+    for i in range(field.nu):
         for j in range(h_jmax + 1):
             d0 = dist[i * cols + j]
             d1 = dist[(i + 1) * cols + j]
 
             if d0 * d1 < 0:
                 t = d0 / (d0 - d1)
-                su = u0 + du * (i + t)
-                sv = v0 + dv * j
-                uv = [su, sv]
+                ok, su, sv = field.newton_correct(
+                    field.u0 + field.du * (i + t), field.v0 + field.dv * j
+                )
 
-                if newton_correct(uv):
-                    seeds.append([uv[0], uv[1], False])
+                if ok:
+                    seeds.append(_SurfacePlaneSeed(su, sv, False))
 
-    v_imax = nu - 1 if closed_u else nu
+    v_imax = field.nu - 1 if field.closed_u else field.nu
 
     for i in range(v_imax + 1):
-        for j in range(nv):
+        for j in range(field.nv):
             d0 = dist[i * cols + j]
             d1 = dist[i * cols + j + 1]
 
             if d0 * d1 < 0:
                 t = d0 / (d0 - d1)
-                su = u0 + du * i
-                sv = v0 + dv * (j + t)
-                uv = [su, sv]
+                ok, su, sv = field.newton_correct(
+                    field.u0 + field.du * i, field.v0 + field.dv * (j + t)
+                )
 
-                if newton_correct(uv):
-                    seeds.append([uv[0], uv[1], False])
+                if ok:
+                    seeds.append(_SurfacePlaneSeed(su, sv, False))
 
-    seed_tol_3d = max(du, dv) * uv_to_3d
+    seed_tol_3d = max(field.du, field.dv) * field.uv_to_3d
 
     for i in range(len(seeds)):
-        if seeds[i][2]:
+        if seeds[i].used:
             continue
 
-        pi = surface.point_at(seeds[i][0], seeds[i][1])
+        pi = field.point((seeds[i].u, seeds[i].v))
 
         for j in range(i + 1, len(seeds)):
-            if seeds[j][2]:
+            if seeds[j].used:
                 continue
 
-            if pi.distance(surface.point_at(seeds[j][0], seeds[j][1])) < seed_tol_3d:
-                seeds[j][2] = True
+            if pi.distance(field.point((seeds[j].u, seeds[j].v))) < seed_tol_3d:
+                seeds[j].used = True
 
-    step = min(du, dv) * 0.25
-    max_steps = nu * nv * 32
-    close_tol_3d = step * 4.0 * uv_to_3d_min
-    consume_tol_3d = step * uv_to_3d * 2.0
+    return seeds
 
-    traces = []
 
-    for seed in seeds:
-        if seed[2]:
-            continue
+def _domain_step(field, u, v, local_step, tu, tv):
+    """Step (u, v) by local_step along (tu, tv), pulled back onto an open domain boundary, as (un, vn, clamped)."""
 
-        seed[2] = True
+    un = u + local_step * tu
+    vn = v + local_step * tv
 
-        def tangent_at_uv(u, v, dir_sign):
-            val, gu, gv = g_and_grad(u, v)
-            mag = math.hypot(gu, gv)
+    out_u = not field.closed_u and (un < field.u0 or un > field.u1)
+    out_v = not field.closed_v and (vn < field.v0 or vn > field.v1)
 
-            if mag < 1e-14:
-                return None
+    if not out_u and not out_v:
+        return un, vn, False
 
-            return (-gv / mag * dir_sign, gu / mag * dir_sign)
+    tc = 1.0
 
-        def trace_dir(su, sv, dir_sign):
-            out = []
-            u, v = su, sv
-            prev_tu, prev_tv = 0.0, 0.0
-            p_start = surface.point_at(su, sv)
-            p_prev = p_start
-            dist_traveled = 0.0
+    if not field.closed_u and tu > 0 and un > field.u1:
+        tc = min(tc, (field.u1 - u) / (local_step * tu))
 
-            for s in range(max_steps):
-                tang = tangent_at_uv(u, v, dir_sign)
+    if not field.closed_u and tu < 0 and un < field.u0:
+        tc = min(tc, (field.u0 - u) / (local_step * tu))
 
-                if tang is None:
-                    if math.hypot(prev_tu, prev_tv) < 1e-14:
-                        break
+    if not field.closed_v and tv > 0 and vn > field.v1:
+        tc = min(tc, (field.v1 - v) / (local_step * tv))
 
-                    tu, tv = prev_tu, prev_tv
-                else:
-                    tu, tv = tang
+    if not field.closed_v and tv < 0 and vn < field.v0:
+        tc = min(tc, (field.v0 - v) / (local_step * tv))
 
-                local_step = step
+    return u + tc * local_step * tu, v + tc * local_step * tv, True
 
-                if math.hypot(prev_tu, prev_tv) > 1e-14:
-                    dot = tu * prev_tu + tv * prev_tv
-                    dot = max(-1.0, min(1.0, dot))
 
-                    if dot < 0.95:
-                        local_step = step * 0.25
-                    elif dot < 0.985:
-                        local_step = step * 0.5
+def _newton_retry(field, u, v, local_step, tu, tv):
+    """Retry a failed Newton projection with the step halved up to four times, or None."""
 
-                u_mid = u + local_step * 0.5 * tu
-                v_mid = v + local_step * 0.5 * tv
-                tang2 = tangent_at_uv(u_mid, v_mid, dir_sign)
+    ls = local_step
 
-                if tang2 is not None:
-                    tu, tv = tang2
-
-                prev_tu, prev_tv = tu, tv
-
-                un = u + local_step * tu
-                vn = v + local_step * tv
-
-                hit_boundary = False
-
-                if (not closed_u and (un < u0 or un > u1)) or (
-                    not closed_v and (vn < v0 or vn > v1)
-                ):
-                    tc = 1.0
-
-                    if not closed_u and tu > 0 and un > u1:
-                        tc = min(tc, (u1 - u) / (local_step * tu))
-
-                    if not closed_u and tu < 0 and un < u0:
-                        tc = min(tc, (u0 - u) / (local_step * tu))
-
-                    if not closed_v and tv > 0 and vn > v1:
-                        tc = min(tc, (v1 - v) / (local_step * tv))
-
-                    if not closed_v and tv < 0 and vn < v0:
-                        tc = min(tc, (v0 - v) / (local_step * tv))
-
-                    un = u + tc * local_step * tu
-                    vn = v + tc * local_step * tv
-                    hit_boundary = True
-
-                un = wrap_u(un)
-                vn = wrap_v(vn)
-
-                uv = [un, vn]
-
-                if not newton_correct(uv):
-                    break
-
-                un, vn = uv[0], uv[1]
-
-                p_cur = surface.point_at(un, vn)
-                dist_traveled += p_prev.distance(p_cur)
-
-                if (
-                    dist_traveled > close_tol_3d * 3.0
-                    and p_start.distance(p_cur) < close_tol_3d
-                ):
-                    out.append((un, vn))
-
-                    return out, True
-
-                out.append((un, vn))
-                u, v = un, vn
-                p_prev = p_cur
-
-                if hit_boundary:
-                    break
-
-                for other in seeds:
-                    if not other[2]:
-                        if (
-                            p_cur.distance(surface.point_at(other[0], other[1]))
-                            < consume_tol_3d
-                        ):
-                            other[2] = True
-
-            return out, False
-
-        fwd, fwd_closed = trace_dir(seed[0], seed[1], +1)
-
-        if not fwd_closed:
-            bwd, _ = trace_dir(seed[0], seed[1], -1)
-        else:
-            bwd = []
-
-        uv_trace = []
-
-        for i in range(len(bwd) - 1, -1, -1):
-            uv_trace.append(bwd[i])
-
-        uv_trace.append((seed[0], seed[1]))
-
-        for p in fwd:
-            uv_trace.append(p)
-
-        if len(uv_trace) < 4:
-            continue
-
-        p_first = surface.point_at(uv_trace[0][0], uv_trace[0][1])
-        p_last = surface.point_at(uv_trace[-1][0], uv_trace[-1][1])
-        is_loop = fwd_closed or (
-            len(uv_trace) >= 6 and p_first.distance(p_last) < close_tol_3d
+    for _ in range(4):
+        ls *= 0.5
+        ok, un, vn = field.newton_correct(
+            field.wrap_u(u + ls * tu), field.wrap_v(v + ls * tv)
         )
 
-        if is_loop:
-            uv_trace.pop()
+        if ok:
+            return un, vn
 
-        if len(uv_trace) < 4:
+    return None
+
+
+def _consume_seeds(field, p, seeds):
+    """Mark every unused seed within the consume distance of p as used."""
+
+    for other in seeds:
+        if (
+            not other.used
+            and p.distance(field.point((other.u, other.v))) < field.consume_tol_3d
+        ):
+            other.used = True
+
+
+def _turn_step(field, tu, tv, prev_tu, prev_tv):
+    """Step length for the turn between two unit tangents: a quarter or half step on sharp turns."""
+
+    if math.hypot(prev_tu, prev_tv) <= 1e-14:
+        return field.step
+
+    dot = max(-1.0, min(1.0, tu * prev_tu + tv * prev_tv))
+
+    if dot < 0.95:
+        return field.step * 0.25
+
+    if dot < 0.985:
+        return field.step * 0.5
+
+    return field.step
+
+
+def _surface_plane_march(field, su, sv, direction, seeds, out):
+    """March the zero set from (su, sv) in direction; true when it closes on its start."""
+
+    u = su
+    v = sv
+    prev_tu = 0.0
+    prev_tv = 0.0
+    p_start = field.point((su, sv))
+    p_prev = p_start
+    dist_traveled = 0.0
+
+    for _ in range(field.max_steps):
+        tangent = field.tangent(u, v, direction)
+
+        if tangent is None:
+            if math.hypot(prev_tu, prev_tv) < 1e-14:
+                break
+
+            tangent = (prev_tu, prev_tv)
+
+        tu, tv = tangent
+        local_step = _turn_step(field, tu, tv, prev_tu, prev_tv)
+        mid = field.tangent(
+            u + local_step * 0.5 * tu, v + local_step * 0.5 * tv, direction
+        )
+
+        if mid is not None:
+            tu, tv = mid
+
+        prev_tu = tu
+        prev_tv = tv
+
+        un_raw, vn_raw, hit_boundary = _domain_step(field, u, v, local_step, tu, tv)
+        ok, un, vn = field.newton_correct(field.wrap_u(un_raw), field.wrap_v(vn_raw))
+
+        if not ok:
+            retry = _newton_retry(field, u, v, local_step, tu, tv)
+
+            if retry is None:
+                break
+
+            un, vn = retry
+
+        p_cur = field.point((un, vn))
+        dist_traveled += p_prev.distance(p_cur)
+        out.append((un, vn))
+
+        if (
+            dist_traveled > field.close_tol_3d * 3.0
+            and p_start.distance(p_cur) < field.close_tol_3d
+        ):
+            return True
+
+        u = un
+        v = vn
+        p_prev = p_cur
+
+        if hit_boundary:
+            break
+
+        _consume_seeds(field, p_cur, seeds)
+
+    return False
+
+
+def _unwrap_trace(field, uv):
+    """Undo the seam jumps of a closed domain in the unwrapped copy of a trace."""
+
+    for i in range(1, len(uv)):
+        u, v = uv[i]
+        du_jump = u - uv[i - 1][0]
+        dv_jump = v - uv[i - 1][1]
+
+        if field.closed_u:
+            if du_jump > field.range_u * 0.5:
+                u -= field.range_u
+            elif du_jump < -field.range_u * 0.5:
+                u += field.range_u
+
+        if field.closed_v:
+            if dv_jump > field.range_v * 0.5:
+                v -= field.range_v
+            elif dv_jump < -field.range_v * 0.5:
+                v += field.range_v
+
+        uv[i] = (u, v)
+
+
+def _surface_plane_trace_seed(field, seeds, index):
+    """Trace one seed both ways into a trace, or None when it is too short to keep."""
+
+    seed_u = seeds[index].u
+    seed_v = seeds[index].v
+    fwd = []
+    bwd = []
+    fwd_closed = _surface_plane_march(field, seed_u, seed_v, 1, seeds, fwd)
+
+    if not fwd_closed:
+        _surface_plane_march(field, seed_u, seed_v, -1, seeds, bwd)
+
+    uv_trace = []
+
+    for i in range(len(bwd) - 1, -1, -1):
+        uv_trace.append(bwd[i])
+
+    uv_trace.append((seed_u, seed_v))
+
+    uv_trace.extend(fwd)
+
+    if len(uv_trace) < 4:
+        return None
+
+    p_first = field.point(uv_trace[0])
+    p_last = field.point(uv_trace[-1])
+    is_loop = fwd_closed or (
+        len(uv_trace) >= 6 and p_first.distance(p_last) < field.close_tol_3d
+    )
+
+    if is_loop:
+        uv_trace.pop()
+
+    if len(uv_trace) < 4:
+        return None
+
+    uv_unwrapped = list(uv_trace)
+    _unwrap_trace(field, uv_unwrapped)
+
+    return _SurfacePlaneTrace(uv_trace, uv_unwrapped, is_loop)
+
+
+def _trace_covered_by(field, a, b):
+    """Whether every eighth sample of trace a lies within the join distance of trace b."""
+
+    stride = max(1, len(a.uv_trace) // 8)
+
+    for k in range(0, len(a.uv_trace), stride):
+        q = field.point(a.uv_trace[k])
+        best = 1e300
+
+        for r in b.uv_trace:
+            best = min(best, q.distance(field.point(r)))
+
+        if best > field.join_tol:
+            return False
+
+    return True
+
+
+def _drop_covered_traces(field, traces):
+    """Empty every open trace that a trace at least as long already covers."""
+
+    for i in range(len(traces)):
+        if not traces[i].uv_trace or traces[i].is_loop:
             continue
 
-        uv_unwrapped = [list(p) for p in uv_trace]
+        for j in range(len(traces)):
+            if i == j or not traces[j].uv_trace:
+                continue
 
-        for i in range(1, len(uv_unwrapped)):
-            du_jump = uv_unwrapped[i][0] - uv_unwrapped[i - 1][0]
-            dv_jump = uv_unwrapped[i][1] - uv_unwrapped[i - 1][1]
+            if len(traces[j].uv_trace) < len(traces[i].uv_trace):
+                continue
 
-            if closed_u:
-                if du_jump > range_u * 0.5:
-                    uv_unwrapped[i][0] -= range_u
-                elif du_jump < -range_u * 0.5:
-                    uv_unwrapped[i][0] += range_u
+            if _trace_covered_by(field, traces[i], traces[j]):
+                traces[i].uv_trace.clear()
+                break
 
-            if closed_v:
-                if dv_jump > range_v * 0.5:
-                    uv_unwrapped[i][1] -= range_v
-                elif dv_jump < -range_v * 0.5:
-                    uv_unwrapped[i][1] += range_v
 
-        traces.append((uv_trace, uv_unwrapped, is_loop))
+def _append_trace(field, a, b, reversed_):
+    """Append trace b to the end of trace a, reversed when requested, and close a when it meets itself."""
 
-    return traces, step, uv_to_3d, uv_to_3d_min
+    add = list(b.uv_trace)
+
+    if reversed_:
+        add.reverse()
+
+    a.uv_trace.extend(add)
+    b.uv_trace.clear()
+
+    if (
+        field.point(a.uv_trace[0]).distance(field.point(a.uv_trace[-1]))
+        < field.join_tol
+    ):
+        a.is_loop = True
+        a.uv_trace.pop()
+
+    a.uv_unwrapped = list(a.uv_trace)
+    _unwrap_trace(field, a.uv_unwrapped)
+
+
+def _join_one_trace_pair(field, traces):
+    """Join the first open trace pair whose end meets a start or end; false when none does."""
+
+    for i in range(len(traces)):
+        if len(traces[i].uv_trace) < 2 or traces[i].is_loop:
+            continue
+
+        ie = field.point(traces[i].uv_trace[-1])
+
+        for j in range(len(traces)):
+            if i == j or len(traces[j].uv_trace) < 2 or traces[j].is_loop:
+                continue
+
+            ja = field.point(traces[j].uv_trace[0])
+            jb = field.point(traces[j].uv_trace[-1])
+            fwd2 = ie.distance(ja) < field.join_tol
+            rev2 = ie.distance(jb) < field.join_tol
+
+            if not fwd2 and not rev2:
+                continue
+
+            _append_trace(field, traces[i], traces[j], rev2)
+
+            return True
+
+    return False
+
+
+def _close_traces(field, traces):
+    """Drop short traces and close the open ones whose ends meet."""
+
+    kept = []
+
+    for t in traces:
+        if len(t.uv_trace) >= 4:
+            kept.append(t)
+
+    traces[:] = kept
+
+    for t in traces:
+        if t.is_loop or len(t.uv_trace) < 6:
+            continue
+
+        if (
+            field.point(t.uv_trace[0]).distance(field.point(t.uv_trace[-1]))
+            < field.join_tol
+        ):
+            t.is_loop = True
+            t.uv_trace.pop()
+            t.uv_unwrapped.pop()
+
+
+def _snap_trace_end(field, q, qu):
+    """Snap one open trace end within a grid cell of the domain boundary onto it, as (q, qu)."""
+
+    qx, qy = q
+    qux, quy = qu
+
+    if not field.closed_u:
+        if abs(qx - field.u0) < field.du:
+            qx = field.u0
+            qux = field.u0
+
+        if abs(qx - field.u1) < field.du:
+            qx = field.u1
+            qux = field.u1
+    elif qx - field.u0 < field.du:
+        qx = field.u0
+    elif field.u1 - qx < field.du:
+        qx = field.u1
+
+    if not field.closed_v:
+        if abs(qy - field.v0) < field.dv:
+            qy = field.v0
+            quy = field.v0
+
+        if abs(qy - field.v1) < field.dv:
+            qy = field.v1
+            quy = field.v1
+    elif qy - field.v0 < field.dv:
+        qy = field.v0
+    elif field.v1 - qy < field.dv:
+        qy = field.v1
+
+    return (qx, qy), (qux, quy)
+
+
+def _surface_plane_traces(surface, plane, tolerance):
+    """Seed and trace surface/plane intersection curves in UV space."""
+
+    field = _SurfacePlaneField(surface, plane, tolerance)
+    dist = _surface_plane_grid(field)
+
+    gmax = 0.0
+
+    for d in dist:
+        gmax = max(gmax, abs(d))
+
+    if gmax < max(tolerance, 1e-9) * 10.0:
+        return _SurfacePlaneTraceResult(
+            [], field.step, field.uv_to_3d, field.uv_to_3d_min
+        )
+
+    seeds = _surface_plane_seeds(field, dist)
+    traces = []
+
+    for i in range(len(seeds)):
+        if seeds[i].used:
+            continue
+
+        seeds[i].used = True
+        trace = _surface_plane_trace_seed(field, seeds, i)
+
+        if trace is not None:
+            traces.append(trace)
+
+    _drop_covered_traces(field, traces)
+
+    for _ in range(len(traces)):
+        if not _join_one_trace_pair(field, traces):
+            break
+
+    _close_traces(field, traces)
+
+    for t in traces:
+        if t.is_loop or not t.uv_trace:
+            continue
+
+        t.uv_trace[0], t.uv_unwrapped[0] = _snap_trace_end(
+            field, t.uv_trace[0], t.uv_unwrapped[0]
+        )
+        t.uv_trace[-1], t.uv_unwrapped[-1] = _snap_trace_end(
+            field, t.uv_trace[-1], t.uv_unwrapped[-1]
+        )
+
+    return _SurfacePlaneTraceResult(
+        traces, field.step, field.uv_to_3d, field.uv_to_3d_min
+    )
+
+
+def _plane_points_2d(pts, plane):
+    """Points projected into the plane's 2D frame, z = 0."""
+
+    ax = plane.x_axis
+    ay = plane.y_axis
+    po = plane.origin
+    pts_2d = []
+
+    for p in pts:
+        dx = p[0] - po[0]
+        dy = p[1] - po[1]
+        dz = p[2] - po[2]
+        px = dx * ax[0] + dy * ax[1] + dz * ax[2]
+        py = dx * ay[0] + dy * ay[1] + dz * ay[2]
+        pts_2d.append(Point(px, py, 0))
+
+    return pts_2d
+
+
+def _chord_parameters(pts, is_loop):
+    """Normalized cumulative chord length of each point, the closing chord included for loops."""
+
+    m = len(pts)
+    chords = [0.0] * m
+    total_len = 0.0
+
+    for i in range(1, m):
+        total_len += pts[i].distance(pts[i - 1])
+        chords[i] = total_len
+
+    if is_loop and m > 1:
+        total_len += pts[0].distance(pts[m - 1])
+
+    if total_len > 1e-14:
+        for i in range(1, m):
+            chords[i] /= total_len
+
+    return chords
+
+
+def _total_turning(pts):
+    """Sum of the turning angles along a planar polyline."""
+
+    turning = 0.0
+
+    for i in range(1, len(pts) - 1):
+        dx1 = pts[i][0] - pts[i - 1][0]
+        dy1 = pts[i][1] - pts[i - 1][1]
+        dx2 = pts[i + 1][0] - pts[i][0]
+        dy2 = pts[i + 1][1] - pts[i][1]
+        l1 = math.hypot(dx1, dy1)
+        l2 = math.hypot(dx2, dy2)
+
+        if l1 > 1e-14 and l2 > 1e-14:
+            c = (dx1 * dx2 + dy1 * dy2) / (l1 * l2)
+            c = max(-1.0, min(1.0, c))
+            turning += math.acos(c)
+
+    return turning
+
+
+def _fitted_max_deviation(cand, pts, chords):
+    """Largest distance from each point to the curve, found by ternary search around its chord parameter."""
+
+    m = len(pts)
+    ft0, ft1 = cand.domain()
+    max_dev = 0.0
+
+    for i in range(m):
+        t = ft0 + (ft1 - ft0) * chords[i]
+        w2 = (ft1 - ft0) * 2.0 / max(m - 1, 1)
+        lo = max(ft0, t - w2)
+        hi = min(ft1, t + w2)
+
+        for _ in range(20):
+            m1 = lo + (hi - lo) / 3
+            m2 = hi - (hi - lo) / 3
+
+            if cand.point_at(m1).distance(pts[i]) < cand.point_at(m2).distance(pts[i]):
+                hi = m2
+            else:
+                lo = m1
+
+        max_dev = max(max_dev, cand.point_at(0.5 * (lo + hi)).distance(pts[i]))
+
+    return max_dev
+
+
+def _fit_planar_freeform(all_pts, is_loop, plane, fit_tol):
+    """Cubic fitted to the points in the plane's frame, CVs doubled until within fit_tol, lifted back to 3D."""
+
+    m = len(all_pts)
+
+    if m < 4:
+        return NurbsCurve()
+
+    pts_2d = _plane_points_2d(all_pts, plane)
+    chords = _chord_parameters(pts_2d, is_loop)
+    target_cvs = max(8, int(_total_turning(pts_2d) / 0.5) + 6)
+    max_cvs = min(m - 1, 128)
+    crv_2d = NurbsCurve()
+    best_dev = 1e300
+
+    for _ in range(6):
+        if target_cvs > max_cvs:
+            break
+
+        cand = NurbsCurve.create_fitted(pts_2d, target_cvs, 3, is_loop)
+
+        if not cand.is_valid():
+            break
+
+        max_dev = _fitted_max_deviation(cand, pts_2d, chords)
+
+        if max_dev < best_dev:
+            best_dev = max_dev
+            crv_2d = cand
+
+        if max_dev < fit_tol:
+            break
+
+        target_cvs = min(target_cvs * 2, max_cvs + 1)
+
+    if not crv_2d.is_valid():
+        if is_loop:
+            crv_2d = NurbsCurve.create_interpolated(
+                pts_2d, CurveNurbsKnotStyle.ChordPeriodic
+            )
+        else:
+            crv_2d = NurbsCurve.create_interpolated(pts_2d)
+
+    if not crv_2d.is_valid():
+        return NurbsCurve()
+
+    ax = plane.x_axis
+    ay = plane.y_axis
+    po = plane.origin
+
+    for i in range(crv_2d.cv_count()):
+        cv2 = crv_2d.get_cv(i)
+        cx = cv2[0]
+        cy = cv2[1]
+        crv_2d.set_cv(
+            i,
+            Point(
+                po[0] + cx * ax[0] + cy * ay[0],
+                po[1] + cx * ax[1] + cy * ay[1],
+                po[2] + cx * ax[2] + cy * ay[2],
+            ),
+        )
+
+    return crv_2d
 
 
 def _surface_plane_fit_3d(
@@ -1679,104 +2232,421 @@ def _surface_plane_fit_3d(
                         crv = NurbsCurve()
 
     if not crv.is_valid():
-        m = len(all_pts)
-
-        if m < 4:
-            return NurbsCurve()
-
-        ax = plane.x_axis
-        ay = plane.y_axis
-        po = plane.origin
-        pts_2d = []
-
-        for i in range(m):
-            dx = all_pts[i][0] - po[0]
-            dy = all_pts[i][1] - po[1]
-            dz = all_pts[i][2] - po[2]
-            px = dx * ax[0] + dy * ax[1] + dz * ax[2]
-            py = dx * ay[0] + dy * ay[1] + dz * ay[2]
-            pts_2d.append(Point(px, py, 0))
-
-        chords = [0.0] * m
-        total_len = 0.0
-
-        for i in range(1, m):
-            total_len += pts_2d[i].distance(pts_2d[i - 1])
-            chords[i] = total_len
-
-        if is_loop and m > 1:
-            total_len += pts_2d[0].distance(pts_2d[m - 1])
-
-        if total_len > 1e-14:
-            for i in range(1, m):
-                chords[i] /= total_len
-
-        fit_tol = step * (uv_to_3d + uv_to_3d_min) * 0.5
-        total_turning = 0.0
-
-        for i in range(1, m - 1):
-            dx1 = pts_2d[i][0] - pts_2d[i - 1][0]
-            dy1 = pts_2d[i][1] - pts_2d[i - 1][1]
-            dx2 = pts_2d[i + 1][0] - pts_2d[i][0]
-            dy2 = pts_2d[i + 1][1] - pts_2d[i][1]
-            l1 = math.hypot(dx1, dy1)
-            l2 = math.hypot(dx2, dy2)
-
-            if l1 > 1e-14 and l2 > 1e-14:
-                c = (dx1 * dx2 + dy1 * dy2) / (l1 * l2)
-                c = max(-1.0, min(1.0, c))
-                total_turning += math.acos(c)
-
-        target_cvs = max(8, int(total_turning / 0.5) + 6)
-        max_cvs = m - 1
-        crv_2d = NurbsCurve()
-
-        for attempt in range(5):
-            if target_cvs > max_cvs:
-                break
-
-            crv_2d = NurbsCurve.create_fitted(pts_2d, target_cvs, 3, is_loop)
-
-            if not crv_2d.is_valid():
-                break
-
-            ft0, ft1 = crv_2d.domain()
-            max_dev = 0.0
-
-            for i in range(m):
-                t = ft0 + (ft1 - ft0) * chords[i]
-                max_dev = max(max_dev, crv_2d.point_at(t).distance(pts_2d[i]))
-
-            if max_dev < fit_tol:
-                break
-
-            target_cvs = min(target_cvs * 2, max_cvs)
-
-        if not crv_2d.is_valid():
-            if is_loop:
-                crv_2d = NurbsCurve.create_interpolated(
-                    pts_2d, CurveNurbsKnotStyle.ChordPeriodic
-                )
-            else:
-                crv_2d = NurbsCurve.create_interpolated(pts_2d)
-
-        if crv_2d.is_valid():
-            crv = crv_2d
-
-            for i in range(crv.cv_count()):
-                cv2 = crv.get_cv(i)
-                cx_l = cv2[0]
-                cy_l = cv2[1]
-                crv.set_cv(
-                    i,
-                    Point(
-                        po[0] + cx_l * ax[0] + cy_l * ay[0],
-                        po[1] + cx_l * ax[1] + cy_l * ay[1],
-                        po[2] + cx_l * ax[2] + cy_l * ay[2],
-                    ),
-                )
+        crv = _fit_planar_freeform(
+            all_pts, is_loop, plane, step * (uv_to_3d + uv_to_3d_min) * 0.5 * 5e-4
+        )
 
     return crv
+
+
+class _SurfacePlanePiece:
+    """Seam-free run of uv samples cut from one trace."""
+
+    def __init__(self, uv, is_loop):
+        self.uv = uv  # Samples in parameter space.
+        self.is_loop = is_loop  # Whether the piece still closes on itself.
+
+
+def _is_duplicate_trace(trace_pts3, kept_pts3, dup_tol):
+    """Whether the quarter, half and three-quarter samples of a trace all lie within dup_tol of one kept trace."""
+
+    m = len(trace_pts3)
+
+    for other in kept_pts3:
+        all_close = True
+
+        for f in (0.25, 0.5, 0.75):
+            cp = trace_pts3[int((m - 1) * f)]
+            dmin = dup_tol + 1.0
+
+            for k in range(0, len(other), 5):
+                dmin = min(dmin, cp.distance(other[k]))
+
+            if dmin > dup_tol:
+                all_close = False
+                break
+
+        if all_close:
+            return True
+
+    return False
+
+
+def _close_unwrapped_loop(field, pts):
+    """Append the loop start shifted by whole periods after the end; returns the shift (closure_du, closure_dv)."""
+
+    du_j = pts[0][0] - pts[-1][0]
+    dv_j = pts[0][1] - pts[-1][1]
+
+    if field.closed_u:
+        while du_j > field.range_u * 0.5:
+            du_j -= field.range_u
+
+        while du_j < -field.range_u * 0.5:
+            du_j += field.range_u
+
+    if field.closed_v:
+        while dv_j > field.range_v * 0.5:
+            dv_j -= field.range_v
+
+        while dv_j < -field.range_v * 0.5:
+            dv_j += field.range_v
+
+    closure_du = (pts[-1][0] + du_j) - pts[0][0]
+    closure_dv = (pts[-1][1] + dv_j) - pts[0][1]
+    pts.append((pts[0][0] + closure_du, pts[0][1] + closure_dv))
+
+    return closure_du, closure_dv
+
+
+def _seam_crossings(field, pa, pb):
+    """Seam crossings (t, axis, seam value) of the segment pa-pb, sorted by t."""
+
+    crossings = []
+
+    if field.closed_u and abs(pb[0] - pa[0]) > 1e-15:
+        k0 = math.floor((pa[0] - field.u0) / field.range_u)
+        k1 = math.floor((pb[0] - field.u0) / field.range_u)
+
+        for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
+            L = field.u0 + k * field.range_u
+            t = (L - pa[0]) / (pb[0] - pa[0])
+
+            if 0.0 < t < 1.0:
+                crossings.append((t, 0, L))
+
+    if field.closed_v and abs(pb[1] - pa[1]) > 1e-15:
+        k0 = math.floor((pa[1] - field.v0) / field.range_v)
+        k1 = math.floor((pb[1] - field.v0) / field.range_v)
+
+        for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
+            L = field.v0 + k * field.range_v
+            t = (L - pa[1]) / (pb[1] - pa[1])
+
+            if 0.0 < t < 1.0:
+                crossings.append((t, 1, L))
+
+    crossings.sort()
+
+    return crossings
+
+
+def _snap_to_seam(field, pa, q):
+    """Snap q onto a seam it lies on within 1e-9 of the period after a real move from pa, as (snapped, q)."""
+
+    qu, qv = q
+    on_seam = False
+
+    if field.closed_u:
+        k = _round_half_away((qu - field.u0) / field.range_u)
+        L = field.u0 + k * field.range_u
+
+        if (
+            abs(qu - L) < field.range_u * 1e-9
+            and abs(qu - pa[0]) > field.range_u * 1e-9
+        ):
+            qu = L
+            on_seam = True
+
+    if field.closed_v:
+        k = _round_half_away((qv - field.v0) / field.range_v)
+        L = field.v0 + k * field.range_v
+
+        if (
+            abs(qv - L) < field.range_v * 1e-9
+            and abs(qv - pa[1]) > field.range_v * 1e-9
+        ):
+            qv = L
+            on_seam = True
+
+    return on_seam, (qu, qv)
+
+
+def _round_half_away(x):
+    """Round half away from zero like std::round."""
+
+    return math.floor(x + 0.5) if x >= 0.0 else -math.floor(-x + 0.5)
+
+
+def _split_at_seams(field, pts):
+    """Samples with the seam crossings inserted, and the indices of the samples on a seam."""
+
+    cross_idx = []
+    out_pts = [pts[0]]
+
+    for i in range(1, len(pts)):
+        pa = pts[i - 1]
+        pb = pts[i]
+
+        for t, axis, L in _seam_crossings(field, pa, pb):
+            cu = pa[0] + (pb[0] - pa[0]) * t
+            cv_ = pa[1] + (pb[1] - pa[1]) * t
+
+            if axis == 0:
+                cv_ = field.seam_newton(L, cv_, 0)[1]
+                cu = L
+            else:
+                cu = field.seam_newton(cu, L, 1)[0]
+                cv_ = L
+
+            out_pts.append((cu, cv_))
+            cross_idx.append(len(out_pts) - 1)
+
+        q = (pb[0], pb[1])
+        on_seam = False
+
+        if i < len(pts) - 1:
+            on_seam, q = _snap_to_seam(field, pa, q)
+
+        out_pts.append(q)
+
+        if on_seam:
+            cross_idx.append(len(out_pts) - 1)
+
+    return out_pts, cross_idx
+
+
+def _seam_pieces(out_pts, cross_idx, is_loop, wrap_drift, closure_du, closure_dv):
+    """Cut the samples at the seam indices; a loop's last piece wraps around to its first seam."""
+
+    pieces = []
+
+    if not cross_idx:
+        pieces.append(_SurfacePlanePiece(list(out_pts), is_loop and not wrap_drift))
+
+        return pieces
+
+    if is_loop:
+        for ci in range(len(cross_idx) - 1):
+            pieces.append(
+                _SurfacePlanePiece(
+                    out_pts[cross_idx[ci] : cross_idx[ci + 1] + 1], False
+                )
+            )
+
+        wrap_piece = out_pts[cross_idx[-1] :]
+
+        for pi in range(1, cross_idx[0] + 1):
+            wrap_piece.append(
+                (out_pts[pi][0] + closure_du, out_pts[pi][1] + closure_dv)
+            )
+
+        pieces.append(_SurfacePlanePiece(wrap_piece, False))
+
+        return pieces
+
+    bounds = [0]
+
+    bounds.extend(cross_idx)
+
+    bounds.append(len(out_pts) - 1)
+
+    for bi in range(len(bounds) - 1):
+        if bounds[bi + 1] > bounds[bi]:
+            pieces.append(
+                _SurfacePlanePiece(out_pts[bounds[bi] : bounds[bi + 1] + 1], False)
+            )
+
+    return pieces
+
+
+def _trace_pieces(field, trace):
+    """Seam-free uv pieces of one trace."""
+
+    pts = list(trace.uv_unwrapped)
+    closure_du = 0.0
+    closure_dv = 0.0
+
+    if trace.is_loop and len(pts) >= 2:
+        closure_du, closure_dv = _close_unwrapped_loop(field, pts)
+
+    out_pts, cross_idx = _split_at_seams(field, pts)
+    wrap_drift = (
+        abs(closure_du) > field.range_u * 0.5 or abs(closure_dv) > field.range_v * 0.5
+    )
+
+    return _seam_pieces(
+        out_pts, cross_idx, trace.is_loop, wrap_drift, closure_du, closure_dv
+    )
+
+
+def _shift_piece_to_domain(field, piece_pts):
+    """Shift a piece by whole periods so its middle sample lies in the base domain."""
+
+    mid = piece_pts[len(piece_pts) // 2]
+
+    if field.closed_u:
+        k_u = math.floor((mid[0] - field.u0) / field.range_u)
+
+        if k_u != 0:
+            for i in range(len(piece_pts)):
+                piece_pts[i] = (piece_pts[i][0] - k_u * field.range_u, piece_pts[i][1])
+
+    if field.closed_v:
+        k_v = math.floor((mid[1] - field.v0) / field.range_v)
+
+        if k_v != 0:
+            for i in range(len(piece_pts)):
+                piece_pts[i] = (piece_pts[i][0], piece_pts[i][1] - k_v * field.range_v)
+
+
+def _densify_segment(field, au, av, bu, bv, depth, pts_uv):
+    """Insert zero-set samples between a and b while the chord midpoint sags more than step * 1e-4, four levels deep."""
+
+    mu = 0.5 * (au + bu)
+    mv = 0.5 * (av + bv)
+    ok, cu, cv2 = field.polish(mu, mv)
+
+    if not ok:
+        return
+
+    sag = math.hypot(cu - mu, cv2 - mv)
+
+    if sag > field.step * 1e-4 and depth < 4:
+        _densify_segment(field, au, av, cu, cv2, depth + 1, pts_uv)
+        pts_uv.append(Point(cu, cv2, 0.0))
+        _densify_segment(field, cu, cv2, bu, bv, depth + 1, pts_uv)
+    else:
+        pts_uv.append(Point(cu, cv2, 0.0))
+
+
+def _densify_piece(field, piece_pts):
+    """Piece samples with zero-set samples inserted where a segment sags."""
+
+    pts_uv = []
+
+    for i in range(1, len(piece_pts)):
+        a = piece_pts[i - 1]
+        b = piece_pts[i]
+        pts_uv.append(Point(a[0], a[1], 0.0))
+        _densify_segment(field, a[0], a[1], b[0], b[1], 0, pts_uv)
+
+    pts_uv.append(Point(piece_pts[-1][0], piece_pts[-1][1], 0.0))
+
+    return pts_uv
+
+
+def _chord_max_deviation(cand, pts, chords):
+    """Largest distance from each point to the curve at its chord parameter."""
+
+    ft0, ft1 = cand.domain()
+    max_dev = 0.0
+
+    for i in range(len(pts)):
+        t = ft0 + (ft1 - ft0) * chords[i]
+        max_dev = max(max_dev, cand.point_at(t).distance(pts[i]))
+
+    return max_dev
+
+
+def _fit_pcurve(pts_uv, piece_loop, step):
+    """Cubic pcurve through the uv samples, CVs doubled until within step * 2e-3, with the last CV count tried."""
+
+    mp = len(pts_uv)
+    chords = _chord_parameters(pts_uv, piece_loop)
+    max_cvs = min(mp - 1, 96)
+    pcurve = NurbsCurve()
+    pcurve_dev = 1e300
+    target_cvs = max(8, int(_total_turning(pts_uv) / 0.5) + 6)
+
+    for _ in range(6):
+        if target_cvs > max_cvs:
+            break
+
+        cand = NurbsCurve.create_fitted(pts_uv, target_cvs, 3, piece_loop)
+
+        if not cand.is_valid():
+            break
+
+        max_dev = _chord_max_deviation(cand, pts_uv, chords)
+
+        if max_dev < pcurve_dev:
+            pcurve_dev = max_dev
+            pcurve = cand
+
+        if max_dev < step * 2e-3:
+            break
+
+        target_cvs = min(target_cvs * 2, max_cvs + 1)
+
+    if not pcurve.is_valid():
+        if piece_loop:
+            pcurve = NurbsCurve.create_interpolated(
+                pts_uv, CurveNurbsKnotStyle.ChordPeriodic
+            )
+        else:
+            pcurve = NurbsCurve.create_interpolated(pts_uv)
+
+    return pcurve, target_cvs
+
+
+def _refit_pcurve(field, pts_uv, piece_loop, target_cvs, vali_tol, pcurve):
+    """The pcurve refit with twice the CVs when it strays from the zero set by more than vali_tol."""
+
+    max_cvs = min(len(pts_uv) - 1, 96)
+    max_off = 0.0
+
+    for i in range(17):
+        pc = pcurve.point_at(i / 16.0)
+        val, _, _ = field.value_and_gradient(pc[0], pc[1])
+        max_off = max(max_off, abs(val))
+
+    if max_off > vali_tol and target_cvs * 2 <= max_cvs:
+        refit = NurbsCurve.create_fitted(pts_uv, target_cvs * 2, 3, piece_loop)
+
+        if refit.is_valid():
+            refit.set_domain(0.0, 1.0)
+
+            return refit
+
+    return pcurve
+
+
+def _piece_curves(field, plane, piece):
+    """3D section curve and uv pcurve of one seam-free piece, or None when a fit fails."""
+
+    _shift_piece_to_domain(field, piece.uv)
+
+    pts_uv = _densify_piece(field, piece.uv)
+    pts3 = []
+
+    for p in pts_uv:
+        pts3.append(field.point((field.wrap_u(p[0]), field.wrap_v(p[1]))))
+
+    crv3 = _surface_plane_fit_3d(
+        pts3,
+        piece.is_loop,
+        plane,
+        field.step,
+        field.uv_to_3d,
+        field.uv_to_3d_min,
+        False,
+    )
+
+    if not crv3.is_valid():
+        if piece.is_loop:
+            crv3 = NurbsCurve.create_interpolated(
+                pts3, CurveNurbsKnotStyle.ChordPeriodic
+            )
+        else:
+            crv3 = NurbsCurve.create_interpolated(pts3)
+
+    if not crv3.is_valid():
+        return None
+
+    pcurve, target_cvs = _fit_pcurve(pts_uv, piece.is_loop, field.step)
+
+    if not pcurve.is_valid():
+        return None
+
+    crv3.set_domain(0.0, 1.0)
+    pcurve.set_domain(0.0, 1.0)
+
+    fit_tol = field.step * (field.uv_to_3d + field.uv_to_3d_min) * 0.5
+    vali_tol = max(10.0 * field.tolerance, fit_tol * 2.0)
+    pcurve = _refit_pcurve(field, pts_uv, piece.is_loop, target_cvs, vali_tol, pcurve)
+
+    return crv3, pcurve
 
 
 def _solve_gauss(M, rhs, n):
@@ -3495,13 +4365,16 @@ def surface_plane(
     if tolerance is None or tolerance <= 0.0:
         tolerance = Tolerance.ZERO_TOLERANCE
 
-    traces, step, uv_to_3d, uv_to_3d_min = _surface_plane_traces(
-        surface, plane, tolerance
-    )
+    traced = _surface_plane_traces(surface, plane, tolerance)
+    step = traced.step
+    uv_to_3d = traced.uv_to_3d
+    uv_to_3d_min = traced.uv_to_3d_min
 
     result = []
 
-    for uv_trace, uv_unwrapped, is_loop in traces:
+    for trace in traced.traces:
+        uv_trace = trace.uv_trace
+        is_loop = trace.is_loop
         all_pts = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
         crv = _surface_plane_fit_3d(
             all_pts, is_loop, plane, step, uv_to_3d, uv_to_3d_min
@@ -3549,360 +4422,32 @@ def surface_plane_uv(
     if tolerance is None or tolerance <= 0.0:
         tolerance = Tolerance.ZERO_TOLERANCE
 
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    range_u = u1 - u0
-    range_v = v1 - v0
-    closed_u = surface.is_closed(0)
-    closed_v = surface.is_closed(1)
-
-    def wrap_u(u):
-        if closed_u:
-            t = math.fmod(u - u0, range_u)
-
-            if t < 0:
-                t += range_u
-
-            return u0 + t
-
-        return max(u0, min(u, u1))
-
-    def wrap_v(v):
-        if closed_v:
-            t = math.fmod(v - v0, range_v)
-
-            if t < 0:
-                t += range_v
-
-            return v0 + t
-
-        return max(v0, min(v, v1))
-
-    pn = plane.z_axis
-    p0 = plane.origin
-
-    def g_and_grad(u, v):
-        derivs = surface.evaluate(wrap_u(u), wrap_v(v), 1)
-        S = derivs[0]
-        Su = derivs[2]
-        Sv = derivs[1]
-        val = (S[0] - p0[0]) * pn[0] + (S[1] - p0[1]) * pn[1] + (S[2] - p0[2]) * pn[2]
-        gu = Su[0] * pn[0] + Su[1] * pn[1] + Su[2] * pn[2]
-        gv = Sv[0] * pn[0] + Sv[1] * pn[1] + Sv[2] * pn[2]
-
-        return val, gu, gv
-
-    def seam_newton(cu, cv_, axis):
-        for _ in range(10):
-            val, gu, gv = g_and_grad(cu, cv_)
-
-            if abs(val) < tolerance:
-                break
-
-            if axis == 0:
-                if abs(gv) < 1e-14:
-                    break
-
-                cv_ = cv_ - val / gv
-            else:
-                if abs(gu) < 1e-14:
-                    break
-
-                cu = cu - val / gu
-
-        return cu, cv_
-
-    traces, step, uv_to_3d, uv_to_3d_min = _surface_plane_traces(
-        surface, plane, tolerance
-    )
-
-    fit_tol = step * (uv_to_3d + uv_to_3d_min) * 0.5
-    dup_tol = step * uv_to_3d * 3.0
+    field = _SurfacePlaneField(surface, plane, tolerance)
+    traced = _surface_plane_traces(surface, plane, tolerance)
+    dup_tol = traced.step * traced.uv_to_3d * 3.0
 
     result = []
     kept_pts3 = []
 
-    for uv_trace, uv_unwrapped, is_loop in traces:
-        m = len(uv_trace)
-        trace_pts3 = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
-        dup = False
+    for trace in traced.traces:
+        trace_pts3 = []
 
-        for other in kept_pts3:
-            all_close = True
+        for q in trace.uv_trace:
+            trace_pts3.append(field.point(q))
 
-            for f in [0.25, 0.5, 0.75]:
-                cp = trace_pts3[int((m - 1) * f)]
-                dmin = dup_tol + 1.0
-
-                for k in range(0, len(other), 5):
-                    dmin = min(dmin, cp.distance(other[k]))
-
-                if dmin > dup_tol:
-                    all_close = False
-                    break
-
-            if all_close:
-                dup = True
-                break
-
-        if dup:
+        if _is_duplicate_trace(trace_pts3, kept_pts3, dup_tol):
             continue
 
         kept_pts3.append(trace_pts3)
 
-        pts = [list(p) for p in uv_unwrapped]
-        closure_du = 0.0
-        closure_dv = 0.0
-
-        if is_loop and len(pts) >= 2:
-            du_j = pts[0][0] - pts[-1][0]
-            dv_j = pts[0][1] - pts[-1][1]
-
-            if closed_u:
-                while du_j > range_u * 0.5:
-                    du_j -= range_u
-
-                while du_j < -range_u * 0.5:
-                    du_j += range_u
-
-            if closed_v:
-                while dv_j > range_v * 0.5:
-                    dv_j -= range_v
-
-                while dv_j < -range_v * 0.5:
-                    dv_j += range_v
-
-            closure_du = (pts[-1][0] + du_j) - pts[0][0]
-            closure_dv = (pts[-1][1] + dv_j) - pts[0][1]
-            pts.append([pts[0][0] + closure_du, pts[0][1] + closure_dv])
-
-        out_pts = [pts[0]]
-        cross_idx = []
-
-        for i in range(1, len(pts)):
-            pa = pts[i - 1]
-            pb = pts[i]
-            crossings = []
-
-            if closed_u and abs(pb[0] - pa[0]) > 1e-15:
-                k0 = math.floor((pa[0] - u0) / range_u)
-                k1 = math.floor((pb[0] - u0) / range_u)
-
-                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
-                    L = u0 + k * range_u
-                    t = (L - pa[0]) / (pb[0] - pa[0])
-
-                    if 0.0 < t < 1.0:
-                        crossings.append((t, 0, L))
-
-            if closed_v and abs(pb[1] - pa[1]) > 1e-15:
-                k0 = math.floor((pa[1] - v0) / range_v)
-                k1 = math.floor((pb[1] - v0) / range_v)
-
-                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
-                    L = v0 + k * range_v
-                    t = (L - pa[1]) / (pb[1] - pa[1])
-
-                    if 0.0 < t < 1.0:
-                        crossings.append((t, 1, L))
-
-            crossings.sort()
-
-            for t, axis, L in crossings:
-                cu = pa[0] + (pb[0] - pa[0]) * t
-                cv_ = pa[1] + (pb[1] - pa[1]) * t
-
-                if axis == 0:
-                    cu_r, cv_r = seam_newton(L, cv_, 0)
-                    cu = L
-                    cv_ = cv_r
-                else:
-                    cu_r, cv_r = seam_newton(cu, L, 1)
-                    cu = cu_r
-                    cv_ = L
-
-                out_pts.append([cu, cv_])
-                cross_idx.append(len(out_pts) - 1)
-
-            out_pts.append([pb[0], pb[1]])
-
-            if i < len(pts) - 1:
-                on_seam = False
-
-                if closed_u:
-                    k = round((pb[0] - u0) / range_u)
-                    L = u0 + k * range_u
-
-                    if (
-                        abs(pb[0] - L) < range_u * 1e-9
-                        and abs(pb[0] - pa[0]) > range_u * 1e-9
-                    ):
-                        out_pts[-1][0] = L
-                        on_seam = True
-
-                if closed_v:
-                    k = round((pb[1] - v0) / range_v)
-                    L = v0 + k * range_v
-
-                    if (
-                        abs(pb[1] - L) < range_v * 1e-9
-                        and abs(pb[1] - pa[1]) > range_v * 1e-9
-                    ):
-                        out_pts[-1][1] = L
-                        on_seam = True
-
-                if on_seam:
-                    cross_idx.append(len(out_pts) - 1)
-
-        wrap_drift = abs(closure_du) > range_u * 0.5 or abs(closure_dv) > range_v * 0.5
-
-        if len(cross_idx) == 0:
-            pieces = [(out_pts, is_loop and not wrap_drift)]
-        else:
-            pieces = []
-
-            if is_loop:
-                for a, b in zip(cross_idx, cross_idx[1:]):
-                    pieces.append((out_pts[a : b + 1], False))
-
-                wrap_piece = [list(p) for p in out_pts[cross_idx[-1] :]]
-
-                for p in out_pts[1 : cross_idx[0] + 1]:
-                    wrap_piece.append([p[0] + closure_du, p[1] + closure_dv])
-
-                pieces.append((wrap_piece, False))
-            else:
-                bounds = [0] + cross_idx + [len(out_pts) - 1]
-
-                for a, b in zip(bounds, bounds[1:]):
-                    if b > a:
-                        pieces.append((out_pts[a : b + 1], False))
-
-        for piece_pts, piece_loop in pieces:
-            if len(piece_pts) < 2:
+        for piece in _trace_pieces(field, trace):
+            if len(piece.uv) < 2:
                 continue
 
-            mid = piece_pts[len(piece_pts) // 2]
+            curves = _piece_curves(field, plane, piece)
 
-            if closed_u:
-                k_u = math.floor((mid[0] - u0) / range_u)
-
-                if k_u != 0:
-                    for p in piece_pts:
-                        p[0] -= k_u * range_u
-
-            if closed_v:
-                k_v = math.floor((mid[1] - v0) / range_v)
-
-                if k_v != 0:
-                    for p in piece_pts:
-                        p[1] -= k_v * range_v
-
-            pts3 = [surface.point_at(wrap_u(p[0]), wrap_v(p[1])) for p in piece_pts]
-
-            crv3 = _surface_plane_fit_3d(
-                pts3, piece_loop, plane, step, uv_to_3d, uv_to_3d_min, False
-            )
-
-            if not crv3.is_valid():
-                if piece_loop:
-                    crv3 = NurbsCurve.create_interpolated(
-                        pts3, CurveNurbsKnotStyle.ChordPeriodic
-                    )
-                else:
-                    crv3 = NurbsCurve.create_interpolated(pts3)
-
-            if not crv3.is_valid():
-                continue
-
-            pts_uv = [Point(p[0], p[1], 0.0) for p in piece_pts]
-            mp = len(pts_uv)
-            fit_tol_uv = step
-            total_turning = 0.0
-
-            for i in range(1, mp - 1):
-                dx1 = pts_uv[i][0] - pts_uv[i - 1][0]
-                dy1 = pts_uv[i][1] - pts_uv[i - 1][1]
-                dx2 = pts_uv[i + 1][0] - pts_uv[i][0]
-                dy2 = pts_uv[i + 1][1] - pts_uv[i][1]
-                l1 = math.hypot(dx1, dy1)
-                l2 = math.hypot(dx2, dy2)
-
-                if l1 > 1e-14 and l2 > 1e-14:
-                    c = (dx1 * dx2 + dy1 * dy2) / (l1 * l2)
-                    c = max(-1.0, min(1.0, c))
-                    total_turning += math.acos(c)
-
-            chords = [0.0] * mp
-            total_len = 0.0
-
-            for i in range(1, mp):
-                total_len += pts_uv[i].distance(pts_uv[i - 1])
-                chords[i] = total_len
-
-            if piece_loop and mp > 1:
-                total_len += pts_uv[0].distance(pts_uv[mp - 1])
-
-            if total_len > 1e-14:
-                for i in range(1, mp):
-                    chords[i] /= total_len
-
-            target_cvs = max(8, int(total_turning / 0.5) + 6)
-            max_cvs = mp - 1
-            pcurve = NurbsCurve()
-
-            for attempt in range(5):
-                if target_cvs > max_cvs:
-                    break
-
-                pcurve = NurbsCurve.create_fitted(pts_uv, target_cvs, 3, piece_loop)
-
-                if not pcurve.is_valid():
-                    break
-
-                ft0, ft1 = pcurve.domain()
-                max_dev = 0.0
-
-                for i in range(mp):
-                    t = ft0 + (ft1 - ft0) * chords[i]
-                    max_dev = max(max_dev, pcurve.point_at(t).distance(pts_uv[i]))
-
-                if max_dev < fit_tol_uv:
-                    break
-
-                target_cvs = min(target_cvs * 2, max_cvs)
-
-            if not pcurve.is_valid():
-                if piece_loop:
-                    pcurve = NurbsCurve.create_interpolated(
-                        pts_uv, CurveNurbsKnotStyle.ChordPeriodic
-                    )
-                else:
-                    pcurve = NurbsCurve.create_interpolated(pts_uv)
-
-            if not pcurve.is_valid():
-                continue
-
-            crv3.set_domain(0.0, 1.0)
-            pcurve.set_domain(0.0, 1.0)
-
-            vali_tol = max(10.0 * tolerance, fit_tol * 2.0)
-            max_off = 0.0
-
-            for i in range(17):
-                t = i / 16.0
-                pc = pcurve.point_at(t)
-                val, gu, gv = g_and_grad(pc[0], pc[1])
-                max_off = max(max_off, abs(val))
-
-            if max_off > vali_tol and target_cvs * 2 <= max_cvs:
-                refit = NurbsCurve.create_fitted(pts_uv, target_cvs * 2, 3, piece_loop)
-
-                if refit.is_valid():
-                    refit.set_domain(0.0, 1.0)
-                    pcurve = refit
-
-            result.append((crv3, pcurve))
+            if curves is not None:
+                result.append(curves)
 
     return result
 
@@ -5067,8 +5612,7 @@ def closest_point_on_segment(pt: Point, seg: Line) -> tuple:
     vx = pt[0] - start[0]
     vy = pt[1] - start[1]
     vz = pt[2] - start[2]
-    t = (vx * dx + vy * dy + vz * dz) / len_sq
-    t = max(0.0, min(1.0, t))
+    t = _clamp_unit((vx * dx + vy * dy + vz * dz) / len_sq)
 
     return (Point(start[0] + t * dx, start[1] + t * dy, start[2] + t * dz), t)
 
@@ -6020,8 +6564,7 @@ def adjacency_search(elements: list[Element], inflate: float = 5.0) -> list[int]
         pts = []
 
         for pl in element.polylines:
-            for p in pl.get_points():
-                pts.append(p)
+            pts.extend(pl.get_points())
 
         obbs.append(OBB.from_points(pts, inflate))
 
