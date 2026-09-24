@@ -41,6 +41,7 @@ from .intersection import ray_mesh_bvh
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .proto import session_pb2
 
 
 COLLECTIONS = [
@@ -212,9 +213,127 @@ def _ray_point(ray: Line, point: Point, tolerance: float) -> Point | None:
     return closest
 
 
+def _ray_polyline(ray: Line, polyline: Polyline, tolerance: float) -> Point | None:
+    """The segment hit closest to the ray start."""
+
+    closest = None
+    min_dist = float("inf")
+
+    for i in range(polyline.segment_count()):
+        segment = Line.from_points(polyline.get_point(i), polyline.get_point(i + 1))
+        hit = line_line(ray, segment, tolerance)
+
+        if hit is None:
+            continue
+
+        dist = ray.start().distance(hit)
+
+        if dist < min_dist:
+            min_dist = dist
+            closest = hit
+
+    return closest
+
+
+def _ray_pointcloud(
+    ray: Line, pointcloud: PointCloud, tolerance: float
+) -> Point | None:
+    """The ray point closest to a cloud point within tolerance."""
+
+    closest = None
+    min_dist = float("inf")
+
+    for point in pointcloud.get_points():
+        hit = _ray_point(ray, point, tolerance)
+
+        if hit is None:
+            continue
+
+        dist = point.distance(hit)
+
+        if dist < min_dist:
+            min_dist = dist
+            closest = hit
+
+    return closest
+
+
+def _ray_mesh(
+    ray: Line, mesh: Mesh, tolerance: float, placement: Xform
+) -> Point | None:
+    """The first hit of the ray on the placed mesh, tested in the mesh frame."""
+
+    inverse = placement.inverse()
+
+    if inverse is None:
+        return None
+
+    local_ray = Line.from_points(
+        inverse.transform_point(ray.start()), inverse.transform_point(ray.end())
+    )
+    hits = ray_mesh_bvh(local_ray, mesh, tolerance, True)
+
+    if not hits:
+        return None
+
+    return placement.transform_point(hits[0])
+
+
+def _box_points(geometry: Any) -> list[Point]:
+    """The points whose box bounds a geometry: vertices, control points or surface samples."""
+
+    points = []
+
+    if isinstance(geometry, Line):
+        points.append(geometry.start())
+        points.append(geometry.end())
+    elif isinstance(geometry, (Polyline, PointCloud)):
+        points = geometry.get_points()
+    elif isinstance(geometry, Mesh):
+        for vertex in geometry.vertex.values():
+            points.append(vertex.position())
+    elif isinstance(geometry, BRep):
+        for vertex in geometry.m_vertices:
+            points.append(vertex.point)
+
+        for surface in geometry.m_surfaces:
+            u0, u1 = surface.domain(0)
+            v0, v1 = surface.domain(1)
+
+            for i in range(3):
+                for j in range(3):
+                    points.append(
+                        surface.point_at(
+                            u0 + (u1 - u0) * i / 2.0, v0 + (v1 - v0) * j / 2.0
+                        )
+                    )
+    elif isinstance(geometry, NurbsCurve):
+        for i in range(geometry.cv_count()):
+            points.append(geometry.get_cv(i))
+    elif isinstance(geometry, NurbsSurface):
+        for i in range(geometry.cv_count(0)):
+            for j in range(geometry.cv_count(1)):
+                points.append(geometry.get_cv(i, j))
+
+    return points
+
+
+def _registered(session: Session, guid: str) -> bool:
+    """Whether guid is a graph node held by an object, instance or component."""
+
+    return session.graph.has_node(guid) and (
+        guid in session.lookup
+        or guid in session.instance_lookup
+        or guid in session.component_lookup
+    )
+
+
 class Session:
     """A session containing geometry objects."""
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Constructors
+    # ═══════════════════════════════════════════════════════════════════════════
     def __init__(self, name: str = "my_session"):
         """Construct an empty session whose tree root carries the session name."""
 
@@ -276,7 +395,6 @@ class Session:
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
     # ═══════════════════════════════════════════════════════════════════════════
-
     def get_object(self, guid: str) -> Any | None:
         """Get a geometry object by GUID, None when there is none."""
         return self.lookup.get(guid)
@@ -494,93 +612,109 @@ class Session:
     # ═══════════════════════════════════════════════════════════════════════════
     # Geometry management
     # ═══════════════════════════════════════════════════════════════════════════
-
     def add_point(
-        self, point: Point, parent: TreeNode | None = None
+        self, point: Point | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
         """Add a point; None adds nothing and returns None."""
+
         if point is None:
             return None
 
         return self._add_object("points", point, "point", parent)
 
-    def add_line(self, line: Line, parent: TreeNode | None = None) -> TreeNode | None:
+    def add_line(
+        self, line: Line | None, parent: TreeNode | None = None
+    ) -> TreeNode | None:
         """Add a line; None adds nothing and returns None."""
+
         if line is None:
             return None
 
         return self._add_object("lines", line, "line", parent)
 
     def add_plane(
-        self, plane: Plane, parent: TreeNode | None = None
+        self, plane: Plane | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
         """Add a plane; None adds nothing and returns None."""
+
         if plane is None:
             return None
 
         return self._add_object("planes", plane, "plane", parent)
 
-    def add_obb(self, bbox: OBB) -> TreeNode | None:
+    def add_obb(self, bbox: OBB | None) -> TreeNode | None:
         """Add a bounding box; None adds nothing and returns None."""
+
         if bbox is None:
             return None
 
         return self._add_object("bboxes", bbox, "bbox", None)
 
     def add_polyline(
-        self, polyline: Polyline, parent: TreeNode | None = None
+        self, polyline: Polyline | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
         """Add a polyline; None, or fewer than two points, adds nothing and returns None."""
+
         if polyline is None or polyline.point_count() < 2:
             return None
 
         return self._add_object("polylines", polyline, "polyline", parent)
 
     def add_pointcloud(
-        self, pointcloud: PointCloud, parent: TreeNode | None = None
+        self, pointcloud: PointCloud | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
         """Add a point cloud; None, or no points, adds nothing and returns None."""
+
         if pointcloud is None or pointcloud.is_empty():
             return None
 
         return self._add_object("pointclouds", pointcloud, "pointcloud", parent)
 
-    def add_mesh(self, mesh: Mesh, parent: TreeNode | None = None) -> TreeNode | None:
+    def add_mesh(
+        self, mesh: Mesh | None, parent: TreeNode | None = None
+    ) -> TreeNode | None:
         """Add a mesh; None, or no faces, adds nothing and returns None."""
+
         if mesh is None or mesh.is_empty() or mesh.number_of_faces() == 0:
             return None
 
         return self._add_object("meshes", mesh, "mesh", parent)
 
     def add_nurbscurve(
-        self, nurbscurve: NurbsCurve, parent: TreeNode | None = None
+        self, nurbscurve: NurbsCurve | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
         """Add a curve; None, or fewer than two control vertices, adds nothing and returns None."""
+
         if nurbscurve is None or nurbscurve.cv_count() < 2:
             return None
 
         return self._add_object("nurbscurves", nurbscurve, "nurbscurve", parent)
 
     def add_nurbssurface(
-        self, nurbssurface: NurbsSurface, parent: TreeNode | None = None
+        self, nurbssurface: NurbsSurface | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
         """Add a surface; None, or no control vertices, adds nothing and returns None."""
+
         if nurbssurface is None or nurbssurface.cv_count() == 0:
             return None
 
         return self._add_object("nurbssurfaces", nurbssurface, "nurbssurface", parent)
 
-    def add_brep(self, brep: BRep, parent: TreeNode | None = None) -> TreeNode | None:
+    def add_brep(
+        self, brep: BRep | None, parent: TreeNode | None = None
+    ) -> TreeNode | None:
         """Add a brep; None, or no faces and no vertices, adds nothing and returns None."""
+
         if brep is None or (brep.face_count() == 0 and brep.vertex_count() == 0):
             return None
 
         return self._add_object("breps", brep, "brep", parent)
 
     def add_element(
-        self, element: Element, parent: TreeNode | None = None
+        self, element: Element | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
         """Add an element; only None adds nothing, an Element is a data record kept even without geometry."""
+
         if element is None:
             return None
 
@@ -650,6 +784,7 @@ class Session:
 
     def add_group(self, group_name: str) -> TreeNode:
         """Create a named group (TreeNode) and add it to the root of the tree."""
+
         node = TreeNode(name=group_name)
         self.add(node)
 
@@ -658,6 +793,34 @@ class Session:
     def add_edge(self, guid1: str, guid2: str, attribute: str = "") -> None:
         """Add an edge between two geometry objects in the graph."""
         self.graph.add_edge(guid1, guid2, attribute)
+
+    def add_interaction(self, a: str, b: str) -> tuple[str, str]:
+        """Add or reuse an undirected interaction edge between registered objects; returns its stored endpoint order. Raises ValueError for missing objects or a self-pair. Preserves an existing edge's attributes and guid."""
+
+        if a == b or not _registered(self, a) or not _registered(self, b):
+            raise ValueError(
+                "Session.add_interaction: add two distinct objects to the session first"
+            )
+
+        if not self.has_interaction(a, b):
+            self.graph.add_edge(a, b)
+
+        edge = self.graph.edges[a][b]
+        self.graph.edges[b][a].guid = edge.guid
+
+        return edge.v0, edge.v1
+
+    def has_interaction(self, a: str, b: str) -> bool:
+        """True when the pair has an interaction edge in either order."""
+        return self.graph.has_edge((a, b)) or self.graph.has_edge((b, a))
+
+    def remove_interaction(self, a: str, b: str) -> None:
+        """Remove the pair's edge in either order; a missing pair is a no-op."""
+
+        if self.graph.has_edge((a, b)):
+            self.graph.remove_edge((a, b))
+        elif self.graph.has_edge((b, a)):
+            self.graph.remove_edge((b, a))
 
     def add_hierarchy(self, parent_guid: str, child_guid: str) -> bool:
         """Add a parent-child relationship in the tree."""
@@ -743,6 +906,10 @@ class Session:
         instance.name = obj.name
         placement = self.xform(guid) * frame
         removed = self._detach(guid)
+
+        if removed is None:
+            return False
+
         added = AddOp(
             guid,
             instance,
@@ -755,6 +922,7 @@ class Session:
             f"instance_{instance.name}",
             removed.edges,
         )
+
         self.history.record(removed)
         self.history.record(added)
         self._attach(added)
@@ -774,6 +942,10 @@ class Session:
         collection, prefix = _collection_of(result)
         size = len(getattr(self.objects, collection))
         removed = self._detach(instance_guid)
+
+        if removed is None:
+            return False
+
         added = AddOp(
             instance_guid,
             result,
@@ -786,6 +958,7 @@ class Session:
             f"{prefix}_{instance.name}",
             removed.edges,
         )
+
         self.history.record(removed)
         self.history.record(added)
         self._attach(added)
@@ -827,7 +1000,6 @@ class Session:
     # ═══════════════════════════════════════════════════════════════════════════
     # History
     # ═══════════════════════════════════════════════════════════════════════════
-
     def begin(self, label: str) -> None:
         """Open a history transaction: every add, remove, replace and xform change until commit becomes one undo step."""
         self.history.begin(label)
@@ -847,7 +1019,6 @@ class Session:
     # ═══════════════════════════════════════════════════════════════════════════
     # Collision detection and ray casting
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def compute_bounding_box(geometry: Any, xform: Xform) -> OBB:
         """Bounding box of an object in WORLD placement, inflated by tolerance."""
@@ -875,40 +1046,7 @@ class Session:
 
             return box
 
-        points = []
-
-        if isinstance(geometry, Line):
-            points.append(geometry.start())
-            points.append(geometry.end())
-        elif isinstance(geometry, (Polyline, PointCloud)):
-            points = geometry.get_points()
-        elif isinstance(geometry, Mesh):
-            for vertex in geometry.vertex.values():
-                points.append(vertex.position())
-        elif isinstance(geometry, BRep):
-            for vertex in geometry.m_vertices:
-                points.append(vertex.point)
-
-            for surface in geometry.m_surfaces:
-                u0, u1 = surface.domain(0)
-                v0, v1 = surface.domain(1)
-
-                for i in range(3):
-                    for j in range(3):
-                        points.append(
-                            surface.point_at(
-                                u0 + (u1 - u0) * i / 2.0, v0 + (v1 - v0) * j / 2.0
-                            )
-                        )
-        elif isinstance(geometry, NurbsCurve):
-            for i in range(geometry.cv_count()):
-                points.append(geometry.get_cv(i))
-        elif isinstance(geometry, NurbsSurface):
-            for i in range(geometry.cv_count(0)):
-                for j in range(geometry.cv_count(1)):
-                    points.append(geometry.get_cv(i, j))
-
-        return _placed_box(points, xform, inflate)
+        return _placed_box(_box_points(geometry), xform, inflate)
 
     def get_collisions(self) -> list[tuple[str, str]]:
         """Get all collision pairs using SpatialBVH and add them as graph edges."""
@@ -981,9 +1119,8 @@ class Session:
         return hits
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # Serialization
+    # JSON
     # ═══════════════════════════════════════════════════════════════════════════
-
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
@@ -992,18 +1129,18 @@ class Session:
         for obj_guid, obj_xform in self._xforms_ordered():
             xforms.append({"guid": obj_guid, "xform": obj_xform.__jsondump__()})
 
-        data = {
-            "type": "Session",
-            "name": self.name,
-            "guid": self.guid,
-            "objects": self.objects.__jsondump__(),
-            "tree": self.tree.__jsondump__(),
-            "graph": self.graph.__jsondump__(),
-            "xforms": xforms,
-        }
+        data = {}
 
         if self.definition_lookup:
             data["definitions"] = self.definitions.__jsondump__()
+
+        data["graph"] = self.graph.__jsondump__()
+        data["guid"] = self.guid
+        data["name"] = self.name
+        data["objects"] = self.objects.__jsondump__()
+        data["tree"] = self.tree.__jsondump__()
+        data["type"] = "Session"
+        data["xforms"] = xforms
 
         return data
 
@@ -1039,6 +1176,7 @@ class Session:
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
+
         self.history.clear()
 
         return json.dumps(self.__jsondump__())
@@ -1050,51 +1188,51 @@ class Session:
 
     def file_json_dump(self, filename: str | Path) -> None:
         """Write to a JSON file."""
+
         self.history.clear()
 
         with open(filename, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
+            json.dump(self.__jsondump__(), f, indent=4)
 
     @classmethod
     def file_json_load(cls, filename: str | Path) -> Session:
         """Read from a JSON file."""
+
         with open(filename) as f:
             return cls.__jsonload__(json.load(f))
 
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Protobuf
+    # ═══════════════════════════════════════════════════════════════════════════
+    def to_proto(self) -> session_pb2.Session:
+        """Convert to the protobuf message."""
 
         from .proto import session_pb2
 
-        self.history.clear()
         proto = session_pb2.Session()
         proto.name = self.name
 
         if self.has_guid():
             proto.guid = self.guid
 
-        proto.objects.ParseFromString(self.objects.pb_dumps())
+        proto.objects.CopyFrom(self.objects.to_proto())
         proto.tree.ParseFromString(self.tree.pb_dumps())
-        proto.graph.ParseFromString(self.graph.pb_dumps())
+        proto.graph.CopyFrom(self.graph.to_proto())
 
         for obj_guid, obj_xform in self._xforms_ordered():
-            entry = proto.xforms.add()
-            entry.guid = obj_guid
-            entry.xform.ParseFromString(obj_xform.pb_dumps())
+            item = proto.xforms.add()
+            item.guid = obj_guid
+            item.xform.CopyFrom(obj_xform.to_proto())
 
         if self.definition_lookup:
-            proto.definitions.ParseFromString(self.definitions.pb_dumps())
+            proto.definitions.CopyFrom(self.definitions.to_proto())
 
-        return proto.SerializeToString()
+        return proto
 
     @classmethod
-    def pb_loads(cls, data: bytes) -> Session:
-        """Deserialize from protobuf bytes."""
+    def from_proto(cls, proto: session_pb2.Session) -> Session:
+        """Construct from the protobuf message."""
 
-        from .proto import session_pb2
-
-        proto = session_pb2.Session()
-        proto.ParseFromString(data)
         session = cls(name=proto.name)
 
         if proto.guid:
@@ -1107,21 +1245,38 @@ class Session:
             session.tree = Tree.pb_loads(proto.tree.SerializeToString())
 
         if proto.HasField("graph"):
-            session.graph = Graph.pb_loads(proto.graph.SerializeToString())
+            session.graph = Graph.from_proto(proto.graph)
 
         if proto.HasField("definitions"):
             session.definitions = Objects.from_proto(proto.definitions)
 
         for entry in proto.xforms:
-            session.xforms[entry.guid] = Xform.pb_loads(entry.xform.SerializeToString())
+            session.xforms[entry.guid] = Xform.from_proto(entry.xform)
 
         session._index_objects()
 
         return session
 
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+
+        self.history.clear()
+
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> Session:
+        """Deserialize from protobuf bytes."""
+
+        from .proto import session_pb2
+
+        proto = session_pb2.Session()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
     def pb_dump(self, filename: str | Path) -> None:
         """Write to a protobuf file."""
-        self.history.clear()
 
         with open(filename, "wb") as f:
             f.write(self.pb_dumps())
@@ -1129,9 +1284,13 @@ class Session:
     @classmethod
     def pb_load(cls, filename: str | Path) -> Session:
         """Read from a protobuf file."""
+
         with open(filename, "rb") as f:
             return cls.pb_loads(f.read())
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # String
+    # ═══════════════════════════════════════════════════════════════════════════
     def __str__(self) -> str:
         """Return the spatial hierarchy and the element interactions as a banner block."""
 
@@ -1140,13 +1299,12 @@ class Session:
         return f"{bar}\nSpatial Hierarchy\n{bar}\n{self.tree}{bar}\nElement Interactions\n{bar}\n{self.graph}\n{bar}\n"
 
     def __repr__(self) -> str:
-        """Return the name, object counts, tree and graph on one line."""
+        """Return "Session(name=..., objects=..., tree=..., graph=...)"."""
         return f"Session(name={self.name}, objects={self.objects}, tree={self.tree!r}, graph={self.graph!r})"
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Details
     # ═══════════════════════════════════════════════════════════════════════════
-
     def _add_object(
         self, collection: str, obj: Any, type_prefix: str, parent: TreeNode | None
     ) -> TreeNode:
@@ -1482,59 +1640,13 @@ class Session:
             return line_plane(ray, geometry, True)
 
         if isinstance(geometry, Polyline):
-            closest = None
-            min_dist = float("inf")
-
-            for i in range(geometry.segment_count()):
-                segment = Line.from_points(
-                    geometry.get_point(i), geometry.get_point(i + 1)
-                )
-                hit = line_line(ray, segment, tolerance)
-
-                if hit is None:
-                    continue
-
-                dist = ray.start().distance(hit)
-
-                if dist < min_dist:
-                    min_dist = dist
-                    closest = hit
-
-            return closest
+            return _ray_polyline(ray, geometry, tolerance)
 
         if isinstance(geometry, PointCloud):
-            closest = None
-            min_dist = float("inf")
-
-            for point in geometry.get_points():
-                hit = _ray_point(ray, point, tolerance)
-
-                if hit is None:
-                    continue
-
-                dist = point.distance(hit)
-
-                if dist < min_dist:
-                    min_dist = dist
-                    closest = hit
-
-            return closest
+            return _ray_pointcloud(ray, geometry, tolerance)
 
         if isinstance(geometry, Mesh):
-            inverse = placement.inverse()
-
-            if inverse is None:
-                return None
-
-            local_ray = Line.from_points(
-                inverse.transform_point(ray.start()), inverse.transform_point(ray.end())
-            )
-            hits = ray_mesh_bvh(local_ray, geometry, tolerance, True)
-
-            if not hits:
-                return None
-
-            return placement.transform_point(hits[0])
+            return _ray_mesh(ray, geometry, tolerance, placement)
 
         if isinstance(geometry, OBB):
             hits = ray_box(ray, geometry, 0.0, 1.0)

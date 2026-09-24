@@ -27,7 +27,7 @@ def test_session_copy():
 
     session = Session("original")
     point = Point(1.0, 2.0, 3.0)
-    element = Element("plate")
+    element = Element(name="plate")
     group = session.add_group("Group")
     session.add_point(point, group)
     session.add_element(element, group)
@@ -58,8 +58,11 @@ def test_session_copy():
 
     copy.objects.points.clear()
     copied_nodes = copy.tree.nodes
+
     MINI_CHECK(len(copied_nodes) > 1)
+
     copy.tree.remove(copied_nodes[1])
+
     MINI_CHECK(len(session.objects.points) == 1)
     MINI_CHECK(len(copy.objects.points) == 0)
     MINI_CHECK(len(session.tree.root.descendants()) > 0)
@@ -264,11 +267,10 @@ def test_session_add_brep():
 @MINI_TEST("Session", "Add Element")
 def test_session_add_element():
     from session_py import Session
-
-    session = Session()
     from session_py import Element
 
-    plate = Element("p1")
+    session = Session()
+    plate = Element(name="p1")
     session.add_element(plate)
 
     MINI_CHECK(len(session.objects.elements) == 1)
@@ -387,6 +389,90 @@ def test_session_add_relationship():
     MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
 
 
+@MINI_TEST("Session", "Add Interaction")
+def test_session_add_interaction():
+    from session_py import Session
+    from session_py import Element
+
+    session = Session()
+    a = Element(name="a")
+    b = Element(name="b")
+    absent = Element(name="absent")
+    session.add_element(a)
+    session.add_element(b)
+    session.add_edge(a.guid, b.guid, "authored")
+    ends = session.add_interaction(a.guid, b.guid)
+    id = session.graph.edges[a.guid][b.guid].guid
+    reversed = session.add_interaction(b.guid, a.guid)
+
+    MINI_CHECK(ends == reversed)
+    MINI_CHECK(ends[0] == a.guid)
+    MINI_CHECK(session.graph.number_of_edges() == 1)
+    MINI_CHECK(session.graph.edges[b.guid][a.guid].guid == id)
+    MINI_CHECK(session.graph.edges[a.guid][b.guid].attribute == "authored")
+
+    missing_rejected = False
+    self_rejected = False
+
+    try:
+        session.add_interaction(a.guid, absent.guid)
+    except ValueError:
+        missing_rejected = True
+
+    try:
+        session.add_interaction(a.guid, a.guid)
+    except ValueError:
+        self_rejected = True
+
+    MINI_CHECK(missing_rejected)
+    MINI_CHECK(self_rejected)
+    MINI_CHECK(session.graph.number_of_edges() == 1)
+
+
+@MINI_TEST("Session", "Has Interaction")
+def test_session_has_interaction():
+    from session_py import Session
+    from session_py import Element
+
+    session = Session()
+    a = Element(name="a")
+    b = Element(name="b")
+    session.add_element(a)
+    session.add_element(b)
+    before = session.has_interaction(a.guid, b.guid)
+    session.add_interaction(a.guid, b.guid)
+    loaded = Session.pb_loads(session.pb_dumps())
+
+    MINI_CHECK(not before)
+    MINI_CHECK(session.has_interaction(a.guid, b.guid))
+    MINI_CHECK(session.has_interaction(b.guid, a.guid))
+    MINI_CHECK(not session.has_interaction(a.guid, "missing"))
+    MINI_CHECK(loaded.has_interaction(b.guid, a.guid))
+
+
+@MINI_TEST("Session", "Remove Interaction")
+def test_session_remove_interaction():
+    from session_py import Session
+    from session_py import Element
+
+    session = Session()
+    a = Element(name="a")
+    b = Element(name="b")
+    c = Element(name="c")
+    session.add_element(a)
+    session.add_element(b)
+    session.add_element(c)
+    session.add_interaction(a.guid, b.guid)
+    session.add_interaction(a.guid, c.guid)
+    session.remove_interaction(b.guid, a.guid)
+    session.remove_interaction(b.guid, a.guid)
+
+    MINI_CHECK(not session.has_interaction(a.guid, b.guid))
+    MINI_CHECK(session.has_interaction(a.guid, c.guid))
+    MINI_CHECK(session.graph.number_of_edges() == 1)
+    MINI_CHECK(session.graph.has_node(b.guid))
+
+
 @MINI_TEST("Session", "Get Neighbours")
 def test_session_get_neighbours():
     from session_py import Session
@@ -440,6 +526,7 @@ def test_session_ray_cast():
     from session_py import Mesh
     from session_py import Point
     from session_py import Vector
+    from session_py import Xform
 
     session = Session()
     mesh = Mesh()
@@ -451,8 +538,6 @@ def test_session_ray_cast():
     hits = session.ray_cast(Point(0.0, 0.0, 2.0), Vector(0.0, 0.0, -1.0))
 
     MINI_CHECK(len(hits) >= 1)
-
-    from session_py import Xform
 
     placed = Mesh()
     placed.add_vertex(Point(-1.0, -1.0, 0.0), 0)
@@ -486,6 +571,7 @@ def test_session_get_object():
 def test_session_remove_object():
     from session_py import Session
     from session_py import Point
+    from session_py import Element
     from pathlib import Path
 
     session = Session()
@@ -493,9 +579,7 @@ def test_session_remove_object():
     session.add_point(point)
     removed = session.remove_object(point.guid)
 
-    from session_py import Element
-
-    plate = Element("p1")
+    plate = Element(name="p1")
     eguid = plate.guid
     session.add_element(plate)
     eremoved = session.remove_object(eguid)
@@ -588,9 +672,12 @@ def test_session_protobuf_roundtrip():
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session.bin"
     session.pb_dump(fname)
     loaded = Session.pb_load(fname)
+    converted = Session.from_proto(session.to_proto())
 
     MINI_CHECK(loaded.name == session.name)
     MINI_CHECK(len(loaded.lookup) == len(session.lookup))
+    MINI_CHECK(len(converted.lookup) == len(session.lookup))
+    MINI_CHECK(converted.graph.has_edge((p1.guid, p2.guid)))
 
 
 @MINI_TEST("Session", "Lookup Mutation Roundtrip")
