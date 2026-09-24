@@ -14,6 +14,8 @@ from .plane import Plane
 from .point import Point
 from .polyline import Polyline
 from .spatial_bvh import SpatialBVH
+from .tolerance import PI
+from .tolerance import TWO_PI
 from .tolerance import Tolerance
 from .vector import Vector
 
@@ -25,6 +27,177 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════
 # Lines and planes
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _max_pivot_3x3(rows):
+    """Largest absolute coefficient of a 3x3 system with its row and column, the first one on ties."""
+
+    temp = abs(rows[0][0])
+    i = 0
+    j = 0
+
+    for r in range(3):
+        for c in range(3):
+            val = abs(rows[r][c])
+
+            if val > temp:
+                temp = val
+                i = r
+                j = c
+
+    return temp, i, j
+
+
+def _load_rows_3x3(rows, ds, i):
+    """Rows of a 3x3 system in a 3x4 work array, row i swapped to the top."""
+
+    w = [0.0] * 12
+    src = [0, 1, 2]
+    src[0], src[i] = src[i], src[0]
+
+    for r in range(3):
+        for c in range(3):
+            w[4 * r + c] = rows[src[r]][c]
+
+        w[4 * r + 3] = ds[src[r]]
+
+    return w
+
+
+def _swap_columns(w, c0, c1):
+    """Swap two coefficient columns in all rows of the 3x4 work array."""
+
+    for r in range(3):
+        w[4 * r + c0], w[4 * r + c1] = w[4 * r + c1], w[4 * r + c0]
+
+
+def _eliminate_first_column(w):
+    """Scale the top row to a unit pivot and clear the first column of the rows below."""
+
+    temp = 1.0 / w[0]
+    w[1] *= temp
+    w[2] *= temp
+    w[3] *= temp
+
+    for r in (4, 8):
+        temp = -w[r]
+
+        if temp != 0.0:
+            for c in range(1, 4):
+                w[r + c] += temp * w[c]
+
+
+def _max_pivot_2x2(w):
+    """Largest absolute coefficient of the lower-right 2x2 block with its row and column, the first one on ties."""
+
+    temp = abs(w[5])
+    i = 0
+    j = 0
+
+    for r in range(2):
+        for c in range(2):
+            val = abs(w[5 + 4 * r + c])
+
+            if val > temp:
+                temp = val
+                i = r
+                j = c
+
+    return temp, i, j
+
+
+def _update_pivot_range(val, maxpiv, minpiv):
+    """Widen the [minpiv, maxpiv] pivot range by val."""
+
+    if val > maxpiv:
+        maxpiv = val
+    elif val < minpiv:
+        minpiv = val
+
+    return maxpiv, minpiv
+
+
+def _eliminate_last_columns(w, pivot, other, maxpiv, minpiv):
+    """Eliminate the second and third columns using the rows at offsets pivot and other: (ok, maxpiv, minpiv)."""
+
+    temp = 1.0 / w[pivot + 1]
+    w[pivot + 2] *= temp
+    w[pivot + 3] *= temp
+    temp = -w[1]
+
+    if temp != 0.0:
+        w[2] += temp * w[pivot + 2]
+        w[3] += temp * w[pivot + 3]
+
+    temp = -w[other + 1]
+
+    if temp != 0.0:
+        w[other + 2] += temp * w[pivot + 2]
+        w[other + 3] += temp * w[pivot + 3]
+
+    temp = w[other + 2]
+
+    if temp == 0.0:
+        return False, maxpiv, minpiv
+
+    maxpiv, minpiv = _update_pivot_range(abs(temp), maxpiv, minpiv)
+    w[other + 3] /= temp
+    temp = -w[pivot + 2]
+
+    if temp != 0.0:
+        w[pivot + 3] += temp * w[other + 3]
+
+    temp = -w[2]
+
+    if temp != 0.0:
+        w[3] += temp * w[other + 3]
+
+    return True, maxpiv, minpiv
+
+
+def _solve_3x3(row0, row1, row2, d0, d1, d2):
+    """Gaussian elimination of a 3x3 system with full pivoting: (rank, x, y, z, pivot_ratio)."""
+
+    rows = [row0, row1, row2]
+    temp, i, j = _max_pivot_3x3(rows)
+
+    if temp == 0.0:
+        return 0, 0.0, 0.0, 0.0, 0.0
+
+    maxpiv = abs(temp)
+    minpiv = maxpiv
+    slot = [0, 1, 2]
+    w = _load_rows_3x3(rows, [d0, d1, d2], i)
+
+    if j != 0:
+        _swap_columns(w, 0, j)
+        slot[0], slot[j] = slot[j], slot[0]
+
+    _eliminate_first_column(w)
+    temp, i, j = _max_pivot_2x2(w)
+
+    if temp == 0.0:
+        return 1, 0.0, 0.0, 0.0, 0.0
+
+    maxpiv, minpiv = _update_pivot_range(abs(temp), maxpiv, minpiv)
+
+    if j != 0:
+        _swap_columns(w, 1, 2)
+        slot[1], slot[2] = slot[2], slot[1]
+
+    pivot = 8 if i else 4
+    other = 4 if i else 8
+    ok, maxpiv, minpiv = _eliminate_last_columns(w, pivot, other, maxpiv, minpiv)
+
+    if not ok:
+        return 2, 0.0, 0.0, 0.0, 0.0
+
+    sol = [0.0, 0.0, 0.0]
+    sol[slot[0]] = w[3]
+    sol[slot[1]] = w[pivot + 3]
+    sol[slot[2]] = w[other + 3]
+
+    return 3, sol[0], sol[1], sol[2], minpiv / maxpiv
 
 
 def _plane_value_at(plane: Plane, point: Point) -> float:
@@ -235,24 +408,19 @@ def line_plane(line: Line, plane: Plane, is_finite: bool = True) -> Point | None
 def plane_plane_plane(plane0: Plane, plane1: Plane, plane2: Plane) -> Point | None:
     """Intersection point of three planes."""
 
-    n0 = plane0.z_axis
-    n1 = plane1.z_axis
-    n2 = plane2.z_axis
-
-    det = n0.dot(n1.cross(n2))
-
-    if abs(det) < 1e-10:
-        return None
-
-    d0 = plane0.d
-    d1 = plane1.d
-    d2 = plane2.d
-
-    p = (n1.cross(n2) * (-d0) + n2.cross(n0) * (-d1) + n0.cross(n1) * (-d2)) * (
-        1.0 / det
+    rank, x, y, z, pr = _solve_3x3(
+        [plane0.a, plane0.b, plane0.c],
+        [plane1.a, plane1.b, plane1.c],
+        [plane2.a, plane2.b, plane2.c],
+        -plane0.d,
+        -plane1.d,
+        -plane2.d,
     )
 
-    return Point(p[0], p[1], p[2])
+    if rank == 3 and pr > 1e-12:
+        return Point(x, y, z)
+
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1897,7 +2065,7 @@ def _total_turning(pts):
     return turning
 
 
-def _fitted_max_deviation(cand, pts, chords):
+def _fitted_max_deviation(cand, pts, chords, iterations):
     """Largest distance from each point to the curve, found by ternary search around its chord parameter."""
 
     m = len(pts)
@@ -1910,7 +2078,7 @@ def _fitted_max_deviation(cand, pts, chords):
         lo = max(ft0, t - w2)
         hi = min(ft1, t + w2)
 
-        for _ in range(20):
+        for _ in range(iterations):
             m1 = lo + (hi - lo) / 3
             m2 = hi - (hi - lo) / 3
 
@@ -1948,7 +2116,7 @@ def _fit_planar_freeform(all_pts, is_loop, plane, fit_tol):
         if not cand.is_valid():
             break
 
-        max_dev = _fitted_max_deviation(cand, pts_2d, chords)
+        max_dev = _fitted_max_deviation(cand, pts_2d, chords, 20)
 
         if max_dev < best_dev:
             best_dev = max_dev
@@ -1990,6 +2158,249 @@ def _fit_planar_freeform(all_pts, is_loop, plane, fit_tol):
     return crv_2d
 
 
+def _circle_nurbs(cx, cy, cz, xa, ya, radius):
+    """Rational 9-CV circle on knots 0..4 around (cx, cy, cz) in the plane of the unit axes xa, ya."""
+
+    w = math.sqrt(2.0) / 2.0
+    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+    wts = [1, w, 1, w, 1, w, 1, w, 1]
+    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+    crv = NurbsCurve(3, True, 3, 9)
+
+    for i in range(10):
+        crv.set_nurbsknot(i, knots[i])
+
+    for i in range(9):
+        x = cx + radius * (px[i] * xa[0] + py[i] * ya[0])
+        y = cy + radius * (px[i] * xa[1] + py[i] * ya[1])
+        z = cz + radius * (px[i] * xa[2] + py[i] * ya[2])
+        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
+
+    return crv
+
+
+def _ellipse_nurbs(cx, cy, cz, ea, eb, semi_a, semi_b):
+    """Rational 9-CV ellipse on knots 0..4 around (cx, cy, cz) with semi-axes along the unit axes ea, eb."""
+
+    w = math.sqrt(2.0) / 2.0
+    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
+    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
+    wts = [1, w, 1, w, 1, w, 1, w, 1]
+    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
+    crv = NurbsCurve(3, True, 3, 9)
+
+    for i in range(10):
+        crv.set_nurbsknot(i, knots[i])
+
+    for i in range(9):
+        x = cx + semi_a * px[i] * ea[0] + semi_b * py[i] * eb[0]
+        y = cy + semi_a * px[i] * ea[1] + semi_b * py[i] * eb[1]
+        z = cz + semi_a * px[i] * ea[2] + semi_b * py[i] * eb[2]
+        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
+
+    return crv
+
+
+def _plane_coords_2d(p, po, ax, ay):
+    """Coordinates of p in the 2D frame (po, ax, ay)."""
+
+    dx = p[0] - po[0]
+    dy = p[1] - po[1]
+    dz = p[2] - po[2]
+
+    return dx * ax[0] + dy * ax[1] + dz * ax[2], dx * ay[0] + dy * ay[1] + dz * ay[2]
+
+
+def _fit_plane_circle(all_pts, plane):
+    """Exact circle of a closed planar trace when every point lies on the circle through three of them."""
+
+    ax = plane.x_axis
+    ay = plane.y_axis
+    po = plane.origin
+    n = len(all_pts)
+    x1, y1 = _plane_coords_2d(all_pts[0], po, ax, ay)
+    x2, y2 = _plane_coords_2d(all_pts[n // 3], po, ax, ay)
+    x3, y3 = _plane_coords_2d(all_pts[2 * n // 3], po, ax, ay)
+    ax_ = x2 - x1
+    ay_ = y2 - y1
+    bx_ = x3 - x1
+    by_ = y3 - y1
+    dd = 2.0 * (ax_ * by_ - ay_ * bx_)
+
+    if abs(dd) <= 1e-10:
+        return NurbsCurve()
+
+    a2 = ax_ * ax_ + ay_ * ay_
+    b2 = bx_ * bx_ + by_ * by_
+    ccx = x1 + (by_ * a2 - ay_ * b2) / dd
+    ccy = y1 + (ax_ * b2 - bx_ * a2) / dd
+    radius = math.hypot(x1 - ccx, y1 - ccy)
+    max_dev = 0.0
+
+    for p in all_pts:
+        px, py = _plane_coords_2d(p, po, ax, ay)
+        max_dev = max(max_dev, abs(math.hypot(px - ccx, py - ccy) - radius))
+
+    if radius <= 1e-10 or max_dev >= max(radius * 1e-5, 1e-6):
+        return NurbsCurve()
+
+    cx3d = po[0] + ccx * ax[0] + ccy * ay[0]
+    cy3d = po[1] + ccx * ax[1] + ccy * ay[1]
+    cz3d = po[2] + ccx * ax[2] + ccy * ay[2]
+
+    return _circle_nurbs(
+        cx3d, cy3d, cz3d, [ax[0], ax[1], ax[2]], [ay[0], ay[1], ay[2]], radius
+    )
+
+
+def _fit_plane_conic(all_pts, po, ax, ay):
+    """Least-squares conic A x^2 + B xy + C y^2 + D x + E y = 1 through the points in the plane's frame, None when singular."""
+
+    ata = [[0.0] * 5 for _ in range(5)]
+    atb = [0.0] * 5
+
+    for p in all_pts:
+        x, y = _plane_coords_2d(p, po, ax, ay)
+        row = [x * x, x * y, y * y, x, y]
+
+        for r in range(5):
+            atb[r] += row[r]
+
+            for c in range(5):
+                ata[r][c] += row[r] * row[c]
+
+    m = [[0.0] * 6 for _ in range(5)]
+
+    for r in range(5):
+        for c in range(5):
+            m[r][c] = ata[r][c]
+
+        m[r][5] = atb[r]
+
+    for col in range(5):
+        pivot = col
+
+        for r in range(col + 1, 5):
+            if abs(m[r][col]) > abs(m[pivot][col]):
+                pivot = r
+
+        if abs(m[pivot][col]) < 1e-20:
+            return None
+
+        if pivot != col:
+            for j in range(col, 6):
+                m[col][j], m[pivot][j] = m[pivot][j], m[col][j]
+
+        for r in range(col + 1, 5):
+            f = m[r][col] / m[col][col]
+
+            for j in range(col, 6):
+                m[r][j] -= f * m[col][j]
+
+    coef = [0.0] * 5
+
+    for i in range(4, -1, -1):
+        s = m[i][5]
+
+        for j in range(i + 1, 5):
+            s -= m[i][j] * coef[j]
+
+        coef[i] = s / m[i][i]
+
+    return coef
+
+
+def _plane_ellipse_deviation(all_pts, po, ax, ay, cx, cy, semi_a, semi_b, cos_t, sin_t):
+    """Largest distance from the points to the ellipse (cx, cy, semi_a, semi_b, theta) in the plane's frame."""
+
+    max_ell_dev = 0.0
+
+    for p in all_pts:
+        px2, py2 = _plane_coords_2d(p, po, ax, ay)
+        lx = cos_t * (px2 - cx) + sin_t * (py2 - cy)
+        ly = -sin_t * (px2 - cx) + cos_t * (py2 - cy)
+        ang = math.atan2(ly / semi_b, lx / semi_a)
+        ex = cx + semi_a * math.cos(ang) * cos_t - semi_b * math.sin(ang) * sin_t
+        ey = cy + semi_a * math.cos(ang) * sin_t + semi_b * math.sin(ang) * cos_t
+        max_ell_dev = max(max_ell_dev, math.hypot(px2 - ex, py2 - ey))
+
+    return max_ell_dev
+
+
+def _fit_plane_ellipse(all_pts, plane):
+    """Exact ellipse of a closed planar trace from a least-squares conic, invalid when it deviates."""
+
+    ax = plane.x_axis
+    ay = plane.y_axis
+    po = plane.origin
+    coef = _fit_plane_conic(all_pts, po, ax, ay)
+
+    if coef is None:
+        return NurbsCurve()
+
+    ca = coef[0]
+    cb = coef[1]
+    cc = coef[2]
+    cd = coef[3]
+    ce = coef[4]
+    disc = cb * cb - 4 * ca * cc
+
+    if disc >= -1e-10 or abs(ca) <= 1e-14:
+        return NurbsCurve()
+
+    max_conic_dev = 0.0
+
+    for p in all_pts:
+        x, y = _plane_coords_2d(p, po, ax, ay)
+        max_conic_dev = max(
+            max_conic_dev,
+            abs(ca * x * x + cb * x * y + cc * y * y + cd * x + ce * y - 1.0),
+        )
+
+    if max_conic_dev / max(max(abs(ca), abs(cc)), 1e-10) >= 0.01:
+        return NurbsCurve()
+
+    det = 4 * ca * cc - cb * cb
+    cx = (cb * ce - 2 * cc * cd) / det
+    cy = (cb * cd - 2 * ca * ce) / det
+    theta = 0.5 * math.atan2(cb, ca - cc)
+    cos_t = math.cos(theta)
+    sin_t = math.sin(theta)
+    a2 = ca * cos_t * cos_t + cb * cos_t * sin_t + cc * sin_t * sin_t
+    c2 = ca * sin_t * sin_t - cb * cos_t * sin_t + cc * cos_t * cos_t
+    rhs = -(ca * cx * cx + cb * cx * cy + cc * cy * cy + cd * cx + ce * cy - 1.0)
+
+    if rhs <= 1e-14 or a2 <= 1e-14 or c2 <= 1e-14:
+        return NurbsCurve()
+
+    semi_a = math.sqrt(rhs / a2)
+    semi_b = math.sqrt(rhs / c2)
+    cx3d = po[0] + cx * ax[0] + cy * ay[0]
+    cy3d = po[1] + cx * ax[1] + cy * ay[1]
+    cz3d = po[2] + cx * ax[2] + cy * ay[2]
+    ea = [0.0, 0.0, 0.0]
+    eb = [0.0, 0.0, 0.0]
+
+    for d in range(3):
+        ea[d] = cos_t * ax[d] + sin_t * ay[d]
+        eb[d] = -sin_t * ax[d] + cos_t * ay[d]
+
+    crv = _ellipse_nurbs(cx3d, cy3d, cz3d, ea, eb, semi_a, semi_b)
+
+    ell_tol = max(max(semi_a, semi_b) * 1e-5, 2e-6)
+
+    if (
+        _plane_ellipse_deviation(
+            all_pts, po, ax, ay, cx, cy, semi_a, semi_b, cos_t, sin_t
+        )
+        > ell_tol
+    ):
+        return NurbsCurve()
+
+    return crv
+
+
 def _surface_plane_fit_3d(
     all_pts, is_loop, plane, step, uv_to_3d, uv_to_3d_min, allow_conics=True
 ):
@@ -1998,238 +2409,10 @@ def _surface_plane_fit_3d(
     crv = NurbsCurve()
 
     if allow_conics and is_loop and len(all_pts) >= 6:
-        ax = plane.x_axis
-        ay = plane.y_axis
-        po = plane.origin
-
-        def to2d_circle(p):
-            dx = p[0] - po[0]
-            dy = p[1] - po[1]
-            dz = p[2] - po[2]
-
-            return (
-                dx * ax[0] + dy * ax[1] + dz * ax[2],
-                dx * ay[0] + dy * ay[1] + dz * ay[2],
-            )
-
-        n = len(all_pts)
-        x1, y1 = to2d_circle(all_pts[0])
-        x2, y2 = to2d_circle(all_pts[n // 3])
-        x3, y3 = to2d_circle(all_pts[2 * n // 3])
-
-        ax_ = x2 - x1
-        ay_ = y2 - y1
-        bx_ = x3 - x1
-        by_ = y3 - y1
-        D = 2.0 * (ax_ * by_ - ay_ * bx_)
-
-        if abs(D) > 1e-10:
-            a2 = ax_ * ax_ + ay_ * ay_
-            b2 = bx_ * bx_ + by_ * by_
-            ccx = x1 + (by_ * a2 - ay_ * b2) / D
-            ccy = y1 + (ax_ * b2 - bx_ * a2) / D
-            radius = math.hypot(x1 - ccx, y1 - ccy)
-
-            max_dev = 0.0
-
-            for p in all_pts:
-                px, py = to2d_circle(p)
-                max_dev = max(max_dev, abs(math.hypot(px - ccx, py - ccy) - radius))
-
-            circle_tol = max(radius * 1e-4, 1e-6)
-
-            if radius > 1e-10 and max_dev < circle_tol:
-                cx3d = po[0] + ccx * ax[0] + ccy * ay[0]
-                cy3d = po[1] + ccx * ax[1] + ccy * ay[1]
-                cz3d = po[2] + ccx * ax[2] + ccy * ay[2]
-
-                w = math.sqrt(2.0) / 2.0
-                cx_ = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-                cy_ = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-                wts = [1, w, 1, w, 1, w, 1, w, 1]
-                crv = NurbsCurve(3, True, 3, 9)
-                nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-
-                for i in range(10):
-                    crv.set_nurbsknot(i, nurbsknots[i])
-
-                for i in range(9):
-                    px = cx3d + radius * (cx_[i] * ax[0] + cy_[i] * ay[0])
-                    py = cy3d + radius * (cx_[i] * ax[1] + cy_[i] * ay[1])
-                    pz = cz3d + radius * (cx_[i] * ax[2] + cy_[i] * ay[2])
-                    crv.set_cv_4d(i, px * wts[i], py * wts[i], pz * wts[i], wts[i])
+        crv = _fit_plane_circle(all_pts, plane)
 
     if not crv.is_valid() and allow_conics and is_loop and len(all_pts) >= 8:
-        ax = plane.x_axis
-        ay = plane.y_axis
-        po = plane.origin
-
-        def to2d_ellipse(p):
-            dx = p[0] - po[0]
-            dy = p[1] - po[1]
-            dz = p[2] - po[2]
-
-            return (
-                dx * ax[0] + dy * ax[1] + dz * ax[2],
-                dx * ay[0] + dy * ay[1] + dz * ay[2],
-            )
-
-        n = len(all_pts)
-        AtA = [[0.0] * 5 for _ in range(5)]
-        Atb = [0.0] * 5
-
-        for i in range(n):
-            x, y = to2d_ellipse(all_pts[i])
-            row = [x * x, x * y, y * y, x, y]
-
-            for r in range(5):
-                Atb[r] += row[r]
-
-                for c in range(5):
-                    AtA[r][c] += row[r] * row[c]
-
-        M = [[0.0] * 6 for _ in range(5)]
-
-        for r in range(5):
-            for c in range(5):
-                M[r][c] = AtA[r][c]
-
-            M[r][5] = Atb[r]
-
-        ok = True
-
-        for col in range(5):
-            if not ok:
-                break
-
-            pivot = col
-
-            for r in range(col + 1, 5):
-                if math.fabs(M[r][col]) > math.fabs(M[pivot][col]):
-                    pivot = r
-
-            if math.fabs(M[pivot][col]) < 1e-20:
-                ok = False
-                break
-
-            if pivot != col:
-                M[col], M[pivot] = M[pivot], M[col]
-
-            for r in range(col + 1, 5):
-                f = M[r][col] / M[col][col]
-
-                for j in range(col, 6):
-                    M[r][j] -= f * M[col][j]
-
-        coef = [0.0] * 5
-
-        if ok:
-            for i in range(4, -1, -1):
-                s = M[i][5]
-
-                for j in range(i + 1, 5):
-                    s -= M[i][j] * coef[j]
-
-                coef[i] = s / M[i][i]
-
-        A_c = coef[0]
-        B_c = coef[1]
-        C_c = coef[2]
-        D_c = coef[3]
-        E_c = coef[4]
-        disc = B_c * B_c - 4 * A_c * C_c
-
-        if ok and disc < -1e-10 and math.fabs(A_c) > 1e-14:
-            max_conic_dev = 0.0
-
-            for p in all_pts:
-                x, y = to2d_ellipse(p)
-                val = A_c * x * x + B_c * x * y + C_c * y * y + D_c * x + E_c * y - 1.0
-                max_conic_dev = max(max_conic_dev, math.fabs(val))
-
-            scale = max(math.fabs(A_c), math.fabs(C_c))
-            norm_dev = max_conic_dev / max(scale, 1e-10)
-
-            if norm_dev < 0.01:
-                det = 4 * A_c * C_c - B_c * B_c
-                cx = (B_c * E_c - 2 * C_c * D_c) / det
-                cy = (B_c * D_c - 2 * A_c * E_c) / det
-
-                theta = 0.5 * math.atan2(B_c, A_c - C_c)
-                cos_t = math.cos(theta)
-                sin_t = math.sin(theta)
-                A2 = A_c * cos_t * cos_t + B_c * cos_t * sin_t + C_c * sin_t * sin_t
-                C2 = A_c * sin_t * sin_t - B_c * cos_t * sin_t + C_c * cos_t * cos_t
-                f_val = (
-                    A_c * cx * cx
-                    + B_c * cx * cy
-                    + C_c * cy * cy
-                    + D_c * cx
-                    + E_c * cy
-                    - 1.0
-                )
-                rhs = -f_val
-
-                if rhs > 1e-14 and A2 > 1e-14 and C2 > 1e-14:
-                    semi_a = math.sqrt(rhs / A2)
-                    semi_b = math.sqrt(rhs / C2)
-
-                    cx3d = po[0] + cx * ax[0] + cy * ay[0]
-                    cy3d = po[1] + cx * ax[1] + cy * ay[1]
-                    cz3d = po[2] + cx * ax[2] + cy * ay[2]
-
-                    ea = Vector(
-                        cos_t * ax[0] + sin_t * ay[0],
-                        cos_t * ax[1] + sin_t * ay[1],
-                        cos_t * ax[2] + sin_t * ay[2],
-                    )
-                    eb = Vector(
-                        -sin_t * ax[0] + cos_t * ay[0],
-                        -sin_t * ax[1] + cos_t * ay[1],
-                        -sin_t * ax[2] + cos_t * ay[2],
-                    )
-
-                    w = math.sqrt(2.0) / 2.0
-                    cx_ = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-                    cy_ = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-                    wts = [1, w, 1, w, 1, w, 1, w, 1]
-                    crv = NurbsCurve(3, True, 3, 9)
-                    nurbsknots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-
-                    for i in range(10):
-                        crv.set_nurbsknot(i, nurbsknots[i])
-
-                    for i in range(9):
-                        px = cx3d + semi_a * cx_[i] * ea[0] + semi_b * cy_[i] * eb[0]
-                        py = cy3d + semi_a * cx_[i] * ea[1] + semi_b * cy_[i] * eb[1]
-                        pz = cz3d + semi_a * cx_[i] * ea[2] + semi_b * cy_[i] * eb[2]
-                        crv.set_cv_4d(i, px * wts[i], py * wts[i], pz * wts[i], wts[i])
-
-                    et0, et1 = crv.domain()
-                    max_ell_dev = 0.0
-
-                    for p in all_pts:
-                        px2, py2 = to2d_ellipse(p)
-                        lx = cos_t * (px2 - cx) + sin_t * (py2 - cy)
-                        ly = -sin_t * (px2 - cx) + cos_t * (py2 - cy)
-                        ang = math.atan2(ly / semi_b, lx / semi_a)
-                        ex = (
-                            cx
-                            + semi_a * math.cos(ang) * cos_t
-                            - semi_b * math.sin(ang) * sin_t
-                        )
-                        ey = (
-                            cy
-                            + semi_a * math.cos(ang) * sin_t
-                            + semi_b * math.sin(ang) * cos_t
-                        )
-                        dev = math.hypot(px2 - ex, py2 - ey)
-                        max_ell_dev = max(max_ell_dev, dev)
-
-                    ell_tol = max(semi_a, semi_b) * 5e-3
-
-                    if max_ell_dev > ell_tol:
-                        crv = NurbsCurve()
+        crv = _fit_plane_ellipse(all_pts, plane)
 
     if not crv.is_valid():
         crv = _fit_planar_freeform(
@@ -2365,7 +2548,12 @@ def _snap_to_seam(field, pa, q):
 def _round_half_away(x):
     """Round half away from zero like std::round."""
 
-    return math.floor(x + 0.5) if x >= 0.0 else -math.floor(-x + 0.5)
+    r = math.floor(abs(x))
+
+    if abs(x) - r >= 0.5:
+        r += 1
+
+    return r if x >= 0.0 else -r
 
 
 def _split_at_seams(field, pts):
@@ -2649,39 +2837,39 @@ def _piece_curves(field, plane, piece):
     return crv3, pcurve
 
 
-def _solve_gauss(M, rhs, n):
+def _solve_gauss(m, rhs, n):
     """Solve an n x n linear system by Gaussian elimination with partial pivoting."""
 
-    A = [list(M[r]) + [rhs[r]] for r in range(n)]
+    a = [list(m[r]) + [rhs[r]] for r in range(n)]
 
     for col in range(n):
         pivot = col
 
         for r in range(col + 1, n):
-            if abs(A[r][col]) > abs(A[pivot][col]):
+            if abs(a[r][col]) > abs(a[pivot][col]):
                 pivot = r
 
-        if abs(A[pivot][col]) < 1e-20:
+        if abs(a[pivot][col]) < 1e-20:
             return None
 
         if pivot != col:
-            A[col], A[pivot] = A[pivot], A[col]
+            a[col], a[pivot] = a[pivot], a[col]
 
         for r in range(col + 1, n):
-            f = A[r][col] / A[col][col]
+            f = a[r][col] / a[col][col]
 
             for j in range(col, n + 1):
-                A[r][j] -= f * A[col][j]
+                a[r][j] -= f * a[col][j]
 
     x = [0.0] * n
 
     for i in range(n - 1, -1, -1):
-        s = A[i][n]
+        s = a[i][n]
 
         for j in range(i + 1, n):
-            s -= A[i][j] * x[j]
+            s -= a[i][j] * x[j]
 
-        x[i] = s / A[i][i]
+        x[i] = s / a[i][i]
 
     return x
 
@@ -2692,98 +2880,90 @@ def _solve_gauss(M, rhs, n):
 
 
 def _ssi_dot(u, v):
-    """Dot product of two V3."""
+    """Dot product of two triples."""
     return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
 
 
 def _ssi_cross(u, v):
-    """Cross product of two V3."""
-
-    return (
+    """Cross product of two triples."""
+    return [
         u[1] * v[2] - u[2] * v[1],
         u[2] * v[0] - u[0] * v[2],
         u[0] * v[1] - u[1] * v[0],
-    )
+    ]
 
 
 def _ssi_unit(v):
-    """Unit V3, or the input when degenerate."""
+    """Unit triple, or the input when degenerate."""
+
     length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
 
-    return (v[0] / length, v[1] / length, v[2] / length) if length > 1e-300 else v
+    return [v[0] / length, v[1] / length, v[2] / length] if length > 1e-300 else list(v)
+
+
+def _normalize_axis(v):
+    """Normalize a triple in place; false when shorter than 1e-12."""
+
+    length = math.sqrt(_ssi_dot(v, v))
+
+    if length < 1e-12:
+        return False
+
+    v[0] /= length
+    v[1] /= length
+    v[2] /= length
+
+    return True
 
 
 def _ortho_basis(n):
     """Two unit vectors spanning the plane perpendicular to unit n."""
 
-    ax = 1.0 if abs(n[0]) <= abs(n[1]) and abs(n[0]) <= abs(n[2]) else 0.0
-    ay = 1.0 if ax == 0.0 and abs(n[1]) <= abs(n[2]) else 0.0
-    az = 1.0 if ax == 0.0 and ay == 0.0 else 0.0
+    ax = 1.0 if (abs(n[0]) <= abs(n[1]) and abs(n[0]) <= abs(n[2])) else 0.0
+    ay = 1.0 if (ax == 0.0 and abs(n[1]) <= abs(n[2])) else 0.0
+    az = 1.0 if (ax == 0.0 and ay == 0.0) else 0.0
     ux = ay * n[2] - az * n[1]
     uy = az * n[0] - ax * n[2]
     uz = ax * n[1] - ay * n[0]
     ul = math.sqrt(ux * ux + uy * uy + uz * uz)
-    ux, uy, uz = ux / ul, uy / ul, uz / ul
+    ux /= ul
+    uy /= ul
+    uz /= ul
     vx = n[1] * uz - n[2] * uy
     vy = n[2] * ux - n[0] * uz
     vz = n[0] * uy - n[1] * ux
 
-    return (ux, uy, uz), (vx, vy, vz)
+    return [ux, uy, uz], [vx, vy, vz]
 
 
 def _exact_circle(cx, cy, cz, xa, ya, radius):
-    """Exact 9-CV rational NURBS circle."""
+    """Exact 9-CV rational NURBS circle on domain [0, 1]."""
 
-    w = math.sqrt(2.0) / 2.0
-    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-    wts = [1, w, 1, w, 1, w, 1, w, 1]
-    crv = NurbsCurve(3, True, 3, 9)
-    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-
-    for i in range(10):
-        crv.set_nurbsknot(i, float(knots[i]))
-
-    for i in range(9):
-        x = cx + radius * (px[i] * xa[0] + py[i] * ya[0])
-        y = cy + radius * (px[i] * xa[1] + py[i] * ya[1])
-        z = cz + radius * (px[i] * xa[2] + py[i] * ya[2])
-        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
-
+    crv = _circle_nurbs(cx, cy, cz, xa, ya, radius)
     crv.set_domain(0.0, 1.0)
 
     return crv
 
 
 def _exact_ellipse(cx, cy, cz, ea, eb, semi_a, semi_b):
-    """Exact 9-CV rational NURBS ellipse."""
+    """Exact 9-CV rational NURBS ellipse on domain [0, 1]."""
 
-    w = math.sqrt(2.0) / 2.0
-    px = [1, 1, 0, -1, -1, -1, 0, 1, 1]
-    py = [0, 1, 1, 1, 0, -1, -1, -1, 0]
-    wts = [1, w, 1, w, 1, w, 1, w, 1]
-    crv = NurbsCurve(3, True, 3, 9)
-    knots = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4]
-
-    for i in range(10):
-        crv.set_nurbsknot(i, float(knots[i]))
-
-    for i in range(9):
-        x = cx + semi_a * px[i] * ea[0] + semi_b * py[i] * eb[0]
-        y = cy + semi_a * px[i] * ea[1] + semi_b * py[i] * eb[1]
-        z = cz + semi_a * px[i] * ea[2] + semi_b * py[i] * eb[2]
-        crv.set_cv_4d(i, x * wts[i], y * wts[i], z * wts[i], wts[i])
-
+    crv = _ellipse_nurbs(cx, cy, cz, ea, eb, semi_a, semi_b)
     crv.set_domain(0.0, 1.0)
 
     return crv
 
 
-def _jacobi_eig3(M):
+def _jacobi_eig3(m):
     """Eigenvalues/vectors of a symmetric 3x3 matrix (cyclic Jacobi)."""
 
-    a = [[M[r][c] for c in range(3)] for r in range(3)]
-    v = [[1.0 if r == c else 0.0 for c in range(3)] for r in range(3)]
+    a = [[0.0] * 3 for _ in range(3)]
+    v = [[0.0] * 3 for _ in range(3)]
+
+    for r in range(3):
+        for c in range(3):
+            a[r][c] = float(m[r][c])
+            v[r][c] = 1.0 if r == c else 0.0
 
     for _ in range(50):
         off = abs(a[0][1]) + abs(a[0][2]) + abs(a[1][2])
@@ -2803,71 +2983,115 @@ def _jacobi_eig3(M):
             s = t * c
 
             for k in range(3):
-                akp, akq = a[k][p], a[k][q]
+                akp = a[k][p]
+                akq = a[k][q]
                 a[k][p] = c * akp - s * akq
                 a[k][q] = s * akp + c * akq
 
             for k in range(3):
-                apk, aqk = a[p][k], a[q][k]
+                apk = a[p][k]
+                aqk = a[q][k]
                 a[p][k] = c * apk - s * aqk
                 a[q][k] = s * apk + c * aqk
 
             for k in range(3):
-                vkp, vkq = v[k][p], v[k][q]
+                vkp = v[k][p]
+                vkq = v[k][q]
                 v[k][p] = c * vkp - s * vkq
                 v[k][q] = s * vkp + c * vkq
 
     eigvals = [a[0][0], a[1][1], a[2][2]]
-    eigvecs = [(v[0][k], v[1][k], v[2][k]) for k in range(3)]
+    eigvecs = []
+
+    for k in range(3):
+        eigvecs.append([v[0][k], v[1][k], v[2][k]])
 
     return eigvals, eigvecs
 
 
-def _fit_cylinder(surface, tol):
-    """Recognize a cylinder from surface samples: axis point, axis direction and radius."""
+def _smallest_eigenvector(m):
+    """Eigenvector of the smallest eigenvalue of a symmetric 3x3 matrix."""
+
+    evals, evecs = _jacobi_eig3(m)
+    kmin = 0
+
+    for k in range(1, 3):
+        if evals[k] < evals[kmin]:
+            kmin = k
+
+    return evecs[kmin]
+
+
+def _largest_eigenvector(m):
+    """Eigenvector of the largest eigenvalue of a symmetric 3x3 matrix."""
+
+    evals, evecs = _jacobi_eig3(m)
+    kmax = 0
+
+    for k in range(1, 3):
+        if evals[k] > evals[kmax]:
+            kmax = k
+
+    return evecs[kmax]
+
+
+class _RecogSurface:
+    """Recognized-surface descriptor."""
+
+    NONE = 0
+    PLANE = 1
+    SPHERE = 2
+    CYLINDER = 3
+    CONE = 4
+    TORUS = 5
+
+    def __init__(self):
+        self.kind = _RecogSurface.NONE  # Recognized kind.
+        self.p1 = [0.0, 0.0, 0.0]  # Origin, center or apex.
+        self.p2 = [0.0, 0.0, 0.0]  # Normal or axis.
+        self.r = 0.0  # Radius or major radius.
+        self.r2 = 0.0  # Half angle or minor radius.
+
+
+def _sample_grid(surface, n, div):
+    """Points of an n x n parameter grid stepping the domain by 1 / div."""
 
     u0, u1 = surface.domain(0)
     v0, v1 = surface.domain(1)
     pts = []
+
+    for i in range(n):
+        for j in range(n):
+            p = surface.point_at(u0 + (u1 - u0) * i / div, v0 + (v1 - v0) * j / div)
+            pts.append([p[0], p[1], p[2]])
+
+    return pts
+
+
+def _sample_grid_normals(surface, n, div):
+    """Normals of an n x n parameter grid stepping the domain by 1 / div."""
+
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
     nrm = []
 
-    for i in range(5):
-        for j in range(5):
-            uu = u0 + (u1 - u0) * i / 4.0
-            vv = v0 + (v1 - v0) * j / 4.0
-            pts.append(surface.point_at(uu, vv))
-            n = surface.normal_at(uu, vv)
-            nrm.append((n[0], n[1], n[2]))
+    for i in range(n):
+        for j in range(n):
+            v = surface.normal_at(u0 + (u1 - u0) * i / div, v0 + (v1 - v0) * j / div)
+            nrm.append([v[0], v[1], v[2]])
 
-    M = [[0.0] * 3 for _ in range(3)]
+    return nrm
 
-    for n in nrm:
-        for r in range(3):
-            for c in range(3):
-                M[r][c] += n[r] * n[c]
 
-    evals, evecs = _jacobi_eig3(M)
-    kmin = min(range(3), key=lambda k: evals[k])
-    w = evecs[kmin]
-    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
+def _fit_circle_2d(xy):
+    """Least-squares circle through 2D samples: center and squared radius, None when singular."""
 
-    if wl < 1e-12:
-        return None
-
-    w = (w[0] / wl, w[1] / wl, w[2] / wl)
-    ea, eb = _ortho_basis(w)
-    p0 = pts[0]
     ata = [[0.0] * 3 for _ in range(3)]
     atb = [0.0] * 3
-    proj = []
 
-    for p in pts:
-        dp = (p[0] - p0[0], p[1] - p0[1], p[2] - p0[2])
-        x = dp[0] * ea[0] + dp[1] * ea[1] + dp[2] * ea[2]
-        y = dp[0] * eb[0] + dp[1] * eb[1] + dp[2] * eb[2]
-        proj.append((x, y))
-        row = [x, y, 1.0]
-        rhs = -(x * x + y * y)
+    for p in xy:
+        row = [p[0], p[1], 1.0]
+        rhs = -(p[0] * p[0] + p[1] * p[1])
 
         for r in range(3):
             atb[r] += row[r] * rhs
@@ -2880,58 +3104,98 @@ def _fit_cylinder(surface, tol):
     if sol is None:
         return None
 
-    ccx, ccy = -sol[0] / 2.0, -sol[1] / 2.0
-    r2 = ccx * ccx + ccy * ccy - sol[2]
+    cx = -sol[0] / 2.0
+    cy = -sol[1] / 2.0
 
-    if r2 <= 1e-18:
+    return cx, cy, cx * cx + cy * cy - sol[2]
+
+
+def _fit_cylinder(surface, tol):
+    """Recognize a cylinder from surface samples: axis point, axis direction and radius."""
+
+    pts = _sample_grid(surface, 5, 4.0)
+    nrm = _sample_grid_normals(surface, 5, 4.0)
+    m = [[0.0] * 3 for _ in range(3)]
+
+    for n in nrm:
+        for r in range(3):
+            for c in range(3):
+                m[r][c] += n[r] * n[c]
+
+    w = _smallest_eigenvector(m)
+
+    if not _normalize_axis(w):
         return None
 
+    ea, eb = _ortho_basis(w)
+    p0 = pts[0]
+    proj = []
+
+    for p in pts:
+        dp = [p[0] - p0[0], p[1] - p0[1], p[2] - p0[2]]
+        proj.append((_ssi_dot(dp, ea), _ssi_dot(dp, eb)))
+
+    circle = _fit_circle_2d(proj)
+
+    if circle is None or circle[2] <= 1e-18:
+        return None
+
+    ccx, ccy, r2 = circle
     r = math.sqrt(r2)
 
-    for x, y in proj:
-        if abs(math.sqrt((x - ccx) ** 2 + (y - ccy) ** 2) - r) > tol:
+    for pr in proj:
+        if (
+            abs(
+                math.sqrt((pr[0] - ccx) * (pr[0] - ccx) + (pr[1] - ccy) * (pr[1] - ccy))
+                - r
+            )
+            > tol
+        ):
             return None
 
-    axis_pt = (
+    axis_pt = [
         p0[0] + ccx * ea[0] + ccy * eb[0],
         p0[1] + ccx * ea[1] + ccy * eb[1],
         p0[2] + ccx * ea[2] + ccy * eb[2],
-    )
+    ]
 
-    return (axis_pt, w, r)
+    return axis_pt, w, r
 
 
-def _fit_cone(surface, tol):
-    """Recognize a cone from surface samples: apex, axis and half angle."""
+def _sample_cone(surface):
+    """Cone samples on an 8 x 5 grid with the unit normals that are not degenerate."""
 
     u0, u1 = surface.domain(0)
     v0, v1 = surface.domain(1)
     pts = []
     nrm = []
-    nu_s = 8
 
-    for i in range(nu_s):
-        uu = u0 + (u1 - u0) * i / nu_s
+    for i in range(8):
+        uu = u0 + (u1 - u0) * i / 8.0
 
         for j in range(5):
             vv = v0 + (v1 - v0) * j / 4.0
-            pts.append(surface.point_at(uu, vv))
+            p = surface.point_at(uu, vv)
+            pts.append([p[0], p[1], p[2]])
             n = surface.normal_at(uu, vv)
-            nl = math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+            nl = math.sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2])
 
             if nl < 1e-12:
                 continue
 
-            nrm.append(((n[0] / nl, n[1] / nl, n[2] / nl), surface.point_at(uu, vv)))
+            nrm.append(([n[0] / nl, n[1] / nl, n[2] / nl], [p[0], p[1], p[2]]))
 
-    if len(nrm) < 4:
-        return None
+    return pts, nrm
+
+
+def _cone_apex(nrm):
+    """Least-squares meeting point of the tangent planes through (unit normal, point) samples."""
 
     ata = [[0.0] * 3 for _ in range(3)]
     atb = [0.0] * 3
 
     for n, p in nrm:
-        npd = n[0] * p[0] + n[1] * p[1] + n[2] * p[2]
+        npd = _ssi_dot(n, p)
 
         for r in range(3):
             atb[r] += n[r] * npd
@@ -2939,81 +3203,88 @@ def _fit_cone(surface, tol):
             for c in range(3):
                 ata[r][c] += n[r] * n[c]
 
-    V = _solve_gauss(ata, atb, 3)
+    return _solve_gauss(ata, atb, 3)
 
-    if V is None:
+
+def _cone_axis(gs):
+    """Mean generator direction of unit apex-to-sample vectors, oriented away from the apex."""
+
+    gram = [[0.0] * 3 for _ in range(3)]
+
+    for g in gs:
+        for r in range(3):
+            for c in range(3):
+                gram[r][c] += g[r] * g[c]
+
+    w = _largest_eigenvector(gram)
+    sx = [0.0, 0.0, 0.0]
+
+    for g in gs:
+        sx[0] += g[0]
+        sx[1] += g[1]
+        sx[2] += g[2]
+
+    if _ssi_dot(w, sx) < 0.0:
+        w = [-w[0], -w[1], -w[2]]
+
+    if not _normalize_axis(w):
+        return None
+
+    return w
+
+
+def _fit_cone(surface, tol):
+    """Recognize a cone from surface samples: apex, axis and half angle."""
+
+    pts, nrm = _sample_cone(surface)
+    vertex = _cone_apex(nrm) if len(nrm) >= 4 else None
+
+    if vertex is None:
         return None
 
     gs = []
 
     for p in pts:
-        d = (p[0] - V[0], p[1] - V[1], p[2] - V[2])
-        dl = math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2)
+        d = [p[0] - vertex[0], p[1] - vertex[1], p[2] - vertex[2]]
+        dl = math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
 
         if dl < tol:
             continue
 
-        gs.append((d[0] / dl, d[1] / dl, d[2] / dl))
+        gs.append([d[0] / dl, d[1] / dl, d[2] / dl])
 
-    if len(gs) < 3:
+    w = _cone_axis(gs) if len(gs) >= 3 else None
+
+    if w is None:
         return None
 
-    G = [[0.0] * 3 for _ in range(3)]
+    sumang = 0.0
 
     for g in gs:
-        for r in range(3):
-            for c in range(3):
-                G[r][c] += g[r] * g[c]
+        sumang += math.acos(max(-1.0, min(1.0, _ssi_dot(g, w))))
 
-    gevals, gevecs = _jacobi_eig3(G)
-    kmax = max(range(3), key=lambda k: gevals[k])
-    w = gevecs[kmax]
-    sx = (sum(g[0] for g in gs), sum(g[1] for g in gs), sum(g[2] for g in gs))
+    alpha = sumang / len(gs)
 
-    if w[0] * sx[0] + w[1] * sx[1] + w[2] * sx[2] < 0.0:
-        w = (-w[0], -w[1], -w[2])
-
-    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
-
-    if wl < 1e-12:
-        return None
-
-    w = (w[0] / wl, w[1] / wl, w[2] / wl)
-    angs = [
-        math.acos(max(-1.0, min(1.0, g[0] * w[0] + g[1] * w[1] + g[2] * w[2])))
-        for g in gs
-    ]
-    alpha = sum(angs) / len(angs)
-
-    if alpha < 1e-4 or alpha > math.pi / 2 - 1e-4:
+    if alpha < 1e-4 or alpha > PI / 2 - 1e-4:
         return None
 
     ca = math.cos(alpha)
 
     for p in pts:
-        d = (p[0] - V[0], p[1] - V[1], p[2] - V[2])
-        axd = d[0] * w[0] + d[1] * w[1] + d[2] * w[2]
-        perp = math.sqrt(max(0.0, (d[0] ** 2 + d[1] ** 2 + d[2] ** 2) - axd * axd))
+        d = [p[0] - vertex[0], p[1] - vertex[1], p[2] - vertex[2]]
+        axd = _ssi_dot(d, w)
+        perp = math.sqrt(max(0.0, _ssi_dot(d, d) - axd * axd))
 
         if abs(perp - axd * math.tan(alpha)) * ca > tol:
             return None
 
-    return ((V[0], V[1], V[2]), w, alpha)
+    return [vertex[0], vertex[1], vertex[2]], w, alpha
 
 
 def _fit_sphere(surface, tol):
     """Recognize a sphere from surface samples: center and radius."""
 
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    pts = []
-
-    for i in range(5):
-        for j in range(5):
-            uu = u0 + (u1 - u0) * i / 4.0
-            vv = v0 + (v1 - v0) * j / 4.0
-            pts.append(surface.point_at(uu, vv))
-
+    pts = _sample_grid(surface, 5, 4.0)
     ata = [[0.0] * 4 for _ in range(4)]
     atb = [0.0] * 4
 
@@ -3032,8 +3303,10 @@ def _fit_sphere(surface, tol):
     if sol is None:
         return None
 
-    cx, cy, cz = -sol[0] / 2.0, -sol[1] / 2.0, -sol[2] / 2.0
-    r2 = cx * cx + cy * cy + cz * cz - sol[3]
+    ccx = -sol[0] / 2.0
+    ccy = -sol[1] / 2.0
+    ccz = -sol[2] / 2.0
+    r2 = ccx * ccx + ccy * ccy + ccz * ccz - sol[3]
 
     if r2 <= 0.0:
         return None
@@ -3041,277 +3314,1799 @@ def _fit_sphere(surface, tol):
     r = math.sqrt(r2)
 
     for p in pts:
-        d = math.sqrt((p[0] - cx) ** 2 + (p[1] - cy) ** 2 + (p[2] - cz) ** 2)
+        d = math.sqrt(
+            (p[0] - ccx) * (p[0] - ccx)
+            + (p[1] - ccy) * (p[1] - ccy)
+            + (p[2] - ccz) * (p[2] - ccz)
+        )
 
         if abs(d - r) > tol:
             return None
 
-    return (cx, cy, cz, r)
+    return ccx, ccy, ccz, r
+
+
+def _principal_axis(pts):
+    """Centroid of the points and the unit direction of least spread about it; None when degenerate."""
+
+    n = len(pts)
+    cen = [0.0, 0.0, 0.0]
+
+    for p in pts:
+        cen[0] += p[0]
+        cen[1] += p[1]
+        cen[2] += p[2]
+
+    cen[0] /= n
+    cen[1] /= n
+    cen[2] /= n
+    m = [[0.0] * 3 for _ in range(3)]
+
+    for p in pts:
+        d = [p[0] - cen[0], p[1] - cen[1], p[2] - cen[2]]
+
+        for r in range(3):
+            for c in range(3):
+                m[r][c] += d[r] * d[c]
+
+    w = _smallest_eigenvector(m)
+
+    if not _normalize_axis(w):
+        return None
+
+    return cen, w
 
 
 def _fit_torus(surface, tol):
     """Recognize a torus from the smallest-variance axis and a tube cross-section circle fit."""
 
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    pts = []
+    pts = _sample_grid(surface, 8, 8.0)
+    axis = _principal_axis(pts)
 
-    for i in range(8):
-        for j in range(8):
-            pts.append(
-                surface.point_at(u0 + (u1 - u0) * i / 8.0, v0 + (v1 - v0) * j / 8.0)
-            )
-
-    n = len(pts)
-    cen = [sum(p[k] for p in pts) / n for k in range(3)]
-    M = [[0.0] * 3 for _ in range(3)]
-
-    for p in pts:
-        d = (p[0] - cen[0], p[1] - cen[1], p[2] - cen[2])
-
-        for r in range(3):
-            for c in range(3):
-                M[r][c] += d[r] * d[c]
-
-    evals, evecs = _jacobi_eig3(M)
-    kmin = min(range(3), key=lambda k: evals[k])
-    w = evecs[kmin]
-    wl = math.sqrt(w[0] ** 2 + w[1] ** 2 + w[2] ** 2)
-
-    if wl < 1e-12:
+    if axis is None:
         return None
 
-    w = (w[0] / wl, w[1] / wl, w[2] / wl)
-    ata = [[0.0] * 3 for _ in range(3)]
-    atb = [0.0] * 3
+    cen, w = axis
     rhoa = []
 
     for p in pts:
-        d = (p[0] - cen[0], p[1] - cen[1], p[2] - cen[2])
-        a = d[0] * w[0] + d[1] * w[1] + d[2] * w[2]
-        perp = (d[0] - a * w[0], d[1] - a * w[1], d[2] - a * w[2])
-        rho = math.sqrt(perp[0] ** 2 + perp[1] ** 2 + perp[2] ** 2)
-        rhoa.append((rho, a))
-        row = [rho, a, 1.0]
-        rhs = -(rho * rho + a * a)
+        d = [p[0] - cen[0], p[1] - cen[1], p[2] - cen[2]]
+        a = _ssi_dot(d, w)
+        perp = [d[0] - a * w[0], d[1] - a * w[1], d[2] - a * w[2]]
+        rhoa.append((math.sqrt(_ssi_dot(perp, perp)), a))
 
-        for r in range(3):
-            atb[r] += row[r] * rhs
+    circle = _fit_circle_2d(rhoa)
 
-            for c in range(3):
-                ata[r][c] += row[r] * row[c]
-
-    sol = _solve_gauss(ata, atb, 3)
-
-    if sol is None:
+    if circle is None or circle[2] <= 1e-18 or circle[0] <= 0.0:
         return None
 
-    R = -sol[0] / 2.0
-    a0 = -sol[1] / 2.0
-    r2 = R * R + a0 * a0 - sol[2]
-
-    if r2 <= 1e-18 or R <= 0.0:
-        return None
-
+    rmaj, a0, r2 = circle
     r = math.sqrt(r2)
 
-    if R <= r * 0.5:
+    if rmaj <= r * 0.5:
         return None
 
-    for rho, a in rhoa:
-        if abs(math.sqrt((rho - R) ** 2 + (a - a0) ** 2) - r) > tol:
+    for ra in rhoa:
+        if (
+            abs(
+                math.sqrt((ra[0] - rmaj) * (ra[0] - rmaj) + (ra[1] - a0) * (ra[1] - a0))
+                - r
+            )
+            > tol
+        ):
             return None
 
-    center = (cen[0] + a0 * w[0], cen[1] + a0 * w[1], cen[2] + a0 * w[2])
+    center = [cen[0] + a0 * w[0], cen[1] + a0 * w[1], cen[2] + a0 * w[2]]
 
-    return (center, w, R, r)
+    return center, w, rmaj, r
+
+
+def _surface_mid_frame(srf):
+    """Point and normal at the middle of the surface domain."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+
+    return srf.point_at((u0 + u1) * 0.5, (v0 + v1) * 0.5), srf.normal_at(
+        (u0 + u1) * 0.5, (v0 + v1) * 0.5
+    )
 
 
 def _recognize_surface(surface, tol):
     """Classify a surface as plane, cylinder, cone, sphere or torus within tol."""
 
+    rs = _RecogSurface()
+
     if surface.is_planar(None, tol):
-        u0, u1 = surface.domain(0)
-        v0, v1 = surface.domain(1)
-        o = surface.point_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
-        n = surface.normal_at((u0 + u1) * 0.5, (v0 + v1) * 0.5)
+        o, n = _surface_mid_frame(surface)
+        rs.kind = _RecogSurface.PLANE
+        rs.p1 = [o[0], o[1], o[2]]
+        rs.p2 = [n[0], n[1], n[2]]
 
-        return ("plane", (o[0], o[1], o[2]), (n[0], n[1], n[2]))
+        return rs
 
-    sph = _fit_sphere(surface, tol)
+    sphere = _fit_sphere(surface, tol)
 
-    if sph is not None:
-        return ("sphere", (sph[0], sph[1], sph[2]), sph[3])
+    if sphere is not None:
+        rs.kind = _RecogSurface.SPHERE
+        rs.p1 = [sphere[0], sphere[1], sphere[2]]
+        rs.r = sphere[3]
 
-    cyl = _fit_cylinder(surface, tol)
+        return rs
 
-    if cyl is not None:
-        return ("cylinder", cyl[0], cyl[1], cyl[2])
+    cylinder = _fit_cylinder(surface, tol)
+    cone = _fit_cone(surface, tol) if cylinder is None else None
+    torus = _fit_torus(surface, tol) if cylinder is None and cone is None else None
 
-    cone = _fit_cone(surface, tol)
+    if cylinder is not None:
+        rs.kind = _RecogSurface.CYLINDER
+        rs.p1, rs.p2, rs.r = cylinder
+    elif cone is not None:
+        rs.kind = _RecogSurface.CONE
+        rs.p1, rs.p2, rs.r = cone
+    elif torus is not None:
+        rs.kind = _RecogSurface.TORUS
+        rs.p1, rs.p2, rs.r, rs.r2 = torus
 
-    if cone is not None:
-        return ("cone", cone[0], cone[1], cone[2])
+    return rs
 
-    tor = _fit_torus(surface, tol)
 
-    if tor is not None:
-        return ("torus", tor[0], tor[1], tor[2], tor[3])
+def _line_cone(x0, d, apex, w, alpha):
+    """Parameters t where x0 + t d meets the double cone of the apex, unit axis w and half angle alpha."""
+
+    ca2 = math.cos(alpha) * math.cos(alpha)
+    e = [x0[0] - apex[0], x0[1] - apex[1], x0[2] - apex[2]]
+    a = _ssi_dot(e, w)
+    b = _ssi_dot(d, w)
+    c = _ssi_dot(e, e)
+    dd = _ssi_dot(e, d)
+    ee = _ssi_dot(d, d)
+    qa = b * b - ca2 * ee
+    qb = 2.0 * a * b - 2.0 * ca2 * dd
+    qc = a * a - ca2 * c
+
+    if abs(qa) < 1e-14:
+        return [] if abs(qb) < 1e-300 else [-qc / qb]
+
+    disc = qb * qb - 4.0 * qa * qc
+
+    if disc < 0.0:
+        return []
+
+    sq = math.sqrt(disc)
+
+    return [(-qb - sq) / (2.0 * qa), (-qb + sq) / (2.0 * qa)]
+
+
+def _ssi_plane_sphere(plane, sph):
+    """Exact plane-sphere circle."""
+
+    o = plane.p1
+    nu = _ssi_unit(plane.p2)
+    c = sph.p1
+    r = sph.r
+    d = (c[0] - o[0]) * nu[0] + (c[1] - o[1]) * nu[1] + (c[2] - o[2]) * nu[2]
+
+    if abs(d) >= r:
+        return None
+
+    cc = [c[0] - d * nu[0], c[1] - d * nu[1], c[2] - d * nu[2]]
+    rr = math.sqrt(r * r - d * d)
+    xa, ya = _ortho_basis(nu)
+
+    return _exact_circle(cc[0], cc[1], cc[2], xa, ya, rr)
+
+
+def _ssi_plane_cylinder(plane, cyl):
+    """Exact plane-cylinder section: an ellipse or nothing."""
+
+    o = plane.p1
+    nu = _ssi_unit(plane.p2)
+    p = cyl.p1
+    w = _ssi_unit(cyl.p2)
+    r = cyl.r
+    wn = _ssi_dot(w, nu)
+
+    if abs(wn) < 1e-7:
+        return None
+
+    t = ((o[0] - p[0]) * nu[0] + (o[1] - p[1]) * nu[1] + (o[2] - p[2]) * nu[2]) / wn
+    cc = [p[0] + t * w[0], p[1] + t * w[1], p[2] + t * w[2]]
+    mraw = _ssi_cross(w, nu)
+
+    if math.sqrt(_ssi_dot(mraw, mraw)) < 1e-9:
+        xa, ya = _ortho_basis(nu)
+
+        return _exact_circle(cc[0], cc[1], cc[2], xa, ya, r)
+
+    minor = _ssi_unit(mraw)
+    major = _ssi_unit([w[0] - wn * nu[0], w[1] - wn * nu[1], w[2] - wn * nu[2]])
+
+    return _exact_ellipse(cc[0], cc[1], cc[2], major, minor, r / abs(wn), r)
+
+
+def _axis_segment(q, w, s0, s1):
+    """Degree-1 segment of the line through q along w between axial offsets s0 and s1."""
+
+    e0 = Point(q[0] + s0 * w[0], q[1] + s0 * w[1], q[2] + s0 * w[2])
+    e1 = Point(q[0] + s1 * w[0], q[1] + s1 * w[1], q[2] + s1 * w[2])
+
+    return NurbsCurve.create(False, 1, [e0, e1])
+
+
+def _cylinder_axial_range(srf, p, w):
+    """Axial range of a cylinder surface over three u and both v boundaries, padded by 5%."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    smin = 1e300
+    smax = -1e300
+
+    for uu in (u0, 0.5 * (u0 + u1), u1):
+        for vv in (v0, v1):
+            q = srf.point_at(uu, vv)
+            s = (q[0] - p[0]) * w[0] + (q[1] - p[1]) * w[1] + (q[2] - p[2]) * w[2]
+            smin = min(smin, s)
+            smax = max(smax, s)
+
+    pad = 0.05 * max(1e-9, smax - smin)
+
+    return smin - pad, smax + pad
+
+
+def _ssi_plane_cylinder_lines(plane, cyl, cyl_srf, out):
+    """Ruling lines of a plane parallel to the cylinder axis."""
+
+    o = plane.p1
+    nu = _ssi_unit(plane.p2)
+    p = cyl.p1
+    w = _ssi_unit(cyl.p2)
+    r = cyl.r
+    wn = _ssi_dot(w, nu)
+
+    if abs(wn) >= 1e-7:
+        return False
+
+    ds = (p[0] - o[0]) * nu[0] + (p[1] - o[1]) * nu[1] + (p[2] - o[2]) * nu[2]
+    d = abs(ds)
+    tt = r * 1e-9 + 1e-12
+
+    if d > r + tt:
+        return True
+
+    smin, smax = _cylinder_axial_range(cyl_srf, p, w)
+    foot = [p[0] - ds * nu[0], p[1] - ds * nu[1], p[2] - ds * nu[2]]
+    feet = []
+
+    if d >= r - tt:
+        feet.append(foot)
+    else:
+        h = math.sqrt(max(0.0, r * r - d * d))
+        s3 = _ssi_unit(_ssi_cross(w, nu))
+        feet.append([foot[0] + h * s3[0], foot[1] + h * s3[1], foot[2] + h * s3[2]])
+        feet.append([foot[0] - h * s3[0], foot[1] - h * s3[1], foot[2] - h * s3[2]])
+
+    for q in feet:
+        line = _axis_segment(q, w, smin, smax)
+
+        if line.is_valid():
+            out.append(line)
+
+    return True
+
+
+def _cone_axial_extent(srf, apex, axis):
+    """Height of the surface along the cone axis from the apex."""
+
+    w = _ssi_unit(axis)
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    um = 0.5 * (u0 + u1)
+    height = 0.0
+
+    for vv in (v0, v1):
+        p = srf.point_at(um, vv)
+        s = (p[0] - apex[0]) * w[0] + (p[1] - apex[1]) * w[1] + (p[2] - apex[2]) * w[2]
+        height = max(height, s)
+
+    return height
+
+
+def _conic_within_cone(c, apex, w, height):
+    """Whether 65 samples of a conic lie within the cone height."""
+
+    t0, t1 = c.domain()
+    pad = 1e-7 * max(1.0, height)
+
+    for i in range(65):
+        p = c.point_at(t0 + (t1 - t0) * i / 64)
+        s = (p[0] - apex[0]) * w[0] + (p[1] - apex[1]) * w[1] + (p[2] - apex[2]) * w[2]
+
+        if s < -pad or s > height + pad:
+            return False
+
+    return True
+
+
+def _fit_conic_arc(pts):
+    """Fit a degree-2 rational arc through sampled points."""
+
+    m = len(pts)
+
+    if m < 2:
+        return NurbsCurve()
+
+    if m == 2:
+        return NurbsCurve.create(False, 1, pts)
+
+    if m <= 4:
+        return NurbsCurve.create_interpolated(pts, CurveNurbsKnotStyle.Chord)
+
+    num_cvs = min(max(m // 6, 8), 64)
+
+    if num_cvs >= m:
+        num_cvs = m - 1
+
+    c = NurbsCurve.create_fitted(pts, num_cvs, 3)
+
+    if not c.is_valid():
+        c = NurbsCurve.create_interpolated(pts, CurveNurbsKnotStyle.Chord)
+
+    return c
+
+
+def _build_exact_plane_cone_ellipse(o, nu, apex, w, alpha):
+    """Exact ellipse of a plane cutting a cone away from the apex."""
+
+    wn = _ssi_dot(w, nu)
+    m = _ssi_cross(w, nu)
+    ml = math.sqrt(_ssi_dot(m, m))
+
+    if ml < 1e-12:
+        return None
+
+    m = [m[0] / ml, m[1] / ml, m[2] / ml]
+    major = _ssi_unit([w[0] - wn * nu[0], w[1] - wn * nu[1], w[2] - wn * nu[2]])
+    dv = (apex[0] - o[0]) * nu[0] + (apex[1] - o[1]) * nu[1] + (apex[2] - o[2]) * nu[2]
+    vp = [apex[0] - dv * nu[0], apex[1] - dv * nu[1], apex[2] - dv * nu[2]]
+    ts = _line_cone(vp, major, apex, w, alpha)
+
+    if len(ts) != 2:
+        return None
+
+    pa = [vp[0] + ts[0] * major[0], vp[1] + ts[0] * major[1], vp[2] + ts[0] * major[2]]
+    pb = [vp[0] + ts[1] * major[0], vp[1] + ts[1] * major[1], vp[2] + ts[1] * major[2]]
+    cc = [(pa[0] + pb[0]) * 0.5, (pa[1] + pb[1]) * 0.5, (pa[2] + pb[2]) * 0.5]
+    ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]
+    semi_major = 0.5 * math.sqrt(_ssi_dot(ab, ab))
+    major = _ssi_unit(ab)
+    tm = _line_cone(cc, m, apex, w, alpha)
+
+    if len(tm) != 2:
+        return None
+
+    semi_minor = 0.5 * abs(tm[1] - tm[0])
+
+    if semi_major < 1e-12 or semi_minor < 1e-12:
+        return None
+
+    return _exact_ellipse(cc[0], cc[1], cc[2], major, m, semi_major, semi_minor)
+
+
+def _conic_bezier(pa, pt, pb, wmid):
+    """Single rational quadratic Bezier conic arc from pa to pb with middle control point pt."""
+
+    crv = NurbsCurve(3, True, 3, 3)
+    knots = [0, 0, 1, 1]
+
+    for i in range(4):
+        crv.set_nurbsknot(i, knots[i])
+
+    crv.set_cv_4d(0, pa[0], pa[1], pa[2], 1.0)
+    crv.set_cv_4d(1, pt[0] * wmid, pt[1] * wmid, pt[2] * wmid, wmid)
+    crv.set_cv_4d(2, pb[0], pb[1], pb[2], 1.0)
+    crv.set_domain(0.0, 1.0)
+
+    return crv
+
+
+class _PlaneConeFrame:
+    """Frame of an open plane-cone conic: cone data and the conic's in-plane axes."""
+
+    def __init__(self):
+        self.o = [0.0, 0.0, 0.0]  # Plane origin.
+        self.nu = [0.0, 0.0, 0.0]  # Unit plane normal.
+        self.apex = [0.0, 0.0, 0.0]  # Cone apex.
+        self.w = [0.0, 0.0, 0.0]  # Unit cone axis.
+        self.height = 0.0  # Cone height.
+        self.cosa = 0.0  # Cosine of the half angle.
+        self.sina = 0.0  # Sine of the half angle.
+        self.ta = 0.0  # Tangent of the half angle.
+        self.na = 0.0  # Plane normal along the axis.
+        self.cost = 0.0  # Absolute na.
+        self.sint = 0.0  # Length of nu x w.
+        self.axex = [0.0, 0.0, 0.0]  # In-plane axis towards the cone axis.
+        self.axey = [0.0, 0.0, 0.0]  # In-plane axis across the cone axis.
+        self.axw = 0.0  # axex along the cone axis.
+        self.d0 = 0.0  # Signed apex distance to the plane.
+        self.tol = 0.0  # On-surface tolerance.
+
+
+def _plane_cone_frame(o, nu, apex, w, alpha, height):
+    """Conic frame of a plane cutting a cone; None when the plane is perpendicular to or contains the axis."""
+
+    f = _PlaneConeFrame()
+    f.o = o
+    f.nu = nu
+    f.apex = apex
+    f.w = w
+    f.height = height
+    f.cosa = math.cos(alpha)
+    f.sina = math.sin(alpha)
+    f.ta = math.tan(alpha)
+    f.na = _ssi_dot(nu, w)
+    f.cost = abs(f.na)
+    f.axey = _ssi_cross(nu, w)
+    f.sint = math.sqrt(_ssi_dot(f.axey, f.axey))
+
+    if f.sint < 1e-12:
+        return None
+
+    f.axey = [f.axey[0] / f.sint, f.axey[1] / f.sint, f.axey[2] / f.sint]
+    f.axex = _ssi_cross(f.axey, nu)
+    f.axw = _ssi_dot(f.axex, w)
+
+    if f.axw < 0:
+        f.axex = [-f.axex[0], -f.axex[1], -f.axex[2]]
+        f.axw = -f.axw
+
+    if f.axw < 1e-12:
+        return None
+
+    f.d0 = (
+        (apex[0] - o[0]) * nu[0] + (apex[1] - o[1]) * nu[1] + (apex[2] - o[2]) * nu[2]
+    )
+    f.tol = 1e-6 * max(1.0, height)
+
+    return f
+
+
+def _conic_on_plane_cone(f, c):
+    """Whether 17 samples of the curve lie on both the plane and the cone within the frame tolerance."""
+
+    for i in range(17):
+        q = c.point_at(i / 16.0)
+        dp = abs(
+            (q[0] - f.o[0]) * f.nu[0]
+            + (q[1] - f.o[1]) * f.nu[1]
+            + (q[2] - f.o[2]) * f.nu[2]
+        )
+        zz = (
+            (q[0] - f.apex[0]) * f.w[0]
+            + (q[1] - f.apex[1]) * f.w[1]
+            + (q[2] - f.apex[2]) * f.w[2]
+        )
+        wx = q[0] - f.apex[0] - zz * f.w[0]
+        wy = q[1] - f.apex[1] - zz * f.w[1]
+        wz = q[2] - f.apex[2] - zz * f.w[2]
+        rho = math.sqrt(wx * wx + wy * wy + wz * wz)
+
+        if dp > f.tol or abs(rho - f.ta * zz) > f.tol * (1.0 + f.ta):
+            return False
+
+        if zz < -f.tol or zz > f.height + f.tol:
+            return False
+
+    return True
+
+
+def _plane_cone_parabola(f):
+    """Exact plane-cone parabola arc cut at the cone height."""
+
+    if f.cost < 1e-12:
+        return None
+
+    sax = -f.d0 / f.na
+    cen = [f.apex[0] + sax * f.w[0], f.apex[1] + sax * f.w[1], f.apex[2] + sax * f.w[2]]
+    distance = abs(sax)
+    dc = 0.5 * distance / f.cosa
+    pf = dc * f.sina * f.sina
+
+    if pf < 1e-15:
+        return None
+
+    for cs in (-1, 1):
+        c2 = [
+            cen[0] + cs * dc * f.axex[0],
+            cen[1] + cs * dc * f.axex[1],
+            cen[2] + cs * dc * f.axex[2],
+        ]
+        zc = (
+            (c2[0] - f.apex[0]) * f.w[0]
+            + (c2[1] - f.apex[1]) * f.w[1]
+            + (c2[2] - f.apex[2]) * f.w[2]
+        )
+        t1s = 2.0 * pf * (f.height - zc) / f.axw
+
+        if t1s <= 0:
+            continue
+
+        t1 = math.sqrt(t1s)
+        xi = t1s / (2.0 * pf)
+        pa = [
+            c2[0] + xi * f.axex[0] - t1 * f.axey[0],
+            c2[1] + xi * f.axex[1] - t1 * f.axey[1],
+            c2[2] + xi * f.axex[2] - t1 * f.axey[2],
+        ]
+        pb = [
+            c2[0] + xi * f.axex[0] + t1 * f.axey[0],
+            c2[1] + xi * f.axex[1] + t1 * f.axey[1],
+            c2[2] + xi * f.axex[2] + t1 * f.axey[2],
+        ]
+        pt = [c2[0] - xi * f.axex[0], c2[1] - xi * f.axex[1], c2[2] - xi * f.axex[2]]
+        arc = _conic_bezier(pa, pt, pb, 1.0)
+
+        if arc.is_valid() and _conic_on_plane_cone(f, arc):
+            return arc
 
     return None
+
+
+def _hyperbola_centers(f):
+    """Semi-axes and centers of the plane-cone hyperbola, one center per nappe; None when degenerate."""
+
+    centers = []
+
+    if f.cost < 1e-6:
+        a = abs(f.d0) / f.ta
+        b = abs(f.d0)
+        centers.append(
+            [
+                f.apex[0] - f.d0 * f.nu[0],
+                f.apex[1] - f.d0 * f.nu[1],
+                f.apex[2] - f.d0 * f.nu[2],
+            ]
+        )
+    else:
+        dd = f.sina * f.sina - f.cost * f.cost
+
+        if dd < 1e-12:
+            return None
+
+        sax = -f.d0 / f.na
+        cen = [
+            f.apex[0] + sax * f.w[0],
+            f.apex[1] + sax * f.w[1],
+            f.apex[2] + sax * f.w[2],
+        ]
+        distance = abs(sax)
+        dc = f.sint * f.sina * f.sina * distance / dd
+        a = f.cost * f.sina * f.cosa * distance / dd
+        b = f.cost * f.sina * distance / math.sqrt(dd)
+        centers.append(
+            [cen[0] - dc * f.axex[0], cen[1] - dc * f.axex[1], cen[2] - dc * f.axex[2]]
+        )
+        centers.append(
+            [cen[0] + dc * f.axex[0], cen[1] + dc * f.axex[1], cen[2] + dc * f.axex[2]]
+        )
+
+    if a < 1e-15 or b < 1e-15:
+        return None
+
+    return a, b, centers
+
+
+def _plane_cone_hyperbola(f):
+    """Exact plane-cone hyperbola branch cut at the cone height."""
+
+    hyperbola = _hyperbola_centers(f)
+
+    if hyperbola is None:
+        return None
+
+    a, b, centers = hyperbola
+
+    for c2 in centers:
+        zc = (
+            (c2[0] - f.apex[0]) * f.w[0]
+            + (c2[1] - f.apex[1]) * f.w[1]
+            + (c2[2] - f.apex[2]) * f.w[2]
+        )
+
+        for sg in (1, -1):
+            ch = (f.height - zc) / (sg * a * f.axw)
+
+            if ch <= 1.0 + 1e-12:
+                continue
+
+            sh = math.sqrt(ch * ch - 1.0)
+            xi = sg * a * ch
+            xt = sg * a / ch
+            pa = [
+                c2[0] + xi * f.axex[0] - b * sh * f.axey[0],
+                c2[1] + xi * f.axex[1] - b * sh * f.axey[1],
+                c2[2] + xi * f.axex[2] - b * sh * f.axey[2],
+            ]
+            pb = [
+                c2[0] + xi * f.axex[0] + b * sh * f.axey[0],
+                c2[1] + xi * f.axex[1] + b * sh * f.axey[1],
+                c2[2] + xi * f.axex[2] + b * sh * f.axey[2],
+            ]
+            pt = [
+                c2[0] + xt * f.axex[0],
+                c2[1] + xt * f.axex[1],
+                c2[2] + xt * f.axex[2],
+            ]
+            arc = _conic_bezier(pa, pt, pb, ch)
+
+            if arc.is_valid() and _conic_on_plane_cone(f, arc):
+                return arc
+
+    return None
+
+
+def _build_exact_plane_cone_open(o, nu, apex, w, alpha, height, parabola):
+    """Exact plane-cone hyperbola or parabola arc (IntAna_QuadQuadGeo.cxx:752-953 port)."""
+
+    f = _plane_cone_frame(o, nu, apex, w, alpha, height)
+
+    if f is None:
+        return None
+
+    if parabola:
+        return _plane_cone_parabola(f)
+
+    return _plane_cone_hyperbola(f)
+
+
+class _PlaneConeSection:
+    """Plane-cone section: the plane, the cone and the cone's polar frame."""
+
+    def __init__(self):
+        self.o = [0.0, 0.0, 0.0]  # Plane origin.
+        self.nu = [0.0, 0.0, 0.0]  # Unit plane normal.
+        self.apex = [0.0, 0.0, 0.0]  # Cone apex.
+        self.w = [0.0, 0.0, 0.0]  # Unit cone axis.
+        self.e1 = [0.0, 0.0, 0.0]  # First unit axis normal.
+        self.e2 = [0.0, 0.0, 0.0]  # Second unit axis normal.
+        self.alpha = 0.0  # Half angle.
+        self.height = 0.0  # Cone height.
+        self.ta = 0.0  # Tangent of the half angle.
+        self.cosa = 0.0  # Cosine of the half angle.
+        self.sina = 0.0  # Sine of the half angle.
+        self.na = 0.0  # Plane normal along the axis.
+        self.pp = 0.0  # Plane normal along e1.
+        self.qp = 0.0  # Plane normal along e2.
+        self.cost = 0.0  # Absolute na.
+        self.sint = 0.0  # Plane normal across the axis.
+        self.costa = 0.0  # Cosine of the plane-to-generator angle sum.
+        self.d0 = 0.0  # Signed apex distance to the plane.
+
+    def denom(self, phi):
+        """Plane normal along the generator at polar angle phi, scaled by cos alpha."""
+        return self.na + self.ta * (self.pp * math.cos(phi) + self.qp * math.sin(phi))
+
+    def height_at(self, phi):
+        """Axial height of the section point at polar angle phi."""
+
+        d = self.denom(phi)
+
+        return 1e308 if abs(d) < 1e-300 else -self.d0 / d
+
+    def point(self, phi):
+        """Section point at polar angle phi."""
+
+        s = self.height_at(phi)
+        rr = s * self.ta
+        c = math.cos(phi)
+        sn = math.sin(phi)
+        apex = self.apex
+        w = self.w
+        e1 = self.e1
+        e2 = self.e2
+
+        return Point(
+            apex[0] + s * w[0] + rr * (c * e1[0] + sn * e2[0]),
+            apex[1] + s * w[1] + rr * (c * e1[1] + sn * e2[1]),
+            apex[2] + s * w[2] + rr * (c * e1[2] + sn * e2[2]),
+        )
+
+    def refine_base(self, pa, pb, dtarget):
+        """Polar angle in [pa, pb] where the denominator reaches dtarget, by bisection."""
+
+        fa = self.denom(pa) - dtarget
+
+        for _ in range(60):
+            pm = 0.5 * (pa + pb)
+            fm = self.denom(pm) - dtarget
+
+            if (fm < 0) == (fa < 0):
+                pa = pm
+                fa = fm
+            else:
+                pb = pm
+
+        return 0.5 * (pa + pb)
+
+
+def _plane_cone_section(plane, cone, cone_srf):
+    """Section of a recognized plane and cone; None when the cone is flat, a line or has no height."""
+
+    s = _PlaneConeSection()
+    s.o = plane.p1
+    s.nu = _ssi_unit(plane.p2)
+    s.apex = cone.p1
+    s.w = _ssi_unit(cone.p2)
+    s.alpha = cone.r
+
+    if s.alpha < 1e-7 or s.alpha > PI / 2 - 1e-7:
+        return None
+
+    s.ta = math.tan(s.alpha)
+    s.cosa = math.cos(s.alpha)
+    s.sina = math.sin(s.alpha)
+    s.height = _cone_axial_extent(cone_srf, s.apex, s.w)
+
+    if s.height < 1e-12:
+        return None
+
+    s.e1, s.e2 = _ortho_basis(s.w)
+    s.na = _ssi_dot(s.nu, s.w)
+    s.pp = _ssi_dot(s.nu, s.e1)
+    s.qp = _ssi_dot(s.nu, s.e2)
+    s.cost = abs(s.na)
+    s.sint = math.sqrt(max(0.0, s.pp * s.pp + s.qp * s.qp))
+    s.costa = s.cost * s.cosa - s.sint * s.sina
+    s.d0 = (
+        (s.apex[0] - s.o[0]) * s.nu[0]
+        + (s.apex[1] - s.o[1]) * s.nu[1]
+        + (s.apex[2] - s.o[2]) * s.nu[2]
+    )
+
+    return s
+
+
+def _collect_cone_runs(s, ok, start, dtarget, runs):
+    """Runs of consecutive in-range polar samples, closed at both ends at the cone base."""
+
+    n = len(ok)
+    cur = []
+    inside = False
+
+    for i in range(n + 1):
+        k = (start + i) % n
+        uphi = TWO_PI * start / n + TWO_PI * i / n
+        v = ok[k] != 0
+
+        if v and not inside:
+            if i > 0:
+                cur.append(s.point(s.refine_base(uphi - TWO_PI / n, uphi, dtarget)))
+
+            cur.append(s.point(uphi))
+            inside = True
+        elif v and inside:
+            cur.append(s.point(uphi))
+        elif not v and inside:
+            cur.append(s.point(s.refine_base(uphi - TWO_PI / n, uphi, dtarget)))
+
+            if len(cur) >= 2:
+                runs.append(cur)
+
+            cur = []
+            inside = False
+
+    if inside and len(cur) >= 2:
+        runs.append(cur)
+
+
+def _sample_plane_cone_arcs(s):
+    """Sample the plane-cone section as point runs, one per branch, and whether it closes."""
+
+    runs = []
+    n = 720
+    eps = 1e-9 * max(1.0, s.height)
+    ok = [0] * n
+    cnt = 0
+
+    for k in range(n):
+        h = s.height_at(TWO_PI * k / n)
+        ok[k] = 1 if (h > eps and h < s.height + eps) else 0
+        cnt += ok[k]
+
+    if cnt == 0:
+        return runs, False
+
+    if cnt == n:
+        loop = []
+
+        for k in range(n + 1):
+            loop.append(s.point(TWO_PI * (k % n) / n))
+
+        runs.append(loop)
+
+        return runs, True
+
+    start = 0
+
+    while start < n and ok[start]:
+        start += 1
+
+    dtarget = (-s.d0 / s.height) if s.height > 1e-300 else 0.0
+    _collect_cone_runs(s, ok, start, dtarget, runs)
+
+    return runs, False
+
+
+def _ray_segment(q, d, length):
+    """Degree-1 segment from q to q + len d."""
+
+    e0 = Point(q[0], q[1], q[2])
+    e1 = Point(q[0] + length * d[0], q[1] + length * d[1], q[2] + length * d[2])
+
+    return NurbsCurve.create(False, 1, [e0, e1])
+
+
+def _plane_cone_through_apex(s, out):
+    """Plane through the cone apex: one tangent generator or two generator lines."""
+
+    nu = s.nu
+    w = s.w
+
+    if abs(s.costa) < 1e-6:
+        g = _ssi_unit([w[0] - s.na * nu[0], w[1] - s.na * nu[1], w[2] - s.na * nu[2]])
+        gw = _ssi_dot(g, w)
+
+        if gw > 1e-9:
+            out.append(_ray_segment(s.apex, g, s.height / gw))
+
+        return
+
+    if s.cost < s.sina:
+        axey = _ssi_cross(nu, w)
+        axex = _ssi_cross(axey, nu)
+        dh = math.sqrt(max(0.0, s.sina * s.sina - s.cost * s.cost)) / s.cosa
+
+        for sgn in (1, -1):
+            d = [
+                axex[0] + sgn * dh * axey[0],
+                axex[1] + sgn * dh * axey[1],
+                axex[2] + sgn * dh * axey[2],
+            ]
+            dw = _ssi_dot(d, w)
+
+            if dw < 1e-12:
+                continue
+
+            out.append(_ray_segment(s.apex, d, s.height / dw))
+
+
+def _plane_cone_exact(s, out):
+    """Exact plane-cone conic: circle, ellipse, parabola or hyperbola; false when none fits the cone."""
+
+    ang = 1e-6
+    is_circle = False
+    is_parabola = False
+    is_hyperbola = False
+    is_ellipse = False
+
+    if s.cost < ang:
+        is_hyperbola = True
+    elif abs(s.costa) < ang:
+        is_parabola = True
+    elif s.sint < ang:
+        is_circle = True
+    elif s.cost < s.sina:
+        is_hyperbola = True
+    else:
+        is_ellipse = True
+
+    if is_circle:
+        apex = s.apex
+        w = s.w
+        dax = (
+            (s.o[0] - apex[0]) * w[0]
+            + (s.o[1] - apex[1]) * w[1]
+            + (s.o[2] - apex[2]) * w[2]
+        )
+        rr = abs(dax) * s.ta
+
+        if rr > 1e-12:
+            cc = [apex[0] + dax * w[0], apex[1] + dax * w[1], apex[2] + dax * w[2]]
+            circ = _exact_circle(cc[0], cc[1], cc[2], s.e1, s.e2, rr)
+
+            if _conic_within_cone(circ, apex, w, s.height):
+                out.append(circ)
+
+        return True
+
+    if is_ellipse:
+        c3 = _build_exact_plane_cone_ellipse(s.o, s.nu, s.apex, s.w, s.alpha)
+
+        if c3 is not None and _conic_within_cone(c3, s.apex, s.w, s.height):
+            out.append(c3)
+
+            return True
+
+    if is_parabola or is_hyperbola:
+        c3 = _build_exact_plane_cone_open(
+            s.o, s.nu, s.apex, s.w, s.alpha, s.height, is_parabola
+        )
+
+        if c3 is not None:
+            out.append(c3)
+
+            return True
+
+    return False
+
+
+def _ssi_plane_cone(plane, cone, cone_srf, out):
+    """Plane-cone section: exact lines or conic when possible, fitted arcs otherwise."""
+
+    s = _plane_cone_section(plane, cone, cone_srf)
+
+    if s is None:
+        return False
+
+    if abs(s.d0) < 1e-6 * max(1.0, s.height):
+        _plane_cone_through_apex(s, out)
+
+        return True
+
+    if _plane_cone_exact(s, out):
+        return True
+
+    runs, _ = _sample_plane_cone_arcs(s)
+
+    for r in runs:
+        c = _fit_conic_arc(r)
+
+        if c.is_valid():
+            out.append(c)
+
+    return True
+
+
+def _ssi_plane_torus(plane, tor, out):
+    """Exact plane-torus circles for a plane perpendicular to the axis."""
+
+    o = plane.p1
+    nu = _ssi_unit(plane.p2)
+    center = tor.p1
+    w = _ssi_unit(tor.p2)
+    rmaj = tor.r
+    r = tor.r2
+    wn = _ssi_dot(w, nu)
+
+    if abs(abs(wn) - 1.0) > 1e-7:
+        return False
+
+    d = (
+        (o[0] - center[0]) * w[0]
+        + (o[1] - center[1]) * w[1]
+        + (o[2] - center[2]) * w[2]
+    )
+
+    if abs(d) > r:
+        return True
+
+    h = math.sqrt(max(0.0, r * r - d * d))
+    cc = [center[0] + d * w[0], center[1] + d * w[1], center[2] + d * w[2]]
+    xa, ya = _ortho_basis(w)
+
+    for rr in (rmaj + h, rmaj - h):
+        if rr > 1e-12:
+            out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rr))
+
+    return True
+
+
+class _FaceFrame:
+    """Corner frame of a bilinear face: origin, edge vectors and their Gram matrix."""
+
+    def __init__(self, o, eu, ev):
+        self.o = o  # Corner at (u0, v0).
+        self.eu = eu  # Edge to (u1, v0).
+        self.ev = ev  # Edge to (u0, v1).
+        self.exx = _ssi_dot(eu, eu)  # eu . eu
+        self.eyy = _ssi_dot(ev, ev)  # ev . ev
+        self.exy = _ssi_dot(eu, ev)  # eu . ev
+        self.det = self.exx * self.eyy - self.exy * self.exy  # Gram determinant.
+
+    def fraction(self, r):
+        """Face fractions (al, be) of the offset r from the corner."""
+
+        rx = _ssi_dot(r, self.eu)
+        ry = _ssi_dot(r, self.ev)
+
+        return (self.eyy * rx - self.exy * ry) / self.det, (
+            self.exx * ry - self.exy * rx
+        ) / self.det
+
+
+def _face_frame(s):
+    """Corner frame of a surface from its corners (u0, v0), (u1, v0) and (u0, v1)."""
+
+    u0, u1 = s.domain(0)
+    v0, v1 = s.domain(1)
+    o = s.point_at(u0, v0)
+    pu = s.point_at(u1, v0)
+    pv = s.point_at(u0, v1)
+
+    return _FaceFrame(
+        [o[0], o[1], o[2]],
+        [pu[0] - o[0], pu[1] - o[1], pu[2] - o[2]],
+        [pv[0] - o[0], pv[1] - o[1], pv[2] - o[2]],
+    )
+
+
+def _clip_axis(c, d, t0, t1):
+    """Narrow [t0, t1] to where c + t d lies in [0, 1]; ok is false when d is zero and c is outside."""
+
+    if abs(d) < 1e-15:
+        return (c >= -1e-9 and c <= 1.0 + 1e-9), t0, t1
+
+    ta = (0.0 - c) / d
+    tb = (1.0 - c) / d
+
+    if ta > tb:
+        ta, tb = tb, ta
+
+    return True, max(t0, ta), min(t1, tb)
+
+
+def _clip_line_to_face(s, anchor, direction, tmin, tmax):
+    """Narrow [tmin, tmax] to the part of the line inside the face: (ok, tmin, tmax, empty)."""
+
+    f = _face_frame(s)
+
+    if abs(f.det) < 1e-18:
+        return False, tmin, tmax, False
+
+    a0, b0 = f.fraction([anchor[0] - f.o[0], anchor[1] - f.o[1], anchor[2] - f.o[2]])
+    da, db = f.fraction(direction)
+    t0 = -1e300
+    t1 = 1e300
+    ok, t0, t1 = _clip_axis(a0, da, t0, t1)
+
+    if ok:
+        ok, t0, t1 = _clip_axis(b0, db, t0, t1)
+
+    if not ok or t0 > t1:
+        return False, tmin, tmax, True
+
+    return True, max(tmin, t0), min(tmax, t1), False
+
+
+def _ssi_plane_plane(sa, pa, sb, pb):
+    """Exact plane-plane line clipped to both finite faces: (curve or None, empty)."""
+
+    na = _ssi_unit(pa.p2)
+    nb = _ssi_unit(pb.p2)
+    v = _ssi_cross(na, nb)
+    vl = math.sqrt(_ssi_dot(v, v))
+
+    if vl < 1e-9:
+        return None, False
+
+    da = _ssi_dot(na, pa.p1)
+    db = _ssi_dot(nb, pb.p1)
+    nb_x_v = _ssi_cross(nb, v)
+    v_x_na = _ssi_cross(v, na)
+    inv = 1.0 / (vl * vl)
+    anchor = [
+        (da * nb_x_v[0] + db * v_x_na[0]) * inv,
+        (da * nb_x_v[1] + db * v_x_na[1]) * inv,
+        (da * nb_x_v[2] + db * v_x_na[2]) * inv,
+    ]
+    direction = [v[0] / vl, v[1] / vl, v[2] / vl]
+    tmin = -1e300
+    tmax = 1e300
+
+    for srf in (sa, sb):
+        ok, tmin, tmax, empty = _clip_line_to_face(srf, anchor, direction, tmin, tmax)
+
+        if not ok:
+            return None, empty
+
+    if tmax - tmin <= 1e-9:
+        return None, True
+
+    start = Point(
+        anchor[0] + tmin * direction[0],
+        anchor[1] + tmin * direction[1],
+        anchor[2] + tmin * direction[2],
+    )
+    end = Point(
+        anchor[0] + tmax * direction[0],
+        anchor[1] + tmax * direction[1],
+        anchor[2] + tmax * direction[2],
+    )
+    c3 = NurbsCurve.create(False, 1, [start, end])
+    c3.set_domain(0.0, 1.0)
+
+    return c3, False
+
+
+class _AnalyticResult:
+    """Tri-state analytic result: not analytic, recognised empty, or curve triples."""
+
+    NOT_ANALYTIC = 0
+    NO_HIT = 1
+    HIT = 2
+
+    def __init__(self):
+        self.status = (
+            _AnalyticResult.NOT_ANALYTIC
+        )  # Whether both surfaces were recognized and whether they meet.
+        self.triples = []  # 3D curve with both pullbacks.
+
+
+def _unwrap_angle(a, prev):
+    """Angle shifted by whole turns to within half a turn of prev."""
+
+    while a - prev > PI:
+        a -= TWO_PI
+
+    while a - prev < -PI:
+        a += TWO_PI
+
+    return a
+
+
+def _wrap_angle(a):
+    """Angle shifted by whole turns into [-pi, pi]."""
+
+    while a > PI:
+        a -= TWO_PI
+
+    while a < -PI:
+        a += TWO_PI
+
+    return a
+
+
+def _wrap_to_range(a, lo, hi):
+    """Angle shifted by whole turns into [lo - 1e-9, hi + 1e-9] when the range allows."""
+
+    while a < lo - 1e-9:
+        a += TWO_PI
+
+    while a > hi + 1e-9:
+        a -= TWO_PI
+
+    return a
+
+
+def _unwrap_period(x, prev, period):
+    """Value shifted by whole periods to within half a period of prev."""
+
+    while x - prev > period * 0.5:
+        x -= period
+
+    while x - prev < -period * 0.5:
+        x += period
+
+    return x
+
+
+def _period_index(x, x0, period):
+    """Index of the period cell of x counted from x0."""
+    return math.floor((x - x0) / period + 1e-9)
+
+
+def _axis_height(p, origin, axis):
+    """Height of p along the unit axis through origin."""
+
+    r = [p[0] - origin[0], p[1] - origin[1], p[2] - origin[2]]
+
+    return _ssi_dot(r, axis)
+
+
+def _axis_radial_sq(p, origin, axis):
+    """Squared distance of p from the unit axis through origin."""
+
+    r = [p[0] - origin[0], p[1] - origin[1], p[2] - origin[2]]
+    h = _ssi_dot(r, axis)
+    px = r[0] - h * axis[0]
+    py = r[1] - h * axis[1]
+    pz = r[2] - h * axis[2]
+
+    return px * px + py * py + pz * pz
+
+
+def _curve_gap(c):
+    """Distance between the curve's end points."""
+
+    t0, t1 = c.domain()
+
+    return c.point_at(t0).distance(c.point_at(t1))
+
+
+def _iso_v_line(u0, u1, vc):
+    """Constant-v UV line from u0 to u1."""
+    return NurbsCurve.create(False, 1, [Point(u0, vc, 0.0), Point(u1, vc, 0.0)])
+
+
+def _curve_height_stats(c3d, origin, axis):
+    """Height range and mean of 33 curve samples along the unit axis through origin."""
+
+    t0, t1 = c3d.domain()
+    ns = 33
+    hsum = 0.0
+    hmin = 1e300
+    hmax = -1e300
+
+    for i in range(ns):
+        h = _axis_height(c3d.point_at(t0 + (t1 - t0) * i / 32), origin, axis)
+        hmin = min(hmin, h)
+        hmax = max(hmax, h)
+        hsum += h
+
+    return hmin, hmax, hsum / ns
+
+
+def _bisect_height_v(srf, um, v0, v1, hc, origin, axis):
+    """v on the line u = um where the axial height reaches hc, by bisection; None when hc is outside."""
+
+    va = v0
+    vb = v1
+    ha = _axis_height(srf.point_at(um, va), origin, axis)
+    hb = _axis_height(srf.point_at(um, vb), origin, axis)
+
+    if (hc - ha) * (hc - hb) > 0:
+        return None
+
+    for _ in range(60):
+        vm = 0.5 * (va + vb)
+        hm = _axis_height(srf.point_at(um, vm), origin, axis)
+
+        if (hm - hc) * (ha - hc) <= 0:
+            vb = vm
+        else:
+            va = vm
+            ha = hm
+
+    return 0.5 * (va + vb)
+
+
+def _plane_pcurve(srf, c3d):
+    """Plane pcurve: the curve's control points mapped to the face's bilinear parameters."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    f = _face_frame(srf)
+
+    if abs(f.det) < 1e-18:
+        return NurbsCurve()
+
+    pc = c3d.duplicate()
+
+    for i in range(c3d.cv_count()):
+        cv = c3d.get_cv(i)
+        a, b = f.fraction([cv[0] - f.o[0], cv[1] - f.o[1], cv[2] - f.o[2]])
+        u = u0 + a * (u1 - u0)
+        v = v0 + b * (v1 - v0)
+
+        if c3d.is_rational():
+            w = c3d.weight(i)
+            pc.set_cv_4d(i, u * w, v * w, 0.0, w)
+        else:
+            pc.set_cv(i, Point(u, v, 0.0))
+
+    return pc
+
+
+def _cylinder_pcurve(srf, recog, c3d):
+    """Cylinder pcurve of a circle perpendicular to the axis: a constant-v line."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    ax = list(recog.p2)
+
+    if not _normalize_axis(ax):
+        return NurbsCurve()
+
+    um = 0.5 * (u0 + u1)
+    h0 = _axis_height(srf.point_at(um, v0), recog.p1, ax)
+    h1 = _axis_height(srf.point_at(um, v1), recog.p1, ax)
+
+    if abs(h1 - h0) < 1e-12:
+        return NurbsCurve()
+
+    hmin, hmax, hc = _curve_height_stats(c3d, recog.p1, ax)
+
+    if hmax - hmin > 1e-5 * abs(h1 - h0):
+        return NurbsCurve()
+
+    if _curve_gap(c3d) > 1e-6 * (abs(h1 - h0) + 1.0):
+        return NurbsCurve()
+
+    vc = v0 + (hc - h0) / (h1 - h0) * (v1 - v0)
+
+    if vc < min(v0, v1) - 1e-9 or vc > max(v0, v1) + 1e-9:
+        return NurbsCurve()
+
+    return _iso_v_line(u0, u1, vc)
+
+
+def _sphere_pcurve(srf, recog, c3d):
+    """Sphere pcurve of a latitude circle: a constant-v line."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    um = 0.5 * (u0 + u1)
+    sp = srf.point_at(um, v0)
+    np_ = srf.point_at(um, v1)
+    ax = [np_[0] - sp[0], np_[1] - sp[1], np_[2] - sp[2]]
+
+    if not _normalize_axis(ax):
+        return NurbsCurve()
+
+    hmin, hmax, hc = _curve_height_stats(c3d, recog.p1, ax)
+
+    if hmax - hmin > recog.r * 1e-4:
+        return NurbsCurve()
+
+    if _curve_gap(c3d) > recog.r * 1e-3:
+        return NurbsCurve()
+
+    vc = _bisect_height_v(srf, um, v0, v1, hc, recog.p1, ax)
+
+    if vc is None:
+        return NurbsCurve()
+
+    return _iso_v_line(u0, u1, vc)
+
+
+def _cone_pcurve(srf, recog, c3d):
+    """Cone pcurve of a circle perpendicular to the axis: a constant-v line."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    ax = list(recog.p2)
+
+    if not _normalize_axis(ax):
+        return NurbsCurve()
+
+    t0, t1 = c3d.domain()
+    clen = c3d.point_at(t0).distance(c3d.point_at(0.5 * (t0 + t1)))
+    hscale = max(clen, 1e-9)
+    hmin, hmax, hc = _curve_height_stats(c3d, recog.p1, ax)
+
+    if hmax - hmin > hscale * 1e-4:
+        return NurbsCurve()
+
+    if _curve_gap(c3d) > hscale * 1e-3:
+        return NurbsCurve()
+
+    vc = _bisect_height_v(srf, 0.5 * (u0 + u1), v0, v1, hc, recog.p1, ax)
+
+    if vc is None:
+        return NurbsCurve()
+
+    return _iso_v_line(u0, u1, vc)
+
+
+def _torus_minor_angle(p, center, w, rmaj):
+    """Tube angle of p about the circle of radius rmaj around the unit axis w through center."""
+
+    d = [p[0] - center[0], p[1] - center[1], p[2] - center[2]]
+    z = _ssi_dot(d, w)
+    hx = d[0] - z * w[0]
+    hy = d[1] - z * w[1]
+    hz = d[2] - z * w[2]
+    rho = math.sqrt(hx * hx + hy * hy + hz * hz)
+
+    return math.atan2(z, rho - rmaj)
+
+
+def _torus_angle_stats(c3d, center, w, rmaj):
+    """Range and mean of the unwrapped tube angle over 33 curve samples."""
+
+    t0, t1 = c3d.domain()
+    ns = 33
+    aprev = 0.0
+    asum = 0.0
+    amin = 1e300
+    amax = -1e300
+
+    for i in range(ns):
+        a = _torus_minor_angle(c3d.point_at(t0 + (t1 - t0) * i / 32), center, w, rmaj)
+
+        if i > 0:
+            a = _unwrap_angle(a, aprev)
+
+        aprev = a
+        amin = min(amin, a)
+        amax = max(amax, a)
+        asum += a
+
+    return amin, amax, asum / ns
+
+
+def _torus_angle_table(srf, um, v0, v1, center, w, rmaj):
+    """Unwrapped tube angle at 257 samples of the line u = um."""
+
+    nv = 256
+    tv = [0.0] * (nv + 1)
+    ta = [0.0] * (nv + 1)
+    ap = 0.0
+
+    for k in range(nv + 1):
+        v = v0 + (v1 - v0) * k / nv
+        a = _torus_minor_angle(srf.point_at(um, v), center, w, rmaj)
+
+        if k > 0:
+            a = _unwrap_angle(a, ap)
+
+        ap = a
+        tv[k] = v
+        ta[k] = a
+
+    return tv, ta
+
+
+def _inverse_table(xs, ys, y):
+    """Parameter and value arrays read backwards: the x where the tabulated y reaches y."""
+
+    nt = len(ys) - 1
+    incr = ys[nt] >= ys[0]
+    y = _wrap_to_range(y, min(ys[0], ys[nt]), max(ys[0], ys[nt]))
+    lo = 0
+    hi = nt
+
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        above = (ys[mid] < y) if incr else (ys[mid] > y)
+
+        if above:
+            lo = mid
+        else:
+            hi = mid
+
+    denom = ys[hi] - ys[lo]
+    f = (y - ys[lo]) / denom if abs(denom) > 1e-15 else 0.0
+
+    return xs[lo] + (xs[hi] - xs[lo]) * f
+
+
+def _torus_refine_v(srf, um, vc, a_target, v0, v1, center, w, rmaj):
+    """Newton-refine v on the line u = um so the tube angle reaches a_target."""
+
+    dv = (v1 - v0) * 1e-7
+    vlo = min(v0, v1)
+    vhi = max(v0, v1)
+
+    for _ in range(3):
+        g0 = _wrap_angle(
+            _torus_minor_angle(
+                srf.point_at(um, min(max(vc, vlo), vhi)), center, w, rmaj
+            )
+            - a_target
+        )
+        vd = min(vc + dv, vhi)
+        g1 = _wrap_angle(
+            _torus_minor_angle(
+                srf.point_at(um, min(max(vd, vlo), vhi)), center, w, rmaj
+            )
+            - a_target
+        )
+        dg = (g1 - g0) / dv
+
+        if abs(dg) < 1e-12:
+            break
+
+        vn = min(max(vc - g0 / dg, vlo), vhi)
+
+        if abs(vn - vc) <= 1e-15 * max(1.0, abs(vc)):
+            vc = vn
+            break
+
+        vc = vn
+
+    return vc
+
+
+def _torus_pcurve(srf, recog, c3d):
+    """Torus pcurve of a circle of constant tube angle: a constant-v line."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    w = list(recog.p2)
+
+    if not _normalize_axis(w):
+        return NurbsCurve()
+
+    rmaj = recog.r
+    rmin = recog.r2
+
+    if rmin < 1e-12 or rmaj <= rmin:
+        return NurbsCurve()
+
+    amin, amax, a_target = _torus_angle_stats(c3d, recog.p1, w, rmaj)
+
+    if amax - amin > 1e-4:
+        return NurbsCurve()
+
+    if _curve_gap(c3d) > rmin * 1e-3:
+        return NurbsCurve()
+
+    um = 0.5 * (u0 + u1)
+    tv, ta = _torus_angle_table(srf, um, v0, v1, recog.p1, w, rmaj)
+    alo = min(ta[0], ta[-1])
+    ahi = max(ta[0], ta[-1])
+    a_target = _wrap_to_range(a_target, alo, ahi)
+
+    if a_target < alo - 1e-9 or a_target > ahi + 1e-9:
+        return NurbsCurve()
+
+    vc = _torus_refine_v(
+        srf, um, _inverse_table(tv, ta, a_target), a_target, v0, v1, recog.p1, w, rmaj
+    )
+
+    return _iso_v_line(u0, u1, vc)
 
 
 def _analytic_pcurve(srf, recog, c3d):
     """Analytic pcurve of an exact 3D intersection conic on a recognized quadric surface."""
 
-    if recog is None:
+    if recog.kind == _RecogSurface.PLANE:
+        return _plane_pcurve(srf, c3d)
+
+    if recog.kind == _RecogSurface.CYLINDER:
+        return _cylinder_pcurve(srf, recog, c3d)
+
+    if recog.kind == _RecogSurface.SPHERE:
+        return _sphere_pcurve(srf, recog, c3d)
+
+    if recog.kind == _RecogSurface.CONE:
+        return _cone_pcurve(srf, recog, c3d)
+
+    if recog.kind == _RecogSurface.TORUS:
+        return _torus_pcurve(srf, recog, c3d)
+
+    return NurbsCurve()
+
+
+class _AxisFrame:
+    """Orthonormal frame about a surface axis."""
+
+    def __init__(self, o, x, y, z):
+        self.o = o  # Origin on the axis.
+        self.x = x  # First radial direction.
+        self.y = y  # Second radial direction.
+        self.z = z  # Unit axis.
+
+
+def _axis_frame(origin, z, p):
+    """Frame about the unit axis z through origin with x towards p; None when p lies on the axis."""
+
+    r = [p[0] - origin[0], p[1] - origin[1], p[2] - origin[2]]
+    h = _ssi_dot(r, z)
+    x = [r[0] - h * z[0], r[1] - h * z[1], r[2] - h * z[2]]
+
+    if not _normalize_axis(x):
         return None
 
-    u0, u1 = srf.domain(0)
-    v0, v1 = srf.domain(1)
+    return _AxisFrame(origin, x, _ssi_cross(z, x), z)
 
-    def dot(p, q):
-        return p[0] * q[0] + p[1] * q[1] + p[2] * q[2]
 
-    if recog[0] == "cylinder":
-        ap = recog[1]
-        ax = recog[2]
-        an = math.sqrt(dot(ax, ax))
+def _frame_longitude(f, q):
+    """Longitude of q about the frame axis."""
 
-        if an < 1e-12:
-            return None
+    r = [q[0] - f.o[0], q[1] - f.o[1], q[2] - f.o[2]]
 
-        ax = (ax[0] / an, ax[1] / an, ax[2] / an)
+    return math.atan2(_ssi_dot(r, f.y), _ssi_dot(r, f.x))
 
-        def height(p):
-            return (
-                (p[0] - ap[0]) * ax[0] + (p[1] - ap[1]) * ax[1] + (p[2] - ap[2]) * ax[2]
-            )
 
-        um = 0.5 * (u0 + u1)
-        h0 = height(srf.point_at(um, v0))
-        h1 = height(srf.point_at(um, v1))
+def _frame_tube_angle(f, rmaj, rmin, q):
+    """Torus tube angle of q for major radius rmaj and minor radius rmin."""
 
-        if abs(h1 - h0) < 1e-12:
-            return None
+    rho = math.sqrt(_axis_radial_sq(q, f.o, f.z))
 
-        hmin = 1e300
-        hmax = -1e300
-        hsum = 0.0
-        ns = 0
-        t0, t1 = c3d.domain()
+    return math.atan2(_axis_height(q, f.o, f.z) / rmin, (rho - rmaj) / rmin)
 
-        for i in range(33):
-            h = height(c3d.point_at(t0 + (t1 - t0) * i / 32))
-            hmin = min(hmin, h)
-            hmax = max(hmax, h)
-            hsum += h
-            ns += 1
 
-        if hmax - hmin > 1e-5 * abs(h1 - h0):
-            return None
+class _AngleProbe:
+    """Angle of surface points along one parameter line: longitude, or the torus tube angle."""
 
-        if c3d.point_at(t0).distance(c3d.point_at(t1)) > 1e-6 * (abs(h1 - h0) + 1.0):
-            return None
+    def __init__(self, srf, frame, fixed, x_is_u, tube, rmaj, rmin):
+        self.srf = srf  # Sampled surface.
+        self.frame = frame  # Frame about the surface axis.
+        self.fixed = fixed  # The parameter held fixed.
+        self.x_is_u = x_is_u  # Whether the free parameter is u.
+        self.tube = tube  # Tube angle instead of longitude.
+        self.rmaj = rmaj  # Torus major radius.
+        self.rmin = rmin  # Torus minor radius.
 
-        hc = hsum / ns
-        vc = v0 + (hc - h0) / (h1 - h0) * (v1 - v0)
-
-        if vc < min(v0, v1) - 1e-9 or vc > max(v0, v1) + 1e-9:
-            return None
-
-        return NurbsCurve.create(
-            False,
-            1,
-            [
-                Point(u0, vc, 0.0),
-                Point(u1, vc, 0.0),
-            ],
+    def point(self, x):
+        """Surface point at free parameter x."""
+        return (
+            self.srf.point_at(x, self.fixed)
+            if self.x_is_u
+            else self.srf.point_at(self.fixed, x)
         )
 
-    if recog[0] == "cone":
-        ax = recog[2]
-        an = math.sqrt(dot(ax, ax))
+    def angle(self, x):
+        """Angle at free parameter x."""
 
-        if an < 1e-12:
-            return None
+        q = self.point(x)
 
-        ax = (ax[0] / an, ax[1] / an, ax[2] / an)
-        A = recog[1]
-
-        def height(p):
-            return (p[0] - A[0]) * ax[0] + (p[1] - A[1]) * ax[1] + (p[2] - A[2]) * ax[2]
-
-        t0, t1 = c3d.domain()
-        clen = c3d.point_at(t0).distance(c3d.point_at(0.5 * (t0 + t1)))
-        hscale = max(clen, 1e-9)
-        hmin = 1e300
-        hmax = -1e300
-        hsum = 0.0
-        ns = 0
-
-        for i in range(33):
-            h = height(c3d.point_at(t0 + (t1 - t0) * i / 32))
-            hmin = min(hmin, h)
-            hmax = max(hmax, h)
-            hsum += h
-            ns += 1
-
-        if hmax - hmin > hscale * 1e-4:
-            return None
-
-        if c3d.point_at(t0).distance(c3d.point_at(t1)) > hscale * 1e-3:
-            return None
-
-        hc = hsum / ns
-        um2 = 0.5 * (u0 + u1)
-        va = v0
-        vb = v1
-        ha = height(srf.point_at(um2, va))
-        hb = height(srf.point_at(um2, vb))
-
-        if (hc - ha) * (hc - hb) > 0:
-            return None
-
-        for _ in range(60):
-            vmid = 0.5 * (va + vb)
-            hm = height(srf.point_at(um2, vmid))
-
-            if (hm - hc) * (ha - hc) <= 0:
-                vb = vmid
-            else:
-                va = vmid
-                ha = hm
-
-        vc = 0.5 * (va + vb)
-
-        return NurbsCurve.create(
-            False,
-            1,
-            [
-                Point(u0, vc, 0.0),
-                Point(u1, vc, 0.0),
-            ],
+        return (
+            _frame_tube_angle(self.frame, self.rmaj, self.rmin, q)
+            if self.tube
+            else _frame_longitude(self.frame, q)
         )
 
-    return None
+
+class _AngleMap:
+    """Tabulated angle along one parameter line."""
+
+    def __init__(self, probe, lo, hi, xs, ys):
+        self.probe = probe  # Angle along the parameter line.
+        self.lo = lo  # Parameter start.
+        self.hi = hi  # Parameter end.
+        self.xs = xs  # Tabulated parameters.
+        self.ys = ys  # Unwrapped angles at xs.
 
 
-def _emit_pullback_curve(nodes):
-    """Degree-1 UV polyline through pull-back nodes."""
+def _angle_map(probe, lo, hi):
+    """Tabulate 129 unwrapped angles of the probe over [lo, hi]."""
 
-    pts = []
+    nt = 128
+    rng = hi - lo
+    xs = [0.0] * (nt + 1)
+    ys = [0.0] * (nt + 1)
 
-    for node in nodes:
-        pts.append(Point(node[0], node[1], 0.0))
+    for k in range(nt + 1):
+        x = lo + rng * k / nt
+        y = probe.angle(x)
 
-    return NurbsCurve.create(False, 1, pts)
+        if k > 0:
+            y = _unwrap_angle(y, ys[k - 1])
+
+        xs[k] = x
+        ys[k] = y
+
+    return _AngleMap(probe, lo, hi, xs, ys)
+
+
+def _polish_angle(probe, x, y, lo, hi):
+    """Two Newton steps moving x in [lo, hi] until the probe angle reaches y."""
+
+    dx = (hi - lo) * 1e-7
+
+    for _ in range(2):
+        xc = min(max(x, lo), hi)
+        g0 = _wrap_angle(probe.angle(xc) - y)
+        g1 = _wrap_angle(probe.angle(min(xc + dx, hi)) - y)
+        dg = (g1 - g0) / dx
+
+        if abs(dg) < 1e-12:
+            break
+
+        x = min(max(xc - g0 / dg, lo), hi)
+
+    return x
+
+
+def _map_parameter(m, y):
+    """Parameter where the tabulated angle reaches y, Newton-polished."""
+    return _polish_angle(m.probe, _inverse_table(m.xs, m.ys, y), y, m.lo, m.hi)
+
+
+def _height_table(srf, f, um, v0, v1):
+    """Height along the frame axis at 129 samples of the line u = um."""
+
+    nt = 128
+    tv = [0.0] * (nt + 1)
+    th = [0.0] * (nt + 1)
+
+    for k in range(nt + 1):
+        v = v0 + (v1 - v0) * k / nt
+        tv[k] = v
+        th[k] = _axis_height(srf.point_at(um, v), f.o, f.z)
+
+    return tv, th
+
+
+def _clamped_table(xs, ys, y):
+    """The x where the tabulated y reaches y, clamped to the table ends."""
+
+    nt = len(ys) - 1
+    incr = ys[nt] >= ys[0]
+
+    if incr and y <= ys[0]:
+        return xs[0]
+
+    if incr and y >= ys[nt]:
+        return xs[nt]
+
+    if not incr and y >= ys[0]:
+        return xs[0]
+
+    if not incr and y <= ys[nt]:
+        return xs[nt]
+
+    lo = 0
+    hi = nt
+
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        above = (ys[mid] < y) if incr else (ys[mid] > y)
+
+        if above:
+            lo = mid
+        else:
+            hi = mid
+
+    denom = ys[hi] - ys[lo]
+    f = (y - ys[lo]) / denom if abs(denom) > 1e-15 else 0.0
+
+    return xs[lo] + (xs[hi] - xs[lo]) * f
+
+
+def _sphere_refine_v(srf, f, um, v, h, v0, v1):
+    """Two Newton steps moving v on the line u = um until the axial height reaches h."""
+
+    vlo = min(v0, v1)
+    vhi = max(v0, v1)
+
+    for _ in range(2):
+        dv = (v1 - v0) * 1e-7
+        vc = min(max(v, vlo), vhi)
+        g0 = _axis_height(srf.point_at(um, vc), f.o, f.z) - h
+        g1 = _axis_height(srf.point_at(um, min(vc + dv, vhi)), f.o, f.z) - h
+        dg = (g1 - g0) / dv
+
+        if abs(dg) < 1e-12:
+            break
+
+        v = min(max(vc - g0 / dg, vlo), vhi)
+
+    return v
+
+
+def _split_pullback_u(uv, u0, range_u):
+    """Degree-1 pcurves of (u, v) samples with u unwrapped, split where u crosses the seam."""
+
+    out = []
+    seg = []
+    cur_k = _period_index(uv[0][0], u0, range_u)
+    seg.append(Point(uv[0][0] - cur_k * range_u, uv[0][1], 0.0))
+
+    for i in range(1, len(uv)):
+        ki = _period_index(uv[i][0], u0, range_u)
+
+        while ki != cur_k:
+            step = 1 if ki > cur_k else -1
+            nk = cur_k + step
+            seam_cont = u0 + (nk if step > 0 else cur_k) * range_u
+            denom = uv[i][0] - uv[i - 1][0]
+            f = (seam_cont - uv[i - 1][0]) / denom if abs(denom) > 1e-15 else 0.0
+            f = min(max(f, 0.0), 1.0)
+            vc = uv[i - 1][1] + (uv[i][1] - uv[i - 1][1]) * f
+            seg.append(Point(seam_cont - cur_k * range_u, vc, 0.0))
+
+            if len(seg) >= 2:
+                out.append(NurbsCurve.create(False, 1, seg))
+
+            seg = [Point(seam_cont - nk * range_u, vc, 0.0)]
+            cur_k = nk
+
+        seg.append(Point(uv[i][0] - cur_k * range_u, uv[i][1], 0.0))
+
+    if len(seg) >= 2:
+        out.append(NurbsCurve.create(False, 1, seg))
+
+    return out
 
 
 def _analytic_sphere_pullback(srf, recog, c3d):
     """Pull a 3D curve back to sphere parameters through longitude and latitude."""
 
-    if recog is None or recog[0] != "sphere":
+    if recog.kind != _RecogSurface.SPHERE:
         return []
 
     u0, u1 = srf.domain(0)
@@ -3321,463 +5116,333 @@ def _analytic_sphere_pullback(srf, recog, c3d):
     if range_u < 1e-9:
         return []
 
-    def dot(a, b):
-        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-
-    C = recog[1]
     um = 0.5 * (u0 + u1)
     vm = 0.5 * (v0 + v1)
     sp = srf.point_at(um, v0)
-    np = srf.point_at(um, v1)
-    Zs = [np[0] - sp[0], np[1] - sp[1], np[2] - sp[2]]
-    zn = math.sqrt(dot(Zs, Zs))
+    np_ = srf.point_at(um, v1)
+    axis = [np_[0] - sp[0], np_[1] - sp[1], np_[2] - sp[2]]
+    frame = (
+        _axis_frame(recog.p1, axis, srf.point_at(u0, vm))
+        if _normalize_axis(axis)
+        else None
+    )
 
-    if zn < 1e-12:
+    if frame is None:
         return []
 
-    Zs = [Zs[0] / zn, Zs[1] / zn, Zs[2] / zn]
-    P0 = srf.point_at(u0, vm)
-    x0 = [P0[0] - C[0], P0[1] - C[1], P0[2] - C[2]]
-    h0 = dot(x0, Zs)
-    Xs = [x0[0] - h0 * Zs[0], x0[1] - h0 * Zs[1], x0[2] - h0 * Zs[2]]
-    xn = math.sqrt(dot(Xs, Xs))
+    lon_map = _angle_map(_AngleProbe(srf, frame, vm, True, False, 0.0, 0.0), u0, u1)
+    tv, th = _height_table(srf, frame, um, v0, v1)
 
-    if xn < 1e-12:
+    if abs(th[-1] - th[0]) < 1e-12:
         return []
-
-    Xs = [Xs[0] / xn, Xs[1] / xn, Xs[2] / xn]
-    Ys = [
-        Zs[1] * Xs[2] - Zs[2] * Xs[1],
-        Zs[2] * Xs[0] - Zs[0] * Xs[2],
-        Zs[0] * Xs[1] - Zs[1] * Xs[0],
-    ]
-    PI = math.pi
-    TWO_PI = 2.0 * PI
-    NT = 128
-    tu = [0.0] * (NT + 1)
-    tlon = [0.0] * (NT + 1)
-
-    for k in range(NT + 1):
-        u = u0 + range_u * k / NT
-        p = srf.point_at(u, vm)
-        r = [p[0] - C[0], p[1] - C[1], p[2] - C[2]]
-        lon = math.atan2(dot(r, Ys), dot(r, Xs))
-
-        if k > 0:
-            while lon - tlon[k - 1] > PI:
-                lon -= TWO_PI
-
-            while lon - tlon[k - 1] < -PI:
-                lon += TWO_PI
-
-        tu[k] = u
-        tlon[k] = lon
-
-    lon_incr = tlon[NT] >= tlon[0]
-    lon_lo = min(tlon[0], tlon[NT])
-    lon_hi = max(tlon[0], tlon[NT])
-
-    def u_from_lon(lon):
-        while lon < lon_lo - 1e-9:
-            lon += TWO_PI
-
-        while lon > lon_hi + 1e-9:
-            lon -= TWO_PI
-
-        lo = 0
-        hi = NT
-
-        while hi - lo > 1:
-            mid = (lo + hi) // 2
-            above = (tlon[mid] < lon) if lon_incr else (tlon[mid] > lon)
-
-            if above:
-                lo = mid
-            else:
-                hi = mid
-
-        denom = tlon[hi] - tlon[lo]
-        f = (lon - tlon[lo]) / denom if abs(denom) > 1e-15 else 0.0
-
-        return tu[lo] + (tu[hi] - tu[lo]) * f
-
-    tv = [0.0] * (NT + 1)
-    th = [0.0] * (NT + 1)
-
-    for k in range(NT + 1):
-        v = v0 + (v1 - v0) * k / NT
-        p = srf.point_at(um, v)
-        r = [p[0] - C[0], p[1] - C[1], p[2] - C[2]]
-        tv[k] = v
-        th[k] = dot(r, Zs)
-
-    incr = th[NT] >= th[0]
-
-    if abs(th[NT] - th[0]) < 1e-12:
-        return []
-
-    def v_from_height(h):
-        if incr:
-            if h <= th[0]:
-                return tv[0]
-
-            if h >= th[NT]:
-                return tv[NT]
-        else:
-            if h >= th[0]:
-                return tv[0]
-
-            if h <= th[NT]:
-                return tv[NT]
-
-        lo = 0
-        hi = NT
-
-        while hi - lo > 1:
-            mid = (lo + hi) // 2
-            above = (th[mid] < h) if incr else (th[mid] > h)
-
-            if above:
-                lo = mid
-            else:
-                hi = mid
-
-        denom = th[hi] - th[lo]
-        f = (h - th[lo]) / denom if abs(denom) > 1e-15 else 0.0
-
-        return tv[lo] + (tv[hi] - tv[lo]) * f
 
     t0, t1 = c3d.domain()
-
-    def project_t(t):
-        p = c3d.point_at(t)
-        r = [p[0] - C[0], p[1] - C[1], p[2] - C[2]]
-        lon = math.atan2(dot(r, Ys), dot(r, Xs))
-        h = dot(r, Zs)
-        u = u_from_lon(lon)
-
-        for _ in range(2):
-            du_ = range_u * 1e-7
-            uc = min(max(u, u0), u1)
-            pc0 = srf.point_at(uc, vm)
-            rc0 = [pc0[0] - C[0], pc0[1] - C[1], pc0[2] - C[2]]
-            g0 = math.atan2(dot(rc0, Ys), dot(rc0, Xs)) - lon
-
-            while g0 > PI:
-                g0 -= TWO_PI
-
-            while g0 < -PI:
-                g0 += TWO_PI
-
-            pc1 = srf.point_at(min(uc + du_, u1), vm)
-            rc1 = [pc1[0] - C[0], pc1[1] - C[1], pc1[2] - C[2]]
-            g1 = math.atan2(dot(rc1, Ys), dot(rc1, Xs)) - lon
-
-            while g1 > PI:
-                g1 -= TWO_PI
-
-            while g1 < -PI:
-                g1 += TWO_PI
-
-            dg = (g1 - g0) / du_
-
-            if abs(dg) < 1e-12:
-                break
-
-            u = min(max(uc - g0 / dg, u0), u1)
-
-        v = v_from_height(h)
-
-        for _ in range(2):
-            dv_ = (v1 - v0) * 1e-7
-            vc2 = min(max(v, min(v0, v1)), max(v0, v1))
-            qc0 = srf.point_at(um, vc2)
-            g0 = (
-                (qc0[0] - C[0]) * Zs[0]
-                + (qc0[1] - C[1]) * Zs[1]
-                + (qc0[2] - C[2]) * Zs[2]
-                - h
-            )
-            qc1 = srf.point_at(um, min(vc2 + dv_, max(v0, v1)))
-            g1 = (
-                (qc1[0] - C[0]) * Zs[0]
-                + (qc1[1] - C[1]) * Zs[1]
-                + (qc1[2] - C[2]) * Zs[2]
-                - h
-            )
-            dg = (g1 - g0) / dv_
-
-            if abs(dg) < 1e-12:
-                break
-
-            v = min(max(vc2 - g0 / dg, min(v0, v1)), max(v0, v1))
-
-        return u, v
-
     n = max(c3d.cv_count() * 8, 120)
     uv = []
     prev_u = 0.0
 
     for i in range(n + 1):
-        t = t0 + (t1 - t0) * i / n
-        u, v = project_t(t)
+        p = c3d.point_at(t0 + (t1 - t0) * i / n)
+        h = _axis_height(p, frame.o, frame.z)
+        u = _map_parameter(lon_map, _frame_longitude(frame, p))
+        v = _sphere_refine_v(srf, frame, um, _clamped_table(tv, th, h), h, v0, v1)
 
         if i > 0:
-            while u - prev_u > range_u * 0.5:
-                u -= range_u
-
-            while u - prev_u < -range_u * 0.5:
-                u += range_u
+            u = _unwrap_period(u, prev_u, range_u)
 
         prev_u = u
         uv.append((u, v))
 
-    if len(uv) < 2:
-        return []
+    return _split_pullback_u(uv, u0, range_u)
 
-    out = []
-    seg = []
 
-    def kof(u):
-        return math.floor((u - u0) / range_u + 1e-9)
+def _cone_pullback_samples(c3d, frame, lon_map, h0, h1, v0, v1):
+    """Samples (u, v) of a curve on a cone or cylinder, u unwrapped and v linear in the axial height."""
 
-    cur_k = kof(uv[0][0])
-    seg.append((uv[0][0] - cur_k * range_u, uv[0][1]))
+    t0, t1 = c3d.domain()
+    range_u = lon_map.hi - lon_map.lo
+    n = max(c3d.cv_count() * 8, 120)
+    prev_lon = 0.0
+    uv = []
+    prev_u = 0.0
 
-    for i in range(1, len(uv)):
-        ki = kof(uv[i][0])
+    for i in range(n + 1):
+        p = c3d.point_at(t0 + (t1 - t0) * i / n)
+        r = [p[0] - frame.o[0], p[1] - frame.o[1], p[2] - frame.o[2]]
+        rx = _ssi_dot(r, frame.x)
+        ry = _ssi_dot(r, frame.y)
+        rad = math.sqrt(max(0.0, rx * rx + ry * ry))
+        lon = math.atan2(ry, rx) if rad > 1e-12 else prev_lon
+        prev_lon = lon
+        u = (
+            _map_parameter(lon_map, lon)
+            if rad > 1e-12
+            else _inverse_table(lon_map.xs, lon_map.ys, lon)
+        )
+        v = v0 + (_ssi_dot(r, frame.z) - h0) / (h1 - h0) * (v1 - v0)
 
-        while ki != cur_k:
-            step = 1 if ki > cur_k else -1
-            nk = cur_k + step
-            seam_cont = u0 + (nk if step > 0 else cur_k) * range_u
-            denom = uv[i][0] - uv[i - 1][0]
-            f = (seam_cont - uv[i - 1][0]) / denom if abs(denom) > 1e-15 else 0.0
-            f = min(max(f, 0.0), 1.0)
-            vc = uv[i - 1][1] + (uv[i][1] - uv[i - 1][1]) * f
-            seg.append((seam_cont - cur_k * range_u, vc))
+        if i > 0:
+            u = _unwrap_period(u, prev_u, range_u)
 
-            if len(seg) >= 2:
-                out.append(_emit_pullback_curve(seg))
+        prev_u = u
+        uv.append((u, v))
 
-            seg = []
-            seg.append((seam_cont - nk * range_u, vc))
-            cur_k = nk
-
-        seg.append((uv[i][0] - cur_k * range_u, uv[i][1]))
-
-    if len(seg) >= 2:
-        out.append(_emit_pullback_curve(seg))
-
-    return out
+    return uv
 
 
 def _analytic_cone_pullback(srf, recog, c3d):
     """Analytic pull-back of a 3D curve onto a recognized cone or cylinder."""
 
-    if recog is None or (recog[0] != "cone" and recog[0] != "cylinder"):
+    if recog.kind != _RecogSurface.CONE and recog.kind != _RecogSurface.CYLINDER:
         return []
 
     u0, u1 = srf.domain(0)
     v0, v1 = srf.domain(1)
     range_u = u1 - u0
+    axis = list(recog.p2)
 
-    if range_u < 1e-9:
+    if range_u < 1e-9 or not _normalize_axis(axis):
         return []
-
-    def dot(a, b):
-        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-
-    A = recog[1]
-    Zc = [recog[2][0], recog[2][1], recog[2][2]]
-    zn = math.sqrt(dot(Zc, Zc))
-
-    if zn < 1e-12:
-        return []
-
-    Zc = [Zc[0] / zn, Zc[1] / zn, Zc[2] / zn]
-
-    def height(p):
-        r = [p[0] - A[0], p[1] - A[1], p[2] - A[2]]
-
-        return dot(r, Zc)
 
     um = 0.5 * (u0 + u1)
-    h0 = height(srf.point_at(um, v0))
-    h1 = height(srf.point_at(um, v1))
+    h0 = _axis_height(srf.point_at(um, v0), recog.p1, axis)
+    h1 = _axis_height(srf.point_at(um, v1), recog.p1, axis)
 
     if abs(h1 - h0) < 1e-12:
         return []
 
-    def v_from_height(h):
-        return v0 + (h - h0) / (h1 - h0) * (v1 - v0)
-
     v_ref = v0 if abs(h0) >= abs(h1) else v1
-    P0 = srf.point_at(u0, v_ref)
-    x0 = [P0[0] - A[0], P0[1] - A[1], P0[2] - A[2]]
-    hp = dot(x0, Zc)
-    Xc = [x0[0] - hp * Zc[0], x0[1] - hp * Zc[1], x0[2] - hp * Zc[2]]
-    xn = math.sqrt(dot(Xc, Xc))
+    frame = _axis_frame(recog.p1, axis, srf.point_at(u0, v_ref))
 
-    if xn < 1e-12:
+    if frame is None:
         return []
 
-    Xc = [Xc[0] / xn, Xc[1] / xn, Xc[2] / xn]
-    Yc = [
-        Zc[1] * Xc[2] - Zc[2] * Xc[1],
-        Zc[2] * Xc[0] - Zc[0] * Xc[2],
-        Zc[0] * Xc[1] - Zc[1] * Xc[0],
-    ]
-    PI = math.pi
-    TWO_PI = 2.0 * PI
-    NT = 128
-    tu = [0.0] * (NT + 1)
-    tlon = [0.0] * (NT + 1)
+    lon_map = _angle_map(_AngleProbe(srf, frame, v_ref, True, False, 0.0, 0.0), u0, u1)
+    uv = _cone_pullback_samples(c3d, frame, lon_map, h0, h1, v0, v1)
 
-    for k in range(NT + 1):
-        u = u0 + range_u * k / NT
-        p = srf.point_at(u, v_ref)
-        r = [p[0] - A[0], p[1] - A[1], p[2] - A[2]]
-        lon = math.atan2(dot(r, Yc), dot(r, Xc))
+    return _split_pullback_u(uv, u0, range_u)
 
-        if k > 0:
-            while lon - tlon[k - 1] > PI:
-                lon -= TWO_PI
 
-            while lon - tlon[k - 1] < -PI:
-                lon += TWO_PI
+class _PeriodGrid:
+    """Period cells of a torus pull-back in (a, b), swapped when a is the surface v."""
 
-        tu[k] = u
-        tlon[k] = lon
+    def __init__(self, a0, range_a, b0, range_b, swapped):
+        self.a0 = a0  # Start of a.
+        self.range_a = range_a  # Period of a.
+        self.b0 = b0  # Start of b.
+        self.range_b = range_b  # Period of b.
+        self.swapped = swapped  # Whether a is the surface v.
 
-    lon_incr = tlon[NT] >= tlon[0]
-    lon_lo = min(tlon[0], tlon[NT])
-    lon_hi = max(tlon[0], tlon[NT])
 
-    def u_from_lon(lon):
-        while lon < lon_lo - 1e-9:
-            lon += TWO_PI
+def _push_pullback_point(g, seg, a, b, ka, kb):
+    """Append the point (a, b) shifted into cell (ka, kb) in surface (u, v) order."""
 
-        while lon > lon_hi + 1e-9:
-            lon -= TWO_PI
+    uu = a - ka * g.range_a
+    vv = b - kb * g.range_b
+    seg.append(Point(vv, uu, 0.0) if g.swapped else Point(uu, vv, 0.0))
 
-        lo = 0
-        hi = NT
 
-        while hi - lo > 1:
-            mid = (lo + hi) // 2
-            above = (tlon[mid] < lon) if lon_incr else (tlon[mid] > lon)
+def _cross_period(g, p, q, ka, kb, seg, out):
+    """Split the step p -> q at its first cell boundary: (crossed, p, ka, kb), false when q is in the current cell."""
 
-            if above:
-                lo = mid
-            else:
-                hi = mid
+    kqa = _period_index(q[0], g.a0, g.range_a)
+    kqb = _period_index(q[1], g.b0, g.range_b)
 
-        denom = tlon[hi] - tlon[lo]
-        f = (lon - tlon[lo]) / denom if abs(denom) > 1e-15 else 0.0
+    if kqa == ka and kqb == kb:
+        return False, p, ka, kb
 
-        return tu[lo] + (tu[hi] - tu[lo]) * f
+    fa = 2.0
+    fb = 2.0
+    sa = 0
+    sb = 0
 
-    t0, t1 = c3d.domain()
-    n = max(c3d.cv_count() * 8, 120)
-    prev_lon_s = [0.0]
+    if kqa != ka:
+        sa = 1 if kqa > ka else -1
+        bound = g.a0 + (ka + 1 if sa > 0 else ka) * g.range_a
+        den = q[0] - p[0]
+        fa = (bound - p[0]) / den if abs(den) > 1e-15 else 0.0
 
-    def project_t(tq):
-        p = c3d.point_at(tq)
-        r = [p[0] - A[0], p[1] - A[1], p[2] - A[2]]
-        rad = math.sqrt(max(0.0, dot(r, Xc) * dot(r, Xc) + dot(r, Yc) * dot(r, Yc)))
-        lon = math.atan2(dot(r, Yc), dot(r, Xc)) if rad > 1e-12 else prev_lon_s[0]
-        prev_lon_s[0] = lon
-        u = u_from_lon(lon)
+    if kqb != kb:
+        sb = 1 if kqb > kb else -1
+        bound = g.b0 + (kb + 1 if sb > 0 else kb) * g.range_b
+        den = q[1] - p[1]
+        fb = (bound - p[1]) / den if abs(den) > 1e-15 else 0.0
 
-        if rad > 1e-12:
-            for _ in range(2):
-                du_ = range_u * 1e-7
-                uc = min(max(u, u0), u1)
-                pc0 = srf.point_at(uc, v_ref)
-                rc0 = [pc0[0] - A[0], pc0[1] - A[1], pc0[2] - A[2]]
-                g0 = math.atan2(dot(rc0, Yc), dot(rc0, Xc)) - lon
+    if fa <= fb:
+        c = (
+            g.a0 + (ka + 1 if sa > 0 else ka) * g.range_a,
+            p[1] + (q[1] - p[1]) * min(max(fa, 0.0), 1.0),
+        )
+    else:
+        c = (
+            p[0] + (q[0] - p[0]) * min(max(fb, 0.0), 1.0),
+            g.b0 + (kb + 1 if sb > 0 else kb) * g.range_b,
+        )
 
-                while g0 > PI:
-                    g0 -= TWO_PI
+    _push_pullback_point(g, seg, c[0], c[1], ka, kb)
 
-                while g0 < -PI:
-                    g0 += TWO_PI
+    if len(seg) >= 2:
+        out.append(NurbsCurve.create(False, 1, seg))
 
-                pc1 = srf.point_at(min(uc + du_, u1), v_ref)
-                rc1 = [pc1[0] - A[0], pc1[1] - A[1], pc1[2] - A[2]]
-                g1 = math.atan2(dot(rc1, Yc), dot(rc1, Xc)) - lon
+    seg.clear()
 
-                while g1 > PI:
-                    g1 -= TWO_PI
+    if fa <= fb:
+        ka += sa
+    else:
+        kb += sb
 
-                while g1 < -PI:
-                    g1 += TWO_PI
+    _push_pullback_point(g, seg, c[0], c[1], ka, kb)
 
-                dg = (g1 - g0) / du_
+    return True, c, ka, kb
 
-                if abs(dg) < 1e-12:
-                    break
 
-                u = min(max(uc - g0 / dg, u0), u1)
-
-        return u, v_from_height(dot(r, Zc))
-
-    uv = []
-    prev_u = 0.0
-
-    for i in range(n + 1):
-        tq = t0 + (t1 - t0) * i / n
-        u, v = project_t(tq)
-
-        if i > 0:
-            while u - prev_u > range_u * 0.5:
-                u -= range_u
-
-            while u - prev_u < -range_u * 0.5:
-                u += range_u
-
-        prev_u = u
-        uv.append((u, v))
-
-    if len(uv) < 2:
-        return []
+def _split_pullback_ab(ab, g):
+    """Degree-1 pcurves of (a, b) samples with a and b unwrapped, split at both seams."""
 
     out = []
     seg = []
+    ka = _period_index(ab[0][0], g.a0, g.range_a)
+    kb = _period_index(ab[0][1], g.b0, g.range_b)
+    _push_pullback_point(g, seg, ab[0][0], ab[0][1], ka, kb)
 
-    def kof(u):
-        return math.floor((u - u0) / range_u + 1e-9)
+    for i in range(1, len(ab)):
+        p = ab[i - 1]
 
-    cur_k = kof(uv[0][0])
-    seg.append((uv[0][0] - cur_k * range_u, uv[0][1]))
+        for _ in range(8):
+            crossed, p, ka, kb = _cross_period(g, p, ab[i], ka, kb, seg, out)
 
-    for i in range(1, len(uv)):
-        ki = kof(uv[i][0])
+            if not crossed:
+                break
 
-        while ki != cur_k:
-            step = 1 if ki > cur_k else -1
-            nk = cur_k + step
-            seam_cont = u0 + (nk if step > 0 else cur_k) * range_u
-            denom = uv[i][0] - uv[i - 1][0]
-            f = (seam_cont - uv[i - 1][0]) / denom if abs(denom) > 1e-15 else 0.0
-            f = min(max(f, 0.0), 1.0)
-            vc = uv[i - 1][1] + (uv[i][1] - uv[i - 1][1]) * f
-            seg.append((seam_cont - cur_k * range_u, vc))
-
-            if len(seg) >= 2:
-                out.append(_emit_pullback_curve(seg))
-
-            seg = []
-            seg.append((seam_cont - nk * range_u, vc))
-            cur_k = nk
-
-        seg.append((uv[i][0] - cur_k * range_u, uv[i][1]))
+        _push_pullback_point(g, seg, ab[i][0], ab[i][1], ka, kb)
 
     if len(seg) >= 2:
-        out.append(_emit_pullback_curve(seg))
+        out.append(NurbsCurve.create(False, 1, seg))
 
     return out
+
+
+def _farthest_from_axis(srf, center, axis):
+    """Sample of a 5 x 5 grid farthest from the unit axis through center."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    pf = srf.point_at(u0, v0)
+    best = -1.0
+
+    for i in range(5):
+        for j in range(5):
+            q = srf.point_at(u0 + (u1 - u0) * i / 4.0, v0 + (v1 - v0) * j / 4.0)
+            d = _axis_radial_sq(q, center, axis)
+
+            if d > best:
+                best = d
+                pf = q
+
+    return pf
+
+
+def _torus_swapped(srf, frame):
+    """Whether the torus's longitude runs along v rather than u."""
+
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    um = 0.5 * (u0 + u1)
+    vm = 0.5 * (v0 + v1)
+    lu1 = _frame_longitude(frame, srf.point_at(u0 + 0.6 * (u1 - u0), vm))
+    lu0 = _frame_longitude(frame, srf.point_at(u0 + 0.3 * (u1 - u0), vm))
+    lv1 = _frame_longitude(frame, srf.point_at(um, v0 + 0.6 * (v1 - v0)))
+    lv0 = _frame_longitude(frame, srf.point_at(um, v0 + 0.3 * (v1 - v0)))
+
+    return abs(_wrap_angle(lv1 - lv0)) > abs(_wrap_angle(lu1 - lu0))
+
+
+def _farthest_on_line(probe, lo, hi):
+    """Free parameter of 17 samples along the probe line farthest from the axis."""
+
+    rng = hi - lo
+    x_ref = lo
+    best = -1.0
+
+    for j in range(17):
+        x = lo + rng * j / 16.0
+        d = _axis_radial_sq(probe.point(x), probe.frame.o, probe.frame.z)
+
+        if d > best:
+            best = d
+            x_ref = x
+
+    return x_ref
+
+
+def _analytic_torus_pullback(srf, recog, c3d):
+    """Analytic pull-back of a 3D curve onto a recognized torus."""
+
+    domain_u = srf.domain(0)
+    domain_v = srf.domain(1)
+    axis = list(recog.p2)
+    rmaj = recog.r
+    rmin = recog.r2
+
+    if (
+        recog.kind != _RecogSurface.TORUS
+        or domain_u[1] - domain_u[0] < 1e-9
+        or domain_v[1] - domain_v[0] < 1e-9
+    ):
+        return []
+
+    if not _normalize_axis(axis) or rmaj < 1e-12 or rmin < 1e-12:
+        return []
+
+    frame = _axis_frame(recog.p1, axis, _farthest_from_axis(srf, recog.p1, axis))
+
+    if frame is None:
+        return []
+
+    swapped = _torus_swapped(srf, frame)
+    a0, a1 = domain_v if swapped else domain_u
+    b0, b1 = domain_u if swapped else domain_v
+    tube_probe = _AngleProbe(srf, frame, 0.5 * (a0 + a1), swapped, True, rmaj, rmin)
+    b_ref = _farthest_on_line(tube_probe, b0, b1)
+    lon_map = _angle_map(
+        _AngleProbe(srf, frame, b_ref, not swapped, False, 0.0, 0.0), a0, a1
+    )
+    tube_map = _angle_map(tube_probe, b0, b1)
+    t0, t1 = c3d.domain()
+    n = max(c3d.cv_count() * 8, 4000)
+    ab = []
+    prev_a = 0.0
+    prev_b = 0.0
+
+    for i in range(n + 1):
+        q = c3d.point_at(t0 + (t1 - t0) * i / n)
+        a = _map_parameter(lon_map, _frame_longitude(frame, q))
+        b = _map_parameter(tube_map, _frame_tube_angle(frame, rmaj, rmin, q))
+
+        if i > 0:
+            a = _unwrap_period(a, prev_a, a1 - a0)
+            b = _unwrap_period(b, prev_b, b1 - b0)
+
+        prev_a = a
+        prev_b = b
+        ab.append((a, b))
+
+    return _split_pullback_ab(ab, _PeriodGrid(a0, a1 - a0, b0, b1 - b0, swapped))
+
+
+def _analytic_pullback(srf, recog, c3d):
+    """Analytic pull-back matching the recognized kind: sphere, cone or cylinder, torus."""
+
+    if recog.kind == _RecogSurface.TORUS:
+        return _analytic_torus_pullback(srf, recog, c3d)
+
+    if recog.kind == _RecogSurface.SPHERE:
+        return _analytic_sphere_pullback(srf, recog, c3d)
+
+    if recog.kind == _RecogSurface.CONE or recog.kind == _RecogSurface.CYLINDER:
+        return _analytic_cone_pullback(srf, recog, c3d)
+
+    return []
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3785,22 +5450,23 @@ def _analytic_cone_pullback(srf, recog, c3d):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _point_axis_dist(apt, adir, P):
-    """Distance of P from the axis through apt along adir."""
+def _point_axis_dist(apt, adir, p):
+    """Distance of p from the axis through apt along adir."""
 
     u = _ssi_unit(adir)
-    dp = (P[0] - apt[0], P[1] - apt[1], P[2] - apt[2])
+    dp = [p[0] - apt[0], p[1] - apt[1], p[2] - apt[2]]
     t = _ssi_dot(dp, u)
-    perp = (dp[0] - t * u[0], dp[1] - t * u[1], dp[2] - t * u[2])
+    perp = [dp[0] - t * u[0], dp[1] - t * u[1], dp[2] - t * u[2]]
 
     return math.sqrt(_ssi_dot(perp, perp))
 
 
-def _axial_coord(apt, adir, P):
-    """Coordinate of P along the axis through apt along adir."""
+def _axial_coord(apt, adir, p):
+    """Coordinate of p along the axis through apt along adir."""
+
     u = _ssi_unit(adir)
 
-    return (P[0] - apt[0]) * u[0] + (P[1] - apt[1]) * u[1] + (P[2] - apt[2]) * u[2]
+    return (p[0] - apt[0]) * u[0] + (p[1] - apt[1]) * u[1] + (p[2] - apt[2]) * u[2]
 
 
 def _axes_coaxial(p1, d1, p2, d2, tol):
@@ -3836,11 +5502,11 @@ def _cyl_span(srf, apt, adir):
 
 
 def _lines_closest_point(p1, d1, p2, d2, tol):
-    """Closest point of two lines, false when parallel."""
+    """Closest point of two lines, None when parallel or apart."""
 
     u = _ssi_unit(d1)
     v = _ssi_unit(d2)
-    w0 = (p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2])
+    w0 = [p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2]]
     a = _ssi_dot(u, u)
     b = _ssi_dot(u, v)
     c = _ssi_dot(v, v)
@@ -3853,500 +5519,721 @@ def _lines_closest_point(p1, d1, p2, d2, tol):
 
     sc = (b * e - c * d) / den
     tc = (a * e - b * d) / den
-    q1 = (p1[0] + sc * u[0], p1[1] + sc * u[1], p1[2] + sc * u[2])
-    q2 = (p2[0] + tc * v[0], p2[1] + tc * v[1], p2[2] + tc * v[2])
-    diff = (q1[0] - q2[0], q1[1] - q2[1], q1[2] - q2[2])
+    q1 = [p1[0] + sc * u[0], p1[1] + sc * u[1], p1[2] + sc * u[2]]
+    q2 = [p2[0] + tc * v[0], p2[1] + tc * v[1], p2[2] + tc * v[2]]
+    diff = [q1[0] - q2[0], q1[1] - q2[1], q1[2] - q2[2]]
 
     if math.sqrt(_ssi_dot(diff, diff)) > tol:
         return None
 
-    return (0.5 * (q1[0] + q2[0]), 0.5 * (q1[1] + q2[1]), 0.5 * (q1[2] + q2[2]))
+    return [0.5 * (q1[0] + q2[0]), 0.5 * (q1[1] + q2[1]), 0.5 * (q1[2] + q2[2])]
 
 
-def _ssi_cylinder_sphere(cyl, sph):
-    """Coaxial cylinder-sphere section: circles."""
+def _axis_circles(center, w, zs, rad, out):
+    """Circles of radius rad around the unit axis w through center at axial offsets zs."""
 
-    kTol = 1e-6
-    P = cyl[1]
-    w = _ssi_unit(cyl[2])
-    rc = cyl[3]
-    C = sph[1]
-    R = sph[2]
-
-    if _point_axis_dist(P, w, C) > kTol:
-        return None
-
-    out = []
-
-    if R < rc - kTol:
-        return out
-
-    dist = math.sqrt(max(0.0, R * R - rc * rc))
     xa, ya = _ortho_basis(w)
 
-    if dist <= kTol:
-        out.append(_exact_circle(C[0], C[1], C[2], xa, ya, rc))
-
-        return out
-
-    for s in (dist, -dist):
-        cc = (C[0] + s * w[0], C[1] + s * w[1], C[2] + s * w[2])
-        out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rc))
-
-    return out
+    for z in zs:
+        cc = [center[0] + z * w[0], center[1] + z * w[1], center[2] + z * w[2]]
+        out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rad))
 
 
-def _ssi_cylinder_cone(cyl, cone):
+def _ssi_cylinder_sphere(cyl, sph, out):
+    """Coaxial cylinder-sphere section: circles."""
+
+    ktol = 1e-6
+    p = cyl.p1
+    w = _ssi_unit(cyl.p2)
+    rc = cyl.r
+    center = sph.p1
+    rsph = sph.r
+
+    if _point_axis_dist(p, w, center) > ktol:
+        return False
+
+    if rsph < rc - ktol:
+        return True
+
+    dist = math.sqrt(max(0.0, rsph * rsph - rc * rc))
+
+    if dist <= ktol:
+        xa, ya = _ortho_basis(w)
+        out.append(_exact_circle(center[0], center[1], center[2], xa, ya, rc))
+
+        return True
+
+    _axis_circles(center, w, [dist, -dist], rc, out)
+
+    return True
+
+
+def _ssi_cylinder_cone(cyl, cone, out):
     """Coaxial cylinder-cone section: circles."""
 
-    kTol = 1e-6
-    Pc = cyl[1]
-    w = _ssi_unit(cyl[2])
-    rc = cyl[3]
-    apex = cone[1]
-    a = _ssi_unit(cone[2])
-    alpha = cone[3]
+    ktol = 1e-6
+    pc = cyl.p1
+    w = _ssi_unit(cyl.p2)
+    rc = cyl.r
+    apex = cone.p1
+    a = _ssi_unit(cone.p2)
+    alpha = cone.r
 
-    if not _axes_coaxial(Pc, w, apex, a, kTol):
-        return None
+    if not _axes_coaxial(pc, w, apex, a, ktol):
+        return False
 
     ta = math.tan(alpha)
 
     if ta < 1e-9:
-        return None
+        return False
 
     s = rc / ta
-    out = []
 
-    if s < kTol:
-        return out
+    if s < ktol:
+        return True
 
-    cc = (apex[0] + s * a[0], apex[1] + s * a[1], apex[2] + s * a[2])
-    xa, ya = _ortho_basis(a)
-    out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rc))
+    _axis_circles(apex, a, [s], rc, out)
 
-    return out
+    return True
 
 
-def _ssi_cone_sphere(cone, sph):
+def _ssi_cone_sphere(cone, sph, out):
     """Coaxial cone-sphere section: circles."""
 
-    kTol = 1e-6
-    apex = cone[1]
-    a = _ssi_unit(cone[2])
-    alpha = cone[3]
-    C = sph[1]
-    R = sph[2]
+    ktol = 1e-6
+    apex = cone.p1
+    a = _ssi_unit(cone.p2)
+    alpha = cone.r
+    center = sph.p1
+    rsph = sph.r
 
-    if _point_axis_dist(apex, a, C) > kTol:
-        return None
+    if _point_axis_dist(apex, a, center) > ktol:
+        return False
 
-    dsign = _axial_coord(apex, a, C)
+    dsign = _axial_coord(apex, a, center)
     d = abs(dsign)
-    dir = (-a[0], -a[1], -a[2]) if (d > kTol and dsign < 0.0) else a
+    direction = [-a[0], -a[1], -a[2]] if (d > ktol and dsign < 0.0) else a
     t = math.tan(alpha)
     t2 = t * t
-    A = 1.0 + t2
-    B = 2.0 * t2 * d
-    Cq = t2 * d * d - R * R
-    disc = B * B - 4.0 * A * Cq
-    out = []
+    qa = 1.0 + t2
+    qb = 2.0 * t2 * d
+    qc = t2 * d * d - rsph * rsph
+    disc = qb * qb - 4.0 * qa * qc
 
-    if disc < -kTol:
-        return out
+    if disc < -ktol:
+        return True
 
     sq = math.sqrt(max(0.0, disc))
 
-    if sq <= kTol:
-        xs = [-B / (2.0 * A)]
+    if sq <= ktol:
+        xs = [-qb / (2.0 * qa)]
     else:
-        xs = [(-B - sq) / (2.0 * A), (-B + sq) / (2.0 * A)]
+        xs = [(-qb - sq) / (2.0 * qa), (-qb + sq) / (2.0 * qa)]
 
     xa, ya = _ortho_basis(a)
 
     for x in xs:
         sAx = d + x
 
-        if sAx < kTol:
+        if sAx < ktol:
             continue
 
         rr = t * sAx
 
-        if rr < kTol:
+        if rr < ktol:
             continue
 
-        cc = (apex[0] + sAx * dir[0], apex[1] + sAx * dir[1], apex[2] + sAx * dir[2])
+        cc = [
+            apex[0] + sAx * direction[0],
+            apex[1] + sAx * direction[1],
+            apex[2] + sAx * direction[2],
+        ]
         out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rr))
 
-    return out
+    return True
 
 
-def _ssi_cylinder_cylinder(sa, A, sb, B):
-    """Cylinder-cylinder section: circles when coaxial, Steinmetz curves when the axes meet."""
+def _ssi_parallel_cylinders(sa, ra, sb, rb, out):
+    """Parallel cylinders: shared ruling lines, false when coaxial with equal radii."""
 
-    kTol = 1e-6
-    P1 = A[1]
-    w1 = _ssi_unit(A[2])
-    R1 = A[3]
-    P2 = B[1]
-    w2 = _ssi_unit(B[2])
-    R2 = B[3]
+    ktol = 1e-6
+    p1 = ra.p1
+    w1 = _ssi_unit(ra.p2)
+    r1 = ra.r
+    p2 = rb.p1
+    r2 = rb.r
+    d = _point_axis_dist(p1, w1, p2)
+
+    if d <= ktol:
+        if abs(r1 - r2) <= ktol:
+            return False
+
+        return True
+
+    if d > r1 + r2 + ktol or d < abs(r1 - r2) - ktol:
+        return True
+
+    off = _ssi_dot([p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]], w1)
+    p2p = [p2[0] - off * w1[0], p2[1] - off * w1[1], p2[2] - off * w1[2]]
+    xdir = _ssi_unit([p2p[0] - p1[0], p2p[1] - p1[1], p2p[2] - p1[2]])
+    ydir = _ssi_unit(_ssi_cross(w1, xdir))
+    aa = (r1 * r1 - r2 * r2 + d * d) / (2.0 * d)
+    h = math.sqrt(max(0.0, r1 * r1 - aa * aa))
+    foot = [p1[0] + aa * xdir[0], p1[1] + aa * xdir[1], p1[2] + aa * xdir[2]]
+    s0a, s1a = _cyl_span(sa, p1, w1)
+    s0b, s1b = _cyl_span(sb, p1, w1)
+    slo = max(s0a, s0b)
+    shi = min(s1a, s1b)
+
+    if shi - slo <= ktol:
+        return True
+
+    feet = []
+
+    if h <= ktol:
+        feet.append(foot)
+    else:
+        feet.append(
+            [foot[0] + h * ydir[0], foot[1] + h * ydir[1], foot[2] + h * ydir[2]]
+        )
+        feet.append(
+            [foot[0] - h * ydir[0], foot[1] - h * ydir[1], foot[2] - h * ydir[2]]
+        )
+
+    for bp in feet:
+        line = _axis_segment(bp, w1, slo, shi)
+        line.set_domain(0.0, 1.0)
+        out.append(line)
+
+    return True
+
+
+def _ssi_cylinder_cylinder(sa, ra, sb, rb, out):
+    """Cylinder-cylinder section: lines when parallel, Steinmetz ellipses when equal axes meet."""
+
+    ktol = 1e-6
+    p1 = ra.p1
+    w1 = _ssi_unit(ra.p2)
+    r1 = ra.r
+    p2 = rb.p1
+    w2 = _ssi_unit(rb.p2)
+    r2 = rb.r
     cx = _ssi_cross(w1, w2)
-    sinmag = math.sqrt(_ssi_dot(cx, cx))
-    out = []
 
-    if sinmag <= kTol:
-        dline = _point_axis_dist(P1, w1, P2)
+    if math.sqrt(_ssi_dot(cx, cx)) <= ktol:
+        return _ssi_parallel_cylinders(sa, ra, sb, rb, out)
 
-        if dline <= kTol:
-            if abs(R1 - R2) <= kTol:
-                return None
+    rmax = max(r1, r2)
 
-            return out
+    if rmax < 1e-12 or abs(r1 - r2) / rmax > 1e-6:
+        return False
 
-        off = _ssi_dot((P2[0] - P1[0], P2[1] - P1[1], P2[2] - P1[2]), w1)
-        P2p = (P2[0] - off * w1[0], P2[1] - off * w1[1], P2[2] - off * w1[2])
-        d = dline
+    pint = _lines_closest_point(p1, w1, p2, w2, ktol)
 
-        if d > R1 + R2 + kTol:
-            return out
+    if pint is None:
+        return False
 
-        if d < abs(R1 - R2) - kTol:
-            return out
-
-        xdir = _ssi_unit((P2p[0] - P1[0], P2p[1] - P1[1], P2p[2] - P1[2]))
-        ydir = _ssi_unit(_ssi_cross(w1, xdir))
-        aa = (R1 * R1 - R2 * R2 + d * d) / (2.0 * d)
-        h = math.sqrt(max(0.0, R1 * R1 - aa * aa))
-        foot = (P1[0] + aa * xdir[0], P1[1] + aa * xdir[1], P1[2] + aa * xdir[2])
-        s0a, s1a = _cyl_span(sa, P1, w1)
-        s0b, s1b = _cyl_span(sb, P1, w1)
-        slo = max(s0a, s0b)
-        shi = min(s1a, s1b)
-
-        if shi - slo <= kTol:
-            return out
-
-        def emit(bp):
-            e0 = (bp[0] + slo * w1[0], bp[1] + slo * w1[1], bp[2] + slo * w1[2])
-            e1 = (bp[0] + shi * w1[0], bp[1] + shi * w1[1], bp[2] + shi * w1[2])
-            ln = NurbsCurve.create(
-                False,
-                1,
-                [
-                    Point(e0[0], e0[1], e0[2]),
-                    Point(e1[0], e1[1], e1[2]),
-                ],
-            )
-            ln.set_domain(0.0, 1.0)
-            out.append(ln)
-
-        if h <= kTol:
-            emit(foot)
-        else:
-            emit((foot[0] + h * ydir[0], foot[1] + h * ydir[1], foot[2] + h * ydir[2]))
-            emit((foot[0] - h * ydir[0], foot[1] - h * ydir[1], foot[2] - h * ydir[2]))
-
-        return out
-
-    Rmax = max(R1, R2)
-
-    if Rmax < 1e-12 or abs(R1 - R2) / Rmax > 1e-6:
-        return None
-
-    Pint = _lines_closest_point(P1, w1, P2, w2, kTol)
-
-    if Pint is None:
-        return None
-
-    R = 0.5 * (R1 + R2)
+    r = 0.5 * (r1 + r2)
     ang = math.acos(max(-1.0, min(1.0, _ssi_dot(w1, w2))))
     sh = math.sin(0.5 * ang)
     ch = math.cos(0.5 * ang)
 
     if sh < 1e-9 or ch < 1e-9:
-        return None
+        return False
 
     minor = _ssi_unit(cx)
-    maj1 = _ssi_unit((w1[0] + w2[0], w1[1] + w2[1], w1[2] + w2[2]))
-    maj2 = _ssi_unit((w1[0] - w2[0], w1[1] - w2[1], w1[2] - w2[2]))
-    out.append(_exact_ellipse(Pint[0], Pint[1], Pint[2], maj1, minor, R / sh, R))
-    out.append(_exact_ellipse(Pint[0], Pint[1], Pint[2], maj2, minor, R / ch, R))
+    maj1 = _ssi_unit([w1[0] + w2[0], w1[1] + w2[1], w1[2] + w2[2]])
+    maj2 = _ssi_unit([w1[0] - w2[0], w1[1] - w2[1], w1[2] - w2[2]])
+    out.append(_exact_ellipse(pint[0], pint[1], pint[2], maj1, minor, r / sh, r))
+    out.append(_exact_ellipse(pint[0], pint[1], pint[2], maj2, minor, r / ch, r))
 
-    return out
+    return True
+
+
+def _ssi_cylinder_torus(cyl, tor, out):
+    """Exact circles of a coaxial cylinder-torus pair."""
+
+    ktol = 1e-6
+    p = cyl.p1
+    wc = _ssi_unit(cyl.p2)
+    rc = cyl.r
+    center = tor.p1
+    w = _ssi_unit(tor.p2)
+    rmaj = tor.r
+    r = tor.r2
+
+    if r >= rmaj - ktol:
+        return False
+
+    if not _axes_coaxial(p, wc, center, w, ktol):
+        return False
+
+    dr = rc - rmaj
+    h2 = r * r - dr * dr
+
+    if h2 < -ktol:
+        return True
+
+    h = math.sqrt(max(0.0, h2))
+
+    if h <= ktol:
+        _axis_circles(center, w, [0.0], rc, out)
+    else:
+        _axis_circles(center, w, [h, -h], rc, out)
+
+    return True
+
+
+def _cone_torus_circles(center, w, t, za, r, rsign, out):
+    """Circles of a coaxial cone and one side (rsign = +rmaj or -rmaj) of the torus tube."""
+
+    ktol = 1e-6
+    qa = t * t + 1.0
+    qb = -2.0 * t * (t * za + rsign)
+    qc = (t * za + rsign) * (t * za + rsign) - r * r
+    disc = qb * qb - 4.0 * qa * qc
+
+    if disc < -ktol:
+        return
+
+    sq = math.sqrt(max(0.0, disc))
+
+    if sq <= ktol:
+        zs = [-qb / (2.0 * qa)]
+    else:
+        zs = [(-qb - sq) / (2.0 * qa), (-qb + sq) / (2.0 * qa)]
+
+    for z in zs:
+        rad = t * abs(z - za)
+
+        if rad < ktol:
+            continue
+
+        _axis_circles(center, w, [z], rad, out)
+
+
+def _ssi_cone_torus(cone, tor, out):
+    """Coaxial cone-torus section: circles."""
+
+    ktol = 1e-6
+    apex = cone.p1
+    a = _ssi_unit(cone.p2)
+    alpha = cone.r
+    center = tor.p1
+    w = _ssi_unit(tor.p2)
+    rmaj = tor.r
+    r = tor.r2
+
+    if r >= rmaj - ktol:
+        return False
+
+    if not _axes_coaxial(apex, a, center, w, ktol):
+        return False
+
+    t = math.tan(alpha)
+
+    if t < 1e-9:
+        return False
+
+    za = _axial_coord(center, w, apex)
+    _cone_torus_circles(center, w, t, za, r, rmaj, out)
+    _cone_torus_circles(center, w, t, za, r, -rmaj, out)
+
+    return True
+
+
+def _meridian_circles(center, w, rmaj, r, dx, dz, r2, out):
+    """Circles where the tube circle (rmaj, 0) of radius r meets the circle of radius r2 at offset (dx, dz) from it."""
+
+    ktol = 1e-6
+    d = math.sqrt(dx * dx + dz * dz)
+    aa = 0.5 * (r * r - r2 * r2 + d * d) / d
+    h = math.sqrt(max(0.0, r * r - aa * aa))
+    dirx = dx / d
+    dirz = dz / d
+    phx = rmaj + aa * dirx
+    phz = aa * dirz
+    perpx = -dirz
+    perpz = dirx
+    signs = [0] if h <= ktol else [1, -1]
+
+    for s in signs:
+        xi = phx + s * h * perpx
+        z = phz + s * h * perpz
+        rad = abs(xi)
+
+        if rad < ktol:
+            continue
+
+        _axis_circles(center, w, [z], rad, out)
+
+
+def _ssi_sphere_torus(sph, tor, out):
+    """Coaxial sphere-torus section: circles."""
+
+    ktol = 1e-6
+    sc = sph.p1
+    rsph = sph.r
+    center = tor.p1
+    w = _ssi_unit(tor.p2)
+    rmaj = tor.r
+    r = tor.r2
+
+    if r >= rmaj - ktol:
+        return False
+
+    if _point_axis_dist(center, w, sc) > ktol:
+        return False
+
+    zs = _axial_coord(center, w, sc)
+    d = math.sqrt(rmaj * rmaj + zs * zs)
+
+    if d < ktol:
+        return True
+
+    if d - ktol > r + rsph or d + ktol < abs(r - rsph):
+        return True
+
+    _meridian_circles(center, w, rmaj, r, 0.0 - rmaj, zs - 0.0, rsph, out)
+
+    return True
+
+
+class _SpiricFrame:
+    """Spiric loop frame of two equal parallel-axis tori."""
+
+    def __init__(self, c1, ex, ey, w, rmaj, r, c, be):
+        self.c1 = c1  # First torus center.
+        self.ex = ex  # Unit direction between the centers.
+        self.ey = ey  # Unit axis cross ex.
+        self.w = w  # Unit common axis.
+        self.rmaj = rmaj  # Major radius.
+        self.r = r  # Minor radius.
+        self.c = c  # Half the center distance.
+        self.be = be  # Semi-axis of the inner loops.
+
+
+def _spiric_xy(f, inner, t):
+    """In-plane point (x, y) of a spiric loop at tube offset t; None when the loop does not reach t."""
+
+    if inner:
+        g = t / f.c
+
+        if abs(g) >= 1.0:
+            return None
+
+        return f.c + f.rmaj * g, f.be * math.sqrt(1.0 - g * g)
+
+    rho = f.rmaj + t
+    y2 = rho * rho - f.c * f.c
+
+    if y2 <= 0.0:
+        return None
+
+    return f.c, math.sqrt(y2)
+
+
+def _emit_spiric_loops(f, inner, out):
+    """Both mirrored spiric loops as periodic interpolants, none when either misses a sample."""
+
+    n = 512
+
+    for sgn in (1, -1):
+        pts = []
+
+        for k in range(n):
+            phi = TWO_PI * k / n
+            t = f.r * math.cos(phi)
+            z = f.r * math.sin(phi)
+            xy = _spiric_xy(f, inner, t)
+
+            if xy is None:
+                return
+
+            x = xy[0]
+            yy = sgn * xy[1]
+            pts.append(
+                Point(
+                    f.c1[0] + x * f.ex[0] + yy * f.ey[0] + z * f.w[0],
+                    f.c1[1] + x * f.ex[1] + yy * f.ey[1] + z * f.w[1],
+                    f.c1[2] + x * f.ex[2] + yy * f.ey[2] + z * f.w[2],
+                )
+            )
+
+        loop = NurbsCurve.create_interpolated(pts, CurveNurbsKnotStyle.ChordPeriodic)
+
+        if loop.is_valid():
+            loop.set_domain(0.0, 1.0)
+            out.append(loop)
+
+
+def _ssi_torus_torus_spiric(ta, tb, out):
+    """Exact spiric loops of two equal parallel-axis tori."""
+
+    ktol = 1e-6
+    c1 = ta.p1
+    w = _ssi_unit(ta.p2)
+    c2 = tb.p1
+    cxw = _ssi_cross(w, _ssi_unit(tb.p2))
+
+    if (
+        math.sqrt(_ssi_dot(cxw, cxw)) > ktol
+        or abs(ta.r2 - tb.r2) > ktol
+        or abs(ta.r - tb.r) > ktol
+    ):
+        return False
+
+    if abs(_axial_coord(c1, w, c2)) > ktol:
+        return False
+
+    dp = [c2[0] - c1[0], c2[1] - c1[1], c2[2] - c1[2]]
+    hax = _ssi_dot(dp, w)
+    ex = [dp[0] - hax * w[0], dp[1] - hax * w[1], dp[2] - hax * w[2]]
+    d = math.sqrt(_ssi_dot(ex, ex))
+
+    if d <= ktol:
+        return False
+
+    ex = [ex[0] / d, ex[1] / d, ex[2] / d]
+    f = _SpiricFrame(
+        c1,
+        ex,
+        _ssi_cross(w, ex),
+        w,
+        0.5 * (ta.r + tb.r),
+        0.5 * (ta.r2 + tb.r2),
+        0.5 * d,
+        0.0,
+    )
+
+    if abs(f.rmaj - f.c) <= ktol:
+        return False
+
+    lo2 = (f.rmaj - f.r) * (f.rmaj - f.r) - f.c * f.c
+    hi2 = (f.rmaj + f.r) * (f.rmaj + f.r) - f.c * f.c
+
+    if hi2 > ktol and lo2 <= ktol:
+        return False
+
+    if f.rmaj > f.c and f.r >= f.c - ktol:
+        return False
+
+    if lo2 > ktol:
+        _emit_spiric_loops(f, False, out)
+
+    if f.rmaj > f.c + ktol:
+        f.be = math.sqrt(f.rmaj * f.rmaj - f.c * f.c)
+        _emit_spiric_loops(f, True, out)
+
+    return True
+
+
+def _ssi_torus_torus(ta, tb, out):
+    """Coaxial torus-torus section: circles."""
+
+    ktol = 1e-6
+    c1 = ta.p1
+    w = _ssi_unit(ta.p2)
+    rmaj1 = ta.r
+    r1 = ta.r2
+    c2 = tb.p1
+    w2 = _ssi_unit(tb.p2)
+    rmaj2 = tb.r
+    r2 = tb.r2
+
+    if r1 >= rmaj1 - ktol or r2 >= rmaj2 - ktol:
+        return False
+
+    if not _axes_coaxial(c1, w, c2, w2, ktol):
+        return _ssi_torus_torus_spiric(ta, tb, out)
+
+    z2 = _axial_coord(c1, w, c2)
+    dxR = rmaj2 - rmaj1
+    d = math.sqrt(dxR * dxR + z2 * z2)
+
+    if d < ktol:
+        return False
+
+    if d - ktol > r1 + r2 or d + ktol < abs(r1 - r2):
+        return True
+
+    _meridian_circles(c1, w, rmaj1, r1, dxR, z2, r2, out)
+
+    return True
+
+
+def _ssi_sphere_sphere(ra, rb, out):
+    """Exact sphere-sphere circle."""
+
+    c1 = ra.p1
+    r1 = ra.r
+    c2 = rb.p1
+    r2 = rb.r
+    dv = [c2[0] - c1[0], c2[1] - c1[1], c2[2] - c1[2]]
+    dist = math.sqrt(dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2])
+    tan_tol = (r1 + r2) * 1e-9
+
+    if dist <= 1e-12 or dist >= r1 + r2 - tan_tol or dist <= abs(r1 - r2) + tan_tol:
+        return
+
+    nu = [dv[0] / dist, dv[1] / dist, dv[2] / dist]
+    aa = (dist * dist + r1 * r1 - r2 * r2) / (2.0 * dist)
+    rr2 = r1 * r1 - aa * aa
+
+    if rr2 > 0.0:
+        _axis_circles(c1, nu, [aa], math.sqrt(rr2), out)
+
+
+def _plane_section_curves(plane, srf, rs, out):
+    """Exact sections of a plane with a recognized surface; false when the case is not analytic."""
+
+    if rs.kind == _RecogSurface.SPHERE:
+        c3 = _ssi_plane_sphere(plane, rs)
+
+        if c3 is not None:
+            out.append(c3)
+
+        return True
+
+    if rs.kind == _RecogSurface.CYLINDER:
+        if not _ssi_plane_cylinder_lines(plane, rs, srf, out):
+            c3 = _ssi_plane_cylinder(plane, rs)
+
+            if c3 is not None:
+                out.append(c3)
+
+        return True
+
+    if rs.kind == _RecogSurface.CONE:
+        return _ssi_plane_cone(plane, rs, srf, out)
+
+    return _ssi_plane_torus(plane, rs, out)
+
+
+def _quadric_section_curves(a, ra, b, rb, out):
+    """Exact sections of two recognized curved surfaces; false when the case is not analytic."""
+
+    ka = ra.kind
+    kb = rb.kind
+
+    if ka == _RecogSurface.SPHERE and kb == _RecogSurface.SPHERE:
+        _ssi_sphere_sphere(ra, rb, out)
+
+        return True
+
+    if ka == _RecogSurface.CYLINDER and kb == _RecogSurface.SPHERE:
+        return _ssi_cylinder_sphere(ra, rb, out)
+
+    if ka == _RecogSurface.SPHERE and kb == _RecogSurface.CYLINDER:
+        return _ssi_cylinder_sphere(rb, ra, out)
+
+    if ka == _RecogSurface.CYLINDER and kb == _RecogSurface.CONE:
+        return _ssi_cylinder_cone(ra, rb, out)
+
+    if ka == _RecogSurface.CONE and kb == _RecogSurface.CYLINDER:
+        return _ssi_cylinder_cone(rb, ra, out)
+
+    if ka == _RecogSurface.CONE and kb == _RecogSurface.SPHERE:
+        return _ssi_cone_sphere(ra, rb, out)
+
+    if ka == _RecogSurface.SPHERE and kb == _RecogSurface.CONE:
+        return _ssi_cone_sphere(rb, ra, out)
+
+    if ka == _RecogSurface.CYLINDER and kb == _RecogSurface.CYLINDER:
+        return _ssi_cylinder_cylinder(a, ra, b, rb, out)
+
+    if ka == _RecogSurface.CYLINDER and kb == _RecogSurface.TORUS:
+        return _ssi_cylinder_torus(ra, rb, out)
+
+    if ka == _RecogSurface.TORUS and kb == _RecogSurface.CYLINDER:
+        return _ssi_cylinder_torus(rb, ra, out)
+
+    if ka == _RecogSurface.CONE and kb == _RecogSurface.TORUS:
+        return _ssi_cone_torus(ra, rb, out)
+
+    if ka == _RecogSurface.TORUS and kb == _RecogSurface.CONE:
+        return _ssi_cone_torus(rb, ra, out)
+
+    if ka == _RecogSurface.SPHERE and kb == _RecogSurface.TORUS:
+        return _ssi_sphere_torus(ra, rb, out)
+
+    if ka == _RecogSurface.TORUS and kb == _RecogSurface.SPHERE:
+        return _ssi_sphere_torus(rb, ra, out)
+
+    if ka == _RecogSurface.TORUS and kb == _RecogSurface.TORUS:
+        return _ssi_torus_torus(ra, rb, out)
+
+    return False
+
+
+def _analytic_curves(a, ra, b, rb, out):
+    """Exact 3D sections of two recognized surfaces; false when the pair is not analytic."""
+
+    if ra.kind == _RecogSurface.PLANE and rb.kind == _RecogSurface.PLANE:
+        c3, empty = _ssi_plane_plane(a, ra, b, rb)
+
+        if c3 is not None:
+            out.append(c3)
+
+            return True
+
+        return empty
+
+    if ra.kind == _RecogSurface.PLANE:
+        return _plane_section_curves(ra, b, rb, out)
+
+    if rb.kind == _RecogSurface.PLANE:
+        return _plane_section_curves(rb, a, ra, out)
+
+    return _quadric_section_curves(a, ra, b, rb, out)
+
+
+def _analytic_side_pcurve(srf, recog, c3):
+    """Pcurve of an exact section on one recognized surface: analytic, pulled back, then projected."""
+
+    pc = _analytic_pcurve(srf, recog, c3)
+
+    if not pc.is_valid():
+        v = _analytic_pullback(srf, recog, c3)
+
+        if v:
+            pc = v[0]
+
+    if not pc.is_valid():
+        v = Closest.surface_curve(srf, c3)
+
+        if v:
+            pc = v[0]
+
+    return pc
 
 
 def _analytic_ssi(a, b, tolerance):
     """Exact section of two recognized analytic surfaces, empty when no case applies."""
 
-    ra = _recognize_surface(a, max(tolerance, 1e-7) * 1e4)
-    rb = _recognize_surface(b, max(tolerance, 1e-7) * 1e4)
+    res = _AnalyticResult()
+    rtol = max(tolerance, 1e-7) * 1e4
+    ra = _recognize_surface(a, rtol)
+    rb = _recognize_surface(b, rtol)
 
-    if ra is None or rb is None:
-        return None
+    if ra.kind == _RecogSurface.NONE or rb.kind == _RecogSurface.NONE:
+        return res
 
-    def unit(v):
-        length = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+    c3_list = []
 
-        return (v[0] / length, v[1] / length, v[2] / length) if length > 1e-300 else v
-
-    def cross(u, v):
-        return (
-            u[1] * v[2] - u[2] * v[1],
-            u[2] * v[0] - u[0] * v[2],
-            u[0] * v[1] - u[1] * v[0],
-        )
-
-    def plane_sphere(plane, sph):
-        o, nu = plane[1], unit(plane[2])
-        c, r = sph[1], sph[2]
-        d = (c[0] - o[0]) * nu[0] + (c[1] - o[1]) * nu[1] + (c[2] - o[2]) * nu[2]
-
-        if abs(d) >= r:
-            return None
-
-        cc = (c[0] - d * nu[0], c[1] - d * nu[1], c[2] - d * nu[2])
-        rr = math.sqrt(r * r - d * d)
-        xa, ya = _ortho_basis(nu)
-
-        return _exact_circle(cc[0], cc[1], cc[2], xa, ya, rr)
-
-    def plane_cylinder(plane, cyl):
-        o, nu = plane[1], unit(plane[2])
-        P, w, r = cyl[1], unit(cyl[2]), cyl[3]
-        wn = w[0] * nu[0] + w[1] * nu[1] + w[2] * nu[2]
-
-        if abs(wn) < 1e-7:
-            return None
-
-        t = ((o[0] - P[0]) * nu[0] + (o[1] - P[1]) * nu[1] + (o[2] - P[2]) * nu[2]) / wn
-        cc = (P[0] + t * w[0], P[1] + t * w[1], P[2] + t * w[2])
-        mraw = cross(w, nu)
-
-        if math.sqrt(mraw[0] ** 2 + mraw[1] ** 2 + mraw[2] ** 2) < 1e-9:
-            xa, ya = _ortho_basis(nu)
-
-            return _exact_circle(cc[0], cc[1], cc[2], xa, ya, r)
-
-        minor = unit(mraw)
-        major = unit((w[0] - wn * nu[0], w[1] - wn * nu[1], w[2] - wn * nu[2]))
-
-        return _exact_ellipse(cc[0], cc[1], cc[2], major, minor, r / abs(wn), r)
-
-    def line_cone(x0, d, V, w, alpha):
-        """Solve ((X-V).w)^2 - cos^2a |X-V|^2 = 0 along X = x0 + t d. Returns roots."""
-
-        ca2 = math.cos(alpha) ** 2
-        e = (x0[0] - V[0], x0[1] - V[1], x0[2] - V[2])
-        A = e[0] * w[0] + e[1] * w[1] + e[2] * w[2]
-        B = d[0] * w[0] + d[1] * w[1] + d[2] * w[2]
-        C = e[0] * e[0] + e[1] * e[1] + e[2] * e[2]
-        D = e[0] * d[0] + e[1] * d[1] + e[2] * d[2]
-        E = d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
-        qa = B * B - ca2 * E
-        qb = 2.0 * A * B - 2.0 * ca2 * D
-        qc = A * A - ca2 * C
-
-        if abs(qa) < 1e-14:
-            return [] if abs(qb) < 1e-300 else [-qc / qb]
-
-        disc = qb * qb - 4.0 * qa * qc
-
-        if disc < 0.0:
-            return []
-
-        sq = math.sqrt(disc)
-
-        return [(-qb - sq) / (2.0 * qa), (-qb + sq) / (2.0 * qa)]
-
-    def plane_cone(plane, cone):
-        o, nu = plane[1], unit(plane[2])
-        V, w, alpha = cone[1], unit(cone[2]), cone[3]
-        wn = w[0] * nu[0] + w[1] * nu[1] + w[2] * nu[2]
-
-        if abs(abs(wn) - 1.0) < 1e-9:
-            dax = (o[0] - V[0]) * w[0] + (o[1] - V[1]) * w[1] + (o[2] - V[2]) * w[2]
-            rr = abs(dax) * math.tan(alpha)
-            cc = (V[0] + dax * w[0], V[1] + dax * w[1], V[2] + dax * w[2])
-
-            if rr < 1e-12:
-                return None
-
-            xa, ya = _ortho_basis(nu)
-
-            return _exact_circle(cc[0], cc[1], cc[2], xa, ya, rr)
-
-        m = cross(w, nu)
-        ml = math.sqrt(m[0] ** 2 + m[1] ** 2 + m[2] ** 2)
-
-        if ml < 1e-12:
-            return None
-
-        m = (m[0] / ml, m[1] / ml, m[2] / ml)
-        major = unit((w[0] - wn * nu[0], w[1] - wn * nu[1], w[2] - wn * nu[2]))
-        dV = (V[0] - o[0]) * nu[0] + (V[1] - o[1]) * nu[1] + (V[2] - o[2]) * nu[2]
-        Vp = (V[0] - dV * nu[0], V[1] - dV * nu[1], V[2] - dV * nu[2])
-        ts = line_cone(Vp, major, V, w, alpha)
-
-        if len(ts) != 2:
-            return None
-
-        A = (
-            Vp[0] + ts[0] * major[0],
-            Vp[1] + ts[0] * major[1],
-            Vp[2] + ts[0] * major[2],
-        )
-        Bp = (
-            Vp[0] + ts[1] * major[0],
-            Vp[1] + ts[1] * major[1],
-            Vp[2] + ts[1] * major[2],
-        )
-        cc = ((A[0] + Bp[0]) * 0.5, (A[1] + Bp[1]) * 0.5, (A[2] + Bp[2]) * 0.5)
-        semi_major = 0.5 * math.sqrt(
-            (Bp[0] - A[0]) ** 2 + (Bp[1] - A[1]) ** 2 + (Bp[2] - A[2]) ** 2
-        )
-        major = unit((Bp[0] - A[0], Bp[1] - A[1], Bp[2] - A[2]))
-        tm = line_cone(cc, m, V, w, alpha)
-
-        if len(tm) != 2:
-            return None
-
-        semi_minor = 0.5 * abs(tm[1] - tm[0])
-
-        if semi_major < 1e-12 or semi_minor < 1e-12:
-            return None
-
-        return _exact_ellipse(cc[0], cc[1], cc[2], major, m, semi_major, semi_minor)
-
-    def plane_torus(plane, tor):
-        o, nu = plane[1], unit(plane[2])
-        C, w, R, r = tor[1], unit(tor[2]), tor[3], tor[4]
-        wn = w[0] * nu[0] + w[1] * nu[1] + w[2] * nu[2]
-
-        if abs(abs(wn) - 1.0) > 1e-7:
-            return None
-
-        d = (o[0] - C[0]) * w[0] + (o[1] - C[1]) * w[1] + (o[2] - C[2]) * w[2]
-
-        if abs(d) > r:
-            return []
-
-        h = math.sqrt(max(0.0, r * r - d * d))
-        cc = (C[0] + d * w[0], C[1] + d * w[1], C[2] + d * w[2])
-        xa, ya = _ortho_basis(w)
-        out = []
-
-        for rr in (R + h, R - h):
-            if rr > 1e-12:
-                out.append(_exact_circle(cc[0], cc[1], cc[2], xa, ya, rr))
-
-        return out
-
-    def single(c):
-        return [c] if c is not None else []
-
-    c3_list = None
-
-    if ra[0] == "plane" and rb[0] == "sphere":
-        c3_list = single(plane_sphere(ra, rb))
-    elif ra[0] == "sphere" and rb[0] == "plane":
-        c3_list = single(plane_sphere(rb, ra))
-    elif ra[0] == "plane" and rb[0] == "cylinder":
-        c3_list = single(plane_cylinder(ra, rb))
-    elif ra[0] == "cylinder" and rb[0] == "plane":
-        c3_list = single(plane_cylinder(rb, ra))
-    elif ra[0] == "plane" and rb[0] == "cone":
-        c3_list = single(plane_cone(ra, rb))
-    elif ra[0] == "cone" and rb[0] == "plane":
-        c3_list = single(plane_cone(rb, ra))
-    elif ra[0] == "plane" and rb[0] == "torus":
-        c3_list = plane_torus(ra, rb)
-    elif ra[0] == "torus" and rb[0] == "plane":
-        c3_list = plane_torus(rb, ra)
-    elif ra[0] == "sphere" and rb[0] == "sphere":
-        c1, r1 = ra[1], ra[2]
-        c2, r2 = rb[1], rb[2]
-        dv = (c2[0] - c1[0], c2[1] - c1[1], c2[2] - c1[2])
-        dist = math.sqrt(dv[0] ** 2 + dv[1] ** 2 + dv[2] ** 2)
-        c3 = None
-
-        if 1e-12 < dist < r1 + r2 and dist > abs(r1 - r2):
-            nu = (dv[0] / dist, dv[1] / dist, dv[2] / dist)
-            aa = (dist * dist + r1 * r1 - r2 * r2) / (2.0 * dist)
-            rr2 = r1 * r1 - aa * aa
-
-            if rr2 > 0.0:
-                cc = (c1[0] + aa * nu[0], c1[1] + aa * nu[1], c1[2] + aa * nu[2])
-                xa, ya = _ortho_basis(nu)
-                c3 = _exact_circle(cc[0], cc[1], cc[2], xa, ya, math.sqrt(rr2))
-
-        c3_list = single(c3)
-    elif ra[0] == "cylinder" and rb[0] == "sphere":
-        c3_list = _ssi_cylinder_sphere(ra, rb)
-    elif ra[0] == "sphere" and rb[0] == "cylinder":
-        c3_list = _ssi_cylinder_sphere(rb, ra)
-    elif ra[0] == "cylinder" and rb[0] == "cone":
-        c3_list = _ssi_cylinder_cone(ra, rb)
-    elif ra[0] == "cone" and rb[0] == "cylinder":
-        c3_list = _ssi_cylinder_cone(rb, ra)
-    elif ra[0] == "cone" and rb[0] == "sphere":
-        c3_list = _ssi_cone_sphere(ra, rb)
-    elif ra[0] == "sphere" and rb[0] == "cone":
-        c3_list = _ssi_cone_sphere(rb, ra)
-    elif ra[0] == "cylinder" and rb[0] == "cylinder":
-        c3_list = _ssi_cylinder_cylinder(a, ra, b, rb)
-    else:
-        return None
-
-    if c3_list is None:
-        return None
-
-    triples = []
+    if not _analytic_curves(a, ra, b, rb, c3_list):
+        return res
 
     for cc3 in c3_list:
-        pa = _analytic_pcurve(a, ra, cc3)
-        pb = _analytic_pcurve(b, rb, cc3)
+        pa = _analytic_side_pcurve(a, ra, cc3)
+        pb = _analytic_side_pcurve(b, rb, cc3)
 
-        if pa is None and ra[0] == "sphere":
-            v = _analytic_sphere_pullback(a, ra, cc3)
+        if pa.is_valid() and pb.is_valid():
+            res.triples.append((cc3, pa, pb))
 
-            if v:
-                pa = v[0]
+    res.status = _AnalyticResult.HIT
 
-        if pb is None and rb[0] == "sphere":
-            v = _analytic_sphere_pullback(b, rb, cc3)
-
-            if v:
-                pb = v[0]
-
-        if pa is None and (ra[0] == "cone" or ra[0] == "cylinder"):
-            v = _analytic_cone_pullback(a, ra, cc3)
-
-            if v:
-                pa = v[0]
-
-        if pb is None and (rb[0] == "cone" or rb[0] == "cylinder"):
-            v = _analytic_cone_pullback(b, rb, cc3)
-
-            if v:
-                pb = v[0]
-
-        if pa is None:
-            v = Closest.surface_curve(a, cc3)
-
-            if v:
-                pa = v[0]
-
-        if pb is None:
-            v = Closest.surface_curve(b, cc3)
-
-            if v:
-                pb = v[0]
-
-        if pa is not None and pa.is_valid() and pb is not None and pb.is_valid():
-            triples.append((cc3, pa, pb))
-
-    return triples
+    return res
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4452,281 +6339,409 @@ def surface_plane_uv(
     return result
 
 
-def surface_surface(
-    a: "NurbsSurface", b: "NurbsSurface", tolerance: float | None = None
-) -> list[tuple[NurbsCurve, NurbsCurve, NurbsCurve]]:
-    """Surface-surface section curves with their UV pcurves on both surfaces."""
+def _drop_point_sections(trs, tolerance):
+    """Drop near-zero-length section curves."""
 
-    if a.is_valid() and b.is_valid():
-        _ana = _analytic_ssi(
-            a,
-            b,
-            tolerance if (tolerance and tolerance > 0) else Tolerance.ZERO_TOLERANCE,
+    min_len = max(tolerance * 10.0, 1e-9)
+    kept = []
+
+    for t in trs:
+        if t[0].length() >= min_len:
+            kept.append(t)
+
+    return kept
+
+
+def _surface_mid_plane(srf):
+    """Plane through the middle of the surface domain."""
+
+    po, nn = _surface_mid_frame(srf)
+
+    return Plane.from_point_normal(po, Vector(nn[0], nn[1], nn[2]))
+
+
+def _planar_section_triples(planar, other, planar_first, tolerance):
+    """Plane-surface section triples, the plane's pcurve found by projection."""
+
+    result = []
+
+    for section in surface_plane_uv(other, _surface_mid_plane(planar), tolerance):
+        c3 = section[0]
+        pps = Closest.surface_curve(planar, c3)
+
+        if len(pps) != 1:
+            continue
+
+        if planar_first:
+            result.append((c3, pps[0], section[1]))
+        else:
+            result.append((c3, section[1], pps[0]))
+
+    return _drop_point_sections(result, tolerance)
+
+
+def _cell_box(samples, ci, cj, c0u, dcu, c0v, dcv, tolerance):
+    """Bounding box of one grid cell from its 3 x 3 samples, inflated by twice its sag, and the cell center."""
+
+    minx = math.inf
+    miny = minx
+    minz = minx
+    maxx = -minx
+    maxy = -minx
+    maxz = -minx
+
+    for i in range(2 * ci, 2 * ci + 3):
+        for j in range(2 * cj, 2 * cj + 3):
+            p = samples[i][j]
+            minx = min(minx, p[0])
+            maxx = max(maxx, p[0])
+            miny = min(miny, p[1])
+            maxy = max(maxy, p[1])
+            minz = min(minz, p[2])
+            maxz = max(maxz, p[2])
+
+    ctr = samples[2 * ci + 1][2 * cj + 1]
+    p00 = samples[2 * ci][2 * cj]
+    p10 = samples[2 * ci + 2][2 * cj]
+    p01 = samples[2 * ci][2 * cj + 2]
+    p11 = samples[2 * ci + 2][2 * cj + 2]
+    cx = (p00[0] + p10[0] + p01[0] + p11[0]) * 0.25
+    cy = (p00[1] + p10[1] + p01[1] + p11[1]) * 0.25
+    cz = (p00[2] + p10[2] + p01[2] + p11[2]) * 0.25
+    sag = math.sqrt(
+        (ctr[0] - cx) * (ctr[0] - cx)
+        + (ctr[1] - cy) * (ctr[1] - cy)
+        + (ctr[2] - cz) * (ctr[2] - cz)
+    )
+    inf = 2.0 * sag + tolerance
+
+    return (
+        minx - inf,
+        miny - inf,
+        minz - inf,
+        maxx + inf,
+        maxy + inf,
+        maxz + inf,
+        c0u + dcu * (ci + 0.5),
+        c0v + dcv * (cj + 0.5),
+    )
+
+
+def _surface_cell_boxes(srf, c0u, dcu, ncu, c0v, dcv, ncv, tolerance):
+    """Inflated bounding boxes and centers of an ncu x ncv grid of surface cells."""
+
+    samples = []
+
+    for i in range(2 * ncu + 1):
+        row = []
+
+        for j in range(2 * ncv + 1):
+            row.append(srf.point_at(c0u + dcu * 0.5 * i, c0v + dcv * 0.5 * j))
+
+        samples.append(row)
+
+    boxes = []
+
+    for ci in range(ncu):
+        for cj in range(ncv):
+            boxes.append(_cell_box(samples, ci, cj, c0u, dcu, c0v, dcv, tolerance))
+
+    return boxes
+
+
+def _cell_diagonal(boxes):
+    """Smallest non-degenerate diagonal among the first 64 boxes, 1 when none."""
+
+    best = math.inf
+
+    for i in range(min(len(boxes), 64)):
+        bx = boxes[i]
+        d = math.sqrt(
+            (bx[3] - bx[0]) * (bx[3] - bx[0])
+            + (bx[4] - bx[1]) * (bx[4] - bx[1])
+            + (bx[5] - bx[2]) * (bx[5] - bx[2])
         )
 
-        if _ana is not None:
-            return _ana
+        if 1e-12 < d and d < best:
+            best = d
 
-    if not a.is_valid() or not b.is_valid():
-        return []
+    return best if best < math.inf else 1.0
 
-    if tolerance is None or tolerance <= 0.0:
-        tolerance = Tolerance.ZERO_TOLERANCE
 
-    def plane_from(srf):
-        s0, s1 = srf.domain(0)
-        t0, t1 = srf.domain(1)
-        po = srf.point_at((s0 + s1) * 0.5, (t0 + t1) * 0.5)
-        nn = srf.normal_at((s0 + s1) * 0.5, (t0 + t1) * 0.5)
+class _SurfaceSurfaceSeed:
+    """Grid seed of a surface-surface trace in joint parameters."""
 
-        return Plane.from_point_normal(po, Vector(nn[0], nn[1], nn[2]))
+    def __init__(self, u, v, s, t, used):
+        self.u = u  # Seed u on a.
+        self.v = v  # Seed v on a.
+        self.s = s  # Seed u on b.
+        self.t = t  # Seed v on b.
+        self.used = used  # Whether a trace already passed the seed.
 
-    if a.is_planar(None, 1e-9):
-        plane = plane_from(a)
-        result = []
 
-        for c3, pb in surface_plane_uv(b, plane, tolerance):
-            pas = Closest.surface_curve(a, c3)
+class _SurfaceSurfaceField:
+    """Joint parameter space (au, av, bu, bv) of two surfaces with the marching scales."""
 
-            if len(pas) == 1:
-                result.append((c3, pas[0], pb))
+    def __init__(self, a, b, tolerance):
+        """Sample both domains into cell boxes and derive the marching scales."""
 
-        return result
+        self.a = a  # First surface.
+        self.b = b  # Second surface.
+        self.tolerance = tolerance  # Section tolerance.
+        self.lo = [0.0] * 4  # Domain starts.
+        self.hi = [0.0] * 4  # Domain ends.
+        self.range = [0.0] * 4  # Domain lengths.
+        self.closed = [False] * 4  # Whether each parameter wraps around a seam.
+        self.step = [0.0] * 4  # Grid cell size per parameter.
+        srfs = [a, b]
+        cells = [0] * 4
 
-    if b.is_planar(None, 1e-9):
-        plane = plane_from(b)
-        result = []
+        for k in range(4):
+            srf = srfs[k // 2]
+            self.lo[k], self.hi[k] = srf.domain(k % 2)
+            self.range[k] = self.hi[k] - self.lo[k]
+            self.closed[k] = srf.is_closed(k % 2)
+            cells[k] = max(len(srf.get_span_vector(k % 2)) - 1, 1) * 4
+            self.step[k] = self.range[k] / cells[k]
 
-        for c3, pa in surface_plane_uv(a, plane, tolerance):
-            pbs = Closest.surface_curve(b, c3)
+        lo = self.lo
+        step = self.step
+        self.boxes_a = _surface_cell_boxes(
+            a, lo[0], step[0], cells[0], lo[1], step[1], cells[1], tolerance
+        )  # Cell boxes of a.
+        self.boxes_b = _surface_cell_boxes(
+            b, lo[2], step[2], cells[2], lo[3], step[3], cells[3], tolerance
+        )  # Cell boxes of b.
+        self.h_init = (
+            min(_cell_diagonal(self.boxes_a), _cell_diagonal(self.boxes_b)) * 0.25
+        )  # Initial 3D marching step.
+        self.conv_tol = max(
+            tolerance, self.h_init * 1e-7
+        )  # Corrector convergence tolerance.
+        self.seed_tol = max(
+            _cell_diagonal(self.boxes_a), _cell_diagonal(self.boxes_b)
+        )  # 3D distance that merges two seeds.
+        self.max_steps = (
+            cells[0] * cells[1] + cells[2] * cells[3]
+        ) * 32  # Marching step cap per direction.
+        self.close_tol = self.h_init * 3.0  # 3D distance that closes a loop.
+        self.consume_tol = self.h_init * 2.0  # 3D distance that consumes a seed.
 
-            if len(pbs) == 1:
-                result.append((c3, pa, pbs[0]))
+    def wrap(self, k, t):
+        """Wrap parameter k across a closed seam or clamp it to the domain."""
 
-        return result
+        if self.closed[k]:
+            f = math.fmod(t - self.lo[k], self.range[k])
 
-    au0, au1 = a.domain(0)
-    av0, av1 = a.domain(1)
-    bu0, bu1 = b.domain(0)
-    bv0, bv1 = b.domain(1)
-    a_range_u = au1 - au0
-    a_range_v = av1 - av0
-    b_range_u = bu1 - bu0
-    b_range_v = bv1 - bv0
-    a_closed_u = a.is_closed(0)
-    a_closed_v = a.is_closed(1)
-    b_closed_u = b.is_closed(0)
-    b_closed_v = b.is_closed(1)
+            if f < 0:
+                f += self.range[k]
 
-    def make_wrap(c0, c1, rng, closed):
-        def w(t):
-            if closed:
-                f = math.fmod(t - c0, rng)
+            return self.lo[k] + f
 
-                if f < 0:
-                    f += rng
+        return max(self.lo[k], min(t, self.hi[k]))
 
-                return c0 + f
+    def eval_a(self, u, v):
+        """Point and first derivatives (s, su, sv) of a at (u, v)."""
 
-            return max(c0, min(t, c1))
-
-        return w
-
-    a_wrap_u = make_wrap(au0, au1, a_range_u, a_closed_u)
-    a_wrap_v = make_wrap(av0, av1, a_range_v, a_closed_v)
-    b_wrap_u = make_wrap(bu0, bu1, b_range_u, b_closed_u)
-    b_wrap_v = make_wrap(bv0, bv1, b_range_v, b_closed_v)
-
-    def eval_a(u, v):
-        d = a.evaluate(a_wrap_u(u), a_wrap_v(v), 1)
+        d = self.a.evaluate(self.wrap(0, u), self.wrap(1, v), 1)
 
         return d[0], d[2], d[1]
 
-    def eval_b(u, v):
-        d = b.evaluate(b_wrap_u(u), b_wrap_v(v), 1)
+    def eval_b(self, u, v):
+        """Point and first derivatives (s, su, sv) of b at (u, v)."""
+
+        d = self.b.evaluate(self.wrap(2, u), self.wrap(3, v), 1)
 
         return d[0], d[2], d[1]
 
-    spans_au = a.get_span_vector(0)
-    spans_av = a.get_span_vector(1)
-    spans_bu = b.get_span_vector(0)
-    spans_bv = b.get_span_vector(1)
-    a_nu = max(len(spans_au) - 1, 1) * 4
-    a_nv = max(len(spans_av) - 1, 1) * 4
-    b_nu = max(len(spans_bu) - 1, 1) * 4
-    b_nv = max(len(spans_bv) - 1, 1) * 4
-    a_du = a_range_u / a_nu
-    a_dv = a_range_v / a_nv
-    b_du = b_range_u / b_nu
-    b_dv = b_range_v / b_nv
+    def point(self, q):
+        """Point of a at the joint parameters q."""
 
-    def cell_boxes(srf, c0u, dcu, ncu, c0v, dcv, ncv):
-        S = []
+        sa = self.eval_a(q[0], q[1])[0]
 
-        for i in range(2 * ncu + 1):
-            row = []
+        return [sa[0], sa[1], sa[2]]
 
-            for j in range(2 * ncv + 1):
-                row.append(srf.point_at(c0u + dcu * 0.5 * i, c0v + dcv * 0.5 * j))
+    def clamp_open(self, x):
+        """Clamp the open parameters of x to their domains."""
 
-            S.append(row)
+        for k in range(4):
+            if not self.closed[k]:
+                x[k] = max(self.lo[k], min(x[k], self.hi[k]))
 
-        boxes = []
+    def correct(self, x, has_pin, pd, pp):
+        """Newton-project x in place onto the section, optionally pinned to the plane through pp normal to pd."""
 
-        for ci in range(ncu):
-            for cj in range(ncv):
-                xs = []
-                ys = []
-                zs = []
-
-                for i in range(2 * ci, 2 * ci + 3):
-                    for j in range(2 * cj, 2 * cj + 3):
-                        p = S[i][j]
-                        xs.append(p[0])
-                        ys.append(p[1])
-                        zs.append(p[2])
-
-                ctr = S[2 * ci + 1][2 * cj + 1]
-                cx = (
-                    S[2 * ci][2 * cj][0]
-                    + S[2 * ci + 2][2 * cj][0]
-                    + S[2 * ci][2 * cj + 2][0]
-                    + S[2 * ci + 2][2 * cj + 2][0]
-                ) * 0.25
-                cy = (
-                    S[2 * ci][2 * cj][1]
-                    + S[2 * ci + 2][2 * cj][1]
-                    + S[2 * ci][2 * cj + 2][1]
-                    + S[2 * ci + 2][2 * cj + 2][1]
-                ) * 0.25
-                cz = (
-                    S[2 * ci][2 * cj][2]
-                    + S[2 * ci + 2][2 * cj][2]
-                    + S[2 * ci][2 * cj + 2][2]
-                    + S[2 * ci + 2][2 * cj + 2][2]
-                ) * 0.25
-                sag = math.sqrt(
-                    (ctr[0] - cx) ** 2 + (ctr[1] - cy) ** 2 + (ctr[2] - cz) ** 2
-                )
-                inf = 2.0 * sag + tolerance
-                boxes.append(
-                    (
-                        min(xs) - inf,
-                        min(ys) - inf,
-                        min(zs) - inf,
-                        max(xs) + inf,
-                        max(ys) + inf,
-                        max(zs) + inf,
-                        c0u + dcu * (ci + 0.5),
-                        c0v + dcv * (cj + 0.5),
-                    )
-                )
-
-        return boxes
-
-    boxes_a = cell_boxes(a, au0, a_du, a_nu, av0, a_dv, a_nv)
-    boxes_b = cell_boxes(b, bu0, b_du, b_nu, bv0, b_dv, b_nv)
-
-    def cell_3d(boxes):
-        best = float("inf")
-
-        for bx in boxes[:64]:
-            d = math.sqrt(
-                (bx[3] - bx[0]) ** 2 + (bx[4] - bx[1]) ** 2 + (bx[5] - bx[2]) ** 2
-            )
-
-            if 1e-12 < d < best:
-                best = d
-
-        return best if best < float("inf") else 1.0
-
-    h_init = min(cell_3d(boxes_a), cell_3d(boxes_b)) * 0.25
-    conv_tol = max(tolerance, h_init * 1e-7)
-
-    def clamp_open(x):
-        if not a_closed_u:
-            x[0] = max(au0, min(x[0], au1))
-
-        if not a_closed_v:
-            x[1] = max(av0, min(x[1], av1))
-
-        if not b_closed_u:
-            x[2] = max(bu0, min(x[2], bu1))
-
-        if not b_closed_v:
-            x[3] = max(bv0, min(x[3], bv1))
-
-    def correct(x, pin=None):
         for _ in range(8):
-            Sa, Sau, Sav = eval_a(x[0], x[1])
-            Sb, Sbu, Sbv = eval_b(x[2], x[3])
-            F = [Sa[0] - Sb[0], Sa[1] - Sb[1], Sa[2] - Sb[2]]
+            sa, sau, sav = self.eval_a(x[0], x[1])
+            sb, sbu, sbv = self.eval_b(x[2], x[3])
+            res = [sa[0] - sb[0], sa[1] - sb[1], sa[2] - sb[2]]
 
-            if math.sqrt(F[0] ** 2 + F[1] ** 2 + F[2] ** 2) < conv_tol:
+            if (
+                math.sqrt(res[0] * res[0] + res[1] * res[1] + res[2] * res[2])
+                < self.conv_tol
+            ):
                 return True
 
-            J = [[Sau[k], Sav[k], -Sbu[k], -Sbv[k]] for k in range(3)]
+            jac = [[0.0] * 4 for _ in range(3)]
 
-            if pin is None:
-                JJt = [
-                    [sum(J[r][c] * J[q][c] for c in range(4)) for q in range(3)]
-                    for r in range(3)
-                ]
-                y = _solve_gauss(JJt, F, 3)
+            for k in range(3):
+                jac[k][0] = sau[k]
+                jac[k][1] = sav[k]
+                jac[k][2] = -sbu[k]
+                jac[k][3] = -sbv[k]
 
-                if y is None:
-                    return False
+            ok = (
+                _newton_step_pinned(jac, res, sa, sau, sav, pd, pp, x)
+                if has_pin
+                else _newton_step_free(jac, res, x)
+            )
 
-                for c in range(4):
-                    x[c] -= sum(J[r][c] * y[r] for r in range(3))
-            else:
-                d, pp = pin
-                M = [
-                    J[0],
-                    J[1],
-                    J[2],
-                    [
-                        d[0] * Sau[0] + d[1] * Sau[1] + d[2] * Sau[2],
-                        d[0] * Sav[0] + d[1] * Sav[1] + d[2] * Sav[2],
-                        0.0,
-                        0.0,
-                    ],
-                ]
-                rhs = [
-                    F[0],
-                    F[1],
-                    F[2],
-                    d[0] * (Sa[0] - pp[0])
-                    + d[1] * (Sa[1] - pp[1])
-                    + d[2] * (Sa[2] - pp[2]),
-                ]
-                dx = _solve_gauss(M, rhs, 4)
+            if not ok:
+                return False
 
-                if dx is None:
-                    return False
+            self.clamp_open(x)
 
-                for c in range(4):
-                    x[c] -= dx[c]
-
-            clamp_open(x)
-
-        Sa, _, _ = eval_a(x[0], x[1])
-        Sb, _, _ = eval_b(x[2], x[3])
+        sa = self.eval_a(x[0], x[1])[0]
+        sb = self.eval_b(x[2], x[3])[0]
         g = math.sqrt(
-            (Sa[0] - Sb[0]) ** 2 + (Sa[1] - Sb[1]) ** 2 + (Sa[2] - Sb[2]) ** 2
+            (sa[0] - sb[0]) * (sa[0] - sb[0])
+            + (sa[1] - sb[1]) * (sa[1] - sb[1])
+            + (sa[2] - sb[2]) * (sa[2] - sb[2])
         )
 
-        return g < conv_tol * 10.0
+        return g < self.conv_tol * 10.0
+
+    def tangent(self, x, dir_sign):
+        """Unit 3D section tangent at x in direction dir_sign, and both surfaces' derivatives: (dir or None, sa, sau, sav, sbu, sbv)."""
+
+        sa, sau, sav = self.eval_a(x[0], x[1])
+        sb, sbu, sbv = self.eval_b(x[2], x[3])
+        na = [
+            sau[1] * sav[2] - sau[2] * sav[1],
+            sau[2] * sav[0] - sau[0] * sav[2],
+            sau[0] * sav[1] - sau[1] * sav[0],
+        ]
+        nb = [
+            sbu[1] * sbv[2] - sbu[2] * sbv[1],
+            sbu[2] * sbv[0] - sbu[0] * sbv[2],
+            sbu[0] * sbv[1] - sbu[1] * sbv[0],
+        ]
+        d = [
+            na[1] * nb[2] - na[2] * nb[1],
+            na[2] * nb[0] - na[0] * nb[2],
+            na[0] * nb[1] - na[1] * nb[0],
+        ]
+        dl = math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
+        nal = math.sqrt(na[0] * na[0] + na[1] * na[1] + na[2] * na[2])
+        nbl = math.sqrt(nb[0] * nb[0] + nb[1] * nb[1] + nb[2] * nb[2])
+
+        if dl < 1e-4 * nal * nbl or dl < 1e-30:
+            return None, sa, sau, sav, sbu, sbv
+
+        return (
+            [d[0] / dl * dir_sign, d[1] / dl * dir_sign, d[2] / dl * dir_sign],
+            sa,
+            sau,
+            sav,
+            sbu,
+            sbv,
+        )
+
+
+def _newton_step_free(jac, res, x):
+    """Minimum-norm Newton step x -= jac^T (jac jac^T)^-1 res."""
+
+    jjt = [[0.0] * 3 for _ in range(3)]
+
+    for r in range(3):
+        for q in range(3):
+            s = 0.0
+
+            for c in range(4):
+                s += jac[r][c] * jac[q][c]
+
+            jjt[r][q] = s
+
+    y = _solve_gauss(jjt, [res[0], res[1], res[2]], 3)
+
+    if y is None:
+        return False
+
+    for c in range(4):
+        s = 0.0
+
+        for r in range(3):
+            s += jac[r][c] * y[r]
+
+        x[c] -= s
+
+    return True
+
+
+def _newton_step_pinned(jac, res, sa, sau, sav, pd, pp, x):
+    """Newton step with a fourth row pinning a's point to the plane through pp normal to pd."""
+
+    m = [
+        [jac[0][0], jac[0][1], jac[0][2], jac[0][3]],
+        [jac[1][0], jac[1][1], jac[1][2], jac[1][3]],
+        [jac[2][0], jac[2][1], jac[2][2], jac[2][3]],
+        [
+            pd[0] * sau[0] + pd[1] * sau[1] + pd[2] * sau[2],
+            pd[0] * sav[0] + pd[1] * sav[1] + pd[2] * sav[2],
+            0.0,
+            0.0,
+        ],
+    ]
+    rhs = [
+        res[0],
+        res[1],
+        res[2],
+        pd[0] * (sa[0] - pp[0]) + pd[1] * (sa[1] - pp[1]) + pd[2] * (sa[2] - pp[2]),
+    ]
+    dx = _solve_gauss(m, rhs, 4)
+
+    if dx is None:
+        return False
+
+    for c in range(4):
+        x[c] -= dx[c]
+
+    return True
+
+
+def _triple_distance(p, q):
+    """Distance between two 3D triples."""
+    return math.sqrt(
+        (p[0] - q[0]) * (p[0] - q[0])
+        + (p[1] - q[1]) * (p[1] - q[1])
+        + (p[2] - q[2]) * (p[2] - q[2])
+    )
+
+
+def _seed_is_duplicate(field, x, seeds):
+    """Whether a's point at x lies within the seed tolerance of an existing seed."""
+
+    p = field.point(x)
+
+    for sd in seeds:
+        if _triple_distance(p, field.point([sd.u, sd.v, 0.0, 0.0])) < field.seed_tol:
+            return True
+
+    return False
+
+
+def _surface_surface_seeds(field):
+    """Corrected centers of overlapping cell-box pairs, one per distinct 3D point, at most 20000 pairs."""
 
     seeds = []
-    seed_tol_3d = max(cell_3d(boxes_a), cell_3d(boxes_b))
     pair_budget = 20000
+    dummy3 = [0.0, 0.0, 0.0]
 
-    for ba in boxes_a:
+    for ba in field.boxes_a:
         if pair_budget < 0:
             break
 
-        for bb in boxes_b:
+        for bb in field.boxes_b:
             if (
                 bb[0] > ba[3]
                 or bb[3] < ba[0]
@@ -4744,759 +6759,979 @@ def surface_surface(
 
             x = [ba[6], ba[7], bb[6], bb[7]]
 
-            if not correct(x):
+            if not field.correct(x, False, dummy3, dummy3) or _seed_is_duplicate(
+                field, x, seeds
+            ):
                 continue
 
-            Sa, _, _ = eval_a(x[0], x[1])
-            dup = False
-
-            for sd in seeds:
-                So, _, _ = eval_a(sd[0], sd[1])
-
-                if (
-                    math.sqrt(
-                        (Sa[0] - So[0]) ** 2
-                        + (Sa[1] - So[1]) ** 2
-                        + (Sa[2] - So[2]) ** 2
-                    )
-                    < seed_tol_3d
-                ):
-                    dup = True
-                    break
-
-            if not dup:
-                seeds.append(
-                    [
-                        a_wrap_u(x[0]),
-                        a_wrap_v(x[1]),
-                        b_wrap_u(x[2]),
-                        b_wrap_v(x[3]),
-                        False,
-                    ]
+            seeds.append(
+                _SurfaceSurfaceSeed(
+                    field.wrap(0, x[0]),
+                    field.wrap(1, x[1]),
+                    field.wrap(2, x[2]),
+                    field.wrap(3, x[3]),
+                    False,
                 )
+            )
 
-    max_steps = (a_nu * a_nv + b_nu * b_nv) * 32
-    close_tol = h_init * 3.0
-    consume_tol = h_init * 2.0
+    return seeds
 
-    def tangent_3d(x, dir_sign):
-        Sa, Sau, Sav = eval_a(x[0], x[1])
-        Sb, Sbu, Sbv = eval_b(x[2], x[3])
-        na = (
-            Sau[1] * Sav[2] - Sau[2] * Sav[1],
-            Sau[2] * Sav[0] - Sau[0] * Sav[2],
-            Sau[0] * Sav[1] - Sau[1] * Sav[0],
-        )
-        nb = (
-            Sbu[1] * Sbv[2] - Sbu[2] * Sbv[1],
-            Sbu[2] * Sbv[0] - Sbu[0] * Sbv[2],
-            Sbu[0] * Sbv[1] - Sbu[1] * Sbv[0],
-        )
-        d = (
-            na[1] * nb[2] - na[2] * nb[1],
-            na[2] * nb[0] - na[0] * nb[2],
-            na[0] * nb[1] - na[1] * nb[0],
-        )
-        dl = math.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2)
-        nal = math.sqrt(na[0] ** 2 + na[1] ** 2 + na[2] ** 2)
-        nbl = math.sqrt(nb[0] ** 2 + nb[1] ** 2 + nb[2] ** 2)
 
-        if dl < 1e-4 * nal * nbl or dl < 1e-30:
-            return None
+class _SurfaceSurfaceMarch:
+    """Marching state of one trace direction."""
 
-        return (d[0] / dl * dir_sign, d[1] / dl * dir_sign, d[2] / dl * dir_sign), (
-            Sa,
-            Sau,
-            Sav,
-            Sbu,
-            Sbv,
-        )
+    def __init__(self):
+        self.x = [0.0, 0.0, 0.0, 0.0]  # Current joint parameters.
+        self.d = [0.0, 0.0, 0.0]  # Current 3D direction.
+        self.sa = None  # Point of a at x.
+        self.sau = None  # u-derivative of a at x.
+        self.sav = None  # v-derivative of a at x.
+        self.sbu = None  # u-derivative of b at x.
+        self.sbv = None  # v-derivative of b at x.
+        self.have_prev_d = False  # Whether a previous step exists.
+        self.prev_d = [0.0, 0.0, 0.0]  # Previous 3D direction.
+        self.p_prev = [0.0, 0.0, 0.0]  # Previous 3D point.
+        self.h = 0.0  # Current 3D step.
+        self.smooth = 0  # Accepted steps since the last change of h.
+        self.tang_reuse = 0  # Steps that reused the previous direction.
+        self.why = "maxsteps"  # Reason the march stopped.
+        self.xn = [0.0, 0.0, 0.0, 0.0]  # Accepted next parameters.
+        self.p_cur = [0.0, 0.0, 0.0]  # Accepted next 3D point.
+        self.step_len = 0.0  # Accepted 3D step length.
+        self.hit_boundary = False  # Whether the accepted step reached an open boundary.
 
-    def trace_dir(x0, dir_sign):
-        out = []
-        x = list(x0)
-        prev_d = None
-        Sa0, _, _ = eval_a(x[0], x[1])
-        p_start = (Sa0[0], Sa0[1], Sa0[2])
-        p_prev = p_start
-        dist_traveled = 0.0
-        h = h_init
-        smooth = 0
 
-        for _step in range(max_steps):
-            tng = tangent_3d(x, dir_sign)
+def _march_direction(field, m, dir_sign):
+    """Direction of the next step, reusing the previous one up to three times at tangencies."""
 
-            if tng is None:
-                break
+    d, m.sa, m.sau, m.sav, m.sbu, m.sbv = field.tangent(m.x, dir_sign)
 
-            d, (Sa, Sau, Sav, Sbu, Sbv) = tng
-            accepted = False
-            attempts = 0
-            xn = None
-            p_cur = None
-            step_len = 0.0
-            hit_boundary = False
+    if d is not None:
+        m.d = d
+        m.tang_reuse = 0
 
-            while attempts < 7 and not accepted:
-                duv_a = _solve_gauss(
-                    [
-                        [
-                            Sau[0] ** 2 + Sau[1] ** 2 + Sau[2] ** 2,
-                            Sau[0] * Sav[0] + Sau[1] * Sav[1] + Sau[2] * Sav[2],
-                        ],
-                        [
-                            Sau[0] * Sav[0] + Sau[1] * Sav[1] + Sau[2] * Sav[2],
-                            Sav[0] ** 2 + Sav[1] ** 2 + Sav[2] ** 2,
-                        ],
-                    ],
-                    [
-                        h * (d[0] * Sau[0] + d[1] * Sau[1] + d[2] * Sau[2]),
-                        h * (d[0] * Sav[0] + d[1] * Sav[1] + d[2] * Sav[2]),
-                    ],
-                    2,
-                )
-                duv_b = _solve_gauss(
-                    [
-                        [
-                            Sbu[0] ** 2 + Sbu[1] ** 2 + Sbu[2] ** 2,
-                            Sbu[0] * Sbv[0] + Sbu[1] * Sbv[1] + Sbu[2] * Sbv[2],
-                        ],
-                        [
-                            Sbu[0] * Sbv[0] + Sbu[1] * Sbv[1] + Sbu[2] * Sbv[2],
-                            Sbv[0] ** 2 + Sbv[1] ** 2 + Sbv[2] ** 2,
-                        ],
-                    ],
-                    [
-                        h * (d[0] * Sbu[0] + d[1] * Sbu[1] + d[2] * Sbu[2]),
-                        h * (d[0] * Sbv[0] + d[1] * Sbv[1] + d[2] * Sbv[2]),
-                    ],
-                    2,
-                )
+        return True
 
-                if duv_a is None or duv_b is None:
-                    return out, False
+    if not m.have_prev_d or m.tang_reuse >= 3:
+        m.why = "tangency"
 
-                delta = [duv_a[0], duv_a[1], duv_b[0], duv_b[1]]
-                tc = 1.0
-                hit_boundary = False
+        return False
 
-                for idx, lo, hi, closed in (
-                    (0, au0, au1, a_closed_u),
-                    (1, av0, av1, a_closed_v),
-                    (2, bu0, bu1, b_closed_u),
-                    (3, bv0, bv1, b_closed_v),
-                ):
-                    if closed or abs(delta[idx]) < 1e-15:
-                        continue
+    m.d = m.prev_d
+    m.tang_reuse += 1
 
-                    if x[idx] + delta[idx] > hi:
-                        tc = min(tc, (hi - x[idx]) / delta[idx])
-                        hit_boundary = True
+    return True
 
-                    if x[idx] + delta[idx] < lo:
-                        tc = min(tc, (lo - x[idx]) / delta[idx])
-                        hit_boundary = True
 
-                xn = [x[k] + tc * delta[k] for k in range(4)]
-                p_pred = (
-                    Sa[0] + d[0] * h * tc,
-                    Sa[1] + d[1] * h * tc,
-                    Sa[2] + d[2] * h * tc,
-                )
+def _march_predict(field, m):
+    """Parameters after a step h along d, cut back at open boundaries, and the predicted point; None when a surface is singular."""
 
-                if not correct(xn, (d, p_pred)):
-                    return out, False
+    sau = m.sau
+    sav = m.sav
+    sbu = m.sbu
+    sbv = m.sbv
+    d = m.d
+    ma = [
+        [
+            sau[0] * sau[0] + sau[1] * sau[1] + sau[2] * sau[2],
+            sau[0] * sav[0] + sau[1] * sav[1] + sau[2] * sav[2],
+        ],
+        [
+            sau[0] * sav[0] + sau[1] * sav[1] + sau[2] * sav[2],
+            sav[0] * sav[0] + sav[1] * sav[1] + sav[2] * sav[2],
+        ],
+    ]
+    ra = [
+        m.h * (d[0] * sau[0] + d[1] * sau[1] + d[2] * sau[2]),
+        m.h * (d[0] * sav[0] + d[1] * sav[1] + d[2] * sav[2]),
+    ]
+    mb = [
+        [
+            sbu[0] * sbu[0] + sbu[1] * sbu[1] + sbu[2] * sbu[2],
+            sbu[0] * sbv[0] + sbu[1] * sbv[1] + sbu[2] * sbv[2],
+        ],
+        [
+            sbu[0] * sbv[0] + sbu[1] * sbv[1] + sbu[2] * sbv[2],
+            sbv[0] * sbv[0] + sbv[1] * sbv[1] + sbv[2] * sbv[2],
+        ],
+    ]
+    rb = [
+        m.h * (d[0] * sbu[0] + d[1] * sbu[1] + d[2] * sbu[2]),
+        m.h * (d[0] * sbv[0] + d[1] * sbv[1] + d[2] * sbv[2]),
+    ]
+    duv_a = _solve_gauss(ma, ra, 2)
+    duv_b = _solve_gauss(mb, rb, 2) if duv_a is not None else None
 
-                San, _, _ = eval_a(xn[0], xn[1])
-                p_cur = (San[0], San[1], San[2])
-                step_len = math.sqrt(
-                    (p_cur[0] - p_prev[0]) ** 2
-                    + (p_cur[1] - p_prev[1]) ** 2
-                    + (p_cur[2] - p_prev[2]) ** 2
-                )
+    if duv_a is None or duv_b is None:
+        return None
 
-                if prev_d is not None and step_len > 1e-14:
-                    sd_ = (
-                        (p_cur[0] - p_prev[0]) / step_len,
-                        (p_cur[1] - p_prev[1]) / step_len,
-                        (p_cur[2] - p_prev[2]) / step_len,
-                    )
-                    ddot = sd_[0] * prev_d[0] + sd_[1] * prev_d[1] + sd_[2] * prev_d[2]
+    delta = [duv_a[0], duv_a[1], duv_b[0], duv_b[1]]
+    tc = 1.0
+    m.hit_boundary = False
 
-                    if ddot < 0.985 and attempts < 6 and not hit_boundary:
-                        h *= 0.5
-                        attempts += 1
-                        smooth = 0
-                        continue
+    for k in range(4):
+        if field.closed[k] or abs(delta[k]) < 1e-15:
+            continue
 
-                accepted = True
+        if m.x[k] + delta[k] > field.hi[k]:
+            tc = min(tc, (field.hi[k] - m.x[k]) / delta[k])
+            m.hit_boundary = True
 
-            if not accepted:
-                break
+        if m.x[k] + delta[k] < field.lo[k]:
+            tc = min(tc, (field.lo[k] - m.x[k]) / delta[k])
+            m.hit_boundary = True
 
-            prev_d = d
-            smooth += 1
+    m.xn = [
+        m.x[0] + tc * delta[0],
+        m.x[1] + tc * delta[1],
+        m.x[2] + tc * delta[2],
+        m.x[3] + tc * delta[3],
+    ]
 
-            if smooth >= 5 and h < h_init * 2.0:
-                h *= 1.4
-                smooth = 0
+    return [
+        m.sa[0] + d[0] * m.h * tc,
+        m.sa[1] + d[1] * m.h * tc,
+        m.sa[2] + d[2] * m.h * tc,
+    ]
 
-            x = xn
-            dist_traveled += step_len
 
-            if (
-                dist_traveled > close_tol * 3.0
-                and math.sqrt(
-                    (p_cur[0] - p_start[0]) ** 2
-                    + (p_cur[1] - p_start[1]) ** 2
-                    + (p_cur[2] - p_start[2]) ** 2
-                )
-                < close_tol
-            ):
-                out.append(list(x))
+def _march_turns_sharply(m):
+    """Whether the step from p_prev to p_cur turns more than acos(0.985) from the previous direction."""
 
-                return out, True
+    sd0 = (m.p_cur[0] - m.p_prev[0]) / m.step_len
+    sd1 = (m.p_cur[1] - m.p_prev[1]) / m.step_len
+    sd2 = (m.p_cur[2] - m.p_prev[2]) / m.step_len
 
-            out.append(list(x))
-            p_prev = p_cur
+    return sd0 * m.prev_d[0] + sd1 * m.prev_d[1] + sd2 * m.prev_d[2] < 0.985
 
-            if hit_boundary:
-                break
 
-            for sd in seeds:
-                if not sd[4]:
-                    So, _, _ = eval_a(sd[0], sd[1])
+def _march_step(field, m):
+    """Up to seven attempts at one step, halving h after a failed corrector or a sharp turn."""
 
-                    if (
-                        math.sqrt(
-                            (p_cur[0] - So[0]) ** 2
-                            + (p_cur[1] - So[1]) ** 2
-                            + (p_cur[2] - So[2]) ** 2
-                        )
-                        < consume_tol
-                    ):
-                        sd[4] = True
+    attempts = 0
 
-        return out, False
+    while attempts < 7:
+        p_pred = _march_predict(field, m)
 
-    axes = (
-        (0, au0, a_range_u, a_closed_u),
-        (1, av0, a_range_v, a_closed_v),
-        (2, bu0, b_range_u, b_closed_u),
-        (3, bv0, b_range_v, b_closed_v),
+        if p_pred is None:
+            m.why = "singular"
+
+            return False
+
+        if not field.correct(m.xn, True, m.d, p_pred):
+            m.why = "corrector"
+            m.h *= 0.5
+            attempts += 1
+            m.smooth = 0
+            continue
+
+        m.p_cur = field.point(m.xn)
+        m.step_len = _triple_distance(m.p_cur, m.p_prev)
+
+        if (
+            m.have_prev_d
+            and m.step_len > 1e-14
+            and _march_turns_sharply(m)
+            and attempts < 6
+            and not m.hit_boundary
+        ):
+            m.why = "angle"
+            m.h *= 0.5
+            attempts += 1
+            m.smooth = 0
+            continue
+
+        return True
+
+    return False
+
+
+def _consume_seeds_near(field, p, seeds):
+    """Mark the unused seeds within the consume tolerance of p as used."""
+
+    for sd in seeds:
+        if (
+            not sd.used
+            and _triple_distance(p, field.point([sd.u, sd.v, 0.0, 0.0]))
+            < field.consume_tol
+        ):
+            sd.used = True
+
+
+def _start_march(field, x0, p_start):
+    """Marching state at x0 with the initial step and no previous direction."""
+
+    m = _SurfaceSurfaceMarch()
+    m.x = list(x0)
+    m.have_prev_d = False
+    m.prev_d = [0.0, 0.0, 0.0]
+    m.p_prev = p_start
+    m.h = field.h_init
+    m.smooth = 0
+    m.tang_reuse = 0
+    m.why = "maxsteps"
+    m.xn = [0.0, 0.0, 0.0, 0.0]
+    m.p_cur = [0.0, 0.0, 0.0]
+    m.step_len = 0.0
+    m.hit_boundary = False
+
+    return m
+
+
+def _trace_dir(field, x0, dir_sign, seeds):
+    """March from x0 in direction dir_sign until it closes, leaves the domain, stalls or hits the step cap: (closed, samples, why)."""
+
+    out = []
+    p_start = field.point(x0)
+    m = _start_march(field, x0, p_start)
+    dist_traveled = 0.0
+
+    for _ in range(field.max_steps):
+        if not _march_direction(field, m, dir_sign) or not _march_step(field, m):
+            break
+
+        m.why = "maxsteps"
+        m.prev_d = m.d
+        m.have_prev_d = True
+        m.smooth += 1
+
+        if m.smooth >= 5 and m.h < field.h_init * 2.0:
+            m.h *= 1.4
+            m.smooth = 0
+
+        m.x = list(m.xn)
+        dist_traveled += m.step_len
+        out.append(list(m.x))
+
+        if (
+            dist_traveled > field.close_tol * 3.0
+            and _triple_distance(m.p_cur, p_start) < field.close_tol
+        ):
+            return True, out, "closed"
+
+        m.p_prev = m.p_cur
+
+        if m.hit_boundary:
+            m.why = "boundary"
+            break
+
+        _consume_seeds_near(field, m.p_cur, seeds)
+
+    return False, out, m.why
+
+
+def _unwrap_quad(field, quad):
+    """Shift closed parameters by whole periods so consecutive samples never jump more than half a period."""
+
+    for i in range(1, len(quad)):
+        for k in range(4):
+            if not field.closed[k]:
+                continue
+
+            jump = quad[i][k] - quad[i - 1][k]
+
+            if jump > field.range[k] * 0.5:
+                quad[i][k] -= field.range[k]
+            elif jump < -field.range[k] * 0.5:
+                quad[i][k] += field.range[k]
+
+
+def _trace_seed(field, x0, seeds):
+    """Trace both directions from a seed into one unwrapped run: (quad, is_loop), None when it is too short."""
+
+    fwd_closed, fwd, fwd_why = _trace_dir(field, x0, 1.0, seeds)
+    bwd = []
+    bwd_why = "?"
+
+    if not fwd_closed:
+        _, bwd, bwd_why = _trace_dir(field, x0, -1.0, seeds)
+
+    quad = []
+
+    for i in range(len(bwd) - 1, -1, -1):
+        quad.append(bwd[i])
+
+    quad.append(list(x0))
+
+    for p in fwd:
+        quad.append(p)
+
+    min_pts = (
+        2 if (not fwd_closed and fwd_why == "boundary" and bwd_why == "boundary") else 4
     )
 
+    if len(quad) < min_pts:
+        return None
+
+    _unwrap_quad(field, quad)
+    gap = _triple_distance(field.point(quad[0]), field.point(quad[-1]))
+    is_loop = fwd_closed or (len(quad) >= 6 and gap < field.close_tol)
+
+    if is_loop:
+        quad.pop()
+
+    if len(quad) < min_pts:
+        return None
+
+    return quad, is_loop
+
+
+def _is_duplicate_quad(trace_pts3, kept_pts3, dup_tol):
+    """Whether the quarter, half and three-quarter samples all lie within dup_tol of one kept run."""
+
+    m = len(trace_pts3)
+
+    for other in kept_pts3:
+        all_close = True
+
+        for f in (0.25, 0.5, 0.75):
+            cp = trace_pts3[int((m - 1) * f)]
+            dmin = dup_tol + 1.0
+
+            for op in other:
+                dmin = min(dmin, _triple_distance(cp, op))
+
+            if dmin > dup_tol:
+                all_close = False
+                break
+
+        if all_close:
+            return True
+
+    return False
+
+
+def _densify_quad(field, quad):
+    """Insert corrected midpoints into gaps longer than 1.5 median gaps, at most four passes."""
+
+    dummy3 = [0.0, 0.0, 0.0]
+
+    for _ in range(4):
+        gg = []
+
+        for i in range(len(quad) - 1):
+            gg.append(_triple_distance(field.point(quad[i]), field.point(quad[i + 1])))
+
+        if not gg:
+            break
+
+        gg.sort()
+        med = gg[len(gg) // 2]
+
+        if med <= 0:
+            break
+
+        changed = False
+        i = 0
+
+        while i + 1 < len(quad) and len(quad) < 4000:
+            if (
+                _triple_distance(field.point(quad[i]), field.point(quad[i + 1]))
+                > 1.5 * med
+            ):
+                midq = [(quad[i][k] + quad[i + 1][k]) * 0.5 for k in range(4)]
+
+                if field.correct(midq, False, dummy3, dummy3):
+                    quad.insert(i + 1, midq)
+                    changed = True
+                    i += 2
+                    continue
+
+            i += 1
+
+        if not changed:
+            break
+
+
+def _close_quad(field, quad, is_loop):
+    """Append the loop start shifted by whole periods after the end; returns the shift."""
+
+    closure = [0.0, 0.0, 0.0, 0.0]
+
+    if not is_loop or len(quad) < 2:
+        return closure
+
+    virt = list(quad[0])
+
+    for k in range(4):
+        jump = quad[0][k] - quad[-1][k]
+
+        if field.closed[k]:
+            jump = _unwrap_period(jump, 0.0, field.range[k])
+
+        virt[k] = quad[-1][k] + jump
+        closure[k] = virt[k] - quad[0][k]
+
+    quad.append(virt)
+
+    return closure
+
+
+def _quad_seam_crossings(field, pa, pb):
+    """Seam crossings (t, parameter, seam value) of the step pa -> pb, sorted by t."""
+
+    crossings = []
+
+    for k in range(4):
+        if not field.closed[k] or abs(pb[k] - pa[k]) <= 1e-15:
+            continue
+
+        k0 = math.floor((pa[k] - field.lo[k]) / field.range[k])
+        k1 = math.floor((pb[k] - field.lo[k]) / field.range[k])
+
+        for j in range(min(k0, k1) + 1, max(k0, k1) + 1):
+            seam = field.lo[k] + j * field.range[k]
+            t = (seam - pa[k]) / (pb[k] - pa[k])
+
+            if 0.0 < t and t < 1.0:
+                crossings.append((t, k, seam))
+
+    crossings.sort()
+
+    return crossings
+
+
+def _snap_quad_to_seam(field, prev, p):
+    """Snap closed parameters of p that sit on a seam onto it; false when none moved."""
+
+    on_seam = False
+
+    for k in range(4):
+        if not field.closed[k]:
+            continue
+
+        j = _round_half_away((p[k] - field.lo[k]) / field.range[k])
+        seam = field.lo[k] + j * field.range[k]
+
+        if (
+            abs(p[k] - seam) < field.range[k] * 1e-9
+            and abs(p[k] - prev[k]) > field.range[k] * 1e-9
+        ):
+            p[k] = seam
+            on_seam = True
+
+    return on_seam
+
+
+def _split_quad_at_seams(field, quad):
+    """Insert corrected seam crossings into the run: (samples, indices of every seam sample)."""
+
+    dummy3 = [0.0, 0.0, 0.0]
+    out_pts = [list(quad[0])]
+    cross_idx = []
+
+    for i in range(1, len(quad)):
+        pa = quad[i - 1]
+        pb = quad[i]
+
+        for t, idx, seam in _quad_seam_crossings(field, pa, pb):
+            cp = [pa[k] + (pb[k] - pa[k]) * t for k in range(4)]
+            cp[idx] = seam
+            field.correct(cp, False, dummy3, dummy3)
+            out_pts.append(cp)
+            cross_idx.append(len(out_pts) - 1)
+
+        out_pts.append(list(pb))
+
+        if i < len(quad) - 1 and _snap_quad_to_seam(field, pa, out_pts[-1]):
+            cross_idx.append(len(out_pts) - 1)
+
+    return out_pts, cross_idx
+
+
+def _quad_pieces(field, out_pts, cross_idx, is_loop, closure):
+    """Seam-free pieces of a split run, the last loop piece wrapped past the start by the closure shift."""
+
+    pieces = []
+    wrap_drift = False
+
+    for k in range(4):
+        if abs(closure[k]) > field.range[k] * 0.5:
+            wrap_drift = True
+
+    if not cross_idx:
+        pieces.append((out_pts, is_loop and not wrap_drift))
+
+        return pieces
+
+    if not is_loop:
+        bounds = [0] + cross_idx + [len(out_pts) - 1]
+
+        for bi in range(len(bounds) - 1):
+            if bounds[bi + 1] > bounds[bi]:
+                pieces.append(
+                    ([list(p) for p in out_pts[bounds[bi] : bounds[bi + 1] + 1]], False)
+                )
+
+        return pieces
+
+    for ci in range(len(cross_idx) - 1):
+        pieces.append(
+            ([list(p) for p in out_pts[cross_idx[ci] : cross_idx[ci + 1] + 1]], False)
+        )
+
+    wrap_piece = [list(p) for p in out_pts[cross_idx[-1] :]]
+
+    for pi in range(1, cross_idx[0] + 1):
+        wrap_piece.append([out_pts[pi][k] + closure[k] for k in range(4)])
+
+    pieces.append((wrap_piece, False))
+
+    return pieces
+
+
+def _shift_quad_piece(field, piece_pts):
+    """Shift closed parameters of a piece by whole periods so its middle sample lies in the domain."""
+
+    mid = list(piece_pts[len(piece_pts) // 2])
+
+    for k in range(4):
+        if not field.closed[k]:
+            continue
+
+        k_s = math.floor((mid[k] - field.lo[k]) / field.range[k])
+
+        if k_s != 0:
+            for p in piece_pts:
+                p[k] -= k_s * field.range[k]
+
+
+def _chord_deviation(pa, pm, pb):
+    """Distance of pm from the line through pa and pb, 0 for a degenerate chord."""
+
+    ex = pb[0] - pa[0]
+    ey = pb[1] - pa[1]
+    ez = pb[2] - pa[2]
+    l2 = ex * ex + ey * ey + ez * ez
+
+    if l2 <= 1e-30:
+        return 0.0
+
+    tt = ((pm[0] - pa[0]) * ex + (pm[1] - pa[1]) * ey + (pm[2] - pa[2]) * ez) / l2
+    c = [pa[0] + tt * ex, pa[1] + tt * ey, pa[2] + tt * ez]
+
+    return _triple_distance(pm, c)
+
+
+def _refine_quad_piece(field, piece_pts):
+    """Insert corrected midpoints that deviate from their chord, at most eight passes and 3000 samples."""
+
+    dummy3 = [0.0, 0.0, 0.0]
+    refine_tol = max(field.tolerance * 100.0, 5e-6)
+
+    for _ in range(8):
+        refined = False
+        new_pp = [piece_pts[0]]
+        n = len(piece_pts) - 1 if len(piece_pts) < 3000 else 0
+
+        for i in range(n):
+            midq = [(piece_pts[i][k] + piece_pts[i + 1][k]) * 0.5 for k in range(4)]
+
+            if field.correct(midq, False, dummy3, dummy3):
+                dev = _chord_deviation(
+                    field.point(piece_pts[i]),
+                    field.point(midq),
+                    field.point(piece_pts[i + 1]),
+                )
+
+                if dev > refine_tol:
+                    new_pp.append(midq)
+                    refined = True
+
+            new_pp.append(piece_pts[i + 1])
+
+        piece_pts[:] = new_pp
+
+        if not refined:
+            break
+
+
+def _total_turning_3d(pts):
+    """Sum of the turning angles along a 3D polyline."""
+
+    turning = 0.0
+
+    for i in range(1, len(pts) - 1):
+        dx1 = pts[i][0] - pts[i - 1][0]
+        dy1 = pts[i][1] - pts[i - 1][1]
+        dz1 = pts[i][2] - pts[i - 1][2]
+        dx2 = pts[i + 1][0] - pts[i][0]
+        dy2 = pts[i + 1][1] - pts[i][1]
+        dz2 = pts[i + 1][2] - pts[i][2]
+        l1 = math.sqrt(dx1 * dx1 + dy1 * dy1 + dz1 * dz1)
+        l2 = math.sqrt(dx2 * dx2 + dy2 * dy2 + dz2 * dz2)
+
+        if l1 > 1e-14 and l2 > 1e-14:
+            c = (dx1 * dx2 + dy1 * dy2 + dz1 * dz2) / (l1 * l2)
+            c = max(-1.0, min(1.0, c))
+            turning += math.acos(c)
+
+    return turning
+
+
+def _fit_track(pts, fit_tol, is_loop):
+    """Cubic fitted to a traced run, CVs doubled until within fit_tol, interpolated when fitting fails."""
+
+    mp = len(pts)
+    chords = _chord_parameters(pts, is_loop)
+    target_cvs = max(8, int(_total_turning_3d(pts) / 0.5) + 6)
+    max_cvs = max(8, min(mp - 1, mp // 3))
+    best = NurbsCurve()
+    best_dev = math.inf
+
+    while target_cvs <= max_cvs:
+        crv = NurbsCurve.create_fitted(pts, target_cvs, 3, is_loop)
+
+        if not crv.is_valid():
+            break
+
+        dev = _fitted_max_deviation(crv, pts, chords, 24)
+
+        if dev < best_dev:
+            best = crv
+            best_dev = dev
+
+        if dev < fit_tol:
+            break
+
+        target_cvs *= 2
+
+    if best_dev >= fit_tol:
+        if is_loop:
+            interp = NurbsCurve.create_interpolated(
+                pts, CurveNurbsKnotStyle.ChordPeriodic
+            )
+        else:
+            interp = NurbsCurve.create_interpolated(pts)
+
+        if interp.is_valid():
+            best = interp
+
+    if best.is_valid():
+        best.set_domain(0.0, 1.0)
+
+    return best
+
+
+def _piece_triple(field, piece_pts, piece_loop):
+    """Section triple of one seam-free piece: refined, then its 3D curve and both pcurves fitted; None when degenerate."""
+
+    _shift_quad_piece(field, piece_pts)
+    chord3 = 0.0
+
+    for i in range(1, len(piece_pts)):
+        chord3 += _triple_distance(
+            field.point(piece_pts[i]), field.point(piece_pts[i - 1])
+        )
+
+    if chord3 < field.h_init * 0.05:
+        return None
+
+    _refine_quad_piece(field, piece_pts)
+    pts3 = []
+    pts_pa = []
+    pts_pb = []
+
+    for q in piece_pts:
+        p = field.point(q)
+        pts3.append(Point(p[0], p[1], p[2]))
+        pts_pa.append(Point(q[0], q[1], 0.0))
+        pts_pb.append(Point(q[2], q[3], 0.0))
+
+    crv3 = _fit_track(pts3, max(field.tolerance * 10.0, 1e-7), piece_loop)
+    pcurve_a = _fit_track(pts_pa, min(field.step[0], field.step[1]) * 1e-4, piece_loop)
+    pcurve_b = _fit_track(pts_pb, min(field.step[2], field.step[3]) * 1e-4, piece_loop)
+
+    if not crv3.is_valid() or not pcurve_a.is_valid() or not pcurve_b.is_valid():
+        return None
+
+    return crv3, pcurve_a, pcurve_b
+
+
+def _marched_section_triples(a, b, tolerance):
+    """Section triples of two freeform surfaces by seeding, marching and fitting every trace."""
+
+    field = _SurfaceSurfaceField(a, b, tolerance)
+    dummy3 = [0.0, 0.0, 0.0]
+    seeds = _surface_surface_seeds(field)
     result = []
     kept_pts3 = []
 
     for seed in seeds:
-        if seed[4]:
+        if seed.used:
             continue
 
-        seed[4] = True
-        x0 = [seed[0], seed[1], seed[2], seed[3]]
+        seed.used = True
+        x0 = [seed.u, seed.v, seed.s, seed.t]
 
-        if not correct(x0):
+        if not field.correct(x0, False, dummy3, dummy3):
             continue
 
-        fwd, fwd_closed = trace_dir(x0, +1)
+        traced = _trace_seed(field, x0, seeds)
 
-        if not fwd_closed:
-            bwd, _ = trace_dir(x0, -1)
-        else:
-            bwd = []
-
-        quad = []
-
-        for i in range(len(bwd) - 1, -1, -1):
-            quad.append(list(bwd[i]))
-
-        quad.append(list(x0))
-
-        for p in fwd:
-            quad.append(list(p))
-
-        if len(quad) < 4:
+        if traced is None:
             continue
 
-        for i in range(1, len(quad)):
-            for idx, c0, rng, closed in axes:
-                if not closed:
-                    continue
+        quad, is_loop = traced
+        trace_pts3 = []
 
-                jump = quad[i][idx] - quad[i - 1][idx]
+        for q in quad:
+            trace_pts3.append(field.point(q))
 
-                if jump > rng * 0.5:
-                    quad[i][idx] -= rng
-                elif jump < -rng * 0.5:
-                    quad[i][idx] += rng
-
-        def eval3_q(q):
-            Sa, _, _ = eval_a(q[0], q[1])
-
-            return Sa
-
-        p_first = eval3_q(quad[0])
-        p_last = eval3_q(quad[-1])
-        gap2 = math.sqrt(
-            (p_first[0] - p_last[0]) ** 2
-            + (p_first[1] - p_last[1]) ** 2
-            + (p_first[2] - p_last[2]) ** 2
-        )
-        is_loop = fwd_closed or (len(quad) >= 6 and gap2 < close_tol)
-
-        if is_loop:
-            quad.pop()
-
-        if len(quad) < 4:
-            continue
-
-        m = len(quad)
-        trace_pts3 = [eval3_q(q) for q in quad]
-        dup_tol = h_init * 2.0
-        dup = False
-
-        for other in kept_pts3:
-            all_close = True
-
-            for f in [0.25, 0.5, 0.75]:
-                cp = trace_pts3[int((m - 1) * f)]
-                dmin = dup_tol + 1.0
-
-                for k in range(0, len(other), 1):
-                    op = other[k]
-                    dmin = min(
-                        dmin,
-                        math.sqrt(
-                            (cp[0] - op[0]) ** 2
-                            + (cp[1] - op[1]) ** 2
-                            + (cp[2] - op[2]) ** 2
-                        ),
-                    )
-
-                if dmin > dup_tol:
-                    all_close = False
-                    break
-
-            if all_close:
-                dup = True
-                break
-
-        if dup:
+        if _is_duplicate_quad(trace_pts3, kept_pts3, field.h_init * 2.0):
             continue
 
         kept_pts3.append(trace_pts3)
+        _densify_quad(field, quad)
+        closure = _close_quad(field, quad, is_loop)
+        out_pts, cross_idx = _split_quad_at_seams(field, quad)
 
-        def _gap3(qi, qj):
-            pi = eval3_q(qi)
-            pj = eval3_q(qj)
-
-            return math.sqrt(
-                (pi[0] - pj[0]) ** 2 + (pi[1] - pj[1]) ** 2 + (pi[2] - pj[2]) ** 2
+        for piece_pts, piece_loop in _quad_pieces(
+            field, out_pts, cross_idx, is_loop, closure
+        ):
+            triple = (
+                _piece_triple(field, piece_pts, piece_loop)
+                if len(piece_pts) >= 2
+                else None
             )
 
-        for _gp in range(4):
-            gg = [_gap3(quad[i], quad[i + 1]) for i in range(len(quad) - 1)]
+            if triple is not None:
+                result.append(triple)
 
-            if not gg:
-                break
+    return _drop_point_sections(result, tolerance)
 
-            med = sorted(gg)[len(gg) // 2]
 
-            if med <= 0:
-                break
+def surface_surface(
+    a: "NurbsSurface", b: "NurbsSurface", tolerance: float | None = None
+) -> list[tuple[NurbsCurve, NurbsCurve, NurbsCurve]]:
+    """Surface-surface section curves with their UV pcurves on both surfaces."""
 
-            changed = False
-            i = 0
+    if not a.is_valid() or not b.is_valid():
+        return []
 
-            while i < len(quad) - 1 and len(quad) < 4000:
-                if _gap3(quad[i], quad[i + 1]) > 1.5 * med:
-                    mid = [(quad[i][k] + quad[i + 1][k]) * 0.5 for k in range(4)]
+    if tolerance is None or tolerance <= 0.0:
+        tolerance = Tolerance.ZERO_TOLERANCE
 
-                    if correct(mid):
-                        quad.insert(i + 1, mid)
-                        changed = True
-                        i += 2
-                        continue
+    analytic = _analytic_ssi(a, b, tolerance)
 
-                i += 1
+    if analytic.status != _AnalyticResult.NOT_ANALYTIC:
+        return _drop_point_sections(analytic.triples, tolerance)
 
-            if not changed:
-                break
+    if a.is_planar(None, 1e-9):
+        return _planar_section_triples(a, b, True, tolerance)
 
-        closure = [0.0, 0.0, 0.0, 0.0]
+    if b.is_planar(None, 1e-9):
+        return _planar_section_triples(b, a, False, tolerance)
 
-        if is_loop and len(quad) >= 2:
-            virt = list(quad[0])
+    return _marched_section_triples(a, b, tolerance)
 
-            for idx, c0, rng, closed in axes:
-                jump = quad[0][idx] - quad[-1][idx]
 
-                if closed:
-                    while jump > rng * 0.5:
-                        jump -= rng
+class _CutterGap:
+    """Distance from a pcurve's lifted point to the cutter, projected onto the corner frame when it is not degenerate."""
 
-                    while jump < -rng * 0.5:
-                        jump += rng
+    def __init__(self, target, pc, cutter):
+        """Corner frame of the cutter."""
 
-                virt[idx] = quad[-1][idx] + jump
-                closure[idx] = virt[idx] - quad[0][idx]
+        cu0, cu1 = cutter.domain(0)
+        cv0, cv1 = cutter.domain(1)
+        self.target = target  # Surface the pcurve lives on.
+        self.pc = pc  # Pcurve on the target.
+        self.cutter = cutter  # Cutting surface.
+        self.q00 = cutter.point_at(cu0, cv0)  # Cutter corner at (u0, v0).
+        q10 = cutter.point_at(cu1, cv0)
+        q01 = cutter.point_at(cu0, cv1)
+        q00 = self.q00
+        self.eu = Vector(
+            q10[0] - q00[0], q10[1] - q00[1], q10[2] - q00[2]
+        )  # Cutter edge to (u1, v0).
+        self.ev = Vector(
+            q01[0] - q00[0], q01[1] - q00[1], q01[2] - q00[2]
+        )  # Cutter edge to (u0, v1).
+        eu = self.eu
+        ev = self.ev
+        self.eu2 = (
+            eu[0] * eu[0] + eu[1] * eu[1] + eu[2] * eu[2]
+        )  # Squared length of eu.
+        self.ev2 = (
+            ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2]
+        )  # Squared length of ev.
+        self.fast_planar = (
+            self.eu2 > 1e-28 and self.ev2 > 1e-28
+        )  # Whether both edges are usable.
 
-            quad.append(virt)
+    def gap(self, t):
+        """Distance to the cutter at pcurve parameter t."""
 
-        out_pts = [quad[0]]
-        cross_idx = []
+        uv = self.pc.point_at(t)
+        p3 = self.target.point_at(uv[0], uv[1])
 
-        for i in range(1, len(quad)):
-            pa_ = quad[i - 1]
-            pb_ = quad[i]
-            crossings = []
+        if not self.fast_planar:
+            return Closest.surface_point(self.cutter, p3, 0.0, 0.0, 0.0, 0.0)[2]
 
-            for idx, c0, rng, closed in axes:
-                if not closed or abs(pb_[idx] - pa_[idx]) <= 1e-15:
-                    continue
+        q00 = self.q00
+        eu = self.eu
+        ev = self.ev
+        dx = p3[0] - q00[0]
+        dy = p3[1] - q00[1]
+        dz = p3[2] - q00[2]
+        a = (dx * eu[0] + dy * eu[1] + dz * eu[2]) / self.eu2
+        b = (dx * ev[0] + dy * ev[1] + dz * ev[2]) / self.ev2
+        a = min(max(a, 0.0), 1.0)
+        b = min(max(b, 0.0), 1.0)
+        cx = q00[0] + a * eu[0] + b * ev[0]
+        cy = q00[1] + a * eu[1] + b * ev[1]
+        cz = q00[2] + a * eu[2] + b * ev[2]
 
-                k0 = math.floor((pa_[idx] - c0) / rng)
-                k1 = math.floor((pb_[idx] - c0) / rng)
+        return math.sqrt(
+            (p3[0] - cx) * (p3[0] - cx)
+            + (p3[1] - cy) * (p3[1] - cy)
+            + (p3[2] - cz) * (p3[2] - cz)
+        )
 
-                for k in range(min(k0, k1) + 1, max(k0, k1) + 1):
-                    L = c0 + k * rng
-                    t = (L - pa_[idx]) / (pb_[idx] - pa_[idx])
 
-                    if 0.0 < t < 1.0:
-                        crossings.append((t, idx, L))
+def _refine_footprint_edge(g, t_in, t_out, edge_tol):
+    """Footprint edge between an inside and an outside parameter, by 24 bisections."""
 
-            crossings.sort()
+    a = t_in
+    b = t_out
 
-            for t, idx, L in crossings:
-                cp = [pa_[k] + (pb_[k] - pa_[k]) * t for k in range(4)]
-                cp[idx] = L
-                correct(cp)
-                out_pts.append(cp)
-                cross_idx.append(len(out_pts) - 1)
+    for _ in range(24):
+        tm = (a + b) * 0.5
 
-            out_pts.append(list(pb_))
-
-            if i < len(quad) - 1:
-                on_seam = False
-
-                for idx, c0, rng, closed in axes:
-                    if not closed:
-                        continue
-
-                    k = round((pb_[idx] - c0) / rng)
-                    L = c0 + k * rng
-
-                    if (
-                        abs(pb_[idx] - L) < rng * 1e-9
-                        and abs(pb_[idx] - pa_[idx]) > rng * 1e-9
-                    ):
-                        out_pts[-1][idx] = L
-                        on_seam = True
-
-                if on_seam:
-                    cross_idx.append(len(out_pts) - 1)
-
-        wrap_drift = False
-
-        for idx, c0, rng, closed in axes:
-            if abs(closure[idx]) > rng * 0.5:
-                wrap_drift = True
-
-        if len(cross_idx) == 0:
-            pieces = [(out_pts, is_loop and not wrap_drift)]
+        if g.gap(tm) < edge_tol:
+            a = tm
         else:
-            pieces = []
+            b = tm
 
-            if is_loop:
-                for ia, ib in zip(cross_idx, cross_idx[1:]):
-                    pieces.append((out_pts[ia : ib + 1], False))
+    return b
 
-                wrap_piece = [list(p) for p in out_pts[cross_idx[-1] :]]
 
-                for p in out_pts[1 : cross_idx[0] + 1]:
-                    wrap_piece.append([p[k] + closure[k] for k in range(4)])
+def _footprint_spans(g, n, on_tol, edge_tol):
+    """Parameter spans of the pcurve inside the footprint from n + 1 samples, ends bisected to the edge."""
 
-                pieces.append((wrap_piece, False))
-            else:
-                bounds = [0] + cross_idx + [len(out_pts) - 1]
+    d0, d1 = g.pc.domain()
+    flags = []
 
-                for ia, ib in zip(bounds, bounds[1:]):
-                    if ib > ia:
-                        pieces.append((out_pts[ia : ib + 1], False))
+    for i in range(n + 1):
+        t = d0 + (d1 - d0) * i / n
+        flags.append((t, g.gap(t) < on_tol))
 
-        for piece_pts, piece_loop in pieces:
-            if len(piece_pts) < 2:
-                continue
+    spans = []
+    i = 0
 
-            mid = piece_pts[len(piece_pts) // 2]
+    while i <= n:
+        if not flags[i][1]:
+            i += 1
+            continue
 
-            for idx, c0, rng, closed in axes:
-                if not closed:
-                    continue
+        j = i
 
-                k_s = math.floor((mid[idx] - c0) / rng)
+        while j + 1 <= n and flags[j + 1][1]:
+            j += 1
 
-                if k_s != 0:
-                    for p in piece_pts:
-                        p[idx] -= k_s * rng
+        ta = (
+            flags[i][0]
+            if i == 0
+            else _refine_footprint_edge(g, flags[i][0], flags[i - 1][0], edge_tol)
+        )
+        tb = (
+            flags[j][0]
+            if j == n
+            else _refine_footprint_edge(g, flags[j][0], flags[j + 1][0], edge_tol)
+        )
 
-            pts3 = [eval3_q(p) for p in piece_pts]
-            chord3 = 0.0
+        if tb - ta > (d1 - d0) * 1e-6:
+            spans.append((ta, tb))
 
-            for i in range(1, len(pts3)):
-                chord3 += math.sqrt(
-                    (pts3[i][0] - pts3[i - 1][0]) ** 2
-                    + (pts3[i][1] - pts3[i - 1][1]) ** 2
-                    + (pts3[i][2] - pts3[i - 1][2]) ** 2
-                )
+        i = j + 1
 
-            if chord3 < h_init * 0.5:
-                continue
+    return spans
 
-            refine_tol = max(tolerance * 100.0, 5e-6)
 
-            for _dp in range(8):
-                refined = False
-                new_pp = [piece_pts[0]]
-                i = 0
+def _join_wrapped_spans(pc, n, spans, pieces):
+    """Join the first and last spans of a closed pcurve across its start into one polyline piece."""
 
-                while i < len(piece_pts) - 1 and len(piece_pts) < 3000:
-                    pa2 = piece_pts[i]
-                    pb2 = piece_pts[i + 1]
-                    p3a = eval3_q(pa2)
-                    p3b = eval3_q(pb2)
-                    mid = [(pa2[k] + pb2[k]) * 0.5 for k in range(4)]
+    d0, d1 = pc.domain()
+    pc_closed = pc.point_at(d0).distance(pc.point_at(d1)) < 1e-9
+    wraps = (
+        pc_closed
+        and len(spans) >= 2
+        and spans[0][0] <= d0 + (d1 - d0) * 1e-9
+        and spans[-1][1] >= d1 - (d1 - d0) * 1e-9
+    )
 
-                    if correct(mid):
-                        p3m = eval3_q(mid)
-                        ex = p3b[0] - p3a[0]
-                        ey = p3b[1] - p3a[1]
-                        ez = p3b[2] - p3a[2]
-                        l2 = ex * ex + ey * ey + ez * ez
+    if not wraps:
+        return
 
-                        if l2 > 1e-30:
-                            tt = (
-                                (p3m[0] - p3a[0]) * ex
-                                + (p3m[1] - p3a[1]) * ey
-                                + (p3m[2] - p3a[2]) * ez
-                            ) / l2
-                            cx = p3a[0] + tt * ex
-                            cy = p3a[1] + tt * ey
-                            cz = p3a[2] + tt * ez
-                            dev = math.sqrt(
-                                (p3m[0] - cx) ** 2
-                                + (p3m[1] - cy) ** 2
-                                + (p3m[2] - cz) ** 2
-                            )
-                        else:
-                            dev = 0.0
+    ta = spans[-1][0]
+    tb = spans[0][1]
+    spans.pop()
+    spans.pop(0)
+    m2 = max(32, n // 2)
+    pts = []
+    len1 = d1 - ta
+    len2 = tb - d0
+    tot = len1 + len2
 
-                        if dev > refine_tol:
-                            new_pp.append(mid)
-                            refined = True
+    for k2 in range(m2 + 1):
+        f = tot * k2 / m2
+        t = ta + f if f < len1 else d0 + (f - len1)
+        pts.append(pc.point_at(min(t, d1)))
 
-                    new_pp.append(pb2)
-                    i += 1
+    joined = NurbsCurve.create(False, 1, pts)
 
-                piece_pts = new_pp
-
-                if not refined:
-                    break
-
-            pts3 = [eval3_q(p) for p in piece_pts]
-
-            def fit_track(pts2, fit_tol_track):
-                mp = len(pts2)
-                total_turning = 0.0
-
-                for i in range(1, mp - 1):
-                    dx1 = pts2[i][0] - pts2[i - 1][0]
-                    dy1 = pts2[i][1] - pts2[i - 1][1]
-                    dz1 = pts2[i][2] - pts2[i - 1][2]
-                    dx2 = pts2[i + 1][0] - pts2[i][0]
-                    dy2 = pts2[i + 1][1] - pts2[i][1]
-                    dz2 = pts2[i + 1][2] - pts2[i][2]
-                    l1 = math.sqrt(dx1 * dx1 + dy1 * dy1 + dz1 * dz1)
-                    l2 = math.sqrt(dx2 * dx2 + dy2 * dy2 + dz2 * dz2)
-
-                    if l1 > 1e-14 and l2 > 1e-14:
-                        c = max(
-                            -1.0,
-                            min(1.0, (dx1 * dx2 + dy1 * dy2 + dz1 * dz2) / (l1 * l2)),
-                        )
-                        total_turning += math.acos(c)
-
-                chords = [0.0] * mp
-                total_len = 0.0
-
-                for i in range(1, mp):
-                    total_len += pts2[i].distance(pts2[i - 1])
-                    chords[i] = total_len
-
-                if piece_loop and mp > 1:
-                    total_len += pts2[0].distance(pts2[mp - 1])
-
-                if total_len > 1e-14:
-                    for i in range(1, mp):
-                        chords[i] /= total_len
-
-                target_cvs = max(8, int(total_turning / 0.5) + 6)
-                max_cvs = max(8, min(mp - 1, mp // 3))
-                best = NurbsCurve()
-                best_dev = float("inf")
-
-                while target_cvs <= max_cvs:
-                    crv = NurbsCurve.create_fitted(pts2, target_cvs, 3, piece_loop)
-
-                    if not crv.is_valid():
-                        break
-
-                    ft0, ft1 = crv.domain()
-                    dev = 0.0
-
-                    for i in range(mp):
-                        dev = max(
-                            dev,
-                            crv.point_at(ft0 + (ft1 - ft0) * chords[i]).distance(
-                                pts2[i]
-                            ),
-                        )
-
-                    if dev < best_dev:
-                        best, best_dev = crv, dev
-
-                    if dev < fit_tol_track:
-                        break
-
-                    target_cvs *= 2
-
-                if best_dev >= fit_tol_track:
-                    interp = (
-                        NurbsCurve.create_interpolated(
-                            pts2, CurveNurbsKnotStyle.ChordPeriodic
-                        )
-                        if piece_loop
-                        else NurbsCurve.create_interpolated(pts2)
-                    )
-
-                    if interp.is_valid():
-                        best = interp
-
-                if best.is_valid():
-                    best.set_domain(0.0, 1.0)
-
-                return best
-
-            pts3_p = [Point(p[0], p[1], p[2]) for p in pts3]
-            pts_pa = [Point(p[0], p[1], 0.0) for p in piece_pts]
-            pts_pb = [Point(p[2], p[3], 0.0) for p in piece_pts]
-            crv3 = fit_track(pts3_p, max(tolerance * 10.0, 1e-7))
-            pcurve_a = fit_track(pts_pa, min(a_du, a_dv) * 1e-4)
-            pcurve_b = fit_track(pts_pb, min(b_du, b_dv) * 1e-4)
-
-            if (
-                not crv3.is_valid()
-                or not pcurve_a.is_valid()
-                or not pcurve_b.is_valid()
-            ):
-                continue
-
-            result.append((crv3, pcurve_a, pcurve_b))
-
-    return result
+    if joined.is_valid():
+        pieces.append(joined)
 
 
 def _clip_pcurve_to_cutter(target, pc, cutter):
     """Keep the pcurve sub-segments whose lifted 3D point lies inside the cutter footprint."""
 
-    n = max(pc.cv_count() * 4, 16)
-    d0, d1 = pc.domain()
+    g = _CutterGap(target, pc, cutter)
     cu0, cu1 = cutter.domain(0)
     cv0, cv1 = cutter.domain(1)
-    corner_diag = cutter.point_at(cu0, cv0).distance(cutter.point_at(cu1, cv1))
-    on_tol = max(1e-7, corner_diag * 1e-4)
-
-    q00 = cutter.point_at(cu0, cv0)
-    q10 = cutter.point_at(cu1, cv0)
-    q01 = cutter.point_at(cu0, cv1)
-    eu0, eu1, eu2_ = q10[0] - q00[0], q10[1] - q00[1], q10[2] - q00[2]
-    ev0, ev1, ev2_ = q01[0] - q00[0], q01[1] - q00[1], q01[2] - q00[2]
-    eu_sq = eu0 * eu0 + eu1 * eu1 + eu2_ * eu2_
-    ev_sq = ev0 * ev0 + ev1 * ev1 + ev2_ * ev2_
-    q00x, q00y, q00z = q00[0], q00[1], q00[2]
-    fast_planar = eu_sq > 1e-28 and ev_sq > 1e-28
-
-    def gap(t):
-        uv = pc.point_at(t)
-        p3 = target.point_at(uv[0], uv[1])
-
-        if fast_planar:
-            dx = p3[0] - q00x
-            dy = p3[1] - q00y
-            dz = p3[2] - q00z
-            a = (dx * eu0 + dy * eu1 + dz * eu2_) / eu_sq
-            b = (dx * ev0 + dy * ev1 + dz * ev2_) / ev_sq
-
-            if a < 0.0:
-                a = 0.0
-            elif a > 1.0:
-                a = 1.0
-
-            if b < 0.0:
-                b = 0.0
-            elif b > 1.0:
-                b = 1.0
-
-            cx = q00x + a * eu0 + b * ev0
-            cy = q00y + a * eu1 + b * ev1
-            cz = q00z + a * eu2_ + b * ev2_
-
-            return ((p3[0] - cx) ** 2 + (p3[1] - cy) ** 2 + (p3[2] - cz) ** 2) ** 0.5
-
-        return Closest.surface_point(cutter, p3, 0.0, 0.0, 0.0, 0.0)[2]
-
-    def refine(t_in, t_out):
-        for _ in range(20):
-            tm = (t_in + t_out) * 0.5
-
-            if gap(tm) < on_tol:
-                t_in = tm
-            else:
-                t_out = tm
-
-        return t_out
-
-    flags = []
-
-    for i in range(n + 1):
-        t = d0 + (d1 - d0) * i / n
-        flags.append((t, gap(t) < on_tol))
-
+    corner_diag = g.q00.distance(cutter.point_at(cu1, cv1))
+    n = max(pc.cv_count() * 4, 16)
+    spans = _footprint_spans(
+        g, n, max(1e-6, corner_diag * 2e-3), max(1e-6, corner_diag * 2e-4)
+    )
     pieces = []
-    i = 0
+    _join_wrapped_spans(pc, n, spans, pieces)
 
-    while i <= n:
-        if flags[i][1]:
-            j = i
+    for sp in spans:
+        piece = pc.duplicate()
 
-            while j + 1 <= n and flags[j + 1][1]:
-                j += 1
-
-            ta = flags[i][0] if i == 0 else refine(flags[i][0], flags[i - 1][0])
-            tb = flags[j][0] if j == n else refine(flags[j][0], flags[j + 1][0])
-
-            if tb - ta > (d1 - d0) * 1e-6:
-                piece = pc.duplicate()
-
-                if piece.trim(ta, tb) and piece.is_valid():
-                    pieces.append(piece)
-
-            i = j + 1
-        else:
-            i += 1
+        if piece.trim(sp[0], sp[1]) and piece.is_valid():
+            pieces.append(piece)
 
     return pieces
+
+
+def _target_pcurves(target, rt, tr, tolerance):
+    """Pcurves of one section on the target: analytic, pulled back, projected, then the traced pcurve."""
+
+    c3d = tr[0]
+    pa_tr = tr[1]
+    pa_an = _analytic_pcurve(target, rt, c3d)
+
+    if pa_an.is_valid():
+        return [pa_an]
+
+    if rt.kind == _RecogSurface.NONE or rt.kind == _RecogSurface.PLANE:
+        if pa_tr.is_valid():
+            return [pa_tr]
+
+        return Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance)
+
+    pcs = _analytic_pullback(target, rt, c3d)
+
+    if not pcs:
+        pcs = Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance)
+
+    if not pcs:
+        pcs = [pa_tr]
+
+    return pcs
 
 
 def cut_curves_on_surface(
@@ -5504,47 +7739,22 @@ def cut_curves_on_surface(
 ) -> list[NurbsCurve]:
     """UV pcurves of the cutter's section on the target, clipped to the cutter footprint."""
 
-    rtol = max(tolerance if (tolerance and tolerance > 0) else 1e-7, 1e-7) * 1e4
-    rt = _recognize_surface(target, rtol)
+    if tolerance is None:
+        tolerance = Tolerance.ZERO_TOLERANCE
 
-    if rt is not None and rt[0] == "sphere":
-        cutter_planar = cutter.is_planar(None, 1e-6)
-        out = []
+    out = []
+    cutter_planar = cutter.is_planar(None, 1e-6)
+    rt = _recognize_surface(target, max(tolerance, 1e-7) * 1e4)
 
-        for triple in surface_surface(target, cutter, tolerance):
-            c3d = triple[0]
-            pcs = _analytic_sphere_pullback(target, rt, c3d)
+    for tr in surface_surface(target, cutter, tolerance):
+        for pc in _target_pcurves(target, rt, tr, tolerance):
+            if not cutter_planar:
+                out.append(pc)
+                continue
 
-            if not pcs:
-                pcs = Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance or 0.0)
+            out.extend(_clip_pcurve_to_cutter(target, pc, cutter))
 
-            if not pcs:
-                pcs = [triple[1]]
-
-            for pc in pcs:
-                if cutter_planar:
-                    out.extend(_clip_pcurve_to_cutter(target, pc, cutter))
-                else:
-                    out.append(pc)
-
-        return out
-
-    if cutter.is_planar(None, 1e-6):
-        cu0, cu1 = cutter.domain(0)
-        cv0, cv1 = cutter.domain(1)
-        mu = (cu0 + cu1) * 0.5
-        mv = (cv0 + cv1) * 0.5
-        origin = cutter.point_at(mu, mv)
-        normal = cutter.normal_at(mu, mv)
-        plane = Plane.from_point_normal(origin, normal)
-        out = []
-
-        for pair in surface_plane_uv(target, plane, tolerance):
-            out.extend(_clip_pcurve_to_cutter(target, pair[1], cutter))
-
-        return out
-
-    return [triple[1] for triple in surface_surface(target, cutter, tolerance)]
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════

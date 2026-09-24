@@ -69,6 +69,77 @@ def distance_flat(p):
     return abs(p[2])
 
 
+def bilinear(p00, p01, p10, p11):
+    """Planar degree-1 surface through four corner points."""
+    from session_py import NurbsSurface
+
+    return NurbsSurface.create(False, False, 1, 1, 2, 2, [p00, p01, p10, p11])
+
+
+def lifted_distance(pcurve, surface, d):
+    """Worst distance of the pcurve lifted onto the surface from a reference shape."""
+
+    t0, t1 = pcurve.domain()
+    worst = 0.0
+
+    for i in range(33):
+        uv = pcurve.point_at(t0 + (t1 - t0) * i / 32.0)
+        worst = max(worst, d(surface.point_at(uv[0], uv[1])))
+
+    return worst
+
+
+def distance_cone(p):
+    """Distance from the cone of base radius 1.5 at z = 0 and apex at z = 3."""
+    return abs(math.sqrt(p[0] * p[0] + p[1] * p[1]) - (3.0 - p[2]) * 0.5)
+
+
+def distance_flat_half(p):
+    """Distance from the plane z = 0.5."""
+    return abs(p[2] - 0.5)
+
+
+def distance_wall(p):
+    """Distance from the plane x = 0.2."""
+    return abs(p[0] - 0.2)
+
+
+def distance_unit_cylinder(p):
+    """Distance from the radius-1 cylinder on the z axis."""
+    return abs(math.sqrt(p[0] * p[0] + p[1] * p[1]) - 1.0)
+
+
+def distance_x_cylinder(p):
+    """Distance from the radius-1 cylinder on the x axis."""
+    return abs(math.sqrt(p[1] * p[1] + p[2] * p[2]) - 1.0)
+
+
+def distance_wide_cylinder(p):
+    """Distance from the radius-2.2 cylinder on the z axis."""
+    return abs(math.sqrt(p[0] * p[0] + p[1] * p[1]) - 2.2)
+
+
+def distance_high_torus(p):
+    """Distance from the torus of radii 1 and 0.3 at z = 1."""
+    ring = math.sqrt(p[0] * p[0] + p[1] * p[1]) - 1.0
+
+    return abs(math.sqrt(ring * ring + (p[2] - 1.0) * (p[2] - 1.0)) - 0.3)
+
+
+def distance_wide_torus(p):
+    """Distance from the torus of radii 2.3 and 0.5 at z = 0.3."""
+    ring = math.sqrt(p[0] * p[0] + p[1] * p[1]) - 2.3
+
+    return abs(math.sqrt(ring * ring + (p[2] - 0.3) * (p[2] - 0.3)) - 0.5)
+
+
+def distance_square(p):
+    """Distance from the square of half size 1.6 at z = 0.5."""
+    return max(
+        abs(p[2] - 0.5), max(max(0.0, abs(p[0]) - 1.6), max(0.0, abs(p[1]) - 1.6))
+    )
+
+
 @MINI_TEST("Intersection", "Line Line")
 def test_intersection_line_line():
     from session_py import intersection
@@ -1231,6 +1302,256 @@ def test_intersection_surface_surface_accuracy():
         MINI_CHECK(on_both(c3, distance_torus, distance_flat) < 1e-6)
 
 
+@MINI_TEST("Intersection", "Surface Surface Planes")
+def test_intersection_surface_surface_planes():
+    from session_py import intersection
+    from session_py import Point
+
+    flat = bilinear(
+        Point(-3.0, -3.0, 0.5),
+        Point(-3.0, 3.0, 0.5),
+        Point(3.0, -3.0, 0.5),
+        Point(3.0, 3.0, 0.5),
+    )
+    wall = bilinear(
+        Point(0.2, -3.0, -3.0),
+        Point(0.2, -3.0, 3.0),
+        Point(0.2, 3.0, -3.0),
+        Point(0.2, 3.0, 3.0),
+    )
+    far = bilinear(
+        Point(5.0, -3.0, -3.0),
+        Point(5.0, -3.0, 3.0),
+        Point(5.0, 3.0, -3.0),
+        Point(5.0, 3.0, 3.0),
+    )
+    tr = intersection.surface_surface(flat, wall)
+
+    MINI_CHECK(len(tr) == 1)
+
+    c3 = tr[0][0]
+    start = c3.point_at_start()
+    end = c3.point_at_end()
+
+    MINI_CHECK(
+        TOLERANCE.is_close(start[0], 0.2)
+        and TOLERANCE.is_close(start[1], -3.0)
+        and TOLERANCE.is_close(start[2], 0.5)
+    )
+    MINI_CHECK(
+        TOLERANCE.is_close(end[0], 0.2)
+        and TOLERANCE.is_close(end[1], 3.0)
+        and TOLERANCE.is_close(end[2], 0.5)
+    )
+    MINI_CHECK(lies_on_curve(c3, tr[0][1], flat) < 1e-9)
+    MINI_CHECK(lies_on_curve(c3, tr[0][2], wall) < 1e-9)
+    MINI_CHECK(len(intersection.surface_surface(flat, far)) == 0)
+
+
+@MINI_TEST("Intersection", "Surface Surface Plane Cone")
+def test_intersection_surface_surface_plane_cone():
+    from session_py import intersection
+    from session_py import Point
+    from session_py import Primitives
+
+    cone = Primitives.cone_surface(0.0, 0.0, 0.0, 1.5, 3.0)
+    flat = bilinear(
+        Point(-3.0, -3.0, 0.5),
+        Point(-3.0, 3.0, 0.5),
+        Point(3.0, -3.0, 0.5),
+        Point(3.0, 3.0, 0.5),
+    )
+    steep = bilinear(
+        Point(1.1, -3.0, -3.0),
+        Point(1.1, 3.0, -3.0),
+        Point(-0.3, -3.0, 4.0),
+        Point(-0.3, 3.0, 4.0),
+    )
+    slant = bilinear(
+        Point(-3.0, -3.0, 8.5),
+        Point(-3.0, 3.0, 8.5),
+        Point(3.0, -3.0, -3.5),
+        Point(3.0, 3.0, -3.5),
+    )
+    axial = bilinear(
+        Point(0.0, -3.0, -3.0),
+        Point(0.0, -3.0, 4.0),
+        Point(0.0, 3.0, -3.0),
+        Point(0.0, 3.0, 4.0),
+    )
+    circle = intersection.surface_surface(cone, flat)
+
+    MINI_CHECK(len(circle) == 1)
+    MINI_CHECK(on_both(circle[0][0], distance_cone, distance_flat_half) < 1e-9)
+    MINI_CHECK(lies_on_curve(circle[0][0], circle[0][1], cone) < 1e-9)
+
+    hyperbola = intersection.surface_surface(cone, steep)
+
+    MINI_CHECK(len(hyperbola) == 1)
+    MINI_CHECK(hyperbola[0][0].degree() == 2)
+    MINI_CHECK(on_both(hyperbola[0][0], distance_cone, distance_cone) < 1e-9)
+
+    parabola = intersection.surface_surface(cone, slant)
+
+    MINI_CHECK(len(parabola) == 1)
+    MINI_CHECK(on_both(parabola[0][0], distance_cone, distance_cone) < 1e-6)
+
+    lines = intersection.surface_surface(cone, axial)
+
+    MINI_CHECK(len(lines) == 2)
+
+    for line in lines:
+        apex = line[0].point_at_start()
+
+        MINI_CHECK(
+            TOLERANCE.is_close(apex[0], 0.0)
+            and TOLERANCE.is_close(apex[1], 0.0)
+            and TOLERANCE.is_close(apex[2], 3.0)
+        )
+        MINI_CHECK(on_both(line[0], distance_cone, distance_cone) < 1e-9)
+
+
+@MINI_TEST("Intersection", "Surface Surface Plane Torus")
+def test_intersection_surface_surface_plane_torus():
+    from session_py import intersection
+    from session_py import Point
+    from session_py import Primitives
+
+    torus = Primitives.torus_surface(0.0, 0.0, 0.0, 2.0, 0.5)
+    wall = bilinear(
+        Point(0.2, -3.0, -3.0),
+        Point(0.2, -3.0, 3.0),
+        Point(0.2, 3.0, -3.0),
+        Point(0.2, 3.0, 3.0),
+    )
+    tr = intersection.surface_surface(torus, wall)
+
+    MINI_CHECK(len(tr) == 2)
+
+    for t in tr:
+        MINI_CHECK(t[0].is_closed())
+        MINI_CHECK(on_both(t[0], distance_torus, distance_wall) < 1e-4)
+        MINI_CHECK(lies_on_curve(t[0], t[2], wall) < 1e-4)
+
+
+@MINI_TEST("Intersection", "Surface Surface Cylinders")
+def test_intersection_surface_surface_cylinders():
+    from session_py import intersection
+    from session_py import Primitives
+    from session_py import Tolerance
+    from session_py import Vector
+    from session_py import Xform
+
+    cyl = Primitives.cylinder_surface(0.0, 0.0, -2.0, 1.0, 4.0)
+    beside = Primitives.cylinder_surface(1.5, 0.0, -2.0, 1.0, 4.0)
+    across = Primitives.cylinder_surface(0.0, 0.0, -2.0, 1.0, 4.0).transformed(
+        Xform.rotation(Vector(0.0, 1.0, 0.0), Tolerance.HALF_PI)
+    )
+    lines = intersection.surface_surface(cyl, beside)
+
+    MINI_CHECK(len(lines) == 2)
+
+    for line in lines:
+        start = line[0].point_at_start()
+        end = line[0].point_at_end()
+
+        MINI_CHECK(
+            TOLERANCE.is_close(start[0], 0.75) and TOLERANCE.is_close(end[0], 0.75)
+        )
+        MINI_CHECK(
+            TOLERANCE.is_close(abs(start[1]), math.sqrt(0.4375))
+            and TOLERANCE.is_close(start[1], end[1])
+        )
+        MINI_CHECK(lies_on_curve(line[0], line[1], cyl) < 1e-9)
+
+    ellipses = intersection.surface_surface(cyl, across)
+
+    MINI_CHECK(len(ellipses) == 2)
+
+    for ellipse in ellipses:
+        MINI_CHECK(ellipse[0].is_closed())
+        MINI_CHECK(
+            on_both(ellipse[0], distance_unit_cylinder, distance_x_cylinder) < 1e-9
+        )
+
+
+@MINI_TEST("Intersection", "Surface Surface Coaxial Quadrics")
+def test_intersection_surface_surface_coaxial_quadrics():
+    from session_py import intersection
+    from session_py import Primitives
+
+    sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
+    cyl = Primitives.cylinder_surface(0.0, 0.0, -2.0, 1.0, 4.0)
+    cone = Primitives.cone_surface(0.0, 0.0, 0.0, 1.5, 3.0)
+    sphere_cyl = intersection.surface_surface(sphere, cyl)
+
+    MINI_CHECK(len(sphere_cyl) == 2)
+
+    for t in sphere_cyl:
+        MINI_CHECK(TOLERANCE.is_close(abs(t[0].point_at_start()[2]), math.sqrt(3.0)))
+        MINI_CHECK(on_both(t[0], distance_sphere, distance_unit_cylinder) < 1e-9)
+        MINI_CHECK(lies_on_curve(t[0], t[1], sphere) < 1e-9)
+        MINI_CHECK(lies_on_curve(t[0], t[2], cyl) < 1e-9)
+
+    cyl_cone = intersection.surface_surface(cyl, cone)
+
+    MINI_CHECK(len(cyl_cone) == 1)
+    MINI_CHECK(TOLERANCE.is_close(cyl_cone[0][0].point_at_start()[2], 1.0))
+    MINI_CHECK(on_both(cyl_cone[0][0], distance_unit_cylinder, distance_cone) < 1e-9)
+    MINI_CHECK(lies_on_curve(cyl_cone[0][0], cyl_cone[0][2], cone) < 1e-9)
+
+    cone_sphere = intersection.surface_surface(cone, sphere)
+
+    MINI_CHECK(len(cone_sphere) == 2)
+
+    for t in cone_sphere:
+        MINI_CHECK(on_both(t[0], distance_cone, distance_sphere) < 1e-9)
+
+
+@MINI_TEST("Intersection", "Surface Surface Coaxial Tori")
+def test_intersection_surface_surface_coaxial_tori():
+    from session_py import intersection
+    from session_py import Primitives
+
+    torus = Primitives.torus_surface(0.0, 0.0, 0.0, 2.0, 0.5)
+    wide_cyl = Primitives.cylinder_surface(0.0, 0.0, -2.0, 2.2, 4.0)
+    cone = Primitives.cone_surface(0.0, 0.0, 0.0, 1.5, 3.0)
+    high_torus = Primitives.torus_surface(0.0, 0.0, 1.0, 1.0, 0.3)
+    sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
+    wide_torus = Primitives.torus_surface(0.0, 0.0, 0.3, 2.3, 0.5)
+    cyl_torus = intersection.surface_surface(wide_cyl, torus)
+
+    MINI_CHECK(len(cyl_torus) == 2)
+
+    for t in cyl_torus:
+        MINI_CHECK(TOLERANCE.is_close(abs(t[0].point_at_start()[2]), math.sqrt(0.21)))
+        MINI_CHECK(on_both(t[0], distance_wide_cylinder, distance_torus) < 1e-9)
+        MINI_CHECK(lies_on_curve(t[0], t[2], torus) < 1e-9)
+
+    cone_torus = intersection.surface_surface(cone, high_torus)
+
+    MINI_CHECK(len(cone_torus) == 2)
+
+    for t in cone_torus:
+        MINI_CHECK(on_both(t[0], distance_cone, distance_high_torus) < 1e-9)
+        MINI_CHECK(lies_on_curve(t[0], t[2], high_torus) < 1e-9)
+
+    sphere_torus = intersection.surface_surface(sphere, torus)
+
+    MINI_CHECK(len(sphere_torus) == 2)
+
+    for t in sphere_torus:
+        MINI_CHECK(on_both(t[0], distance_sphere, distance_torus) < 1e-9)
+
+    torus_torus = intersection.surface_surface(torus, wide_torus)
+
+    MINI_CHECK(len(torus_torus) == 2)
+
+    for t in torus_torus:
+        MINI_CHECK(on_both(t[0], distance_torus, distance_wide_torus) < 1e-9)
+        MINI_CHECK(lies_on_curve(t[0], t[1], torus) < 1e-9)
+
+
 @MINI_TEST("Intersection", "Cut Curves On Surface")
 def test_intersection_cut_curves_on_surface():
     from session_py import intersection
@@ -1266,6 +1587,69 @@ def test_intersection_cut_curves_on_surface():
         max_off = max(max_off, abs(math.sqrt(p[0] * p[0] + p[1] * p[1]) - 1.0))
 
     MINI_CHECK(max_off < 1e-3)
+
+
+@MINI_TEST("Intersection", "Cut Curves On Surface Pullbacks")
+def test_intersection_cut_curves_on_surface_pullbacks():
+    from session_py import intersection
+    from session_py import Point
+    from session_py import Primitives
+
+    sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
+    cone = Primitives.cone_surface(0.0, 0.0, 0.0, 1.5, 3.0)
+    wall = bilinear(
+        Point(0.2, -3.0, -3.0),
+        Point(0.2, -3.0, 3.0),
+        Point(0.2, 3.0, -3.0),
+        Point(0.2, 3.0, 3.0),
+    )
+    square = bilinear(
+        Point(-1.6, -1.6, 0.5),
+        Point(-1.6, 1.6, 0.5),
+        Point(1.6, -1.6, 0.5),
+        Point(1.6, 1.6, 0.5),
+    )
+    sphere_cuts = intersection.cut_curves_on_surface(sphere, wall)
+
+    MINI_CHECK(len(sphere_cuts) == 3)
+
+    for pc in sphere_cuts:
+        MINI_CHECK(lifted_distance(pc, sphere, distance_wall) < 5e-3)
+
+    cone_cuts = intersection.cut_curves_on_surface(cone, wall)
+
+    MINI_CHECK(len(cone_cuts) == 2)
+
+    for pc in cone_cuts:
+        MINI_CHECK(lifted_distance(pc, cone, distance_wall) < 1e-3)
+
+    square_cuts = intersection.cut_curves_on_surface(sphere, square)
+
+    MINI_CHECK(len(square_cuts) == 4)
+
+    for pc in square_cuts:
+        MINI_CHECK(lifted_distance(pc, sphere, distance_square) < 2e-3)
+
+
+@MINI_TEST("Intersection", "Cut Curves On Surface Torus")
+def test_intersection_cut_curves_on_surface_torus():
+    from session_py import intersection
+    from session_py import Point
+    from session_py import Primitives
+
+    torus = Primitives.torus_surface(0.0, 0.0, 0.0, 2.0, 0.5)
+    wall = bilinear(
+        Point(0.2, -3.0, -3.0),
+        Point(0.2, -3.0, 3.0),
+        Point(0.2, 3.0, -3.0),
+        Point(0.2, 3.0, 3.0),
+    )
+    cuts = intersection.cut_curves_on_surface(torus, wall)
+
+    MINI_CHECK(len(cuts) == 4)
+
+    for pc in cuts:
+        MINI_CHECK(lifted_distance(pc, torus, distance_wall) < 1e-5)
 
 
 @MINI_TEST("Intersection", "Remap")
