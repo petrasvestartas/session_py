@@ -176,11 +176,11 @@ def _nurbsknot_vectors_equal(a: list[float], b: list[float]) -> bool:
     return True
 
 
-def _make_curves_compatible(curves: list[NurbsCurve]) -> None:
-    """Same degree, rationality, domain [0, 1] and nurbsknot vector for every curve."""
+def _unify_curves(curves: list[NurbsCurve]) -> bool:
+    """Same degree, rationality, domain [0, 1] and nurbsknot vector for every curve; false when a curve cannot be changed."""
 
     if len(curves) < 2:
-        return
+        return True
 
     max_degree = 0
     any_rational = False
@@ -190,11 +190,11 @@ def _make_curves_compatible(curves: list[NurbsCurve]) -> None:
         any_rational = any_rational or c.is_rational()
 
     for c in curves:
-        if c.degree() < max_degree:
-            c.increase_degree(max_degree)
+        if c.degree() < max_degree and not c.increase_degree(max_degree):
+            return False
 
-        if any_rational:
-            c.make_rational()
+        if any_rational and not c.make_rational():
+            return False
 
     compatible = True
 
@@ -205,10 +205,11 @@ def _make_curves_compatible(curves: list[NurbsCurve]) -> None:
             compatible = False
 
     if compatible:
-        return
+        return True
 
     for c in curves:
-        c.set_domain(0.0, 1.0)
+        if not c.set_domain(0.0, 1.0):
+            return False
 
     unified = curves[0].get_nurbsknots()
 
@@ -226,6 +227,8 @@ def _make_curves_compatible(curves: list[NurbsCurve]) -> None:
                 ci += 1
             else:
                 c.insert_nurbsknot(unified[ui], 1)
+
+    return True
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -366,6 +369,22 @@ def _loft_basis_row(
     return row
 
 
+def _loft_column(curves: list[NurbsCurve], i: int, is_rat: bool) -> list[list[float]]:
+    """Right-hand side of column i: control point i of every section, homogeneous when rational."""
+
+    rhs = []
+
+    for curve in curves:
+        if is_rat:
+            x, y, z, w = curve.get_cv_4d(i)
+            rhs.append([x, y, z, w])
+        else:
+            p = curve.get_cv(i)
+            rhs.append([p[0], p[1], p[2]])
+
+    return rhs
+
+
 def _solve_linear(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
     """Solves a x = b by Gaussian elimination with partial pivoting, one right-hand side per column of b."""
 
@@ -412,6 +431,58 @@ def _solve_linear(a: list[list[float]], b: list[list[float]]) -> list[list[float
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Revolve helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _revolve_arc_count(angle: float) -> int:
+    """Number of quarter arcs, at most 4, that cover the angle."""
+
+    if angle <= PI / 2.0 + 1e-10:
+        return 1
+
+    if angle <= PI + 1e-10:
+        return 2
+
+    if angle <= 3.0 * PI / 2.0 + 1e-10:
+        return 3
+
+    return 4
+
+
+def _set_revolve_column(
+    surface: NurbsSurface,
+    profile: NurbsCurve,
+    j: int,
+    axis_origin: Point,
+    axis: Vector,
+    d_theta: float,
+) -> None:
+    """Column j of a surface of revolution: profile control point j swept around the axis in arcs of d_theta."""
+
+    w_mid = math.cos(d_theta / 2.0)
+    p = profile.get_cv(j)
+    profile_w = profile.weight(j) if profile.is_rational() else 1.0
+    center = axis_origin + axis * (p - axis_origin).dot(axis)
+    x_local = p - center
+    r = x_local.magnitude()
+
+    if r > 1e-14:
+        x_local /= r
+
+    y_local = axis.cross(x_local)
+
+    for i in range(surface.cv_count(0)):
+        shoulder = i % 2 == 1
+        theta = (i // 2) * d_theta + (d_theta / 2.0 if shoulder else 0.0)
+        w = (w_mid if shoulder else 1.0) * profile_w
+        q = center + (x_local * math.cos(theta) + y_local * math.sin(theta)) * (
+            r / w_mid if shoulder else r
+        )
+        surface.set_cv_4d(i, j, q[0] * w, q[1] * w, q[2] * w, w)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Sweep helpers
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -424,6 +495,27 @@ def _lerp_point(a: Point, b: Point, s: float) -> Point:
 def _lerp_vector(a: Vector, b: Vector, s: float) -> Vector:
     """Vector at fraction s from a to b."""
     return a + (b - a) * s
+
+
+def _blend_curves(a: NurbsCurve, b: NurbsCurve, s: float) -> NurbsCurve:
+    """Copy of a with every control point at fraction s toward the matching control point of b."""
+
+    blend = a.duplicate()
+
+    for c in range(blend.cv_count()):
+        blend.set_cv(c, _lerp_point(a.get_cv(c), b.get_cv(c), s))
+
+    return blend
+
+
+def _blend_planes(a: Plane, b: Plane, s: float) -> Plane:
+    """Plane at fraction s from a to b."""
+
+    return Plane(
+        _lerp_point(a.origin, b.origin, s),
+        _lerp_vector(a.x_axis, b.x_axis, s),
+        _lerp_vector(a.y_axis, b.y_axis, s),
+    )
 
 
 def _profile_to_xy(profile: NurbsCurve) -> Xform:
@@ -482,6 +574,34 @@ def _shape_width(shape: NurbsCurve) -> float:
     return 1.0 if width < 1e-14 else width
 
 
+def _rail_xform(
+    source: Plane, width: float, p1: Point, p2: Point, frame: Plane
+) -> Xform:
+    """Source plane onto the rail points p1 and p2, x toward p2, scaled from width to the rail distance."""
+
+    x_dir = p2 - p1
+    rail_dist = x_dir.magnitude()
+
+    if not x_dir.normalize_self():
+        x_dir = frame.x_axis
+
+    y_dir = frame.z_axis.cross(x_dir)
+
+    if not y_dir.normalize_self():
+        y_dir = frame.y_axis
+
+    if y_dir.dot(source.y_axis) < 0.0:
+        y_dir = -y_dir
+
+    scale = rail_dist / width if rail_dist > 1e-14 and width > 1e-14 else 1.0
+    target = Plane(p1, x_dir, y_dir)
+    to_source = Xform.world_to_frame(
+        source.origin, source.x_axis, source.y_axis, source.z_axis
+    )
+
+    return Xform.to_frame(target) * Xform.scale_xyz(scale, scale, scale) * to_source
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Edge helpers
 # ═══════════════════════════════════════════════════════════════════════════
@@ -537,6 +657,50 @@ def _normalized_greville(curve: NurbsCurve) -> list[float]:
         grev[i] = (grev[i] - t0) / (t1 - t0) if t1 > t0 else 0.0
 
     return grev
+
+
+def _set_coons_cvs(
+    surface: NurbsSurface,
+    south: NurbsCurve,
+    north: NurbsCurve,
+    west: NurbsCurve,
+    east: NurbsCurve,
+) -> None:
+    """Control points of a Coons patch: boundary blends at the Greville abcissae minus the bilinear corners."""
+
+    cv_count_u = west.cv_count()
+    cv_count_v = south.cv_count()
+    u_grev = _normalized_greville(west)
+    v_grev = _normalized_greville(south)
+    c00 = south.get_cv(0)
+    c01 = south.get_cv(cv_count_v - 1)
+    c10 = north.get_cv(0)
+    c11 = north.get_cv(cv_count_v - 1)
+
+    for i in range(cv_count_u):
+        ui = u_grev[i]
+        wi = west.get_cv(i)
+        ei = east.get_cv(i)
+
+        for j in range(cv_count_v):
+            vj = v_grev[j]
+            sj = south.get_cv(j)
+            nj = north.get_cv(j)
+            q = [0.0, 0.0, 0.0]
+
+            for axis in range(3):
+                q[axis] = (
+                    (1.0 - ui) * sj[axis]
+                    + ui * nj[axis]
+                    + (1.0 - vj) * wi[axis]
+                    + vj * ei[axis]
+                    - (1.0 - ui) * (1.0 - vj) * c00[axis]
+                    - (1.0 - ui) * vj * c01[axis]
+                    - ui * (1.0 - vj) * c10[axis]
+                    - ui * vj * c11[axis]
+                )
+
+            surface.set_cv(i, j, Point(q[0], q[1], q[2]))
 
 
 class Primitives:
@@ -1062,9 +1226,13 @@ class Primitives:
             return NurbsSurface()
 
         curves = [curve_a.duplicate(), curve_b.duplicate()]
-        curves[0].set_domain(0.0, 1.0)
-        curves[1].set_domain(0.0, 1.0)
-        _make_curves_compatible(curves)
+
+        if (
+            not curves[0].set_domain(0.0, 1.0)
+            or not curves[1].set_domain(0.0, 1.0)
+            or not _unify_curves(curves)
+        ):
+            return NurbsSurface()
 
         cv_count_u = curves[0].cv_count()
         is_rat = curves[0].is_rational()
@@ -1162,7 +1330,8 @@ class Primitives:
         for c in input_curves:
             curves.append(c.duplicate())
 
-        _make_curves_compatible(curves)
+        if not _unify_curves(curves):
+            return NurbsSurface()
 
         n = len(curves)
         cv_count_u = curves[0].cv_count()
@@ -1186,20 +1355,8 @@ class Primitives:
         for k in range(n):
             basis.append(_loft_basis_row(nurbsknots_v, order_v, n, v_params[k]))
 
-        dim = 4 if is_rat else 3
-
         for i in range(cv_count_u):
-            rhs = [[0.0] * dim for _ in range(n)]
-
-            for k in range(n):
-                if is_rat:
-                    x, y, z, w = curves[k].get_cv_4d(i)
-                    rhs[k] = [x, y, z, w]
-                else:
-                    p = curves[k].get_cv(i)
-                    rhs[k] = [p[0], p[1], p[2]]
-
-            q = _solve_linear(basis, rhs)
+            q = _solve_linear(basis, _loft_column(curves, i, is_rat))
 
             for j in range(n):
                 if is_rat:
@@ -1231,17 +1388,8 @@ class Primitives:
         if angle < 1e-14:
             return NurbsSurface()
 
-        n_arcs = 4
-
-        if angle <= PI / 2.0 + 1e-10:
-            n_arcs = 1
-        elif angle <= PI + 1e-10:
-            n_arcs = 2
-        elif angle <= 3.0 * PI / 2.0 + 1e-10:
-            n_arcs = 3
-
+        n_arcs = _revolve_arc_count(angle)
         d_theta = angle / n_arcs
-        w_mid = math.cos(d_theta / 2.0)
         n_u = 2 * n_arcs + 1
         cv_count_v = profile.cv_count()
         surface = NurbsSurface(3, True, 3, profile.order(), n_u, cv_count_v)
@@ -1258,25 +1406,7 @@ class Primitives:
             surface.set_nurbsknot(1, i, profile.nurbsknot(i))
 
         for j in range(cv_count_v):
-            p = profile.get_cv(j)
-            profile_w = profile.weight(j) if profile.is_rational() else 1.0
-            center = axis_origin + axis * (p - axis_origin).dot(axis)
-            x_local = p - center
-            r = x_local.magnitude()
-
-            if r > 1e-14:
-                x_local /= r
-
-            y_local = axis.cross(x_local)
-
-            for i in range(n_u):
-                shoulder = i % 2 == 1
-                theta = (i // 2) * d_theta + (d_theta / 2.0 if shoulder else 0.0)
-                w = (w_mid if shoulder else 1.0) * profile_w
-                q = center + (x_local * math.cos(theta) + y_local * math.sin(theta)) * (
-                    r / w_mid if shoulder else r
-                )
-                surface.set_cv_4d(i, j, q[0] * w, q[1] * w, q[2] * w, w)
+            _set_revolve_column(surface, profile, j, axis_origin, axis, d_theta)
 
         return surface
 
@@ -1321,7 +1451,8 @@ class Primitives:
         for shape in shapes:
             compat.append(shape.duplicate())
 
-        _make_curves_compatible(compat)
+        if not _unify_curves(compat):
+            return NurbsSurface()
 
         n_shapes = len(compat)
         planes = []
@@ -1346,44 +1477,11 @@ class Primitives:
             j = 0 if n_shapes == 1 else min(int(t * (n_shapes - 1)), n_shapes - 2)
             j1 = 0 if n_shapes == 1 else j + 1
             s = 0.0 if n_shapes == 1 else max(0.0, min(t * (n_shapes - 1) - j, 1.0))
-            section = compat[j].duplicate()
-
-            for c in range(section.cv_count()):
-                section.set_cv(
-                    c, _lerp_point(compat[j].get_cv(c), compat[j1].get_cv(c), s)
-                )
-
-            source = Plane(
-                _lerp_point(planes[j].origin, planes[j1].origin, s),
-                _lerp_vector(planes[j].x_axis, planes[j1].x_axis, s),
-                _lerp_vector(planes[j].y_axis, planes[j1].y_axis, s),
-            )
+            section = _blend_curves(compat[j], compat[j1], s)
+            source = _blend_planes(planes[j], planes[j1], s)
             width = widths[j] * (1.0 - s) + widths[j1] * s
-            p1 = pts1[i]
-            x_dir = pts2[i] - p1
-            rail_dist = x_dir.magnitude()
 
-            if not x_dir.normalize_self():
-                x_dir = frames[i].x_axis
-
-            y_dir = frames[i].z_axis.cross(x_dir)
-
-            if not y_dir.normalize_self():
-                y_dir = frames[i].y_axis
-
-            if y_dir.dot(source.y_axis) < 0.0:
-                y_dir = -y_dir
-
-            scale = rail_dist / width if rail_dist > 1e-14 and width > 1e-14 else 1.0
-            target = Plane(p1, x_dir, y_dir)
-            to_source = Xform.world_to_frame(
-                source.origin, source.x_axis, source.y_axis, source.z_axis
-            )
-            section.transform(
-                Xform.to_frame(target)
-                * Xform.scale_xyz(scale, scale, scale)
-                * to_source
-            )
+            section.transform(_rail_xform(source, width, pts1[i], pts2[i], frames[i]))
             sections.append(section)
 
         return Primitives.create_loft(sections, min(3, len(sections) - 1))
@@ -1410,26 +1508,27 @@ class Primitives:
             return NurbsSurface()
 
         v_pair = [loop[0].duplicate(), loop[2].duplicate()]
-        v_pair[1].reverse()
-        _make_curves_compatible(v_pair)
-
         u_pair = [loop[3].duplicate(), loop[1].duplicate()]
-        u_pair[0].reverse()
-        _make_curves_compatible(u_pair)
+
+        if (
+            not v_pair[1].reverse()
+            or not u_pair[0].reverse()
+            or not _unify_curves(v_pair)
+            or not _unify_curves(u_pair)
+        ):
+            return NurbsSurface()
 
         south = v_pair[0]
         north = v_pair[1]
         west = u_pair[0]
         east = u_pair[1]
-        cv_count_u = west.cv_count()
-        cv_count_v = south.cv_count()
         surface = NurbsSurface(
             3,
             south.is_rational() or west.is_rational(),
             west.order(),
             south.order(),
-            cv_count_u,
-            cv_count_v,
+            west.cv_count(),
+            south.cv_count(),
         )
 
         if not surface.is_valid():
@@ -1441,37 +1540,7 @@ class Primitives:
         for i in range(surface.nurbsknot_count(1)):
             surface.set_nurbsknot(1, i, south.nurbsknot(i))
 
-        u_grev = _normalized_greville(west)
-        v_grev = _normalized_greville(south)
-        c00 = south.get_cv(0)
-        c01 = south.get_cv(cv_count_v - 1)
-        c10 = north.get_cv(0)
-        c11 = north.get_cv(cv_count_v - 1)
-
-        for i in range(cv_count_u):
-            ui = u_grev[i]
-            wi = west.get_cv(i)
-            ei = east.get_cv(i)
-
-            for j in range(cv_count_v):
-                vj = v_grev[j]
-                sj = south.get_cv(j)
-                nj = north.get_cv(j)
-                q = [0.0, 0.0, 0.0]
-
-                for axis in range(3):
-                    q[axis] = (
-                        (1.0 - ui) * sj[axis]
-                        + ui * nj[axis]
-                        + (1.0 - vj) * wi[axis]
-                        + vj * ei[axis]
-                        - (1.0 - ui) * (1.0 - vj) * c00[axis]
-                        - (1.0 - ui) * vj * c01[axis]
-                        - ui * (1.0 - vj) * c10[axis]
-                        - ui * vj * c11[axis]
-                    )
-
-                surface.set_cv(i, j, Point(q[0], q[1], q[2]))
+        _set_coons_cvs(surface, south, north, west, east)
 
         return surface
 

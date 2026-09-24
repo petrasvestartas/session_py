@@ -80,7 +80,7 @@ def test_nurbscurve_polyline():
     MINI_CHECK(curve.cv_count() == 5)
     MINI_CHECK(curve.order() == 2)
     MINI_CHECK(curve.degree() == 1)
-    MINI_CHECK(curve.is_rational() == False)
+    MINI_CHECK(not curve.is_rational())
     MINI_CHECK(
         TOLERANCE.is_point_close(curve.point_at(curve.domain_start()), Point(0, 0, 0))
     )
@@ -97,7 +97,7 @@ def test_nurbscurve_circle():
 
     MINI_CHECK(curve.cv_count() == 9)
     MINI_CHECK(curve.order() == 3)
-    MINI_CHECK(curve.is_rational() == True)
+    MINI_CHECK(curve.is_rational())
 
 
 @MINI_TEST("Primitives", "Nurbscurve Ellipse")
@@ -108,7 +108,7 @@ def test_nurbscurve_ellipse():
 
     MINI_CHECK(curve.cv_count() == 9)
     MINI_CHECK(curve.order() == 3)
-    MINI_CHECK(curve.is_rational() == True)
+    MINI_CHECK(curve.is_rational())
 
 
 @MINI_TEST("Primitives", "Nurbscurve Arc")
@@ -123,7 +123,7 @@ def test_nurbscurve_arc():
 
     MINI_CHECK(curve.cv_count() == 3)
     MINI_CHECK(curve.order() == 3)
-    MINI_CHECK(curve.is_rational() == True)
+    MINI_CHECK(curve.is_rational())
 
 
 @MINI_TEST("Primitives", "Nurbscurve Parabola")
@@ -138,7 +138,7 @@ def test_nurbscurve_parabola():
 
     MINI_CHECK(curve.cv_count() == 3)
     MINI_CHECK(curve.order() == 3)
-    MINI_CHECK(curve.is_rational() == False)
+    MINI_CHECK(not curve.is_rational())
 
 
 @MINI_TEST("Primitives", "Nurbscurve Hyperbola")
@@ -151,7 +151,7 @@ def test_nurbscurve_hyperbola():
 
     MINI_CHECK(curve.cv_count() >= 4)
     MINI_CHECK(curve.order() == 4)
-    MINI_CHECK(curve.is_rational() == False)
+    MINI_CHECK(not curve.is_rational())
 
 
 @MINI_TEST("Primitives", "Nurbscurve Spiral")
@@ -162,7 +162,7 @@ def test_nurbscurve_spiral():
 
     MINI_CHECK(curve.cv_count() >= 4)
     MINI_CHECK(curve.order() == 4)
-    MINI_CHECK(curve.is_rational() == False)
+    MINI_CHECK(not curve.is_rational())
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -795,7 +795,7 @@ def test_nurbssurface_extrusion():
     MINI_CHECK(s_circle.is_valid())
     MINI_CHECK(s_circle.degree(0) == 2 and s_circle.degree(1) == 1)
     MINI_CHECK(s_circle.is_rational())
-    MINI_CHECK(s_circle.is_closed(0) == True and s_circle.is_closed(1) == False)
+    MINI_CHECK(s_circle.is_closed(0) and not s_circle.is_closed(1))
     MINI_CHECK(s_circle.cv_count(0) == 9 and s_circle.cv_count(1) == 2)
     MINI_CHECK(m_circle.number_of_vertices() == 42)
     MINI_CHECK(m_circle.number_of_faces() == 42)
@@ -1263,8 +1263,8 @@ def test_nurbssurface_revolve():
     m_cone = s_cone.mesh()
 
     MINI_CHECK(s_vase.is_valid())
-    MINI_CHECK(s_vase.is_closed(0) == True)
-    MINI_CHECK(s_vase.is_closed(1) == False)
+    MINI_CHECK(s_vase.is_closed(0))
+    MINI_CHECK(not s_vase.is_closed(1))
     MINI_CHECK(s_vase.cv_count(0) == 9)
     MINI_CHECK(s_vase.cv_count(1) == 7)
     MINI_CHECK(m_vase.number_of_vertices() == 609)
@@ -1273,8 +1273,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(TOLERANCE.is_point_close(s_vase.get_cv(0, 6), Point(1.8, 0.0, 5.0)))
 
     MINI_CHECK(s_torus.is_valid())
-    MINI_CHECK(s_torus.is_closed(0) == True)
-    MINI_CHECK(s_torus.is_closed(1) == True)
+    MINI_CHECK(s_torus.is_closed(0))
+    MINI_CHECK(s_torus.is_closed(1))
     MINI_CHECK(s_torus.cv_count(0) == 9)
     MINI_CHECK(s_torus.cv_count(1) == 9)
     MINI_CHECK(m_torus.number_of_vertices() == 693)
@@ -1282,8 +1282,8 @@ def test_nurbssurface_revolve():
     MINI_CHECK(TOLERANCE.is_point_close(s_torus.get_cv(0, 0), Point(20.5, 0.0, 0.0)))
 
     MINI_CHECK(s_elbow.is_valid())
-    MINI_CHECK(s_elbow.is_closed(0) == False)
-    MINI_CHECK(s_elbow.is_closed(1) == False)
+    MINI_CHECK(not s_elbow.is_closed(0))
+    MINI_CHECK(not s_elbow.is_closed(1))
     MINI_CHECK(s_elbow.cv_count(0) == 3)
     MINI_CHECK(s_elbow.cv_count(1) == 2)
     MINI_CHECK(m_elbow.number_of_vertices() == 16)
@@ -1294,10 +1294,10 @@ def test_nurbssurface_revolve():
     MINI_CHECK(TOLERANCE.is_point_close(s_elbow.get_cv(2, 1), Point(26.0, 3.0, 0.5)))
 
     MINI_CHECK(s_sphere.is_valid())
-    MINI_CHECK(s_sphere.is_closed(0) == True)
-    MINI_CHECK(s_sphere.is_closed(1) == False)
-    MINI_CHECK(s_sphere.is_singular(0) == True)
-    MINI_CHECK(s_sphere.is_singular(2) == True)
+    MINI_CHECK(s_sphere.is_closed(0))
+    MINI_CHECK(not s_sphere.is_closed(1))
+    MINI_CHECK(s_sphere.is_singular(0))
+    MINI_CHECK(s_sphere.is_singular(2))
     MINI_CHECK(s_sphere.cv_count(0) == 9)
     MINI_CHECK(s_sphere.cv_count(1) == 5)
     MINI_CHECK(m_sphere.number_of_vertices() == 191)
@@ -1306,10 +1306,10 @@ def test_nurbssurface_revolve():
     MINI_CHECK(TOLERANCE.is_point_close(s_sphere.get_cv(0, 4), Point(36.0, 0.0, 2.0)))
 
     MINI_CHECK(s_cone.is_valid())
-    MINI_CHECK(s_cone.is_closed(0) == True)
-    MINI_CHECK(s_cone.is_closed(1) == False)
-    MINI_CHECK(s_cone.is_singular(0) == True)
-    MINI_CHECK(s_cone.is_singular(2) == False)
+    MINI_CHECK(s_cone.is_closed(0))
+    MINI_CHECK(not s_cone.is_closed(1))
+    MINI_CHECK(s_cone.is_singular(0))
+    MINI_CHECK(not s_cone.is_singular(2))
     MINI_CHECK(s_cone.cv_count(0) == 9)
     MINI_CHECK(s_cone.cv_count(1) == 2)
     MINI_CHECK(m_cone.number_of_vertices() == 22)
@@ -1822,6 +1822,7 @@ def test_nurbssurface_sweep():
             Point(9.000000000000000, 4.000000000000000, 0.000000000000000),
         )
     )
+
     TOLERANCE.reset()
 
 
@@ -1983,7 +1984,7 @@ def test_nurbscurve_interpolated():
     MINI_CHECK(curve.degree() == 3)
     MINI_CHECK(curve.order() == 4)
     MINI_CHECK(curve.cv_count() == 9)
-    MINI_CHECK(curve.is_rational() == False)
+    MINI_CHECK(not curve.is_rational())
 
     d0, d1 = curve.domain()
     nurbsknots = curve.get_nurbsknots()
@@ -2005,10 +2006,13 @@ def test_nurbscurve_interpolated():
         Point(5, 3, 0),
     ]
     c4 = Primitives.create_interpolated(pts4, CurveNurbsKnotStyle.Chord)
+
     MINI_CHECK(c4.is_valid())
     MINI_CHECK(c4.degree() == 3)
     MINI_CHECK(c4.cv_count() == 6)
+
     d4_0, d4_1 = c4.domain()
+
     MINI_CHECK(TOLERANCE.is_point_close(c4.point_at(d4_0), pts4[0]))
     MINI_CHECK(TOLERANCE.is_point_close(c4.point_at(d4_1), pts4[3]))
 
