@@ -1267,6 +1267,37 @@ def _lp_add_top_triangles(
             panel.wall_faces.append(w)
 
 
+def _lp_add_quad_wall(
+    panel: LoftPanel,
+    top_vkeys: list[int],
+    bot_vkeys: list[int],
+    j: int,
+    ti: int,
+    edge_gap: float,
+) -> None:
+    """Quad wall between bottom edge j and its matched top edge ti, recorded with the original keys it spans."""
+
+    n = len(top_vkeys)
+    m = len(bot_vkeys)
+    b0 = panel.orig_bot_to_local[bot_vkeys[j]]
+    b1 = panel.orig_bot_to_local[bot_vkeys[(j + 1) % m]]
+    t0 = panel.orig_top_to_local[top_vkeys[ti]]
+    t1 = panel.orig_top_to_local[top_vkeys[(ti + 1) % n]]
+    fk = _lp_add_quad(panel, b0, b1, t0, t1, edge_gap)
+
+    if fk is None:
+        return
+
+    w = LoftWallFace()
+    w.face_key = fk
+    w.is_quad = True
+    w.top_v0 = top_vkeys[ti]
+    w.top_v1 = top_vkeys[(ti + 1) % n]
+    w.bot_v0 = bot_vkeys[(j + 1) % m]
+    w.bot_v1 = bot_vkeys[j]
+    panel.wall_faces.append(w)
+
+
 def _lp_add_walls(
     panel: LoftPanel,
     top_pts: list[Point],
@@ -1308,20 +1339,7 @@ def _lp_add_walls(
         ti = bot_to_top[j]
 
         if bot_dist[j] <= threshold and top_to_bot[ti] == j:
-            t0 = panel.orig_top_to_local[top_vkeys[ti]]
-            t1 = panel.orig_top_to_local[top_vkeys[(ti + 1) % n]]
-            fk = _lp_add_quad(panel, b0, b1, t0, t1, edge_gap)
-
-            if fk is not None:
-                w = LoftWallFace()
-                w.face_key = fk
-                w.is_quad = True
-                w.top_v0 = top_vkeys[ti]
-                w.top_v1 = top_vkeys[(ti + 1) % n]
-                w.bot_v0 = bot_vkeys[(j + 1) % m]
-                w.bot_v1 = bot_vkeys[j]
-                panel.wall_faces.append(w)
-
+            _lp_add_quad_wall(panel, top_vkeys, bot_vkeys, j, ti, edge_gap)
             top_used[ti] = True
         elif not skip_triangles:
             tv = panel.orig_top_to_local[top_vkeys[_lp_nearest(bot_mids[j], top_pts)]]
@@ -1334,6 +1352,29 @@ def _lp_add_walls(
 
     if not skip_triangles:
         _lp_add_top_triangles(panel, top_mids, top_vkeys, bot_pts, bot_vkeys, top_used)
+
+
+def _lp_assign_roles(panel: LoftPanel) -> None:
+    """Face index of every wall and the role of every wall and cap face."""
+
+    fkey_to_idx = {}
+    fi = 0
+
+    for fk in panel.mesh.faces():
+        fkey_to_idx[fk] = fi
+        fi += 1
+
+    for w in panel.wall_faces:
+        w.face_index = fkey_to_idx[w.face_key]
+        panel.face_roles[w.face_key] = (
+            LoftFaceRole.QuadWall if w.is_quad else LoftFaceRole.TriWall
+        )
+
+    if panel.top_face_key is not None:
+        panel.face_roles[panel.top_face_key] = LoftFaceRole.TopCap
+
+    if panel.bot_face_key is not None:
+        panel.face_roles[panel.bot_face_key] = LoftFaceRole.BotCap
 
 
 def _lp_build_panel(
@@ -1392,24 +1433,7 @@ def _lp_build_panel(
     if add_caps:
         panel.bot_face_key = _lp_add_cap(panel.mesh, panel.bot_vertices, bot_pts)
 
-    fkey_to_idx = {}
-    fi = 0
-
-    for fk in panel.mesh.faces():
-        fkey_to_idx[fk] = fi
-        fi += 1
-
-    for w in panel.wall_faces:
-        w.face_index = fkey_to_idx[w.face_key]
-        panel.face_roles[w.face_key] = (
-            LoftFaceRole.QuadWall if w.is_quad else LoftFaceRole.TriWall
-        )
-
-    if panel.top_face_key is not None:
-        panel.face_roles[panel.top_face_key] = LoftFaceRole.TopCap
-
-    if panel.bot_face_key is not None:
-        panel.face_roles[panel.bot_face_key] = LoftFaceRole.BotCap
+    _lp_assign_roles(panel)
 
     return panel
 
@@ -1917,6 +1941,149 @@ def _cut_caps(
     return _cut_regions(_cut_loops(section, uv), uv)
 
 
+def _cut_rings(
+    fk: int,
+    ring: list[int],
+    face_holes: dict[int, list[list[int]]],
+    normal: Vector,
+    points: dict[int, Point],
+) -> list[list[int]]:
+    """Face ring followed by its hole rings, every hole turned against the face normal."""
+
+    rings = [list(ring)]
+
+    for hole in face_holes.get(fk, []):
+        rings.append(list(hole))
+
+        if _newell_normal(_cut_points(hole, points)).dot(normal) > 0.0:
+            rings[-1].reverse()
+
+    return rings
+
+
+def _cut_split_rings(
+    rings: list[list[int]],
+    crossings: dict[tuple[int, int], int],
+    distance: dict[int, float],
+    points: dict[int, Point],
+    first: int,
+) -> list[list[int]]:
+    """Rings with the crossing vertex inserted after every edge that crosses the plane."""
+
+    split = []
+
+    for r in rings:
+        split.append([])
+
+        for i in range(len(r)):
+            split[-1].append(r[i])
+
+            if distance[r[i]] * distance[r[(i + 1) % len(r)]] < 0.0:
+                split[-1].append(
+                    _cut_crossing(
+                        (r[i], r[(i + 1) % len(r)]), crossings, distance, points, first
+                    )
+                )
+
+    return split
+
+
+def _cut_face(
+    fk: int,
+    rings: list[list[int]],
+    normal: Vector,
+    plane: Plane,
+    crossings: dict[tuple[int, int], int],
+    distance: dict[int, float],
+    points: dict[int, Point],
+    first: int,
+    tolerance: float,
+) -> list[_CutFace]:
+    """Kept pieces of face fk: none below the plane, the whole face above it, the split pieces when it crosses."""
+
+    above = False
+    below = False
+
+    for r in rings:
+        for key in r:
+            above = above or distance[key] > 0.0
+            below = below or distance[key] < 0.0
+
+    if not above:
+        return []
+
+    if not below:
+        return [_CutFace(rings, fk)]
+
+    xaxis = plane.z_axis - normal * plane.z_axis.dot(normal)
+
+    if not xaxis.normalize_self():
+        return []
+
+    split = _cut_split_rings(rings, crossings, distance, points, first)
+    pieces = _cut_pieces(split, normal, xaxis, distance, points, tolerance)
+
+    for piece in pieces:
+        piece.parent = fk
+
+    return pieces
+
+
+def _cut_result(
+    output: dict[int, _CutFace],
+    points: dict[int, Point],
+    face: dict[int, list[int]],
+    facedata: dict[int, dict[str, float]],
+    triangulation: dict[int, list[list[int]]],
+) -> "Mesh":
+    """Mesh of the kept pieces with the parent face data and the triangulation of every untouched face."""
+
+    result = Mesh()
+    used = set()
+
+    for piece in output.values():
+        for r in piece.rings:
+            used.update(r)
+
+    for vk in sorted(used):
+        result.add_vertex(points[vk], vk)
+
+    for fk, piece in sorted(output.items()):
+        if result.add_face(piece.rings[0], fk) is None:
+            continue
+
+        whole = piece.parent is not None and piece.rings[0] == face[piece.parent]
+
+        if len(piece.rings) > 1:
+            result.set_face_holes(fk, piece.rings[1:])
+
+        if piece.parent in facedata:
+            result.facedata[fk] = dict(facedata[piece.parent])
+
+        if whole and fk in triangulation:
+            result.set_face_triangulation(fk, [list(t) for t in triangulation[fk]])
+
+        if not whole and (len(piece.rings) > 1 or len(piece.rings[0]) > 3):
+            result.set_face_triangulation(fk, _cut_triangulation(piece, points))
+
+    return result
+
+
+def _cut_tolerance(points: dict[int, Point]) -> float:
+    """Snap distance of the plane test, 1e-9 of the bounding box diagonal."""
+
+    big = math.inf
+    low = Point(big, big, big)
+    high = Point(-big, -big, -big)
+
+    for p in points.values():
+        for k in range(3):
+            low[k] = min(low[k], p[k])
+            high[k] = max(high[k], p[k])
+
+    return 1e-9 * low.distance(high)
+
+
 class Mesh:
     """A halfedge mesh data structure for representing polygonal surfaces."""
 
@@ -1957,7 +2124,6 @@ class Mesh:
         self._triangle_face_subidx_cache: list[tuple[int, int]] = []
         self._vertices_cache: list[Point] = []
         self._triangle_aabb_tree: SpatialAABBTree | None = None
-
 
     def __deepcopy__(self, memo):
         """Copy (same guid, same data)."""
@@ -2256,7 +2422,9 @@ class Mesh:
         tri_list = []
 
         for t in tris:
-            tri_list.append([vkeys[ordered[t[0]]], vkeys[ordered[t[1]]], vkeys[ordered[t[2]]]])
+            tri_list.append(
+                [vkeys[ordered[t[0]]], vkeys[ordered[t[1]]], vkeys[ordered[t[2]]]]
+            )
 
         return tri_list
 
@@ -2314,7 +2482,9 @@ class Mesh:
             fk = mesh.add_face(fvkeys)
 
             if fk is not None:
-                mesh.triangulation[fk] = Mesh._lines_cycle_triangles(cycle, verts, vkeys)
+                mesh.triangulation[fk] = Mesh._lines_cycle_triangles(
+                    cycle, verts, vkeys
+                )
 
         return mesh
 
@@ -2381,10 +2551,22 @@ class Mesh:
 
         if cap:
             _loft_cap(
-                mesh, frame, _loft_rings(polys, False), all_bot, bot_vkeys, True, fix_collinear
+                mesh,
+                frame,
+                _loft_rings(polys, False),
+                all_bot,
+                bot_vkeys,
+                True,
+                fix_collinear,
             )
             _loft_cap(
-                mesh, frame, _loft_rings(polys, True), all_top, top_vkeys, False, fix_collinear
+                mesh,
+                frame,
+                _loft_rings(polys, True),
+                all_top,
+                top_vkeys,
+                False,
+                fix_collinear,
             )
 
         for poly in polys:
@@ -3322,6 +3504,31 @@ class Mesh:
 
         return x
 
+    @staticmethod
+    def _weld_union(
+        parent: list[int], positions: list[Point], tolerance: float
+    ) -> None:
+        """Join in the union-find forest every pair of positions closer than tolerance."""
+
+        boxes = []
+
+        for p in positions:
+            boxes.append(OBB.from_point(p, tolerance))
+
+        ws = SpatialBVH.compute_world_size(boxes)
+        bvh = SpatialBVH.from_boxes(boxes, ws)
+        pairs, _ignore1, _ignore2 = bvh.check_all_collisions(boxes)
+
+        for i, j in pairs:
+            if positions[i].distance(positions[j]) > tolerance:
+                continue
+
+            ri = Mesh._weld_find(parent, i)
+            rj = Mesh._weld_find(parent, j)
+
+            if ri != rj:
+                parent[ri] = rj
+
     def weld(self, tolerance: float = 0.001) -> "Mesh":
         """Copy with vertices closer than tolerance merged; degenerate faces are dropped."""
 
@@ -3338,24 +3545,7 @@ class Mesh:
         parent = list(range(n))
 
         if tolerance > 0.0:
-            boxes = []
-
-            for p in positions:
-                boxes.append(OBB.from_point(p, tolerance))
-
-            ws = SpatialBVH.compute_world_size(boxes)
-            bvh = SpatialBVH.from_boxes(boxes, ws)
-            pairs, _ignore1, _ignore2 = bvh.check_all_collisions(boxes)
-
-            for i, j in pairs:
-                if positions[i].distance(positions[j]) > tolerance:
-                    continue
-
-                ri = Mesh._weld_find(parent, i)
-                rj = Mesh._weld_find(parent, j)
-
-                if ri != rj:
-                    parent[ri] = rj
+            Mesh._weld_union(parent, positions, tolerance)
 
         root_to_rep = {}
 
@@ -3390,15 +3580,15 @@ class Mesh:
 
         return m
 
-    def unify_winding(self) -> bool:
-        """Unify face winding by BFS; returns true when any face was flipped."""
-
-        if len(self.face) < 2:
-            return False
+    @staticmethod
+    def _winding_edge_faces(
+        face: dict[int, list[int]],
+    ) -> dict[tuple[int, int], list[tuple[int, int, int]]]:
+        """Faces on every undirected edge as (face key, u, v) in ring direction."""
 
         edge_faces = {}
 
-        for fkey, verts in self.face.items():
+        for fkey, verts in face.items():
             n = len(verts)
 
             for i in range(n):
@@ -3406,10 +3596,19 @@ class Mesh:
                 v = verts[(i + 1) % n]
                 edge_faces.setdefault((min(u, v), max(u, v)), []).append((fkey, u, v))
 
+        return edge_faces
+
+    @staticmethod
+    def _winding_flipped(
+        face: dict[int, list[int]],
+        edge_faces: dict[tuple[int, int], list[tuple[int, int, int]]],
+    ) -> set[int]:
+        """Faces to reverse so every face agrees with the neighbor it was first reached from."""
+
         visited = set()
         flipped = set()
 
-        for seed in self.faces():
+        for seed in sorted(face.keys()):
             if seed in visited:
                 continue
 
@@ -3419,7 +3618,7 @@ class Mesh:
             while queue:
                 f = queue.pop()
                 is_flipped = f in flipped
-                verts = self.face[f]
+                verts = face[f]
                 n = len(verts)
 
                 for i in range(n):
@@ -3428,9 +3627,9 @@ class Mesh:
                     eff_u = v_orig if is_flipped else u_orig
                     eff_v = u_orig if is_flipped else v_orig
 
-                    for adj_key, adj_u, adj_v in edge_faces.get(
-                        (min(u_orig, v_orig), max(u_orig, v_orig)), []
-                    ):
+                    for adj_key, adj_u, adj_v in edge_faces[
+                        (min(u_orig, v_orig), max(u_orig, v_orig))
+                    ]:
                         if adj_key == f or adj_key in visited:
                             continue
 
@@ -3439,6 +3638,16 @@ class Mesh:
 
                         visited.add(adj_key)
                         queue.append(adj_key)
+
+        return flipped
+
+    def unify_winding(self) -> bool:
+        """Unify face winding by BFS; returns true when any face was flipped."""
+
+        if len(self.face) < 2:
+            return False
+
+        flipped = Mesh._winding_flipped(self.face, Mesh._winding_edge_faces(self.face))
 
         if not flipped:
             return False
@@ -3961,10 +4170,14 @@ class Mesh:
         if s == 0:
             s = 1
 
+        period = 1 << 31
         used = set()
         out = []
 
-        while len(out) < take:
+        for _step in range(period):
+            if len(out) >= take:
+                break
+
             s = (s * 1103515245 + 12345) & 0x7FFFFFFF
             i = s % n
 
@@ -4407,6 +4620,53 @@ class Mesh:
 
         return d / length
 
+    @staticmethod
+    def _dihedral_arc(
+        ep0: Point,
+        ep1: Point,
+        mid: Point,
+        c0: Point,
+        c1: Point,
+        scale: float,
+        arc_n: int,
+    ) -> list[Point]:
+        """Arc of arc_n + 1 points around mid from the arm toward c0 to the arm toward c1, empty when degenerate."""
+
+        edge = ep1 - ep0
+
+        if edge.magnitude() < 1e-10 or not edge.normalize_self():
+            return []
+
+        d0 = Mesh._dihedral_arm(c0, mid, edge)
+        d1 = Mesh._dihedral_arm(c1, mid, edge)
+
+        if d0 is None or d1 is None:
+            return []
+
+        theta = math.acos(max(-1.0, min(1.0, d0.dot(d1))))
+
+        if abs(math.sin(theta)) < 1e-10:
+            return []
+
+        arc_pts = []
+
+        for j in range(arc_n + 1):
+            t = j / arc_n
+            w1 = math.sin((1.0 - t) * theta) / math.sin(theta)
+            w2 = math.sin(t * theta) / math.sin(theta)
+            arc_pts.append(mid + (d0 * w1 + d1 * w2) * scale)
+
+        return arc_pts
+
+    @staticmethod
+    def _dihedral_label(p: Point, angle: float, color: Color) -> Point:
+        """Label point at p named by the angle."""
+
+        pt = Point(p[0], p[1], p[2], str(angle))
+        pt.pointcolor = color
+
+        return pt
+
     def dihedral_angles(
         self, scale: float = 0.3, with_arcs: bool = True, with_points: bool = True
     ) -> tuple[dict[tuple[int, int], float], list[Polyline], list[Point]]:
@@ -4434,38 +4694,24 @@ class Mesh:
             )
 
             if scale == 0.0:
-                if not with_points:
-                    continue
+                if with_points:
+                    points.append(Mesh._dihedral_label(mid, da, label_color))
 
-                pt = Point(mid[0], mid[1], mid[2], str(da))
-                pt.pointcolor = label_color
-                points.append(pt)
                 continue
 
             ef = self.edge_faces(u, v)
-            edge = ep1 - ep0
+            arc_pts = Mesh._dihedral_arc(
+                ep0,
+                ep1,
+                mid,
+                self.face_centroid(ef[0]),
+                self.face_centroid(ef[1]),
+                scale,
+                arc_n,
+            )
 
-            if edge.magnitude() < 1e-10 or not edge.normalize_self():
+            if not arc_pts:
                 continue
-
-            d0 = Mesh._dihedral_arm(self.face_centroid(ef[0]), mid, edge)
-            d1 = Mesh._dihedral_arm(self.face_centroid(ef[1]), mid, edge)
-
-            if d0 is None or d1 is None:
-                continue
-
-            theta = math.acos(max(-1.0, min(1.0, d0.dot(d1))))
-
-            if abs(math.sin(theta)) < 1e-10:
-                continue
-
-            arc_pts = []
-
-            for j in range(arc_n + 1):
-                t = j / arc_n
-                w1 = math.sin((1.0 - t) * theta) / math.sin(theta)
-                w2 = math.sin(t * theta) / math.sin(theta)
-                arc_pts.append(mid + (d0 * w1 + d1 * w2) * scale)
 
             if with_arcs:
                 arc = Polyline(arc_pts)
@@ -4474,14 +4720,9 @@ class Mesh:
                 arcs.append(arc)
 
             if with_points:
-                pt = Point(
-                    arc_pts[arc_n // 2][0],
-                    arc_pts[arc_n // 2][1],
-                    arc_pts[arc_n // 2][2],
-                    str(da),
+                points.append(
+                    Mesh._dihedral_label(arc_pts[arc_n // 2], da, label_color)
                 )
-                pt.pointcolor = label_color
-                points.append(pt)
 
         return angles, arcs, points
 
@@ -4927,19 +5168,12 @@ class Mesh:
     def cut_by_plane(self, plane: Plane) -> "Mesh":
         """Return the part on the side the plane normal points to, every section loop capped by one n-gon face, so a closed mesh stays closed; empty when nothing lies on that side, a copy when everything does."""
 
-        big = math.inf
-        low = Point(big, big, big)
-        high = Point(-big, -big, -big)
         points = {}
 
         for vk, vd in self.vertex.items():
             points[vk] = vd.position()
 
-            for k in range(3):
-                low[k] = min(low[k], points[vk][k])
-                high[k] = max(high[k], points[vk][k])
-
-        tolerance = 1e-9 * low.distance(high)
+        tolerance = _cut_tolerance(points)
         distance = {}
         lowest = 0.0
         highest = 0.0
@@ -4962,58 +5196,20 @@ class Mesh:
 
         for fk, ring in sorted(self.face.items()):
             normal = _newell_normal(_cut_points(ring, points))
-            rings = [list(ring)]
-
-            for hole in self.face_holes.get(fk, []):
-                rings.append(list(hole))
-
-                if _newell_normal(_cut_points(hole, points)).dot(normal) > 0.0:
-                    rings[-1].reverse()
-
-            above = False
-            below = False
-
-            for r in rings:
-                for key in r:
-                    above = above or distance[key] > 0.0
-                    below = below or distance[key] < 0.0
-
-            if not above:
-                continue
-
-            if not below:
-                output[fk] = _CutFace(rings, fk)
-                continue
-
-            xaxis = plane.z_axis - normal * plane.z_axis.dot(normal)
-
-            if not xaxis.normalize_self():
-                continue
-
-            split = []
-
-            for r in rings:
-                split.append([])
-
-                for i in range(len(r)):
-                    split[-1].append(r[i])
-
-                    if distance[r[i]] * distance[r[(i + 1) % len(r)]] < 0.0:
-                        split[-1].append(
-                            _cut_crossing(
-                                (r[i], r[(i + 1) % len(r)]),
-                                crossings,
-                                distance,
-                                points,
-                                self._max_vertex,
-                            )
-                        )
-
-            pieces = _cut_pieces(split, normal, xaxis, distance, points, tolerance)
+            rings = _cut_rings(fk, ring, self.face_holes, normal, points)
+            pieces = _cut_face(
+                fk,
+                rings,
+                normal,
+                plane,
+                crossings,
+                distance,
+                points,
+                self._max_vertex,
+                tolerance,
+            )
 
             for i in range(len(pieces)):
-                pieces[i].parent = fk
-
                 if i == 0:
                     output[fk] = pieces[i]
                 else:
@@ -5024,39 +5220,11 @@ class Mesh:
             output[count] = cap
             count += 1
 
-        result = Mesh()
+        result = _cut_result(
+            output, points, self.face, self.facedata, self.triangulation
+        )
         result.name = self.name
         result._objectcolor = self._objectcolor
-        used = set()
-
-        for piece in output.values():
-            for r in piece.rings:
-                used.update(r)
-
-        for vk in sorted(used):
-            result.add_vertex(points[vk], vk)
-
-        for fk, piece in sorted(output.items()):
-            if result.add_face(piece.rings[0], fk) is None:
-                continue
-
-            whole = (
-                piece.parent is not None and piece.rings[0] == self.face[piece.parent]
-            )
-
-            if len(piece.rings) > 1:
-                result.set_face_holes(fk, piece.rings[1:])
-
-            if piece.parent in self.facedata:
-                result.facedata[fk] = dict(self.facedata[piece.parent])
-
-            if whole and fk in self.triangulation:
-                result.set_face_triangulation(
-                    fk, [list(t) for t in self.triangulation[fk]]
-                )
-
-            if not whole and (len(piece.rings) > 1 or len(piece.rings[0]) > 3):
-                result.set_face_triangulation(fk, _cut_triangulation(piece, points))
 
         return result
 
@@ -5090,6 +5258,49 @@ class Mesh:
             colors.append(Color(arr[i], arr[i + 1], arr[i + 2], arr[i + 3]))
 
         return colors
+
+    @staticmethod
+    def _halfedge_to_json(halfedge: dict[int, dict[int, int | None]]) -> dict:
+        """Halfedge connectivity keyed by vertex, null where no face lies on the left."""
+
+        halfedge_json = {}
+
+        for u, neighbors in halfedge.items():
+            neighbor_json = {}
+
+            for v, face_opt in neighbors.items():
+                neighbor_json[str(v)] = face_opt
+
+            halfedge_json[str(u)] = neighbor_json
+
+        return halfedge_json
+
+    @staticmethod
+    def _triangulation_to_json(triangulation: dict[int, list[list[int]]]) -> dict:
+        """Triangles keyed by face as [a, b, c] arrays."""
+
+        triangulation_json = {}
+
+        for fkey, tris in triangulation.items():
+            triangulation_json[str(fkey)] = [[t[0], t[1], t[2]] for t in tris]
+
+        return triangulation_json
+
+    @staticmethod
+    def _vertex_to_json(vertex: dict[int, VertexData]) -> dict:
+        """Vertex positions and attributes keyed by vertex."""
+
+        vertex_json = {}
+
+        for key, vdata in vertex.items():
+            vertex_json[str(key)] = {
+                "attributes": dict(vdata.attributes),
+                "x": vdata.x,
+                "y": vdata.y,
+                "z": vdata.z,
+            }
+
+        return vertex_json
 
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
@@ -5125,104 +5336,85 @@ class Mesh:
 
         data["facedata"] = facedata_json
         data["guid"] = self.guid
-        he = (
+        data["halfedge"] = Mesh._halfedge_to_json(
             self._compute_halfedges()
             if not self.halfedge and self.face
             else self.halfedge
         )
-        halfedge_json = {}
-
-        for u, neighbors in he.items():
-            neighbor_json = {}
-
-            for v, face_opt in neighbors.items():
-                neighbor_json[str(v)] = face_opt
-
-            halfedge_json[str(u)] = neighbor_json
-
-        data["halfedge"] = halfedge_json
         data["linecolors"] = Mesh._colors_to_json(self._linecolors)
         data["max_face"] = self._max_face
         data["max_vertex"] = self._max_vertex
         data["name"] = self.name
         data["objectcolor"] = self._objectcolor.__jsondump__()
         data["pointcolors"] = Mesh._colors_to_json(self._pointcolors)
-        triangulation_json = {}
-
-        for fkey, tris in self.triangulation.items():
-            triangulation_json[str(fkey)] = [[t[0], t[1], t[2]] for t in tris]
-
-        data["triangulation"] = triangulation_json
+        data["triangulation"] = Mesh._triangulation_to_json(self.triangulation)
         data["type"] = "Mesh"
-        vertex_json = {}
-
-        for key, vdata in self.vertex.items():
-            vertex_json[str(key)] = {
-                "attributes": dict(vdata.attributes),
-                "x": vdata.x,
-                "y": vdata.y,
-                "z": vdata.z,
-            }
-
-        data["vertex"] = vertex_json
+        data["vertex"] = Mesh._vertex_to_json(self.vertex)
         data["widths"] = list(self._widths)
 
         return data
 
-    @classmethod
-    def __jsonload__(
-        cls, data: dict, guid: str | None = None, name: str | None = None
-    ) -> "Mesh":
-        """Deserialize from a JSON object."""
+    @staticmethod
+    def _halfedge_from_json(halfedge_json: dict) -> dict[int, dict[int, int | None]]:
+        """Halfedge connectivity from a JSON object keyed by vertex."""
 
-        mesh = cls()
+        halfedge = {}
 
-        if "guid" in data:
-            mesh.guid = data["guid"]
+        for u_str, neighbors in halfedge_json.items():
+            u = int(u_str)
+            halfedge[u] = {}
 
-        if "name" in data:
-            mesh.name = data["name"]
+            for v_str, face_val in neighbors.items():
+                halfedge[u][int(v_str)] = face_val
 
-        if guid is not None:
-            mesh.guid = guid
+        return halfedge
 
-        if name is not None:
-            mesh.name = name
+    @staticmethod
+    def _vertex_from_json(vertex_json: dict) -> dict[int, VertexData]:
+        """Vertex positions and attributes from a JSON object keyed by vertex."""
 
-        if "halfedge" in data:
-            for u_str, neighbors in data["halfedge"].items():
-                u = int(u_str)
-                mesh.halfedge[u] = {}
+        vertex = {}
 
-                for v_str, face_val in neighbors.items():
-                    mesh.halfedge[u][int(v_str)] = face_val
+        for key_str, vdata in vertex_json.items():
+            vertex_data = VertexData()
+            vertex_data.x = vdata["x"]
+            vertex_data.y = vdata["y"]
+            vertex_data.z = vdata["z"]
 
-        if "vertex" in data:
-            for key_str, vdata in data["vertex"].items():
-                key = int(key_str)
-                vertex_data = VertexData()
-                vertex_data.x = vdata["x"]
-                vertex_data.y = vdata["y"]
-                vertex_data.z = vdata["z"]
+            if "attributes" in vdata:
+                vertex_data.attributes = Attributes(vdata["attributes"])
 
-                if "attributes" in vdata:
-                    vertex_data.attributes = Attributes(vdata["attributes"])
+            vertex[int(key_str)] = vertex_data
 
-                mesh.vertex[key] = vertex_data
+        return vertex
 
-                if "halfedge" not in data:
-                    mesh.halfedge[key] = {}
+    @staticmethod
+    def _face_from_json(face_json: dict) -> dict[int, list[int]]:
+        """Face rings from a JSON object keyed by face."""
 
-                if key >= mesh._max_vertex:
-                    mesh._max_vertex = key + 1
+        face = {}
 
-        if "face" in data:
-            for key_str, vertices in data["face"].items():
-                key = int(key_str)
-                mesh.face[key] = list(vertices)
+        for key_str, vertices in face_json.items():
+            face[int(key_str)] = list(vertices)
 
-                if key >= mesh._max_face:
-                    mesh._max_face = key + 1
+        return face
+
+    @staticmethod
+    def _triangulation_from_json(
+        triangulation_json: dict,
+    ) -> dict[int, list[list[int]]]:
+        """Triangles from a JSON object of [a, b, c] arrays keyed by face."""
+
+        triangulation = {}
+
+        for fk_str, tris in triangulation_json.items():
+            triangulation[int(fk_str)] = [[t[0], t[1], t[2]] for t in tris]
+
+        return triangulation
+
+    @staticmethod
+    def _jsonload_attributes(data: dict, mesh: "Mesh") -> None:
+        """Read face holes, face data, edge data and default attributes into mesh."""
 
         if "face_holes" in data:
             for fk_str, rings in data["face_holes"].items():
@@ -5245,6 +5437,47 @@ class Mesh:
 
         if "default_edge_attributes" in data:
             mesh.default_edge_attributes = dict(data["default_edge_attributes"])
+
+    @classmethod
+    def __jsonload__(
+        cls, data: dict, guid: str | None = None, name: str | None = None
+    ) -> "Mesh":
+        """Deserialize from a JSON object."""
+
+        mesh = cls()
+
+        if "guid" in data:
+            mesh.guid = data["guid"]
+
+        if "name" in data:
+            mesh.name = data["name"]
+
+        if guid is not None:
+            mesh.guid = guid
+
+        if name is not None:
+            mesh.name = name
+
+        if "halfedge" in data:
+            mesh.halfedge = Mesh._halfedge_from_json(data["halfedge"])
+
+        if "vertex" in data:
+            mesh.vertex = Mesh._vertex_from_json(data["vertex"])
+
+        if "halfedge" not in data:
+            for key in mesh.vertex:
+                mesh.halfedge[key] = {}
+
+        if mesh.vertex:
+            mesh._max_vertex = max(mesh.vertex.keys()) + 1
+
+        if "face" in data:
+            mesh.face = Mesh._face_from_json(data["face"])
+
+        if mesh.face:
+            mesh._max_face = max(mesh.face.keys()) + 1
+
+        Mesh._jsonload_attributes(data, mesh)
 
         if "max_vertex" in data:
             mesh._max_vertex = data["max_vertex"]
@@ -5275,8 +5508,7 @@ class Mesh:
             )
 
         if "triangulation" in data:
-            for fk_str, tris in data["triangulation"].items():
-                mesh.triangulation[int(fk_str)] = [[t[0], t[1], t[2]] for t in tris]
+            mesh.triangulation = Mesh._triangulation_from_json(data["triangulation"])
 
         return mesh
 
@@ -5328,37 +5560,43 @@ class Mesh:
 
         return colors
 
-    def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
-        return self.to_proto().SerializeToString()
+    @staticmethod
+    def _vertices_to_proto(
+        vertex: dict[int, VertexData], proto: "mesh_pb2.Mesh"
+    ) -> None:
+        """Write vertex positions and attributes into the proto."""
 
-    @classmethod
-    def pb_loads(cls, data: bytes) -> "Mesh":
-        """Deserialize from protobuf bytes."""
+        for vkey, vdata in vertex.items():
+            vertex_proto = proto.vertices[vkey]
+            vertex_proto.x = vdata.x
+            vertex_proto.y = vdata.y
+            vertex_proto.z = vdata.z
+
+            for k, v in vdata.attributes.items():
+                vertex_proto.attributes[k] = v
+
+    @staticmethod
+    def _faces_to_proto(
+        face: dict[int, list[int]],
+        facedata: dict[int, dict[str, float]],
+        face_holes: dict[int, list[list[int]]],
+        proto: "mesh_pb2.Mesh",
+    ) -> None:
+        """Write face rings with their attributes and hole rings into the proto."""
 
         from .proto import mesh_pb2
 
-        proto = mesh_pb2.Mesh()
-        proto.ParseFromString(data)
+        for fkey, fverts in face.items():
+            face_proto = proto.faces[fkey]
+            face_proto.vertices.extend(fverts)
 
-        return cls.from_proto(proto)
+            for k, v in facedata.get(fkey, {}).items():
+                face_proto.attributes[k] = v
 
-    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
-        """Write to a protobuf file."""
-
-        data = self.pb_dumps()
-
-        with open(filepath, "wb") as f:
-            f.write(data)
-
-    @classmethod
-    def pb_load(cls, filepath: Union[str, "Path"]) -> "Mesh":
-        """Read from a protobuf file."""
-
-        with open(filepath, "rb") as f:
-            data = f.read()
-
-        return cls.pb_loads(data)
+            for ring in face_holes.get(fkey, []):
+                hole_proto = mesh_pb2.HoleRing()
+                hole_proto.vertices.extend(ring)
+                face_proto.holes.append(hole_proto)
 
     def to_proto(self) -> "mesh_pb2.Mesh":
         """Convert to the protobuf message."""
@@ -5372,26 +5610,8 @@ class Mesh:
 
         proto.name = self.name
 
-        for vkey, vdata in self.vertex.items():
-            vertex_proto = proto.vertices[vkey]
-            vertex_proto.x = vdata.x
-            vertex_proto.y = vdata.y
-            vertex_proto.z = vdata.z
-
-            for k, v in vdata.attributes.items():
-                vertex_proto.attributes[k] = v
-
-        for fkey, fverts in self.face.items():
-            face_proto = proto.faces[fkey]
-            face_proto.vertices.extend(fverts)
-
-            for k, v in self.facedata.get(fkey, {}).items():
-                face_proto.attributes[k] = v
-
-            for ring in self.face_holes.get(fkey, []):
-                hole_proto = mesh_pb2.HoleRing()
-                hole_proto.vertices.extend(ring)
-                face_proto.holes.append(hole_proto)
+        Mesh._vertices_to_proto(self.vertex, proto)
+        Mesh._faces_to_proto(self.face, self.facedata, self.face_holes, proto)
 
         for fkey, tris in self.triangulation.items():
             tri_list = proto.triangulation[fkey]
@@ -5429,6 +5649,49 @@ class Mesh:
 
         return proto
 
+    @staticmethod
+    def _vertices_from_proto(proto: "mesh_pb2.Mesh") -> dict[int, VertexData]:
+        """Vertex positions and attributes of the proto."""
+
+        vertex = {}
+
+        for vkey, vdata in proto.vertices.items():
+            vd = VertexData(Point(vdata.x, vdata.y, vdata.z))
+            vd.attributes = Attributes(dict(vdata.attributes))
+            vertex[vkey] = vd
+
+        return vertex
+
+    @staticmethod
+    def _faces_from_proto(proto: "mesh_pb2.Mesh", mesh: "Mesh") -> None:
+        """Read face rings with their attributes and hole rings into mesh."""
+
+        for fkey, fdata in proto.faces.items():
+            mesh.face[fkey] = list(fdata.vertices)
+
+            if fdata.attributes:
+                mesh.facedata[fkey] = dict(fdata.attributes)
+
+            if fdata.holes:
+                mesh.face_holes[fkey] = [list(h.vertices) for h in fdata.holes]
+
+    @staticmethod
+    def _triangulation_from_proto(proto: "mesh_pb2.Mesh") -> dict[int, list[list[int]]]:
+        """Triangles of the proto keyed by face."""
+
+        triangulation = {}
+
+        for fkey, tri_list in proto.triangulation.items():
+            vlist = list(tri_list.vertices)
+            tris = []
+
+            for i in range(0, len(vlist) - 2, 3):
+                tris.append([vlist[i], vlist[i + 1], vlist[i + 2]])
+
+            triangulation[fkey] = tris
+
+        return triangulation
+
     @classmethod
     def from_proto(cls, proto: "mesh_pb2.Mesh") -> "Mesh":
         """Construct from the protobuf message."""
@@ -5440,28 +5703,9 @@ class Mesh:
 
         mesh.name = proto.name
 
-        for vkey, vdata in proto.vertices.items():
-            vd = VertexData(Point(vdata.x, vdata.y, vdata.z))
-            vd.attributes = Attributes(dict(vdata.attributes))
-            mesh.vertex[vkey] = vd
-
-        for fkey, fdata in proto.faces.items():
-            mesh.face[fkey] = list(fdata.vertices)
-
-            if fdata.attributes:
-                mesh.facedata[fkey] = dict(fdata.attributes)
-
-            if fdata.holes:
-                mesh.face_holes[fkey] = [list(h.vertices) for h in fdata.holes]
-
-        for fkey, tri_list in proto.triangulation.items():
-            vlist = list(tri_list.vertices)
-            tris = []
-
-            for i in range(0, len(vlist) - 2, 3):
-                tris.append([vlist[i], vlist[i + 1], vlist[i + 2]])
-
-            mesh.triangulation[fkey] = tris
+        mesh.vertex = Mesh._vertices_from_proto(proto)
+        Mesh._faces_from_proto(proto, mesh)
+        mesh.triangulation = Mesh._triangulation_from_proto(proto)
 
         for edata in proto.edge_data:
             mesh.edgedata[(edata.vertex1, edata.vertex2)] = dict(edata.attributes)
@@ -5490,6 +5734,38 @@ class Mesh:
             mesh._max_face = max(mesh.face.keys()) + 1
 
         return mesh
+
+    def pb_dumps(self) -> bytes:
+        """Serialize to protobuf bytes."""
+        return self.to_proto().SerializeToString()
+
+    @classmethod
+    def pb_loads(cls, data: bytes) -> "Mesh":
+        """Deserialize from protobuf bytes."""
+
+        from .proto import mesh_pb2
+
+        proto = mesh_pb2.Mesh()
+        proto.ParseFromString(data)
+
+        return cls.from_proto(proto)
+
+    def pb_dump(self, filepath: Union[str, "Path"]) -> None:
+        """Write to a protobuf file."""
+
+        data = self.pb_dumps()
+
+        with open(filepath, "wb") as f:
+            f.write(data)
+
+    @classmethod
+    def pb_load(cls, filepath: Union[str, "Path"]) -> "Mesh":
+        """Read from a protobuf file."""
+
+        with open(filepath, "rb") as f:
+            data = f.read()
+
+        return cls.pb_loads(data)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String

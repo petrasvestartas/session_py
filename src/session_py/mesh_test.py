@@ -23,6 +23,7 @@ def test_mesh_constructor():
     MINI_CHECK(mcopy == mesh)
 
     MINI_CHECK(mesh.is_valid())
+
     mesh.name = "hexagon"
 
     palette = Color.palette()
@@ -65,6 +66,7 @@ def test_mesh_constructor():
     mesh.color_mode = ColorMode.FACECOLORS
 
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
+
     mesh.clear_facecolors()
 
     MINI_CHECK(mesh.color_mode == ColorMode.OBJECTCOLOR)
@@ -73,6 +75,7 @@ def test_mesh_constructor():
     mesh.color_mode = ColorMode.FACECOLORS
 
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
+
     mesh.clear_pointcolors()
 
     MINI_CHECK(mesh.color_mode == ColorMode.FACECOLORS)
@@ -517,6 +520,7 @@ def test_mesh_from_polygon_with_holes_many():
     MINI_CHECK(meshes[1].is_valid())
     MINI_CHECK(meshes[2].is_valid())
     MINI_CHECK(meshes[3].is_valid())
+
     meshes_seq = Mesh.from_polygon_with_holes_many(inputs, False, False)
 
     MINI_CHECK(meshes_seq[0].number_of_faces() == meshes[0].number_of_faces())
@@ -566,6 +570,7 @@ def test_mesh_loft_many():
     MINI_CHECK(meshes[4].is_closed())
     MINI_CHECK(meshes[5].is_valid())
     MINI_CHECK(meshes[5].is_closed())
+
     meshes_seq = Mesh.loft_many(loft_inputs, True, False)
 
     MINI_CHECK(meshes_seq[0].is_valid())
@@ -874,6 +879,7 @@ def test_mesh_attributes():
     MINI_CHECK(vertices[5] == 5)
     MINI_CHECK(vertices[6] == 6)
     MINI_CHECK(vertices[7] == 7)
+
     faces = mesh.faces()
 
     MINI_CHECK(len(faces) == 6)
@@ -883,6 +889,7 @@ def test_mesh_attributes():
     MINI_CHECK(faces[3] == 3)
     MINI_CHECK(faces[4] == 4)
     MINI_CHECK(faces[5] == 5)
+
     edges = mesh.edges()
 
     MINI_CHECK(len(edges) == 12)
@@ -901,23 +908,29 @@ def test_mesh_attributes():
 
     MINI_CHECK(len(mesh.naked_edges(True)) == 0)
     MINI_CHECK(len(mesh.naked_faces(False)) == 6)
+
     mesh.remove_face(mesh.faces()[0])
     ne = mesh.naked_edges(True)
 
     MINI_CHECK(len(ne) == 4)
     MINI_CHECK(ne[0] == (0, 1))
+
     ni = mesh.naked_edges(False)
 
     MINI_CHECK(len(ni) == 8)
+
     nv = mesh.naked_vertices(True)
 
     MINI_CHECK(len(nv) == 4)
+
     nvi = mesh.naked_vertices(False)
 
     MINI_CHECK(len(nvi) == 4)
+
     nf = mesh.naked_faces(True)
 
     MINI_CHECK(len(nf) == 4)
+
     nfi = mesh.naked_faces(False)
 
     MINI_CHECK(len(nfi) == 1)
@@ -1009,10 +1022,12 @@ def test_mesh_vertex_and_face_operations():
     mesh = mesh.unweld()
 
     MINI_CHECK(mesh.number_of_vertices() == 24)
+
     mesh = mesh.weld(0.001)
 
     MINI_CHECK(mesh.number_of_vertices() == 8)
     MINI_CHECK(mesh.number_of_faces() == 6)
+
     fv0 = mesh.face_vertices(0)
     fv1 = mesh.face_vertices(1)
     fv2 = mesh.face_vertices(2)
@@ -2281,6 +2296,7 @@ def test_mesh_vertices_on_boundary():
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
 
     MINI_CHECK(len(mesh.vertices_on_boundary()) == 0)
+
     mesh.remove_face(mesh.faces()[0])
     vb = mesh.vertices_on_boundary()
 
@@ -2294,6 +2310,7 @@ def test_mesh_edges_on_boundary():
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
 
     MINI_CHECK(len(mesh.edges_on_boundary()) == 0)
+
     mesh.remove_face(mesh.faces()[0])
     eb = mesh.edges_on_boundary()
 
@@ -2307,6 +2324,7 @@ def test_mesh_faces_on_boundary():
     mesh = Mesh.create_box(1.0, 1.0, 1.0)
 
     MINI_CHECK(len(mesh.faces_on_boundary()) == 0)
+
     mesh.remove_face(mesh.faces()[0])
 
     MINI_CHECK(len(mesh.faces_on_boundary()) == 4)
@@ -2321,6 +2339,7 @@ def test_mesh_halfedge_face():
 
     MINI_CHECK(f is not None)
     MINI_CHECK(f == 0)
+
     mesh.remove_face(0)
 
     MINI_CHECK(mesh.halfedge_face((0, 3)) is None)
@@ -2371,7 +2390,11 @@ def test_mesh_vertex_sample():
     s = mesh.vertex_sample(3, seed=42)
 
     MINI_CHECK(len(s) == 3)
-    MINI_CHECK(len(set(s)) == 3)
+
+    uniq = set(s)
+
+    MINI_CHECK(len(uniq) == 3)
+
     s2 = mesh.vertex_sample(3, seed=42)
 
     MINI_CHECK(s == s2)
@@ -2385,6 +2408,7 @@ def test_mesh_edge_sample():
     s = mesh.edge_sample(2, seed=7)
 
     MINI_CHECK(len(s) == 2)
+
     s2 = mesh.edge_sample(2, seed=7)
 
     MINI_CHECK(s == s2)
@@ -2398,6 +2422,7 @@ def test_mesh_face_sample():
     s = mesh.face_sample(2, seed=11)
 
     MINI_CHECK(len(s) == 2)
+
     s2 = mesh.face_sample(2, seed=11)
 
     MINI_CHECK(s == s2)
@@ -2613,6 +2638,7 @@ def test_mesh_refresh_guid():
     copy = copy_module.deepcopy(mesh)
 
     MINI_CHECK(copy.guid == original)
+
     copy.refresh_guid()
 
     MINI_CHECK(copy.guid != original)
