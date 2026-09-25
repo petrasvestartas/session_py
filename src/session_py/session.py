@@ -784,45 +784,53 @@ class Session:
     def add_point(
         self, point: Point | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a point; None adds nothing and returns None."""
+        """Add a point; None adds nothing and returns None, a guid already live adds nothing and returns the node that guid has."""
 
         if point is None:
             return None
 
-        return self._add_object("points", point, "point", parent)
+        node = self._add_object("points", point, "point", parent)
+
+        return node if node is not None else self._node_of(point.guid)
 
     def add_line(
         self, line: Line | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a line; None adds nothing and returns None."""
+        """Add a line; None adds nothing and returns None, a guid already live adds nothing and returns the node that guid has."""
 
         if line is None:
             return None
 
-        return self._add_object("lines", line, "line", parent)
+        node = self._add_object("lines", line, "line", parent)
+
+        return node if node is not None else self._node_of(line.guid)
 
     def add_plane(
         self, plane: Plane | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a plane; None adds nothing and returns None."""
+        """Add a plane; None adds nothing and returns None, a guid already live adds nothing and returns the node that guid has."""
 
         if plane is None:
             return None
 
-        return self._add_object("planes", plane, "plane", parent)
+        node = self._add_object("planes", plane, "plane", parent)
+
+        return node if node is not None else self._node_of(plane.guid)
 
     def add_obb(self, bbox: OBB | None) -> TreeNode | None:
-        """Add a bounding box; None adds nothing and returns None."""
+        """Add a bounding box; None adds nothing and returns None, a guid already live adds nothing and returns the node that guid has."""
 
         if bbox is None:
             return None
 
-        return self._add_object("bboxes", bbox, "bbox", None)
+        node = self._add_object("bboxes", bbox, "bbox", None)
+
+        return node if node is not None else self._node_of(bbox.guid)
 
     def add_polyline(
         self, polyline: Polyline | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a polyline; None, or fewer than two points, adds nothing and returns None."""
+        """Add a polyline; None, or fewer than two points, or a guid already live, adds nothing and returns None."""
 
         if polyline is None or polyline.point_count() < 2:
             return None
@@ -832,7 +840,7 @@ class Session:
     def add_pointcloud(
         self, pointcloud: PointCloud | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a point cloud; None, or no points, adds nothing and returns None."""
+        """Add a point cloud; None, or no points, or a guid already live, adds nothing and returns None."""
 
         if pointcloud is None or pointcloud.is_empty():
             return None
@@ -842,7 +850,7 @@ class Session:
     def add_mesh(
         self, mesh: Mesh | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a mesh; None, or no faces, adds nothing and returns None."""
+        """Add a mesh; None, or no faces, or a guid already live, adds nothing and returns None."""
 
         if mesh is None or mesh.is_empty() or mesh.number_of_faces() == 0:
             return None
@@ -852,7 +860,7 @@ class Session:
     def add_nurbscurve(
         self, nurbscurve: NurbsCurve | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a curve; None, or fewer than two control vertices, adds nothing and returns None."""
+        """Add a curve; None, or fewer than two control vertices, or a guid already live, adds nothing and returns None."""
 
         if nurbscurve is None or nurbscurve.cv_count() < 2:
             return None
@@ -862,7 +870,7 @@ class Session:
     def add_nurbssurface(
         self, nurbssurface: NurbsSurface | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a surface; None, or no control vertices, adds nothing and returns None."""
+        """Add a surface; None, or no control vertices, or a guid already live, adds nothing and returns None."""
 
         if nurbssurface is None or nurbssurface.cv_count() == 0:
             return None
@@ -872,7 +880,7 @@ class Session:
     def add_brep(
         self, brep: BRep | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add a brep; None, or no faces and no vertices, adds nothing and returns None."""
+        """Add a brep; None, or no faces and no vertices, or a guid already live, adds nothing and returns None."""
 
         if brep is None or (brep.face_count() == 0 and brep.vertex_count() == 0):
             return None
@@ -882,18 +890,23 @@ class Session:
     def add_element(
         self, element: Element | None, parent: TreeNode | None = None
     ) -> TreeNode | None:
-        """Add an element; only None adds nothing, an Element is a data record kept even without geometry."""
+        """Add an element, a data record kept even without geometry; None adds nothing and returns None, a guid already live adds nothing and returns the node that guid has."""
 
         if element is None:
             return None
 
-        return self._add_object("elements", element, "element", parent)
+        node = self._add_object("elements", element, "element", parent)
+
+        return node if node is not None else self._node_of(element.guid)
 
     def add_component(
         self, component: Component, parent: TreeNode | None = None
     ) -> TreeNode:
-        """Add a custom component (any object with type_name/guid/name/extra)."""
-        return self._add_object("components", component, "component", parent)
+        """Add a custom component (any object with type_name/guid/name/extra); a guid already live adds nothing and returns the node that guid has."""
+
+        node = self._add_object("components", component, "component", parent)
+
+        return node if node is not None else self._node_of(component.guid)
 
     def add_definition(self, definition: Any) -> str:
         """Add a definition, geometry in its own frame that instances share; returns its guid, also when that guid is already defined, and "" for None or a guid an object, instance or component holds."""
@@ -930,7 +943,7 @@ class Session:
         xform: Xform | None = None,
         parent: TreeNode | None = None,
     ) -> TreeNode | None:
-        """Add an instance under parent, placed by xform relative to the parent with its own xform folded in; None when None or its definition_guid names no definition."""
+        """Add an instance under parent, placed by xform relative to the parent with its own xform folded in; None when None, its definition_guid names no definition or its guid is already live."""
 
         if instance is None or instance.definition_guid not in self.definition_lookup:
             return None
@@ -938,6 +951,9 @@ class Session:
         placement = (xform if xform is not None else Xform.identity()) * instance.xform
         instance.xform = Xform.identity()
         node = self._add_object("instances", instance, "instance", parent)
+
+        if node is None:
+            return None
 
         if not placement.is_identity():
             self.set_xform(instance.guid, placement)
@@ -1137,9 +1153,10 @@ class Session:
 
         if old == new:
             if self.history.current is not None:
-                self.history.record(ReplaceOp(guid, before, obj), bytes)
+                node = self.get_node(guid)
+                self.history.record(ReplaceOp(guid, before, obj, node), bytes)
 
-            self._swap(guid, obj)
+            self._swap(guid, obj, None)
 
             return True
 
@@ -1171,9 +1188,9 @@ class Session:
 
         if old == new:
             if self.history.current is not None:
-                self.history.record(ReplaceOp(guid, before, definition), bytes)
+                self.history.record(ReplaceOp(guid, before, definition, None), bytes)
 
-            self._swap(guid, definition)
+            self._swap(guid, definition, None)
 
             return True
 
@@ -1282,7 +1299,8 @@ class Session:
         if self.history.current is not None:
             before = self.xforms.get(guid)
             before = None if before is None else before.duplicate()
-            self.history.record(XformOp(guid, before, xform.duplicate()), RECORD)
+            node = self.get_node(guid)
+            self.history.record(XformOp(guid, before, xform.duplicate(), node), RECORD)
 
         self.xforms[guid] = xform
         self.bvh_cache_dirty = True
@@ -1297,7 +1315,8 @@ class Session:
             return False
 
         if self.history.current is not None:
-            self.history.record(XformOp(guid, before.duplicate(), None), RECORD)
+            node = self.get_node(guid)
+            self.history.record(XformOp(guid, before.duplicate(), None, node), RECORD)
 
         del self.xforms[guid]
         self.bvh_cache_dirty = True
@@ -1790,10 +1809,14 @@ class Session:
     # ═══════════════════════════════════════════════════════════════════════════
     def _add_object(
         self, collection: str, obj: Any, type_prefix: str, parent: TreeNode | None
-    ) -> TreeNode:
-        """Store an object in its list, lookup, graph and tree, recording an add when a transaction is open."""
+    ) -> TreeNode | None:
+        """Store an object in its list, lookup, graph and tree, recording an add when a transaction is open; None for a guid that is already live, as an object or a definition, which adds nothing."""
 
         guid = obj.guid
+
+        if self._is_live(guid) or guid in self.definition_lookup:
+            return None
+
         items = getattr(self.objects, collection)
         items.append(obj)
         slot = items.number_of_slots() - 1
@@ -1820,6 +1843,37 @@ class Session:
             )
 
         return node
+
+    def _node_of(self, guid: str) -> TreeNode:
+        """The node of a live guid, a detached one named guid when the object is outside the tree."""
+
+        node = self.get_node(guid)
+
+        return node if node is not None else TreeNode(name=guid)
+
+    def _twin(self, definition: bool, collection: str, slot: int, guid: str) -> bool:
+        """Whether the live entry under guid, if any, is another entry than the one in a slot of the list of that name: one on the other side of the object/definition divide, of another type, or of the same type at another slot."""
+
+        if definition:
+            other = self._is_live(guid)
+            held = self.definition_lookup.get(guid)
+            items = getattr(self.definitions, collection)
+        else:
+            other = guid in self.definition_lookup
+            held = self._item(guid)
+            items = getattr(self.objects, collection)
+
+        if other:
+            return True
+
+        if held is None:
+            return False
+
+        return _collection_for(held)[0] != collection or items.get_slot(guid) != slot
+
+    def _owns(self, guid: str, node: TreeNode | None) -> bool:
+        """Whether the entry under guid is the one a record was taken on: any entry when no node was recorded, else the live entry whose node it is."""
+        return node is None or self.get_node(guid) is node
 
     def _is_live(self, guid: str) -> bool:
         """Whether guid names a live object, component or instance."""
@@ -2408,7 +2462,7 @@ class Session:
             stored = items.get_item(slot)
             guid = stored.guid
             held = self.definition_lookup.get(guid)
-            owner = items.get_slot(guid) == slot
+            owner = not self._twin(True, tomb.collection, slot, guid)
 
             if owner and held is not None and held is not stored:
                 items.set_item(slot, held)
@@ -2425,7 +2479,9 @@ class Session:
         guid = stored.guid
         table = self._table(tomb.collection)
         held = table.get(guid)
-        owner = held is stored or items.get_slot(guid) == slot
+        owner = not self._twin(False, tomb.collection, slot, guid) and (
+            held is not None or items.get_slot(guid) == slot
+        )
 
         if owner and held is not None and held is not stored:
             items.set_item(slot, held)
@@ -2481,12 +2537,8 @@ class Session:
         if tomb.definition:
             items = getattr(self.definitions, tomb.collection)
             geometry = items.get_item(slot)
-            twin = (
-                geometry.guid in self.definition_lookup
-                and items.get_slot(geometry.guid) != slot
-            )
 
-            if not twin:
+            if not self._twin(True, tomb.collection, slot, geometry.guid):
                 items.set_dead(slot, False)
                 self.definition_lookup[geometry.guid] = geometry
 
@@ -2496,7 +2548,7 @@ class Session:
         item = items.get_item(slot)
         guid = item.guid
 
-        if self._is_live(guid) and items.get_slot(guid) != slot:
+        if self._twin(False, tomb.collection, slot, guid):
             return
 
         items.set_dead(slot, False)
@@ -2538,8 +2590,11 @@ class Session:
             if edge.guid in tomb.interactions:
                 self.interactions[edge.guid] = tomb.interactions.pop(edge.guid)
 
-    def _swap(self, guid: str, obj: Any) -> None:
-        """Store obj under guid in its slot and map, relabelling its vertex; a guid that is only a definition swaps in Session.definitions; O(1)."""
+    def _swap(self, guid: str, obj: Any, node: TreeNode | None) -> None:
+        """Store obj under guid in its slot and map, relabelling its vertex; a guid that is only a definition swaps in Session.definitions; a guid whose entry is not the recorded node is left alone; O(1)."""
+
+        if not self._owns(guid, node):
+            return
 
         collection, prefix = _collection_for(obj)
         self.revision += 1
@@ -2645,8 +2700,11 @@ class Session:
         root = self.tree.root
         self._indexed = None if root is None else weakref.ref(root)
 
-    def _place(self, guid: str, xform: Xform | None) -> None:
-        """Set or drop (None) the local transform under guid, unrecorded."""
+    def _place(self, guid: str, xform: Xform | None, node: TreeNode | None) -> None:
+        """Set or drop (None) the local transform under guid, unrecorded; a guid whose entry is not the recorded node is left alone."""
+
+        if not self._owns(guid, node):
+            return
 
         if xform is not None:
             self.xforms[guid] = xform.duplicate()

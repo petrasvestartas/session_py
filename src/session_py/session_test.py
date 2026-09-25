@@ -2572,6 +2572,7 @@ def test_session_unrecorded_remove():
 def test_session_remove_twin_keeps_slot():
     from session_py import Point
     from session_py import Session
+    from session_py import Xform
 
     session = Session()
     x = Point(1.0, 0.0, 0.0)
@@ -2581,13 +2582,18 @@ def test_session_remove_twin_keeps_slot():
     session.begin("add")
     session.add_point(x)
     session.commit()
+    session.undo()
     session.add_point(y)
+    session.set_xform(guid, Xform.translation(0.0, 1.0, 0.0))
+    session.redo()
     session.undo()
 
     MINI_CHECK(session.objects.points.get_slot(guid) == 1)
     MINI_CHECK(session.objects.points.is_dead(0))
     MINI_CHECK(len(session.objects.points) == 1)
     MINI_CHECK(guid in session.lookup)
+    MINI_CHECK(guid in session.xforms)
+    MINI_CHECK(session.graph.has_node(guid))
 
     removed = session.remove_object(guid)
     data = session.pb_dumps()
@@ -2598,6 +2604,7 @@ def test_session_remove_twin_keeps_slot():
     MINI_CHECK(len(session.objects.points) == 0)
     MINI_CHECK(len(loaded.objects.points) == 0)
     MINI_CHECK(len(loaded.lookup) == 0)
+    MINI_CHECK(loaded.graph.number_of_vertices() == 0)
 
 
 @MINI_TEST("Session", "Redo Twin Keeps Slot")
@@ -2613,22 +2620,24 @@ def test_session_redo_twin_keeps_slot():
     session.begin("add")
     session.add_point(x)
     session.commit()
-    session.add_point(y)
     session.undo()
+    session.add_point(y)
     session.redo()
     held = 0.0
+    live_node = False
 
     if isinstance(session.lookup.get(guid), Point):
         held = session.lookup[guid][0]
+
+    if session.get_node(guid) is not None:
+        live_node = not session.get_node(guid).is_dead()
 
     MINI_CHECK(len(session.objects.points) == 1)
     MINI_CHECK(session.objects.points.get_slot(guid) == 1)
     MINI_CHECK(session.objects.points.is_dead(0))
     MINI_CHECK(held == 2.0)
     MINI_CHECK(session.graph.has_node(guid))
-    MINI_CHECK(
-        session.get_node(guid) is not None and not session.get_node(guid).is_dead()
-    )
+    MINI_CHECK(live_node)
 
     session.undo()
     session.redo()
@@ -2649,6 +2658,223 @@ def test_session_redo_twin_keeps_slot():
     MINI_CHECK(len(loaded.objects.points) == 0)
     MINI_CHECK(len(loaded.lookup) == 0)
     MINI_CHECK(len(loaded.tree.nodes) == 1)
+
+
+@MINI_TEST("Session", "Cross Type Twin")
+def test_session_cross_type_twin():
+    from session_py import Line
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    x = Point(1.0, 0.0, 0.0)
+    guid = x.guid
+    y = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    y.guid = guid
+    session.begin("add")
+    session.add_point(x)
+    session.commit()
+    session.undo()
+    session.add_line(y)
+    session.set_xform(guid, Xform.translation(0.0, 1.0, 0.0))
+    session.redo()
+    redone = (
+        session.objects.points.is_dead(0),
+        session.objects.lines.get_slot(guid),
+        isinstance(session.lookup.get(guid), Line),
+    )
+    session.undo()
+    undone = (
+        session.objects.lines.get_slot(guid),
+        guid in session.xforms,
+        session.graph.has_node(guid),
+    )
+    session.redo()
+
+    MINI_CHECK(redone == (True, 0, True))
+    MINI_CHECK(undone == (0, True, True))
+    MINI_CHECK(len(session.objects.points) == 0)
+    MINI_CHECK(len(session.objects.lines) == 1)
+    MINI_CHECK(session.order() == [guid])
+
+    removed = session.remove_object(guid)
+    undone = session.undo()
+    data = session.pb_dumps()
+    loaded = Session.pb_loads(data)
+
+    MINI_CHECK(removed)
+    MINI_CHECK(undone)
+    MINI_CHECK(guid not in session.lookup)
+    MINI_CHECK(len(session.objects.lines) == 0)
+    MINI_CHECK(len(session.objects.points) == 0)
+    MINI_CHECK(len(loaded.objects.lines) == 0)
+    MINI_CHECK(len(loaded.objects.points) == 0)
+    MINI_CHECK(loaded.graph.number_of_vertices() == 0)
+    MINI_CHECK(len(loaded.tree.nodes) == 1)
+
+
+@MINI_TEST("Session", "Add Live Guid Refused")
+def test_session_add_live_guid_refused():
+    from session_py import Component
+    from session_py import InstanceRef
+    from session_py import Line
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    x = Point(1.0, 0.0, 0.0)
+    guid = x.guid
+    node = session.add_point(x)
+    definition = session.add_definition(Point(0.0, 0.0, 0.0))
+    revision = session.revision
+    point = Point(2.0, 0.0, 0.0)
+    point.guid = guid
+    line = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    line.guid = guid
+    polyline = Polyline(
+        [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    )
+    polyline.guid = guid
+    component = Component()
+    component.guid = guid
+    instance = InstanceRef(definition, Xform.identity())
+    instance.guid = guid
+    same_point = session.add_point(point) is node
+    same_line = session.add_line(line) is node
+    no_polyline = session.add_polyline(polyline) is None
+    same_component = session.add_component(component) is node
+    no_instance = session.add_instance(instance, Xform.identity()) is None
+    held = 0.0
+
+    if isinstance(session.lookup.get(guid), Point):
+        held = session.lookup[guid][0]
+
+    MINI_CHECK(same_point and same_line and same_component)
+    MINI_CHECK(no_polyline and no_instance)
+    MINI_CHECK(held == 1.0)
+    MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(len(session.objects.lines) == 0)
+    MINI_CHECK(len(session.objects.polylines) == 0)
+    MINI_CHECK(len(session.objects.components) == 0)
+    MINI_CHECK(len(session.objects.instances) == 0)
+    MINI_CHECK(session.revision == revision)
+    MINI_CHECK(len(session.tree.nodes) == 2)
+
+    again = Point(3.0, 0.0, 0.0)
+    again.guid = guid
+    session.begin("twin")
+    session.add_point(again)
+    session.commit()
+
+    MINI_CHECK(session.history.depth() == 0)
+    MINI_CHECK(not session.undo())
+    MINI_CHECK(len(session.objects.points) == 1)
+
+
+@MINI_TEST("Session", "Twin Skips Recorded Edits")
+def test_session_twin_skips_recorded_edits():
+    from session_py import InstanceRef
+    from session_py import Line
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    x = Point(1.0, 0.0, 0.0)
+    guid = x.guid
+    y = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    y.guid = guid
+    moved = Point(5.0, 0.0, 0.0)
+    moved.guid = guid
+    session.begin("edit")
+    session.add_point(x)
+    session.set_xform(guid, Xform.translation(0.0, 0.0, 1.0))
+    session.replace(guid, moved)
+    session.commit()
+    session.undo()
+    session.add_line(y)
+    session.set_xform(guid, Xform.translation(0.0, 1.0, 0.0))
+    placed = Xform.translation(0.0, 1.0, 0.0)
+    session.redo()
+    redone = (isinstance(session.lookup.get(guid), Line), session.xform(guid) == placed)
+    session.undo()
+    undone = (isinstance(session.lookup.get(guid), Line), session.xform(guid) == placed)
+
+    MINI_CHECK(redone == (True, True))
+    MINI_CHECK(undone == (True, True))
+    MINI_CHECK(len(session.objects.lines) == 1)
+    MINI_CHECK(len(session.objects.points) == 0)
+
+    definition = session.add_definition(Point(0.0, 0.0, 0.0))
+    instance = InstanceRef(definition, Xform.identity())
+    instance_guid = instance.guid
+    twin = Point(2.0, 0.0, 0.0)
+    twin.guid = instance_guid
+    session.begin("place")
+    session.add_instance(instance, Xform.translation(3.0, 0.0, 0.0))
+    session.commit()
+    session.undo()
+    session.add_point(twin)
+    session.redo()
+    twin_placed = instance_guid in session.xforms
+    session.undo()
+
+    MINI_CHECK(not twin_placed)
+    MINI_CHECK(instance_guid not in session.xforms)
+    MINI_CHECK(instance_guid in session.lookup)
+    MINI_CHECK(len(session.objects.instances) == 0)
+
+
+@MINI_TEST("Session", "Definition Guid Is Live")
+def test_session_definition_guid_is_live():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    definition = session.add_definition(Point(0.0, 0.0, 0.0))
+    revision = session.revision
+    point = Point(1.0, 0.0, 0.0)
+    point.guid = definition
+    node = session.add_point(point)
+
+    MINI_CHECK(node.parent is None)
+    MINI_CHECK(len(session.objects.points) == 0)
+    MINI_CHECK(definition not in session.lookup)
+    MINI_CHECK(session.revision == revision)
+
+    again = Point(2.0, 0.0, 0.0)
+    again.guid = definition
+    session.begin("define")
+    session.remove_definition(definition)
+    session.commit()
+    session.add_point(again)
+    session.undo()
+
+    MINI_CHECK(definition in session.lookup)
+    MINI_CHECK(definition not in session.definition_lookup)
+    MINI_CHECK(session.definitions.points.is_dead(0))
+
+    x = Point(3.0, 0.0, 0.0)
+    guid = x.guid
+    session.begin("add")
+    session.add_point(x)
+    session.commit()
+    session.undo()
+    defined = session.add_definition(Point(4.0, 0.0, 0.0))
+    shared = Point(5.0, 0.0, 0.0)
+    shared.guid = guid
+    taken = session.add_definition(shared)
+    session.redo()
+
+    MINI_CHECK(defined != guid)
+    MINI_CHECK(taken == guid)
+    MINI_CHECK(guid not in session.lookup)
+    MINI_CHECK(session.objects.points.get_slot(guid) is None)
+    MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(guid in session.definition_lookup)
 
 
 @MINI_TEST("Session", "Purge Clears History")
