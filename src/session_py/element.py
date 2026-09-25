@@ -72,6 +72,10 @@ class ElementFeature:
 
         return result
 
+    def duplicate(self) -> ElementFeature:
+        """Copy with a new guid and the same data."""
+        return copy.deepcopy(self)
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
     # ═══════════════════════════════════════════════════════════════════════════
@@ -567,6 +571,7 @@ class Element:
         """Return the cached face outlines, computing them when dirty."""
 
         if self._is_dirty or self._polylines is None:
+            self._ensure_geometry()
             self._polylines = self._compute_polylines()
             self._is_dirty = False
 
@@ -577,6 +582,7 @@ class Element:
         """Return the cached face planes, computing them when dirty."""
 
         if self._is_dirty or self._planes is None:
+            self._ensure_geometry()
             self._planes = self._compute_planes()
             self._is_dirty = False
 

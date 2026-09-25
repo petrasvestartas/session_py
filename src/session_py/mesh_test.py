@@ -1816,6 +1816,17 @@ def test_mesh_cut_by_plane():
     MINI_CHECK(TOLERANCE.is_close(corners.volume(), 0.25))
 
 
+@MINI_TEST("Mesh", "Volume Far From Origin")
+def test_mesh_volume_far_from_origin():
+    from session_py import Mesh
+    from session_py import Xform
+
+    far = Xform.translation(1000000.1, 1000000.2, 1000000.3)
+    box = Mesh.create_box(2.0, 3.0, 4.0).transformed(far)
+
+    MINI_CHECK(abs(box.volume() / 24.0 - 1.0) < 1e-9)
+
+
 @MINI_TEST("Mesh", "Json Roundtrip")
 def test_mesh_json_roundtrip():
     from session_py import Mesh

@@ -549,6 +549,21 @@ def test_polylines_empty_without_mesh():
     MINI_CHECK(len(Element(name="no_geometry").planes) == 0)
 
 
+@MINI_TEST("Element", "Planes Without Geometry Call")
+def test_planes_without_geometry_call():
+    from session_py import Element
+    from session_py import Mesh
+
+    e = Element(Mesh.create_box(1.0, 1.0, 1.0))
+    before = e.geometry_synced()
+    count = len(e.planes)
+
+    MINI_CHECK(not before)
+    MINI_CHECK(count == 6)
+    MINI_CHECK(e.geometry_synced())
+    MINI_CHECK(len(e.polylines) == 6)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Element - Polymorphic registry
 # ═══════════════════════════════════════════════════════════════════════════
@@ -814,6 +829,8 @@ def test_duplicate_keeps_every_field():
     MINI_CHECK(len(copy.insertion_vectors) == 1)
     MINI_CHECK(copy.dimensions is not None)
     MINI_CHECK(len(copy.features) == 1)
+    MINI_CHECK(copy.features[0] == e.features[0])
+    MINI_CHECK(copy.features[0].guid != e.features[0].guid)
 
 
 @MINI_TEST("Element", "Equality Compares Carried Fields")
@@ -861,6 +878,11 @@ def test_element_feature_constructor():
     MINI_CHECK(f == same)
     MINI_CHECK(not (f != same))
     MINI_CHECK(f.guid != same.guid)
+
+    copy = f.duplicate()
+
+    MINI_CHECK(copy == f)
+    MINI_CHECK(copy.guid != f.guid)
 
     other = ElementFeature("drill", 2, [outline], "notch")
 

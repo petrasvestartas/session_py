@@ -1054,6 +1054,17 @@ def test_brep_volume():
     MINI_CHECK(abs(vsph - (4.0 / 3.0) * PI * 8) / ((4.0 / 3.0) * PI * 8) < 0.05)
 
 
+@MINI_TEST("BRep", "Volume Far From Origin")
+def test_brep_volume_far_from_origin():
+    from session_py import BRep
+    from session_py import Xform
+
+    far = Xform.translation(1000000.1, 1000000.2, 1000000.3)
+    box = BRep.create_box(2.0, 3.0, 4.0).transformed(far)
+
+    MINI_CHECK(abs(box.volume() / 24.0 - 1.0) < 1e-9)
+
+
 @MINI_TEST("BRep", "Face Polylines Box")
 def test_brep_face_polylines_box():
     from session_py import BRep

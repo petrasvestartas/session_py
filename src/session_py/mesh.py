@@ -4927,9 +4927,10 @@ class Mesh:
         return normals
 
     def volume(self) -> float:
-        """Return the enclosed volume of a closed mesh."""
+        """Return the enclosed volume of a closed mesh, fanned from its first vertex so a far-away solid keeps its precision."""
 
         total = 0.0
+        origin = None
 
         for fk in self.faces():
             vkeys = self.face[fk]
@@ -4942,6 +4943,11 @@ class Mesh:
             if p0 is None:
                 continue
 
+            if origin is None:
+                origin = p0
+
+            v0 = p0 - origin
+
             for i in range(1, len(vkeys) - 1):
                 p1 = self.vertex_point(vkeys[i])
                 p2 = self.vertex_point(vkeys[i + 1])
@@ -4949,11 +4955,7 @@ class Mesh:
                 if p1 is None or p2 is None:
                     continue
 
-                total += (
-                    p0[0] * (p1[1] * p2[2] - p1[2] * p2[1])
-                    + p0[1] * (p1[2] * p2[0] - p1[0] * p2[2])
-                    + p0[2] * (p1[0] * p2[1] - p1[1] * p2[0])
-                )
+                total += v0.dot((p1 - origin).cross(p2 - origin))
 
         return abs(total) / 6.0
 
