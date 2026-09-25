@@ -104,7 +104,7 @@ def test_history_clear():
     session.add_point(Point(1.0, 0.0, 0.0))
     session.history.commit()
 
-    session.history.undo(session)
+    session.undo()
     session.history.clear()
     dropped = session.history.dropped
     due = session.purge_due()
