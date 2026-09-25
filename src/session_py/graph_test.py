@@ -6,8 +6,6 @@ from .mini_test import run_all
 # ═══════════════════════════════════════════════════════════════════════════
 # Vertex
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Vertex", "Constructor")
 def test_vertex_constructor():
     from session_py import Vertex
@@ -44,8 +42,6 @@ def test_vertex_json_roundtrip():
 # ═══════════════════════════════════════════════════════════════════════════
 # Edge
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Edge", "Constructor")
 def test_edge_constructor():
     from session_py import Edge
@@ -112,8 +108,6 @@ def test_edge_other_vertex():
 # ═══════════════════════════════════════════════════════════════════════════
 # Graph
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Graph", "Constructor")
 def test_graph_constructor():
     from session_py import Graph

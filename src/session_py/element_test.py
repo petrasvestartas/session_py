@@ -8,8 +8,6 @@ from .tolerance import PI
 # ═══════════════════════════════════════════════════════════════════════════
 # Element
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Element", "Constructor")
 def test_element_constructor():
     from session_py import Mesh
@@ -492,8 +490,6 @@ def test_protobuf_roundtrip():
 # ═══════════════════════════════════════════════════════════════════════════
 # Element - Polylines
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Element", "Polylines")
 def test_polylines():
     from session_py import Mesh
@@ -556,8 +552,6 @@ def test_polylines_empty_without_mesh():
 # ═══════════════════════════════════════════════════════════════════════════
 # Element - Polymorphic registry
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _test_plate_class():
     """Stand-in for a domain element: carries state the kernel knows nothing about."""
 
@@ -840,8 +834,6 @@ def test_equality_compares_carried_fields():
 # ═══════════════════════════════════════════════════════════════════════════
 # ElementFeature
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("ElementFeature", "Constructor")
 def test_element_feature_constructor():
     from session_py import ElementFeature

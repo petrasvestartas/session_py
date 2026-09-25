@@ -240,8 +240,6 @@ class VertexData:
 # ═══════════════════════════════════════════════════════════════════════════
 # Helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _newell_normal(pts: list[Point]) -> Vector:
     """Unit Newell normal of a closed ring."""
 
@@ -365,8 +363,6 @@ def _signed_area_2d(pts: list[tuple[float, float]]) -> float:
 # ═══════════════════════════════════════════════════════════════════════════
 # Loft
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class LoftFaceRole(Enum):
     """Role of a face inside a loft panel."""
 
@@ -983,8 +979,6 @@ def _loft_rings(polys: list[_LoftPoly], top: bool) -> list[_LoftRing]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Loft panels
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _lp_merge_collinear(
     pts: list[Point], vkeys: list[int]
 ) -> tuple[list[Point], list[int]]:
@@ -1489,8 +1483,6 @@ def _lp_ordered_mesh(panels: list[LoftPanel], top: bool) -> "Mesh":
 # ═══════════════════════════════════════════════════════════════════════════
 # Miter contours
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _fold_chamfer_mask(pts: list[Point], max_angle_deg: float) -> list[bool]:
     """Corners whose interior angle is below max_angle_deg."""
 
@@ -1623,8 +1615,6 @@ def _miter_contour(corner_lines: list[Line], plane: Plane) -> list[Point]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Cutting
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _CutFace:
     """One face of a cut and the input face it came from."""
 

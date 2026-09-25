@@ -21,8 +21,6 @@ STACK_SIZE = 64
 # ═══════════════════════════════════════════════════════════════════════════
 # Curve helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _curve_seed(curve: NurbsCurve, test_point: Point, t0: float, t1: float) -> float:
     """Parameter of the closest sample on a dense grid over [t0, t1]."""
 
@@ -135,8 +133,6 @@ def _curve_curve_seed(curve0: NurbsCurve, curve1: NurbsCurve) -> tuple[float, fl
 # ═══════════════════════════════════════════════════════════════════════════
 # Surface helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _surface_seed(
     surface: NurbsSurface,
     test_point: Point,
@@ -237,8 +233,6 @@ def _surface_newton(
 # ═══════════════════════════════════════════════════════════════════════════
 # Pullback helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _Pullback:
     """Surface domain, trace step and tolerances shared by the surface_curve steps."""
 
@@ -781,8 +775,6 @@ def _pullback_fit(
 # ═══════════════════════════════════════════════════════════════════════════
 # Mesh helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _closest_point_on_triangle(p: Point, a: Point, b: Point, c: Point) -> Point:
     """Closest point on triangle abc to p (Ericson, Real-Time Collision Detection 5.1.5)."""
 
@@ -868,7 +860,6 @@ class Closest:
     # ═══════════════════════════════════════════════════════════════════════════
     # Curves
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def curve_point(
         curve: NurbsCurve, test_point: Point, t0: float = 0.0, t1: float = 0.0
@@ -1037,7 +1028,6 @@ class Closest:
     # ═══════════════════════════════════════════════════════════════════════════
     # Surfaces
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def surface_point(
         surface: NurbsSurface,
@@ -1126,7 +1116,6 @@ class Closest:
     # ═══════════════════════════════════════════════════════════════════════════
     # Meshes and clouds
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def mesh_point(mesh: Mesh, test_point: Point) -> tuple[Point, int, float]:
         """Return the closest point, face key and distance on a mesh via its triangle BVH."""
@@ -1304,7 +1293,6 @@ class Closest:
     # ═══════════════════════════════════════════════════════════════════════════
     # Collections
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def lines_closest(
         lines: list[Line], threshold: float = 0.0

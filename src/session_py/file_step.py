@@ -15,7 +15,6 @@ from .tolerance import PI
 # ═══════════════════════════════════════════════════════════════════════════
 # ISO 10303-21 parser
 # ═══════════════════════════════════════════════════════════════════════════
-
 REF = 0  # Entity reference.
 NUM = 1  # Real or integer.
 STR = 2  # Quoted string.
@@ -450,8 +449,6 @@ def _parse_step_file(filepath: str) -> _StepFile:
 # ═══════════════════════════════════════════════════════════════════════════
 # Parameter access
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _first_ref(params: list[_StepParam]) -> int:
     """Return the first reference parameter, or -1."""
 
@@ -673,8 +670,6 @@ def _surface_params(e: _StepEntity) -> _SurfaceParams | None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Knot utilities
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _expand_knots(vals: list[float], mults: list[int]) -> list[float]:
     """Repeat each knot value by its multiplicity."""
 
@@ -731,8 +726,6 @@ def _internal_from_full(full: list[float]) -> list[float]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Analytic geometry
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _Axis2:
     """Orthonormal frame of an AXIS2_PLACEMENT_3D."""
 
@@ -1063,8 +1056,6 @@ def _bilinear_projector(srf: NurbsSurface) -> _Proj:
 # ═══════════════════════════════════════════════════════════════════════════
 # Curve helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _sample_nurbs(nc: NurbsCurve, n: int) -> list[Point]:
     """n points evenly spaced in parameter over the curve domain."""
 
@@ -1186,8 +1177,6 @@ def _unwrap_seam(uv: list[Point]) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Surface grid
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _surface_grid(srf: NurbsSurface, ns: int) -> list[Point]:
     """ns x ns surface points over the domain, row-major with u slowest."""
 
@@ -1243,8 +1232,6 @@ def _grid_degenerate(grid: list[Point], ns: int, tol: float, j: int) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 # StepReader
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _StepReader:
     """Entity access over a parsed file with points, directions and frames cached by id."""
 
@@ -1631,8 +1618,6 @@ class _StepReader:
 # ═══════════════════════════════════════════════════════════════════════════
 # Topology access
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _Bound:
     """One face bound: outer flag, orientation and the ORIENTED_EDGE ids of its EDGE_LOOP."""
 
@@ -1704,8 +1689,6 @@ def _edge_geom_id(r: _StepReader, ec_ref: int) -> int:
 # ═══════════════════════════════════════════════════════════════════════════
 # BRep assembly from STEP
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _PendingEdge:
     """One edge use in loop-traversal order; c2d is flipped into the edge direction when stored."""
 
@@ -2743,8 +2726,6 @@ class _BRepBuilder:
 # ═══════════════════════════════════════════════════════════════════════════
 # StepWriter
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _fmt(v: float) -> str:
     """ISO 10303-21 REAL: a decimal point in the mantissa and an uppercase E."""
 
@@ -3302,8 +3283,6 @@ def _write_step_string(content: str, filepath: str) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 # Public API
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def read_file_step_points(filepath: str) -> list[Point]:
     """Every CARTESIAN_POINT of the file in entity-id order."""
 

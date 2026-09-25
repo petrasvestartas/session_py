@@ -6,7 +6,6 @@ from .mini_test import run_all
 # ═══════════════════════════════════════════════════════════════════════════
 # TreeNode
 # ═══════════════════════════════════════════════════════════════════════════
-
 @MINI_TEST("TreeNode", "Constructor")
 def test_treenode_constructor():
     from session_py import TreeNode
@@ -183,7 +182,6 @@ def test_treenode_traverse():
 # ═══════════════════════════════════════════════════════════════════════════
 # Tree
 # ═══════════════════════════════════════════════════════════════════════════
-
 @MINI_TEST("Tree", "Constructor")
 def test_tree_constructor():
     from session_py import Tree

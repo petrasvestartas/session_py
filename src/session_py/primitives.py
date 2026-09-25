@@ -20,7 +20,6 @@ from . import nurbsknot
 # ═══════════════════════════════════════════════════════════════════════════
 # Rational quadratic circle pattern
 # ═══════════════════════════════════════════════════════════════════════════
-
 _CIRCLE_W = 0.7071067811865476
 _CIRCLE_X = [1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0, 1.0, 1.0]
 _CIRCLE_Y = [0.0, 1.0, 1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0]
@@ -49,8 +48,6 @@ def _set_circle_row(
 # ═══════════════════════════════════════════════════════════════════════════
 # Mesh helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _add_ring(vertices: list[Point], n: int, radius: float, z: float) -> None:
     """Appends n points of a circle of the given radius in the plane z."""
 
@@ -128,8 +125,6 @@ def _surface_mid_grid(
 # ═══════════════════════════════════════════════════════════════════════════
 # Curve compatibility
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _merge_nurbsknot_vectors(a: list[float], b: list[float]) -> list[float]:
     """Sorted union of two nurbsknot vectors, equal values kept once."""
 
@@ -234,8 +229,6 @@ def _unify_curves(curves: list[NurbsCurve]) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 # Planar helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _bilinear_patch(p00: Point, p10: Point, p01: Point, p11: Point) -> NurbsSurface:
     """Bilinear patch: u runs p00 to p10, v runs p00 to p01."""
 
@@ -300,8 +293,6 @@ def _bounded_patch(
 # ═══════════════════════════════════════════════════════════════════════════
 # Loft helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _loft_section_params(curves: list[NurbsCurve]) -> list[float]:
     """Section parameters in [0, 1] from the mean CV distance between consecutive sections."""
 
@@ -433,8 +424,6 @@ def _solve_linear(a: list[list[float]], b: list[list[float]]) -> list[list[float
 # ═══════════════════════════════════════════════════════════════════════════
 # Revolve helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _revolve_arc_count(angle: float) -> int:
     """Number of quarter arcs, at most 4, that cover the angle."""
 
@@ -485,8 +474,6 @@ def _set_revolve_column(
 # ═══════════════════════════════════════════════════════════════════════════
 # Sweep helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _lerp_point(a: Point, b: Point, s: float) -> Point:
     """Point at fraction s from a to b."""
     return a + (b - a) * s
@@ -605,8 +592,6 @@ def _rail_xform(
 # ═══════════════════════════════════════════════════════════════════════════
 # Edge helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _chain_curves(input_curves: list[NurbsCurve]) -> list[NurbsCurve]:
     """Curves ordered head to tail, reversed where needed; empty when they do not close a loop."""
 
@@ -709,7 +694,6 @@ class Primitives:
     # ═══════════════════════════════════════════════════════════════════════════
     # Mesh primitives
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def arrow_mesh(line: Line, radius: float) -> Mesh:
         """Arrow mesh along a line: cylinder body over 80% of the length, cone head of 1.5x radius over 20%."""
@@ -912,7 +896,6 @@ class Primitives:
     # ═══════════════════════════════════════════════════════════════════════════
     # Curve primitives
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def circle(cx: float, cy: float, cz: float, radius: float) -> NurbsCurve:
         """Full circle as a rational quadratic NURBS (9 CVs)."""
@@ -1044,7 +1027,6 @@ class Primitives:
     # ═══════════════════════════════════════════════════════════════════════════
     # Surface primitives
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def cylinder_surface(
         cx: float, cy: float, cz: float, radius: float, height: float
@@ -1217,7 +1199,6 @@ class Primitives:
     # ═══════════════════════════════════════════════════════════════════════════
     # Surface factories
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def create_ruled(curve_a: NurbsCurve, curve_b: NurbsCurve) -> NurbsSurface:
         """Ruled surface between two curves."""
@@ -1547,7 +1528,6 @@ class Primitives:
     # ═══════════════════════════════════════════════════════════════════════════
     # Surface to mesh
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def quad_mesh(surface: NurbsSurface, u_count: int, v_count: int) -> Mesh:
         """Quad mesh sampled on a u_count x v_count grid."""
@@ -1657,7 +1637,6 @@ class Primitives:
     # ═══════════════════════════════════════════════════════════════════════════
     # Mesh geometry
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def _unit_cylinder_geometry() -> tuple[list[Point], list[list[int]]]:
         """Ten-sided unit cylinder: radius 0.5, z from -0.5 to 0.5."""

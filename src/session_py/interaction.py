@@ -16,8 +16,6 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════
 # Hex encoding
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _to_hex(data: bytes) -> str:
     """Encode bytes as hex text, since interaction_data is opaque and JSON carries no bytes."""
     return data.hex()
@@ -277,8 +275,6 @@ class Interaction(ABC):
 # ═══════════════════════════════════════════════════════════════════════════
 # InteractionUnknown
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class InteractionUnknown(Interaction):
     """An interaction whose type has no registered factory: a load keeps its type name and data so a save writes them back unchanged."""
 

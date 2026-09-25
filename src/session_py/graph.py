@@ -13,8 +13,6 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════
 # Vertex
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class Vertex:
     """A graph vertex with a name, attribute string and integer index."""
 
@@ -95,8 +93,6 @@ class Vertex:
 # ═══════════════════════════════════════════════════════════════════════════
 # Edge
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class Edge:
     """A graph edge connecting two vertices by name."""
 
@@ -201,8 +197,6 @@ class Edge:
 # ═══════════════════════════════════════════════════════════════════════════
 # Graph
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class Graph:
     """An undirected graph with string vertices, string labels and double attributes."""
 

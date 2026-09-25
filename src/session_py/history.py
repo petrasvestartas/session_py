@@ -40,8 +40,6 @@ def clone(obj: Any) -> Any:
 # ═══════════════════════════════════════════════════════════════════════════
 # Records
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class Tombstone:
     """Everything needed to put one object back into every live table of a session."""
 
@@ -179,8 +177,6 @@ class Transaction:
 # ═══════════════════════════════════════════════════════════════════════════
 # History
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class History:
     """CAD-style undo/redo over a Session, in memory only: records exist between `begin` and `commit`, every save purges them."""
 

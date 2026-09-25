@@ -145,8 +145,6 @@ class _Piece:
 # ═══════════════════════════════════════════════════════════════════════════
 # Validation
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _require(condition: bool, message: str) -> None:
     """Raise ValueError when the condition fails."""
     if not condition:
@@ -199,8 +197,6 @@ def _check_surface(surface: NurbsSurface) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Curve parameters
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _clamp(value: float, lo: float, hi: float) -> float:
     """Value limited to [lo, hi]."""
     return max(lo, min(hi, value))
@@ -297,8 +293,6 @@ def _unique_parameters(values: list[float], lo: float, hi: float) -> list[float]
 # ═══════════════════════════════════════════════════════════════════════════
 # Curve intersection
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _flat(curve: NurbsCurve, tolerance: float) -> bool:
     """True when every control point lies within tolerance of the chord."""
     a = curve.point_at_start()
@@ -497,8 +491,6 @@ def _intersections(
 # ═══════════════════════════════════════════════════════════════════════════
 # Trim polygons
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _pullback(
     surface: NurbsSurface, curve: NurbsCurve, tolerance: float
 ) -> list[NurbsCurve]:
@@ -619,8 +611,6 @@ def _inside_loops(p: Point, loops: list[list[Point]]) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 # Trim arrangement
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _compute_spans(sources: list[_Source], tolerance: float) -> list[_Span]:
     """Knot spans of every source, cut at their mutual intersections."""
     spans = []
@@ -878,8 +868,6 @@ def _arrange(
 # ═══════════════════════════════════════════════════════════════════════════
 # BRep assembly
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _vertex(result: BRep, p: Point, tolerance: float) -> int:
     """Index of the BRep vertex at a point, added when none lies within tolerance."""
     for i in range(len(result.m_vertices)):
@@ -1244,8 +1232,6 @@ def _validate(result: BRep, original: BRep, tolerance: float) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Split
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def split_curve_by_curves(
     curve: NurbsCurve, cutters: list[NurbsCurve], tolerance: float
 ) -> list[NurbsCurve]:

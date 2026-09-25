@@ -10,8 +10,6 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════
 # TreeNode
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class TreeNode:
     """A node of a tree; geometry nodes are named by their object's guid, group nodes by a label."""
 
@@ -247,8 +245,6 @@ class TreeNode:
 # ═══════════════════════════════════════════════════════════════════════════
 # Tree
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class Tree:
     """A hierarchy of TreeNodes under one root."""
 
@@ -578,12 +574,15 @@ class Tree:
 # ═══════════════════════════════════════════════════════════════════════════
 # Node helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _draw_node(node: TreeNode, prefix: str, last: bool) -> str:
     """Draw one node and its subtree, the last child of every level closing its branch."""
 
-    text = prefix + ("\u2514\u2500\u2500 " if last else "\u251c\u2500\u2500 ") + str(node) + "\n"
+    text = (
+        prefix
+        + ("\u2514\u2500\u2500 " if last else "\u251c\u2500\u2500 ")
+        + str(node)
+        + "\n"
+    )
     nxt = prefix + ("    " if last else "\u2502   ")
     for i, child in enumerate(node.children):
         text += _draw_node(child, nxt, i + 1 == len(node.children))

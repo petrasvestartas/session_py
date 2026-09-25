@@ -9,8 +9,6 @@ from .tolerance import PI
 # ═══════════════════════════════════════════════════════════════════════════
 # Mesh primitives
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Primitives", "Mesh Arrow")
 def test_mesh_arrow():
     from session_py import Primitives
@@ -58,8 +56,6 @@ def test_mesh_edge_pipes():
 # ═══════════════════════════════════════════════════════════════════════════
 # NurbsCurve primitives
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Primitives", "Nurbscurve Polyline")
 def test_nurbscurve_polyline():
     from session_py import NurbsCurve
@@ -168,8 +164,6 @@ def test_nurbscurve_spiral():
 # ═══════════════════════════════════════════════════════════════════════════
 # NurbsSurface primitives
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Primitives", "Nurbssurface Cylinder")
 def test_nurbssurface_cylinder():
     from session_py import Primitives
@@ -349,8 +343,6 @@ def test_nurbssurface_quad_sphere():
 # ═══════════════════════════════════════════════════════════════════════════
 # NurbsSurface factory methods
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Primitives", "Nurbssurface Ruled")
 def test_nurbssurface_ruled():
     from session_py import Primitives
@@ -1887,8 +1879,6 @@ def test_nurbssurface_edge():
 # ═══════════════════════════════════════════════════════════════════════════
 # Surface-to-mesh subdivision
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 @MINI_TEST("Primitives", "Mesh Quad Mesh")
 def test_mesh_quad_mesh():
     from session_py import Primitives

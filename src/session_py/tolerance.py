@@ -500,11 +500,10 @@ class Tolerance:
 
 TOLERANCE = Tolerance()  # Global tolerance instance.
 
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Utilities
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def is_finite(x: float) -> bool:
     """Check if a number is finite"""
     return math.isfinite(x)

@@ -23,8 +23,6 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════
 # Hex encoding
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _to_hex(data: bytes) -> str:
     """Encode bytes as hex text, since element_data is opaque and JSON carries no bytes."""
     return data.hex()
@@ -38,8 +36,6 @@ def _from_hex(s: str) -> bytes:
 # ═══════════════════════════════════════════════════════════════════════════
 # ElementFeature
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class ElementFeature:
     """One serializable modification of a host element - a cut, a drill, a joint pocket - that the kernel draws but never applies."""
 
@@ -279,8 +275,6 @@ class ElementFeature:
 # ═══════════════════════════════════════════════════════════════════════════
 # Element
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class Element:
     """Named geometry carrier with lazily cached boxes, features and a polymorphic type registry."""
 

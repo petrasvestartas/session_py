@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════
 # Integer geometry
 # ═══════════════════════════════════════════════════════════════════════════
-
 NULL_IDX = None
 MAX_COORD64 = 9e17
 MAX_PRECISION = 6
@@ -218,7 +217,6 @@ def _find_loc_min(path, i: int) -> tuple[bool, int]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Sweep graph
 # ═══════════════════════════════════════════════════════════════════════════
-
 LOOSE = 0  # Diagonal between two boundary edges.
 ASCEND = 1  # Boundary edge on the left side.
 DESCEND = 2  # Boundary edge on the right side.
@@ -1091,8 +1089,6 @@ class _Delaunay:
 # ═══════════════════════════════════════════════════════════════════════════
 # Triangulation
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _cdt_scale(border_2d, holes_2d) -> float:
     """Power of ten keeping the largest coordinate inside int64 headroom."""
 
@@ -1236,8 +1232,6 @@ def _to_indices(tris, indices) -> list[tuple[int, int, int]]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Mesh assembly
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _strip_close(polyline: Polyline) -> list[Point]:
     """Polyline points without the closing duplicate."""
 
@@ -1392,8 +1386,6 @@ def _build_mesh(
 # ═══════════════════════════════════════════════════════════════════════════
 # RemeshCDT
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def cdt_triangulate(border_2d, holes_2d) -> list[tuple[int, int, int]]:
     """Triangle index triples of a counter-clockwise 2D border with clockwise holes into the flat list [border..., hole0..., hole1...]."""
 
@@ -1419,7 +1411,6 @@ class RemeshCDT:
     # ═══════════════════════════════════════════════════════════════════════════
     # Triangulation
     # ═══════════════════════════════════════════════════════════════════════════
-
     @staticmethod
     def triangulate(polylines: list[Polyline]) -> list[tuple[int, int, int]]:
         """Triangle index triples into the flat list [border..., hole0..., hole1...], closing duplicates stripped."""

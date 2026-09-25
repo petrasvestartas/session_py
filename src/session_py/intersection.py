@@ -27,8 +27,6 @@ if TYPE_CHECKING:
 # ═══════════════════════════════════════════════════════════════════════════
 # Lines and planes
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _max_pivot_3x3(rows):
     """Largest absolute coefficient of a 3x3 system with its row and column, the first one on ties."""
 
@@ -426,8 +424,6 @@ def plane_plane_plane(plane0: Plane, plane1: Plane, plane2: Plane) -> Point | No
 # ═══════════════════════════════════════════════════════════════════════════
 # Rays
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class RayHit:
     """Ray-mesh hit."""
 
@@ -752,8 +748,6 @@ def ray_mesh_bvh(
 # ═══════════════════════════════════════════════════════════════════════════
 # NURBS curve helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _unique_sorted(values: list[float], tolerance: float) -> list[float]:
     """Sorted values without neighbours closer than tolerance to the last kept one."""
 
@@ -1081,8 +1075,6 @@ def _curve_plane_subdivide_production(curve, plane, tolerance, a, b, depth, resu
 # ═══════════════════════════════════════════════════════════════════════════
 # NURBS curves
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _append_parameter(params: list[float], t: float, tolerance: float) -> None:
     """Appends t unless it lies within tolerance of the last parameter."""
 
@@ -1314,8 +1306,6 @@ def curve_closest_point(
 # ═══════════════════════════════════════════════════════════════════════════
 # NURBS surface helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 class _SurfacePlaneTrace:
     """One traced surface-plane curve in parameter space."""
 
@@ -2877,8 +2867,6 @@ def _solve_gauss(m, rhs, n):
 # ═══════════════════════════════════════════════════════════════════════════
 # Analytic quadric surface intersection
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _ssi_dot(u, v):
     """Dot product of two triples."""
     return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
@@ -5639,8 +5627,6 @@ def _analytic_pullback(srf, recog, c3d):
 # ═══════════════════════════════════════════════════════════════════════════
 # Coaxial quadric pairs
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _point_axis_dist(apt, adir, p):
     """Distance of p from the axis through apt along adir."""
 
@@ -6428,8 +6414,6 @@ def _analytic_ssi(a, b, tolerance):
 # ═══════════════════════════════════════════════════════════════════════════
 # NURBS surfaces
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def surface_plane(
     surface: "NurbsSurface", plane: Plane, tolerance: float | None = None
 ) -> list[NurbsCurve]:
@@ -8005,8 +7989,6 @@ def cut_curves_on_surface(
 # ═══════════════════════════════════════════════════════════════════════════
 # Polylines and plane sets
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _vectors_nearly_parallel(v0: Vector, v1: Vector, angle_tol: float) -> bool:
     """Whether two vectors are parallel within angle_tol."""
 
@@ -8279,8 +8261,6 @@ def scale_vector_to_distance_of_2planes(
 # ═══════════════════════════════════════════════════════════════════════════
 # Plane 2D helpers
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def _plane_to_2d(
     p: Point, origin: Point, xax: Vector, yax: Vector
 ) -> tuple[float, float]:
@@ -8653,8 +8633,6 @@ def _offset_ring_2d(ring, delta, concave_notch) -> list[tuple[float, float]]:
 # ═══════════════════════════════════════════════════════════════════════════
 # Polyline booleans
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def polyline_boolean(a: Polyline, b: Polyline, clip_type: int) -> list[Polyline]:
     """Boolean of two closed planar polylines, clip_type 0 intersection, 1 union, 2 difference."""
     return Polyline.boolean_op(a, b, clip_type)
@@ -8774,8 +8752,6 @@ def polyline_boolean_2d_in_plane(
 # ═══════════════════════════════════════════════════════════════════════════
 # Joints
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def polyline_plane_to_line(
     poly: Polyline, plane: Plane, align_start: Point
 ) -> Line | None:
@@ -8904,8 +8880,6 @@ def closed_and_open_paths_2d(
 # ═══════════════════════════════════════════════════════════════════════════
 # Elements
 # ═══════════════════════════════════════════════════════════════════════════
-
-
 def face_to_face(
     adjacency: list[int],
     polylines: list[list[Polyline]],
