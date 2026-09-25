@@ -987,7 +987,7 @@ class Session:
         tomb = self._tomb(obj_guid)
         degree = len(self.graph.edges.get(obj_guid, {}))
         node = tomb.node if tomb.node.parent is not None else None
-        index = node._at if node is not None else 0
+        index = node.at() if node is not None else 0
         parent_guid = node.parent.name if node is not None else None
         self._kill(tomb)
 
@@ -1619,7 +1619,7 @@ class Session:
             items.set_tomb(slot, tomb)
             node.set_tomb(tomb)
             self.history.record(
-                AddOp(guid, collection, parent_guid, node._at, node, tomb), RECORD
+                AddOp(guid, collection, parent_guid, node.at(), node, tomb), RECORD
             )
 
         return node
@@ -1747,7 +1747,7 @@ class Session:
 
             return
 
-        index = node._at if node is not None else 0
+        index = node.at() if node is not None else 0
         parent = node.parent if node is not None else None
         parent_guid = parent.name if parent is not None else None
         self.history.record(
@@ -2014,7 +2014,7 @@ class Session:
         """Set or drop (None) the local transform under guid, unrecorded."""
 
         if xform is not None:
-            self.xforms[guid] = xform
+            self.xforms[guid] = xform.duplicate()
         else:
             self.xforms.pop(guid, None)
 

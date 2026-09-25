@@ -107,6 +107,10 @@ class TreeNode:
         """Return whether a compaction of the children is part way."""
         return self._cursor is not None
 
+    def at(self) -> int:
+        """Return the raw index in the parent's children, dead siblings counted."""
+        return self._at
+
     def is_queued(self) -> bool:
         """Return whether Session.sweep holds this node."""
         return self._queued

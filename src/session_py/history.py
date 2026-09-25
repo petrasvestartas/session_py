@@ -177,12 +177,8 @@ class Tombstone:
 
         self.guid = guid  # The object's guid.
         self.collection = collection  # The Objects list it lives in, or "definitions".
-        self.parent_guid = (
-            parent_guid  # Name of its tree parent, None when it has no node.
-        )
-        self.index = (
-            index  # Its raw index among the parent's children at record time, a hint.
-        )
+        self.parent_guid = parent_guid  # Name of its tree parent, None without a node.
+        self.index = index  # Its raw index among the parent's children, a hint.
         self.node = node  # Its tree node, for adds too; None when it has none.
         self.tomb = tomb  # The tomb undo and redo flip.
 
@@ -317,9 +313,7 @@ class History:
     def __init__(self):
         """Construct an empty history with the default budget."""
 
-        self.undo_stack: list[
-            Transaction
-        ] = []  # Committed, oldest first; capped at CAPACITY and budget.
+        self.undo_stack: list[Transaction] = []  # Committed, oldest first, capped.
         self.redo_stack: list[Transaction] = []  # Undone, cleared on the next commit.
         self.current: Transaction | None = None  # Open transaction, None when closed.
         self.bytes = 0  # Bytes pinned by both stacks and the open transaction.

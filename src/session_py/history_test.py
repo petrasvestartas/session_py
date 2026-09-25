@@ -263,7 +263,7 @@ def test_history_abort():
     MINI_CHECK(b_guid in session.lookup)
     MINI_CHECK(session.objects.points.get_slot(b_guid) == 1)
     MINI_CHECK(group.children[1] is b_node)
-    MINI_CHECK(b_node._at == 1)
+    MINI_CHECK(b_node.at() == 1)
     MINI_CHECK(session.history.depth() == 0)
     MINI_CHECK(session.history.can_redo())
     MINI_CHECK(len(session.history.redo_stack) == 1)

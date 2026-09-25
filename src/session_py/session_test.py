@@ -1854,7 +1854,7 @@ def test_session_remove_keeps_slot():
     MINI_CHECK(session.order() == [a_guid, b_guid, c_guid])
     MINI_CHECK(names == [a_guid, b_guid, c_guid])
     MINI_CHECK(g.children[1] is b_node)
-    MINI_CHECK(b_node._at == 1)
+    MINI_CHECK(b_node.at() == 1)
 
 
 @MINI_TEST("Session", "Redo Add Keeps Node")
@@ -2150,7 +2150,7 @@ def test_session_tree_ops():
     MINI_CHECK(redone == [True, True, True, True])
     MINI_CHECK(node.is_dead())
     MINI_CHECK(node.name == "M")
-    MINI_CHECK(node._at == 1)
+    MINI_CHECK(node.at() == 1)
     MINI_CHECK(node.color is not None)
     MINI_CHECK(session.tree.root is root)
     MINI_CHECK(session.history.undo_stack[3].ops[0].kind == "tree")
