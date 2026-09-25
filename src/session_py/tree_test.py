@@ -552,7 +552,12 @@ def test_tree_dead_nodes():
     g_guid = g.guid
 
     def names(nodes):
-        return [n.name for n in nodes]
+        result = []
+
+        for node in nodes:
+            result.append(node.name)
+
+        return result
 
     json = tree.file_json_dumps()
     from_json = Tree.file_json_loads(json)

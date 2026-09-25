@@ -674,13 +674,19 @@ def test_graph_take_node():
     g.set_edge_attribute(("a", "b"), "weight", 3.0)
     before = g.file_json_dumps()
     vertex, edges = g.take_node("b")
+    incident = True
+    weighted = False
+
+    for e in edges:
+        incident = incident and (e.v0 == "b" or e.v1 == "b")
+        weighted = weighted or e.attributes.get("weight") == 3.0
 
     MINI_CHECK(
         vertex.guid in before and vertex.index == 1 and vertex.attribute == "bee"
     )
     MINI_CHECK(vertex.attributes.get("load") == 2.0)
-    MINI_CHECK(len(edges) == 2 and all(e.v0 == "b" or e.v1 == "b" for e in edges))
-    MINI_CHECK(any(e.attributes.get("weight") == 3.0 for e in edges))
+    MINI_CHECK(len(edges) == 2 and incident)
+    MINI_CHECK(weighted)
     MINI_CHECK(
         not g.has_node("b")
         and not g.has_edge(("a", "b"))
@@ -735,7 +741,10 @@ def test_graph_renumber():
     g.take_node("b")
     g.take_node("d")
     g.renumber()
-    indices = [v.index for v in g.get_vertices()]
+    indices = []
+
+    for vertex in g.get_vertices():
+        indices.append(vertex.index)
 
     MINI_CHECK(indices == [0, 1, 2])
     MINI_CHECK(g.edges["a"]["c"].index == 0 and g.edges["e"]["c"].index == 1)

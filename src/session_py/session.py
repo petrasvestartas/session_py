@@ -1154,7 +1154,7 @@ class Session:
         bytes = RECORD + weight(before)
 
         if old == new:
-            entry = Entry(False, self.get_node(guid), 0)
+            entry = Entry(False, self.get_node(guid), None)
 
             if self.history.current is not None:
                 self.history.record(ReplaceOp(guid, before, obj, entry), bytes)
@@ -1190,12 +1190,7 @@ class Session:
         bytes = RECORD + weight(before)
 
         if old == new:
-            slot = getattr(self.definitions, old).get_slot(guid)
-
-            if slot is None:
-                return False
-
-            entry = Entry(True, None, slot)
+            entry = Entry(True, None, self._half(True, old, guid))
 
             if self.history.current is not None:
                 self.history.record(ReplaceOp(guid, before, definition, entry), bytes)
@@ -2608,10 +2603,10 @@ class Session:
         if entry.definition:
             items = getattr(self.definitions, collection)
 
-            if self._is_live(guid) or items.get_slot(guid) != entry.slot:
+            if self._is_live(guid) or items.get_slot(guid) != entry.tomb.slot:
                 return
 
-            items.set_item(entry.slot, obj)
+            items.set_item(entry.tomb.slot, obj)
             self.definition_lookup[guid] = obj
         else:
             if guid in self.definition_lookup or not self._owns(guid, entry.node):

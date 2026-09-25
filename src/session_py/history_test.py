@@ -191,7 +191,10 @@ def test_history_budget():
     newest = session.history.undo_stack[session.history.depth() - 1].bytes
     pinned = 0
 
-    for transaction in session.history.undo_stack + session.history.redo_stack:
+    for transaction in session.history.undo_stack:
+        pinned += transaction.bytes
+
+    for transaction in session.history.redo_stack:
         pinned += transaction.bytes
 
     MINI_CHECK(session.history.depth() < 20)

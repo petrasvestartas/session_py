@@ -2054,7 +2054,10 @@ def test_session_remove_keeps_slot():
     MINI_CHECK(pinned)
 
     session.undo()
-    names = [n.name for n in g.children]
+    names = []
+
+    for child in g.children:
+        names.append(child.name)
 
     MINI_CHECK(session.objects.points.get_item(1) is stored)
     MINI_CHECK(session.objects.points.get_slot(b_guid) == 1)
@@ -2442,7 +2445,10 @@ def test_session_deleted_parent_orphans_children():
     session.begin("remove")
     session.remove_object(e_guid)
     session.commit()
-    names = [n.name for n in session.tree.nodes]
+    names = []
+
+    for node in session.tree.nodes:
+        names.append(node.name)
 
     MINI_CHECK(q_guid in session.lookup)
     MINI_CHECK(session.get_node(q_guid) is q_node)
@@ -2524,24 +2530,39 @@ def test_session_live_views():
     session.remove_group(g)
     session.commit()
     gone = [point_guid, mesh_guid, instance_guid, "gone_group"]
+    order = session.order()
     world = session.world_xforms()
-    groups = [n.name for n in session.tree.root.children]
+    groups = []
+
+    for child in session.tree.root.children:
+        groups.append(child.name)
+
     geometry = session.get_geometry()
     collisions = session.get_collisions()
     hits = session.ray_cast(Point(5.0, 0.0, -10.0), Vector(0.0, 0.0, 1.0), 0.01)
     text_json = json.dumps(session.__jsondump__())
     text = str(session) + repr(session)
+    ordered = True
+    placed = True
+    dumped = True
+    printed = True
 
-    MINI_CHECK(all(guid not in gone for guid in session.order()))
-    MINI_CHECK(all(name not in world for name in gone))
+    for name in gone:
+        ordered = ordered and name not in order
+        placed = placed and name not in world
+        dumped = dumped and name not in text_json
+        printed = printed and name not in text
+
+    MINI_CHECK(ordered)
+    MINI_CHECK(placed)
     MINI_CHECK(len(session.select_by_type(Point)) == 1)
     MINI_CHECK(groups == ["kept"])
     MINI_CHECK(len(geometry.points) == 1 and len(geometry.meshes) == 0)
     MINI_CHECK(len(session.instances_of(definition)) == 0)
     MINI_CHECK(len(collisions) == 0)
     MINI_CHECK(len(hits) == 0)
-    MINI_CHECK(all(name not in text_json for name in gone))
-    MINI_CHECK(all(name not in text for name in gone))
+    MINI_CHECK(dumped)
+    MINI_CHECK(printed)
     MINI_CHECK(session.undo())
     MINI_CHECK(len(session.order()) == 3)
 
@@ -3137,6 +3158,42 @@ def test_session_checkpoint_twin_xform():
     MINI_CHECK(data == session.to_proto().SerializeToString(deterministic=True))
     MINI_CHECK(loaded.xform(x.guid) == session.xform(x.guid))
     MINI_CHECK(loaded.xform(instance.guid) == session.xform(instance.guid))
+
+
+@MINI_TEST("Session", "Checkpoint Keeps Replaced Definition")
+def test_session_checkpoint_keeps_replaced_definition():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(1.0, 0.0, 0.0)
+    c = Point(2.0, 0.0, 0.0)
+    guid = b.guid
+    c.guid = guid
+    session.add_definition(a)
+    session.add_definition(b)
+    session.remove_definition(a.guid)
+    session.begin("swap")
+    session.replace_definition(guid, c)
+    session.commit()
+    data = session.checkpoint(1)
+
+    while data is None:
+        data = session.checkpoint(1)
+
+    moved = session.definitions.points.get_slot(guid) == 0
+    undone = session.undo()
+
+    MINI_CHECK(moved)
+    MINI_CHECK(undone)
+    MINI_CHECK(session.definition_lookup[guid] is b)
+    MINI_CHECK(session.definitions.points.get_item(0) is b)
+
+    session.redo()
+
+    MINI_CHECK(session.definition_lookup[guid] is c)
+    MINI_CHECK(session.definitions.points.get_item(0) is c)
 
 
 if __name__ == "__main__":

@@ -144,7 +144,12 @@ def test_collection_compact_step():
 
     while True:
         bounded &= points.compact_step(10) <= 10
-        expected = [m[0] for m in model if m[1]]
+        expected = []
+
+        for m in model:
+            if m[1]:
+                expected.append(m[0])
+
         exact &= len(points) == len(expected)
         exact &= all(p is q for p, q in zip(points, expected))
 

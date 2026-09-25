@@ -204,14 +204,14 @@ class RemoveOp(Tombstone):
 
 
 class Entry:
-    """The entry a replace was taken on: an object by its tree node at record time (None outside the tree) or a definition by its slot."""
+    """The entry a replace was taken on: an object by its tree node at record time (None outside the tree) or a definition by the tomb pinning its slot."""
 
-    def __init__(self, definition: bool, node: TreeNode | None, slot: int):
-        """Construct an object entry from its node or a definition entry from its slot."""
+    def __init__(self, definition: bool, node: TreeNode | None, tomb: Tomb | None):
+        """Construct an object entry from its node or a definition entry from its slot's tomb."""
 
         self.definition = definition  # Whether the entry is a definition.
         self.node = node  # An object's tree node at record time; None outside the tree or for a definition.
-        self.slot = slot  # A definition's slot; 0 for an object.
+        self.tomb = tomb  # A definition's slot-only tomb, moved with its slot by compaction; None for an object.
 
 
 class ReplaceOp:
