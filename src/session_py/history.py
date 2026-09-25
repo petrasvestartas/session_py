@@ -40,6 +40,38 @@ def clone(obj: Any) -> Any:
 # ═══════════════════════════════════════════════════════════════════════════
 # Records
 # ═══════════════════════════════════════════════════════════════════════════
+class Tomb:
+    """One dead or revivable entity: where it lives and what it parked while dead; slots and nodes pin it weakly, records strongly."""
+
+    __slots__ = (
+        "collection",
+        "definition",
+        "slot",
+        "node",
+        "vertex",
+        "edges",
+        "xform",
+        "interactions",
+        "__weakref__",
+    )
+
+    def __init__(
+        self, collection: str, definition: bool, slot: int, node: TreeNode | None
+    ):
+        """Construct a tomb with nothing parked."""
+
+        self.collection = (
+            collection  # The Objects list of its slot, "" for a node-only tomb.
+        )
+        self.definition = definition  # Whether the slot is in Session.definitions.
+        self.slot = slot  # Its raw slot, moved by compaction.
+        self.node = node  # Its tree node, None for a slot-only tomb.
+        self.vertex = None  # Its graph vertex while dead.
+        self.edges = []  # Its incident edges while dead.
+        self.xform = None  # Its local transform while dead.
+        self.interactions = {}  # Its edges' interactions while dead, by edge guid.
+
+
 class Tombstone:
     """Everything needed to put one object back into every live table of a session."""
 

@@ -26,6 +26,7 @@ from .tree import TreeNode
 from .graph import Graph
 from .graph import Vertex
 from .graph import Edge
+from .collection import Collection
 from .objects import Objects
 from .objects import Component
 from .history import History
@@ -92,6 +93,7 @@ __all__ = [
     "Graph",
     "Vertex",
     "Edge",
+    "Collection",
     "Objects",
     "Component",
     "History",

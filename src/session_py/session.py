@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 import copy
 import json
 import uuid
+import weakref
+from .collection import Collection
 from .objects import Objects
 from .objects import Component
 from .point import Point
@@ -83,16 +85,38 @@ def _clone_objects(objects: Objects) -> Objects:
 
 
 def _locate(objects: Objects, guid: str) -> tuple[str, int]:
-    """Which list of objects holds a guid, and where; ("", -1) when none does."""
+    """Which list of objects holds a guid, and its slot; ("", -1) when none does."""
 
     for collection, prefix in COLLECTIONS:
-        items = getattr(objects, collection)
+        slot = getattr(objects, collection).get_slot(guid)
 
-        for i in range(len(items)):
-            if items[i].guid == guid:
-                return collection, i
+        if slot is not None:
+            return collection, slot
 
     return "", -1
+
+
+def _put(items: Collection, index: int, item: Any) -> None:
+    """Append item, or rebuild the list in place with it at index while index is inside."""
+
+    if index >= len(items):
+        items.append(item)
+
+        return
+
+    rebuilt = list(items)
+    rebuilt.insert(index, item)
+    items.clear()
+    items.extend(rebuilt)
+
+
+def _take(items: Collection, index: int) -> None:
+    """Rebuild the list in place without the entry at index."""
+
+    rebuilt = list(items)
+    rebuilt.pop(index)
+    items.clear()
+    items.extend(rebuilt)
 
 
 def _collection_of(geometry: Any) -> tuple[str, str]:
@@ -119,15 +143,34 @@ def _collection_of(geometry: Any) -> tuple[str, str]:
     return "", ""
 
 
-def _index_geometry(objects: Objects, lookup: dict[str, Any]) -> None:
-    """Every geometry of objects under its guid."""
+def _repoint(items: Collection, lookup: dict[str, Any]) -> None:
+    """Point every live slot whose guid lookup holds with another value at the lookup value, and index every live slot lookup lacks."""
 
-    for collection, prefix in COLLECTIONS:
-        if collection == "components" or collection == "instances":
+    for slot in range(items.number_of_slots()):
+        if items.is_dead(slot):
             continue
 
-        for item in getattr(objects, collection):
+        item = items.get_item(slot)
+        held = lookup.get(item.guid)
+
+        if held is None:
             lookup[item.guid] = item
+        elif held is not item:
+            items.set_item(slot, held)
+
+
+def _adopt(objects: Objects, lookup: dict[str, Any], collection: str) -> None:
+    """Append every value only lookup holds, in guid order, to collection or, when "", to the list of its type."""
+
+    orphans = []
+
+    for guid in lookup:
+        if _locate(objects, guid)[1] < 0:
+            orphans.append(guid)
+
+    for guid in sorted(orphans):
+        name = collection if collection else _collection_of(lookup[guid])[0]
+        getattr(objects, name).append(lookup[guid])
 
 
 def _place(geometry: Any, xform: Xform) -> None:
@@ -356,8 +399,11 @@ class Session:
         self.cached_guids: list[str] = []  # GUID per leaf of cached_ray_bvh.
         self.cached_boxes: list[OBB] = []  # Box per leaf of cached_ray_bvh.
         self.bvh_cache_dirty = True  # Flag to rebuild cached_ray_bvh.
+        self.node_lookup: dict[str, TreeNode] = {}  # Tree node per live object guid.
+        self.revision = 0  # Bumped by every Session mutation.
 
         self.tree.add(TreeNode(name=self.name))
+        self._indexed = weakref.ref(self.tree.root)  # Root at the last reindex.
 
     def __deepcopy__(self, memo):
         """Copy every table and object, guids included; caches are rebuilt on demand and history starts empty."""
@@ -377,7 +423,7 @@ class Session:
             for interaction in interactions:
                 result.interactions.setdefault(edge, []).append(interaction.clone())
 
-        result._index_objects()
+        result.reindex()
         memo[id(self)] = result
 
         return result
@@ -405,6 +451,21 @@ class Session:
     def get_object(self, guid: str) -> Any | None:
         """Get a geometry object by GUID, None when there is none."""
         return self.lookup.get(guid)
+
+    def get_node(self, guid: str) -> TreeNode | None:
+        """The tree node of a live object in O(1) through node_lookup; a tree search when the index is stale, None for a guid that is no live object."""
+
+        if not self._is_live(guid):
+            return None
+
+        indexed = None if self._indexed is None else self._indexed()
+        node = self.node_lookup.get(guid)
+
+        if indexed is not None and indexed is self.tree.root and node is not None:
+            if node.name == guid and node.parent is not None:
+                return node
+
+        return self.tree.get_node_by_name(guid)
 
     def select_by_type(self, cls: type) -> list[list]:
         """Select objects of one type, grouped by the top-level nodes of the tree."""
@@ -489,7 +550,7 @@ class Session:
         """The CUMULATIVE placement of an object: every ancestor's transform multiplied down the tree onto its own."""
 
         acc = self.xform(guid)
-        node = self.tree.get_node_by_name(guid)
+        node = self.get_node(guid)
 
         if node is None:
             return acc
@@ -784,6 +845,11 @@ class Session:
         if node is None:
             return
 
+        self.revision += 1
+
+        if self._is_live(node.name):
+            self.node_lookup[node.name] = node
+
         if parent is None:
             self.tree.add(node, self.tree.root)
         else:
@@ -799,16 +865,23 @@ class Session:
 
     def add_edge(self, guid1: str, guid2: str, attribute: str = "") -> None:
         """Add an edge between two geometry objects in the graph."""
+
+        self.revision += 1
         self.graph.add_edge(guid1, guid2, attribute)
 
     def add_hierarchy(self, parent_guid: str, child_guid: str) -> bool:
         """Add a parent-child relationship in the tree."""
+
+        self.revision += 1
+
         return self.tree.add_child_by_guid(parent_guid, child_guid)
 
     def add_relationship(
         self, from_guid: str, to_guid: str, relationship_type: str = "default"
     ) -> None:
         """Add a relationship edge in the graph."""
+
+        self.revision += 1
         self.graph.add_edge(from_guid, to_guid, relationship_type)
 
     def remove_object(self, obj_guid: str) -> bool:
@@ -961,6 +1034,7 @@ class Session:
 
         self.xforms[guid] = xform
         self.bvh_cache_dirty = True
+        self.revision += 1
 
     def remove_xform(self, guid: str) -> bool:
         """Removes an object's local transform, returning whether one was present."""
@@ -975,6 +1049,7 @@ class Session:
 
         del self.xforms[guid]
         self.bvh_cache_dirty = True
+        self.revision += 1
 
         return True
 
@@ -1001,6 +1076,7 @@ class Session:
         if not self.graph.has_edge((first, second)):
             self.graph.add_edge(first, second)
 
+        self.revision += 1
         id = self.graph.edges[first][second].guid
         self.interactions.setdefault(id, []).append(interaction)
 
@@ -1027,6 +1103,7 @@ class Session:
             return
 
         id = self.graph.edges[a.guid][b.guid].guid
+        self.revision += 1
         self.interactions.pop(id, None)
         self.graph.remove_edge((a.guid, b.guid))
 
@@ -1043,10 +1120,16 @@ class Session:
 
     def undo(self) -> bool:
         """Revert the latest committed transaction, returning whether there was one."""
+
+        self.revision += 1
+
         return self.history.undo(self)
 
     def redo(self) -> bool:
         """Reapply the latest undone transaction, returning whether there was one."""
+
+        self.revision += 1
+
         return self.history.redo(self)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1220,7 +1303,7 @@ class Session:
                     Interaction.__jsonload__(item)
                 )
 
-        session._index_objects()
+        session.reindex()
 
         return session
 
@@ -1316,7 +1399,7 @@ class Session:
                     Interaction.from_proto(item)
                 )
 
-        session._index_objects()
+        session.reindex()
 
         return session
 
@@ -1389,6 +1472,8 @@ class Session:
         self.graph.add_node(guid, attribute)
         self.bvh_cache_dirty = True
         node = TreeNode(name=guid)
+        self.node_lookup[guid] = node
+        self.revision += 1
         host = parent if parent is not None else self.tree.root
         parent_guid = None
         index = 0
@@ -1420,6 +1505,15 @@ class Session:
         """Which Objects list holds a guid, and where; ("", -1) when none does."""
         return _locate(self.objects, guid)
 
+    def _is_live(self, guid: str) -> bool:
+        """Whether guid names a live object, component or instance."""
+
+        return (
+            guid in self.lookup
+            or guid in self.component_lookup
+            or guid in self.instance_lookup
+        )
+
     def _detach(self, guid: str) -> RemoveOp | None:
         """Take an object out of every live table, unrecorded, returning its tombstone."""
 
@@ -1437,16 +1531,18 @@ class Session:
         collection, obj_index = self._locate(guid)
 
         if obj_index >= 0:
-            getattr(self.objects, collection).pop(obj_index)
+            _take(getattr(self.objects, collection), obj_index)
 
+        node = self.get_node(guid)
         self.lookup.pop(guid, None)
         self.component_lookup.pop(guid, None)
         self.instance_lookup.pop(guid, None)
+        self.node_lookup.pop(guid, None)
         xform = self.xforms.pop(guid, None)
         self.bvh_cache_dirty = True
+        self.revision += 1
         parent_guid = None
         index = 0
-        node = self.tree.get_node_by_name(guid)
 
         if node is not None:
             parent = node.parent
@@ -1456,6 +1552,10 @@ class Session:
                 index = parent.children.index(node)
 
             node = self.tree.remove(node)
+
+            for child in node.descendants():
+                if self.node_lookup.get(child.name) is child:
+                    del self.node_lookup[child.name]
 
         attribute = ""
         edges = []
@@ -1495,8 +1595,7 @@ class Session:
         """Put an object back from its tombstone, unrecorded: typed list, lookup, xform, tree node with its subtree, graph node and edges."""
 
         obj = clone(op.obj)
-        items = getattr(self.objects, op.collection)
-        items.insert(min(op.obj_index, len(items)), obj)
+        _put(getattr(self.objects, op.collection), op.obj_index, obj)
 
         if op.collection == "components":
             self.component_lookup[op.guid] = obj
@@ -1513,6 +1612,13 @@ class Session:
 
         if node is None:
             node = TreeNode(name=op.guid)
+
+        self.node_lookup[op.guid] = node
+        self.revision += 1
+
+        for child in node.descendants():
+            if self._is_live(child.name):
+                self.node_lookup[child.name] = child
 
         if op.parent_guid is not None:
             parent = self.tree.get_node_by_name(op.parent_guid)
@@ -1555,7 +1661,8 @@ class Session:
         if obj_index < 0:
             return
 
-        getattr(self.objects, collection)[obj_index] = obj
+        getattr(self.objects, collection).set_item(obj_index, obj)
+        self.revision += 1
 
         if collection == "components":
             self.component_lookup[guid] = obj
@@ -1574,27 +1681,35 @@ class Session:
         if self.graph.has_node(guid):
             self.graph.node_label(guid, attribute)
 
-    def _index_objects(self) -> None:
-        """Point every lookup at the objects and definitions this session holds, folding a non-identity instance xform into xforms."""
+    def reindex(self) -> None:
+        """Rebuild every index from the tables in O(n + N): the maps win over the slots, map-only and slot-only entries are adopted, a non-identity instance xform folds into xforms, node_lookup is refilled from the live tree."""
 
-        self.lookup.clear()
-        self.component_lookup.clear()
-        self.instance_lookup.clear()
-        self.definition_lookup.clear()
-        _index_geometry(self.objects, self.lookup)
-        _index_geometry(self.definitions, self.definition_lookup)
+        for collection, prefix in COLLECTIONS[:-2]:
+            _repoint(getattr(self.objects, collection), self.lookup)
+            _repoint(getattr(self.definitions, collection), self.definition_lookup)
 
-        for component in self.objects.components:
-            self.component_lookup[component.guid] = component
+        _repoint(self.objects.components, self.component_lookup)
+        _repoint(self.objects.instances, self.instance_lookup)
+        _adopt(self.objects, self.lookup, "")
+        _adopt(self.definitions, self.definition_lookup, "")
+        _adopt(self.objects, self.component_lookup, "components")
+        _adopt(self.objects, self.instance_lookup, "instances")
 
         for instance in self.objects.instances:
-            self.instance_lookup[instance.guid] = instance
-
             if instance.xform.is_identity():
                 continue
 
             self.xforms[instance.guid] = self.xform(instance.guid) * instance.xform
             instance.xform = Xform.identity()
+
+        self.node_lookup.clear()
+
+        for node in self.tree.nodes:
+            if self._is_live(node.name) and node.name not in self.node_lookup:
+                self.node_lookup[node.name] = node
+
+        root = self.tree.root
+        self._indexed = None if root is None else weakref.ref(root)
 
     def _define(self, guid: str, definition: Any | None) -> None:
         """Set or drop (None) a definition under guid, unrecorded."""
@@ -1602,17 +1717,17 @@ class Session:
         collection, position = _locate(self.definitions, guid)
 
         if position >= 0:
-            getattr(self.definitions, collection).pop(position)
+            _take(getattr(self.definitions, collection), position)
 
         self.definition_lookup.pop(guid, None)
         self.bvh_cache_dirty = True
+        self.revision += 1
 
         if definition is None:
             return
 
         items = getattr(self.definitions, _collection_of(definition)[0])
-        at = len(items) if position < 0 else min(position, len(items))
-        items.insert(at, definition)
+        _put(items, len(items) if position < 0 else position, definition)
         self.definition_lookup[guid] = definition
 
     def _place(self, guid: str, xform: Xform | None) -> None:
@@ -1624,6 +1739,7 @@ class Session:
             self.xforms.pop(guid, None)
 
         self.bvh_cache_dirty = True
+        self.revision += 1
 
     def _xforms_ordered(self) -> list[tuple[str, Xform]]:
         """The xforms in canonical order() sequence, identity entries omitted, the exact sequence __jsondump__ and pb_dumps write."""

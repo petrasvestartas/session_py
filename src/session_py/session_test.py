@@ -1747,5 +1747,45 @@ def test_session_ray_cast_instance():
     MINI_CHECK(TOLERANCE.is_close(hits[0].hit_point[2], 1.0))
 
 
+@MINI_TEST("Session", "Get Node")
+def test_session_get_node():
+    from session_py import Point
+    from session_py import Session
+    from session_py import Tree
+    from session_py import TreeNode
+
+    session = Session()
+    node = session.add_point(Point(0.0, 0.0, 0.0))
+    guid = node.name
+    child = session.add_point(Point(1.0, 0.0, 0.0), node)
+    child_guid = child.name
+    found = session.get_node(guid)
+    session.begin("remove")
+    session.remove_object(guid)
+    session.commit()
+    removed = session.get_node(guid)
+    orphaned = session.get_node(child_guid)
+    session.undo()
+    restored = session.get_node(guid)
+    reattached = session.get_node(child_guid)
+    indexed = session.node_lookup.get(child_guid) is child
+    tree = Tree("swapped")
+    tree.add(TreeNode("root"))
+    root = tree.root
+    swapped = TreeNode(guid)
+    tree.add(swapped, root)
+    session.tree = tree
+    searched = session.get_node(guid)
+    session.reindex()
+
+    MINI_CHECK(found is node)
+    MINI_CHECK(removed is None and orphaned is None)
+    MINI_CHECK(restored is node)
+    MINI_CHECK(reattached is child and indexed)
+    MINI_CHECK(searched is swapped)
+    MINI_CHECK(session.node_lookup[guid] is swapped)
+    MINI_CHECK(session.get_node("missing") is None)
+
+
 if __name__ == "__main__":
     run_all(language="python")

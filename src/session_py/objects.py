@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 import copy
 import json
 import uuid
+from .collection import Collection
 from .point import Point
 from .line import Line
 from .plane import Plane
@@ -21,10 +22,10 @@ if TYPE_CHECKING:
     from .proto import objects_pb2
 
 
-def _clone_list(items: list, memo: dict) -> list:
+def _clone_list(items: Collection, memo: dict) -> Collection:
     """One list, duplicated: new list, new objects, same guids."""
 
-    out = []
+    out = Collection()
 
     for item in items:
         clone = copy.deepcopy(item, memo)
@@ -37,7 +38,7 @@ def _clone_list(items: list, memo: dict) -> list:
     return out
 
 
-def _dump_list(items: list) -> list:
+def _dump_list(items: Collection) -> list:
     """Serialize every object of a list to JSON."""
 
     out = []
@@ -48,12 +49,12 @@ def _dump_list(items: list) -> list:
     return out
 
 
-def _load_list(data: dict, key: str) -> list:
+def _load_list(data: dict, key: str) -> Collection:
     """Load every object under key, keeping guids."""
 
     from .file_encoders import file_decode_node
 
-    out = []
+    out = Collection()
 
     for item in data.get(key, []):
         out.append(file_decode_node(item))
@@ -61,17 +62,17 @@ def _load_list(data: dict, key: str) -> list:
     return out
 
 
-def _dump_pb_list(items: list, repeated) -> None:
+def _dump_pb_list(items: Collection, repeated) -> None:
     """Convert every object of a list into a repeated proto field."""
 
     for item in items:
         repeated.add().CopyFrom(item.to_proto())
 
 
-def _load_pb_list(repeated, cls) -> list:
+def _load_pb_list(repeated, cls) -> Collection:
     """Load every message of a repeated proto field, keeping guids."""
 
-    out = []
+    out = Collection()
 
     for item in repeated:
         out.append(cls.from_proto(item))
@@ -200,21 +201,19 @@ class Objects:
 
         self._guid = None  # Lazily minted GUID.
         self.name = name  # The name of the collection.
-        self.points: list[Point] = []  # Points.
-        self.lines: list[Line] = []  # Lines.
-        self.planes: list[Plane] = []  # Planes.
-        self.bboxes: list[OBB] = []  # Bounding boxes.
-        self.polylines: list[Polyline] = []  # Polylines.
-        self.pointclouds: list[PointCloud] = []  # Point clouds.
-        self.meshes: list[Mesh] = []  # Meshes.
-        self.nurbscurves: list[NurbsCurve] = []  # NURBS curves.
-        self.nurbssurfaces: list[NurbsSurface] = []  # NURBS surfaces.
-        self.breps: list[BRep] = []  # BReps.
-        self.elements: list[Element] = []  # Elements.
-        self.components: list[Component] = []  # Components.
-        self.instances: list[
-            InstanceRef
-        ] = []  # Instances, each placing a definition of Session.definitions by guid.
+        self.points = Collection()  # Points.
+        self.lines = Collection()  # Lines.
+        self.planes = Collection()  # Planes.
+        self.bboxes = Collection()  # Bounding boxes.
+        self.polylines = Collection()  # Polylines.
+        self.pointclouds = Collection()  # Point clouds.
+        self.meshes = Collection()  # Meshes.
+        self.nurbscurves = Collection()  # NURBS curves.
+        self.nurbssurfaces = Collection()  # NURBS surfaces.
+        self.breps = Collection()  # BReps.
+        self.elements = Collection()  # Elements.
+        self.components = Collection()  # Components.
+        self.instances = Collection()  # Instances, each placing a definition of Session.definitions by guid.
 
     def __deepcopy__(self, memo):
         """Copy every list and every object in it, guids included, so a Session's indexes still match."""
