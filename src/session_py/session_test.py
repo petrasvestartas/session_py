@@ -3006,14 +3006,15 @@ def test_session_steady_state_bounds():
         node = session.add_point(Point(float(i), 0.0, 0.0), group)
         guids.append(node.name)
 
-    for cycle, guid in enumerate(guids[:cycles]):
+    for guid in guids[:cycles]:
         session.begin("remove")
         session.remove_object(guid)
         session.commit()
         session.undo()
         session.redo()
+        x = float(len(session.objects.points))
         session.begin("add")
-        session.add_point(Point(float(cycle), 1.0, 0.0), group)
+        session.add_point(Point(x, 1.0, 0.0), group)
         session.commit()
         session.purge_step(PURGE_WORK)
 
