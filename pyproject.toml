@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.20.0",
-    "protobuf>=6.33,<7.0",
+    "protobuf>=7.35.1,<8",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +47,7 @@ dev = [
 # Included in `dev`, so `uv sync` still provides it for anyone regenerating.
 # exact pin: CI diffs regenerated *_pb2.py against committed files, and the
 # version banner protoc stamps into them follows this package's version
-proto = ["grpcio-tools==1.80.0"]
+proto = ["grpcio-tools==1.84.0"]
 tests = []
 docs = [
     "sphinx",
