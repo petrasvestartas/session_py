@@ -1,10 +1,13 @@
 from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING
+import sys
 import uuid
+import weakref
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .history import Tomb
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -21,9 +24,14 @@ class TreeNode:
 
         self._guid = None  # Lazy guid.
         self._parent = None  # Parent node, None for the root.
-        self._children = []  # Child nodes in order.
+        self._children = []  # Raw child nodes in order, dead ones included.
         self.name = name  # Object guid or group label.
         self.color = None  # Display colour override.
+        self._dead = False  # Hidden from every public walk.
+        self._tomb = None  # Weak pin while a record holds it.
+        self._at = 0  # Raw index in the parent's children.
+        self._queued = False  # Whether Session.sweep holds this parent.
+        self._cursor = None  # (read, write) while a compaction is part way.
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
@@ -53,24 +61,24 @@ class TreeNode:
 
     @property
     def is_leaf(self) -> bool:
-        """Return whether this node has no children."""
-        return not self._children
+        """Return whether this node has no live children."""
+        return not self.children
 
     @property
     def parent(self) -> TreeNode | None:
-        """Return the parent node, or None when this is the root."""
-        return self._parent
+        """Return the parent node, or None for the root and for a dead node."""
+        return None if self._dead else self._parent
 
     @property
     def ancestors(self) -> list[TreeNode]:
         """Return all ancestors from the immediate parent up to the root."""
 
         result = []
-        current = self._parent
+        current = self.parent
 
         while current is not None:
             result.append(current)
-            current = current._parent
+            current = current.parent
 
         return result
 
@@ -84,45 +92,152 @@ class TreeNode:
 
     @property
     def children(self) -> list[TreeNode]:
-        """Return the direct children of this node."""
-        return self._children
+        """Return the live direct children of this node."""
+        return [child for child in self._children if not child._dead]
+
+    def is_dead(self) -> bool:
+        """Return whether this node is dead."""
+        return self._dead
+
+    def get_tomb(self) -> Tomb | None:
+        """Return the tomb pinning this node while a record still holds it."""
+        return None if self._tomb is None else self._tomb()
+
+    def is_compacting(self) -> bool:
+        """Return whether a compaction of the children is part way."""
+        return self._cursor is not None
+
+    def _position(self, child: TreeNode) -> int | None:
+        """Return the raw index of a child, O(1) through its _at."""
+
+        if child._at < len(self._children) and self._children[child._at] is child:
+            return child._at
+
+        for i in range(len(self._children)):
+            if self._children[i] is child:
+                return i
+
+        return None
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Mutators
     # ═══════════════════════════════════════════════════════════════════════════
-    def add(self, child: TreeNode) -> None:
-        """Add a child node to this node."""
+    def add(self, child: TreeNode) -> TreeNode | None:
+        """Append a child; a child placed elsewhere moves and leaves the returned dead ghost in its old slot."""
 
-        if child is None:
-            return
+        if child is None or child is self:
+            return None
 
-        if child is self:
-            return
-
-        ancestor = self
+        ancestor = self._parent
 
         while ancestor is not None:
             if ancestor is child:
-                return
+                return None
 
-            ancestor = ancestor.parent
+            ancestor = ancestor._parent
+
+        old = child._parent
+
+        if old is self:
+            return None
+
+        ghost = None
+
+        if old is not None:
+            at = old._position(child)
+
+            if at is not None:
+                ghost = TreeNode("")
+                ghost._dead = True
+                ghost._at = at
+                ghost._parent = old
+                old._children[at] = ghost
 
         child._parent = self
+        child._at = len(self._children)
         self._children.append(child)
 
+        return ghost
+
     def remove(self, child: TreeNode) -> TreeNode | None:
-        """Remove a child node and return it, or None when not found."""
+        """Remove a child node and return it, or None when not found; aborts a running compaction."""
 
-        for i in range(len(self._children)):
-            if self._children[i] is not child:
-                continue
+        i = self._position(child)
 
-            removed = self._children.pop(i)
-            removed._parent = None
+        if i is None:
+            return None
 
-            return removed
+        removed = self._children.pop(i)
 
-        return None
+        for later in self._children[i:]:
+            later._at -= 1
+
+        self._cursor = None
+        removed._parent = None
+
+        return removed
+
+    def set_dead(self, dead: bool) -> None:
+        """Kill or revive this node in O(1); a dead node hides itself and its subtree from every walk."""
+
+        cursor = None if self._parent is None else self._parent._cursor
+
+        if cursor is not None and cursor[1] <= self._at < cursor[0]:
+            return
+
+        self._dead = dead
+
+    def set_tomb(self, tomb: Tomb) -> None:
+        """Pin this node weakly to a tomb."""
+        self._tomb = weakref.ref(tomb)
+
+    def compact_step(self, work: int) -> int:
+        """Purge unpinned dead children for at most work children, resuming where the last call stopped; returns the children examined."""
+
+        if work == 0:
+            return 0
+
+        r, w = self._cursor if self._cursor is not None else (0, 0)
+        examined = 0
+
+        while examined < work and r < len(self._children):
+            child = self._children[r]
+
+            if child._tomb is not None and child._tomb() is None:
+                child._tomb = None
+
+            if not child._dead or child._tomb is not None:
+                if w != r:
+                    self._children[r] = self._children[w]
+                    self._children[w] = child
+                    self._children[r]._at = r
+                    child._at = w
+
+                w += 1
+
+            r += 1
+            examined += 1
+
+        if r < len(self._children):
+            self._cursor = (r, w)
+
+            return examined
+
+        for child in self._children[w:]:
+            child._parent = None
+
+        del self._children[w:]
+        self._cursor = None
+
+        return examined
+
+    def compact(self) -> None:
+        """Finish a running compaction, then purge every unpinned dead child."""
+
+        if self._cursor is not None:
+            self.compact_step(sys.maxsize)
+
+        self.compact_step(sys.maxsize)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
@@ -159,11 +274,13 @@ class TreeNode:
                 current = stack.pop()
                 result.append(current)
 
+                children = current.children
+
                 if order == "preorder":
-                    for i in range(len(current._children) - 1, -1, -1):
-                        stack.append(current._children[i])
+                    for i in range(len(children) - 1, -1, -1):
+                        stack.append(children[i])
                 else:
-                    stack.extend(current._children)
+                    stack.extend(children)
 
             if order == "postorder":
                 result.reverse()
@@ -174,7 +291,7 @@ class TreeNode:
                 current = queue.popleft()
                 result.append(current)
 
-                for child in current._children:
+                for child in current.children:
                     queue.append(child)
         else:
             raise ValueError(f"Unknown traversal strategy: {strategy}")
@@ -189,7 +306,7 @@ class TreeNode:
 
         children = []
 
-        for child in self._children:
+        for child in self.children:
             children.append(child.__jsondump__())
 
         data = {"children": children}
@@ -235,11 +352,11 @@ class TreeNode:
     # ═══════════════════════════════════════════════════════════════════════════
     def __str__(self) -> str:
         """Return the name and child count."""
-        return f"TreeNode({self.name}, {len(self._children)} children)"
+        return f"TreeNode({self.name}, {len(self.children)} children)"
 
     def __repr__(self) -> str:
         """Return the name, guid and child count."""
-        return f"TreeNode({self.name}, {self.guid}, {len(self._children)} children)"
+        return f"TreeNode({self.name}, {self.guid}, {len(self.children)} children)"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -257,6 +374,19 @@ class Tree:
         self._guid = None  # Lazy guid.
         self._root = None  # Root node, None when empty.
         self.name = name  # Tree name.
+
+    def __deepcopy__(self, memo) -> Tree:
+        """Duplicate the live hierarchy with the same names, guids and colours."""
+
+        tree = Tree(self.name)
+        tree._guid = self._guid
+
+        if self._root is not None:
+            tree._root = _clone_node(self._root, memo)
+
+        memo[id(self)] = tree
+
+        return tree
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
@@ -299,7 +429,7 @@ class Tree:
             current = queue.popleft()
             result.append(current)
 
-            for child in current._children:
+            for child in current.children:
                 queue.append(child)
 
         return result
@@ -389,7 +519,7 @@ class Tree:
 
             return node
 
-        parent = node.parent
+        parent = node._parent
 
         if parent is None:
             raise ValueError("Node is not in this tree")
@@ -588,6 +718,21 @@ def _draw_node(node: TreeNode, prefix: str, last: bool) -> str:
         text += _draw_node(child, nxt, i + 1 == len(node.children))
 
     return text
+
+
+def _clone_node(node: TreeNode, memo) -> TreeNode:
+    """Duplicate one node and its live subtree with the same names, guids and colours."""
+
+    import copy
+
+    clone = TreeNode(node.name)
+    clone._guid = node._guid
+    clone.color = copy.deepcopy(node.color, memo)
+
+    for child in node.children:
+        clone.add(_clone_node(child, memo))
+
+    return clone
 
 
 def _node_to_proto(node: TreeNode):

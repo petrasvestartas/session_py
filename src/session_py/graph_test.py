@@ -661,5 +661,88 @@ def test_graph_cycle_basis():
     MINI_CHECK(len(cycles) == 1)
 
 
+@MINI_TEST("Graph", "Take Node")
+def test_graph_take_node():
+    from session_py import Graph
+
+    g = Graph("g")
+    g.add_node("a", "")
+    g.add_node("b", "bee")
+    g.add_edge("a", "b", "ab")
+    g.add_edge("b", "c", "bc")
+    g.set_vertex_attribute("b", "load", 2.0)
+    g.set_edge_attribute(("a", "b"), "weight", 3.0)
+    before = g.file_json_dumps()
+    vertex, edges = g.take_node("b")
+
+    MINI_CHECK(
+        vertex.guid in before and vertex.index == 1 and vertex.attribute == "bee"
+    )
+    MINI_CHECK(vertex.attributes.get("load") == 2.0)
+    MINI_CHECK(len(edges) == 2 and all(e.v0 == "b" or e.v1 == "b" for e in edges))
+    MINI_CHECK(any(e.attributes.get("weight") == 3.0 for e in edges))
+    MINI_CHECK(
+        not g.has_node("b")
+        and not g.has_edge(("a", "b"))
+        and not g.has_edge(("c", "b"))
+    )
+    MINI_CHECK(g.vertex_count == 3 and g.edge_count == 2 and g.edges == {})
+    MINI_CHECK(g.get_vertices()[0].index == 0 and g.get_vertices()[1].index == 2)
+    MINI_CHECK(str(g) == "<Graph with 2 vertices, 0 edges: g>")
+    MINI_CHECK(g.take_node("b") is None)
+
+
+@MINI_TEST("Graph", "Put Node")
+def test_graph_put_node():
+    from session_py import Graph
+
+    g = Graph("g")
+    g.add_edge("a", "b", "ab")
+    g.add_edge("b", "c", "bc")
+    g.set_vertex_attribute("b", "load", 2.0)
+    g.set_edge_attribute(("b", "c"), "weight", 3.0)
+    before = g.file_json_dumps()
+    vertex, edges = g.take_node("b")
+    g.put_node(vertex, edges)
+    after = g.file_json_dumps()
+    ab = g.edges["a"]["b"].guid
+    vertex, edges = g.take_node("b")
+    g.remove_node("c")
+    g.add_edge("b", "d", "bd")
+    guid = vertex.guid
+    g.put_node(vertex, edges)
+
+    MINI_CHECK(before == after)
+    MINI_CHECK(g.edges["a"]["b"].guid == ab and g.edges["b"]["a"].guid == ab)
+    MINI_CHECK(not g.has_edge(("b", "c")) and g.has_edge(("b", "d")))
+    MINI_CHECK(
+        g.get_vertices()[1].guid == guid and g.vertex_attribute("b", "load") == 2.0
+    )
+    MINI_CHECK(g.number_of_edges() == 2)
+
+
+@MINI_TEST("Graph", "Renumber")
+def test_graph_renumber():
+    from session_py import Graph
+
+    g = Graph("g")
+    g.add_edge("a", "b", "")
+    g.add_edge("a", "c", "")
+    g.add_edge("b", "d", "")
+    g.add_edge("c", "e", "")
+    g.add_edge("d", "e", "")
+    g.add_edge("a", "e", "")
+    g.take_node("b")
+    g.take_node("d")
+    g.renumber()
+    indices = [v.index for v in g.get_vertices()]
+
+    MINI_CHECK(indices == [0, 1, 2])
+    MINI_CHECK(g.edges["a"]["c"].index == 0 and g.edges["e"]["c"].index == 1)
+    MINI_CHECK(g.edges["a"]["e"].index == 2 and g.edges["e"]["a"].index == 2)
+    MINI_CHECK(g.vertex_count == g.number_of_vertices() and g.vertex_count == 3)
+    MINI_CHECK(g.edge_count == g.number_of_edges() and g.edge_count == 3)
+
+
 if __name__ == "__main__":
     run_all(language="python")

@@ -179,6 +179,112 @@ def test_treenode_traverse():
     MINI_CHECK(len(bfs) == 3 and bfs[0].name == "root")
 
 
+@MINI_TEST("TreeNode", "Set Dead")
+def test_treenode_set_dead():
+    from session_py import TreeNode
+
+    p = TreeNode("p")
+    a = TreeNode("a")
+    b = TreeNode("b")
+    c = TreeNode("c")
+    d = TreeNode("d")
+    p.add(a)
+    p.add(b)
+    p.add(c)
+    b.add(d)
+    b.set_dead(True)
+    kids = p.children
+    ancestors = d.ancestors
+
+    MINI_CHECK(len(kids) == 2 and kids[0] is a and kids[1] is c)
+    MINI_CHECK(b.is_dead() and b.parent is None)
+    MINI_CHECK(b.children[0] is d)
+    MINI_CHECK(d.parent is b)
+    MINI_CHECK(len(ancestors) == 1 and ancestors[0] is b)
+    MINI_CHECK(not p.is_leaf)
+
+    a.set_dead(True)
+    c.set_dead(True)
+
+    MINI_CHECK(p.is_leaf)
+
+    a.set_dead(False)
+    b.set_dead(False)
+    c.set_dead(False)
+    kids = p.children
+
+    MINI_CHECK(len(kids) == 3 and kids[1] is b)
+    MINI_CHECK(b.parent is p)
+
+
+@MINI_TEST("TreeNode", "Compact")
+def test_treenode_compact():
+    from session_py import TreeNode
+    from session_py.history import Tomb
+    import sys
+
+    p = TreeNode("p")
+    kids = []
+
+    for i in range(6):
+        kids.append(TreeNode(f"c{i}"))
+        p.add(kids[i])
+
+    tomb = Tomb("", False, 0, kids[3])
+    kids[1].set_dead(True)
+    kids[3].set_dead(True)
+    kids[4].set_dead(True)
+    kids[3].set_tomb(tomb)
+    before = p.children
+    p.compact()
+    after = p.children
+    raw = p.compact_step(sys.maxsize)
+    q = TreeNode("q")
+    q.add(kids[5])
+    moved = p.children
+
+    MINI_CHECK(raw == 4 and not p.is_compacting())
+    MINI_CHECK(len(after) == 3 and all(x is y for x, y in zip(after, before)))
+    MINI_CHECK(kids[3].is_dead() and kids[3].get_tomb() is tomb)
+    MINI_CHECK(kids[1].get_tomb() is None)
+    MINI_CHECK(len(moved) == 2 and moved[0] is kids[0] and moved[1] is kids[2])
+
+
+@MINI_TEST("TreeNode", "Add Moves")
+def test_treenode_add_moves():
+    from session_py import Tree
+    from session_py import TreeNode
+
+    tree = Tree("t")
+    root = TreeNode("root")
+    p1 = TreeNode("p1")
+    p2 = TreeNode("p2")
+    w = TreeNode("w")
+    x = TreeNode("x")
+    z = TreeNode("z")
+    y = TreeNode("y")
+    tree.add(root)
+    tree.add(p1, root)
+    tree.add(p2, root)
+    tree.add(w, p1)
+    tree.add(x, p1)
+    tree.add(z, p1)
+    tree.add(y, x)
+    count = len(tree.nodes)
+    ghost = p2.add(x)
+    again = p2.add(x)
+    old = p1.children
+    new = p2.children
+
+    MINI_CHECK(ghost.is_dead() and ghost.name == "")
+    MINI_CHECK(len(old) == 2 and old[0] is w and old[1] is z)
+    MINI_CHECK(new[-1] is x)
+    MINI_CHECK(x.parent is p2)
+    MINI_CHECK(y.parent is x)
+    MINI_CHECK(len(tree.nodes) == count)
+    MINI_CHECK(again is None and len(new) == 1)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Tree
 # ═══════════════════════════════════════════════════════════════════════════
@@ -420,6 +526,57 @@ def test_tree_get_children_guids():
     MINI_CHECK(len(guids) == 2)
     MINI_CHECK(guids[0] == a.guid)
     MINI_CHECK(guids[1] == b.guid)
+
+
+@MINI_TEST("Tree", "Dead Nodes")
+def test_tree_dead_nodes():
+    from session_py import Tree
+    from session_py import TreeNode
+
+    tree = Tree("t")
+    root = TreeNode("root")
+    g = TreeNode("group")
+    a = TreeNode("alpha")
+    b = TreeNode("beta")
+    c = TreeNode("gamma")
+    d = TreeNode("delta")
+    tree.add(root)
+    tree.add(g, root)
+    tree.add(a, g)
+    tree.add(b, g)
+    tree.add(c, b)
+    tree.add(d, g)
+    b.set_dead(True)
+    b_guid = b.guid
+    c_guid = c.guid
+    g_guid = g.guid
+
+    def names(nodes):
+        return [n.name for n in nodes]
+
+    json = tree.file_json_dumps()
+    from_json = Tree.file_json_loads(json)
+    from_pb = Tree.pb_loads(tree.pb_dumps())
+    expected = ["root", "group", "alpha", "delta"]
+
+    MINI_CHECK(names(tree.nodes) == expected)
+    MINI_CHECK(names(tree.leaves) == ["alpha", "delta"])
+    MINI_CHECK(
+        tree.get_node_by_name("beta") is None and tree.get_nodes_by_name("gamma") == []
+    )
+    MINI_CHECK(
+        tree.find_node_by_guid(b_guid) is None
+        and tree.find_node_by_guid(c_guid) is None
+    )
+    MINI_CHECK(len(tree.get_children_guids(g_guid)) == 2)
+    MINI_CHECK(names(tree.traverse("depthfirst", "preorder")) == expected)
+    MINI_CHECK(names(tree.traverse("breadthfirst", "preorder")) == expected)
+    MINI_CHECK("beta" not in str(tree) and "gamma" not in str(tree))
+    MINI_CHECK(
+        repr(tree) == "Tree(t, 4 nodes)" and str(g) == "TreeNode(group, 2 children)"
+    )
+    MINI_CHECK("beta" not in json and "gamma" not in json)
+    MINI_CHECK(names(from_json.nodes) == expected and names(from_pb.nodes) == expected)
 
 
 if __name__ == "__main__":

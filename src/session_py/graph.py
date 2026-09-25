@@ -318,6 +318,48 @@ class Graph:
         del self.edges[v][u]
         self._reassign_edge_indices()
 
+    def take_node(self, key: str) -> tuple[Vertex, list[Edge]] | None:
+        """Take a node and its incident edges out without renumbering, each edge once as stored under edges[v0][v1], dropping emptied neighbour maps; O(d)."""
+
+        vertex = self.vertices.pop(key, None)
+
+        if vertex is None:
+            return None
+
+        edges = []
+
+        for other, edge in self.edges.pop(key, {}).items():
+            neighbours = self.edges.get(other, {})
+            twin = neighbours.pop(key, None)
+
+            if not neighbours:
+                self.edges.pop(other, None)
+
+            edges.append(edge if edge.v0 == key or twin is None else twin)
+
+        return (vertex, edges)
+
+    def put_node(self, vertex: Vertex, edges: list[Edge]) -> None:
+        """Put back a taken node, adopting a bare vertex add_edge made meanwhile; an edge whose other end is gone, or taken by a newer edge, is skipped; O(d)."""
+
+        key = vertex.name
+        self.vertices[key] = vertex
+
+        for edge in edges:
+            other = edge.other_vertex(key)
+
+            if not self.has_node(other) or self.has_edge((key, other)):
+                continue
+
+            self.edges.setdefault(other, {})[key] = edge
+            self.edges.setdefault(key, {})[other] = edge
+
+    def renumber(self) -> None:
+        """Make vertex and edge indices dense 0..n in their old order."""
+
+        self._reassign_indices()
+        self._reassign_edge_indices()
+
     def _reassign_indices(self) -> None:
         """Renumber vertex indices 0, 1, 2, ... keeping their relative order."""
 
@@ -1015,11 +1057,9 @@ class Graph:
     # String
     # ═══════════════════════════════════════════════════════════════════════════
     def __str__(self) -> str:
-        """Return "<Graph with V vertices, E edges: name>"."""
-        return f"<Graph with {self.vertex_count} vertices, {self.edge_count} edges: {self.name}>"
+        """Return "<Graph with V vertices, E edges: name>", live counts."""
+        return f"<Graph with {self.number_of_vertices()} vertices, {self.number_of_edges()} edges: {self.name}>"
 
     def __repr__(self) -> str:
-        """Return "Graph(guid, name, vertex_count, edge_count)"."""
-        return (
-            f"Graph({self.guid}, {self.name}, {self.vertex_count}, {self.edge_count})"
-        )
+        """Return "Graph(guid, name, V, E)", live counts."""
+        return f"Graph({self.guid}, {self.name}, {self.number_of_vertices()}, {self.number_of_edges()})"
