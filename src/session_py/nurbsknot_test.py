@@ -32,8 +32,8 @@ def test_domain_tolerance():
     )
 
 
-@MINI_TEST("NurbsKnot", "Make Clamped Uniform")
-def test_make_clamped_uniform():
+@MINI_TEST("NurbsKnot", "Compute Clamped Uniform")
+def test_compute_clamped_uniform():
     from session_py import nurbsknot
 
     order = 4
@@ -48,8 +48,8 @@ def test_make_clamped_uniform():
     MINI_CHECK(len(nurbsknot.compute_clamped_uniform(sys.maxsize, sys.maxsize)) == 0)
 
 
-@MINI_TEST("NurbsKnot", "Make Periodic Uniform")
-def test_make_periodic_uniform():
+@MINI_TEST("NurbsKnot", "Compute Periodic Uniform")
+def test_compute_periodic_uniform():
     from session_py import nurbsknot
 
     order = 4

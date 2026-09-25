@@ -16,6 +16,8 @@ from .vector import Vector
 from .plane import Plane
 from .line import Line
 from .instance_ref import InstanceRef
+from .interaction import Interaction
+from .interaction import InteractionUnknown
 from .polyline import Polyline
 from .xform import Xform
 from .quaternion import Quaternion
@@ -80,6 +82,8 @@ __all__ = [
     "Plane",
     "Line",
     "InstanceRef",
+    "Interaction",
+    "InteractionUnknown",
     "Polyline",
     "Xform",
     "Quaternion",

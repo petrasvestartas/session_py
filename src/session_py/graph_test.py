@@ -267,6 +267,7 @@ def test_graph_add_edge():
     MINI_CHECK(g.number_of_edges() == 1)
     MINI_CHECK(g.edge_count == 1)
     MINI_CHECK(g.edge_label("a", "b") == "updated")
+    MINI_CHECK(g.edges["a"]["b"].guid == g.edges["b"]["a"].guid)
 
 
 @MINI_TEST("Graph", "Remove Node")

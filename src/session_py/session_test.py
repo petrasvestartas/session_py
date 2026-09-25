@@ -389,10 +389,34 @@ def test_session_add_relationship():
     MINI_CHECK(session.graph.has_edge((p1.guid, p2.guid)))
 
 
+def _named_interaction_class():
+    """A test-only subclass: a named interaction with no state of its own."""
+
+    from session_py import Interaction
+
+    class NamedInteraction(Interaction):
+        def interaction_type_name(self):
+            """Return the registered type name."""
+            return "NamedInteraction"
+
+        def interaction_data_dumps(self):
+            """Return no state."""
+            return b""
+
+    return NamedInteraction
+
+
+def _named_interaction(data):
+    """Build a NamedInteraction from its data."""
+    return _named_interaction_class()()
+
+
 @MINI_TEST("Session", "Add Interaction")
 def test_session_add_interaction():
     from session_py import Session
     from session_py import Element
+
+    NamedInteraction = _named_interaction_class()
 
     session = Session()
     a = Element(name="a")
@@ -401,12 +425,14 @@ def test_session_add_interaction():
     session.add_element(a)
     session.add_element(b)
     session.add_edge(a.guid, b.guid, "authored")
-    ends = session.add_interaction(a.guid, b.guid)
+    glue = session.add_interaction(a, b, NamedInteraction("glue"))
     id = session.graph.edges[a.guid][b.guid].guid
-    reversed = session.add_interaction(b.guid, a.guid)
+    screw = session.add_interaction(b, a, NamedInteraction("screw"))
 
-    MINI_CHECK(ends == reversed)
-    MINI_CHECK(ends[0] == a.guid)
+    MINI_CHECK(len(session.interactions) == 1)
+    MINI_CHECK(len(session.interactions[id]) == 2)
+    MINI_CHECK(session.interactions[id][0].guid == glue.guid)
+    MINI_CHECK(session.interactions[id][1].guid == screw.guid)
     MINI_CHECK(session.graph.number_of_edges() == 1)
     MINI_CHECK(session.graph.edges[b.guid][a.guid].guid == id)
     MINI_CHECK(session.graph.edges[a.guid][b.guid].attribute == "authored")
@@ -415,12 +441,12 @@ def test_session_add_interaction():
     self_rejected = False
 
     try:
-        session.add_interaction(a.guid, absent.guid)
+        session.add_interaction(a, absent, NamedInteraction())
     except ValueError:
         missing_rejected = True
 
     try:
-        session.add_interaction(a.guid, a.guid)
+        session.add_interaction(a, a, NamedInteraction())
     except ValueError:
         self_rejected = True
 
@@ -429,31 +455,15 @@ def test_session_add_interaction():
     MINI_CHECK(session.graph.number_of_edges() == 1)
 
 
-@MINI_TEST("Session", "Has Interaction")
-def test_session_has_interaction():
+@MINI_TEST("Session", "Get Interaction")
+def test_session_get_interaction():
+    import copy
     from session_py import Session
     from session_py import Element
+    from session_py import Interaction
 
-    session = Session()
-    a = Element(name="a")
-    b = Element(name="b")
-    session.add_element(a)
-    session.add_element(b)
-    before = session.has_interaction(a.guid, b.guid)
-    session.add_interaction(a.guid, b.guid)
-    loaded = Session.pb_loads(session.pb_dumps())
-
-    MINI_CHECK(not before)
-    MINI_CHECK(session.has_interaction(a.guid, b.guid))
-    MINI_CHECK(session.has_interaction(b.guid, a.guid))
-    MINI_CHECK(not session.has_interaction(a.guid, "missing"))
-    MINI_CHECK(loaded.has_interaction(b.guid, a.guid))
-
-
-@MINI_TEST("Session", "Remove Interaction")
-def test_session_remove_interaction():
-    from session_py import Session
-    from session_py import Element
+    NamedInteraction = _named_interaction_class()
+    Interaction.register_type("NamedInteraction", _named_interaction)
 
     session = Session()
     a = Element(name="a")
@@ -462,15 +472,110 @@ def test_session_remove_interaction():
     session.add_element(a)
     session.add_element(b)
     session.add_element(c)
-    session.add_interaction(a.guid, b.guid)
-    session.add_interaction(a.guid, c.guid)
-    session.remove_interaction(b.guid, a.guid)
-    session.remove_interaction(b.guid, a.guid)
+    session.add_edge(a.guid, c.guid, "authored")
+    before = session.get_interaction(a, b)
+    bare = session.get_interaction(a, c)
+    glue = session.add_interaction(a, b, NamedInteraction("glue"))
+    id = session.graph.edges[a.guid][b.guid].guid
+    duplicate = copy.deepcopy(session)
+    duplicate.interactions[id][0].name = "screw"
+    loaded_b = Session.pb_loads(session.pb_dumps())
+    loaded_j = Session.file_json_loads(session.file_json_dumps())
 
-    MINI_CHECK(not session.has_interaction(a.guid, b.guid))
-    MINI_CHECK(session.has_interaction(a.guid, c.guid))
+    MINI_CHECK(len(before) == 0)
+    MINI_CHECK(len(bare) == 0)
+    MINI_CHECK(session.get_interaction(a, b)[0].guid == glue.guid)
+    MINI_CHECK(session.get_interaction(b, a)[0].guid == glue.guid)
+    MINI_CHECK(session.get_interaction(a, b)[0].name == "glue")
+    MINI_CHECK(duplicate.get_interaction(b, a)[0].name == "screw")
+    MINI_CHECK(duplicate.get_interaction(b, a)[0].guid == glue.guid)
+    MINI_CHECK(loaded_b.get_interaction(b, a)[0] == glue)
+    MINI_CHECK(loaded_b.get_interaction(b, a)[0].guid == glue.guid)
+    MINI_CHECK(loaded_j.get_interaction(b, a)[0] == glue)
+
+
+@MINI_TEST("Session", "Has Interaction")
+def test_session_has_interaction():
+    from session_py import Session
+    from session_py import Element
+    from session_py import Interaction
+
+    NamedInteraction = _named_interaction_class()
+    Interaction.register_type("NamedInteraction", _named_interaction)
+
+    session = Session()
+    a = Element(name="a")
+    b = Element(name="b")
+    absent = Element(name="absent")
+    session.add_element(a)
+    session.add_element(b)
+    before = session.has_interaction(a, b)
+    session.add_interaction(a, b, NamedInteraction())
+    loaded = Session.pb_loads(session.pb_dumps())
+
+    MINI_CHECK(not before)
+    MINI_CHECK(session.has_interaction(a, b))
+    MINI_CHECK(session.has_interaction(b, a))
+    MINI_CHECK(not session.has_interaction(a, absent))
+    MINI_CHECK(loaded.has_interaction(b, a))
+
+
+@MINI_TEST("Session", "Remove Interaction")
+def test_session_remove_interaction():
+    from session_py import Session
+    from session_py import Element
+
+    NamedInteraction = _named_interaction_class()
+
+    session = Session()
+    a = Element(name="a")
+    b = Element(name="b")
+    c = Element(name="c")
+    session.add_element(a)
+    session.add_element(b)
+    session.add_element(c)
+    session.add_interaction(a, b, NamedInteraction("glue"))
+    session.add_interaction(a, c, NamedInteraction())
+    session.remove_interaction(b, a)
+    session.remove_interaction(b, a)
+
+    MINI_CHECK(not session.has_interaction(a, b))
+    MINI_CHECK(session.has_interaction(a, c))
+    MINI_CHECK(len(session.get_interaction(a, b)) == 0)
+    MINI_CHECK(len(session.interactions) == 1)
     MINI_CHECK(session.graph.number_of_edges() == 1)
     MINI_CHECK(session.graph.has_node(b.guid))
+
+
+@MINI_TEST("Session", "Undo Remove Interaction")
+def test_session_undo_remove_interaction():
+    from session_py import Session
+    from session_py import Element
+
+    NamedInteraction = _named_interaction_class()
+
+    session = Session()
+    a = Element(name="a")
+    b = Element(name="b")
+    session.add_element(a)
+    session.add_element(b)
+    glue = session.add_interaction(a, b, NamedInteraction("glue"))
+    id = session.graph.edges[a.guid][b.guid].guid
+
+    session.begin("remove")
+    session.remove_object(b.guid)
+    session.commit()
+    dropped = id not in session.interactions
+    session.undo()
+
+    MINI_CHECK(dropped)
+    MINI_CHECK(len(session.get_interaction(a, b)) == 1)
+    MINI_CHECK(session.get_interaction(a, b)[0].guid == glue.guid)
+    MINI_CHECK(session.get_interaction(a, b)[0].name == "glue")
+
+    session.redo()
+
+    MINI_CHECK(id not in session.interactions)
 
 
 @MINI_TEST("Session", "Get Neighbours")

@@ -72,6 +72,7 @@ class Tombstone:
         self.node = node  # Detached tree node with its subtree, None for an add.
         self.attribute = attribute  # Its graph node attribute.
         self.edges = edges  # Incident edges as (other guid, attribute, forward, edge guid or "").
+        self.interactions = {}  # Those edges' interactions by edge guid.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""

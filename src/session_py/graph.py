@@ -287,6 +287,7 @@ class Graph:
 
         edge = Edge(u, v, attribute)
         edge.index = self.edge_count
+        edge.guid = str(uuid.uuid4())
 
         self.edges.setdefault(u, {})[v] = edge
         self.edges.setdefault(v, {})[u] = edge

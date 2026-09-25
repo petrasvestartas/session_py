@@ -20,6 +20,7 @@ from .nurbssurface import NurbsSurface
 from .brep import BRep
 from .element import Element
 from .instance_ref import InstanceRef
+from .interaction import Interaction
 from .tree import Tree
 from .tree import TreeNode
 from .graph import Graph
@@ -348,6 +349,7 @@ class Session:
         self.definitions = Objects()  # Shared geometry instances place, each in its own frame; never in order(), the tree, the graph or xforms.
         self.definition_lookup: dict[str, Any] = {}  # Definitions by guid.
         self.instance_lookup: dict[str, InstanceRef] = {}  # Instances by guid.
+        self.interactions: dict = {}  # Interactions per graph edge, by the edge's guid; a subclass keeps its type.
         self.history = History()  # Undo/redo buffer, purged by every save.
         self.bvh = SpatialBVH()  # Bounding volume hierarchy for collision detection.
         self.cached_ray_bvh = SpatialBVH()  # Cached SpatialBVH for ray casting.
@@ -370,6 +372,11 @@ class Session:
         result.graph = copy.deepcopy(self.graph, memo)
         result.xforms = copy.deepcopy(self.xforms, memo)
         result.definitions = _clone_objects(self.definitions)
+
+        for edge, interactions in self.interactions.items():
+            for interaction in interactions:
+                result.interactions.setdefault(edge, []).append(interaction.clone())
+
         result._index_objects()
         memo[id(self)] = result
 
@@ -794,34 +801,6 @@ class Session:
         """Add an edge between two geometry objects in the graph."""
         self.graph.add_edge(guid1, guid2, attribute)
 
-    def add_interaction(self, a: str, b: str) -> tuple[str, str]:
-        """Add or reuse an undirected interaction edge between registered objects; returns its stored endpoint order. Raises ValueError for missing objects or a self-pair. Preserves an existing edge's attributes and guid."""
-
-        if a == b or not _registered(self, a) or not _registered(self, b):
-            raise ValueError(
-                "Session.add_interaction: add two distinct objects to the session first"
-            )
-
-        if not self.has_interaction(a, b):
-            self.graph.add_edge(a, b)
-
-        edge = self.graph.edges[a][b]
-        self.graph.edges[b][a].guid = edge.guid
-
-        return edge.v0, edge.v1
-
-    def has_interaction(self, a: str, b: str) -> bool:
-        """True when the pair has an interaction edge in either order."""
-        return self.graph.has_edge((a, b)) or self.graph.has_edge((b, a))
-
-    def remove_interaction(self, a: str, b: str) -> None:
-        """Remove the pair's edge in either order; a missing pair is a no-op."""
-
-        if self.graph.has_edge((a, b)):
-            self.graph.remove_edge((a, b))
-        elif self.graph.has_edge((b, a)):
-            self.graph.remove_edge((b, a))
-
     def add_hierarchy(self, parent_guid: str, child_guid: str) -> bool:
         """Add a parent-child relationship in the tree."""
         return self.tree.add_child_by_guid(parent_guid, child_guid)
@@ -922,6 +901,7 @@ class Session:
             f"instance_{instance.name}",
             removed.edges,
         )
+        added.interactions = removed.interactions
 
         self.history.record(removed)
         self.history.record(added)
@@ -958,6 +938,7 @@ class Session:
             f"{prefix}_{instance.name}",
             removed.edges,
         )
+        added.interactions = removed.interactions
 
         self.history.record(removed)
         self.history.record(added)
@@ -996,6 +977,58 @@ class Session:
         self.bvh_cache_dirty = True
 
         return True
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Session - Interactions
+    # ═══════════════════════════════════════════════════════════════════════════
+    def add_interaction(
+        self, a: Element, b: Element, interaction: Interaction
+    ) -> Interaction:
+        """Make or reuse the pair's undirected edge, an existing edge keeping its attributes, and append interaction to its list; returns the stored interaction. Raises ValueError unless both elements are in the session and distinct."""
+
+        first = a.guid
+        second = b.guid
+
+        if (
+            first == second
+            or not _registered(self, first)
+            or not _registered(self, second)
+        ):
+            raise ValueError(
+                "Session.add_interaction: add two distinct elements to the session first"
+            )
+
+        if not self.graph.has_edge((first, second)):
+            self.graph.add_edge(first, second)
+
+        id = self.graph.edges[first][second].guid
+        self.interactions.setdefault(id, []).append(interaction)
+
+        return interaction
+
+    def get_interaction(self, a: Element, b: Element) -> list[Interaction]:
+        """The pair's interactions in either order, empty when there are none."""
+
+        if not self.graph.has_edge((a.guid, b.guid)):
+            return []
+
+        id = self.graph.edges[a.guid][b.guid].guid
+
+        return list(self.interactions.get(id, []))
+
+    def has_interaction(self, a: Element, b: Element) -> bool:
+        """True when the pair has an edge in either order."""
+        return self.graph.has_edge((a.guid, b.guid))
+
+    def remove_interaction(self, a: Element, b: Element) -> None:
+        """Remove the pair's edge and all of its interactions in either order; a missing pair is a no-op."""
+
+        if not self.graph.has_edge((a.guid, b.guid)):
+            return
+
+        id = self.graph.edges[a.guid][b.guid].guid
+        self.interactions.pop(id, None)
+        self.graph.remove_edge((a.guid, b.guid))
 
     # ═══════════════════════════════════════════════════════════════════════════
     # History
@@ -1129,6 +1162,16 @@ class Session:
         for obj_guid, obj_xform in self._xforms_ordered():
             xforms.append({"guid": obj_guid, "xform": obj_xform.__jsondump__()})
 
+        interactions = []
+
+        for edge in sorted(self.interactions):
+            items = []
+
+            for interaction in self.interactions[edge]:
+                items.append(interaction.__jsondump__())
+
+            interactions.append({"guid": edge, "interactions": items})
+
         data = {}
 
         if self.definition_lookup:
@@ -1136,6 +1179,7 @@ class Session:
 
         data["graph"] = self.graph.__jsondump__()
         data["guid"] = self.guid
+        data["interactions"] = interactions
         data["name"] = self.name
         data["objects"] = self.objects.__jsondump__()
         data["tree"] = self.tree.__jsondump__()
@@ -1169,6 +1213,12 @@ class Session:
 
         for entry in data.get("xforms", []):
             session.xforms[entry["guid"]] = Xform.__jsonload__(entry["xform"])
+
+        for entry in data.get("interactions", []):
+            for item in entry["interactions"]:
+                session.interactions.setdefault(entry["guid"], []).append(
+                    Interaction.__jsonload__(item)
+                )
 
         session._index_objects()
 
@@ -1227,6 +1277,13 @@ class Session:
         if self.definition_lookup:
             proto.definitions.CopyFrom(self.definitions.to_proto())
 
+        for edge in sorted(self.interactions):
+            item = proto.interactions.add()
+            item.guid = edge
+
+            for interaction in self.interactions[edge]:
+                item.interactions.add().CopyFrom(interaction.to_proto())
+
         return proto
 
     @classmethod
@@ -1252,6 +1309,12 @@ class Session:
 
         for entry in proto.xforms:
             session.xforms[entry.guid] = Xform.from_proto(entry.xform)
+
+        for entry in proto.interactions:
+            for item in entry.interactions:
+                session.interactions.setdefault(entry.guid, []).append(
+                    Interaction.from_proto(item)
+                )
 
         session._index_objects()
 
@@ -1407,7 +1470,7 @@ class Session:
 
             self.graph.remove_node(guid)
 
-        return RemoveOp(
+        op = RemoveOp(
             guid,
             clone(obj),
             collection,
@@ -1419,6 +1482,14 @@ class Session:
             attribute,
             edges,
         )
+
+        for edge in edges:
+            if edge[3] not in self.interactions:
+                continue
+
+            op.interactions[edge[3]] = self.interactions.pop(edge[3])
+
+        return op
 
     def _attach(self, op: Tombstone) -> None:
         """Put an object back from its tombstone, unrecorded: typed list, lookup, xform, tree node with its subtree, graph node and edges."""
@@ -1469,6 +1540,12 @@ class Session:
 
             self.graph.edges[op.guid][other].guid = id
             self.graph.edges[other][op.guid].guid = id
+
+            if id not in op.interactions:
+                continue
+
+            for interaction in op.interactions[id]:
+                self.interactions.setdefault(id, []).append(interaction.clone())
 
     def _swap(self, guid: str, obj: Any) -> None:
         """Store obj under guid in its typed list and lookup, unrecorded."""
