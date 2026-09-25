@@ -39,6 +39,7 @@ def test_session_copy():
 
     MINI_CHECK(copy.name == session.name)
     MINI_CHECK(copy.guid == guid)
+    MINI_CHECK(copy.history.depth() == 0)
     MINI_CHECK(len(copy.objects.points) == 1)
     MINI_CHECK(len(copy.objects.elements) == 1)
     MINI_CHECK(len(copy.lookup) == len(session.lookup))
@@ -569,6 +570,7 @@ def test_session_undo_remove_interaction():
     session.undo()
 
     MINI_CHECK(dropped)
+    MINI_CHECK(session.graph.edges[a.guid][b.guid].guid == id)
     MINI_CHECK(len(session.get_interaction(a, b)) == 1)
     MINI_CHECK(session.get_interaction(a, b)[0].guid == glue.guid)
     MINI_CHECK(session.get_interaction(a, b)[0].name == "glue")
@@ -701,7 +703,11 @@ def test_session_remove_object():
     MINI_CHECK(point.guid not in session.lookup)
     MINI_CHECK(eremoved)
     MINI_CHECK(len(session.objects.elements) == 0)
+    MINI_CHECK(session.objects.elements.number_of_slots() == 1)
+    MINI_CHECK(session.objects.points.number_of_dead() == 1)
+    MINI_CHECK(not session.graph.has_node(eguid))
     MINI_CHECK(eguid not in loaded.lookup)
+    MINI_CHECK(loaded.objects.points.number_of_slots() == 0)
 
 
 @MINI_TEST("Session", "Get Geometry")
@@ -1092,6 +1098,8 @@ def test_session_document_workflow():
     MINI_CHECK(TOLERANCE.is_close(loaded.lookup[b_guid][0], 20.0))
     MINI_CHECK(loaded.xform(a_guid) == shift)
     MINI_CHECK(loaded.history.depth() == 0)
+    MINI_CHECK(len(session.objects.points) == 2)
+    MINI_CHECK(session.objects.points.number_of_slots() == 3)
 
 
 @MINI_TEST("Session", "Undo Remove")
@@ -1114,6 +1122,7 @@ def test_session_undo_remove():
     session.add_edge(a_guid, b_guid, "connection")
     shift = Xform.translation(0.0, 5.0, 0.0)
     session.set_xform(b_guid, shift)
+    stored = session.objects.points[1]
 
     session.begin("remove")
     session.remove_object(b_guid)
@@ -1124,7 +1133,9 @@ def test_session_undo_remove():
     MINI_CHECK(gone)
     MINI_CHECK(b_guid in session.lookup)
     MINI_CHECK(session.objects.points[1].guid == b_guid)
+    MINI_CHECK(session.objects.points[1] is stored)
     MINI_CHECK(group.children[1].name == b_guid)
+    MINI_CHECK(group.children[1] is b_node)
     MINI_CHECK(group.children[1].children[0].name == c_guid)
     MINI_CHECK(session.graph.has_edge((a_guid, b_guid)))
     MINI_CHECK(session.graph.edge_label(a_guid, b_guid) == "connection")
@@ -1160,6 +1171,7 @@ def test_session_undo_add():
     MINI_CHECK(gone)
     MINI_CHECK(guid in session.lookup)
     MINI_CHECK(session.objects.points[1].guid == guid)
+    MINI_CHECK(session.objects.points.number_of_slots() == 2)
     MINI_CHECK(group.children[1].name == guid)
     MINI_CHECK(session.graph.has_node(guid))
     MINI_CHECK(TOLERANCE.is_close(session.lookup[guid][2], 3.0))
@@ -1188,6 +1200,7 @@ def test_session_undo_replace():
     MINI_CHECK(TOLERANCE.is_close(session.lookup[guid][0], 9.0))
     MINI_CHECK(session.objects.points[0].guid == guid)
     MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(session.objects.points.number_of_slots() == 1)
 
 
 @MINI_TEST("Session", "Undo Xform")
@@ -1217,6 +1230,7 @@ def test_session_undo_xform():
     MINI_CHECK(cleared)
     MINI_CHECK(session.xform(guid) == shift)
     MINI_CHECK(len(session.xforms) == 1)
+    MINI_CHECK(session.history.undo_stack[0].ops[0].kind == "xform")
 
 
 @MINI_TEST("Session", "History Purged On Save")
@@ -1267,6 +1281,8 @@ def test_session_history_capacity():
     MINI_CHECK(depth == 64)
     MINI_CHECK(not session.history.can_undo())
     MINI_CHECK(len(session.objects.points) == 6)
+    MINI_CHECK(session.objects.points.number_of_slots() == 70)
+    MINI_CHECK(session.history.dropped == 6)
     MINI_CHECK(TOLERANCE.is_close(session.objects.points[5][0], 5.0))
 
 
@@ -1494,6 +1510,7 @@ def test_session_remove_definition():
     MINI_CHECK(refused)
     MINI_CHECK(removed)
     MINI_CHECK(len(session.definitions.meshes) == 0)
+    MINI_CHECK(session.definitions.meshes.number_of_dead() == 1)
     MINI_CHECK(len(session.definition_lookup) == 0)
     MINI_CHECK(len(session.objects.instances) == 0)
     MINI_CHECK(not session.remove_definition("missing"))
@@ -1518,11 +1535,15 @@ def test_session_to_instance():
     session.set_xform(guid, Xform.translation(0.0, 0.0, 1.0))
 
     before = session.world_geometry(guid).vertex_point(0)
+    session.begin("to instance")
     converted = session.to_instance(guid, definition, Xform.translation(5.0, 0.0, 0.0))
+    session.commit()
     after = session.world_geometry(guid).vertex_point(0)
 
     MINI_CHECK(converted)
     MINI_CHECK(len(session.objects.meshes) == 0)
+    MINI_CHECK(session.objects.meshes.number_of_slots() == 1)
+    MINI_CHECK(session.history.can_undo())
     MINI_CHECK(session.instance_lookup[guid].name == "column")
     MINI_CHECK(session.instance_lookup[guid].definition_guid == definition)
     MINI_CHECK(group.children[1].name == guid)
@@ -1564,6 +1585,7 @@ def test_session_explode():
 
     MINI_CHECK(exploded)
     MINI_CHECK(len(session.objects.instances) == 0)
+    MINI_CHECK(session.objects.instances.number_of_dead() == 1)
     MINI_CHECK(element.name == "deck")
     MINI_CHECK(len(element.features) == 1)
     MINI_CHECK(element.features[0].guid == feature)
@@ -1617,6 +1639,8 @@ def test_session_undo_instance():
     MINI_CHECK(instanced)
     MINI_CHECK(gone)
     MINI_CHECK(session.objects.meshes[0].guid == guid)
+    MINI_CHECK(session.objects.meshes.number_of_slots() == 2)
+    MINI_CHECK(len(session.objects.instances) == 1)
     MINI_CHECK(session.graph.has_edge((point.guid, guid)))
     MINI_CHECK(session.graph.edges[guid][point.guid].guid == edge)
     MINI_CHECK(session.graph.node_label(guid) == label)
@@ -1779,12 +1803,562 @@ def test_session_get_node():
     session.reindex()
 
     MINI_CHECK(found is node)
-    MINI_CHECK(removed is None and orphaned is None)
+    MINI_CHECK(removed is None)
+    MINI_CHECK(orphaned is child)
     MINI_CHECK(restored is node)
     MINI_CHECK(reattached is child and indexed)
     MINI_CHECK(searched is swapped)
     MINI_CHECK(session.node_lookup[guid] is swapped)
     MINI_CHECK(session.get_node("missing") is None)
+
+
+@MINI_TEST("Session", "Remove Keeps Slot")
+def test_session_remove_keeps_slot():
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    g = session.add_group("g")
+    a = Point(1.0, 0.0, 0.0)
+    b = Point(2.0, 0.0, 0.0)
+    c = Point(3.0, 0.0, 0.0)
+    a_guid = a.guid
+    b_guid = b.guid
+    c_guid = c.guid
+    session.add_point(a, g)
+    b_node = session.add_point(b, g)
+    session.add_point(c, g)
+    session.set_xform(b_guid, Xform.translation(0.0, 1.0, 0.0))
+    stored = session.objects.points[1]
+
+    session.begin("remove")
+    session.remove_object(b_guid)
+    session.commit()
+    pinned = session.history.undo_stack[0].ops[0].tomb.node is b_node
+
+    MINI_CHECK(len(session.objects.points) == 2)
+    MINI_CHECK(session.objects.points.number_of_slots() == 3)
+    MINI_CHECK(session.objects.points.get_item(1) is stored)
+    MINI_CHECK(b_guid not in session.lookup)
+    MINI_CHECK(b_guid not in session.xforms)
+    MINI_CHECK(not session.graph.has_node(b_guid))
+    MINI_CHECK(session.get_node(b_guid) is None)
+    MINI_CHECK(pinned)
+
+    session.undo()
+    names = [n.name for n in g.children]
+
+    MINI_CHECK(session.objects.points.get_item(1) is stored)
+    MINI_CHECK(session.objects.points.get_slot(b_guid) == 1)
+    MINI_CHECK(session.order() == [a_guid, b_guid, c_guid])
+    MINI_CHECK(names == [a_guid, b_guid, c_guid])
+    MINI_CHECK(g.children[1] is b_node)
+    MINI_CHECK(b_node._at == 1)
+
+
+@MINI_TEST("Session", "Redo Add Keeps Node")
+def test_session_redo_add_keeps_node():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    a = Point(1.0, 0.0, 0.0)
+    a_guid = a.guid
+
+    session.begin("add")
+    node = session.add_point(a)
+    session.commit()
+    node_guid = node.guid
+    stored = session.objects.points[0]
+    session.undo()
+    gone = session.get_node(a_guid) is None and len(session.objects.points) == 0
+    session.redo()
+    found = session.get_node(a_guid)
+
+    MINI_CHECK(gone)
+    MINI_CHECK(found is node)
+    MINI_CHECK(node.guid == node_guid)
+    MINI_CHECK(session.objects.points[0] is stored)
+    MINI_CHECK(session.objects.points.get_slot(a_guid) == 0)
+    MINI_CHECK(len(session.tree.root.children) == 1)
+
+
+@MINI_TEST("Session", "Replace Shares Geometry")
+def test_session_replace_shares_geometry():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    a = Point(1.0, 0.0, 0.0)
+    a_guid = a.guid
+    session.add_point(a)
+    original = session.objects.points[0]
+    p2 = Point(9.0, 9.0, 9.0)
+    p2.guid = a_guid
+
+    session.begin("replace")
+    session.replace(a_guid, p2)
+    session.commit()
+    op = session.history.undo_stack[0].ops[0]
+    shared = op.kind == "replace" and op.before is original and op.after is p2
+    swapped = session.objects.points[0] is p2
+    session.undo()
+    restored = (
+        session.objects.points[0] is original
+        and session.objects.points.get_slot(a_guid) == 0
+    )
+    session.redo()
+
+    MINI_CHECK(shared)
+    MINI_CHECK(swapped)
+    MINI_CHECK(restored)
+    MINI_CHECK(session.objects.points[0] is p2)
+    MINI_CHECK(session.lookup[a_guid] is p2)
+
+
+@MINI_TEST("Session", "Replace Across Types")
+def test_session_replace_across_types():
+    from session_py import Line
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    a = Point(1.0, 0.0, 0.0)
+    a_guid = a.guid
+    node = session.add_point(a)
+    line = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    line.name = "edge"
+
+    session.begin("replace")
+    replaced = session.replace(a_guid, line)
+    session.commit()
+    label = session.graph.node_label(a_guid)
+    same_node = session.get_node(a_guid) is node
+    counts = (len(session.objects.points), len(session.objects.lines))
+    session.undo()
+    undone = (len(session.objects.points), len(session.objects.lines))
+    restored = session.graph.node_label(a_guid)
+    session.redo()
+
+    MINI_CHECK(replaced)
+    MINI_CHECK(counts == (0, 1))
+    MINI_CHECK(same_node)
+    MINI_CHECK(label == "line_edge")
+    MINI_CHECK(undone == (1, 0))
+    MINI_CHECK(restored == "point_my_point")
+    MINI_CHECK(len(session.objects.lines) == 1)
+    MINI_CHECK(len(session.objects.points) == 0)
+    MINI_CHECK(isinstance(session.lookup[a_guid], Line))
+    MINI_CHECK(session.get_node(a_guid) is node)
+
+
+@MINI_TEST("Session", "Undo Restores Graph")
+def test_session_undo_restores_graph():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(1.0, 0.0, 0.0)
+    c = Point(2.0, 0.0, 0.0)
+    a_guid = a.guid
+    b_guid = b.guid
+    c_guid = c.guid
+    session.add_point(a)
+    session.add_point(b)
+    session.add_point(c)
+    session.graph.set_vertex_attribute(a_guid, "mass", 2.0)
+    session.add_edge(a_guid, b_guid, "joint")
+    session.graph.set_edge_attribute((a_guid, b_guid), "load", 1.5)
+    session.add_edge(a_guid, c_guid, "contact")
+    session.add_edge(b_guid, c_guid, "contact")
+    before = session.graph.file_json_dumps()
+
+    session.begin("remove")
+    session.remove_object(a_guid)
+    session.commit()
+    taken = not session.graph.has_node(a_guid) and session.graph.number_of_edges() == 1
+    session.undo()
+    after = session.graph.file_json_dumps()
+    session.redo()
+
+    MINI_CHECK(taken)
+    MINI_CHECK(before == after)
+    MINI_CHECK(not session.graph.has_node(a_guid))
+    MINI_CHECK(session.graph.has_edge((b_guid, c_guid)))
+    MINI_CHECK(session.graph.number_of_vertices() == 2)
+
+    c_node = session.get_node(c_guid)
+    session.tree.remove(c_node)
+    session.remove_object(c_guid)
+
+    MINI_CHECK(not session.graph.has_node(c_guid))
+
+
+@MINI_TEST("Session", "Undo Restores Interactions")
+def test_session_undo_restores_interactions():
+    from session_py import Element
+    from session_py import Session
+
+    NamedInteraction = _named_interaction_class()
+
+    session = Session()
+    session.add_element(Element(name="a"))
+    session.add_element(Element(name="b"))
+    session.add_element(Element(name="c"))
+    a = session.objects.elements[0]
+    b = session.objects.elements[1]
+    c = session.objects.elements[2]
+    glue = session.add_interaction(a, b, NamedInteraction("glue")).guid
+    nail = session.add_interaction(a, c, NamedInteraction("nail")).guid
+    ab = session.graph.edges[a.guid][b.guid].guid
+    ac = session.graph.edges[a.guid][c.guid].guid
+
+    session.begin("remove")
+    session.remove_object(a.guid)
+    session.commit()
+    parked = len(session.interactions) == 0
+    session.undo()
+    session.redo()
+    session.undo()
+
+    MINI_CHECK(parked)
+    MINI_CHECK(len(session.interactions) == 2)
+    MINI_CHECK(session.graph.edges[a.guid][b.guid].guid == ab)
+    MINI_CHECK(session.graph.edges[a.guid][c.guid].guid == ac)
+    MINI_CHECK(session.get_interaction(a, b)[0].guid == glue)
+    MINI_CHECK(session.get_interaction(a, c)[0].guid == nail)
+    MINI_CHECK(session.get_interaction(a, c)[0].name == "nail")
+
+
+@MINI_TEST("Session", "Dead Guid Reused")
+def test_session_dead_guid_reused():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    x = Point(1.0, 0.0, 0.0)
+    x_guid = x.guid
+    session.add_point(x)
+    again = Point(9.0, 0.0, 0.0)
+    again.guid = x_guid
+
+    session.begin("reuse")
+    session.remove_object(x_guid)
+    session.add_point(again)
+    session.commit()
+    first = session.lookup[x_guid][0]
+    slots = (
+        session.objects.points.is_dead(0),
+        session.objects.points.get_slot(x_guid),
+    )
+    count = len(session.objects.points)
+    session.undo()
+    second = session.lookup[x_guid][0]
+    undone = (
+        session.objects.points.is_dead(1),
+        session.objects.points.get_slot(x_guid),
+    )
+    still = len(session.objects.points)
+    session.redo()
+
+    MINI_CHECK(TOLERANCE.is_close(first, 9.0))
+    MINI_CHECK(slots == (True, 1))
+    MINI_CHECK(count == 1)
+    MINI_CHECK(TOLERANCE.is_close(second, 1.0))
+    MINI_CHECK(undone == (True, 0))
+    MINI_CHECK(still == 1)
+    MINI_CHECK(session.objects.points.get_slot(x_guid) == 1)
+    MINI_CHECK(len(session.objects.points) == 1)
+
+
+@MINI_TEST("Session", "Remove Keeps Lookup Edit")
+def test_session_remove_keeps_lookup_edit():
+    from session_py import Point
+    from session_py import Session
+    import json
+
+    session = Session()
+    a = Point(1.0, 0.0, 0.0)
+    a_guid = a.guid
+    session.add_point(a)
+    edited = Point(7.0, 0.0, 0.0)
+    edited.guid = a_guid
+    session.lookup[a_guid] = edited
+
+    session.begin("remove")
+    session.remove_object(a_guid)
+    session.commit()
+    session.undo()
+    text = json.dumps(session.__jsondump__())
+
+    MINI_CHECK(TOLERANCE.is_close(session.lookup[a_guid][0], 7.0))
+    MINI_CHECK(TOLERANCE.is_close(session.objects.points[0][0], 7.0))
+    MINI_CHECK("7.0" in text)
+
+
+@MINI_TEST("Session", "Tree Ops")
+def test_session_tree_ops():
+    from session_py import Color
+    from session_py import Point
+    from session_py import Session
+    from session_py import TreeNode
+    from session_py import Xform
+
+    session = Session()
+    session.add_group("A")
+    root = session.tree.root
+    snapshots = [str(session.tree)]
+
+    session.begin("group")
+    node = session.add_group("L")
+    session.commit()
+    snapshots.append(str(session.tree))
+
+    session.begin("rename")
+    renamed = session.rename_node(node, "M")
+    session.commit()
+    snapshots.append(str(session.tree))
+
+    session.begin("colour")
+    coloured = session.set_node_color(node, Color(1.0, 0.0, 0.0, 1.0))
+    session.commit()
+    snapshots.append(str(session.tree))
+
+    session.begin("remove")
+    removed = session.remove_group(node)
+    session.commit()
+    dead = node.is_dead() and len(root.children) == 1
+    restored = []
+
+    for i in range(3, -1, -1):
+        session.undo()
+        restored.append(str(session.tree) == snapshots[i])
+
+    absent = node.is_dead() and session.tree.get_node_by_name("L") is None
+    redone = []
+
+    for i in range(1, 5):
+        session.redo()
+        redone.append(i == 4 or str(session.tree) == snapshots[i])
+
+    MINI_CHECK(renamed and coloured and removed)
+    MINI_CHECK(dead)
+    MINI_CHECK(restored == [True, True, True, True])
+    MINI_CHECK(absent)
+    MINI_CHECK(redone == [True, True, True, True])
+    MINI_CHECK(node.is_dead())
+    MINI_CHECK(node.name == "M")
+    MINI_CHECK(node._at == 1)
+    MINI_CHECK(node.color is not None)
+    MINI_CHECK(session.tree.root is root)
+    MINI_CHECK(session.history.undo_stack[3].ops[0].kind == "tree")
+
+    point = Point(0.0, 0.0, 0.0)
+    guid = point.guid
+    held = session.add_point(point)
+    session.tree.remove(held)
+    session.set_xform(guid, Xform.translation(1.0, 0.0, 0.0))
+    session.begin("adopt")
+    session.add(TreeNode(guid))
+    session.commit()
+    session.undo()
+
+    MINI_CHECK(session.get_node(guid) is None)
+    MINI_CHECK(guid in session.xforms)
+
+
+@MINI_TEST("Session", "Move Node")
+def test_session_move_node():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    g1 = session.add_group("g1")
+    g2 = session.add_group("g2")
+    session.add_point(Point(0.0, 0.0, 0.0), g1)
+    x = session.add_point(Point(1.0, 0.0, 0.0), g1)
+    y = session.add_point(Point(2.0, 0.0, 0.0), x)
+    count = len(session.tree.nodes)
+
+    session.begin("move")
+    session.add(x, g2)
+    session.commit()
+    queued = g1.is_queued()
+    moved = (
+        len(g1.children) == 1
+        and len(g2.children) > 0
+        and g2.children[-1] is x
+        and y.parent is x
+    )
+    walked = len(session.tree.nodes)
+    session.undo()
+    back = len(g1.children) > 1 and g1.children[1] is x and len(g2.children) == 0
+    text = str(session.tree)
+    session.redo()
+
+    MINI_CHECK(moved)
+    MINI_CHECK(queued)
+    MINI_CHECK(g2.is_queued())
+    MINI_CHECK(walked == count)
+    MINI_CHECK(back)
+    MINI_CHECK(len(session.tree.nodes) == count)
+    MINI_CHECK("TreeNode(, " not in text)
+    MINI_CHECK(len(g2.children) == 1)
+    MINI_CHECK(len(g1.children) == 1)
+    MINI_CHECK(x.parent is g2)
+
+
+@MINI_TEST("Session", "Deleted Parent Orphans Children")
+def test_session_deleted_parent_orphans_children():
+    from session_py import Element
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Session
+    from session_py import TreeNode
+    from session_py import Xform
+
+    session = Session()
+    element = Element(name="E")
+    e_guid = element.guid
+    e_node = session.add_element(element)
+    attributes = TreeNode("attributes")
+    session.add(attributes, e_node)
+    q = Polyline([Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0)])
+    q_guid = q.guid
+    q_node = session.add_polyline(q, attributes)
+    session.set_xform(e_guid, Xform.translation(1.0, 0.0, 0.0))
+    session.set_xform(q_guid, Xform.translation(0.0, 1.0, 0.0))
+    composed = session.world_xform(q_guid)
+
+    session.begin("remove")
+    session.remove_object(e_guid)
+    session.commit()
+    names = [n.name for n in session.tree.nodes]
+
+    MINI_CHECK(q_guid in session.lookup)
+    MINI_CHECK(session.get_node(q_guid) is q_node)
+    MINI_CHECK(q_node.parent is attributes)
+    MINI_CHECK(attributes.parent is e_node)
+    MINI_CHECK(e_node.parent is None)
+    MINI_CHECK(session.world_xform(q_guid) == session.xform(q_guid))
+    MINI_CHECK(q_guid in session.world_xforms())
+    MINI_CHECK(names == ["my_session"])
+
+    session.undo()
+
+    MINI_CHECK(session.world_xform(q_guid) == composed)
+    MINI_CHECK(len(session.tree.nodes) == 4)
+
+
+@MINI_TEST("Session", "Copy Drops Dead")
+def test_session_copy_drops_dead():
+    from session_py import Point
+    from session_py import Session
+    from copy import deepcopy
+
+    session = Session()
+    g = session.add_group("g")
+    a = Point(1.0, 0.0, 0.0)
+    b = Point(2.0, 0.0, 0.0)
+    b_guid = b.guid
+    session.add_point(a, g)
+    session.add_point(b, g)
+
+    session.begin("remove")
+    session.remove_object(b_guid)
+    session.commit()
+    copy = deepcopy(session)
+
+    MINI_CHECK(copy.objects.points.number_of_slots() == len(copy.objects.points))
+    MINI_CHECK(copy.objects.points.number_of_dead() == 0)
+    MINI_CHECK(len(copy.objects.points) == 1)
+    MINI_CHECK(copy.history.depth() == 0)
+    MINI_CHECK(copy.order() == session.order())
+    MINI_CHECK(str(copy.tree) == str(session.tree))
+    MINI_CHECK(copy.graph.number_of_vertices() == 1)
+    MINI_CHECK(session.undo())
+    MINI_CHECK(len(session.objects.points) == 2)
+    MINI_CHECK(len(copy.objects.points) == 1)
+
+
+@MINI_TEST("Session", "Live Views")
+def test_session_live_views():
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Session
+    from session_py import Vector
+    from session_py import Xform
+    import json
+
+    session = Session()
+    g = session.add_group("gone_group")
+    kept = session.add_group("kept")
+    definition = session.add_definition(create_box(Point(0.0, 0.0, 0.0), 2.0))
+    point = Point(0.0, 0.0, 0.0)
+    point_guid = point.guid
+    mesh = create_box(Point(5.0, 0.0, 0.0), 2.0)
+    mesh_guid = mesh.guid
+    instance = InstanceRef(definition, Xform.identity())
+    instance_guid = instance.guid
+    session.add_point(point, g)
+    session.add_mesh(mesh, g)
+    session.add_instance(instance, Xform.translation(10.0, 0.0, 0.0), g)
+    session.add_point(Point(20.0, 0.0, 0.0), kept)
+    session.set_xform(point_guid, Xform.translation(0.0, 1.0, 0.0))
+    session.set_xform(mesh_guid, Xform.translation(0.0, 1.0, 0.0))
+    session.set_xform("gone_group", Xform.translation(0.0, 0.0, 1.0))
+
+    session.begin("remove")
+    session.remove_object(point_guid)
+    session.remove_object(mesh_guid)
+    session.remove_object(instance_guid)
+    session.remove_group(g)
+    session.commit()
+    gone = [point_guid, mesh_guid, instance_guid, "gone_group"]
+    world = session.world_xforms()
+    groups = [n.name for n in session.tree.root.children]
+    geometry = session.get_geometry()
+    collisions = session.get_collisions()
+    hits = session.ray_cast(Point(5.0, 0.0, -10.0), Vector(0.0, 0.0, 1.0), 0.01)
+    text_json = json.dumps(session.__jsondump__())
+    text = str(session) + repr(session)
+
+    MINI_CHECK(all(guid not in gone for guid in session.order()))
+    MINI_CHECK(all(name not in world for name in gone))
+    MINI_CHECK(len(session.select_by_type(Point)) == 1)
+    MINI_CHECK(groups == ["kept"])
+    MINI_CHECK(len(geometry.points) == 1 and len(geometry.meshes) == 0)
+    MINI_CHECK(len(session.instances_of(definition)) == 0)
+    MINI_CHECK(len(collisions) == 0)
+    MINI_CHECK(len(hits) == 0)
+    MINI_CHECK(all(name not in text_json for name in gone))
+    MINI_CHECK(all(name not in text for name in gone))
+    MINI_CHECK(session.undo())
+    MINI_CHECK(len(session.order()) == 3)
+
+
+@MINI_TEST("Session", "Unrecorded Remove")
+def test_session_unrecorded_remove():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    a = Point(1.0, 0.0, 0.0)
+    a_guid = a.guid
+    session.add_point(a)
+    session.add_point(Point(2.0, 0.0, 0.0))
+    removed = session.remove_object(a_guid)
+
+    MINI_CHECK(removed)
+    MINI_CHECK(a_guid not in session.lookup)
+    MINI_CHECK(len(session.order()) == 1)
+    MINI_CHECK(len(session.tree.nodes) == 2)
+    MINI_CHECK(session.objects.points.number_of_dead() == 1)
+    MINI_CHECK(session.objects.points.get_tomb(0) is None)
+    MINI_CHECK(session.history.dropped == 1)
+    MINI_CHECK(not session.undo())
 
 
 if __name__ == "__main__":

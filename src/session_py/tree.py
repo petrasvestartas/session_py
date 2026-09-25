@@ -107,6 +107,14 @@ class TreeNode:
         """Return whether a compaction of the children is part way."""
         return self._cursor is not None
 
+    def is_queued(self) -> bool:
+        """Return whether Session.sweep holds this node."""
+        return self._queued
+
+    def has_child(self, child: TreeNode) -> bool:
+        """Return whether a node is a child, dead or alive."""
+        return self._position(child) is not None
+
     def _position(self, child: TreeNode) -> int | None:
         """Return the raw index of a child, O(1) through its _at."""
 
@@ -190,6 +198,28 @@ class TreeNode:
     def set_tomb(self, tomb: Tomb) -> None:
         """Pin this node weakly to a tomb."""
         self._tomb = weakref.ref(tomb)
+
+    def set_queued(self, queued: bool) -> None:
+        """Mark whether Session.sweep holds this node."""
+        self._queued = queued
+
+    @staticmethod
+    def swap(a: TreeNode, b: TreeNode) -> None:
+        """Exchange the places of two nodes, each into the other's parent and raw slot; their subtrees travel with them."""
+
+        parent_a, at_a = a._parent, a._at
+        parent_b, at_b = b._parent, b._at
+
+        if parent_a is not None:
+            parent_a._children[at_a] = b
+            parent_a._cursor = None
+
+        if parent_b is not None:
+            parent_b._children[at_b] = a
+            parent_b._cursor = None
+
+        a._parent, a._at = parent_b, at_b
+        b._parent, b._at = parent_a, at_a
 
     def compact_step(self, work: int) -> int:
         """Purge unpinned dead children for at most work children, resuming where the last call stopped; returns the children examined."""

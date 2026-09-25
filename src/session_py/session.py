@@ -28,12 +28,14 @@ from .tree import TreeNode
 from .graph import Graph
 from .history import History
 from .history import AddOp
-from .history import DefinitionOp
 from .history import RemoveOp
 from .history import ReplaceOp
 from .history import XformOp
-from .history import Tombstone
+from .history import TreeOp
+from .history import Tomb
+from .history import RECORD
 from .history import clone
+from .history import weight
 from .spatial_bvh import SpatialBVH
 from .tolerance import Tolerance
 from .xform import Xform
@@ -44,6 +46,7 @@ from .intersection import ray_mesh_bvh
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .color import Color
     from .proto import session_pb2
 
 
@@ -84,41 +87,6 @@ def _clone_objects(objects: Objects) -> Objects:
     return out
 
 
-def _locate(objects: Objects, guid: str) -> tuple[str, int]:
-    """Which list of objects holds a guid, and its slot; ("", -1) when none does."""
-
-    for collection, prefix in COLLECTIONS:
-        slot = getattr(objects, collection).get_slot(guid)
-
-        if slot is not None:
-            return collection, slot
-
-    return "", -1
-
-
-def _put(items: Collection, index: int, item: Any) -> None:
-    """Append item, or rebuild the list in place with it at index while index is inside."""
-
-    if index >= len(items):
-        items.append(item)
-
-        return
-
-    rebuilt = list(items)
-    rebuilt.insert(index, item)
-    items.clear()
-    items.extend(rebuilt)
-
-
-def _take(items: Collection, index: int) -> None:
-    """Rebuild the list in place without the entry at index."""
-
-    rebuilt = list(items)
-    rebuilt.pop(index)
-    items.clear()
-    items.extend(rebuilt)
-
-
 def _collection_of(geometry: Any) -> tuple[str, str]:
     """The COLLECTIONS entry whose list holds the type of geometry."""
 
@@ -143,6 +111,28 @@ def _collection_of(geometry: Any) -> tuple[str, str]:
     return "", ""
 
 
+def _collection_for(item: Any) -> tuple[str, str]:
+    """The COLLECTIONS entry of any stored item: geometry, instance or component."""
+
+    if isinstance(item, InstanceRef):
+        return COLLECTIONS[12]
+
+    if isinstance(item, Component):
+        return COLLECTIONS[11]
+
+    return _collection_of(item)
+
+
+def _prefix_of(collection: str) -> str:
+    """The vertex label prefix of a list name, "" for an unknown one."""
+
+    for name, prefix in COLLECTIONS:
+        if name == collection:
+            return prefix
+
+    return ""
+
+
 def _repoint(items: Collection, lookup: dict[str, Any]) -> None:
     """Point every live slot whose guid lookup holds with another value at the lookup value, and index every live slot lookup lacks."""
 
@@ -164,8 +154,10 @@ def _adopt(objects: Objects, lookup: dict[str, Any], collection: str) -> None:
 
     orphans = []
 
-    for guid in lookup:
-        if _locate(objects, guid)[1] < 0:
+    for guid, item in lookup.items():
+        name = collection if collection else _collection_of(item)[0]
+
+        if getattr(objects, name).get_slot(guid) is None:
             orphans.append(guid)
 
     for guid in sorted(orphans):
@@ -225,18 +217,6 @@ def _placed_box(points: list[Point], xform: Xform, inflate: float) -> OBB:
         placed.append(xform.transform_point(point))
 
     return OBB.from_points(placed, inflate)
-
-
-def _edge_guid(graph: Graph, a: str, b: str) -> str:
-    """The guid of the edge between a and b, from whichever stored copy has one; "" when neither was minted."""
-
-    forward = graph.edges[a][b]
-    backward = graph.edges[b][a]
-
-    if forward.has_guid():
-        return forward.guid
-
-    return backward.guid if backward.has_guid() else ""
 
 
 def _ray_point(ray: Line, point: Point, tolerance: float) -> Point | None:
@@ -401,6 +381,7 @@ class Session:
         self.bvh_cache_dirty = True  # Flag to rebuild cached_ray_bvh.
         self.node_lookup: dict[str, TreeNode] = {}  # Tree node per live object guid.
         self.revision = 0  # Bumped by every Session mutation.
+        self._sweep = []  # Parents whose children died, for the purge to compact.
 
         self.tree.add(TreeNode(name=self.name))
         self._indexed = weakref.ref(self.tree.root)  # Root at the last reindex.
@@ -416,6 +397,7 @@ class Session:
         result.objects = _clone_objects(self.objects)
         result.tree = copy.deepcopy(self.tree, memo)
         result.graph = copy.deepcopy(self.graph, memo)
+        result.graph.renumber()
         result.xforms = copy.deepcopy(self.xforms, memo)
         result.definitions = _clone_objects(self.definitions)
 
@@ -805,17 +787,21 @@ class Session:
         if guid in self.definition_lookup:
             return guid
 
-        if (
-            guid in self.lookup
-            or guid in self.instance_lookup
-            or guid in self.component_lookup
-        ):
+        if self._is_live(guid):
             return ""
 
-        if self.history.current is not None:
-            self.history.record(DefinitionOp(guid, None, clone(definition)))
+        collection, _ = _collection_of(definition)
+        items = getattr(self.definitions, collection)
+        items.append(definition)
+        slot = items.number_of_slots() - 1
+        self.definition_lookup[guid] = definition
+        self.bvh_cache_dirty = True
+        self.revision += 1
 
-        self._define(guid, definition)
+        if self.history.current is not None:
+            tomb = Tomb(collection, True, slot, None)
+            items.set_tomb(slot, tomb)
+            self.history.record(AddOp(guid, "definitions", None, 0, None, tomb), RECORD)
 
         return guid
 
@@ -840,20 +826,55 @@ class Session:
         return node
 
     def add(self, node: TreeNode | None, parent: TreeNode | None = None) -> None:
-        """Add a TreeNode to the tree hierarchy, under the root when no parent is given; None is ignored."""
+        """Put a TreeNode under a parent, the root when none is given: a placed node moves and leaves a ghost, one already there is left alone; None is ignored."""
 
         if node is None:
             return
 
+        parent = parent if parent is not None else self.tree.root
+
+        if parent is None or node is parent or node.parent is parent:
+            return
+
+        name = node.name
+        was_dead = node.is_dead()
+        old = node.parent
+        ghost = parent.add(node)
+
+        if not parent.has_child(node):
+            return
+
+        node.set_dead(False)
         self.revision += 1
 
-        if self._is_live(node.name):
-            self.node_lookup[node.name] = node
+        if old is not None and ghost is not None:
+            self._queue(old)
 
-        if parent is None:
-            self.tree.add(node, self.tree.root)
-        else:
-            self.tree.add(node, parent)
+        # a group comes back with its transform; an object's stays with its own tomb
+        tomb = node.get_tomb()
+
+        if was_dead and tomb is not None and tomb.collection == "":
+            if tomb.xform is not None:
+                self.xforms[name] = tomb.xform
+                tomb.xform = None
+
+        if self._is_live(name):
+            self.node_lookup[name] = node
+
+        if self.history.current is None:
+            self.history.dropped += 1 if ghost is not None else 0
+
+            return
+
+        tomb = self._node_tomb(ghost if ghost is not None else node)
+        color = node.color
+        dead_before = was_dead or ghost is None
+        self.history.record(
+            TreeOp(
+                name, node, tomb, ghost, name, name, color, color, dead_before, False
+            ),
+            RECORD,
+        )
 
     def add_group(self, group_name: str) -> TreeNode:
         """Create a named group (TreeNode) and add it to the root of the tree."""
@@ -862,6 +883,77 @@ class Session:
         self.add(node)
 
         return node
+
+    def rename_node(self, node: TreeNode, name: str) -> bool:
+        """Rename a group node; False for an object node, a dead node or the same name."""
+
+        before = node.name
+
+        if self._is_live(before) or node.is_dead() or before == name:
+            return False
+
+        node.name = name
+        self.revision += 1
+
+        if self.history.current is not None:
+            tomb = self._node_tomb(node)
+            color = node.color
+            self.history.record(
+                TreeOp(
+                    before, node, tomb, None, before, name, color, color, False, False
+                ),
+                RECORD,
+            )
+
+        return True
+
+    def set_node_color(self, node: TreeNode, color: Color | None) -> bool:
+        """Set or clear (None) the display colour of a node; False for a dead node."""
+
+        if node.is_dead():
+            return False
+
+        before = node.color
+        node.color = color
+        self.revision += 1
+
+        if self.history.current is not None:
+            name = node.name
+            tomb = self._node_tomb(node)
+            self.history.record(
+                TreeOp(name, node, tomb, None, name, name, before, color, False, False),
+                RECORD,
+            )
+
+        return True
+
+    def remove_group(self, node: TreeNode) -> bool:
+        """Kill a group node with everything below it, parking its transform; False for an object node, the root or a dead node."""
+
+        name = node.name
+        parent = node.parent
+
+        if parent is None or self._is_live(name):
+            return False
+
+        tomb = self._node_tomb(node)
+        node.set_dead(True)
+        tomb.xform = self.xforms.pop(name, None)
+        self._queue(parent)
+        self.revision += 1
+
+        if self.history.current is None:
+            self.history.dropped += 1
+
+            return True
+
+        color = node.color
+        self.history.record(
+            TreeOp(name, node, tomb, None, name, name, color, color, False, True),
+            RECORD,
+        )
+
+        return True
 
     def add_edge(self, guid1: str, guid2: str, attribute: str = "") -> None:
         """Add an edge between two geometry objects in the graph."""
@@ -885,19 +977,34 @@ class Session:
         self.graph.add_edge(from_guid, to_guid, relationship_type)
 
     def remove_object(self, obj_guid: str) -> bool:
-        """Remove an object by its GUID from every live table at once; the removal record is the tombstone undo restores from."""
+        """Kill an object in place: its slot, node, transform, vertex, edges and interactions flip dead until undo revives them; O(1 + d log V)."""
 
-        op = self._detach(obj_guid)
+        obj = self._item(obj_guid)
 
-        if op is None:
+        if obj is None:
             return False
 
-        self.history.record(op)
+        tomb = self._tomb(obj_guid)
+        degree = len(self.graph.edges.get(obj_guid, {}))
+        node = tomb.node if tomb.node.parent is not None else None
+        index = node._at if node is not None else 0
+        parent_guid = node.parent.name if node is not None else None
+        self._kill(tomb)
+
+        if self.history.current is None:
+            self.history.dropped += 1
+
+            return True
+
+        self.history.record(
+            RemoveOp(obj_guid, tomb.collection, parent_guid, index, node, tomb),
+            RECORD + weight(obj) + 128 * degree,
+        )
 
         return True
 
     def replace(self, guid: str, obj: Any) -> bool:
-        """Swap the object stored under guid for obj, which takes over that guid; the recorded edit undo and redo restore as absolute snapshots."""
+        """Swap the object stored under guid for obj, which takes over that guid; a different type moves the guid to that type's list, the node and edges staying."""
 
         before = self.lookup.get(guid)
 
@@ -905,11 +1012,28 @@ class Session:
             return False
 
         obj.guid = guid
+        old, _ = _collection_of(before)
+        new, prefix = _collection_of(obj)
+        bytes = RECORD + weight(before)
 
-        if self.history.current is not None:
-            self.history.record(ReplaceOp(guid, clone(before), clone(obj)))
+        if old == new:
+            if self.history.current is not None:
+                self.history.record(ReplaceOp(guid, before, obj), bytes)
 
-        self._swap(guid, obj)
+            self._swap(guid, obj)
+
+            return True
+
+        node = self.get_node(guid)
+        removed = self._half(False, old, guid)
+        self._kill(removed)
+        items = getattr(self.objects, new)
+        items.append(obj)
+        added = Tomb(new, False, items.number_of_slots() - 1, None)
+        items.set_tomb(added.slot, added)
+        self.lookup[guid] = obj
+        self._label(guid, f"{prefix}_{obj.name}")
+        self._pair(guid, old, new, node, removed, added, bytes)
 
         return True
 
@@ -922,11 +1046,26 @@ class Session:
             return False
 
         definition.guid = guid
+        old, _ = _collection_of(before)
+        new, _ = _collection_of(definition)
+        bytes = RECORD + weight(before)
 
-        if self.history.current is not None:
-            self.history.record(DefinitionOp(guid, clone(before), clone(definition)))
+        if old == new:
+            if self.history.current is not None:
+                self.history.record(ReplaceOp(guid, before, definition), bytes)
 
-        self._define(guid, definition)
+            self._swap(guid, definition)
+
+            return True
+
+        removed = self._half(True, old, guid)
+        self._kill(removed)
+        items = getattr(self.definitions, new)
+        items.append(definition)
+        added = Tomb(new, True, items.number_of_slots() - 1, None)
+        items.set_tomb(added.slot, added)
+        self.definition_lookup[guid] = definition
+        self._pair(guid, "definitions", "definitions", None, removed, added, bytes)
 
         return True
 
@@ -938,10 +1077,19 @@ class Session:
         if before is None or len(self.instances_of(guid)) > 0:
             return False
 
-        if self.history.current is not None:
-            self.history.record(DefinitionOp(guid, clone(before), None))
+        collection, _ = _collection_of(before)
+        tomb = self._half(True, collection, guid)
+        self._kill(tomb)
 
-        self._define(guid, None)
+        if self.history.current is None:
+            self.history.dropped += 1
+
+            return True
+
+        self.history.record(
+            RemoveOp(guid, "definitions", None, 0, None, tomb),
+            RECORD + weight(before),
+        )
 
         return True
 
@@ -957,28 +1105,23 @@ class Session:
         instance.guid = guid
         instance.name = obj.name
         placement = self.xform(guid) * frame
-        removed = self._detach(guid)
+        old, _ = _collection_of(obj)
+        node = self.get_node(guid)
+        removed = self._half(False, old, guid)
+        self._kill(removed)
+        items = self.objects.instances
+        items.append(instance)
+        added = Tomb("instances", False, items.number_of_slots() - 1, None)
+        items.set_tomb(added.slot, added)
+        self.instance_lookup[guid] = instance
+        self._label(guid, f"instance_{instance.name}")
+        bytes = RECORD + weight(obj)
+        self._pair(guid, old, "instances", node, removed, added, bytes)
 
-        if removed is None:
-            return False
-
-        added = AddOp(
-            guid,
-            instance,
-            "instances",
-            len(self.objects.instances),
-            None if placement.is_identity() else placement,
-            removed.parent_guid,
-            removed.index,
-            removed.node,
-            f"instance_{instance.name}",
-            removed.edges,
-        )
-        added.interactions = removed.interactions
-
-        self.history.record(removed)
-        self.history.record(added)
-        self._attach(added)
+        if placement.is_identity():
+            self.remove_xform(guid)
+        else:
+            self.set_xform(guid, placement)
 
         return True
 
@@ -993,29 +1136,17 @@ class Session:
         instance = self.instance_lookup[instance_guid]
         result = _resolve(instance, definition, Xform.identity())
         collection, prefix = _collection_of(result)
-        size = len(getattr(self.objects, collection))
-        removed = self._detach(instance_guid)
-
-        if removed is None:
-            return False
-
-        added = AddOp(
-            instance_guid,
-            result,
-            collection,
-            size,
-            removed.xform,
-            removed.parent_guid,
-            removed.index,
-            removed.node,
-            f"{prefix}_{instance.name}",
-            removed.edges,
-        )
-        added.interactions = removed.interactions
-
-        self.history.record(removed)
-        self.history.record(added)
-        self._attach(added)
+        node = self.get_node(instance_guid)
+        removed = self._half(False, "instances", instance_guid)
+        self._kill(removed)
+        items = getattr(self.objects, collection)
+        items.append(result)
+        added = Tomb(collection, False, items.number_of_slots() - 1, None)
+        items.set_tomb(added.slot, added)
+        self.lookup[instance_guid] = result
+        self._label(instance_guid, f"{prefix}_{instance.name}")
+        bytes = RECORD + weight(instance)
+        self._pair(instance_guid, "instances", collection, node, removed, added, bytes)
 
         return True
 
@@ -1030,7 +1161,9 @@ class Session:
             return
 
         if self.history.current is not None:
-            self.history.record(XformOp(guid, self.xforms.get(guid), xform))
+            before = self.xforms.get(guid)
+            before = None if before is None else before.duplicate()
+            self.history.record(XformOp(guid, before, xform.duplicate()), RECORD)
 
         self.xforms[guid] = xform
         self.bvh_cache_dirty = True
@@ -1045,7 +1178,7 @@ class Session:
             return False
 
         if self.history.current is not None:
-            self.history.record(XformOp(guid, before, None))
+            self.history.record(XformOp(guid, before.duplicate(), None), RECORD)
 
         del self.xforms[guid]
         self.bvh_cache_dirty = True
@@ -1131,6 +1264,13 @@ class Session:
         self.revision += 1
 
         return self.history.redo(self)
+
+    def abort(self) -> bool:
+        """Revert and drop the open transaction, leaving the stacks as they are; False when none is open."""
+
+        self.revision += 1
+
+        return self.history.abort(self)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Collision detection and ray casting
@@ -1454,20 +1594,13 @@ class Session:
     def _add_object(
         self, collection: str, obj: Any, type_prefix: str, parent: TreeNode | None
     ) -> TreeNode:
-        """Store an object in its typed list, lookup, graph and tree, recording an AddOp when a transaction is open."""
+        """Store an object in its list, lookup, graph and tree, recording an add when a transaction is open."""
 
         guid = obj.guid
         items = getattr(self.objects, collection)
         items.append(obj)
-        obj_index = len(items) - 1
-
-        if collection == "components":
-            self.component_lookup[guid] = obj
-        elif collection == "instances":
-            self.instance_lookup[guid] = obj
-        else:
-            self.lookup[guid] = obj
-
+        slot = items.number_of_slots() - 1
+        self._table(collection)[guid] = obj
         attribute = f"{type_prefix}_{obj.name}"
         self.graph.add_node(guid, attribute)
         self.bvh_cache_dirty = True
@@ -1476,34 +1609,20 @@ class Session:
         self.revision += 1
         host = parent if parent is not None else self.tree.root
         parent_guid = None
-        index = 0
 
         if host is not None:
-            self.add(node, host)
+            self.tree.add(node, host)
             parent_guid = host.name
-            index = len(host.children) - 1
 
         if self.history.current is not None:
+            tomb = Tomb(collection, False, slot, node)
+            items.set_tomb(slot, tomb)
+            node.set_tomb(tomb)
             self.history.record(
-                AddOp(
-                    guid,
-                    clone(obj),
-                    collection,
-                    obj_index,
-                    None,
-                    parent_guid,
-                    index,
-                    None,
-                    attribute,
-                    [],
-                )
+                AddOp(guid, collection, parent_guid, node._at, node, tomb), RECORD
             )
 
         return node
-
-    def _locate(self, guid: str) -> tuple[str, int]:
-        """Which Objects list holds a guid, and where; ("", -1) when none does."""
-        return _locate(self.objects, guid)
 
     def _is_live(self, guid: str) -> bool:
         """Whether guid names a live object, component or instance."""
@@ -1514,172 +1633,352 @@ class Session:
             or guid in self.instance_lookup
         )
 
-    def _detach(self, guid: str) -> RemoveOp | None:
-        """Take an object out of every live table, unrecorded, returning its tombstone."""
-
-        obj = self.lookup.get(guid)
-
-        if obj is None:
-            obj = self.component_lookup.get(guid)
-
-        if obj is None:
-            obj = self.instance_lookup.get(guid)
-
-        if obj is None:
-            return None
-
-        collection, obj_index = self._locate(guid)
-
-        if obj_index >= 0:
-            _take(getattr(self.objects, collection), obj_index)
-
-        node = self.get_node(guid)
-        self.lookup.pop(guid, None)
-        self.component_lookup.pop(guid, None)
-        self.instance_lookup.pop(guid, None)
-        self.node_lookup.pop(guid, None)
-        xform = self.xforms.pop(guid, None)
-        self.bvh_cache_dirty = True
-        self.revision += 1
-        parent_guid = None
-        index = 0
-
-        if node is not None:
-            parent = node.parent
-
-            if parent is not None:
-                parent_guid = parent.name
-                index = parent.children.index(node)
-
-            node = self.tree.remove(node)
-
-            for child in node.descendants():
-                if self.node_lookup.get(child.name) is child:
-                    del self.node_lookup[child.name]
-
-        attribute = ""
-        edges = []
-
-        if self.graph.has_node(guid):
-            attribute = self.graph.node_label(guid)
-
-            for other, label, forward in self.graph.edges_of(guid):
-                edges.append(
-                    (other, label, forward, _edge_guid(self.graph, guid, other))
-                )
-
-            self.graph.remove_node(guid)
-
-        op = RemoveOp(
-            guid,
-            clone(obj),
-            collection,
-            obj_index,
-            xform,
-            parent_guid,
-            index,
-            node,
-            attribute,
-            edges,
-        )
-
-        for edge in edges:
-            if edge[3] not in self.interactions:
-                continue
-
-            op.interactions[edge[3]] = self.interactions.pop(edge[3])
-
-        return op
-
-    def _attach(self, op: Tombstone) -> None:
-        """Put an object back from its tombstone, unrecorded: typed list, lookup, xform, tree node with its subtree, graph node and edges."""
-
-        obj = clone(op.obj)
-        _put(getattr(self.objects, op.collection), op.obj_index, obj)
-
-        if op.collection == "components":
-            self.component_lookup[op.guid] = obj
-        elif op.collection == "instances":
-            self.instance_lookup[op.guid] = obj
-        else:
-            self.lookup[op.guid] = obj
-
-        if op.xform is not None:
-            self.xforms[op.guid] = op.xform
-
-        self.bvh_cache_dirty = True
-        node = op.node
-
-        if node is None:
-            node = TreeNode(name=op.guid)
-
-        self.node_lookup[op.guid] = node
-        self.revision += 1
-
-        for child in node.descendants():
-            if self._is_live(child.name):
-                self.node_lookup[child.name] = child
-
-        if op.parent_guid is not None:
-            parent = self.tree.get_node_by_name(op.parent_guid)
-
-            if parent is not None:
-                self.tree.add(node, parent)
-                children = list(parent.children)
-
-                for i in range(min(op.index, len(children) - 1), len(children) - 1):
-                    parent.add(parent.remove(children[i]))
-
-        self.graph.add_node(op.guid, op.attribute)
-
-        for other, attribute, forward, id in op.edges:
-            if not self.graph.has_node(other):
-                continue
-
-            if forward:
-                self.graph.add_edge(op.guid, other, attribute)
-            else:
-                self.graph.add_edge(other, op.guid, attribute)
-
-            if id == "":
-                continue
-
-            self.graph.edges[op.guid][other].guid = id
-            self.graph.edges[other][op.guid].guid = id
-
-            if id not in op.interactions:
-                continue
-
-            for interaction in op.interactions[id]:
-                self.interactions.setdefault(id, []).append(interaction.clone())
-
-    def _swap(self, guid: str, obj: Any) -> None:
-        """Store obj under guid in its typed list and lookup, unrecorded."""
-
-        collection, obj_index = self._locate(guid)
-
-        if obj_index < 0:
-            return
-
-        getattr(self.objects, collection).set_item(obj_index, obj)
-        self.revision += 1
+    def _table(self, collection: str) -> dict[str, Any]:
+        """The lookup map of a list name."""
 
         if collection == "components":
-            self.component_lookup[guid] = obj
-        elif collection == "instances":
-            self.instance_lookup[guid] = obj
+            return self.component_lookup
+
+        if collection == "instances":
+            return self.instance_lookup
+
+        return self.lookup
+
+    def _item(self, guid: str) -> Any | None:
+        """The stored object, component or instance under guid, the object itself."""
+
+        item = self.lookup.get(guid)
+
+        if item is None:
+            item = self.component_lookup.get(guid)
+
+        if item is None:
+            item = self.instance_lookup.get(guid)
+
+        return item
+
+    def _tomb(self, guid: str) -> Tomb | None:
+        """The object tomb of a live guid, reused while a record still holds it, else made and pinned on its slot and node; O(1)."""
+
+        item = self._item(guid)
+
+        if item is None:
+            return None
+
+        collection, _ = _collection_for(item)
+        items = getattr(self.objects, collection)
+        slot = items.get_slot(guid)
+
+        if slot is None:
+            items.append(item)
+            slot = items.number_of_slots() - 1
+
+        tomb = items.get_tomb(slot)
+
+        if tomb is not None and tomb.node is not None:
+            return tomb
+
+        node = self.get_node(guid)
+
+        if node is not None:
+            self.node_lookup[guid] = node
         else:
-            self.lookup[guid] = obj
+            # an object outside the tree parks its transform and vertex on a detached node
+            node = TreeNode(name=guid)
 
+        tomb = Tomb(collection, False, slot, node)
+        items.set_tomb(slot, tomb)
+        node.set_tomb(tomb)
+
+        return tomb
+
+    def _node_tomb(self, node: TreeNode) -> Tomb:
+        """The node-only tomb pinned on a node, reused while a record still holds it."""
+
+        tomb = node.get_tomb()
+
+        if tomb is not None and tomb.collection == "":
+            return tomb
+
+        tomb = Tomb("", False, 0, node)
+        node.set_tomb(tomb)
+
+        return tomb
+
+    def _half(self, definition: bool, collection: str, guid: str) -> Tomb:
+        """A slot-only tomb on the live slot of guid in the list of that name, reused while a record still holds it; a map-only entry is appended first."""
+
+        item = self.definition_lookup[guid] if definition else self._item(guid)
+        objects = self.definitions if definition else self.objects
+        items = getattr(objects, collection)
+        slot = items.get_slot(guid)
+
+        if slot is None:
+            items.append(item)
+            slot = items.number_of_slots() - 1
+
+        tomb = items.get_tomb(slot)
+
+        if tomb is not None and tomb.node is None and tomb.definition == definition:
+            return tomb
+
+        tomb = Tomb(collection, definition, slot, None)
+        items.set_tomb(slot, tomb)
+
+        return tomb
+
+    def _pair(
+        self,
+        guid: str,
+        old: str,
+        new: str,
+        node: TreeNode | None,
+        removed: Tomb,
+        added: Tomb,
+        bytes: int,
+    ) -> None:
+        """Record the halves of a type change under one guid, or drop them when no transaction is open."""
+
+        self.revision += 1
         self.bvh_cache_dirty = True
-        attribute = ""
 
-        for name, prefix in COLLECTIONS:
-            if name == collection:
-                attribute = f"{prefix}_{obj.name}"
+        if self.history.current is None:
+            self.history.dropped += 1
+
+            return
+
+        index = node._at if node is not None else 0
+        parent = node.parent if node is not None else None
+        parent_guid = parent.name if parent is not None else None
+        self.history.record(
+            RemoveOp(guid, old, parent_guid, index, node, removed), bytes
+        )
+        self.history.record(AddOp(guid, new, parent_guid, index, node, added), RECORD)
+
+    def _label(self, guid: str, label: str) -> None:
+        """Relabel the graph vertex of guid, when it has one."""
 
         if self.graph.has_node(guid):
-            self.graph.node_label(guid, attribute)
+            self.graph.node_label(guid, label)
+
+    def _queue(self, parent: TreeNode) -> None:
+        """Remember a parent whose child died, once, for the sweep."""
+
+        if parent.is_queued():
+            return
+
+        parent.set_queued(True)
+        self._sweep.append(weakref.ref(parent))
+
+    def _kill(self, tomb: Tomb) -> None:
+        """Flip a tomb dead: its slot and map entry, and for an object tomb its node, transform, vertex, edges and interactions; O(1 + d log V)."""
+
+        if tomb.collection == "":
+            return
+
+        slot = tomb.slot
+        self.revision += 1
+        self.bvh_cache_dirty = True
+
+        if tomb.definition:
+            items = getattr(self.definitions, tomb.collection)
+            stored = items.get_item(slot)
+            guid = stored.guid
+            held = self.definition_lookup.get(guid)
+
+            if held is not None and held is not stored:
+                items.set_item(slot, held)
+
+            owner = items.get_slot(guid) == slot
+            items.set_dead(slot, True)
+
+            if owner:
+                del self.definition_lookup[guid]
+
+            return
+
+        items = getattr(self.objects, tomb.collection)
+        stored = items.get_item(slot)
+        guid = stored.guid
+        table = self._table(tomb.collection)
+        held = table.get(guid)
+        owner = held is stored or items.get_slot(guid) == slot
+
+        # the map value is the truth; a twin that took the guid keeps its entry
+        if held is not None and held is not stored:
+            items.set_item(slot, held)
+
+        items.set_dead(slot, True)
+
+        if owner:
+            table.pop(guid, None)
+
+        node = tomb.node
+
+        if node is None:
+            return
+
+        parent = node.parent
+        node.set_dead(True)
+        node.set_tomb(tomb)
+
+        if self.node_lookup.get(guid) is node:
+            del self.node_lookup[guid]
+
+        if parent is not None:
+            self._queue(parent)
+
+        tomb.xform = self.xforms.pop(guid, None)
+        taken = self.graph.take_node(guid)
+
+        if taken is None:
+            return
+
+        vertex, edges = taken
+
+        for edge in edges:
+            if edge.has_guid() and edge.guid in self.interactions:
+                tomb.interactions[edge.guid] = self.interactions.pop(edge.guid)
+
+        tomb.vertex = vertex
+        tomb.edges = edges
+
+    def _revive(self, tomb: Tomb) -> None:
+        """Flip a tomb live again: the same slot and object, and for an object tomb the same node, transform, vertex, edges and interactions; O(1 + d log V)."""
+
+        if tomb.collection == "":
+            return
+
+        slot = tomb.slot
+        self.revision += 1
+        self.bvh_cache_dirty = True
+
+        if tomb.definition:
+            items = getattr(self.definitions, tomb.collection)
+            items.set_dead(slot, False)
+            geometry = items.get_item(slot)
+            self.definition_lookup[geometry.guid] = geometry
+
+            return
+
+        items = getattr(self.objects, tomb.collection)
+        items.set_dead(slot, False)
+        item = items.get_item(slot)
+        guid = item.guid
+        self._table(tomb.collection)[guid] = item
+        node = tomb.node
+
+        if node is None:
+            self._label(guid, f"{_prefix_of(tomb.collection)}_{item.name}")
+
+            return
+
+        node.set_dead(False)
+
+        if node.parent is not None:
+            self.node_lookup[guid] = node
+
+        if tomb.xform is not None:
+            self.xforms[guid] = tomb.xform
+            tomb.xform = None
+
+        if tomb.vertex is None:
+            return
+
+        vertex = tomb.vertex
+        edges = tomb.edges
+        tomb.vertex = None
+        tomb.edges = []
+        self.graph.put_node(vertex, edges)
+
+        for edge in edges:
+            if not edge.has_guid():
+                continue
+
+            back = self.graph.edges.get(guid, {}).get(edge.other_vertex(guid))
+
+            if back is None or back.guid != edge.guid:
+                continue
+
+            if edge.guid in tomb.interactions:
+                self.interactions[edge.guid] = tomb.interactions.pop(edge.guid)
+
+    def _swap(self, guid: str, obj: Any) -> None:
+        """Store obj under guid in its slot and map, relabelling its vertex; a guid that is only a definition swaps in Session.definitions; O(1)."""
+
+        collection, prefix = _collection_for(obj)
+        self.revision += 1
+        self.bvh_cache_dirty = True
+
+        if not self._is_live(guid):
+            if guid in self.definition_lookup:
+                items = getattr(self.definitions, collection)
+                slot = items.get_slot(guid)
+
+                if slot is not None:
+                    items.set_item(slot, obj)
+
+                self.definition_lookup[guid] = obj
+
+            return
+
+        items = getattr(self.objects, collection)
+        slot = items.get_slot(guid)
+
+        if slot is None:
+            return
+
+        items.set_item(slot, obj)
+        self._table(collection)[guid] = obj
+        self._label(guid, f"{prefix}_{obj.name}")
+
+    def _tree(self, op: TreeOp, back: bool) -> None:
+        """Apply the before (back) or after state of a tree record: name, colour, liveness, and for a move the swap of node and ghost."""
+
+        if back:
+            name, color, dead = op.name_before, op.color_before, op.dead_before
+        else:
+            name, color, dead = op.name_after, op.color_after, op.dead_after
+
+        was = op.node.is_dead()
+        live = self._is_live(name)
+
+        # the ghost takes the node's place, and that parent is swept
+        if op.ghost is not None:
+            source = op.node.parent
+            TreeNode.swap(op.node, op.ghost)
+            op.ghost.set_tomb(op.tomb)
+
+            if source is not None:
+                self._queue(source)
+
+        parent = op.node.parent
+        op.node.name = name
+        op.node.color = color
+        op.node.set_dead(dead)
+        self.revision += 1
+
+        if dead and not was:
+            op.node.set_tomb(op.tomb)
+
+            if parent is not None:
+                self._queue(parent)
+
+        # a live object keeps its transform, only a group parks it
+        if dead and not was and not live:
+            op.tomb.xform = self.xforms.pop(name, None)
+
+        if was and not dead and not live and op.tomb.xform is not None:
+            self.xforms[name] = op.tomb.xform
+            op.tomb.xform = None
+
+        if not live:
+            return
+
+        if not dead:
+            self.node_lookup[name] = op.node
+        elif self.node_lookup.get(name) is op.node:
+            del self.node_lookup[name]
 
     def reindex(self) -> None:
         """Rebuild every index from the tables in O(n + N): the maps win over the slots, map-only and slot-only entries are adopted, a non-identity instance xform folds into xforms, node_lookup is refilled from the live tree."""
@@ -1710,25 +2009,6 @@ class Session:
 
         root = self.tree.root
         self._indexed = None if root is None else weakref.ref(root)
-
-    def _define(self, guid: str, definition: Any | None) -> None:
-        """Set or drop (None) a definition under guid, unrecorded."""
-
-        collection, position = _locate(self.definitions, guid)
-
-        if position >= 0:
-            _take(getattr(self.definitions, collection), position)
-
-        self.definition_lookup.pop(guid, None)
-        self.bvh_cache_dirty = True
-        self.revision += 1
-
-        if definition is None:
-            return
-
-        items = getattr(self.definitions, _collection_of(definition)[0])
-        _put(items, len(items) if position < 0 else position, definition)
-        self.definition_lookup[guid] = definition
 
     def _place(self, guid: str, xform: Xform | None) -> None:
         """Set or drop (None) the local transform under guid, unrecorded."""

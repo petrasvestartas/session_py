@@ -2,15 +2,28 @@ from __future__ import annotations
 from typing import Any
 from typing import TYPE_CHECKING
 import copy
+from .brep import BRep
 from .element import Element
 from .instance_ref import InstanceRef
+from .line import Line
+from .mesh import Mesh
+from .nurbscurve import NurbsCurve
+from .nurbssurface import NurbsSurface
+from .obb import OBB
+from .plane import Plane
+from .point import Point
+from .pointcloud import PointCloud
+from .polyline import Polyline
 
 if TYPE_CHECKING:
+    from .color import Color
     from .session import Session
     from .tree import TreeNode
     from .xform import Xform
 
 CAPACITY = 64  # Committed transactions kept; past it the oldest is dropped.
+BUDGET = 256 << 20  # Bytes the stacks may pin; past it the oldest is dropped.
+RECORD = 256  # Bytes one record costs on top of what it pins.
 
 
 def clone(obj: Any) -> Any:
@@ -35,6 +48,82 @@ def clone(obj: Any) -> Any:
         snapshot.features = clone(obj.features)
 
     return snapshot
+
+
+def _mesh_weight(mesh: Mesh) -> int:
+    """Bytes a mesh pins, from its counts."""
+    return 128 + 64 * mesh.number_of_vertices() + 48 * mesh.number_of_faces()
+
+
+def _brep_weight(brep: BRep) -> int:
+    """Bytes a brep pins, from its table lengths."""
+
+    return (
+        512
+        + 256 * len(brep.m_surfaces)
+        + 128 * (len(brep.m_curves_3d) + len(brep.m_curves_2d))
+        + 24 * len(brep.m_vertices)
+        + 64 * (len(brep.m_edges) + len(brep.m_faces))
+    )
+
+
+def weight(item: Any) -> int:
+    """An estimate of the bytes an item pins while a record holds it, O(1) from its container lengths."""
+
+    if isinstance(item, Point):
+        return 64
+
+    if isinstance(item, Line):
+        return 96
+
+    if isinstance(item, Plane):
+        return 160
+
+    if isinstance(item, OBB):
+        return 192
+
+    if isinstance(item, Polyline):
+        return 64 + 24 * item.point_count()
+
+    if isinstance(item, PointCloud):
+        return (
+            64
+            + 24 * item.point_count()
+            + 24 * item.normal_count()
+            + 16 * item.color_count()
+        )
+
+    if isinstance(item, Mesh):
+        return _mesh_weight(item)
+
+    if isinstance(item, NurbsCurve):
+        return 96 + 32 * item.cv_count() + 8 * len(item.m_nurbsknot)
+
+    if isinstance(item, NurbsSurface):
+        return (
+            128
+            + 32 * item.cv_count()
+            + 8 * (len(item.m_nurbsknot[0]) + len(item.m_nurbsknot[1]))
+        )
+
+    if isinstance(item, BRep):
+        return _brep_weight(item)
+
+    if isinstance(item, Element):
+        geometry = item.geometry
+        bytes = 0
+
+        if isinstance(geometry, Mesh):
+            bytes = _mesh_weight(geometry)
+        elif isinstance(geometry, BRep):
+            bytes = _brep_weight(geometry)
+
+        return 256 + bytes + 128 * len(item.features)
+
+    if isinstance(item, InstanceRef):
+        return 256 + 128 * len(item.features)
+
+    return 128
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -71,36 +160,31 @@ class Tomb:
 
 
 class Tombstone:
-    """Everything needed to put one object back into every live table of a session."""
+    """An object added or removed: the tomb that flips it and where its node sits."""
 
     kind = ""  # "add" or "remove".
 
     def __init__(
         self,
         guid: str,
-        obj: Any,
         collection: str,
-        obj_index: int,
-        xform: Xform | None,
         parent_guid: str | None,
         index: int,
         node: TreeNode | None,
-        attribute: str,
-        edges: list[tuple[str, str, bool, str]],
+        tomb: Tomb,
     ):
-        """Construct from every field of the kit."""
+        """Construct from every field of the record."""
 
-        self.guid = guid  # The object's guid; the clone carries the same one.
-        self.obj = obj  # A clone() of the object, never the live instance.
-        self.collection = collection  # The Objects list it lives in: "points", "lines", ... "components".
-        self.obj_index = obj_index  # Its position in that list, so the order() sequence survives a round trip.
-        self.xform = xform  # Its local transform, None when none was set.
-        self.parent_guid = parent_guid  # Tree parent name, None when added without one.
-        self.index = index  # Its position among the parent's children.
-        self.node = node  # Detached tree node with its subtree, None for an add.
-        self.attribute = attribute  # Its graph node attribute.
-        self.edges = edges  # Incident edges as (other guid, attribute, forward, edge guid or "").
-        self.interactions = {}  # Those edges' interactions by edge guid.
+        self.guid = guid  # The object's guid.
+        self.collection = collection  # The Objects list it lives in, or "definitions".
+        self.parent_guid = (
+            parent_guid  # Name of its tree parent, None when it has no node.
+        )
+        self.index = (
+            index  # Its raw index among the parent's children at record time, a hint.
+        )
+        self.node = node  # Its tree node, for adds too; None when it has none.
+        self.tomb = tomb  # The tomb undo and redo flip.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
@@ -108,32 +192,32 @@ class Tombstone:
 
     def __repr__(self) -> str:
         """Return a string representation of the record for debugging."""
-        return f"{self.kind}({self.guid}, {self.collection}[{self.obj_index}])"
+        return f"{self.kind}({self.guid}, {self.collection})"
 
 
 class AddOp(Tombstone):
-    """An object entered the session; undo detaches it, redo attaches the kit again."""
+    """An object entered the session; undo kills its tomb, redo revives it."""
 
     kind = "add"  # Always "add".
 
 
 class RemoveOp(Tombstone):
-    """An object left the session; the kit is what brings it back on undo."""
+    """An object left the session; undo revives its tomb, redo kills it."""
 
     kind = "remove"  # Always "remove".
 
 
 class ReplaceOp:
-    """The object under `guid` was swapped: absolute before/after snapshots, never deltas."""
+    """The object under `guid` was swapped: the stored objects before and after, never copies."""
 
     kind = "replace"  # Always "replace".
 
     def __init__(self, guid: str, before: Any, after: Any):
-        """Construct from the guid and the before and after snapshots."""
+        """Construct from the guid and the before and after objects."""
 
         self.guid = guid  # The object's guid.
-        self.before = before  # Snapshot before the swap.
-        self.after = after  # Snapshot after the swap.
+        self.before = before  # The object before the swap.
+        self.after = after  # The object after the swap.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
@@ -165,35 +249,55 @@ class XformOp:
         return f"xform({self.guid})"
 
 
-class DefinitionOp:
-    """A definition added (None before), removed (None after) or replaced."""
+class TreeOp:
+    """A tree node added, removed, moved, renamed or recoloured: its state before and after."""
 
-    kind = "definition"  # Always "definition".
+    kind = "tree"  # Always "tree".
 
-    def __init__(self, guid: str, before: Any | None, after: Any | None):
-        """Construct from the guid and the before and after snapshots."""
+    def __init__(
+        self,
+        guid: str,
+        node: TreeNode,
+        tomb: Tomb,
+        ghost: TreeNode | None,
+        name_before: str,
+        name_after: str,
+        color_before: Color | None,
+        color_after: Color | None,
+        dead_before: bool,
+        dead_after: bool,
+    ):
+        """Construct from every field of the record."""
 
-        self.guid = guid  # The definition's guid.
-        self.before = before  # Snapshot before, None when it was added.
-        self.after = after  # Snapshot after, None when it was removed.
+        self.guid = guid  # The node name at record time.
+        self.node = node  # The node itself.
+        self.tomb = tomb  # Node-only; pins the ghost of a move, else the node.
+        self.ghost = ghost  # The dead ghost a move left in the old slot.
+        self.name_before = name_before  # Name before.
+        self.name_after = name_after  # Name after.
+        self.color_before = color_before  # Colour before.
+        self.color_after = color_after  # Colour after.
+        self.dead_before = dead_before  # Whether it was dead or absent before.
+        self.dead_after = dead_after  # Whether it is dead after.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
-        return f"definition({self.guid})"
+        return f"tree({self.guid})"
 
     def __repr__(self) -> str:
         """Return a string representation of the record for debugging."""
-        return f"definition({self.guid})"
+        return f"tree({self.guid})"
 
 
 class Transaction:
-    """One undoable step: a label and the ops it made, in the order they happened."""
+    """One undoable step: a label, the ops it made in the order they happened, and the bytes they pin."""
 
     def __init__(self, label: str = "my_transaction"):
         """Construct an empty transaction with a label."""
 
         self.label = label  # What the step did.
         self.ops: list = []  # Ops in the order they happened.
+        self.bytes = 0  # Bytes its records pin.
 
     def __str__(self) -> str:
         """Return a string representation of the transaction."""
@@ -208,14 +312,19 @@ class Transaction:
 # History
 # ═══════════════════════════════════════════════════════════════════════════
 class History:
-    """CAD-style undo/redo over a Session, in memory only: records exist between `begin` and `commit`, every save purges them."""
+    """CAD-style undo/redo over a Session, in memory only: records flip tombs in place, every save purges them."""
 
     def __init__(self):
-        """Construct an empty history."""
+        """Construct an empty history with the default budget."""
 
-        self.undo_stack: list[Transaction] = []  # Committed, oldest first; capped.
+        self.undo_stack: list[
+            Transaction
+        ] = []  # Committed, oldest first; capped at CAPACITY and budget.
         self.redo_stack: list[Transaction] = []  # Undone, cleared on the next commit.
         self.current: Transaction | None = None  # Open transaction, None when closed.
+        self.bytes = 0  # Bytes pinned by both stacks and the open transaction.
+        self.budget = BUDGET  # Bytes the stacks may pin before the oldest is dropped.
+        self.dropped = 0  # Ops dropped since the last purge cycle began, unrecorded kills included.
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
@@ -242,7 +351,7 @@ class History:
         self.current = Transaction(label)
 
     def commit(self) -> None:
-        """Close the open transaction. An empty one is dropped; a real one clears redo."""
+        """Close the open transaction. An empty one is dropped; a real one clears redo and trims the oldest past the caps."""
 
         transaction = self.current
         self.current = None
@@ -251,18 +360,46 @@ class History:
             return
 
         self.undo_stack.append(transaction)
+
+        for undone in self.redo_stack:
+            self.dropped += len(undone.ops)
+
         self.redo_stack.clear()
+        self.bytes = self._pinned()
 
-        if len(self.undo_stack) > CAPACITY:
-            self.undo_stack.pop(0)
+        while len(self.undo_stack) > 1 and (
+            len(self.undo_stack) > CAPACITY or self.bytes > self.budget
+        ):
+            oldest = self.undo_stack.pop(0)
+            self.dropped += len(oldest.ops)
+            self.bytes -= oldest.bytes
 
-    def record(self, op: Any) -> None:
-        """Append an op to the open transaction; a no-op when none is open."""
+    def record(self, op: Any, bytes: int) -> None:
+        """Append an op pinning `bytes` to the open transaction; a no-op when none is open."""
 
         if self.current is None:
             return
 
         self.current.ops.append(op)
+        self.current.bytes += bytes
+        self.bytes += bytes
+
+    def abort(self, session: Session) -> bool:
+        """Revert the open transaction's ops in reverse and drop it, leaving both stacks as they are; False when none is open."""
+
+        transaction = self.current
+        self.current = None
+
+        if transaction is None:
+            return False
+
+        for i in range(len(transaction.ops) - 1, -1, -1):
+            self._revert(transaction.ops[i], session)
+
+        self.dropped += len(transaction.ops)
+        self.bytes = self._pinned()
+
+        return True
 
     def undo(self, session: Session) -> bool:
         """Revert the newest transaction, ops in reverse order, and park it for redo."""
@@ -299,39 +436,56 @@ class History:
         return True
 
     def clear(self) -> None:
-        """Drop every transaction, open or committed."""
+        """Drop every transaction, open or committed; what they pinned is purgeable now."""
+
+        for transaction in self.undo_stack + self.redo_stack:
+            self.dropped += len(transaction.ops)
+
+        if self.current is not None:
+            self.dropped += len(self.current.ops)
 
         self.undo_stack.clear()
         self.redo_stack.clear()
         self.current = None
+        self.bytes = 0
+
+    def _pinned(self) -> int:
+        """Bytes pinned by both stacks."""
+
+        total = 0
+
+        for transaction in self.undo_stack + self.redo_stack:
+            total += transaction.bytes
+
+        return total
 
     def _revert(self, op: Any, session: Session) -> None:
         """Undo one op against the session."""
 
         if op.kind == "add":
-            session._detach(op.guid)
+            session._kill(op.tomb)
         elif op.kind == "remove":
-            session._attach(op)
+            session._revive(op.tomb)
         elif op.kind == "replace":
-            session._swap(op.guid, clone(op.before))
+            session._swap(op.guid, op.before)
         elif op.kind == "xform":
             session._place(op.guid, op.before)
-        elif op.kind == "definition":
-            session._define(op.guid, None if op.before is None else clone(op.before))
+        elif op.kind == "tree":
+            session._tree(op, True)
 
     def _apply(self, op: Any, session: Session) -> None:
         """Redo one op against the session."""
 
         if op.kind == "add":
-            session._attach(op)
+            session._revive(op.tomb)
         elif op.kind == "remove":
-            session._detach(op.guid)
+            session._kill(op.tomb)
         elif op.kind == "replace":
-            session._swap(op.guid, clone(op.after))
+            session._swap(op.guid, op.after)
         elif op.kind == "xform":
             session._place(op.guid, op.after)
-        elif op.kind == "definition":
-            session._define(op.guid, None if op.after is None else clone(op.after))
+        elif op.kind == "tree":
+            session._tree(op, False)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String
