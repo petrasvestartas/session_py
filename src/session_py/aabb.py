@@ -132,16 +132,16 @@ class AABB:
 
         dt = (t1 - t0) / NUM_SAMPLES
 
-        for axis in range(3):
-            for i in range(NUM_SAMPLES):
-                t_start = t0 + i * dt
-                t_end = t_start + dt
-                deriv_start = curve.evaluate(t_start, 1)
-                deriv_end = curve.evaluate(t_end, 1)
+        for i in range(NUM_SAMPLES):
+            t_start = t0 + i * dt
+            t_end = t_start + dt
+            deriv_start = curve.evaluate(t_start, 1)
+            deriv_end = curve.evaluate(t_end, 1)
 
-                if len(deriv_start) < 2 or len(deriv_end) < 2:
-                    continue
+            if len(deriv_start) < 2 or len(deriv_end) < 2:
+                continue
 
+            for axis in range(3):
                 d_start = deriv_start[1][axis]
                 d_end = deriv_end[1][axis]
 
@@ -150,6 +150,10 @@ class AABB:
                         curve, axis, t_start, t_end, d_start
                     )
                     points.append(curve.point_at(t_root))
+                elif d_start == 0.0 and d_end != 0.0:
+                    points.append(curve.point_at(t_start))
+                elif d_end == 0.0 and d_start != 0.0:
+                    points.append(curve.point_at(t_end))
 
         return AABB.from_points(points, inflate)
 

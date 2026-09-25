@@ -817,6 +817,68 @@ def test_nurbscurve_closest_point():
     MINI_CHECK(TOLERANCE.is_point_close(closest[1], Point(4.552264625, 1.380381100, 0.676740741)))
 
 
+@MINI_TEST("NurbsCurve", "Length Repeated Knot")
+def test_nurbscurve_length_repeated_knot():
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 2, 0),
+        Point(3, 2, 1),
+        Point(4, 0, 0),
+        Point(6, 1, 2),
+        Point(7, 3, 0),
+    ]
+
+    curve = NurbsCurve.create(False, 3, points)
+    length = curve.length()
+    curve.insert_nurbsknot(1.5, 2)
+
+    MINI_CHECK(curve.span_count() == 4)
+    MINI_CHECK(TOLERANCE.is_close(curve.length(), length))
+
+
+@MINI_TEST("NurbsCurve", "Span Vector Empty")
+def test_nurbscurve_span_vector_empty():
+    from session_py import NurbsCurve
+
+    curve = NurbsCurve()
+
+    MINI_CHECK(len(curve.get_span_vector()) == 0)
+
+
+@MINI_TEST("NurbsCurve", "Periodic Too Few Points")
+def test_nurbscurve_periodic_too_few_points():
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    curve = NurbsCurve()
+    ok = curve.create_periodic_uniform(3, 4, [Point(0, 0, 0), Point(1, 0, 0)])
+
+    MINI_CHECK(not ok)
+
+
+@MINI_TEST("NurbsCurve", "Polyline Adaptive Closed")
+def test_nurbscurve_polyline_adaptive_closed():
+    from session_py import Primitives
+
+    circle = Primitives.circle(0, 0, 0, 2.0)
+    polyline = circle.to_polyline_adaptive(0.1, 0.0, 0.0)
+
+    MINI_CHECK(len(polyline[0]) == 25)
+    MINI_CHECK(TOLERANCE.is_point_close(polyline[0][0], polyline[0][-1]))
+
+
+@MINI_TEST("NurbsCurve", "Circle Length")
+def test_nurbscurve_circle_length():
+    from session_py import Primitives
+
+    circle = Primitives.circle(0, 0, 0, 2.0)
+
+    MINI_CHECK(abs(circle.length() - 4.0 * PI) < 1e-9)
+
+
 if __name__ == "__main__":
     from .mini_test import run_all
 

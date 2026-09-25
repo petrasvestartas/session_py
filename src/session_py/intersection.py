@@ -382,7 +382,9 @@ def line_plane(line: Line, plane: Plane, is_finite: bool = True) -> Point | None
         d_inv = 1.0 / d
         fd = abs(d_inv)
 
-        if fd > 1.0 and (abs(a) >= 1e38 / fd or abs(b) >= 1e38 / fd):
+        if fd > 1.0 and (
+            abs(a) >= sys.float_info.max / fd or abs(b) >= sys.float_info.max / fd
+        ):
             t = 0.5
             rc = False
         else:
@@ -8087,12 +8089,12 @@ def _vectors_nearly_parallel(v0: Vector, v1: Vector, angle_tol: float) -> bool:
     m0 = math.sqrt(v0[0] * v0[0] + v0[1] * v0[1] + v0[2] * v0[2])
     m1 = math.sqrt(v1[0] * v1[0] + v1[1] * v1[1] + v1[2] * v1[2])
 
-    if m0 < 1e-10 or m1 < 1e-10:
-        return True
+    if m0 < Tolerance.ZERO_TOLERANCE or m1 < Tolerance.ZERO_TOLERANCE:
+        return False
 
     cos_angle = abs((v0[0] * v1[0] + v0[1] * v1[1] + v0[2] * v1[2]) / (m0 * m1))
 
-    return cos_angle > math.cos(angle_tol)
+    return cos_angle >= math.cos(angle_tol)
 
 
 def plane_plane_plane_check(
@@ -8117,7 +8119,7 @@ def remap(val: float, from1: float, to1: float, from2: float, to2: float) -> flo
 
     span = to1 - from1
 
-    if abs(span) < 1e-14:
+    if abs(span) < Tolerance.ZERO_TOLERANCE:
         return from2
 
     t = (val - from1) / span
@@ -8314,7 +8316,7 @@ def scale_vector_to_distance_of_2planes(
 
     mag = math.sqrt(direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2)
 
-    if mag < 1e-14:
+    if mag < Tolerance.ZERO_TOLERANCE:
         return None
 
     ray = Line(0.0, 0.0, 0.0, direction[0], direction[1], direction[2])
@@ -8328,7 +8330,7 @@ def scale_vector_to_distance_of_2planes(
     n1 = plane1.z_axis
     n1_mag = math.sqrt(n1[0] ** 2 + n1[1] ** 2 + n1[2] ** 2)
 
-    if n1_mag < 1e-14:
+    if n1_mag < Tolerance.ZERO_TOLERANCE:
         return None
 
     o0 = plane0.origin
@@ -8339,7 +8341,7 @@ def scale_vector_to_distance_of_2planes(
     ) / n1_mag
     dist_ortho_sq = d * d
 
-    if dist_ortho_sq < 1e-28:
+    if dist_ortho_sq < Tolerance.ZERO_TOLERANCE:
         return None
 
     dist_sq = output[0] ** 2 + output[1] ** 2 + output[2] ** 2

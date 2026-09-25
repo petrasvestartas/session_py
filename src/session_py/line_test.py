@@ -1,3 +1,4 @@
+import math
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
@@ -267,6 +268,21 @@ def test_line_closest_point():
     MINI_CHECK(TOLERANCE.is_close(t3, 1.0))
 
 
+@MINI_TEST("Line", "Closest Point Unlimited")
+def test_line_closest_point_unlimited():
+    from session_py import Line
+    from session_py import Point
+
+    line = Line(0.0, 0.0, 0.0, 10.0, 0.0, 0.0)
+    before = line.closest_point(Point(-5.0, 2.0, 0.0), False)
+    after = line.closest_point(Point(15.0, 3.0, 0.0), False)
+
+    MINI_CHECK(TOLERANCE.is_close(before[0], -0.5))
+    MINI_CHECK(TOLERANCE.is_point_close(before[1], Point(-5.0, 0.0, 0.0)))
+    MINI_CHECK(TOLERANCE.is_close(after[0], 1.5))
+    MINI_CHECK(TOLERANCE.is_point_close(after[1], Point(15.0, 0.0, 0.0)))
+
+
 @MINI_TEST("Line", "Start End Center")
 def test_line_start_end_center():
     from session_py import Line
@@ -306,6 +322,38 @@ def test_line_fit_points():
     )
 
     MINI_CHECK(abs(l_vertical.to_direction()[1]) > 0.99)
+
+    l_skew = Line.fit_points(
+        [
+            Point(3.0, 0.0, 0.0),
+            Point(-3.0, 0.0, 0.0),
+            Point(0.0, 2.4, 2.4),
+            Point(0.0, -2.4, -2.4),
+        ]
+    )
+    skew = l_skew.to_direction()
+
+    MINI_CHECK(TOLERANCE.is_close(skew[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(abs(skew[1]), math.sqrt(0.5)))
+    MINI_CHECK(TOLERANCE.is_close(skew[1], skew[2]))
+
+
+@MINI_TEST("Line", "Fit Points Uneven")
+def test_line_fit_points_uneven():
+    from session_py import Line
+    from session_py import Point
+
+    line = Line.fit_points(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(0.0, 1.0, 0.0),
+            Point(0.0, 9.0, 0.0),
+        ]
+    )
+
+    MINI_CHECK(TOLERANCE.is_close(line.length(), 9.0))
+    MINI_CHECK(TOLERANCE.is_point_close(line.start(), Point(0.0, 0.0, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(line.end(), Point(0.0, 9.0, 0.0)))
 
 
 @MINI_TEST("Line", "Subdivide")
@@ -364,6 +412,27 @@ def test_line_extend():
 
     MINI_CHECK(TOLERANCE.is_close(line.start()[0], -1.0))
     MINI_CHECK(TOLERANCE.is_close(line.end()[0], 12.0))
+
+
+@MINI_TEST("Line", "Extend Keeps Properties")
+def test_line_extend_keeps_properties():
+    from session_py import Color
+    from session_py import Line
+    from session_py import Point
+
+    line = Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0))
+    line.name = "beam"
+    line.width = 3.0
+    line.dash = [2.0, 1.0]
+    line.linecolor = Color.red()
+    guid = line.guid
+    line.extend(1.0, 2.0)
+
+    MINI_CHECK(line.name == "beam")
+    MINI_CHECK(line.width == 3.0)
+    MINI_CHECK(line.dash == [2.0, 1.0])
+    MINI_CHECK(line.linecolor == Color.red())
+    MINI_CHECK(line.guid == guid)
 
 
 if __name__ == "__main__":

@@ -121,8 +121,28 @@ class Line:
         return Line.from_points(point, point + direction.normalized() * length)
 
     @staticmethod
+    def _fit_points_power(
+        row0: Vector, row1: Vector, row2: Vector, seed: Vector
+    ) -> tuple[Vector, float]:
+        """Power iteration on the covariance rows from seed: the unit axis and its eigenvalue estimate."""
+
+        axis = seed
+        eigen = 0.0
+
+        for _ in range(100):
+            next = Vector(row0.dot(axis), row1.dot(axis), row2.dot(axis))
+            eigen = math.sqrt(next.magnitude_squared())
+
+            if eigen < 1e-15:
+                break
+
+            axis = next / eigen
+
+        return (axis, eigen)
+
+    @staticmethod
     def _fit_points_axis(points: list[Point], center: Point) -> Vector:
-        """Principal direction of the points about center by power iteration on their covariance."""
+        """Principal direction of the points about center: power iteration from each of X, Y and Z, largest eigenvalue kept."""
 
         cxx = 0.0
         cyy = 0.0
@@ -140,51 +160,51 @@ class Line:
             cxz += d[0] * d[2]
             cyz += d[1] * d[2]
 
-        axis = Vector(1.0, 0.0, 0.0)
+        row0 = Vector(cxx, cxy, cxz)
+        row1 = Vector(cxy, cyy, cyz)
+        row2 = Vector(cxz, cyz, czz)
+        first = 0
 
         if cyy > cxx and cyy >= czz:
-            axis = Vector(0.0, 1.0, 0.0)
+            first = 1
         elif czz > cxx and czz > cyy:
-            axis = Vector(0.0, 0.0, 1.0)
+            first = 2
 
-        for _ in range(100):
-            next = Vector(
-                cxx * axis[0] + cxy * axis[1] + cxz * axis[2],
-                cxy * axis[0] + cyy * axis[1] + cyz * axis[2],
-                cxz * axis[0] + cyz * axis[1] + czz * axis[2],
-            )
-            mag = math.sqrt(next.magnitude_squared())
+        axis = Vector(1.0, 0.0, 0.0)
+        best = -1.0
 
-            if mag < 1e-15:
-                break
+        for k in range(3):
+            seed = Vector(0.0, 0.0, 0.0)
+            seed[(first + k) % 3] = 1.0
+            power = Line._fit_points_power(row0, row1, row2, seed)
 
-            axis = next / mag
+            if power[1] > best * (1.0 + Tolerance.RELATIVE):
+                axis = power[0]
+                best = power[1]
 
         return axis
 
     @staticmethod
-    def _fit_points_half(
+    def _fit_points_extent(
         points: list[Point], center: Point, axis: Vector, length: float
-    ) -> float:
-        """Half length of the fitted line: length / 2, or the projected extent when length <= 0."""
+    ) -> tuple[float, float]:
+        """Parameter range of the fitted line along axis: +-length / 2, or the projected extent when length <= 0."""
 
-        half = length / 2.0
+        if length > 0.0:
+            return (-length / 2.0, length / 2.0)
 
-        if length <= 0.0:
-            t_min = 0.0
-            t_max = 0.0
+        t_min = 0.0
+        t_max = 0.0
 
-            for p in points:
-                t = (p - center).dot(axis)
-                t_min = min(t_min, t)
-                t_max = max(t_max, t)
+        for p in points:
+            t = (p - center).dot(axis)
+            t_min = min(t_min, t)
+            t_max = max(t_max, t)
 
-            half = max(abs(t_min), abs(t_max))
+        if t_max - t_min < 1e-10:
+            return (-0.5, 0.5)
 
-            if half < 1e-10:
-                half = 0.5
-
-        return half
+        return (t_min, t_max)
 
     @staticmethod
     def fit_points(points: list[Point], length: float = 0.0) -> Line:
@@ -195,9 +215,9 @@ class Line:
 
         center = Point.centroid(points)
         axis = Line._fit_points_axis(points, center)
-        half = Line._fit_points_half(points, center, axis, length)
+        extent = Line._fit_points_extent(points, center, axis, length)
 
-        return Line.from_points(center - axis * half, center + axis * half)
+        return Line.from_points(center + axis * extent[0], center + axis * extent[1])
 
     @staticmethod
     def with_name(

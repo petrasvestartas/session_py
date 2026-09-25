@@ -429,6 +429,9 @@ class NurbsCurve:
 
         point_count = len(points)
 
+        if point_count < order:
+            return False
+
         if not self.create_curve(dimension, False, order, point_count + order - 1):
             return False
 
@@ -1280,6 +1283,9 @@ class NurbsCurve:
     def get_span_vector(self) -> list[float]:
         """Return the distinct nurbsknot values inside the domain."""
 
+        if not self.is_valid():
+            return []
+
         spans = [float(self.m_nurbsknot[self.m_order - 2])]
 
         for i in range(self.m_order - 1, self.m_cv_count):
@@ -1342,7 +1348,7 @@ class NurbsCurve:
 
         SUBDIVISIONS = 4
         total = 0.0
-        n_spans = self.span_count()
+        n_spans = self.m_cv_count - self.m_order + 1
 
         for span in range(n_spans):
             span_a = self.m_nurbsknot[self.m_order - 2 + span]
@@ -3637,6 +3643,15 @@ class NurbsCurve:
         t0, t1 = self.domain()
         samples = [(t0, self.point_at(t0)), (t1, self.point_at(t1))]
         work_queue = [(t0, t1)]
+        closed = samples[0][1].distance(samples[1][1]) < 1e-6
+
+        if closed and self.length() > max_edge_length:
+            t_third = t0 + (t1 - t0) / 3.0
+            t_two_thirds = t0 + 2.0 * (t1 - t0) / 3.0
+            samples.append((t_third, self.point_at(t_third)))
+            samples.append((t_two_thirds, self.point_at(t_two_thirds)))
+            work_queue = [(t0, t_third), (t_third, t_two_thirds), (t_two_thirds, t1)]
+
         max_iterations = 10000
         iterations = 0
 

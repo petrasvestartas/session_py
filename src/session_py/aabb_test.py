@@ -225,5 +225,39 @@ def test_aabb_from_geometry():
     MINI_CHECK(TOLERANCE.is_close(a_ns.volume(), 8.0))
 
 
+@MINI_TEST("AABB", "From Nurbscurve Tight")
+def test_aabb_from_nurbscurve_tight():
+    from session_py import AABB
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    bulge = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 2.0, 0.0),
+            Point(2.0, 1.0, 0.0),
+        ],
+    )
+    arch = NurbsCurve.create(
+        False,
+        2,
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 2.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+        ],
+    )
+    hull = AABB.from_nurbscurve(bulge, 0.0, False)
+    tight = AABB.from_nurbscurve(bulge, 0.0, True)
+    boundary = AABB.from_nurbscurve(arch, 0.0, True)
+
+    MINI_CHECK(TOLERANCE.is_close(hull.max_point()[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(tight.max_point()[1], 4.0 / 3.0))
+    MINI_CHECK(TOLERANCE.is_close(boundary.hy, 0.5))
+    MINI_CHECK(TOLERANCE.is_close(boundary.cy, 0.5))
+
+
 if __name__ == "__main__":
     run_all(language="python")

@@ -61,8 +61,13 @@ def _point_in_polygon_2d(u: float, v: float, poly: list[Point]) -> bool:
     return winding != 0
 
 
-def _inside_loops(u: float, v: float, loops_uv: list[list[Point]]) -> bool:
-    """True when (u, v) lies inside the outer loop and outside every hole."""
+def _inside_loops(
+    u: float, v: float, loops_uv: list[list[Point]], bounds: list[float]
+) -> bool:
+    """True when (u, v) lies inside the outer loop and outside every hole; bounds is the outer loop's UV box."""
+
+    if u < bounds[0] or v < bounds[1] or u > bounds[2] or v > bounds[3]:
+        return False
 
     if not _point_in_polygon_2d(u, v, loops_uv[0]):
         return False
@@ -1954,12 +1959,17 @@ def _insert_loops(
     return loop_vids
 
 
-def _insert_crease_lines(dt: _Delaunay2D, loops_uv: list[list[Point]], crease_knots: list[list[float]]) -> None:
+def _insert_crease_lines(
+    dt: _Delaunay2D,
+    loops_uv: list[list[Point]],
+    bounds: list[float],
+    crease_knots: list[list[float]],
+) -> None:
     """Insert the crease knot crossings inside the loops and constrain each knot line between consecutive vertices on it."""
 
     for u in crease_knots[0]:
         for v in crease_knots[1]:
-            if _inside_loops(u, v, loops_uv):
+            if _inside_loops(u, v, loops_uv, bounds):
                 dt.insert(u, v)
 
     for direction in range(2):
@@ -1978,7 +1988,7 @@ def _insert_crease_lines(dt: _Delaunay2D, loops_uv: list[list[Point]], crease_kn
                 uv = [knot, knot]
                 uv[1 - direction] = (nodes[k - 1][0] + nodes[k][0]) * 0.5
 
-                if _inside_loops(uv[0], uv[1], loops_uv):
+                if _inside_loops(uv[0], uv[1], loops_uv, bounds):
                     dt.insert_constraint(nodes[k - 1][1], nodes[k][1])
 
 
@@ -2006,6 +2016,7 @@ def _refinement_points(
     dt: _Delaunay2D,
     surface: NurbsSurface,
     loops_uv: list[list[Point]],
+    bounds: list[float],
     crease_knots: list[list[float]],
     deflection: float,
     cos_max_angle: float,
@@ -2024,7 +2035,7 @@ def _refinement_points(
         cu = (a.x + b.x + c.x) / 3.0
         cv = (a.y + b.y + c.y) / 3.0
 
-        if not _inside_loops(cu, cv, loops_uv):
+        if not _inside_loops(cu, cv, loops_uv, bounds):
             continue
 
         pa = surface.point_at(a.x, a.y)
@@ -2049,6 +2060,7 @@ def _refine(
     dt: _Delaunay2D,
     surface: NurbsSurface,
     loops_uv: list[list[Point]],
+    bounds: list[float],
     crease_knots: list[list[float]],
     deflection: float,
     cos_max_angle: float,
@@ -2059,7 +2071,9 @@ def _refine(
     MAX_VERTS = 200000
 
     for _iter in range(MAX_ITERS):
-        to_insert = _refinement_points(dt, surface, loops_uv, crease_knots, deflection, cos_max_angle)
+        to_insert = _refinement_points(
+            dt, surface, loops_uv, bounds, crease_knots, deflection, cos_max_angle
+        )
 
         if not to_insert:
             break
@@ -2074,7 +2088,9 @@ def _refine(
             break
 
 
-def _trim_outside(dt: _Delaunay2D, loops_uv: list[list[Point]]) -> None:
+def _trim_outside(
+    dt: _Delaunay2D, loops_uv: list[list[Point]], bounds: list[float]
+) -> None:
     """Drop the super triangle and every triangle whose centroid lies outside the loops."""
 
     dt.cleanup()
@@ -2087,7 +2103,7 @@ def _trim_outside(dt: _Delaunay2D, loops_uv: list[list[Point]]) -> None:
         cu = (dt.vertices[v0].x + dt.vertices[v1].x + dt.vertices[v2].x) / 3.0
         cv = (dt.vertices[v0].y + dt.vertices[v1].y + dt.vertices[v2].y) / 3.0
 
-        if not _inside_loops(cu, cv, loops_uv):
+        if not _inside_loops(cu, cv, loops_uv, bounds):
             tri.alive = False
 
 
@@ -2984,14 +3000,22 @@ class NurbsSurfaceTrimmed:
         dt = _Delaunay2D(bounds[0], bounds[1], bounds[2], bounds[3])
         boundary_intervals = {}
         loop_vids = _insert_loops(dt, loops.uv, crease_knots, boundary_intervals)
-        _insert_crease_lines(dt, loops.uv, crease_knots)
+        _insert_crease_lines(dt, loops.uv, bounds, crease_knots)
 
         for p in loops.interior_uv:
-            if _inside_loops(p[0], p[1], loops.uv):
+            if _inside_loops(p[0], p[1], loops.uv, bounds):
                 dt.insert(p[0], p[1])
 
-        _refine(dt, self.m_surface, loops.uv, crease_knots, deflection, cos_max_angle)
-        _trim_outside(dt, loops.uv)
+        _refine(
+            dt,
+            self.m_surface,
+            loops.uv,
+            bounds,
+            crease_knots,
+            deflection,
+            cos_max_angle,
+        )
+        _trim_outside(dt, loops.uv, bounds)
         tris = dt.get_triangles()
 
         if not tris or _crosses_crease(tris, dt, crease_knots):
