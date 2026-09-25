@@ -407,6 +407,44 @@ def test_boolean_polyline_large_coords_auto_scale():
     MINI_CHECK(diff[0].point_count() > 0)
 
 
+@MINI_TEST("Boolean Polyline", "Regions")
+def test_boolean_polyline_regions():
+    from session_py import BooleanPolyline
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    plane = Plane.xy_plane()
+    outer = Polyline.rectangle(
+        Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 10.0, 10.0
+    )
+    inner = Polyline.rectangle(
+        Point(3.0, 3.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 4.0, 4.0
+    )
+    left = Polyline.rectangle(
+        Point(0.0, -1.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 5.0, 12.0
+    )
+    apart = Polyline.rectangle(
+        Point(20.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 10.0, 10.0
+    )
+    frame = BooleanPolyline.compute_regions([outer], [inner], 2)
+    half = BooleanPolyline.compute_regions(frame, [left], 0)
+    both = BooleanPolyline.compute_regions([outer], [apart], 1)
+    clockwise = 0
+
+    for ring in frame:
+        clockwise += 1 if ring.is_clockwise(plane) else 0
+
+    MINI_CHECK(len(frame) == 2)
+    MINI_CHECK(frame[0].is_closed())
+    MINI_CHECK(clockwise == 1)
+    MINI_CHECK(len(half) == 1)
+    MINI_CHECK(half[0].point_count() == 9)
+    MINI_CHECK(not half[0].is_clockwise(plane))
+    MINI_CHECK(len(both) == 2)
+
+
 @MINI_TEST("Boolean Polyline Open", "Horizontal Line Vs Unit Square")
 def test_boolean_polyline_open_horizontal_line_vs_unit_square():
     from session_py import BooleanPolyline

@@ -2320,6 +2320,42 @@ class BooleanPolyline:
         return _v_extract(sc, 1.0 / bool_scale)
 
     @staticmethod
+    def compute_regions(
+        a: list[Polyline], b: list[Polyline], clip_type: int
+    ) -> list[Polyline]:
+        """Compute the nonzero Vatti boolean of two sets of closed rings in xy, holes clockwise, with clip_type 0 intersection, 1 union, 2 a minus b; closed rings, outer counter-clockwise, holes clockwise."""
+
+        ca = []
+        cb = []
+
+        for ring in a:
+            ca.extend(ring.coords)
+
+        for ring in b:
+            cb.extend(ring.coords)
+
+        bool_scale = _v_bool_scale(ca, len(ca) // 3, cb, len(cb) // 3)
+        sc = _VattiScratch()
+
+        for ring in a:
+            n = _v_strip_closing(ring.coords, len(ring.coords) // 3)
+            _v_add_path_from_doubles(ring.coords, n, 0, bool_scale, sc)
+
+        for ring in b:
+            n = _v_strip_closing(ring.coords, len(ring.coords) // 3)
+            _v_add_path_from_doubles(ring.coords, n, 1, bool_scale, sc)
+
+        if not _v_execute_internal(sc, clip_type):
+            return []
+
+        rings = _v_extract(sc, 1.0 / bool_scale)
+
+        for ring in rings:
+            ring.add_point(ring.get_point(0))
+
+        return rings
+
+    @staticmethod
     def compute_count(a: Polyline, b: Polyline, clip_type: int) -> int:
         """Return the number of output points of compute without building polylines."""
 
