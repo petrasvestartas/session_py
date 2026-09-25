@@ -62,7 +62,7 @@ class TreeNode:
     @property
     def is_leaf(self) -> bool:
         """Return whether this node has no live children."""
-        return not self.children
+        return all(child._dead for child in self._children)
 
     @property
     def parent(self) -> TreeNode | None:
@@ -713,9 +713,10 @@ def _draw_node(node: TreeNode, prefix: str, last: bool) -> str:
         + str(node)
         + "\n"
     )
+    children = node.children
     nxt = prefix + ("    " if last else "\u2502   ")
-    for i, child in enumerate(node.children):
-        text += _draw_node(child, nxt, i + 1 == len(node.children))
+    for i, child in enumerate(children):
+        text += _draw_node(child, nxt, i + 1 == len(children))
 
     return text
 
@@ -728,6 +729,7 @@ def _clone_node(node: TreeNode, memo) -> TreeNode:
     clone = TreeNode(node.name)
     clone._guid = node._guid
     clone.color = copy.deepcopy(node.color, memo)
+    memo[id(node)] = clone
 
     for child in node.children:
         clone.add(_clone_node(child, memo))
