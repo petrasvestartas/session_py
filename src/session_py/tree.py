@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING
+import copy
 import sys
 import uuid
 import weakref
@@ -772,8 +773,6 @@ def _draw_node(node: TreeNode, prefix: str, last: bool) -> str:
 
 def _clone_node(node: TreeNode, memo) -> TreeNode:
     """Duplicate one node and its live subtree with the same names, guids and colours."""
-
-    import copy
 
     clone = TreeNode(node.name)
     clone._guid = node._guid
