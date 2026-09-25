@@ -451,7 +451,10 @@ class History:
     def clear(self) -> None:
         """Drop every transaction, open or committed; what they pinned is purgeable now."""
 
-        for transaction in self.undo_stack + self.redo_stack:
+        for transaction in self.undo_stack:
+            self.dropped += len(transaction.ops)
+
+        for transaction in self.redo_stack:
             self.dropped += len(transaction.ops)
 
         if self.current is not None:
@@ -465,12 +468,15 @@ class History:
     def _pinned(self) -> int:
         """Bytes pinned by both stacks."""
 
-        total = 0
+        pinned = 0
 
-        for transaction in self.undo_stack + self.redo_stack:
-            total += transaction.bytes
+        for transaction in self.undo_stack:
+            pinned += transaction.bytes
 
-        return total
+        for transaction in self.redo_stack:
+            pinned += transaction.bytes
+
+        return pinned
 
     def _revert(self, op: Any, session: Session) -> None:
         """Undo one op against the session."""

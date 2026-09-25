@@ -987,7 +987,6 @@ class Session:
         if old is not None and ghost is not None:
             self._queue(old)
 
-        # a group comes back with its transform; an object's stays with its own tomb
         tomb = node.get_tomb()
 
         if was_dead and tomb is not None and tomb.collection == "":
@@ -1939,7 +1938,6 @@ class Session:
         if node is not None:
             self.node_lookup[guid] = node
         else:
-            # an object outside the tree parks its transform and vertex on a detached node
             node = TreeNode(name=guid)
 
         tomb = Tomb(collection, False, slot, node)
@@ -2463,19 +2461,7 @@ class Session:
         self.bvh_cache_dirty = True
 
         if tomb.definition:
-            items = getattr(self.definitions, tomb.collection)
-            stored = items.get_item(slot)
-            guid = stored.guid
-            held = self.definition_lookup.get(guid)
-            owner = not self._twin(True, tomb.collection, slot, guid)
-
-            if owner and held is not None and held is not stored:
-                items.set_item(slot, held)
-
-            items.set_dead(slot, True)
-
-            if owner:
-                del self.definition_lookup[guid]
+            self._kill_definition(tomb)
 
             return
 
@@ -2511,23 +2497,8 @@ class Session:
         if parent is not None:
             self._queue(parent)
 
-        if not owner:
-            return
-
-        tomb.xform = self.xforms.pop(guid, None)
-        taken = self.graph.take_node(guid)
-
-        if taken is None:
-            return
-
-        vertex, edges = taken
-
-        for edge in edges:
-            if edge.has_guid() and edge.guid in self.interactions:
-                tomb.interactions[edge.guid] = self.interactions.pop(edge.guid)
-
-        tomb.vertex = vertex
-        tomb.edges = edges
+        if owner:
+            self._park(tomb, guid)
 
     def _revive(self, tomb: Tomb) -> None:
         """Flip a tomb live again: the same slot and object, and for an object tomb the same node, transform, vertex, edges and interactions; a guid a live twin owns stays dead; O(1 + d log V)."""
@@ -2540,12 +2511,7 @@ class Session:
         self.bvh_cache_dirty = True
 
         if tomb.definition:
-            items = getattr(self.definitions, tomb.collection)
-            geometry = items.get_item(slot)
-
-            if not self._twin(True, tomb.collection, slot, geometry.guid):
-                items.set_dead(slot, False)
-                self.definition_lookup[geometry.guid] = geometry
+            self._revive_definition(tomb)
 
             return
 
@@ -2570,6 +2536,61 @@ class Session:
         if node.parent is not None:
             self.node_lookup[guid] = node
 
+        self._unpark(tomb, guid)
+
+    def _kill_definition(self, tomb: Tomb) -> None:
+        """Flip a definition tomb dead: its slot, and its map entry when it owns the guid; O(1)."""
+
+        slot = tomb.slot
+        items = getattr(self.definitions, tomb.collection)
+        stored = items.get_item(slot)
+        guid = stored.guid
+        owner = not self._twin(True, tomb.collection, slot, guid)
+        held = self.definition_lookup.get(guid)
+
+        if owner and held is not None and held is not stored:
+            items.set_item(slot, held)
+
+        items.set_dead(slot, True)
+
+        if owner:
+            del self.definition_lookup[guid]
+
+    def _revive_definition(self, tomb: Tomb) -> None:
+        """Flip a definition tomb live again, unless a live twin owns its guid; O(1)."""
+
+        slot = tomb.slot
+        items = getattr(self.definitions, tomb.collection)
+        item = items.get_item(slot)
+        guid = item.guid
+
+        if self._twin(True, tomb.collection, slot, guid):
+            return
+
+        items.set_dead(slot, False)
+        self.definition_lookup[guid] = item
+
+    def _park(self, tomb: Tomb, guid: str) -> None:
+        """Move the transform, graph vertex, incident edges and their interactions of guid into its tomb; O(d log V)."""
+
+        tomb.xform = self.xforms.pop(guid, None)
+        taken = self.graph.take_node(guid)
+
+        if taken is None:
+            return
+
+        vertex, edges = taken
+
+        for edge in edges:
+            if edge.has_guid() and edge.guid in self.interactions:
+                tomb.interactions[edge.guid] = self.interactions.pop(edge.guid)
+
+        tomb.vertex = vertex
+        tomb.edges = edges
+
+    def _unpark(self, tomb: Tomb, guid: str) -> None:
+        """Move a tomb's transform, vertex and edges back, with the interactions of every edge that returns; O(d log V)."""
+
         if tomb.xform is not None:
             self.xforms[guid] = tomb.xform
             tomb.xform = None
@@ -2589,7 +2610,7 @@ class Session:
 
             back = self.graph.edges.get(guid, {}).get(edge.other_vertex(guid))
 
-            if back is None or back.guid != edge.guid:
+            if back is None or not back.has_guid() or back.guid != edge.guid:
                 continue
 
             if edge.guid in tomb.interactions:
@@ -2636,7 +2657,6 @@ class Session:
         was = op.node.is_dead()
         live = self._is_live(name)
 
-        # the ghost takes the node's place, and that parent is swept
         if op.ghost is not None:
             source = op.node.parent
             TreeNode.swap(op.node, op.ghost)
@@ -2657,7 +2677,6 @@ class Session:
             if parent is not None:
                 self._queue(parent)
 
-        # a live object keeps its transform, only a group parks it
         if dead and not was and not live:
             op.tomb.xform = self.xforms.pop(name, None)
 

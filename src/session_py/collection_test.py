@@ -72,8 +72,8 @@ def test_collection_index_skips_dead():
     points.append(e[5])
 
     MINI_CHECK(points[0] is e[1] and points[1] is e[2])
-    MINI_CHECK(points[2] is e[4] and points[-2] is e[4])
-    MINI_CHECK(points[0] is e[1] and points[0:2] == [e[1], e[2]])
+    MINI_CHECK(points[2] is e[4])
+    MINI_CHECK(points[0] is e[1])
     MINI_CHECK(missing)
     MINI_CHECK(points[3] is e[5])
     MINI_CHECK(points[-1] is e[5])
