@@ -213,7 +213,7 @@ class Objects:
         self.breps = Collection()  # BReps.
         self.elements = Collection()  # Elements.
         self.components = Collection()  # Components.
-        self.instances = Collection()  # Instances, each placing a definition of Session.definitions by guid.
+        self.instances = Collection()  # Instances, each placing a definition by guid.
 
     def __deepcopy__(self, memo):
         """Copy every list and every object in it, guids included, so a Session's indexes still match."""

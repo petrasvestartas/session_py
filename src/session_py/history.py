@@ -60,9 +60,7 @@ class Tomb:
     ):
         """Construct a tomb with nothing parked."""
 
-        self.collection = (
-            collection  # The Objects list of its slot, "" for a node-only tomb.
-        )
+        self.collection = collection  # Its Objects list, "" for a node-only tomb.
         self.definition = definition  # Whether the slot is in Session.definitions.
         self.slot = slot  # Its raw slot, moved by compaction.
         self.node = node  # Its tree node, None for a slot-only tomb.
