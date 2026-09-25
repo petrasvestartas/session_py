@@ -24,7 +24,7 @@ LIST = 4  # Parenthesised list.
 NULL = 5  # Unset or derived value.
 
 
-class StepParam:
+class _StepParam:
     """One parameter of an entity instance."""
 
     def __init__(self):
@@ -37,7 +37,7 @@ class StepParam:
         self.list = []  # Items for List.
 
 
-class StepSubEntity:
+class _StepSubEntity:
     """One TYPE(params) part of an entity instance."""
 
     def __init__(self):
@@ -47,7 +47,7 @@ class StepSubEntity:
         self.params = []  # Parameters in file order.
 
 
-class StepEntity:
+class _StepEntity:
     """One entity: a single part for a simple instance, several for a complex one."""
 
     def __init__(self):
@@ -63,7 +63,7 @@ class StepEntity:
 
         return False
 
-    def find(self, t: str) -> StepSubEntity | None:
+    def find(self, t: str) -> _StepSubEntity | None:
         """Return the first sub-entity of type t, or null."""
 
         for p in self.parts:
@@ -73,7 +73,7 @@ class StepEntity:
         return None
 
 
-class StepFile:
+class _StepFile:
     """Entities of a parsed file by id."""
 
     def __init__(self):
@@ -99,7 +99,7 @@ MAX_DEPTH = 8  # Deepest list nesting parsed recursively.
 NS = 17  # Samples per side of a surface grid.
 
 
-class Cursor:
+class _Cursor:
     """Read position in a STEP text."""
 
     def __init__(self, text: str):
@@ -110,13 +110,13 @@ class Cursor:
         self.end = len(text)  # End of text.
 
 
-def _skip_ws(c: Cursor) -> None:
+def _skip_ws(c: _Cursor) -> None:
     """Advance the cursor past whitespace."""
     while c.p < c.end and c.s[c.p].isspace():
         c.p += 1
 
 
-def _consume(c: Cursor, ch: str) -> bool:
+def _consume(c: _Cursor, ch: str) -> bool:
     """Advance past ch when it is next, skipping whitespace first."""
 
     _skip_ws(c)
@@ -134,7 +134,7 @@ def _isident(ch: str) -> bool:
     return ch.isupper() or ch.isdigit() or ch == "_"
 
 
-def _parse_int(c: Cursor) -> int:
+def _parse_int(c: _Cursor) -> int:
     """Read an optionally signed integer."""
 
     id_ = 0
@@ -146,7 +146,7 @@ def _parse_int(c: Cursor) -> int:
     return id_
 
 
-def _parse_number(c: Cursor) -> float:
+def _parse_number(c: _Cursor) -> float:
     """Read a real, an integer or an enum literal as a double."""
 
     start = c.p
@@ -175,7 +175,7 @@ def _parse_number(c: Cursor) -> float:
         return 0.0
 
 
-def _parse_ident(c: Cursor) -> str:
+def _parse_ident(c: _Cursor) -> str:
     """Read an identifier."""
 
     start = c.p
@@ -186,7 +186,7 @@ def _parse_ident(c: Cursor) -> str:
     return c.s[start : c.p]
 
 
-def _parse_string(c: Cursor) -> str:
+def _parse_string(c: _Cursor) -> str:
     """Read a quoted string, unescaping doubled quotes."""
 
     out = []
@@ -209,7 +209,7 @@ def _parse_string(c: Cursor) -> str:
     return "".join(out)
 
 
-def _parse_params(c: Cursor, depth: int) -> list[StepParam]:
+def _parse_params(c: _Cursor, depth: int) -> list[_StepParam]:
     """Read a parenthesised parameter list, recursing one level deeper."""
 
     out = []
@@ -235,7 +235,7 @@ def _parse_params(c: Cursor, depth: int) -> list[StepParam]:
     return out
 
 
-def _skip_list(c: Cursor) -> None:
+def _skip_list(c: _Cursor) -> None:
     """Skip a parenthesised group without recursing, for lists nested deeper than MAX_DEPTH."""
 
     open_ = 0
@@ -253,12 +253,12 @@ def _skip_list(c: Cursor) -> None:
             return
 
 
-def _parse_param(c: Cursor, depth: int) -> StepParam:
+def _parse_param(c: _Cursor, depth: int) -> _StepParam:
     """Read one parameter: reference, number, string, enum, list or sub-entity."""
 
     _skip_ws(c)
 
-    r = StepParam()
+    r = _StepParam()
 
     if c.p >= c.end:
         return r
@@ -310,10 +310,10 @@ def _parse_param(c: Cursor, depth: int) -> StepParam:
     return r
 
 
-def _parse_sub_entity(c: Cursor) -> StepSubEntity:
+def _parse_sub_entity(c: _Cursor) -> _StepSubEntity:
     """Read one TYPE(params) instance."""
 
-    sub = StepSubEntity()
+    sub = _StepSubEntity()
     sub.type = _parse_ident(c)
     _skip_ws(c)
 
@@ -323,7 +323,7 @@ def _parse_sub_entity(c: Cursor) -> StepSubEntity:
     return sub
 
 
-def _skip_statement(c: Cursor) -> None:
+def _skip_statement(c: _Cursor) -> None:
     """Advance past the next semicolon."""
 
     in_str = False
@@ -339,10 +339,10 @@ def _skip_statement(c: Cursor) -> None:
             return
 
 
-def _parse_step_string(content: str, sf: StepFile) -> None:
+def _parse_step_string(content: str, sf: _StepFile) -> None:
     """Fill sf from the DATA section of a STEP text."""
 
-    c = Cursor(content)
+    c = _Cursor(content)
 
     while c.p < c.end:
         _skip_ws(c)
@@ -368,7 +368,7 @@ def _parse_step_string(content: str, sf: StepFile) -> None:
         if c.p >= c.end:
             break
 
-        ent = StepEntity()
+        ent = _StepEntity()
 
         if c.s[c.p] == "(":
             c.p += 1
@@ -415,10 +415,10 @@ def _strip_comments(raw: str) -> str:
     return "".join(text)
 
 
-def _parse_step_file(filepath: str) -> StepFile:
+def _parse_step_file(filepath: str) -> _StepFile:
     """Read and parse a STEP file."""
 
-    sf = StepFile()
+    sf = _StepFile()
 
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
@@ -452,7 +452,7 @@ def _parse_step_file(filepath: str) -> StepFile:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _first_ref(params: list[StepParam]) -> int:
+def _first_ref(params: list[_StepParam]) -> int:
     """Return the first reference parameter, or -1."""
 
     for p in params:
@@ -462,7 +462,7 @@ def _first_ref(params: list[StepParam]) -> int:
     return -1
 
 
-def _all_refs(params: list[StepParam]) -> list[int]:
+def _all_refs(params: list[_StepParam]) -> list[int]:
     """Return every reference parameter in order."""
 
     out = []
@@ -474,7 +474,7 @@ def _all_refs(params: list[StepParam]) -> list[int]:
     return out
 
 
-def _list_refs(params: list[StepParam]) -> list[int]:
+def _list_refs(params: list[_StepParam]) -> list[int]:
     """Return every reference inside the list parameters."""
 
     out = []
@@ -485,7 +485,7 @@ def _list_refs(params: list[StepParam]) -> list[int]:
     return out
 
 
-def _nums(params: list[StepParam]) -> list[float]:
+def _nums(params: list[_StepParam]) -> list[float]:
     """Return every numeric parameter in order."""
 
     out = []
@@ -497,7 +497,7 @@ def _nums(params: list[StepParam]) -> list[float]:
     return out
 
 
-def _int_list(p: StepParam) -> list[int]:
+def _int_list(p: _StepParam) -> list[int]:
     """Return the numbers of a list parameter as integers."""
 
     out = []
@@ -508,12 +508,12 @@ def _int_list(p: StepParam) -> list[int]:
     return out
 
 
-def _dbl_list(p: StepParam) -> list[float]:
+def _dbl_list(p: _StepParam) -> list[float]:
     """Return the numbers of a list parameter."""
     return _nums(p.list)
 
 
-def _dbl_list_list(p: StepParam) -> list[list[float]]:
+def _dbl_list_list(p: _StepParam) -> list[list[float]]:
     """Return the numbers of a list-of-lists parameter."""
 
     out = []
@@ -524,7 +524,7 @@ def _dbl_list_list(p: StepParam) -> list[list[float]]:
     return out
 
 
-def _ref_list_list(p: StepParam) -> list[list[int]]:
+def _ref_list_list(p: _StepParam) -> list[list[int]]:
     """Return the references of a list-of-lists parameter."""
 
     out = []
@@ -535,7 +535,7 @@ def _ref_list_list(p: StepParam) -> list[list[int]]:
     return out
 
 
-def _coords(params: list[StepParam]) -> list[float]:
+def _coords(params: list[_StepParam]) -> list[float]:
     """Numbers of the first list parameter that holds any."""
 
     for p in params:
@@ -547,7 +547,7 @@ def _coords(params: list[StepParam]) -> list[float]:
     return []
 
 
-def _last_flag(params: list[StepParam], fallback: bool) -> bool:
+def _last_flag(params: list[_StepParam], fallback: bool) -> bool:
     """Last enum parameter as a flag (.T. is true), fallback when there is none."""
 
     out = fallback
@@ -559,7 +559,7 @@ def _last_flag(params: list[StepParam], fallback: bool) -> bool:
     return out
 
 
-class CurveParams:
+class _CurveParams:
     """Degree, control point ids and knots of a B-spline curve entity."""
 
     def __init__(self):
@@ -571,7 +571,7 @@ class CurveParams:
         self.knots = []  # Distinct knot values.
 
 
-class SurfaceParams:
+class _SurfaceParams:
     """Degrees, control point id grid and knots of a B-spline surface entity."""
 
     def __init__(self):
@@ -586,7 +586,7 @@ class SurfaceParams:
         self.v_knots = []  # Distinct knot values in v.
 
 
-def _curve_params(e: StepEntity) -> CurveParams | None:
+def _curve_params(e: _StepEntity) -> _CurveParams | None:
     """B_SPLINE_CURVE_WITH_KNOTS parameters, simple or split across a complex instance; none when missing, short or empty."""
 
     bsc = e.find("B_SPLINE_CURVE_WITH_KNOTS")
@@ -595,7 +595,7 @@ def _curve_params(e: StepEntity) -> CurveParams | None:
         return None
 
     base = e.find("B_SPLINE_CURVE")
-    cp = CurveParams()
+    cp = _CurveParams()
 
     if base is None:
         pp = bsc.params
@@ -625,7 +625,7 @@ def _curve_params(e: StepEntity) -> CurveParams | None:
     return cp
 
 
-def _surface_params(e: StepEntity) -> SurfaceParams | None:
+def _surface_params(e: _StepEntity) -> _SurfaceParams | None:
     """B_SPLINE_SURFACE_WITH_KNOTS parameters, simple or split across a complex instance; none when missing, short or empty."""
 
     bss = e.find("B_SPLINE_SURFACE_WITH_KNOTS")
@@ -634,7 +634,7 @@ def _surface_params(e: StepEntity) -> SurfaceParams | None:
         return None
 
     base = e.find("B_SPLINE_SURFACE")
-    sp = SurfaceParams()
+    sp = _SurfaceParams()
 
     if base is None:
         pp = bss.params
@@ -733,7 +733,7 @@ def _internal_from_full(full: list[float]) -> list[float]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class Axis2:
+class _Axis2:
     """Orthonormal frame of an AXIS2_PLACEMENT_3D."""
 
     def __init__(self):
@@ -746,34 +746,34 @@ class Axis2:
         self.ok = False  # Whether the frame was read.
 
 
-class Proj:
+class _Proj:
     """Parameter projector of a surface: a plane or a cylinder on the quarter-arc chart."""
 
     def __init__(self):
         """Construct a projector of no kind."""
 
         self.kind = 0  # 0 none, 1 plane, 2 cylinder.
-        self.a = Axis2()  # Surface frame.
+        self.a = _Axis2()  # Surface frame.
 
 
-class AnFace:
+class _AnFace:
     """Analytic surface of a face."""
 
     def __init__(self):
         """Construct a face of no kind."""
 
         self.kind = 0  # 2 cylinder, 3 cone, 4 sphere, 5 torus.
-        self.a = Axis2()  # Surface frame.
+        self.a = _Axis2()  # Surface frame.
         self.radius = 0.0  # Main radius.
         self.r2 = 0.0  # Cone semi-angle or torus minor radius.
 
 
-def _axis_point(a: Axis2, lx: float, ly: float, lz: float) -> Point:
+def _axis_point(a: _Axis2, lx: float, ly: float, lz: float) -> Point:
     """Return the point at local coordinates in the axis frame."""
     return a.origin + a.ax * lx + a.ay * ly + a.az * lz
 
 
-def _angle_of(a: Axis2, pt: Point) -> float:
+def _angle_of(a: _Axis2, pt: Point) -> float:
     """Return the angle of pt around the axis in radians."""
 
     d = pt - a.origin
@@ -868,7 +868,7 @@ def _quarter_knots(nspans: int) -> list[float]:
     return knots
 
 
-def _an_st_of(an: AnFace, p: Point) -> tuple[float, float, bool]:
+def _an_st_of(an: _AnFace, p: Point) -> tuple[float, float, bool]:
     """Canonical (s, t) of a 3D point; radial_ok is false at a pole or apex where the angle is undefined."""
 
     d = p - an.a.origin
@@ -893,7 +893,7 @@ def _an_st_of(an: AnFace, p: Point) -> tuple[float, float, bool]:
     return s, math.atan2(z, rho - an.radius), radial_ok
 
 
-def _an_eval(an: AnFace, s: float, t: float) -> Point:
+def _an_eval(an: _AnFace, s: float, t: float) -> Point:
     """Evaluate the analytic surface at chart parameters s, t."""
 
     cs = math.cos(s)
@@ -921,7 +921,7 @@ def _an_eval(an: AnFace, s: float, t: float) -> Point:
 
 
 def _build_analytic_nurbs(
-    an: AnFace, su0: int, nsu: int, t0: float, t1: float, sv0: int, nsv: int
+    an: _AnFace, su0: int, nsu: int, t0: float, t1: float, sv0: int, nsv: int
 ) -> NurbsSurface:
     """Kernel NURBS window of an analytic surface: nsu quarter arcs from quarter su0 in u; v is linear on [t0, t1] for cylinder and cone, nsv quarter arcs from sv0 for sphere and torus."""
 
@@ -969,7 +969,7 @@ def _build_analytic_nurbs(
 
 
 def _plane_surface(
-    a: Axis2, u0: float, u1: float, v0: float, v1: float
+    a: _Axis2, u0: float, u1: float, v0: float, v1: float
 ) -> NurbsSurface:
     """Bilinear patch of the plane with axis a over [u0, u1] x [v0, v1]."""
 
@@ -988,7 +988,7 @@ def _plane_surface(
 
 
 def _cylinder_surface(
-    a: Axis2, radius: float, u0: float, u1: float, v0: float, v1: float
+    a: _Axis2, radius: float, u0: float, u1: float, v0: float, v1: float
 ) -> NurbsSurface:
     """Rational cylinder patch on the quarter-arc chart (1 unit = 90 degrees) over [u0, u1] x [v0, v1]; a span of 4 closes it."""
 
@@ -1023,7 +1023,7 @@ def _cylinder_surface(
     return out
 
 
-def _project(pr: Proj, pt: Point) -> tuple[float, float]:
+def _project(pr: _Proj, pt: Point) -> tuple[float, float]:
     """Parameter-space image of a 3D point: plane coordinates, or cylinder (angle in quarter turns, height)."""
 
     d = pt - pr.a.origin
@@ -1034,10 +1034,10 @@ def _project(pr: Proj, pt: Point) -> tuple[float, float]:
     return math.atan2(d.dot(pr.a.ay), d.dot(pr.a.ax)) * 2.0 / PI, d.dot(pr.a.az)
 
 
-def _bilinear_projector(srf: NurbsSurface) -> Proj:
+def _bilinear_projector(srf: NurbsSurface) -> _Proj:
     """Affine projector of a bilinear patch from its corner p00; kind 0 when the patch is not bilinear or degenerate."""
 
-    pr = Proj()
+    pr = _Proj()
 
     if not srf.is_valid() or srf.degree(0) != 1 or srf.degree(1) != 1:
         return pr
@@ -1096,7 +1096,7 @@ def _polyline_nurbs(pts: list[Point], dim: int) -> NurbsCurve:
     return nc
 
 
-def _circle_nurbs(a: Axis2, rad: float, vs: Point, ve: Point) -> NurbsCurve:
+def _circle_nurbs(a: _Axis2, rad: float, vs: Point, ve: Point) -> NurbsCurve:
     """Exact rational arc on the circle (axis a, radius rad) from vs to ve, the full circle when they coincide."""
 
     sa = _angle_of(a, vs)
@@ -1148,7 +1148,7 @@ def _uv_line(u0: float, v0: float, u1: float, v1: float) -> NurbsCurve:
     )
 
 
-def _exact_pcurve(proj: Proj, c3: NurbsCurve) -> NurbsCurve:
+def _exact_pcurve(proj: _Proj, c3: NurbsCurve) -> NurbsCurve:
     """Exact pcurve of a 3D curve under an affine projector: control points map one to one, weights unchanged."""
 
     if proj.kind != 1 or not c3.is_valid() or c3.cv_count() < 2:
@@ -1245,10 +1245,10 @@ def _grid_degenerate(grid: list[Point], ns: int, tol: float, j: int) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class StepReader:
+class _StepReader:
     """Entity access over a parsed file with points, directions and frames cached by id."""
 
-    def __init__(self, sf: StepFile):
+    def __init__(self, sf: _StepFile):
         """Construct over a parsed file."""
 
         self.sf = sf  # Parsed file.
@@ -1256,7 +1256,7 @@ class StepReader:
         self.dir_cache = {}  # Directions by id.
         self.ax_cache = {}  # Frames by id.
 
-    def get(self, id_: int) -> StepEntity | None:
+    def get(self, id_: int) -> _StepEntity | None:
         """Return the entity with this id, or null."""
         return self.sf.entities.get(id_)
 
@@ -1310,13 +1310,13 @@ class StepReader:
 
         return v
 
-    def get_axis2(self, id_: int) -> Axis2:
+    def get_axis2(self, id_: int) -> _Axis2:
         """AXIS2_PLACEMENT_3D as an orthonormal frame: az normalized, ax made orthogonal to it, ay = az x ax."""
 
         if id_ in self.ax_cache:
             return self.ax_cache[id_]
 
-        a = Axis2()
+        a = _Axis2()
         e = self.get(id_)
         sub = e.find("AXIS2_PLACEMENT_3D") if e is not None else None
         refs = _all_refs(sub.params) if sub is not None else []
@@ -1493,10 +1493,10 @@ class StepReader:
 
         return pts
 
-    def get_projector(self, surface_id: int) -> Proj:
+    def get_projector(self, surface_id: int) -> _Proj:
         """Return the parameter projector of a surface, caching by id."""
 
-        pr = Proj()
+        pr = _Proj()
         e = self.get(surface_id)
         plane = e.find("PLANE") if e is not None else None
         cyl = e.find("CYLINDRICAL_SURFACE") if e is not None else None
@@ -1546,10 +1546,10 @@ class StepReader:
             a, rr[0] if rr else 1.0, u0, u1, v0 - pad_v, v1 + pad_v
         )
 
-    def get_analytic_srf(self, id_: int) -> AnFace:
+    def get_analytic_srf(self, id_: int) -> _AnFace:
         """CYLINDRICAL, CONICAL, SPHERICAL or TOROIDAL_SURFACE as an analytic face; kind 0 otherwise."""
 
-        an = AnFace()
+        an = _AnFace()
         e = self.get(id_)
 
         if e is None:
@@ -1633,7 +1633,7 @@ class StepReader:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class Bound:
+class _Bound:
     """One face bound: outer flag, orientation and the ORIENTED_EDGE ids of its EDGE_LOOP."""
 
     def __init__(self):
@@ -1644,7 +1644,7 @@ class Bound:
         self.oe_refs = []  # ORIENTED_EDGE ids.
 
 
-def _bound_loop(r: StepReader, bid: int) -> Bound | None:
+def _bound_loop(r: _StepReader, bid: int) -> _Bound | None:
     """Read a FACE_BOUND or FACE_OUTER_BOUND with its EDGE_LOOP."""
 
     bent = r.get(bid)
@@ -1662,7 +1662,7 @@ def _bound_loop(r: StepReader, bid: int) -> Bound | None:
     if loop is None:
         return None
 
-    b = Bound()
+    b = _Bound()
     b.is_outer = bent.has("FACE_OUTER_BOUND")
     b.orient = _last_flag(bsub.params, True)
     b.oe_refs = _list_refs(loop.params)
@@ -1670,7 +1670,7 @@ def _bound_loop(r: StepReader, bid: int) -> Bound | None:
     return b
 
 
-def _oriented_edge(r: StepReader, oe_id: int) -> tuple[int, bool]:
+def _oriented_edge(r: _StepReader, oe_id: int) -> tuple[int, bool]:
     """EDGE_CURVE id (-1 when missing) and orientation of an ORIENTED_EDGE."""
 
     oent = r.get(oe_id)
@@ -1684,7 +1684,7 @@ def _oriented_edge(r: StepReader, oe_id: int) -> tuple[int, bool]:
     return refs[-1] if refs else -1, _last_flag(oe.params, True)
 
 
-def _edge_refs(r: StepReader, ec_ref: int) -> list[int]:
+def _edge_refs(r: _StepReader, ec_ref: int) -> list[int]:
     """Start vertex, end vertex and geometry ids of an EDGE_CURVE; empty when missing."""
 
     ecent = r.get(ec_ref)
@@ -1693,7 +1693,7 @@ def _edge_refs(r: StepReader, ec_ref: int) -> list[int]:
     return _all_refs(ec.params) if ec is not None else []
 
 
-def _edge_geom_id(r: StepReader, ec_ref: int) -> int:
+def _edge_geom_id(r: _StepReader, ec_ref: int) -> int:
     """Return the geometry id of an EDGE_CURVE, or -1."""
 
     refs = _edge_refs(r, ec_ref)
@@ -1706,7 +1706,7 @@ def _edge_geom_id(r: StepReader, ec_ref: int) -> int:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class PendingEdge:
+class _PendingEdge:
     """One edge use in loop-traversal order; c2d is flipped into the edge direction when stored."""
 
     def __init__(self, edge: int, reversed_: bool, c2d: NurbsCurve):
@@ -1717,7 +1717,7 @@ class PendingEdge:
         self.c2d = c2d  # Parameter-space curve.
 
 
-class LoopEdge:
+class _LoopEdge:
     """One edge use with its parameter-space samples in curve order; pc2d is an exact pcurve when exact."""
 
     def __init__(self):
@@ -1730,7 +1730,7 @@ class LoopEdge:
         self.exact = False  # Whether pc2d is exact rather than sampled.
 
 
-class Loop:
+class _Loop:
     """One face loop with its edge uses in traversal order."""
 
     def __init__(self):
@@ -1741,7 +1741,7 @@ class Loop:
         self.edges = []  # Edges in traversal order.
 
 
-class Window:
+class _Window:
     """Chart window of an analytic face: quarter arcs from su0 in u, from sv0 in v for sphere and torus, [t0, t1] otherwise."""
 
     def __init__(self):
@@ -1755,7 +1755,7 @@ class Window:
         self.t1 = 0.0  # End of the linear domain.
 
 
-def _loop_bounds(lp: Loop) -> tuple[float, float, float, float]:
+def _loop_bounds(lp: _Loop) -> tuple[float, float, float, float]:
     """(umin, umax, vmin, vmax) over the samples of one loop; umin > umax when there are none."""
 
     umin = 1e300
@@ -1773,7 +1773,7 @@ def _loop_bounds(lp: Loop) -> tuple[float, float, float, float]:
     return umin, umax, vmin, vmax
 
 
-def _loops_bounds(loops: list[Loop]) -> tuple[float, float, float, float]:
+def _loops_bounds(loops: list[_Loop]) -> tuple[float, float, float, float]:
     """Return the uv bounds over every loop."""
 
     umin = 1e300
@@ -1791,7 +1791,7 @@ def _loops_bounds(loops: list[Loop]) -> tuple[float, float, float, float]:
     return umin, umax, vmin, vmax
 
 
-def _pick_outer_loop(loops: list[Loop]) -> None:
+def _pick_outer_loop(loops: list[_Loop]) -> None:
     """Mark the loop with the largest uv extent as outer when none is marked (OCCT and FreeCAD write FACE_BOUND for the outer boundary)."""
 
     for lp in loops:
@@ -1815,7 +1815,7 @@ def _pick_outer_loop(loops: list[Loop]) -> None:
     loops[best].is_outer = True
 
 
-def _outer_first(loops: list[Loop]) -> list[Loop]:
+def _outer_first(loops: list[_Loop]) -> list[_Loop]:
     """Reorder so outer loops come before inner ones."""
 
     ordered = []
@@ -1831,7 +1831,7 @@ def _outer_first(loops: list[Loop]) -> list[Loop]:
     return ordered
 
 
-def _loop_ucenter(lp: Loop) -> float | None:
+def _loop_ucenter(lp: _Loop) -> float | None:
     """Mean u of the samples of a loop, none when it has no samples."""
 
     total = 0.0
@@ -1848,7 +1848,7 @@ def _loop_ucenter(lp: Loop) -> float | None:
     return total / cnt
 
 
-def _surface_periods(proj: Proj, proj_srf: NurbsSurface) -> tuple[float, float]:
+def _surface_periods(proj: _Proj, proj_srf: NurbsSurface) -> tuple[float, float]:
     """Periods of the parameter chart: 4 in u for the analytic cylinder, the domain span of each closed direction of a B-spline surface, 0 when open."""
 
     if proj.kind == 2:
@@ -1882,7 +1882,7 @@ def _surface_periods(proj: Proj, proj_srf: NurbsSurface) -> tuple[float, float]:
     return du1 - du0 if closed_u else 0.0, dv1 - dv0 if closed_v else 0.0
 
 
-def _chain_loops(loops: list[Loop], tau_u: float, tau_v: float) -> None:
+def _chain_loops(loops: list[_Loop], tau_u: float, tau_v: float) -> None:
     """Shift each edge by whole periods so its traversal start meets the previous edge's end."""
 
     if tau_u <= 0.0 and tau_v <= 0.0:
@@ -1916,7 +1916,7 @@ def _chain_loops(loops: list[Loop], tau_u: float, tau_v: float) -> None:
             have_prev = True
 
 
-def _center_inner_loops(loops: list[Loop], tau_u: float) -> None:
+def _center_inner_loops(loops: list[_Loop], tau_u: float) -> None:
     """Shift each inner loop by whole u periods onto the outer loop's u window."""
 
     if tau_u <= 0.0:
@@ -1945,7 +1945,7 @@ def _center_inner_loops(loops: list[Loop], tau_u: float) -> None:
                 p[0] += n * tau_u
 
 
-def _pending_of(lp: Loop) -> list[PendingEdge]:
+def _pending_of(lp: _Loop) -> list[_PendingEdge]:
     """Pending edges of a loop in traversal order: the exact pcurve when there is one, else the sampled polyline."""
 
     pl = []
@@ -1961,13 +1961,13 @@ def _pending_of(lp: Loop) -> list[PendingEdge]:
 
             crv2d = _polyline_nurbs(uv, 2)
 
-        pl.append(PendingEdge(le.edge_idx, le.reversed, crv2d))
+        pl.append(_PendingEdge(le.edge_idx, le.reversed, crv2d))
 
     return pl
 
 
 def _uv_of_samples(
-    proj: Proj, proj_srf: NurbsSurface, samples: list[Point]
+    proj: _Proj, proj_srf: NurbsSurface, samples: list[Point]
 ) -> list[Point]:
     """Parameter-space images of 3D samples: the analytic projection, or a warm-started closest-point search on proj_srf."""
 
@@ -2013,7 +2013,7 @@ def _uv_of_samples(
     return uv
 
 
-def _chart_point(an: AnFace, w: Window, p: Point) -> Point:
+def _chart_point(an: _AnFace, w: _Window, p: Point) -> Point:
     """Map a surface parameter point into the window chart."""
 
     angular = an.kind == 4 or an.kind == 5
@@ -2025,7 +2025,7 @@ def _chart_point(an: AnFace, w: Window, p: Point) -> Point:
     )
 
 
-def _chart_eval(an: AnFace, w: Window, q: Point) -> Point:
+def _chart_eval(an: _AnFace, w: _Window, q: Point) -> Point:
     """Evaluate the analytic surface at a window chart point."""
 
     angular = an.kind == 4 or an.kind == 5
@@ -2035,7 +2035,7 @@ def _chart_eval(an: AnFace, w: Window, q: Point) -> Point:
     )
 
 
-def _analytic_window(loops: list[Loop], an: AnFace) -> Window | None:
+def _analytic_window(loops: list[_Loop], an: _AnFace) -> _Window | None:
     """Chart window of the loops; none when they are empty or wider than 16 quarter arcs."""
 
     smin, smax, tmin, tmax = _loops_bounds(loops)
@@ -2043,7 +2043,7 @@ def _analytic_window(loops: list[Loop], an: AnFace) -> Window | None:
     if smin > smax:
         return None
 
-    w = Window()
+    w = _Window()
     w.su0 = math.floor(smin / PI_2 + 1e-9)
     w.nsu = max(1, math.ceil(smax / PI_2 - 1e-9) - w.su0)
     w.t0 = tmin
@@ -2071,7 +2071,9 @@ def _analytic_window(loops: list[Loop], an: AnFace) -> Window | None:
     return w
 
 
-def _st_start(an: AnFace, lp: Loop, ordered: list[Point]) -> tuple[float, float, bool]:
+def _st_start(
+    an: _AnFace, lp: _Loop, ordered: list[Point]
+) -> tuple[float, float, bool]:
     """Canonical (s, t) where the loop left off: the end of its last edge, else the first sample that projects; false when neither exists."""
 
     if lp.edges and lp.edges[-1].uv:
@@ -2090,7 +2092,7 @@ def _st_start(an: AnFace, lp: Loop, ordered: list[Point]) -> tuple[float, float,
 
 
 def _st_unwrapped(
-    an: AnFace, ordered: list[Point], ps: float, pt: float, have_prev: bool
+    an: _AnFace, ordered: list[Point], ps: float, pt: float, have_prev: bool
 ) -> list[Point]:
     """Canonical (s, t) of 3D samples, s (and t on a torus) shifted by whole turns next to the sample before, the first next to (ps, pt)."""
 
@@ -2114,10 +2116,10 @@ def _st_unwrapped(
     return st
 
 
-class BRepBuilder:
+class _BRepBuilder:
     """BRep of one STEP shell, built face by face."""
 
-    def __init__(self, reader: StepReader):
+    def __init__(self, reader: _StepReader):
         """Construct over a reader."""
 
         self.r = reader  # Entity reader.
@@ -2153,7 +2155,7 @@ class BRepBuilder:
         self.brep.add_pcurve(edge, si, c2)
 
     def finish_face(
-        self, si: int, reversed_face: bool, loops: list[list[PendingEdge]]
+        self, si: int, reversed_face: bool, loops: list[list[_PendingEdge]]
     ) -> None:
         """Face from its surface and loops (outer first), oriented in the shell by reversed_face."""
 
@@ -2255,7 +2257,7 @@ class BRepBuilder:
         return idx
 
     def st_projected(
-        self, an: AnFace, geom_id: int, edge_idx: int, rev: bool, lp: Loop
+        self, an: _AnFace, geom_id: int, edge_idx: int, rev: bool, lp: _Loop
     ) -> list[Point]:
         """Projection fallback: 3D samples of an edge mapped to canonical (s, t), branch-unwrapped along the loop traversal."""
 
@@ -2282,7 +2284,7 @@ class BRepBuilder:
         return st
 
     def analytic_loops(
-        self, bound_refs: list[int], surface_ref: int, an: AnFace, loops: list[Loop]
+        self, bound_refs: list[int], surface_ref: int, an: _AnFace, loops: list[_Loop]
     ) -> bool:
         """Loops of an analytic face with canonical (s, t) samples from the file pcurves or from projection."""
 
@@ -2292,7 +2294,7 @@ class BRepBuilder:
             if b is None:
                 continue
 
-            lp = Loop()
+            lp = _Loop()
             lp.is_outer = b.is_outer
 
             for oe_id in b.oe_refs:
@@ -2303,7 +2305,7 @@ class BRepBuilder:
                     continue
 
                 geom_id = _edge_geom_id(self.r, ec_ref)
-                le = LoopEdge()
+                le = _LoopEdge()
                 le.edge_idx = edge_idx
                 le.reversed = oe_orient != b.orient
 
@@ -2329,8 +2331,8 @@ class BRepBuilder:
         return len(loops) > 0
 
     def analytic_pending(
-        self, lp: Loop, an: AnFace, w: Window, scale3: float
-    ) -> list[PendingEdge]:
+        self, lp: _Loop, an: _AnFace, w: _Window, scale3: float
+    ) -> list[_PendingEdge]:
         """Pending edges of one loop in the chart, plus a degenerated edge across each pole or apex gap between consecutive edges."""
 
         period = 4.0
@@ -2372,7 +2374,7 @@ class BRepBuilder:
                 continue
 
             pl.append(
-                PendingEdge(
+                _PendingEdge(
                     lp.edges[k].edge_idx,
                     lp.edges[k].reversed,
                     _polyline_nurbs(chains[k], 2),
@@ -2398,7 +2400,7 @@ class BRepBuilder:
 
             vd = self.vertex_at(p3a, scale3 * 1e-6)
             pl.append(
-                PendingEdge(
+                _PendingEdge(
                     self.brep.add_edge(-1, vd, vd), False, _polyline_nurbs([a2, b2], 2)
                 )
             )
@@ -2406,7 +2408,7 @@ class BRepBuilder:
         return pl
 
     def add_face_analytic(
-        self, bound_refs: list[int], surface_ref: int, same_sense: bool, an: AnFace
+        self, bound_refs: list[int], surface_ref: int, same_sense: bool, an: _AnFace
     ) -> bool:
         """Face on a cylinder, cone, sphere or torus: the exact kernel window with the file pcurves bound in it; false falls back to projection."""
 
@@ -2475,7 +2477,7 @@ class BRepBuilder:
         grid: list[Point],
         vl_vertex_ids: list[int],
         tol: float,
-    ) -> list[PendingEdge]:
+    ) -> list[_PendingEdge]:
         """Wire of a sphere-like surface: a degenerated edge at each pole and the seam used both ways; empty when the seam is invalid."""
 
         u0, u1 = srf.domain(0)
@@ -2492,10 +2494,10 @@ class BRepBuilder:
         ei_hi = self.brep.add_edge(-1, v_hi, v_hi)
 
         return [
-            PendingEdge(ei_lo, False, _uv_line(u0, v0, u1, v0)),
-            PendingEdge(ei_seam, False, _uv_line(u1, v0, u1, v1)),
-            PendingEdge(ei_hi, False, _uv_line(u1, v1, u0, v1)),
-            PendingEdge(ei_seam, True, _uv_line(u0, v1, u0, v0)),
+            _PendingEdge(ei_lo, False, _uv_line(u0, v0, u1, v0)),
+            _PendingEdge(ei_seam, False, _uv_line(u1, v0, u1, v1)),
+            _PendingEdge(ei_hi, False, _uv_line(u1, v1, u0, v1)),
+            _PendingEdge(ei_seam, True, _uv_line(u0, v1, u0, v0)),
         ]
 
     def seam_wire(
@@ -2504,7 +2506,7 @@ class BRepBuilder:
         grid: list[Point],
         vl_vertex_ids: list[int],
         tol: float,
-    ) -> list[PendingEdge]:
+    ) -> list[_PendingEdge]:
         """Wire of a torus-like surface: the u seam and the v seam each used both ways; empty when a seam is invalid."""
 
         u0, u1 = srf.domain(0)
@@ -2520,10 +2522,10 @@ class BRepBuilder:
         ei_v = self.brep.add_edge(self.brep.add_curve_3d(c_v), vtx, vtx)
 
         return [
-            PendingEdge(ei_v, False, _uv_line(u0, v0, u1, v0)),
-            PendingEdge(ei_u, False, _uv_line(u1, v0, u1, v1)),
-            PendingEdge(ei_v, True, _uv_line(u1, v1, u0, v1)),
-            PendingEdge(ei_u, True, _uv_line(u0, v1, u0, v0)),
+            _PendingEdge(ei_v, False, _uv_line(u0, v0, u1, v0)),
+            _PendingEdge(ei_u, False, _uv_line(u1, v0, u1, v1)),
+            _PendingEdge(ei_v, True, _uv_line(u1, v1, u0, v1)),
+            _PendingEdge(ei_u, True, _uv_line(u0, v1, u0, v0)),
         ]
 
     def add_face_vertex_loop(
@@ -2595,14 +2597,14 @@ class BRepBuilder:
     def projected_loops(
         self,
         bound_refs: list[int],
-        proj: Proj,
+        proj: _Proj,
         proj_srf: NurbsSurface,
-        loops: list[Loop],
+        loops: list[_Loop],
     ) -> None:
         """Loops of a face on a projected surface: uv samples in curve order, exact pcurves under an affine projector."""
 
         n = 48 if proj_srf.is_valid() else 16
-        exact = Proj()
+        exact = _Proj()
 
         if proj.kind == 1:
             exact = proj
@@ -2615,7 +2617,7 @@ class BRepBuilder:
             if b is None:
                 continue
 
-            lp = Loop()
+            lp = _Loop()
             lp.is_outer = b.is_outer
 
             for oe_id in b.oe_refs:
@@ -2628,7 +2630,7 @@ class BRepBuilder:
                 be = self.brep.m_edges[edge_idx]
                 vs = self.brep.m_vertices[be.start_vertex].point
                 ve = self.brep.m_vertices[be.end_vertex].point
-                le = LoopEdge()
+                le = _LoopEdge()
                 le.edge_idx = edge_idx
                 le.reversed = oe_orient != b.orient
                 le.uv = _uv_of_samples(
@@ -2819,7 +2821,7 @@ def _fmt_dbl_grid(rows: list[list[float]]) -> str:
     return s + ")"
 
 
-class StepWriter:
+class _StepWriter:
     """Entity lines of a STEP file under construction."""
 
     def __init__(self):
@@ -3118,10 +3120,10 @@ class StepWriter:
         return out
 
 
-class BRepEmitter:
+class _BRepEmitter:
     """Write one BRep into a StepWriter: vertices, edges and surfaces once each, degenerated edges omitted, a wire of only degenerated edges as a VERTEX_LOOP."""
 
-    def __init__(self, writer: StepWriter, b: BRep):
+    def __init__(self, writer: _StepWriter, b: BRep):
         """Construct over a writer and the brep to emit."""
 
         self.w = writer  # Entity writer.
@@ -3234,10 +3236,10 @@ class BRepEmitter:
         )
 
 
-def _emit_brep_shells(w: StepWriter, brep: BRep) -> list[tuple[list[int], bool]]:
+def _emit_brep_shells(w: _StepWriter, brep: BRep) -> list[tuple[list[int], bool]]:
     """Face-id groups of a brep written into w: one per shell with its closed flag, then the free faces as an open group."""
 
-    em = BRepEmitter(w, brep)
+    em = _BRepEmitter(w, brep)
     groups = []
     in_shell = [False] * len(brep.m_faces)
 
@@ -3306,7 +3308,7 @@ def read_file_step_points(filepath: str) -> list[Point]:
     """Every CARTESIAN_POINT of the file in entity-id order."""
 
     sf = _parse_step_file(filepath)
-    r = StepReader(sf)
+    r = _StepReader(sf)
     out = []
 
     for id_ in sf.ids_of_type("CARTESIAN_POINT"):
@@ -3319,7 +3321,7 @@ def read_file_step_nurbscurves(filepath: str) -> list[NurbsCurve]:
     """Every B_SPLINE_CURVE_WITH_KNOTS of the file that reads as a valid curve."""
 
     sf = _parse_step_file(filepath)
-    r = StepReader(sf)
+    r = _StepReader(sf)
     out = []
 
     for id_ in sf.ids_of_type("B_SPLINE_CURVE_WITH_KNOTS"):
@@ -3335,7 +3337,7 @@ def read_file_step_nurbssurfaces(filepath: str) -> list[NurbsSurface]:
     """Every B_SPLINE_SURFACE_WITH_KNOTS of the file that reads as a valid surface."""
 
     sf = _parse_step_file(filepath)
-    r = StepReader(sf)
+    r = _StepReader(sf)
     out = []
 
     for id_ in sf.ids_of_type("B_SPLINE_SURFACE_WITH_KNOTS"):
@@ -3347,7 +3349,7 @@ def read_file_step_nurbssurfaces(filepath: str) -> list[NurbsSurface]:
     return out
 
 
-def _trimmed_outer_loop(r: StepReader, bound_refs: list[int]) -> NurbsCurve:
+def _trimmed_outer_loop(r: _StepReader, bound_refs: list[int]) -> NurbsCurve:
     """Outer trim of a face as a dim-2 polyline of sampled 3D edge points (x, y), from the first bound with an EDGE_LOOP."""
 
     for bid in bound_refs:
@@ -3381,7 +3383,7 @@ def read_file_step_nurbssurfaces_trimmed(filepath: str) -> list[NurbsSurfaceTrim
     """Every ADVANCED_FACE on a B-spline surface with its first edge loop sampled as the outer trim."""
 
     sf = _parse_step_file(filepath)
-    r = StepReader(sf)
+    r = _StepReader(sf)
     out = []
 
     for face_id in sf.ids_of_type("ADVANCED_FACE"):
@@ -3411,7 +3413,7 @@ def read_file_step_breps(filepath: str) -> list[BRep]:
     """One BRep per shell of every MANIFOLD_SOLID_BREP, BREP_WITH_VOIDS and SHELL_BASED_SURFACE_MODEL, in file order."""
 
     sf = _parse_step_file(filepath)
-    r = StepReader(sf)
+    r = _StepReader(sf)
     ids = sorted(sf.entities.keys())
     shell_refs = []
 
@@ -3437,7 +3439,7 @@ def read_file_step_breps(filepath: str) -> list[BRep]:
         sh = r.get(shell_ref)
         os_ = sh.find("ORIENTED_CLOSED_SHELL") if sh is not None else None
         inner = _first_ref(os_.params) if os_ is not None else -1
-        builder = BRepBuilder(r)
+        builder = _BRepBuilder(r)
         b = builder.build_from_shell(inner if inner >= 0 else shell_ref)
 
         if b.m_faces:
@@ -3449,7 +3451,7 @@ def read_file_step_breps(filepath: str) -> list[BRep]:
 def write_file_step_nurbscurves(curves: list[NurbsCurve], filepath: str) -> bool:
     """One file holding the curves as bare B_SPLINE_CURVE_WITH_KNOTS entities; false when the file cannot be written."""
 
-    w = StepWriter()
+    w = _StepWriter()
 
     for nc in curves:
         w.write_nurbs_curve(nc)
@@ -3460,7 +3462,7 @@ def write_file_step_nurbscurves(curves: list[NurbsCurve], filepath: str) -> bool
 def write_file_step_nurbssurfaces(surfaces: list[NurbsSurface], filepath: str) -> bool:
     """One file holding the surfaces as bare B_SPLINE_SURFACE_WITH_KNOTS entities; false when the file cannot be written."""
 
-    w = StepWriter()
+    w = _StepWriter()
 
     for srf in surfaces:
         w.write_nurbs_surface(srf)
@@ -3473,7 +3475,7 @@ def write_file_step_nurbssurfaces_trimmed(
 ) -> bool:
     """One file holding the trimmed surfaces as ADVANCED_FACEs of an open shell; false when the file cannot be written."""
 
-    w = StepWriter()
+    w = _StepWriter()
     face_ids = []
 
     for t in trimmed:
@@ -3495,7 +3497,7 @@ def write_file_step_nurbssurfaces_trimmed(
 def write_file_step_brep(brep: BRep, filepath: str) -> bool:
     """One AP214 file holding the brep, one body per shell; false when the file cannot be written."""
 
-    w = StepWriter()
+    w = _StepWriter()
     bodies = []
     any_closed = False
 
@@ -3519,7 +3521,7 @@ def write_file_step_brep(brep: BRep, filepath: str) -> bool:
 def write_file_step_breps(breps: list[BRep], name: str, filepath: str) -> bool:
     """One AP214 file holding several breps side by side, each face colored from its brep's surfacecolor; false when the file cannot be written."""
 
-    w = StepWriter()
+    w = _StepWriter()
     bodies = []
     styled = []
     any_closed = False

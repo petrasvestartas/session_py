@@ -38,12 +38,14 @@ def test_make_clamped_uniform():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_clamped_uniform(order, cv_count)
 
     MINI_CHECK(TOLERANCE.is_allclose(nurbsknots, [0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0]))
-    MINI_CHECK(len(nurbsknot.make_clamped_uniform(1, cv_count)) == 0)
-    MINI_CHECK(len(nurbsknot.make_clamped_uniform(order, cv_count, float("nan"))) == 0)
-    MINI_CHECK(len(nurbsknot.make_clamped_uniform(sys.maxsize, sys.maxsize)) == 0)
+    MINI_CHECK(len(nurbsknot.compute_clamped_uniform(1, cv_count)) == 0)
+    MINI_CHECK(
+        len(nurbsknot.compute_clamped_uniform(order, cv_count, float("nan"))) == 0
+    )
+    MINI_CHECK(len(nurbsknot.compute_clamped_uniform(sys.maxsize, sys.maxsize)) == 0)
 
 
 @MINI_TEST("NurbsKnot", "Make Periodic Uniform")
@@ -52,11 +54,13 @@ def test_make_periodic_uniform():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_periodic_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_periodic_uniform(order, cv_count)
 
     MINI_CHECK(TOLERANCE.is_allclose(nurbsknots, [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]))
-    MINI_CHECK(len(nurbsknot.make_periodic_uniform(order, cv_count, 0.0)) == 0)
-    MINI_CHECK(len(nurbsknot.make_periodic_uniform(order, cv_count, float("inf"))) == 0)
+    MINI_CHECK(len(nurbsknot.compute_periodic_uniform(order, cv_count, 0.0)) == 0)
+    MINI_CHECK(
+        len(nurbsknot.compute_periodic_uniform(order, cv_count, float("inf"))) == 0
+    )
 
 
 @MINI_TEST("NurbsKnot", "Clamp")
@@ -87,7 +91,7 @@ def test_is_valid():
 
     order = 4
     cv_count = 5
-    nurbsknots_clamped = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots_clamped = nurbsknot.compute_clamped_uniform(order, cv_count)
     nurbsknots_flat = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     nurbsknots_nan = list(nurbsknots_clamped)
     nurbsknots_nan[3] = float("nan")
@@ -104,8 +108,8 @@ def test_is_clamped():
 
     order = 4
     cv_count = 5
-    nurbsknots_periodic = nurbsknot.make_periodic_uniform(order, cv_count)
-    nurbsknots_clamped = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots_periodic = nurbsknot.compute_periodic_uniform(order, cv_count)
+    nurbsknots_clamped = nurbsknot.compute_clamped_uniform(order, cv_count)
     is_not_clamped = nurbsknot.is_clamped(order, cv_count, nurbsknots_periodic)
     is_clamped = nurbsknot.is_clamped(order, cv_count, nurbsknots_clamped)
 
@@ -121,8 +125,8 @@ def test_is_periodic():
 
     order = 4
     cv_count = 5
-    nurbsknots_periodic = nurbsknot.make_periodic_uniform(order, cv_count)
-    nurbsknots_clamped = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots_periodic = nurbsknot.compute_periodic_uniform(order, cv_count)
+    nurbsknots_clamped = nurbsknot.compute_clamped_uniform(order, cv_count)
 
     MINI_CHECK(nurbsknot.is_periodic(order, cv_count, nurbsknots_periodic))
     MINI_CHECK(not nurbsknot.is_periodic(order, cv_count, nurbsknots_clamped))
@@ -138,7 +142,7 @@ def test_get_domain():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_clamped_uniform(order, cv_count)
     domain = nurbsknot.get_domain(order, cv_count, nurbsknots)
 
     MINI_CHECK(TOLERANCE.is_close(domain[0], 0.0))
@@ -159,7 +163,7 @@ def test_set_domain():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_clamped_uniform(order, cv_count)
     ok = nurbsknot.set_domain(order, cv_count, nurbsknots, 0.0, 1.0)
 
     MINI_CHECK(ok)
@@ -174,7 +178,7 @@ def test_reverse():
 
     order = 4
     cv_count = 5
-    nurbsknots_sym = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots_sym = nurbsknot.compute_clamped_uniform(order, cv_count)
 
     MINI_CHECK(nurbsknot.reverse(order, cv_count, nurbsknots_sym))
     MINI_CHECK(
@@ -199,7 +203,7 @@ def test_multiplicity():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_clamped_uniform(order, cv_count)
 
     MINI_CHECK(nurbsknot.multiplicity(order, cv_count, nurbsknots, 0) == 3)
     MINI_CHECK(nurbsknot.multiplicity(order, cv_count, nurbsknots, 3) == 1)
@@ -216,7 +220,7 @@ def test_span_count():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_clamped_uniform(order, cv_count)
 
     MINI_CHECK(nurbsknot.span_count(order, cv_count, nurbsknots) == 2)
 
@@ -231,7 +235,7 @@ def test_find_span():
 
     order = 4
     cv_count = 5
-    nurbsknots_clamped = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots_clamped = nurbsknot.compute_clamped_uniform(order, cv_count)
     spancount0 = nurbsknot.find_span(order, cv_count, nurbsknots_clamped, 0.5)
     spancount1 = nurbsknot.find_span(order, cv_count, nurbsknots_clamped, 1.5)
 
@@ -252,7 +256,7 @@ def test_get_greville_abcissae():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_clamped_uniform(order, cv_count)
     greville = nurbsknot.get_greville_abcissae(order, cv_count, nurbsknots)
     periodic = nurbsknot.get_greville_abcissae(order, cv_count, nurbsknots, True)
 
@@ -347,7 +351,7 @@ def test_eval_basis():
 
     order = 4
     cv_count = 5
-    nurbsknots = nurbsknot.make_clamped_uniform(order, cv_count)
+    nurbsknots = nurbsknot.compute_clamped_uniform(order, cv_count)
     span = nurbsknot.find_span(order, cv_count, nurbsknots, 0.5)
     basis = nurbsknot.eval_basis(order, nurbsknots, span, 0.5)
     nan = float("nan")

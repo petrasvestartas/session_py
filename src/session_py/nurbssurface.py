@@ -494,14 +494,14 @@ class NurbsSurface:
         self._zero_cvs()
 
         if is_periodic_u:
-            self._make_periodic_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
+            self._set_periodic_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
         else:
-            self._make_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
+            self._set_clamped_uniform_nurbsknot_vector(0, nurbsknot_delta_u)
 
         if is_periodic_v:
-            self._make_periodic_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
+            self._set_periodic_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
         else:
-            self._make_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
+            self._set_clamped_uniform_nurbsknot_vector(1, nurbsknot_delta_v)
 
         return True
 
@@ -874,7 +874,7 @@ class NurbsSurface:
             float(cv_ptr[self.m_dim]) if self.m_is_rat and cv_ptr is not None else 1.0
         )
 
-    def set_weight(self, i: int, j: int, w: float) -> bool:
+    def set_weight(self, i: int, j: int, weight: float) -> bool:
         """Rescale the homogeneous CV to the new weight so the Euclidean point stays; false when non-rational."""
 
         cv_ptr = self.cv(i, j)
@@ -883,7 +883,7 @@ class NurbsSurface:
             return False
 
         old_w = cv_ptr[self.m_dim] if abs(cv_ptr[self.m_dim]) > 1e-14 else 1.0
-        new_w = w if abs(w) > 1e-14 else 1.0
+        new_w = weight if abs(weight) > 1e-14 else 1.0
         scale = new_w / old_w
 
         for d in range(self.m_dim):
@@ -1429,7 +1429,7 @@ class NurbsSurface:
 
         return (lo, hi)
 
-    def make_rational(self) -> bool:
+    def to_rational(self) -> bool:
         """Add weights of 1."""
 
         if self.m_is_rat:
@@ -1449,7 +1449,7 @@ class NurbsSurface:
 
         return True
 
-    def make_non_rational(self) -> bool:
+    def to_non_rational(self) -> bool:
         """Drop weights, dividing each CV by its own."""
 
         if not self.m_is_rat:
@@ -1703,15 +1703,15 @@ class NurbsSurface:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: str | Path) -> None:
+    def file_json_dump(self, filename: str | Path) -> None:
         """Write to a JSON file."""
-        with open(filepath, "w") as f:
+        with open(filename, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: str | Path) -> NurbsSurface:
+    def file_json_load(cls, filename: str | Path) -> NurbsSurface:
         """Read from a JSON file."""
-        with open(filepath) as f:
+        with open(filename) as f:
             return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1818,15 +1818,15 @@ class NurbsSurface:
 
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: str | Path) -> None:
+    def pb_dump(self, filename: str | Path) -> None:
         """Write to a protobuf file."""
-        with open(filepath, "wb") as f:
+        with open(filename, "wb") as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: str | Path) -> NurbsSurface:
+    def pb_load(cls, filename: str | Path) -> NurbsSurface:
         """Read from a protobuf file."""
-        with open(filepath, "rb") as f:
+        with open(filename, "rb") as f:
             return cls.pb_loads(f.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1884,7 +1884,7 @@ class NurbsSurface:
 
         return True
 
-    def _make_clamped_uniform_nurbsknot_vector(
+    def _set_clamped_uniform_nurbsknot_vector(
         self, dir: int, delta: float = 1.0
     ) -> bool:
         """Fill the nurbsknot vector in dir with clamped uniform values of the given spacing."""
@@ -1893,7 +1893,7 @@ class NurbsSurface:
             return False
 
         self.m_nurbsknot[dir] = np.array(
-            nurbsknot.make_clamped_uniform(
+            nurbsknot.compute_clamped_uniform(
                 self.m_order[dir], self.m_cv_count[dir], delta
             ),
             dtype=np.float64,
@@ -1901,7 +1901,7 @@ class NurbsSurface:
 
         return len(self.m_nurbsknot[dir]) > 0
 
-    def _make_periodic_uniform_nurbsknot_vector(
+    def _set_periodic_uniform_nurbsknot_vector(
         self, dir: int, delta: float = 1.0
     ) -> bool:
         """Fill the nurbsknot vector in dir with periodic uniform values of the given spacing."""
@@ -1910,7 +1910,7 @@ class NurbsSurface:
             return False
 
         self.m_nurbsknot[dir] = np.array(
-            nurbsknot.make_periodic_uniform(
+            nurbsknot.compute_periodic_uniform(
                 self.m_order[dir], self.m_cv_count[dir], delta
             ),
             dtype=np.float64,

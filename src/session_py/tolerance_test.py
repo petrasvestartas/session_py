@@ -89,9 +89,13 @@ def test_tolerance_runtime_modification():
     tolerance = Tolerance()
     original_absolute = tolerance.absolute()
     original_relative = tolerance.relative()
+    tstr = str(tolerance)
+    trepr = repr(tolerance)
 
     MINI_CHECK(original_absolute == 1e-9)
     MINI_CHECK(original_relative == 1e-6)
+    MINI_CHECK(tstr == "Tolerance(M)")
+    MINI_CHECK(trepr.startswith("Tolerance(unit='M', absolute="))
 
     tolerance.set_absolute(1e-12)
     tolerance.set_relative(1e-12)

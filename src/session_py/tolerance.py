@@ -489,9 +489,14 @@ class Tolerance:
     # ═══════════════════════════════════════════════════════════════════════════
     # String
     # ═══════════════════════════════════════════════════════════════════════════
+    def __str__(self) -> str:
+        """Return "Tolerance(unit)"."""
+        return f"Tolerance({self.unit()})"
+
     def __repr__(self) -> str:
         """Return a constructor-style representation."""
         return f"Tolerance(unit='{self.unit()}', absolute={self.absolute()}, relative={self.relative()}, angular={self.angular()}, approximation={self.approximation()}, precision={self.precision()}, lineardeflection={self.lineardeflection()}, angulardeflection={self.angulardeflection()})"
+
 
 TOLERANCE = Tolerance()  # Global tolerance instance.
 
@@ -499,9 +504,11 @@ TOLERANCE = Tolerance()  # Global tolerance instance.
 # Utilities
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def is_finite(x: float) -> bool:
     """Check if a number is finite"""
     return math.isfinite(x)
+
 
 def unique_from_two_int(a: int, b: int) -> int:
     """Order-independent key from two ints: larger in the high 32 bits"""
@@ -511,6 +518,7 @@ def unique_from_two_int(a: int, b: int) -> int:
 
     return (hi << 32) | lo
 
+
 def wrap_index(index: int, n: int) -> int:
     """Signed modulo into [0, n-1]; 0 when n == 0"""
 
@@ -519,17 +527,21 @@ def wrap_index(index: int, n: int) -> int:
 
     return ((index % n) + n) % n
 
+
 def triangle_edge_by_angle(edge_length: float, angle_deg: float) -> float:
     """Opposite side of a right triangle: edge_length * tan(angle_deg)"""
     return edge_length * math.tan(Tolerance.to_radians(angle_deg))
+
 
 def rad_to_deg(radians: float) -> float:
     """Convert radians to degrees"""
     return radians * Tolerance.TO_DEGREES
 
+
 def deg_to_rad(degrees: float) -> float:
     """Convert degrees to radians"""
     return degrees * Tolerance.TO_RADIANS
+
 
 def count_digits(n: float) -> int:
     """Number of decimal digits of the integer part of |n|; 0 when |n| < 1"""

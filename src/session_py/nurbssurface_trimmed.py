@@ -2810,17 +2810,17 @@ class NurbsSurfaceTrimmed:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: str | Path) -> None:
+    def file_json_dump(self, filename: str | Path) -> None:
         """Write to a JSON file."""
 
-        with open(filepath, "w") as f:
+        with open(filename, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: str | Path) -> NurbsSurfaceTrimmed:
+    def file_json_load(cls, filename: str | Path) -> NurbsSurfaceTrimmed:
         """Read from a JSON file."""
 
-        with open(filepath) as f:
+        with open(filename) as f:
             return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -2890,17 +2890,17 @@ class NurbsSurfaceTrimmed:
 
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: str | Path) -> None:
+    def pb_dump(self, filename: str | Path) -> None:
         """Write to a protobuf file."""
 
-        with open(filepath, "wb") as f:
+        with open(filename, "wb") as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: str | Path) -> NurbsSurfaceTrimmed:
+    def pb_load(cls, filename: str | Path) -> NurbsSurfaceTrimmed:
         """Read from a protobuf file."""
 
-        with open(filepath, "rb") as f:
+        with open(filename, "rb") as f:
             return cls.pb_loads(f.read())
 
     # ═══════════════════════════════════════════════════════════════════════════

@@ -8145,11 +8145,11 @@ def plane_4lines(plane: Plane, l0: Line, l1: Line, l2: Line, l3: Line) -> object
     return Polyline([p0, p1, p2, p3, p0])
 
 
-def line_two_planes(line: Line, p0: Plane, p1: Plane) -> object | None:
+def line_two_planes(line: Line, plane0: Plane, plane1: Plane) -> object | None:
     """Clips a segment to the two plane intersections."""
 
-    new_start = line_plane(line, p0, True)
-    new_end = line_plane(line, p1, True)
+    new_start = line_plane(line, plane0, True)
+    new_end = line_plane(line, plane1, True)
 
     if new_start is None or new_end is None:
         return None
@@ -8159,10 +8159,10 @@ def line_two_planes(line: Line, p0: Plane, p1: Plane) -> object | None:
     )
 
 
-def polyline_plane(poly: Polyline, plane: Plane) -> tuple | None:
+def polyline_plane(polyline: Polyline, plane: Plane) -> tuple | None:
     """Polyline edge crossings with a plane and their edge indices."""
 
-    n = poly.point_count()
+    n = polyline.point_count()
 
     if n < 2:
         return None
@@ -8171,8 +8171,8 @@ def polyline_plane(poly: Polyline, plane: Plane) -> tuple | None:
     edge_ids = []
 
     for i in range(n - 1):
-        a = poly.get_point(i)
-        b = poly.get_point(i + 1)
+        a = polyline.get_point(i)
+        b = polyline.get_point(i + 1)
         va = _plane_value_at(plane, a)
         vb = _plane_value_at(plane, b)
         a_on = abs(va) < Tolerance.ZERO_TOLERANCE
@@ -8188,7 +8188,7 @@ def polyline_plane(poly: Polyline, plane: Plane) -> tuple | None:
 
         if b_on:
             if i + 2 == n:
-                front = poly.get_point(0)
+                front = polyline.get_point(0)
                 closes = (
                     abs(b[0] - front[0]) < Tolerance.ZERO_TOLERANCE
                     and abs(b[1] - front[1]) < Tolerance.ZERO_TOLERANCE
@@ -8234,7 +8234,7 @@ def line_line_3d(cutter: Line, seg: Line) -> Point | None:
 
 
 def scale_vector_to_distance_of_2planes(
-    direction: "Vector", p0: Plane, p1: Plane
+    direction: "Vector", plane0: Plane, plane1: Plane
 ) -> object | None:
     """Direction scaled to span the distance between two planes."""
 
@@ -8244,24 +8244,24 @@ def scale_vector_to_distance_of_2planes(
         return None
 
     ray = Line(0.0, 0.0, 0.0, direction[0], direction[1], direction[2])
-    q0 = line_plane(ray, p0, False)
-    q1 = line_plane(ray, p1, False)
+    q0 = line_plane(ray, plane0, False)
+    q1 = line_plane(ray, plane1, False)
 
     if q0 is None or q1 is None:
         return None
 
     output = q1 - q0
-    n1 = p1.z_axis
+    n1 = plane1.z_axis
     n1_mag = math.sqrt(n1[0] ** 2 + n1[1] ** 2 + n1[2] ** 2)
 
     if n1_mag < 1e-14:
         return None
 
-    o0 = p0.origin
+    o0 = plane0.origin
     d = (
-        (o0[0] - p1.origin[0]) * n1[0]
-        + (o0[1] - p1.origin[1]) * n1[1]
-        + (o0[2] - p1.origin[2]) * n1[2]
+        (o0[0] - plane1.origin[0]) * n1[0]
+        + (o0[1] - plane1.origin[1]) * n1[1]
+        + (o0[2] - plane1.origin[2]) * n1[2]
     ) / n1_mag
     dist_ortho_sq = d * d
 

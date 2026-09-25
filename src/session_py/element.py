@@ -176,17 +176,17 @@ class ElementFeature:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath: str | Path) -> None:
+    def file_json_dump(self, filename: str | Path) -> None:
         """Write to a JSON file."""
 
-        with open(filepath, "w") as f:
+        with open(filename, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: str | Path) -> ElementFeature:
+    def file_json_load(cls, filename: str | Path) -> ElementFeature:
         """Read from a JSON file."""
 
-        with open(filepath) as f:
+        with open(filename) as f:
             return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -251,17 +251,17 @@ class ElementFeature:
 
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: str | Path) -> None:
+    def pb_dump(self, filename: str | Path) -> None:
         """Write to a protobuf file."""
 
-        with open(filepath, "wb") as f:
+        with open(filename, "wb") as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: str | Path) -> ElementFeature:
+    def pb_load(cls, filename: str | Path) -> ElementFeature:
         """Read from a protobuf file."""
 
-        with open(filepath, "rb") as f:
+        with open(filename, "rb") as f:
             return cls.pb_loads(f.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -675,10 +675,10 @@ class Element:
     # ═══════════════════════════════════════════════════════════════════════════
     # Mutators
     # ═══════════════════════════════════════════════════════════════════════════
-    def add_geometry_op(self, op: Callable) -> None:
+    def add_geometry_op(self, f: Callable) -> None:
         """Append an in-memory mesh operation and invalidate the caches."""
 
-        self._geometry_ops.append(op)
+        self._geometry_ops.append(f)
         self.reset()
 
     def set_features(self, features: list[ElementFeature]) -> None:
@@ -717,16 +717,16 @@ class Element:
         self._geometry = geometry
         self.reset()
 
-    def set_polylines(self, polylines: list[Polyline]) -> None:
+    def set_polylines(self, polys: list[Polyline]) -> None:
         """Override the cached face outlines, kept until the next reset."""
 
-        self._polylines = polylines
+        self._polylines = polys
         self._is_dirty = False
 
-    def set_planes(self, planes: list[Plane]) -> None:
+    def set_planes(self, plns: list[Plane]) -> None:
         """Override the cached face planes, kept until the next reset."""
 
-        self._planes = planes
+        self._planes = plns
         self._is_dirty = False
 
     def reset(self) -> None:
@@ -862,17 +862,17 @@ class Element:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(s))
 
-    def file_json_dump(self, filepath: str | Path) -> None:
+    def file_json_dump(self, filename: str | Path) -> None:
         """Write to a JSON file."""
 
-        with open(filepath, "w") as f:
+        with open(filename, "w") as f:
             json.dump(self.__jsondump__(), f, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: str | Path) -> Element:
+    def file_json_load(cls, filename: str | Path) -> Element:
         """Read from a JSON file."""
 
-        with open(filepath) as f:
+        with open(filename) as f:
             return cls.__jsonload__(json.load(f))
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -969,17 +969,17 @@ class Element:
 
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: str | Path) -> None:
+    def pb_dump(self, filename: str | Path) -> None:
         """Write to a protobuf file."""
 
-        with open(filepath, "wb") as f:
+        with open(filename, "wb") as f:
             f.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: str | Path) -> Element:
+    def pb_load(cls, filename: str | Path) -> Element:
         """Read from a protobuf file."""
 
-        with open(filepath, "rb") as f:
+        with open(filename, "rb") as f:
             return cls.pb_loads(f.read())
 
     # ═══════════════════════════════════════════════════════════════════════════

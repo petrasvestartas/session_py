@@ -193,7 +193,7 @@ def _unify_curves(curves: list[NurbsCurve]) -> bool:
         if c.degree() < max_degree and not c.increase_degree(max_degree):
             return False
 
-        if any_rational and not c.make_rational():
+        if any_rational and not c.to_rational():
             return False
 
     compatible = True
@@ -1315,37 +1315,37 @@ class Primitives:
         return _bounded_patch(samples, plane.origin, plane.x_axis, plane.y_axis)
 
     @staticmethod
-    def create_loft(input_curves: list[NurbsCurve], degree_v: int = 3) -> NurbsSurface:
-        """Loft through section curves, interpolating them in v."""
+    def create_loft(curves: list[NurbsCurve], degree_v: int = 3) -> NurbsSurface:
+        """Loft through section sections, interpolating them in v."""
 
-        if len(input_curves) < 2:
+        if len(curves) < 2:
             return NurbsSurface()
 
-        for c in input_curves:
+        for c in curves:
             if not c.is_valid():
                 return NurbsSurface()
 
-        curves = []
+        sections = []
 
-        for c in input_curves:
-            curves.append(c.duplicate())
+        for c in curves:
+            sections.append(c.duplicate())
 
-        if not _unify_curves(curves):
+        if not _unify_curves(sections):
             return NurbsSurface()
 
-        n = len(curves)
-        cv_count_u = curves[0].cv_count()
-        is_rat = curves[0].is_rational()
+        n = len(sections)
+        cv_count_u = sections[0].cv_count()
+        is_rat = sections[0].is_rational()
         order_v = max(1, min(degree_v, n - 1)) + 1
-        v_params = _loft_section_params(curves)
+        v_params = _loft_section_params(sections)
         nurbsknots_v = _loft_nurbsknots(v_params, order_v)
-        surface = NurbsSurface(3, is_rat, curves[0].order(), order_v, cv_count_u, n)
+        surface = NurbsSurface(3, is_rat, sections[0].order(), order_v, cv_count_u, n)
 
         if not surface.is_valid():
             return NurbsSurface()
 
         for i in range(surface.nurbsknot_count(0)):
-            surface.set_nurbsknot(0, i, curves[0].nurbsknot(i))
+            surface.set_nurbsknot(0, i, sections[0].nurbsknot(i))
 
         for i in range(surface.nurbsknot_count(1)):
             surface.set_nurbsknot(1, i, nurbsknots_v[i])
@@ -1356,7 +1356,7 @@ class Primitives:
             basis.append(_loft_basis_row(nurbsknots_v, order_v, n, v_params[k]))
 
         for i in range(cv_count_u):
-            q = _solve_linear(basis, _loft_column(curves, i, is_rat))
+            q = _solve_linear(basis, _loft_column(sections, i, is_rat))
 
             for j in range(n):
                 if is_rat:

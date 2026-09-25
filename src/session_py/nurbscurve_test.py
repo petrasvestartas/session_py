@@ -599,12 +599,12 @@ def test_nurbscurve_modifications():
 
     curve_rational = curve.duplicate()
     original_length = curve.length()
-    curve_rational.make_rational()
+    curve_rational.to_rational()
     curve_rational.set_weight(2, 10)
 
     MINI_CHECK(curve_rational.length() != original_length)
 
-    curve_rational.make_non_rational(True)
+    curve_rational.to_non_rational(True)
 
     MINI_CHECK(curve_rational.length() == original_length)
 

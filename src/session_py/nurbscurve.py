@@ -988,7 +988,7 @@ class NurbsCurve:
         if cv_index < 0 or cv_index >= self.m_cv_count:
             return False
 
-        if not self.m_is_rat and w != 1.0 and not self.make_rational():
+        if not self.m_is_rat and w != 1.0 and not self.to_rational():
             return False
 
         cv_ptr = self.cv(cv_index)
@@ -1022,7 +1022,7 @@ class NurbsCurve:
     def set_weight(self, cv_index: int, weight: float) -> bool:
         """Set the weight, making the curve rational first."""
 
-        if not self.m_is_rat and not self.make_rational():
+        if not self.m_is_rat and not self.to_rational():
             return False
 
         cv_ptr = self.cv(cv_index)
@@ -1977,7 +1977,7 @@ class NurbsCurve:
 
         return changed
 
-    def make_rational(self) -> bool:
+    def to_rational(self) -> bool:
         """Add unit weights."""
 
         if self.m_is_rat:
@@ -2000,7 +2000,7 @@ class NurbsCurve:
 
         return True
 
-    def make_non_rational(self, force: bool = False) -> bool:
+    def to_non_rational(self, force: bool = False) -> bool:
         """Drop the weights; fails when they differ unless force."""
 
         if not self.m_is_rat:
@@ -2264,17 +2264,17 @@ class NurbsCurve:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: str | Path) -> None:
+    def file_json_dump(self, filename: str | Path) -> None:
         """Write to a JSON file."""
 
-        with open(filepath, "w") as file:
+        with open(filename, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: str | Path) -> NurbsCurve:
+    def file_json_load(cls, filename: str | Path) -> NurbsCurve:
         """Read from a JSON file."""
 
-        with open(filepath) as file:
+        with open(filename) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -2353,17 +2353,17 @@ class NurbsCurve:
 
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: str | Path) -> None:
+    def pb_dump(self, filename: str | Path) -> None:
         """Write to a protobuf file."""
 
-        with open(filepath, "wb") as file:
+        with open(filename, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: str | Path) -> NurbsCurve:
+    def pb_load(cls, filename: str | Path) -> NurbsCurve:
         """Read from a protobuf file."""
 
-        with open(filepath, "rb") as file:
+        with open(filename, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -3464,7 +3464,7 @@ class NurbsCurve:
 
         for c in chain:
             if rational:
-                c.make_rational()
+                c.to_rational()
 
             if not c.clamp_end(2) or not c.increase_degree(max_degree):
                 aligned = False

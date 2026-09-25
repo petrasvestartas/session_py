@@ -404,17 +404,17 @@ class Quaternion:
         """Deserialize from a JSON string."""
         return cls.__jsonload__(json.loads(json_string))
 
-    def file_json_dump(self, filepath: str | Path) -> None:
+    def file_json_dump(self, filename: str | Path) -> None:
         """Write JSON to a file."""
 
-        with open(filepath, "w") as file:
+        with open(filename, "w") as file:
             json.dump(self.__jsondump__(), file, indent=2)
 
     @classmethod
-    def file_json_load(cls, filepath: str | Path) -> Quaternion:
+    def file_json_load(cls, filename: str | Path) -> Quaternion:
         """Read JSON from a file."""
 
-        with open(filepath) as file:
+        with open(filename) as file:
             return cls.__jsonload__(json.load(file))
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -458,17 +458,17 @@ class Quaternion:
 
         return cls.from_proto(proto)
 
-    def pb_dump(self, filepath: str | Path) -> None:
+    def pb_dump(self, filename: str | Path) -> None:
         """Write protobuf bytes to a file."""
 
-        with open(filepath, "wb") as file:
+        with open(filename, "wb") as file:
             file.write(self.pb_dumps())
 
     @classmethod
-    def pb_load(cls, filepath: str | Path) -> Quaternion:
+    def pb_load(cls, filename: str | Path) -> Quaternion:
         """Read protobuf bytes from a file."""
 
-        with open(filepath, "rb") as file:
+        with open(filename, "rb") as file:
             return cls.pb_loads(file.read())
 
     # ═══════════════════════════════════════════════════════════════════════════

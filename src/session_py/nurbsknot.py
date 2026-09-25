@@ -77,7 +77,9 @@ def domain_tolerance(a: float, b: float) -> float:
     return max(tol, epsilon)
 
 
-def make_clamped_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.ndarray:
+def compute_clamped_uniform(
+    order: int, cv_count: int, delta: float = 1.0
+) -> np.ndarray:
     """Return a clamped uniform nurbsknot vector, or an empty vector for invalid arguments."""
 
     if order < 2 or cv_count < order or not math.isfinite(delta) or delta <= 0.0:
@@ -101,7 +103,9 @@ def make_clamped_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.nd
     return nurbsknot
 
 
-def make_periodic_uniform(order: int, cv_count: int, delta: float = 1.0) -> np.ndarray:
+def compute_periodic_uniform(
+    order: int, cv_count: int, delta: float = 1.0
+) -> np.ndarray:
     """Return a periodic uniform nurbsknot vector, or an empty vector for invalid arguments."""
 
     if order < 2 or cv_count < order or not math.isfinite(delta) or delta <= 0.0:
