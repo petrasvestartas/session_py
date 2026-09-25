@@ -1,8 +1,11 @@
 from __future__ import annotations
 from typing import Any
+from typing import Iterable
 from typing import NamedTuple
 from typing import TYPE_CHECKING
 import copy
+import heapq
+import itertools
 import json
 import sys
 import uuid
@@ -433,14 +436,36 @@ class _Checkpoint:
         self.revision = revision  # The revision it writes.
         self.phase = _HEAD  # The section being written.
         self.cursor = 0  # Slot or key position in the phase.
-        self.keys = None  # Keys of the running graph, rest or interactions phase.
-        self.hits = 0  # Xforms entries order() reached.
-        self.graph = None  # The vertices map being filled.
+        self.unsorted = None  # Keys yet to sort, in runs of at most work.
+        self.runs = []  # The sorted runs.
+        self.keys = None  # The phase's keys in order, merged lazily.
+        self.seen = set()  # Guids whose xform order() reached.
         self.stack = []  # Tree frames being written, root first: node, next raw child, bytes in chunks.
         self.tree = []  # The framed root, in chunks after the Tree head.
         self.sections = {name: bytearray() for name in _SECTIONS}  # One per field.
         self.pieces = []  # The framed sections in message order.
         self.out = bytearray()  # The joined message.
+
+    def sort_step(self, keys: Iterable[str], work: int) -> int:
+        """Sort a snapshot of keys in runs of at most work per call, then merge the runs lazily into self.keys; returns the keys sorted."""
+
+        if self.unsorted is None:
+            self.unsorted = list(keys)
+            self.runs = []
+            self.cursor = 0
+
+        start = self.cursor
+        end = min(len(self.unsorted), start + work)
+        self.runs.append(sorted(self.unsorted[start:end]))
+        self.cursor = end
+
+        if end == len(self.unsorted):
+            self.keys = heapq.merge(*self.runs)
+            self.unsorted = None
+            self.runs = []
+            self.cursor = 0
+
+        return end - start
 
 
 class Session:
@@ -2134,52 +2159,49 @@ class Session:
         return bytearray(proto.SerializeToString(deterministic=True))
 
     def _write_vertices(self, writer: _Checkpoint, work: int) -> int:
-        """Fill the vertices map from the cursor, then write the graph head and that map with its entries sorted; returns the vertices written."""
+        """Write the graph head, then the vertices in name order, at most work per call; returns the vertices sorted or written."""
 
         from .proto import graph_pb2
 
         if writer.keys is None:
-            writer.keys = list(self.graph.vertices)
-            writer.graph = graph_pb2.Graph()
+            if writer.unsorted is None:
+                head = graph_pb2.Graph()
+                head.name = self.graph.name
 
-        start = writer.cursor
-        end = min(len(writer.keys), start + work)
+                if self.graph.has_guid():
+                    head.guid = self.graph.guid
 
-        for name in writer.keys[start:end]:
-            vertex_to_proto(self.graph.vertices[name], writer.graph.vertices[name])
+                writer.sections["graph"] = bytearray(head.SerializeToString())
 
-        writer.cursor = end
+            return writer.sort_step(self.graph.vertices, work)
 
-        if end < len(writer.keys):
-            return end - start
+        proto = graph_pb2.Graph()
+        names = list(itertools.islice(writer.keys, work))
 
-        head = graph_pb2.Graph()
-        head.name = self.graph.name
+        for name in names:
+            vertex_to_proto(self.graph.vertices[name], proto.vertices[name])
 
-        if self.graph.has_guid():
-            head.guid = self.graph.guid
+        writer.sections["graph"] += proto.SerializeToString(deterministic=True)
 
-        writer.sections["graph"] = bytearray(head.SerializeToString(deterministic=True))
-        writer.sections["graph"] += writer.graph.SerializeToString(deterministic=True)
+        if len(names) == work:
+            return work
+
         writer.keys = None
-        writer.graph = None
-        writer.cursor = 0
         writer.phase = _EDGES
 
-        return end - start
+        return len(names)
 
     def _write_edges(self, writer: _Checkpoint, work: int) -> int:
-        """Write the graph edges in vertex order from the cursor, then the counts and defaults; returns the entries examined."""
+        """Write the graph edges in vertex order, at most work entries per call, then the counts and defaults; returns the keys sorted or entries examined."""
 
         from .proto import graph_pb2
 
         if writer.keys is None:
-            writer.keys = sorted(self.graph.edges)
+            return writer.sort_step(self.graph.edges, work)
 
         spent = 0
 
-        while writer.cursor < len(writer.keys) and spent < work:
-            u = writer.keys[writer.cursor]
+        for u in writer.keys:
             neighbors = self.graph.edges[u]
 
             for v in sorted(neighbors):
@@ -2190,11 +2212,10 @@ class Session:
                         deterministic=True
                     )
 
-            writer.cursor += 1
             spent += max(len(neighbors), 1)
 
-        if writer.cursor < len(writer.keys):
-            return spent
+            if spent >= work:
+                return spent
 
         proto = graph_pb2.Graph()
         proto.vertex_count = self.graph.vertex_count
@@ -2208,7 +2229,6 @@ class Session:
 
         writer.sections["graph"] += proto.SerializeToString(deterministic=True)
         writer.keys = None
-        writer.cursor = 0
         writer.phase = _ORDERED
 
         return spent
@@ -2227,10 +2247,10 @@ class Session:
             guid = items.get_item(slot).guid
             xform = self.xforms.get(guid)
 
-            if xform is None:
+            if xform is None or guid in writer.seen:
                 continue
 
-            writer.hits += 1
+            writer.seen.add(guid)
 
             if not xform.is_identity():
                 self._write_xform(writer, guid, xform)
@@ -2251,8 +2271,8 @@ class Session:
         if writer.keys is None:
             writer.keys = []
 
-            if writer.hits < len(self.xforms):
-                writer.keys = self._unordered()
+            if len(writer.seen) < len(self.xforms):
+                writer.keys = self._unordered(writer.seen)
                 spent = len(self.xforms)
 
         start = writer.cursor
@@ -2276,21 +2296,13 @@ class Session:
 
         return spent + end - start
 
-    def _unordered(self) -> list[str]:
-        """The sorted guids of the non-identity xforms whose objects are not in order()."""
+    def _unordered(self, seen: set[str]) -> list[str]:
+        """The sorted guids of the non-identity xforms order() did not reach."""
 
         guids = []
 
         for guid, xform in self.xforms.items():
-            geometry = self.lookup.get(guid)
-            items = None
-
-            if geometry is not None:
-                items = getattr(self.objects, _collection_of(geometry)[0], None)
-
-            if (
-                items is None or items.get_slot(guid) is None
-            ) and not xform.is_identity():
+            if guid not in seen and not xform.is_identity():
                 guids.append(guid)
 
         guids.sort()
@@ -2309,17 +2321,16 @@ class Session:
         writer.sections["xforms"] += proto.SerializeToString(deterministic=True)
 
     def _write_interactions(self, writer: _Checkpoint, work: int) -> int:
-        """Write the interactions per edge guid in guid order from the cursor; returns the entries written."""
+        """Write the interactions per edge guid in guid order, at most work per call; returns the keys sorted or entries written."""
 
         from .proto import session_pb2
 
         if writer.keys is None:
-            writer.keys = sorted(self.interactions)
+            return writer.sort_step(self.interactions, work)
 
-        start = writer.cursor
-        end = min(len(writer.keys), start + work)
+        edges = list(itertools.islice(writer.keys, work))
 
-        for edge in writer.keys[start:end]:
+        for edge in edges:
             proto = session_pb2.Session()
             item = proto.interactions.add()
             item.guid = edge
@@ -2331,16 +2342,13 @@ class Session:
                 deterministic=True
             )
 
-        writer.cursor = end
-
-        if end < len(writer.keys):
-            return end - start
+        if len(edges) == work:
+            return work
 
         writer.keys = None
-        writer.cursor = 0
         writer.phase = _ASSEMBLY
 
-        return end - start
+        return len(edges)
 
     def _assemble(self, writer: _Checkpoint, work: int) -> bool:
         """Join the sections into one Session message, copying at most work KiB; True once complete."""

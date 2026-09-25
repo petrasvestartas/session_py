@@ -1296,38 +1296,6 @@ def test_session_purge_on_save():
     MINI_CHECK(loaded.pb_dumps() == data)
 
 
-@MINI_TEST("Session", "Purge Clears History")
-def test_session_purge_clears_history():
-    from session_py import Point
-    from session_py import Session
-
-    session = Session()
-    guids = []
-
-    for i in range(3):
-        node = session.add_point(Point(float(i), 0.0, 0.0))
-        guids.append(node.name)
-
-    session.add_edge(guids[1], guids[2])
-    session.begin("remove")
-    session.remove_object(guids[0])
-    session.commit()
-    session.purge()
-    indices = []
-
-    for vertex in session.graph.get_vertices():
-        indices.append(vertex.index)
-
-    indices.sort()
-
-    MINI_CHECK(not session.history.can_undo())
-    MINI_CHECK(not session.undo())
-    MINI_CHECK(session.number_of_dead() == 0)
-    MINI_CHECK(indices == [0, 1])
-    MINI_CHECK(guids[0] not in session.lookup)
-    MINI_CHECK(session.graph.has_edge((guids[1], guids[2])))
-
-
 @MINI_TEST("Session", "Purge Unreachable")
 def test_session_purge_unreachable():
     from session_py import Point
@@ -2607,21 +2575,134 @@ def test_session_remove_twin_keeps_slot():
 
     session = Session()
     x = Point(1.0, 0.0, 0.0)
+    guid = x.guid
     y = Point(2.0, 0.0, 0.0)
-    y.guid = x.guid
-
+    y.guid = guid
     session.begin("add")
     session.add_point(x)
     session.commit()
     session.add_point(y)
     session.undo()
-    removed = session.remove_object(x.guid)
-    loaded = Session.pb_loads(session.pb_dumps())
+
+    MINI_CHECK(session.objects.points.get_slot(guid) == 1)
+    MINI_CHECK(session.objects.points.is_dead(0))
+    MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(guid in session.lookup)
+
+    removed = session.remove_object(guid)
+    data = session.pb_dumps()
+    loaded = Session.pb_loads(data)
 
     MINI_CHECK(removed)
+    MINI_CHECK(guid not in session.lookup)
     MINI_CHECK(len(session.objects.points) == 0)
     MINI_CHECK(len(loaded.objects.points) == 0)
-    MINI_CHECK(x.guid not in loaded.lookup)
+    MINI_CHECK(len(loaded.lookup) == 0)
+
+
+@MINI_TEST("Session", "Purge Clears History")
+def test_session_purge_clears_history():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(1.0, 0.0, 0.0)
+    c = Point(2.0, 0.0, 0.0)
+    a_guid = a.guid
+    b_guid = b.guid
+    c_guid = c.guid
+    session.add_point(a)
+    session.add_point(b)
+    session.add_point(c)
+    session.begin("remove")
+    session.remove_object(b_guid)
+    session.commit()
+    session.purge()
+    undone = session.undo()
+    indices = []
+
+    for vertex in session.graph.get_vertices():
+        indices.append(vertex.index)
+
+    indices.sort()
+
+    MINI_CHECK(not undone)
+    MINI_CHECK(session.history.depth() == 0)
+    MINI_CHECK(session.order() == [a_guid, c_guid])
+    MINI_CHECK(indices == [0, 1])
+    MINI_CHECK(session.objects.points.number_of_slots() == 2)
+    MINI_CHECK(session.number_of_dead() == 0)
+    MINI_CHECK(len(session.tree.nodes) == 3)
+
+
+@MINI_TEST("Session", "Purge Keeps Replaced Tomb")
+def test_session_purge_keeps_replaced_tomb():
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Session
+    from session_py.session import PURGE_WORK
+
+    session = Session()
+    definition = session.add_definition(Point(1.0, 2.0, 3.0))
+    first = InstanceRef(definition)
+    second = InstanceRef(definition)
+    session.add_instance(first)
+    session.begin("add")
+    session.add_instance(second)
+    session.commit()
+    session.begin("explode")
+    session.explode(second.guid)
+    session.commit()
+    session.remove_object(first.guid)
+
+    while session.purge_step(PURGE_WORK):
+        pass
+
+    slots = session.objects.instances.number_of_slots()
+    unexploded = session.undo()
+    instances = len(session.objects.instances)
+    unadded = session.undo()
+
+    MINI_CHECK(slots == 1)
+    MINI_CHECK(unexploded)
+    MINI_CHECK(instances == 1)
+    MINI_CHECK(unadded)
+    MINI_CHECK(len(session.objects.instances) == 0)
+    MINI_CHECK(len(session.objects.points) == 0)
+    MINI_CHECK(second.guid not in session.instance_lookup)
+    MINI_CHECK(session.redo())
+    MINI_CHECK(session.redo())
+    MINI_CHECK(len(session.objects.points) == 1)
+
+
+@MINI_TEST("Session", "Checkpoint Twin Xform")
+def test_session_checkpoint_twin_xform():
+    from session_py import InstanceRef
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    definition = session.add_definition(Point(1.0, 2.0, 3.0))
+    x = Point(0.0, 0.0, 0.0)
+    y = Point(1.0, 0.0, 0.0)
+    y.guid = x.guid
+    instance = InstanceRef(definition)
+    session.add_point(x)
+    session.add_point(y)
+    session.add_instance(instance, Xform.translation(0.0, 1.0, 0.0))
+    session.set_xform(x.guid, Xform.translation(1.0, 0.0, 0.0))
+    data = session.checkpoint(1)
+
+    while data is None:
+        data = session.checkpoint(1)
+
+    loaded = Session.pb_loads(data)
+
+    MINI_CHECK(data == session.to_proto().SerializeToString(deterministic=True))
+    MINI_CHECK(loaded.xform(x.guid) == session.xform(x.guid))
+    MINI_CHECK(loaded.xform(instance.guid) == session.xform(instance.guid))
 
 
 if __name__ == "__main__":

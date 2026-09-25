@@ -23,7 +23,7 @@ class Collection:
         self._items: list = []  # Raw slots in canonical order, dead ones included.
         self._dead: list[bool] = []  # One flag per slot.
         self._slots: dict[str, int] = {}  # Live guid -> slot.
-        self._tombs: dict[int, weakref.ref] = {}  # Sparse weak pin per slot.
+        self._tombs: dict[int, list[weakref.ref]] = {}  # Weak pins, newest last.
         self._live = 0  # Live count.
         self._count = 0  # Dead slots not yet purged.
         self._low = 0  # Lowest dead slot, where compaction starts.
@@ -147,17 +147,24 @@ class Collection:
             self._count -= 1
 
     def get_tomb(self, slot: int) -> Tomb | None:
-        """Return the tomb pinning a slot while a record still holds it."""
+        """Return the newest tomb pinning a slot while a record still holds it."""
 
-        pin = self._tombs.get(slot)
+        held = _held(self._tombs.get(slot))
 
-        return None if pin is None else pin()
+        return held[-1] if held else None
 
     def set_tomb(self, slot: int, tomb: Tomb) -> None:
-        """Pin a slot weakly to a tomb and point the tomb at the slot."""
+        """Pin a slot weakly to a tomb and point the tomb at the slot; older pins a record still holds stay."""
 
         tomb.slot = slot
-        self._tombs[slot] = weakref.ref(tomb)
+        pins = []
+
+        for held in _held(self._tombs.get(slot)):
+            if held is not tomb:
+                pins.append(weakref.ref(held))
+
+        pins.append(weakref.ref(tomb))
+        self._tombs[slot] = pins
 
     def number_of_dead(self) -> int:
         """Return the number of dead slots not yet purged."""
@@ -221,22 +228,22 @@ class Collection:
         self._positions = None
 
         while examined < work and r < len(self._items):
-            pin = self._tombs.get(r)
-            pinned = pin is not None and pin() is not None
+            held = _held(self._tombs.get(r))
 
-            if self._dead[r] and not pinned:
+            if self._dead[r] and not held:
                 self._tombs.pop(r, None)
                 self._count -= 1
             else:
                 if w != r:
                     self._items[w], self._items[r] = self._items[r], self._items[w]
                     self._dead[w], self._dead[r] = self._dead[r], self._dead[w]
-                    pin = self._tombs.pop(r, None)
-                    held = None if pin is None else pin()
+                    self._tombs.pop(r, None)
 
-                    if held is not None:
-                        held.slot = w
-                        self._tombs[w] = pin
+                    for tomb in held:
+                        tomb.slot = w
+
+                    if held:
+                        self._tombs[w] = [weakref.ref(tomb) for tomb in held]
 
                     if not self._dead[w]:
                         self._slots[self._items[w].guid] = w
@@ -321,3 +328,17 @@ class Collection:
         for slot in range(len(self._items)):
             if not self._dead[slot]:
                 yield self._items[slot]
+
+
+def _held(pins: list[weakref.ref] | None) -> list[Tomb]:
+    """The tombs of a slot's pins that a record still holds, oldest first."""
+
+    held = []
+
+    for pin in pins or ():
+        tomb = pin()
+
+        if tomb is not None:
+            held.append(tomb)
+
+    return held
