@@ -2636,6 +2636,135 @@ def test_session_purge_clears_history():
     MINI_CHECK(len(session.tree.nodes) == 3)
 
 
+@MINI_TEST("Session", "Checkpoint After Purge Steps")
+def test_session_checkpoint_after_purge_steps():
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+    from session_py.history import CAPACITY
+    from session_py.session import PURGE_WORK
+
+    n = 40_000
+    bulk = 20_000
+    session = Session()
+    group = session.add_group("flat")
+    guids = []
+
+    for i in range(n):
+        node = session.add_point(Point(float(i), 0.0, 0.0), group)
+        guids.append(node.name)
+
+    session.begin("remove")
+
+    for guid in guids[:bulk]:
+        session.remove_object(guid)
+
+    session.commit()
+
+    for step in range(CAPACITY):
+        session.begin("move")
+        session.set_xform(guids[n - 1], Xform.translation(float(step), 0.0, 0.0))
+        session.commit()
+
+    steps = 0
+
+    while session.purge_step(PURGE_WORK):
+        steps += 1
+
+    data = None
+
+    while data is None:
+        data = session.checkpoint(PURGE_WORK)
+
+    loaded = Session.pb_loads(data)
+
+    MINI_CHECK(steps > 1)
+    MINI_CHECK(len(loaded.objects.points) == n - bulk)
+    MINI_CHECK(data == session.to_proto().SerializeToString(deterministic=True))
+    MINI_CHECK(session.number_of_dead() == 0)
+    MINI_CHECK(session.history.depth() == CAPACITY)
+
+
+@MINI_TEST("Session", "Steady State Bounds")
+def test_session_steady_state_bounds():
+    from session_py import Point
+    from session_py import Session
+    from session_py.history import CAPACITY
+    from session_py.session import PURGE_WORK
+
+    n = 2_000
+    cycles = 1_000
+    session = Session()
+    group = session.add_group("flat")
+    guids = []
+
+    for i in range(n):
+        node = session.add_point(Point(float(i), 0.0, 0.0), group)
+        guids.append(node.name)
+
+    for cycle, guid in enumerate(guids[:cycles]):
+        session.begin("remove")
+        session.remove_object(guid)
+        session.commit()
+        session.undo()
+        session.redo()
+        session.begin("add")
+        session.add_point(Point(float(cycle), 1.0, 0.0), group)
+        session.commit()
+        session.purge_step(PURGE_WORK)
+
+    bound = 2 * CAPACITY + 2 * (n // PURGE_WORK + 1)
+    points = session.objects.points
+
+    MINI_CHECK(len(points) == n)
+    MINI_CHECK(session.history.bytes <= session.history.budget)
+    MINI_CHECK(session.number_of_dead() <= bound)
+    MINI_CHECK(points.number_of_slots() <= len(points) + bound)
+    MINI_CHECK(len(group.children) <= len(points) + bound)
+
+
+@MINI_TEST("Session", "History Budget Bounds")
+def test_session_history_budget_bounds():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Session
+    from session_py.history import CAPACITY
+
+    side = 30
+    vertices = []
+    faces = []
+
+    for at in range(side * side):
+        vertices.append(Point(float(at // side), float(at % side), 0.0))
+
+    for cell in range((side - 1) * (side - 1)):
+        at = cell // (side - 1) * side + cell % (side - 1)
+        faces.append([at, at + side, at + side + 1, at + 1])
+
+    session = Session()
+    session.history.budget = 1 << 20
+    guids = []
+
+    for _ in range(200):
+        mesh = Mesh.from_vertices_and_faces(vertices, faces)
+        guids.append(mesh.guid)
+        session.add_mesh(mesh)
+
+    bounded = True
+
+    for guid in guids:
+        session.begin("remove")
+        session.remove_object(guid)
+        session.commit()
+        newest = session.history.undo_stack[session.history.depth() - 1].bytes
+        bounded &= session.history.bytes <= session.history.budget + newest
+
+    MINI_CHECK(bounded)
+    MINI_CHECK(session.history.depth() < CAPACITY)
+    MINI_CHECK(session.history.depth() > 1)
+    MINI_CHECK(len(session.objects.meshes) == 0)
+
+
 @MINI_TEST("Session", "Purge Keeps Replaced Tomb")
 def test_session_purge_keeps_replaced_tomb():
     from session_py import InstanceRef
