@@ -123,7 +123,7 @@ class SpatialRTree:
         """Insert an item with its bounding box."""
 
         branch = _Branch()
-        branch.m_rect = self._make_rect(a_min, a_max)
+        branch.m_rect = self._to_rect(a_min, a_max)
         branch.m_child = None
         branch.m_data = a_data
 
@@ -133,7 +133,7 @@ class SpatialRTree:
     def remove(self, a_min: list[float], a_max: list[float], a_data: int) -> bool:
         """Remove an item by its bounding box and data; false when not found."""
 
-        rect = self._make_rect(a_min, a_max)
+        rect = self._to_rect(a_min, a_max)
         reinsert_list = []
 
         if not self._remove_rect_internal(rect, a_data, reinsert_list):
@@ -162,7 +162,7 @@ class SpatialRTree:
     def search(self, a_min: list[float], a_max: list[float], a_callback: Callable[[int], bool]) -> int:
         """Visit every item overlapping the box until the callback returns false; returns the visit count."""
 
-        rect = self._make_rect(a_min, a_max)
+        rect = self._to_rect(a_min, a_max)
         stack: list[_Visit] = [_Visit(self._m_root, 0)]
         count = 0
 
@@ -206,7 +206,7 @@ class SpatialRTree:
     # ═══════════════════════════════════════════════════════════════════════════
     # Rect math
     # ═══════════════════════════════════════════════════════════════════════════
-    def _make_rect(self, a_min: list[float], a_max: list[float]) -> _Rect:
+    def _to_rect(self, a_min: list[float], a_max: list[float]) -> _Rect:
         """Build a rect from min and max corners."""
 
         rect = _Rect()
@@ -417,7 +417,7 @@ class SpatialRTree:
                 if part_vars.m_partition[i] == NOT_TAKEN:
                     self._classify_branch(i, group, part_vars)
 
-    def _load_nodes(self, node_a: _Node, node_b: _Node, part_vars: _PartitionVars) -> None:
+    def _distribute_branches(self, node_a: _Node, node_b: _Node, part_vars: _PartitionVars) -> None:
         """Move partitioned branches into the two nodes."""
 
         for i in range(part_vars.m_total):
@@ -434,7 +434,7 @@ class SpatialRTree:
 
         new_node = self._alloc_node()
         new_node.m_level = node.m_level
-        self._load_nodes(node, new_node, part_vars)
+        self._distribute_branches(node, new_node, part_vars)
 
         return new_node
 

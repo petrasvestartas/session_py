@@ -19,8 +19,8 @@ class _BIVec2:
     __slots__ = ("x", "y")
 
     def __init__(self, x: int = 0, y: int = 0):
-        self.x = x
-        self.y = y
+        self.x = x  # Scaled integer x.
+        self.y = y  # Scaled integer y.
 
     def __eq__(self, o):
         return self.x == o.x and self.y == o.y
@@ -33,40 +33,40 @@ class _VVertex:
     __slots__ = ("pt", "next", "prev", "flags")
 
     def __init__(self):
-        self.pt = _BIVec2()
-        self.next = None
-        self.prev = None
-        self.flags = _VF_NONE
+        self.pt = _BIVec2()  # Scaled position.
+        self.next = None  # Next vertex of the ring.
+        self.prev = None  # Previous vertex of the ring.
+        self.flags = _VF_NONE  # Local extremum flags.
 
 
 class _VLocalMinima:
     __slots__ = ("vertex", "polytype")
 
     def __init__(self, vertex: _VVertex, polytype: int):
-        self.vertex = vertex
-        self.polytype = polytype
+        self.vertex = vertex  # Vertex at the local minimum.
+        self.polytype = polytype  # 0 subject, 1 clip.
 
 
 class _VOutPt:
     __slots__ = ("pt", "next", "prev", "outrec", "horz")
 
     def __init__(self, pt: _BIVec2, outrec: "_VOutRec"):
-        self.pt = pt
-        self.outrec = outrec
-        self.next = self
-        self.prev = self
-        self.horz = None
+        self.pt = pt  # Scaled output position.
+        self.outrec = outrec  # Owning output ring.
+        self.next = self  # Next point of the output ring.
+        self.prev = self  # Previous point of the output ring.
+        self.horz = None  # Horizontal segment starting here.
 
 
 class _VOutRec:
     __slots__ = ("idx", "front_edge", "back_edge", "pts", "owner")
 
     def __init__(self, idx: int = 0):
-        self.idx = idx
-        self.front_edge = None
-        self.back_edge = None
-        self.pts = None
-        self.owner = None
+        self.idx = idx  # Index in the output list.
+        self.front_edge = None  # Edge adding points to the front.
+        self.back_edge = None  # Edge adding points to the back.
+        self.pts = None  # Entry point of the ring.
+        self.owner = None  # Ring this one was merged into.
 
 
 class _VActive:
@@ -91,54 +91,54 @@ class _VActive:
     )
 
     def __init__(self):
-        self.bot = _BIVec2()
-        self.top = _BIVec2()
-        self.curr_x = 0
-        self.dx = 0.0
-        self.wind_dx = 1
-        self.wind_cnt = 0
-        self.wind_cnt2 = 0
-        self.outrec = None
-        self.prev_in_ael = None
-        self.next_in_ael = None
-        self.prev_in_sel = None
-        self.next_in_sel = None
-        self.jump = None
-        self.vertex_top = None
-        self.local_min = None
-        self.is_left_bound = False
-        self.join_with = _JW_NONE
+        self.bot = _BIVec2()  # Bottom of the edge.
+        self.top = _BIVec2()  # Top of the edge.
+        self.curr_x = 0  # x at the current scanline.
+        self.dx = 0.0  # Inverse slope.
+        self.wind_dx = 1  # Winding direction, 1 or -1.
+        self.wind_cnt = 0  # Winding count of its own polytype.
+        self.wind_cnt2 = 0  # Winding count of the other polytype.
+        self.outrec = None  # Output ring the edge contributes to.
+        self.prev_in_ael = None  # Previous edge in the active edge list.
+        self.next_in_ael = None  # Next edge in the active edge list.
+        self.prev_in_sel = None  # Previous edge in the sorted edge list.
+        self.next_in_sel = None  # Next edge in the sorted edge list.
+        self.jump = None  # Merge sort run boundary.
+        self.vertex_top = None  # Vertex at the top of the edge.
+        self.local_min = None  # Local minimum the bound starts from.
+        self.is_left_bound = False  # Left or right bound of its minimum.
+        self.join_with = _JW_NONE  # 0 none, 1 left, 2 right.
 
 
 class _VIntersectNode:
     __slots__ = ("pt", "edge1", "edge2")
 
     def __init__(self, pt: _BIVec2, edge1: _VActive, edge2: _VActive):
-        self.pt = pt
-        self.edge1 = edge1
-        self.edge2 = edge2
+        self.pt = pt  # Intersection point.
+        self.edge1 = edge1  # Left edge.
+        self.edge2 = edge2  # Right edge.
 
 
 class _VHorzSeg:
     __slots__ = ("left_op", "right_op", "left_to_right")
 
     def __init__(self, left_op: _VOutPt):
-        self.left_op = left_op
-        self.right_op = None
-        self.left_to_right = True
+        self.left_op = left_op  # Left end of the segment.
+        self.right_op = None  # Right end of the segment.
+        self.left_to_right = True  # Direction of the output ring.
 
 
 class _VHorzJoin:
     __slots__ = ("op1", "op2")
 
     def __init__(self, op1: _VOutPt, op2: _VOutPt):
-        self.op1 = op1
-        self.op2 = op2
+        self.op1 = op1  # First point to join.
+        self.op2 = op2  # Second point to join.
 
 
 class _ScanlineHeap:
     def __init__(self):
-        self._heap = []
+        self._heap = []  # Max heap storage, negated.
 
     def clear(self) -> None:
         self._heap.clear()
@@ -158,18 +158,18 @@ class _ScanlineHeap:
 
 class _VattiScratch:
     def __init__(self):
-        self.vertex_count = 0
-        self.locmin_list = []
-        self.intersect_nodes = []
-        self.horz_seg_list = []
-        self.horz_join_list = []
-        self.outrec_list = []
-        self.scanline_list = _ScanlineHeap()
-        self.actives = None
-        self.sel = None
-        self.bot_y = 0
-        self.locmin_idx = 0
-        self.succeeded = True
+        self.vertex_count = 0  # Number of vertices of both inputs.
+        self.locmin_list = []  # Local minima of both inputs.
+        self.intersect_nodes = []  # Intersections of the current scanbeam.
+        self.horz_seg_list = []  # Horizontal output segments of the current scanline.
+        self.horz_join_list = []  # Pending horizontal joins.
+        self.outrec_list = []  # Output rings in creation order.
+        self.scanline_list = _ScanlineHeap()  # Pending scanlines.
+        self.actives = None  # Head of the active edge list.
+        self.sel = None  # Head of the sorted edge list.
+        self.bot_y = 0  # Bottom of the current scanbeam.
+        self.locmin_idx = 0  # Next local minimum to insert.
+        self.succeeded = True  # False once the sweep failed.
 
     def new_outpt(self, pt: _BIVec2, rec: _VOutRec) -> _VOutPt:
         return _VOutPt(_BIVec2(pt.x, pt.y), rec)
@@ -2286,81 +2286,6 @@ def _v_extract(sc: _VattiScratch, inv_scale: float) -> list[Polyline]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Open subject against closed clip
-# ═══════════════════════════════════════════════════════════════════════════
-def _v_point_in_poly(cc: list[float], nc: int, px: float, py: float) -> bool:
-    """Even-odd ray cast of (px, py) against the first nc points of cc."""
-
-    inside = False
-    j = nc - 1
-
-    for i in range(nc):
-        xi = cc[i * 3]
-        yi = cc[i * 3 + 1]
-        xj = cc[j * 3]
-        yj = cc[j * 3 + 1]
-        j = i
-
-        if (yi > py) == (yj > py):
-            continue
-
-        xint = xj + (py - yj) * (xi - xj) / (yi - yj)
-
-        if px < xint:
-            inside = not inside
-
-    return inside
-
-
-def _v_crossings(
-    cc: list[float], nc: int, ax: float, ay: float, dx: float, dy: float
-) -> list[float]:
-    """Sorted parameters in (0, 1] where segment (a, b) crosses an edge of the clip."""
-
-    ts = []
-    j = nc - 1
-
-    for i in range(nc):
-        ex = cc[i * 3] - cc[j * 3]
-        ey = cc[i * 3 + 1] - cc[j * 3 + 1]
-        rx = cc[j * 3] - ax
-        ry = cc[j * 3 + 1] - ay
-        j = i
-        denom = dy * ex - dx * ey
-
-        if abs(denom) < 1e-18:
-            continue
-
-        t = (ry * ex - rx * ey) / denom
-        u = (ry * dx - rx * dy) / denom
-
-        if t > 1e-12 and t <= 1.0 + 1e-12 and u >= -1e-9 and u <= 1.0 + 1e-9:
-            ts.append(min(max(t, 0.0), 1.0))
-
-    ts.sort()
-
-    return ts
-
-
-def _v_push_xy(cur: list[float], x: float, y: float) -> None:
-    n = len(cur)
-
-    if n >= 3 and abs(cur[n - 3] - x) < 1e-9 and abs(cur[n - 2] - y) < 1e-9:
-        return
-
-    cur.append(x)
-    cur.append(y)
-    cur.append(0.0)
-
-
-def _v_flush(cur: list[float], result: list[Polyline]) -> None:
-    if len(cur) >= 6:
-        result.append(Polyline.from_coords(list(cur)))
-
-    cur.clear()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
 # Boolean operations
 # ═══════════════════════════════════════════════════════════════════════════
 class BooleanPolyline:
@@ -2541,3 +2466,78 @@ class BooleanPolyline:
         _v_flush(cur, result)
 
         return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Open subject against closed clip
+# ═══════════════════════════════════════════════════════════════════════════
+def _v_point_in_poly(cc: list[float], nc: int, px: float, py: float) -> bool:
+    """Even-odd ray cast of (px, py) against the first nc points of cc."""
+
+    inside = False
+    j = nc - 1
+
+    for i in range(nc):
+        xi = cc[i * 3]
+        yi = cc[i * 3 + 1]
+        xj = cc[j * 3]
+        yj = cc[j * 3 + 1]
+        j = i
+
+        if (yi > py) == (yj > py):
+            continue
+
+        xint = xj + (py - yj) * (xi - xj) / (yi - yj)
+
+        if px < xint:
+            inside = not inside
+
+    return inside
+
+
+def _v_crossings(
+    cc: list[float], nc: int, ax: float, ay: float, dx: float, dy: float
+) -> list[float]:
+    """Sorted parameters in (0, 1] where segment (a, b) crosses an edge of the clip."""
+
+    ts = []
+    j = nc - 1
+
+    for i in range(nc):
+        ex = cc[i * 3] - cc[j * 3]
+        ey = cc[i * 3 + 1] - cc[j * 3 + 1]
+        rx = cc[j * 3] - ax
+        ry = cc[j * 3 + 1] - ay
+        j = i
+        denom = dy * ex - dx * ey
+
+        if abs(denom) < 1e-18:
+            continue
+
+        t = (ry * ex - rx * ey) / denom
+        u = (ry * dx - rx * dy) / denom
+
+        if t > 1e-12 and t <= 1.0 + 1e-12 and u >= -1e-9 and u <= 1.0 + 1e-9:
+            ts.append(min(max(t, 0.0), 1.0))
+
+    ts.sort()
+
+    return ts
+
+
+def _v_push_xy(cur: list[float], x: float, y: float) -> None:
+    n = len(cur)
+
+    if n >= 3 and abs(cur[n - 3] - x) < 1e-9 and abs(cur[n - 2] - y) < 1e-9:
+        return
+
+    cur.append(x)
+    cur.append(y)
+    cur.append(0.0)
+
+
+def _v_flush(cur: list[float], result: list[Polyline]) -> None:
+    if len(cur) >= 6:
+        result.append(Polyline.from_coords(list(cur)))
+
+    cur.clear()

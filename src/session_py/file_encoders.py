@@ -25,7 +25,7 @@ def file_json_dumps(data: Any, pretty: bool = True) -> str:
     if pretty:
         return json.dumps(data, cls=GeometryFileEncoder, indent=4)
 
-    return json.dumps(data, cls=GeometryFileEncoder)
+    return json.dumps(data, cls=GeometryFileEncoder, separators=(",", ":"))
 
 
 def file_json_loads(json_str: str) -> Any:

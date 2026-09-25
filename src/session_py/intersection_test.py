@@ -59,6 +59,7 @@ def distance_sphere2(p):
 
 def distance_torus(p):
     """Distance from the torus of radii 2 and 0.5 at the origin."""
+
     ring = math.sqrt(p[0] * p[0] + p[1] * p[1]) - 2.0
 
     return abs(math.sqrt(ring * ring + p[2] * p[2]) - 0.5)
@@ -71,6 +72,7 @@ def distance_flat(p):
 
 def bilinear(p00, p01, p10, p11):
     """Planar degree-1 surface through four corner points."""
+
     from session_py import NurbsSurface
 
     return NurbsSurface.create(False, False, 1, 1, 2, 2, [p00, p01, p10, p11])
@@ -121,6 +123,7 @@ def distance_wide_cylinder(p):
 
 def distance_high_torus(p):
     """Distance from the torus of radii 1 and 0.3 at z = 1."""
+
     ring = math.sqrt(p[0] * p[0] + p[1] * p[1]) - 1.0
 
     return abs(math.sqrt(ring * ring + (p[2] - 1.0) * (p[2] - 1.0)) - 0.3)
@@ -128,6 +131,7 @@ def distance_high_torus(p):
 
 def distance_wide_torus(p):
     """Distance from the torus of radii 2.3 and 0.5 at z = 0.3."""
+
     ring = math.sqrt(p[0] * p[0] + p[1] * p[1]) - 2.3
 
     return abs(math.sqrt(ring * ring + (p[2] - 0.3) * (p[2] - 0.3)) - 0.5)

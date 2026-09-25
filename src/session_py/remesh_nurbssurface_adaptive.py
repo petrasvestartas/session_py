@@ -26,6 +26,7 @@ class _Corner:
 
     def __init__(self, p: Point, n: Vector):
         """Construct from a point and its normal."""
+
         self.p = p  # Surface point.
         self.n = n  # Unit normal, zero at a pole.
 
@@ -136,7 +137,7 @@ def _sample(s: NurbsSurface, u: float, v: float) -> _Corner:
     return c
 
 
-def _make_node(
+def _compute_node(
     s: NurbsSurface,
     u0: float,
     v0: float,
@@ -310,44 +311,44 @@ def _split_node(
 
     if split_u and split_v:
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, p.u0, p.v0, um, vm, [p.c[0], mids[0], p.c[4], mids[3]], depth
             )
         )
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, um, p.v0, p.u1, vm, [mids[0], p.c[1], mids[1], p.c[4]], depth
             )
         )
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, um, vm, p.u1, p.v1, [p.c[4], mids[1], p.c[2], mids[2]], depth
             )
         )
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, p.u0, vm, um, p.v1, [mids[3], p.c[4], mids[2], p.c[3]], depth
             )
         )
     elif split_u:
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, p.u0, p.v0, um, p.v1, [p.c[0], mids[0], mids[2], p.c[3]], depth
             )
         )
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, um, p.v0, p.u1, p.v1, [mids[0], p.c[1], p.c[2], mids[2]], depth
             )
         )
     else:
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, p.u0, p.v0, p.u1, vm, [p.c[0], p.c[1], mids[1], mids[3]], depth
             )
         )
         q.nodes.append(
-            _make_node(
+            _compute_node(
                 q.s, p.u0, vm, p.u1, p.v1, [mids[3], mids[1], p.c[2], p.c[3]], depth
             )
         )
@@ -400,7 +401,7 @@ def _build(q: _Quadtree) -> None:
             root = len(q.nodes)
 
             q.nodes.append(
-                _make_node(
+                _compute_node(
                     q.s,
                     q.usp[i],
                     q.vsp[j],

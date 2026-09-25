@@ -238,7 +238,7 @@ def _twist_subs(
     return min(max(math.ceil(2.0 * math.sqrt(max_twist / twist_tol)), 4), MAX_SUBS)
 
 
-def _make_odd(subs: list[int]) -> None:
+def _set_odd_total(subs: list[int]) -> None:
     """One more subdivision on the largest span when the total is even, so a closed direction triangulates seamlessly."""
 
     total = 0
@@ -345,7 +345,7 @@ def _grid_params(
     closed = s.is_closed(dir)
 
     if closed and count == 0:
-        _make_odd(subs)
+        _set_odd_total(subs)
 
     params = (
         _arclen_params(s, dir, max(count, 2), sp, fixed)

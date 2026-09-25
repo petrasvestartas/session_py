@@ -656,7 +656,7 @@ class Line:
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> Line:
@@ -667,7 +667,7 @@ class Line:
         """Write to a JSON file."""
 
         with open(filename, "w") as file:
-            json.dump(self.__jsondump__(), file, indent=2)
+            json.dump(self.__jsondump__(), file, indent=4)
 
     @classmethod
     def file_json_load(cls, filename: str | Path) -> Line:

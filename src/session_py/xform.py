@@ -25,14 +25,14 @@ class Xform:
     def __init__(self, matrix: list[float] | None = None):
         """Construct the identity, or from column-major values."""
 
-        self._guid = None
-        self.name = "my_xform"
+        self._guid = None  # Lazily minted GUID.
+        self.name = "my_xform"  # Xform name.
 
         if matrix is not None:
-            self.m = list(matrix)
+            self.m = list(matrix)  # Column-major values.
             return
 
-        self.m = [0.0] * 16
+        self.m = [0.0] * 16  # Column-major values.
         self.m[0] = 1.0
         self.m[5] = 1.0
         self.m[10] = 1.0
@@ -891,7 +891,7 @@ class Xform:
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> Xform:
@@ -902,7 +902,7 @@ class Xform:
         """Write JSON to a file."""
 
         with open(filename, "w") as file:
-            json.dump(self.__jsondump__(), file, indent=2)
+            json.dump(self.__jsondump__(), file, indent=4)
 
     @classmethod
     def file_json_load(cls, filename: str | Path) -> Xform:

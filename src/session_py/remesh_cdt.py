@@ -229,6 +229,7 @@ class _Vertex:
 
     def __init__(self, pt: tuple[int, int]):
         """Construct at an integer point."""
+
         self.pt = pt  # Integer position.
         self.edges = []  # Edges touching the vertex.
         self.inner_lm = False  # True at a local minimum of a hole.
@@ -252,6 +253,7 @@ class _Edge:
 
     def __init__(self):
         """Construct an unlinked edge."""
+
         self.vl = NULL_IDX  # Left vertex.
         self.vr = NULL_IDX  # Right vertex.
         self.vb = NULL_IDX  # Bottom vertex.
@@ -279,6 +281,7 @@ class _Delaunay:
 
     def __init__(self):
         """Construct an empty sweep graph."""
+
         self.vs = []  # Vertices.
         self.es = []  # Edges.
         self.ts = []  # Triangles.

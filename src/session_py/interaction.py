@@ -188,7 +188,7 @@ class Interaction(ABC):
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> Interaction:

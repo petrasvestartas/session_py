@@ -230,7 +230,7 @@ def test_decode_primitives():
     json_str = json.dumps(flag)
     loaded = json.loads(json_str)
 
-    MINI_CHECK(loaded is True)
+    MINI_CHECK(loaded)
 
 
 @MINI_TEST("FileEncoders", "Decode List")

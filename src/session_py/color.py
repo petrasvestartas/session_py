@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import copy
 import json
+import struct
 import uuid
 
 if TYPE_CHECKING:
@@ -9,10 +10,15 @@ if TYPE_CHECKING:
     from .proto import color_pb2
 
 
+def _to_float32(value: float) -> float:
+    """Round a component to the nearest 32-bit float, the precision C++ and Rust store."""
+    return struct.unpack("f", struct.pack("f", value))[0]
+
+
 class Color:
     """A named color with RGBA components in [0.0, 1.0]."""
 
-    __slots__ = ("_guid", "name", "r", "g", "b", "a")
+    __slots__ = ("_guid", "name", "_r", "_g", "_b", "_a")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Constructors
@@ -58,6 +64,42 @@ class Color:
     @guid.setter
     def guid(self, value: str) -> None:
         self._guid = value
+
+    @property
+    def r(self) -> float:
+        """Return the red component."""
+        return self._r
+
+    @r.setter
+    def r(self, value: float) -> None:
+        self._r = _to_float32(value)
+
+    @property
+    def g(self) -> float:
+        """Return the green component."""
+        return self._g
+
+    @g.setter
+    def g(self, value: float) -> None:
+        self._g = _to_float32(value)
+
+    @property
+    def b(self) -> float:
+        """Return the blue component."""
+        return self._b
+
+    @b.setter
+    def b(self, value: float) -> None:
+        self._b = _to_float32(value)
+
+    @property
+    def a(self) -> float:
+        """Return the alpha component."""
+        return self._a
+
+    @a.setter
+    def a(self, value: float) -> None:
+        self._a = _to_float32(value)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
@@ -285,7 +327,7 @@ class Color:
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> Color:
@@ -296,7 +338,7 @@ class Color:
         """Write JSON to a file."""
 
         with open(filename, "w") as file:
-            json.dump(self.__jsondump__(), file, indent=2)
+            json.dump(self.__jsondump__(), file, indent=4)
 
     @classmethod
     def file_json_load(cls, filename: str | Path) -> Color:

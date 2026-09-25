@@ -30,6 +30,7 @@ class _Bounds:
 
     def __init__(self, curve: NurbsCurve):
         """Box around the control points of a curve."""
+
         p = curve.get_cv(0)
         self.lo = [p[0], p[1], p[2]]  # Minimum corner.
         self.hi = [p[0], p[1], p[2]]  # Maximum corner.
@@ -49,6 +50,7 @@ class _Bounds:
 
     def overlaps(self, other: _Bounds, tolerance: float) -> bool:
         """True when the boxes overlap within tolerance."""
+
         for d in range(3):
             if (
                 self.hi[d] + tolerance < other.lo[d]
@@ -161,6 +163,7 @@ def _check_tolerance(tolerance: float) -> None:
 
 def _check_curve(curve: NurbsCurve) -> None:
     """Reject an invalid curve or one with non-finite controls or non-positive weights."""
+
     _require(curve.is_valid(), "Split requires valid curves")
 
     for i in range(curve.cv_count()):
@@ -178,6 +181,7 @@ def _check_curve(curve: NurbsCurve) -> None:
 
 def _check_surface(surface: NurbsSurface) -> None:
     """Reject an invalid surface or one with non-finite controls or non-positive weights."""
+
     _require(surface.is_valid(), "Split requires a valid NURBS surface")
 
     for i in range(surface.cv_count(0)):
@@ -204,6 +208,7 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 
 def _interval(curve: NurbsCurve, a: float, b: float) -> NurbsCurve:
     """Copy of a curve trimmed to [a, b], clamped to its domain."""
+
     result = curve.duplicate()
     lo = curve.domain_start()
     hi = curve.domain_end()
@@ -219,6 +224,7 @@ def _interval(curve: NurbsCurve, a: float, b: float) -> NurbsCurve:
 
 def _closest_segments(curve: NurbsCurve, point: Point, t: float) -> tuple[float, float]:
     """Closest parameter and distance on a degree-1 curve, exact per segment."""
+
     spans = curve.get_span_vector()
     best = math.inf
 
@@ -248,6 +254,7 @@ def _closest_segments(curve: NurbsCurve, point: Point, t: float) -> tuple[float,
 
 def _closest(curve: NurbsCurve, point: Point) -> tuple[float, float]:
     """Closest parameter and distance from a point to a curve, polished by Newton steps."""
+
     t = Closest.curve_point(curve, point)[0]
 
     if curve.degree() == 1:
@@ -278,6 +285,7 @@ def _closest(curve: NurbsCurve, point: Point) -> tuple[float, float]:
 
 def _unique_parameters(values: list[float], lo: float, hi: float) -> list[float]:
     """Sorted parameters clamped to [lo, hi], dropping near duplicates."""
+
     values = sorted(values)
     result = []
 
@@ -295,6 +303,7 @@ def _unique_parameters(values: list[float], lo: float, hi: float) -> list[float]
 # ═══════════════════════════════════════════════════════════════════════════
 def _flat(curve: NurbsCurve, tolerance: float) -> bool:
     """True when every control point lies within tolerance of the chord."""
+
     a = curve.point_at_start()
     b = curve.point_at_end()
     v = b - a
@@ -315,6 +324,7 @@ def _flat(curve: NurbsCurve, tolerance: float) -> bool:
 
 def _refine(a: NurbsCurve, b: NurbsCurve, ta: float, tb: float) -> tuple[float, float]:
     """Newton refinement of a curve-curve intersection seed."""
+
     a0 = a.domain_start()
     a1 = a.domain_end()
     b0 = b.domain_start()
@@ -352,6 +362,7 @@ def _refine(a: NurbsCurve, b: NurbsCurve, ta: float, tb: float) -> tuple[float, 
 
 def _check_overlap(pair: _Pair, tolerance: float) -> None:
     """Raise when two flat pieces overlap along a shared line."""
+
     ap = pair.a.point_at_start()
     aq = pair.a.point_at_end()
     bp = pair.b.point_at_start()
@@ -388,6 +399,7 @@ def _duplicate(
     tolerance: float,
 ) -> bool:
     """True when a hit is already recorded within tolerance on both curves."""
+
     for hit in hits:
         near_a = (
             a.point_at(hit[0]).distance(a.point_at(ta)) <= tolerance * 2.0
@@ -414,6 +426,7 @@ def _add_hit(
     hits: list[tuple[float, float]],
 ) -> None:
     """Record the refined crossing of two flat pieces unless it is a duplicate."""
+
     _check_overlap(pair, tolerance)
     ta, tb, d = Closest.curve_curve(pair.a, pair.b)
 
@@ -431,6 +444,7 @@ def _add_hit(
 
 def _subdivide(pair: _Pair, ba: _Bounds, bb: _Bounds, work: list[_Pair]) -> None:
     """Halve the piece with the larger box at its parameter midpoint."""
+
     if ba.diagonal() >= bb.diagonal():
         lo = pair.a.domain_start()
         hi = pair.a.domain_end()
@@ -450,6 +464,7 @@ def _intersections(
     a: NurbsCurve, b: NurbsCurve, tolerance: float, budget: list[int]
 ) -> list[tuple[float, float]]:
     """Sorted parameter pairs where two curves cross, drawing on a shared work budget."""
+
     av = a.get_span_vector()
     bv = b.get_span_vector()
     _require(len(av) > 1 and len(bv) > 1, "Split requires nonempty curve spans")
@@ -495,6 +510,7 @@ def _pullback(
     surface: NurbsSurface, curve: NurbsCurve, tolerance: float
 ) -> list[NurbsCurve]:
     """Curves in surface parameter space, exact on a bilinear parallelogram patch."""
+
     bilinear = (
         surface.m_cv_count[0] == 2
         and surface.m_cv_count[1] == 2
@@ -549,6 +565,7 @@ def _pullback(
 
 def _polygon(curve: NurbsCurve, tolerance: float) -> list[Point]:
     """Points sampling a curve until each piece is flat within tolerance."""
+
     spans = curve.get_span_vector()
     work = []
 
@@ -579,6 +596,7 @@ def _polygon(curve: NurbsCurve, tolerance: float) -> list[Point]:
 
 def _inside(p: Point, polygon: list[Point]) -> bool:
     """Even-odd point in polygon test in the xy plane."""
+
     result = False
     j = len(polygon) - 1
 
@@ -598,6 +616,7 @@ def _inside(p: Point, polygon: list[Point]) -> bool:
 
 def _inside_loops(p: Point, loops: list[list[Point]]) -> bool:
     """True inside the first loop and outside every hole loop."""
+
     if not loops or not _inside(p, loops[0]):
         return False
 
@@ -613,6 +632,7 @@ def _inside_loops(p: Point, loops: list[list[Point]]) -> bool:
 # ═══════════════════════════════════════════════════════════════════════════
 def _compute_spans(sources: list[_Source], tolerance: float) -> list[_Span]:
     """Knot spans of every source, cut at their mutual intersections."""
+
     spans = []
 
     for si in range(len(sources)):
@@ -659,6 +679,7 @@ def _compute_spans(sources: list[_Source], tolerance: float) -> list[_Span]:
 
 def _span_cuts(span: _Span, tolerance: float) -> list[float]:
     """Cut parameters of a span, snapped to its ends and deduplicated."""
+
     cuts = list(span.cuts)
 
     for k in range(len(cuts)):
@@ -674,6 +695,7 @@ def _span_cuts(span: _Span, tolerance: float) -> list[float]:
 
 def _node(graph: _Graph, vertices: list[Point], p: Point, tolerance: float) -> int:
     """Index of the graph vertex at a point, added when none lies within tolerance."""
+
     for i in range(len(vertices)):
         if p.distance(vertices[i]) <= tolerance * 4.0:
             return i
@@ -685,6 +707,7 @@ def _node(graph: _Graph, vertices: list[Point], p: Point, tolerance: float) -> i
 
 def _angle(sources: list[_Source], run: _Run) -> float:
     """Direction angle of a run leaving its start vertex."""
+
     d = sources[run.source].uv.evaluate(run.a, 1)[1]
     sign = 1.0 if run.b > run.a else -1.0
     return math.atan2(sign * d[1], sign * d[0])
@@ -697,6 +720,7 @@ def _compute_graph(
     tolerance: float,
 ) -> _Graph:
     """Half-edge graph of the cut spans inside the original loops."""
+
     graph = _Graph()
     vertices = []
 
@@ -738,6 +762,7 @@ def _compute_graph(
 
 def _signed_area(points: list[Point]) -> float:
     """Signed shoelace area of a closed polygon in the xy plane."""
+
     area = 0.0
 
     for i in range(len(points)):
@@ -756,6 +781,7 @@ def _trace_cycle(
     tolerance: float,
 ) -> _Cycle:
     """Loop traced from one half-edge by turning to the previous outgoing half-edge at each vertex."""
+
     cycle = _Cycle(0.0, [], [])
     edge = initial
 
@@ -782,6 +808,7 @@ def _trace_cycle(
 
 def _left_of(sources: list[_Source], run: _Run, tolerance: float) -> Point:
     """Point eight tolerances left of the middle of a run."""
+
     curve = sources[run.source].uv
     t = (run.a + run.b) * 0.5
     p = curve.point_at(t)
@@ -803,6 +830,7 @@ def _compute_cycles(
     tolerance: float,
 ) -> list[_Cycle]:
     """Non-degenerate graph cycles whose interior lies inside the original loops."""
+
     cycles = []
     used = [False] * len(graph.edges)
 
@@ -823,6 +851,7 @@ def _compute_cycles(
 
 def _nest_cycles(cycles: list[_Cycle], tolerance: float) -> list[list[list[_Run]]]:
     """Regions as outer loops, each hole nested in the smallest outer loop around it."""
+
     result = []
     positive = []
 
@@ -859,6 +888,7 @@ def _arrange(
     sources: list[_Source], original_loops: list[list[Point]], tolerance: float
 ) -> list[list[list[_Run]]]:
     """Regions of the planar arrangement of the sources inside the original loops."""
+
     spans = _compute_spans(sources, tolerance)
     graph = _compute_graph(spans, sources, original_loops, tolerance)
     cycles = _compute_cycles(graph, sources, original_loops, tolerance)
@@ -870,6 +900,7 @@ def _arrange(
 # ═══════════════════════════════════════════════════════════════════════════
 def _vertex(result: BRep, p: Point, tolerance: float) -> int:
     """Index of the BRep vertex at a point, added when none lies within tolerance."""
+
     for i in range(len(result.m_vertices)):
         if result.m_vertices[i].point.distance(p) <= tolerance:
             return i
@@ -879,6 +910,7 @@ def _vertex(result: BRep, p: Point, tolerance: float) -> int:
 
 def _lifted_gap(surface: NurbsSurface, uv: NurbsCurve, p: Point, t: float) -> float:
     """Distance from a point to the surface under a pcurve parameter."""
+
     q = uv.point_at(t)
     return surface.point_at(q[0], q[1]).distance(p)
 
@@ -887,6 +919,7 @@ def _lifted_parameter(
     surface: NurbsSurface, uv: NurbsCurve, p: Point, expected: float, tolerance: float
 ) -> float:
     """Pcurve parameter whose surface point meets a world point, sampled then refined by ternary search."""
+
     lo = uv.domain_start()
     hi = uv.domain_end()
 
@@ -934,6 +967,7 @@ def _world_parameter(
     source: _Source, t: float, p: Point, tolerance: float
 ) -> tuple[float, float]:
     """World curve parameter and distance for a surface point, proportional guess first."""
+
     lo = source.world.domain_start()
     hi = source.world.domain_end()
     a = source.uv.domain_start()
@@ -951,6 +985,7 @@ def _world_run(
     surface: NurbsSurface, source: _Source, run: _Run, tolerance: float
 ) -> tuple[float, float]:
     """World curve parameters of both run ends, a closed curve's seam end moved to the domain end."""
+
     qa = source.uv.point_at(run.a)
     qb = source.uv.point_at(run.b)
     wa, da = _world_parameter(source, run.a, surface.point_at(qa[0], qa[1]), tolerance)
@@ -984,6 +1019,7 @@ def _add_shared_pcurves(
     tolerance: float,
 ) -> None:
     """Pcurves of a piece of a shared BRep edge, cut from every adjacent face trim."""
+
     w0 = source.world.domain_start()
     w1 = source.world.domain_end()
 
@@ -1029,6 +1065,7 @@ def _add_run_edge(
     tolerance: float,
 ) -> BRepRef:
     """Oriented BRep edge for a run, reusing the edge already cut for the same stretch of its source."""
+
     source = sources[run.source]
     wa, wb = _world_run(brep.m_surfaces[surface_index], source, run, tolerance)
     lo = min(wa, wb)
@@ -1081,6 +1118,7 @@ def _boundary_loops(
     sources: list[_Source],
 ) -> list[list[Point]]:
     """Sampled trim loops of a face, each boundary edge added to the sources."""
+
     loops = []
 
     for wr in brep.m_faces[face_index].wires:
@@ -1115,6 +1153,7 @@ def _replace_wires(
     result: BRep, brep: BRep, sources: list[_Source], pieces: list[_Piece]
 ) -> None:
     """Replace every use of a cut boundary edge in the wires by its pieces in order."""
+
     replacements = {}
 
     for piece in pieces:
@@ -1146,6 +1185,7 @@ def _add_faces(
     result: BRep, face: BRepFace, face_index: int, new_wires: list[list[BRepRef]]
 ) -> None:
     """Put the first region on the split face and the others on new faces beside it in every shell."""
+
     result.m_faces[face_index].wires = new_wires[0]
     added = []
 
@@ -1189,6 +1229,7 @@ def _check_wires(result: BRep) -> None:
 
 def _validate(result: BRep, original: BRep, tolerance: float) -> None:
     """Reject a split that opens a shell, leaves a wire open or moves an edge off its vertices or trims."""
+
     _require(result.is_valid(), "Split produced invalid BRep references")
 
     for s in range(len(original.m_shells)):
@@ -1231,6 +1272,7 @@ def _validate(result: BRep, original: BRep, tolerance: float) -> None:
 
 def _surface_uv_tolerance(surface: NurbsSurface, tolerance: float) -> float:
     """Parameter-space tolerance of a surface: tolerance over its larger world length per unit parameter."""
+
     u0, u1 = surface.domain(0)
     v0, v1 = surface.domain(1)
     origin = surface.point_at(u0, v0)
@@ -1253,6 +1295,7 @@ def _region_wires(
     tolerance: float,
 ) -> list[list[BRepRef]]:
     """Wires of every region, one new edge per run added to result."""
+
     new_wires = []
 
     for region in regions:
@@ -1288,6 +1331,7 @@ def split_curve_by_curves(
     curve: NurbsCurve, cutters: list[NurbsCurve], tolerance: float
 ) -> list[NurbsCurve]:
     """Split a curve at isolated 3D intersections, retaining every piece and rejecting overlapping cutters."""
+
     _check_tolerance(tolerance)
     _check_curve(curve)
     _require(len(cutters) > 0, "Select at least one cutter")
@@ -1335,6 +1379,7 @@ def split_brep_face_by_curves(
     brep: BRep, face_index: int, cutters: list[NurbsCurve], tolerance: float
 ) -> BRep:
     """Partition one face inside its owning BRep, retaining all regions and shared shell topology."""
+
     _check_tolerance(tolerance)
     _require(brep.is_valid(), "Split requires a valid BRep")
     _require(
@@ -1378,6 +1423,7 @@ def split_surface_by_curves(
     surface: NurbsSurface, cutters: list[NurbsCurve], tolerance: float
 ) -> BRep:
     """Wrap a surface's natural boundary in a BRep and partition it with on-surface curves."""
+
     _check_tolerance(tolerance)
     _check_surface(surface)
     result = BRep()
@@ -1417,6 +1463,7 @@ def split_line_by_curves(
     line: Line, cutters: list[NurbsCurve], tolerance: float
 ) -> list[Line]:
     """Split a line at isolated 3D intersections, retaining line types and display attributes."""
+
     curve = NurbsCurve.create(False, 1, [line.point_at(0.0), line.point_at(1.0)])
     result = []
 
@@ -1435,6 +1482,7 @@ def split_polyline_by_curves(
     polyline: Polyline, cutters: list[NurbsCurve], tolerance: float
 ) -> list[Polyline]:
     """Split a polyline, retaining each original corner, piece order and display attributes."""
+
     curve = NurbsCurve.create(False, 1, polyline.get_points())
     result = []
 

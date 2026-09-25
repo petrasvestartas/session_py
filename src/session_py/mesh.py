@@ -366,10 +366,10 @@ def _signed_area_2d(pts: list[tuple[float, float]]) -> float:
 class LoftFaceRole(Enum):
     """Role of a face inside a loft panel."""
 
-    TopCap = "TopCap"
-    BotCap = "BotCap"
-    QuadWall = "QuadWall"
-    TriWall = "TriWall"
+    TopCap = "TopCap"  # Top cap face.
+    BotCap = "BotCap"  # Bottom cap face.
+    QuadWall = "QuadWall"  # Quad wall between matched edges.
+    TriWall = "TriWall"  # Triangle wall over an unmatched edge.
 
 
 class LoftWallFace:
@@ -378,13 +378,13 @@ class LoftWallFace:
     def __init__(self):
         """Construct an empty wall face."""
 
-        self.face_key = 0
-        self.face_index = 0
-        self.is_quad = False
-        self.top_v0 = 0
-        self.top_v1 = 0
-        self.bot_v0 = 0
-        self.bot_v1 = 0
+        self.face_key = 0  # Local panel mesh face key.
+        self.face_index = 0  # Zero-based position of face_key in panel mesh.face.
+        self.is_quad = False  # Whether the wall is a quad rather than a triangle.
+        self.top_v0 = 0  # Original top-mesh vertex key.
+        self.top_v1 = 0  # Original top-mesh vertex key.
+        self.bot_v0 = 0  # Original bot-mesh vertex key, valid when is_quad.
+        self.bot_v1 = 0  # Original bot-mesh vertex key, valid when is_quad.
 
 
 class LoftPanel:
@@ -393,15 +393,15 @@ class LoftPanel:
     def __init__(self):
         """Construct an empty panel."""
 
-        self.mesh = Mesh()
-        self.top_face_key: int | None = None
-        self.bot_face_key: int | None = None
-        self.wall_faces: list[LoftWallFace] = []
-        self.face_roles: dict[int, LoftFaceRole] = {}
-        self.orig_top_to_local: dict[int, int] = {}
-        self.orig_bot_to_local: dict[int, int] = {}
-        self.top_vertices: list[int] = []
-        self.bot_vertices: list[int] = []
+        self.mesh = Mesh()  # Panel mesh.
+        self.top_face_key: int | None = None  # Local key of top cap face.
+        self.bot_face_key: int | None = None  # Local key of bot cap face.
+        self.wall_faces: list[LoftWallFace] = []  # Wall faces in order.
+        self.face_roles: dict[int, LoftFaceRole] = {}  # Face key to role for every face in mesh.
+        self.orig_top_to_local: dict[int, int] = {}  # Original top vertex key to local key.
+        self.orig_bot_to_local: dict[int, int] = {}  # Original bot vertex key to local key.
+        self.top_vertices: list[int] = []  # Local keys of the top cap.
+        self.bot_vertices: list[int] = []  # Local keys of the bot cap.
 
 
 class LoftAdjPair:
@@ -410,10 +410,10 @@ class LoftAdjPair:
     def __init__(self, pi: int, wi: int, pj: int, wj: int):
         """Construct from panel and wall indices of both sides."""
 
-        self.pi = pi
-        self.wi = wi
-        self.pj = pj
-        self.wj = wj
+        self.pi = pi  # Panel index for side i.
+        self.wi = wi  # Wall face index for side i.
+        self.pj = pj  # Panel index for side j.
+        self.wj = wj  # Wall face index for side j.
 
 
 class LoftResult:
@@ -428,10 +428,10 @@ class LoftResult:
     ):
         """Construct from panels, adjacency and the two cap meshes."""
 
-        self.panels = panels
-        self.adjacency = adjacency
-        self.top_mesh = top_mesh
-        self.bot_mesh = bot_mesh
+        self.panels = panels  # One panel per matched polygon pair.
+        self.adjacency = adjacency  # Facing wall pairs.
+        self.top_mesh = top_mesh  # Top polygons of the matched panels, one face per panel.
+        self.bot_mesh = bot_mesh  # Bot polygons of the matched panels, one face per panel.
 
     def __iter__(self):
         """Unpack as (panels, adjacency, top_mesh, bot_mesh)."""
@@ -444,9 +444,9 @@ class _LoftFrame:
     def __init__(self, origin: Point, xaxis: Vector, yaxis: Vector):
         """Construct from origin and axes."""
 
-        self.origin = origin
-        self.xaxis = xaxis
-        self.yaxis = yaxis
+        self.origin = origin  # Frame origin.
+        self.xaxis = xaxis  # Frame x axis.
+        self.yaxis = yaxis  # Frame y axis.
 
 
 class _LoftRing:
@@ -455,8 +455,8 @@ class _LoftRing:
     def __init__(self, off: int, n: int):
         """Construct from offset and length."""
 
-        self.off = off
-        self.n = n
+        self.off = off  # Offset of the first point.
+        self.n = n  # Number of points.
 
 
 class _LoftPoly:
@@ -465,8 +465,8 @@ class _LoftPoly:
     def __init__(self, bot: _LoftRing, top: _LoftRing):
         """Construct from bottom and top rings."""
 
-        self.bot = bot
-        self.top = top
+        self.bot = bot  # Bottom ring.
+        self.top = top  # Top ring.
 
 
 def _loft_project(frame: _LoftFrame, p: Point) -> tuple[float, float]:
@@ -2083,37 +2083,33 @@ class Mesh:
     def __init__(self):
         """Construct an empty mesh."""
 
-        self.halfedge: dict[int, dict[int, int | None]] = {}
-        self.vertex: dict[int, VertexData] = {}
-        self.face: dict[int, list[int]] = {}
-        self.face_holes: dict[int, list[list[int]]] = {}
-        self.facedata: dict[int, dict[str, float]] = {}
-        self.edgedata: dict[tuple[int, int], dict[str, float]] = {}
-        self.default_vertex_attributes: dict[str, float] = {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0,
-        }
-        self.default_face_attributes: dict[str, float] = {}
-        self.default_edge_attributes: dict[str, float] = {}
-        self._guid: str | None = None
-        self.name = "my_mesh"
-        self.color_mode = ColorMode.OBJECTCOLOR
-        self._pointcolors: list[Color] = []
-        self._facecolors: list[Color] = []
-        self._linecolors: list[Color] = []
-        self._widths: list[float] = []
-        self._objectcolor = Color.lightgrey()
-        self._max_vertex = 0
-        self._max_face = 0
-        self.triangulation: dict[int, list[list[int]]] = {}
-        self._triangle_bvh_built = False
-        self._triangle_bvh: SpatialBVH | None = None
-        self._triangle_aabbs_cache: list[AABB] = []
-        self._triangle_indices_cache: list[tuple[int, int, int]] = []
-        self._triangle_face_subidx_cache: list[tuple[int, int]] = []
-        self._vertices_cache: list[Point] = []
-        self._triangle_aabb_tree: SpatialAABBTree | None = None
+        self.halfedge: dict[int, dict[int, int | None]] = {}  # Halfedge connectivity.
+        self.vertex: dict[int, VertexData] = {}  # Vertex data.
+        self.face: dict[int, list[int]] = {}  # Face vertex lists.
+        self.face_holes: dict[int, list[list[int]]] = {}  # Face hole rings.
+        self.facedata: dict[int, dict[str, float]] = {}  # Face attributes.
+        self.edgedata: dict[tuple[int, int], dict[str, float]] = {}  # Edge attributes.
+        self.default_vertex_attributes: dict[str, float] = {"x": 0.0, "y": 0.0, "z": 0.0}  # Default vertex attrs.
+        self.default_face_attributes: dict[str, float] = {}  # Default face attrs.
+        self.default_edge_attributes: dict[str, float] = {}  # Default edge attrs.
+        self._guid: str | None = None  # Lazily minted GUID.
+        self.name = "my_mesh"  # Mesh name.
+        self.color_mode = ColorMode.OBJECTCOLOR  # Active color mode.
+        self._pointcolors: list[Color] = []  # Vertex colors.
+        self._facecolors: list[Color] = []  # Face colors.
+        self._linecolors: list[Color] = []  # Edge colors.
+        self._widths: list[float] = []  # Edge widths.
+        self._objectcolor = Color.lightgrey()  # Object color.
+        self._max_vertex = 0  # Next vertex key.
+        self._max_face = 0  # Next face key.
+        self.triangulation: dict[int, list[list[int]]] = {}  # Cached triangulations.
+        self._triangle_bvh_built = False  # Whether the triangle caches are current.
+        self._triangle_bvh: SpatialBVH | None = None  # BVH over cached triangle AABBs.
+        self._triangle_aabbs_cache: list[AABB] = []  # Per-triangle AABBs.
+        self._triangle_indices_cache: list[tuple[int, int, int]] = []  # Triangle vertex indices.
+        self._triangle_face_subidx_cache: list[tuple[int, int]] = []  # Face index and sub-triangle index per triangle.
+        self._vertices_cache: list[Point] = []  # Sequential vertex positions.
+        self._triangle_aabb_tree: SpatialAABBTree | None = None  # AABB tree over cached triangle AABBs.
 
     def __deepcopy__(self, memo):
         """Copy (same guid, same data)."""
@@ -5508,7 +5504,7 @@ class Mesh:
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> "Mesh":
@@ -5519,7 +5515,7 @@ class Mesh:
         """Write to a JSON file."""
 
         with open(filename, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
+            json.dump(self.__jsondump__(), f, indent=4)
 
     @classmethod
     def file_json_load(cls, filename: Union[str, "Path"]) -> "Mesh":

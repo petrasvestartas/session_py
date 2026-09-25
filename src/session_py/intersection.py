@@ -46,7 +46,7 @@ def _max_pivot_3x3(rows):
     return temp, i, j
 
 
-def _load_rows_3x3(rows, ds, i):
+def _to_work_array(rows, ds, i):
     """Rows of a 3x3 system in a 3x4 work array, row i swapped to the top."""
 
     w = [0.0] * 12
@@ -167,7 +167,7 @@ def _solve_3x3(row0, row1, row2, d0, d1, d2):
     maxpiv = abs(temp)
     minpiv = maxpiv
     slot = [0, 1, 2]
-    w = _load_rows_3x3(rows, [d0, d1, d2], i)
+    w = _to_work_array(rows, [d0, d1, d2], i)
 
     if j != 0:
         _swap_columns(w, slot, 0, j)
@@ -1228,6 +1228,7 @@ def curve_plane_points(
     curve: NurbsCurve, plane: Plane, tolerance: float | None = None
 ) -> list[Point]:
     """Curve-plane intersection points."""
+
     params = curve_plane(curve, plane, tolerance)
 
     return [curve.point_at(t) for t in params]
@@ -8359,6 +8360,7 @@ def _plane_to_2d(
     p: Point, origin: Point, xax: Vector, yax: Vector
 ) -> tuple[float, float]:
     """Project a point into plane coordinates."""
+
     d = p - origin
 
     return (d.dot(xax), d.dot(yax))
@@ -8373,6 +8375,7 @@ def _plane_to_3d(
 
 def _distance_sq_2d(a: tuple[float, float], b: tuple[float, float]) -> float:
     """Squared distance of two 2D points."""
+
     dx = a[0] - b[0]
     dy = a[1] - b[1]
 
@@ -8522,6 +8525,7 @@ def _closest_param_2d(p, a, b) -> float:
 
 def _distance_sq_seg_2d(p, a, b) -> float:
     """Squared distance from p to segment ab."""
+
     t = _closest_param_2d(p, a, b)
 
     return _distance_sq_2d(p, (a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))

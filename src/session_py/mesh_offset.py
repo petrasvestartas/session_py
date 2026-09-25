@@ -78,6 +78,7 @@ class MeshOffset:
 
         def __init__(self, top: Mesh, bottom: Mesh, sides: Mesh):
             """Construct from the three meshes."""
+
             self.top = top  # Offset faces.
             self.bottom = bottom  # Reversed original faces.
             self.sides = sides  # One quad per naked edge.

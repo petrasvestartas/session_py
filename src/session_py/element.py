@@ -169,7 +169,7 @@ class ElementFeature:
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, s: str) -> ElementFeature:
@@ -180,7 +180,7 @@ class ElementFeature:
         """Write to a JSON file."""
 
         with open(filename, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
+            json.dump(self.__jsondump__(), f, indent=4)
 
     @classmethod
     def file_json_load(cls, filename: str | Path) -> ElementFeature:
@@ -290,17 +290,17 @@ class Element:
     def __init__(self, geometry: Mesh | BRep | None = None, name: str = "my_element"):
         """Construct from optional geometry and a name."""
 
-        self._guid: str | None = None
-        self.name = name
-        self._geometry = geometry
-        self._geometry_ops: list[Callable] = []
-        self._features: list[ElementFeature] = []
-        self._insertion_vectors: list[Vector] = []
-        self._dimensions: Vector | None = None
-        self._element_type = ""
-        self._element_data = b""
-        self._geometry_synced = False
-        self._computing_geometry = False
+        self._guid: str | None = None  # Lazily minted guid.
+        self.name = name  # Element name.
+        self._geometry = geometry  # Mesh, BRep or nothing.
+        self._geometry_ops: list[Callable] = []  # In-memory mesh operations, never written.
+        self._features: list[ElementFeature] = []  # Serialized modifications.
+        self._insertion_vectors: list[Vector] = []  # One insertion direction per jointed face.
+        self._dimensions: Vector | None = None  # Authored nominal extents.
+        self._element_type = ""  # Derived type name this element was loaded with.
+        self._element_data = b""  # Opaque derived-type state.
+        self._geometry_synced = False  # Whether the slot holds what compute_geometry_mesh() would write.
+        self._computing_geometry = False  # Guards ensure_geometry() against re-entry from compute_geometry_mesh().
         self.reset()
 
     def __deepcopy__(self, memo):
@@ -855,7 +855,7 @@ class Element:
 
     def file_json_dumps(self) -> str:
         """Serialize to a JSON string."""
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, s: str) -> Element:
@@ -866,7 +866,7 @@ class Element:
         """Write to a JSON file."""
 
         with open(filename, "w") as f:
-            json.dump(self.__jsondump__(), f, indent=2)
+            json.dump(self.__jsondump__(), f, indent=4)
 
     @classmethod
     def file_json_load(cls, filename: str | Path) -> Element:
