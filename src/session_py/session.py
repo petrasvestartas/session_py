@@ -2394,7 +2394,7 @@ class Session:
         return len(writer.out) == sum(len(piece) for piece in writer.pieces)
 
     def _kill(self, tomb: Tomb) -> None:
-        """Flip a tomb dead: its slot and map entry, and for an object tomb its node, transform, vertex, edges and interactions; O(1 + d log V)."""
+        """Flip a tomb dead: its slot and map entry, and for an object tomb its node, transform, vertex, edges and interactions; a guid a live twin owns keeps those with the twin; O(1 + d log V)."""
 
         if tomb.collection == "":
             return
@@ -2408,11 +2408,11 @@ class Session:
             stored = items.get_item(slot)
             guid = stored.guid
             held = self.definition_lookup.get(guid)
+            owner = items.get_slot(guid) == slot
 
-            if held is not None and held is not stored:
+            if owner and held is not None and held is not stored:
                 items.set_item(slot, held)
 
-            owner = items.get_slot(guid) == slot
             items.set_dead(slot, True)
 
             if owner:
@@ -2450,6 +2450,9 @@ class Session:
         if parent is not None:
             self._queue(parent)
 
+        if not owner:
+            return
+
         tomb.xform = self.xforms.pop(guid, None)
         taken = self.graph.take_node(guid)
 
@@ -2466,7 +2469,7 @@ class Session:
         tomb.edges = edges
 
     def _revive(self, tomb: Tomb) -> None:
-        """Flip a tomb live again: the same slot and object, and for an object tomb the same node, transform, vertex, edges and interactions; O(1 + d log V)."""
+        """Flip a tomb live again: the same slot and object, and for an object tomb the same node, transform, vertex, edges and interactions; a guid a live twin owns stays dead; O(1 + d log V)."""
 
         if tomb.collection == "":
             return
@@ -2477,16 +2480,26 @@ class Session:
 
         if tomb.definition:
             items = getattr(self.definitions, tomb.collection)
-            items.set_dead(slot, False)
             geometry = items.get_item(slot)
-            self.definition_lookup[geometry.guid] = geometry
+            twin = (
+                geometry.guid in self.definition_lookup
+                and items.get_slot(geometry.guid) != slot
+            )
+
+            if not twin:
+                items.set_dead(slot, False)
+                self.definition_lookup[geometry.guid] = geometry
 
             return
 
         items = getattr(self.objects, tomb.collection)
-        items.set_dead(slot, False)
         item = items.get_item(slot)
         guid = item.guid
+
+        if self._is_live(guid) and items.get_slot(guid) != slot:
+            return
+
+        items.set_dead(slot, False)
         self._table(tomb.collection)[guid] = item
         node = tomb.node
 

@@ -2600,6 +2600,57 @@ def test_session_remove_twin_keeps_slot():
     MINI_CHECK(len(loaded.lookup) == 0)
 
 
+@MINI_TEST("Session", "Redo Twin Keeps Slot")
+def test_session_redo_twin_keeps_slot():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    x = Point(1.0, 0.0, 0.0)
+    guid = x.guid
+    y = Point(2.0, 0.0, 0.0)
+    y.guid = guid
+    session.begin("add")
+    session.add_point(x)
+    session.commit()
+    session.add_point(y)
+    session.undo()
+    session.redo()
+    held = 0.0
+
+    if isinstance(session.lookup.get(guid), Point):
+        held = session.lookup[guid][0]
+
+    MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(session.objects.points.get_slot(guid) == 1)
+    MINI_CHECK(session.objects.points.is_dead(0))
+    MINI_CHECK(held == 2.0)
+    MINI_CHECK(session.graph.has_node(guid))
+    MINI_CHECK(
+        session.get_node(guid) is not None and not session.get_node(guid).is_dead()
+    )
+
+    session.undo()
+    session.redo()
+
+    MINI_CHECK(len(session.objects.points) == 1)
+    MINI_CHECK(session.objects.points.get_slot(guid) == 1)
+
+    removed = session.remove_object(guid)
+    undone = session.undo()
+    data = session.pb_dumps()
+    loaded = Session.pb_loads(data)
+
+    MINI_CHECK(removed)
+    MINI_CHECK(undone)
+    MINI_CHECK(guid not in session.lookup)
+    MINI_CHECK(not session.graph.has_node(guid))
+    MINI_CHECK(len(session.objects.points) == 0)
+    MINI_CHECK(len(loaded.objects.points) == 0)
+    MINI_CHECK(len(loaded.lookup) == 0)
+    MINI_CHECK(len(loaded.tree.nodes) == 1)
+
+
 @MINI_TEST("Session", "Purge Clears History")
 def test_session_purge_clears_history():
     from session_py import Point

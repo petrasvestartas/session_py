@@ -8,7 +8,7 @@ from session_py import Xform
 from session_py.history import CAPACITY
 from session_py.session import PURGE_WORK
 
-LARGEST = 1_000_000  # Largest flat size; the others are it over 1000 and over 10.
+LARGEST = 1_000_000  # The largest scene; the others are a tenth and a thousandth.
 SCALE = 40.0  # Slack on bulk and slice budgets for a slower kernel.
 WARMUP = 5  # Untimed runs before the timed ones.
 RUNS = 101  # Timed runs; their median is the cost.
@@ -378,15 +378,14 @@ def layer_move(unrelated_sizes: list[int]) -> None:
     )
 
 
-largest = max(LARGEST, 110_000)
-sizes = [largest // 1_000, largest // 10, largest]
-bulk = largest // 10
+sizes = [LARGEST // 1_000, LARGEST // 10, LARGEST]
+bulk = LARGEST // 10
 print(
     f"sizes {sizes}, bulk {bulk}, cpu {'unthrottled' if unthrottled() else 'throttled'}"
 )
 edit_latency(sizes)
-bulk_undo(largest, bulk)
-no_pauses(largest, bulk)
+bulk_undo(LARGEST, bulk)
+no_pauses(LARGEST, bulk)
 steady_state(sizes[1])
 history_memory()
 record_cost(sizes[1])
