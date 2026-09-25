@@ -108,6 +108,15 @@ def test_point_json_roundtrip():
     loaded = Point.file_json_load(filename)
     parsed = Point.file_json_loads(p.file_json_dumps())
 
+    missing = p.__jsondump__()
+    del missing["x"]
+    missing_failed = False
+
+    try:
+        Point.__jsonload__(missing)
+    except KeyError:
+        missing_failed = True
+
     MINI_CHECK(loaded.name == "test_point")
     MINI_CHECK(loaded[0] == 1.5 and loaded[1] == 2.5 and loaded[2] == 3.5)
     MINI_CHECK(loaded.width == 2.0)
@@ -118,6 +127,7 @@ def test_point_json_roundtrip():
     MINI_CHECK(parsed == p)
     MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(parsed.guid == guid)
+    MINI_CHECK(missing_failed)
 
 
 @MINI_TEST("Point", "Protobuf Roundtrip")
