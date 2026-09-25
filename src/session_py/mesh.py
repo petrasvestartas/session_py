@@ -2059,6 +2059,27 @@ def _cut_result(
     return result
 
 
+def _arrangement_area(points: list[Point]) -> float:
+    """Signed xy area of a face loop."""
+
+    area = 0.0
+
+    for i in range(len(points)):
+        a = points[i]
+        b = points[(i + 1) % len(points)]
+        area += a[0] * b[1] - b[0] * a[1]
+
+    return area / 2.0
+
+
+def _arrangement_key(point: Point, tolerance: float) -> tuple[int, int]:
+    """Integer xy key of a point on the tolerance grid."""
+    return (
+        _round_half_away(point[0] / tolerance),
+        _round_half_away(point[1] / tolerance),
+    )
+
+
 def _cut_tolerance(points: dict[int, Point]) -> float:
     """Snap distance of the plane test, 1e-9 of the bounding box diagonal."""
 
@@ -2471,6 +2492,41 @@ class Mesh:
                 mesh.triangulation[fk] = Mesh._lines_cycle_triangles(
                     cycle, verts, vkeys
                 )
+
+        return mesh
+
+    @staticmethod
+    def from_arrangement(
+        lines: list[Line], boundary: list[Line], tolerance: float, merge: float
+    ) -> "Mesh":
+        """Construct the planar faces of lines and boundary lines in xy split by Line.split_at_crossings, the outer face and faces under tolerance squared in area dropped; edge attribute line holds the index of the line an edge lies on, boundary lines numbered after lines, -1 when none."""
+
+        pieces, sources = Line.split_at_crossings(lines, boundary, tolerance, merge)
+        mesh = Mesh.from_lines(pieces, True, tolerance * 0.1)
+
+        for face in mesh.faces():
+            points = []
+
+            for key in mesh.face_vertices(face):
+                points.append(mesh.vertex_point(key))
+
+            if abs(_arrangement_area(points)) < tolerance * tolerance:
+                mesh.remove_face(face)
+
+        lookup = {}
+
+        for i in range(len(pieces)):
+            a = _arrangement_key(pieces[i].start(), tolerance)
+            b = _arrangement_key(pieces[i].end(), tolerance)
+            lookup[(min(a, b), max(a, b))] = sources[i]
+
+        for edge in mesh.edges():
+            a = _arrangement_key(mesh.vertex_point(edge[0]), tolerance)
+            b = _arrangement_key(mesh.vertex_point(edge[1]), tolerance)
+            key = (min(a, b), max(a, b))
+            mesh.set_edge_attribute(
+                edge, "line", float(lookup[key]) if key in lookup else -1.0
+            )
 
         return mesh
 
@@ -5215,6 +5271,45 @@ class Mesh:
         result._objectcolor = self._objectcolor
 
         return result
+
+    def section_by_plane(self, plane: Plane) -> list[Polyline]:
+        """Return the closed loops where the plane cuts the mesh: outer loops counter-clockwise about the plane normal, holes clockwise; empty when the mesh does not reach the plane."""
+
+        below = self.cut_by_plane(
+            Plane.from_point_normal(plane.origin, plane.z_axis * -1.0)
+        )
+        loops = []
+
+        for fk, ring in sorted(below.face.items()):
+            rings = [ring]
+            flat = True
+
+            for hole in below.face_holes.get(fk, []):
+                rings.append(hole)
+
+            for r in rings:
+                for key in r:
+                    distance = (below.vertex[key].position() - plane.origin).dot(
+                        plane.z_axis
+                    )
+                    flat = flat and abs(distance) <= Tolerance.APPROXIMATION
+
+            if not flat:
+                continue
+
+            for i in range(len(rings)):
+                points = []
+
+                for key in rings[i]:
+                    points.append(below.vertex[key].position())
+
+                if (_newell_normal(points).dot(plane.z_axis) > 0.0) != (i == 0):
+                    points.reverse()
+
+                points.append(points[0])
+                loops.append(Polyline(points))
+
+        return loops
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON

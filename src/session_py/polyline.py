@@ -957,6 +957,45 @@ class Polyline:
 
         return cut
 
+    def offset_sides(self, distances: list[float]) -> Polyline:
+        """Return the loop closed with side i moved right of its direction in xy by distances[i], outwards for a counter-clockwise loop; corners mitred, the larger distance where two sides are parallel."""
+
+        points = self.get_points()
+
+        if self.is_closed():
+            points.pop()
+
+        count = len(points)
+        outward = []
+
+        for i in range(count):
+            nxt = points[(i + 1) % count]
+            outward.append(
+                Vector(nxt[1] - points[i][1], points[i][0] - nxt[0], 0.0).normalized()
+            )
+
+        result = []
+
+        for i in range(count):
+            before = outward[(i + count - 1) % count]
+            after = outward[i]
+            a = distances[(i + count - 1) % count]
+            b = distances[i]
+            cosine = before.dot(after)
+
+            if 1.0 - cosine * cosine < 1e-9:
+                result.append(points[i] + before * max(a, b))
+            else:
+                result.append(
+                    points[i]
+                    + before * ((a - cosine * b) / (1.0 - cosine * cosine))
+                    + after * ((b - cosine * a) / (1.0 - cosine * cosine))
+                )
+
+        result.append(result[0])
+
+        return Polyline(result)
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════

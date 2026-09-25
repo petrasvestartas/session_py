@@ -1241,5 +1241,43 @@ def test_polyline_extend_edge_equally():
     MINI_CHECK(TOLERANCE.is_close(pl.get_point(4)[0], -1.0))
 
 
+@MINI_TEST("Polyline", "Offset Sides")
+def test_polyline_offset_sides():
+    from session_py import Point
+    from session_py import Polyline
+
+    square = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 2.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    split = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 1.0, 0.0),
+            Point(0.0, 1.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    moved = square.offset_sides([1.0, 0.0, 0.0, 0.0])
+    stepped = split.offset_sides([1.0, 2.0, 0.0, 0.0, 0.0])
+
+    MINI_CHECK(moved.point_count() == 5)
+    MINI_CHECK(moved.is_closed())
+    MINI_CHECK(TOLERANCE.is_close(moved.get_point(0)[1], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(moved.get_point(1)[0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(moved.get_point(1)[1], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(moved.get_point(2)[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(stepped.get_point(0)[1], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(stepped.get_point(1)[1], -2.0))
+    MINI_CHECK(TOLERANCE.is_close(stepped.get_point(2)[1], -2.0))
+
+
 if __name__ == "__main__":
     run_all("python")

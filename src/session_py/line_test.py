@@ -435,5 +435,38 @@ def test_line_extend_keeps_properties():
     MINI_CHECK(line.guid == guid)
 
 
+@MINI_TEST("Line", "Split At Crossings")
+def test_line_split_at_crossings():
+    from session_py import Line
+    from session_py import Point
+
+    lines = [
+        Line.from_points(Point(-2.0, 5.0, 0.0), Point(12.0, 5.0, 0.0)),
+        Line.from_points(Point(5.0, 0.0, 0.0), Point(5.0, 10.0, 0.0)),
+        Line.from_points(Point(2.0, 0.0, 0.0), Point(8.0, 0.0, 0.0)),
+        Line.from_points(Point(0.3, 0.3, 0.0), Point(5.0, 5.0, 0.0)),
+    ]
+    boundary = [
+        Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)),
+        Line.from_points(Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0)),
+        Line.from_points(Point(10.0, 10.0, 0.0), Point(0.0, 10.0, 0.0)),
+        Line.from_points(Point(0.0, 10.0, 0.0), Point(0.0, 0.0, 0.0)),
+    ]
+    split = Line.split_at_crossings(lines, boundary, 0.01, 0.5)
+    overlapped = 0
+
+    for i in range(len(split[1])):
+        overlapped += 1 if split[1][i] == 2 else 0
+
+    MINI_CHECK(len(split[0]) == 13)
+    MINI_CHECK(split[1][0] == 0)
+    MINI_CHECK(split[1][2] == 1)
+    MINI_CHECK(split[1][4] == 3)
+    MINI_CHECK(split[1][5] == 4)
+    MINI_CHECK(overlapped == 0)
+    MINI_CHECK(TOLERANCE.is_close(split[0][4].start()[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(split[0][4].start()[1], 0.0))
+
+
 if __name__ == "__main__":
     run_all("python")

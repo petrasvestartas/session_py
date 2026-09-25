@@ -213,6 +213,42 @@ def test_mesh_from_lines():
     MINI_CHECK(mesh.is_valid())
 
 
+@MINI_TEST("Mesh", "From Arrangement")
+def test_mesh_from_arrangement():
+    from session_py import Line
+    from session_py import Mesh
+    from session_py import Point
+
+    lines = [
+        Line.from_points(Point(-2.0, 5.0, 0.0), Point(12.0, 5.0, 0.0)),
+        Line.from_points(Point(5.0, 0.0, 0.0), Point(5.0, 10.0, 0.0)),
+        Line.from_points(Point(2.0, 0.0, 0.0), Point(8.0, 0.0, 0.0)),
+        Line.from_points(Point(0.3, 0.3, 0.0), Point(5.0, 5.0, 0.0)),
+    ]
+    boundary = [
+        Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)),
+        Line.from_points(Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0)),
+        Line.from_points(Point(10.0, 10.0, 0.0), Point(0.0, 10.0, 0.0)),
+        Line.from_points(Point(0.0, 10.0, 0.0), Point(0.0, 0.0, 0.0)),
+    ]
+    mesh = Mesh.from_arrangement(lines, boundary, 0.01, 0.5)
+    horizontal = 0
+    diagonal = 0
+    sides = 0
+
+    for edge in mesh.edges():
+        line = mesh.edge_attribute(edge, "line")
+        horizontal += 1 if line == 0.0 else 0
+        diagonal += 1 if line == 3.0 else 0
+        sides += 1 if line >= 4.0 else 0
+
+    MINI_CHECK(mesh.number_of_faces() == 5)
+    MINI_CHECK(mesh.number_of_edges() == 13)
+    MINI_CHECK(horizontal == 2)
+    MINI_CHECK(diagonal == 1)
+    MINI_CHECK(sides == 8)
+
+
 @MINI_TEST("Mesh", "From Polygon With Holes")
 def test_mesh_from_polygon_with_holes():
     from session_py import Mesh
@@ -1814,6 +1850,58 @@ def test_mesh_cut_by_plane():
     MINI_CHECK(corners.is_closed())
     MINI_CHECK(corners.number_of_faces() == 10)
     MINI_CHECK(TOLERANCE.is_close(corners.volume(), 0.25))
+
+
+@MINI_TEST("Mesh", "Section By Plane")
+def test_mesh_section_by_plane():
+    from session_py import Mesh
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    plane = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    box = Mesh.create_box(2.0, 2.0, 2.0)
+    middle = box.section_by_plane(plane)
+    down = box.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, -1.0))
+    )
+    above = box.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 5.0), Vector(0.0, 0.0, 1.0))
+    )
+
+    MINI_CHECK(len(middle) == 1)
+    MINI_CHECK(middle[0].point_count() == 5)
+    MINI_CHECK(middle[0].is_closed())
+    MINI_CHECK(not middle[0].is_clockwise(plane))
+    MINI_CHECK(down[0].is_clockwise(plane))
+    MINI_CHECK(len(above) == 0)
+
+    bottom = [
+        Polyline.rectangle(
+            Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 4.0, 4.0
+        ),
+        Polyline.rectangle(
+            Point(1.0, 1.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 2.0, 2.0
+        ).reversed(),
+    ]
+    top = [
+        Polyline.rectangle(
+            Point(0.0, 0.0, 2.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 4.0, 4.0
+        ),
+        Polyline.rectangle(
+            Point(1.0, 1.0, 2.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 2.0, 2.0
+        ).reversed(),
+    ]
+    tube = Mesh.loft(bottom, top)
+    rings = tube.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    )
+
+    MINI_CHECK(len(rings) == 2)
+    MINI_CHECK(not rings[0].is_clockwise(plane))
+    MINI_CHECK(rings[1].is_clockwise(plane))
+    MINI_CHECK(TOLERANCE.is_close(rings[1].get_point(0)[2], 1.0))
 
 
 @MINI_TEST("Mesh", "Volume Far From Origin")
