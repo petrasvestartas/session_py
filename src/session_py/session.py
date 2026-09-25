@@ -36,6 +36,7 @@ from .graph import edge_to_proto
 from .graph import vertex_to_proto
 from .history import History
 from .history import AddOp
+from .history import Entry
 from .history import RemoveOp
 from .history import ReplaceOp
 from .history import XformOp
@@ -949,11 +950,12 @@ class Session:
             return None
 
         placement = (xform if xform is not None else Xform.identity()) * instance.xform
-        instance.xform = Xform.identity()
         node = self._add_object("instances", instance, "instance", parent)
 
         if node is None:
             return None
+
+        instance.xform = Xform.identity()
 
         if not placement.is_identity():
             self.set_xform(instance.guid, placement)
@@ -1152,11 +1154,12 @@ class Session:
         bytes = RECORD + weight(before)
 
         if old == new:
-            if self.history.current is not None:
-                node = self.get_node(guid)
-                self.history.record(ReplaceOp(guid, before, obj, node), bytes)
+            entry = Entry(False, self.get_node(guid), 0)
 
-            self._swap(guid, obj, None)
+            if self.history.current is not None:
+                self.history.record(ReplaceOp(guid, before, obj, entry), bytes)
+
+            self._swap(guid, obj, entry)
 
             return True
 
@@ -1187,10 +1190,17 @@ class Session:
         bytes = RECORD + weight(before)
 
         if old == new:
-            if self.history.current is not None:
-                self.history.record(ReplaceOp(guid, before, definition, None), bytes)
+            slot = getattr(self.definitions, old).get_slot(guid)
 
-            self._swap(guid, definition, None)
+            if slot is None:
+                return False
+
+            entry = Entry(True, None, slot)
+
+            if self.history.current is not None:
+                self.history.record(ReplaceOp(guid, before, definition, entry), bytes)
+
+            self._swap(guid, definition, entry)
 
             return True
 
@@ -2590,37 +2600,35 @@ class Session:
             if edge.guid in tomb.interactions:
                 self.interactions[edge.guid] = tomb.interactions.pop(edge.guid)
 
-    def _swap(self, guid: str, obj: Any, node: TreeNode | None) -> None:
-        """Store obj under guid in its slot and map, relabelling its vertex; a guid that is only a definition swaps in Session.definitions; a guid whose entry is not the recorded node is left alone; O(1)."""
-
-        if not self._owns(guid, node):
-            return
+    def _swap(self, guid: str, obj: Any, entry: Entry) -> None:
+        """Store obj under guid in the slot and map of the recorded entry, relabelling an object's vertex; a guid now live on the other side, or on the same side as another entry, is left alone; O(1)."""
 
         collection, prefix = _collection_for(obj)
+
+        if entry.definition:
+            items = getattr(self.definitions, collection)
+
+            if self._is_live(guid) or items.get_slot(guid) != entry.slot:
+                return
+
+            items.set_item(entry.slot, obj)
+            self.definition_lookup[guid] = obj
+        else:
+            if guid in self.definition_lookup or not self._owns(guid, entry.node):
+                return
+
+            items = getattr(self.objects, collection)
+            slot = items.get_slot(guid)
+
+            if slot is None:
+                return
+
+            items.set_item(slot, obj)
+            self._label(guid, f"{prefix}_{obj.name}")
+            self._table(collection)[guid] = obj
+
         self.revision += 1
         self.bvh_cache_dirty = True
-
-        if not self._is_live(guid):
-            if guid in self.definition_lookup:
-                items = getattr(self.definitions, collection)
-                slot = items.get_slot(guid)
-
-                if slot is not None:
-                    items.set_item(slot, obj)
-
-                self.definition_lookup[guid] = obj
-
-            return
-
-        items = getattr(self.objects, collection)
-        slot = items.get_slot(guid)
-
-        if slot is None:
-            return
-
-        items.set_item(slot, obj)
-        self._table(collection)[guid] = obj
-        self._label(guid, f"{prefix}_{obj.name}")
 
     def _tree(self, op: TreeOp, back: bool) -> None:
         """Apply the before (back) or after state of a tree record: name, colour, liveness, and for a move the swap of node and ghost."""

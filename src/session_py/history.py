@@ -203,18 +203,29 @@ class RemoveOp(Tombstone):
     kind = "remove"  # Always "remove".
 
 
+class Entry:
+    """The entry a replace was taken on: an object by its tree node at record time (None outside the tree) or a definition by its slot."""
+
+    def __init__(self, definition: bool, node: TreeNode | None, slot: int):
+        """Construct an object entry from its node or a definition entry from its slot."""
+
+        self.definition = definition  # Whether the entry is a definition.
+        self.node = node  # An object's tree node at record time; None outside the tree or for a definition.
+        self.slot = slot  # A definition's slot; 0 for an object.
+
+
 class ReplaceOp:
-    """The object under `guid` was swapped: the stored objects before and after, never copies."""
+    """The object or definition under `guid` was swapped: the stored objects before and after, never copies."""
 
     kind = "replace"  # Always "replace".
 
-    def __init__(self, guid: str, before: Any, after: Any, node: TreeNode | None):
-        """Construct from the guid, the before and after objects and the entry's node."""
+    def __init__(self, guid: str, before: Any, after: Any, entry: Entry):
+        """Construct from the guid, the before and after items and the entry."""
 
-        self.guid = guid  # The object's guid.
-        self.before = before  # The object before the swap.
-        self.after = after  # The object after the swap.
-        self.node = node  # The entry's tree node at record time; None for a definition or an object outside the tree.
+        self.guid = guid  # The entry's guid.
+        self.before = before  # The entry before the swap.
+        self.after = after  # The entry after the swap.
+        self.entry = entry  # The entry the swap was taken on.
 
     def __str__(self) -> str:
         """Return a string representation of the record."""
@@ -469,7 +480,7 @@ class History:
         elif op.kind == "remove":
             session._revive(op.tomb)
         elif op.kind == "replace":
-            session._swap(op.guid, op.before, op.node)
+            session._swap(op.guid, op.before, op.entry)
         elif op.kind == "xform":
             session._place(op.guid, op.before, op.node)
         elif op.kind == "tree":
@@ -483,7 +494,7 @@ class History:
         elif op.kind == "remove":
             session._kill(op.tomb)
         elif op.kind == "replace":
-            session._swap(op.guid, op.after, op.node)
+            session._swap(op.guid, op.after, op.entry)
         elif op.kind == "xform":
             session._place(op.guid, op.after, op.node)
         elif op.kind == "tree":

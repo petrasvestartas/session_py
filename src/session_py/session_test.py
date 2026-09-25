@@ -2827,6 +2827,33 @@ def test_session_twin_skips_recorded_edits():
     MINI_CHECK(instance_guid in session.lookup)
     MINI_CHECK(len(session.objects.instances) == 0)
 
+    held = Point(0.0, 0.0, 0.0)
+    held_guid = held.guid
+    swapped = Point(9.0, 0.0, 0.0)
+    swapped.guid = held_guid
+    taker = Point(7.0, 0.0, 0.0)
+    taker.guid = held_guid
+    session.begin("define")
+    session.add_definition(held)
+    session.commit()
+    session.begin("swap")
+    session.replace_definition(held_guid, swapped)
+    session.commit()
+    session.undo()
+    session.undo()
+    session.add_point(taker)
+    session.redo()
+    session.redo()
+    point = session.lookup.get(held_guid)
+    taker_redone = isinstance(point, Point) and point[0] == 7.0
+    session.undo()
+    point = session.lookup.get(held_guid)
+    taker_undone = isinstance(point, Point) and point[0] == 7.0
+
+    MINI_CHECK(taker_redone)
+    MINI_CHECK(taker_undone)
+    MINI_CHECK(held_guid not in session.definition_lookup)
+
 
 @MINI_TEST("Session", "Definition Guid Is Live")
 def test_session_definition_guid_is_live():
