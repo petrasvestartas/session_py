@@ -947,38 +947,14 @@ class Graph:
             proto.default_edge_attributes[name] = value
 
         for vertex_name in sorted(self.vertices):
-            vertex = self.vertices[vertex_name]
-            v = proto.vertices[vertex_name]
-            v.name = vertex.name
-
-            if vertex.has_guid():
-                v.guid = vertex.guid
-
-            v.attribute = vertex.attribute
-            v.index = vertex.index
-
-            for name, value in vertex.attributes.items():
-                v.attributes[name] = value
+            vertex_to_proto(self.vertices[vertex_name], proto.vertices[vertex_name])
 
         for u in sorted(self.edges):
             for v in sorted(self.edges[u]):
                 if u > v:
                     continue
 
-                edge = self.edges[u][v]
-                e = proto.edges.add()
-
-                if edge.has_guid():
-                    e.guid = edge.guid
-
-                e.name = edge.name
-                e.v0 = edge.v0
-                e.v1 = edge.v1
-                e.attribute = edge.attribute
-                e.index = edge.index
-
-                for name, value in edge.attributes.items():
-                    e.attributes[name] = value
+                edge_to_proto(self.edges[u][v], proto.edges.add())
 
         return proto
 
@@ -1063,3 +1039,34 @@ class Graph:
     def __repr__(self) -> str:
         """Return "Graph(guid, name, V, E)", live counts."""
         return f"Graph({self.guid}, {self.name}, {self.number_of_vertices()}, {self.number_of_edges()})"
+
+
+def vertex_to_proto(vertex: Vertex, proto) -> None:
+    """Fill a protobuf vertex, its guid only when minted."""
+
+    proto.name = vertex.name
+
+    if vertex.has_guid():
+        proto.guid = vertex.guid
+
+    proto.attribute = vertex.attribute
+    proto.index = vertex.index
+
+    for name, value in vertex.attributes.items():
+        proto.attributes[name] = value
+
+
+def edge_to_proto(edge: Edge, proto) -> None:
+    """Fill a protobuf edge, its guid only when minted."""
+
+    if edge.has_guid():
+        proto.guid = edge.guid
+
+    proto.name = edge.name
+    proto.v0 = edge.v0
+    proto.v1 = edge.v1
+    proto.attribute = edge.attribute
+    proto.index = edge.index
+
+    for name, value in edge.attributes.items():
+        proto.attributes[name] = value

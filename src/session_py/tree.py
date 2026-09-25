@@ -7,6 +7,7 @@ import weakref
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .color import Color
     from .history import Tomb
 
 
@@ -32,6 +33,7 @@ class TreeNode:
         self._at = 0  # Raw index in the parent's children.
         self._queued = False  # Whether Session.sweep holds this parent.
         self._cursor = None  # (read, write) while a compaction is part way.
+        self._kept = False  # Whether the last compaction kept a dead child.
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
@@ -114,6 +116,14 @@ class TreeNode:
     def is_queued(self) -> bool:
         """Return whether Session.sweep holds this node."""
         return self._queued
+
+    def has_dead(self) -> bool:
+        """Return whether the last finished compaction kept a dead child a record still pins."""
+        return self._kept
+
+    def get_child(self, at: int) -> TreeNode | None:
+        """Return the raw child at an index, dead or alive, None past the end."""
+        return self._children[at] if at < len(self._children) else None
 
     def has_child(self, child: TreeNode) -> bool:
         """Return whether a node is a child, dead or alive."""
@@ -231,6 +241,9 @@ class TreeNode:
         if work == 0:
             return 0
 
+        if self._cursor is None:
+            self._kept = False
+
         r, w = self._cursor if self._cursor is not None else (0, 0)
         examined = 0
 
@@ -241,6 +254,8 @@ class TreeNode:
                 child._tomb = None
 
             if not child._dead or child._tomb is not None:
+                self._kept = self._kept or child._dead
+
                 if w != r:
                     self._children[r] = self._children[w]
                     self._children[w] = child
@@ -782,15 +797,46 @@ def _node_to_proto(node: TreeNode):
     proto.parent_guid = ""
 
     if node.color is not None:
-        proto.color.r = node.color.r
-        proto.color.g = node.color.g
-        proto.color.b = node.color.b
-        proto.color.a = node.color.a
+        _color_to_proto(node.color, proto.color)
 
     for child in node.children:
         proto.children.append(_node_to_proto(child))
 
     return proto
+
+
+def _color_to_proto(color: Color, proto) -> None:
+    """Fill a protobuf colour with the display colour's components."""
+
+    proto.r = color.r
+    proto.g = color.g
+    proto.b = color.b
+    proto.a = color.a
+
+
+def node_head(node: TreeNode) -> bytes:
+    """The protobuf bytes of a node before its children: guid and name."""
+
+    from .proto import treenode_pb2
+
+    proto = treenode_pb2.TreeNode()
+    proto.guid = node.guid
+    proto.name = node.name
+
+    return proto.SerializeToString()
+
+
+def node_tail(node: TreeNode) -> bytes:
+    """The protobuf bytes of a node after its children: its colour."""
+
+    from .proto import treenode_pb2
+
+    proto = treenode_pb2.TreeNode()
+
+    if node.color is not None:
+        _color_to_proto(node.color, proto.color)
+
+    return proto.SerializeToString()
 
 
 def _proto_to_node(proto) -> TreeNode:

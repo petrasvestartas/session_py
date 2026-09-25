@@ -106,14 +106,20 @@ def test_history_clear():
 
     session.history.undo(session)
     session.history.clear()
+    dropped = session.history.dropped
+    due = session.purge_due()
+    dead = session.number_of_dead()
+    session.purge()
 
     MINI_CHECK(not session.history.can_undo())
     MINI_CHECK(not session.history.can_redo())
     MINI_CHECK(session.history.depth() == 0)
     MINI_CHECK(session.history.bytes == 0)
-    MINI_CHECK(session.history.dropped == 2)
+    MINI_CHECK(dropped == 2)
     MINI_CHECK(len(session.objects.points) == 1)
-    MINI_CHECK(session.objects.points.number_of_dead() == 1)
+    MINI_CHECK(dead == 1)
+    MINI_CHECK(due)
+    MINI_CHECK(session.objects.points.number_of_slots() == 1)
 
 
 @MINI_TEST("History", "Undo Definition")

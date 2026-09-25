@@ -703,8 +703,8 @@ def test_session_remove_object():
     MINI_CHECK(point.guid not in session.lookup)
     MINI_CHECK(eremoved)
     MINI_CHECK(len(session.objects.elements) == 0)
-    MINI_CHECK(session.objects.elements.number_of_slots() == 1)
-    MINI_CHECK(session.objects.points.number_of_dead() == 1)
+    MINI_CHECK(session.objects.elements.number_of_slots() == 0)
+    MINI_CHECK(session.number_of_dead() == 0)
     MINI_CHECK(not session.graph.has_node(eguid))
     MINI_CHECK(eguid not in loaded.lookup)
     MINI_CHECK(loaded.objects.points.number_of_slots() == 0)
@@ -1099,7 +1099,7 @@ def test_session_document_workflow():
     MINI_CHECK(loaded.xform(a_guid) == shift)
     MINI_CHECK(loaded.history.depth() == 0)
     MINI_CHECK(len(session.objects.points) == 2)
-    MINI_CHECK(session.objects.points.number_of_slots() == 3)
+    MINI_CHECK(session.objects.points.number_of_slots() == 2)
 
 
 @MINI_TEST("Session", "Undo Remove")
@@ -1257,8 +1257,247 @@ def test_session_history_purged_on_save():
     MINI_CHECK(after_pb == 0)
     MINI_CHECK(before_json == 1)
     MINI_CHECK(session.history.depth() == 0)
+    MINI_CHECK(session.number_of_dead() == 0)
     MINI_CHECK(not session.undo())
     MINI_CHECK(len(session.objects.points) == 2)
+
+
+@MINI_TEST("Session", "Purge On Save")
+def test_session_purge_on_save():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    guids = []
+
+    for i in range(5):
+        node = session.add_point(Point(float(i), 0.0, 0.0))
+        guids.append(node.name)
+
+    for i in [1, 3]:
+        session.begin("remove")
+        session.remove_object(guids[i])
+        session.commit()
+
+    data = session.pb_dumps()
+    loaded = Session.pb_loads(data)
+    indices = []
+
+    for vertex in session.graph.get_vertices():
+        indices.append(vertex.index)
+
+    indices.sort()
+
+    MINI_CHECK(session.history.depth() == 0)
+    MINI_CHECK(session.number_of_dead() == 0)
+    MINI_CHECK(session.objects.points.number_of_slots() == 3)
+    MINI_CHECK(indices == [0, 1, 2])
+    MINI_CHECK(loaded.order() == [guids[0], guids[2], guids[4]])
+    MINI_CHECK(loaded.pb_dumps() == data)
+
+
+@MINI_TEST("Session", "Purge Clears History")
+def test_session_purge_clears_history():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    guids = []
+
+    for i in range(3):
+        node = session.add_point(Point(float(i), 0.0, 0.0))
+        guids.append(node.name)
+
+    session.add_edge(guids[1], guids[2])
+    session.begin("remove")
+    session.remove_object(guids[0])
+    session.commit()
+    session.purge()
+    indices = []
+
+    for vertex in session.graph.get_vertices():
+        indices.append(vertex.index)
+
+    indices.sort()
+
+    MINI_CHECK(not session.history.can_undo())
+    MINI_CHECK(not session.undo())
+    MINI_CHECK(session.number_of_dead() == 0)
+    MINI_CHECK(indices == [0, 1])
+    MINI_CHECK(guids[0] not in session.lookup)
+    MINI_CHECK(session.graph.has_edge((guids[1], guids[2])))
+
+
+@MINI_TEST("Session", "Purge Unreachable")
+def test_session_purge_unreachable():
+    from session_py import Point
+    from session_py import Session
+    from session_py.session import PURGE_WORK
+
+    session = Session()
+    guids = []
+
+    for i in range(70):
+        node = session.add_point(Point(float(i), 0.0, 0.0))
+        guids.append(node.name)
+
+    for guid in guids:
+        session.begin("remove")
+        session.remove_object(guid)
+        session.commit()
+
+    due = session.purge_due()
+
+    while session.purge_step(PURGE_WORK):
+        pass
+
+    dead = session.number_of_dead()
+    undone = 0
+
+    while session.undo():
+        undone += 1
+
+    MINI_CHECK(due)
+    MINI_CHECK(dead == 64)
+    MINI_CHECK(undone == 64)
+    MINI_CHECK(len(session.objects.points) == 64)
+
+
+@MINI_TEST("Session", "Purge Step")
+def test_session_purge_step():
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    guids = []
+
+    for i in range(10_000):
+        node = session.add_point(Point(float(i), 0.0, 0.0))
+        guids.append(node.name)
+
+    session.begin("remove")
+
+    for guid in guids[::2]:
+        session.remove_object(guid)
+
+    session.commit()
+
+    for i in range(64):
+        session.begin("move")
+        session.set_xform(guids[1], Xform.translation(float(i), 0.0, 0.0))
+        session.commit()
+
+    expected = guids[1::2]
+    first = session.purge_step(64)
+    ordered = session.order() == expected
+    calls = 1
+
+    while session.purge_step(64):
+        calls += 1
+
+        if calls == 10:
+            session.begin("remove")
+            session.remove_object(guids[3])
+            session.commit()
+            expected.remove(guids[3])
+
+        if calls == 20:
+            session.undo()
+            expected = guids[1::2]
+
+        if calls == 30:
+            node = session.add_point(Point(0.0, 1.0, 0.0))
+            expected.append(node.name)
+
+        ordered &= session.order() == expected
+
+    MINI_CHECK(first)
+    MINI_CHECK(calls > 30)
+    MINI_CHECK(ordered)
+    MINI_CHECK(session.order() == expected)
+    MINI_CHECK(session.number_of_dead() == 0)
+    MINI_CHECK(session.objects.points.number_of_slots() == len(session.objects.points))
+    MINI_CHECK(len(session.tree.root.children) == len(expected))
+
+
+@MINI_TEST("Session", "Checkpoint Keeps History")
+def test_session_checkpoint_keeps_history():
+    import copy
+    import sys
+    from session_py import Color
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    group = session.add_group("group")
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(1.0, 0.0, 0.0)
+    c = Point(2.0, 0.0, 0.0)
+    a_guid = a.guid
+    b_guid = b.guid
+    c_guid = c.guid
+    session.add_point(a, group)
+    session.add_point(b, group)
+    session.add_point(c)
+    session.set_node_color(group, Color(1.0, 0.0, 0.0, 1.0))
+    session.set_xform("group", Xform.translation(0.0, 0.0, 1.0))
+    session.set_xform(c_guid, Xform.translation(5.0, 0.0, 0.0))
+    session.add_edge(a_guid, c_guid, "touch")
+    whole = session.checkpoint(sys.maxsize)
+    duplicate = copy.deepcopy(session).pb_dumps()
+
+    session.begin("remove")
+    session.remove_object(b_guid)
+    session.commit()
+    data = None
+    calls = 0
+
+    while data is None:
+        data = session.checkpoint(16)
+        calls += 1
+
+    loaded = Session.pb_loads(data)
+
+    MINI_CHECK(whole == duplicate)
+    MINI_CHECK(calls > 1)
+    MINI_CHECK(data == session.to_proto().SerializeToString(deterministic=True))
+    MINI_CHECK(session.history.can_undo())
+    MINI_CHECK(b_guid not in loaded.lookup)
+    MINI_CHECK(loaded.order() == session.order())
+    MINI_CHECK(session.undo())
+    MINI_CHECK(b_guid in session.lookup)
+
+
+@MINI_TEST("Session", "Checkpoint Restarts On Edit")
+def test_session_checkpoint_restarts_on_edit():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    guids = []
+
+    for i in range(20):
+        node = session.add_point(Point(float(i), 0.0, 0.0))
+        guids.append(node.name)
+
+    first = session.checkpoint(10)
+    session.begin("remove")
+    session.remove_object(guids[5])
+    session.commit()
+    data = None
+
+    while data is None:
+        data = session.checkpoint(10)
+
+    loaded = Session.pb_loads(data)
+
+    MINI_CHECK(first is None)
+    MINI_CHECK(data == session.to_proto().SerializeToString(deterministic=True))
+    MINI_CHECK(len(loaded.objects.points) == 19)
+    MINI_CHECK(guids[5] not in loaded.lookup)
+    MINI_CHECK(session.history.can_undo())
 
 
 @MINI_TEST("Session", "History Capacity")
@@ -2359,6 +2598,30 @@ def test_session_unrecorded_remove():
     MINI_CHECK(session.objects.points.get_tomb(0) is None)
     MINI_CHECK(session.history.dropped == 1)
     MINI_CHECK(not session.undo())
+
+
+@MINI_TEST("Session", "Remove Twin Keeps Slot")
+def test_session_remove_twin_keeps_slot():
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    x = Point(1.0, 0.0, 0.0)
+    y = Point(2.0, 0.0, 0.0)
+    y.guid = x.guid
+
+    session.begin("add")
+    session.add_point(x)
+    session.commit()
+    session.add_point(y)
+    session.undo()
+    removed = session.remove_object(x.guid)
+    loaded = Session.pb_loads(session.pb_dumps())
+
+    MINI_CHECK(removed)
+    MINI_CHECK(len(session.objects.points) == 0)
+    MINI_CHECK(len(loaded.objects.points) == 0)
+    MINI_CHECK(x.guid not in loaded.lookup)
 
 
 if __name__ == "__main__":

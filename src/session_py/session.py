@@ -4,6 +4,7 @@ from typing import NamedTuple
 from typing import TYPE_CHECKING
 import copy
 import json
+import sys
 import uuid
 import weakref
 from .collection import Collection
@@ -25,7 +26,11 @@ from .instance_ref import InstanceRef
 from .interaction import Interaction
 from .tree import Tree
 from .tree import TreeNode
+from .tree import node_head
+from .tree import node_tail
 from .graph import Graph
+from .graph import edge_to_proto
+from .graph import vertex_to_proto
 from .history import History
 from .history import AddOp
 from .history import RemoveOp
@@ -65,6 +70,31 @@ COLLECTIONS = [
     ("components", "component"),
     ("instances", "instance"),
 ]
+
+PURGE_WORK = 1024  # Work units of one idle purge or checkpoint step, about 2 ms: one raw slot, child, vertex or entry each.
+
+_HEAD = 0  # Checkpoint phase: the session name and guid.
+_OBJECTS = 1  # Checkpoint phases 1..13: the objects lists.
+_TREE = 14  # Checkpoint phase: the tree, depth first.
+_VERTICES = 15  # Checkpoint phase: the graph vertices.
+_EDGES = 16  # Checkpoint phase: the graph edges.
+_ORDERED = 17  # Checkpoint phases 17..27: xforms in order() sequence.
+_REST = 28  # Checkpoint phase: xforms outside order(), by guid.
+_DEFINITIONS = 29  # Checkpoint phases 29..41: the definitions lists.
+_INTERACTIONS = 42  # Checkpoint phase: the interactions, by edge guid.
+_ASSEMBLY = 43  # Checkpoint phase: the sections joined into one message.
+_CHUNK = 64 << 10  # Bytes past which a finished node's chunks move whole.
+_LENGTH_DELIMITED = 2  # Protobuf wire type of strings, bytes and messages.
+_SECTIONS = (  # Checkpoint buffers in Session field order.
+    "head",
+    "objects",
+    "tree",
+    "graph",
+    "xforms",
+    "definitions",
+    "interactions",
+)
+_FRAMED = ("objects", "tree", "graph", "definitions")  # Framed as one field.
 
 
 class RayHit(NamedTuple):
@@ -342,6 +372,48 @@ def _box_points(geometry: Any) -> list[Point]:
     return points
 
 
+def _varint(value: int) -> bytearray:
+    """The protobuf varint encoding of a non-negative integer."""
+
+    out = bytearray()
+
+    while value >= 0x80:
+        out.append(value & 0x7F | 0x80)
+        value >>= 7
+
+    out.append(value)
+
+    return out
+
+
+def _prefix(field: int, length: int) -> bytearray:
+    """The key and length of a length-delimited protobuf field."""
+    return _varint(field << 3 | _LENGTH_DELIMITED) + _varint(length)
+
+
+def _append(chunks: list[bytearray], piece: bytearray) -> None:
+    """Append bytes to a chunked buffer: a small piece is copied into the last chunk, a large one moves whole."""
+
+    if chunks and len(piece) <= _CHUNK and len(chunks[-1]) < _CHUNK:
+        chunks[-1] += piece
+    else:
+        chunks.append(piece)
+
+
+def _objects_head(objects: Objects) -> bytearray:
+    """The name and guid fields of an Objects message."""
+
+    from .proto import objects_pb2
+
+    proto = objects_pb2.Objects()
+    proto.name = objects.name
+
+    if objects.has_guid():
+        proto.guid = objects.guid
+
+    return bytearray(proto.SerializeToString(deterministic=True))
+
+
 def _registered(session: Session, guid: str) -> bool:
     """Whether guid is a graph node held by an object, instance or component."""
 
@@ -350,6 +422,25 @@ def _registered(session: Session, guid: str) -> bool:
         or guid in session.instance_lookup
         or guid in session.component_lookup
     )
+
+
+class _Checkpoint:
+    """A resumable protobuf writer over a session: live entries only, the layout to_proto encodes."""
+
+    def __init__(self, revision: int):
+        """Construct a writer at the first phase."""
+
+        self.revision = revision  # The revision it writes.
+        self.phase = _HEAD  # The section being written.
+        self.cursor = 0  # Slot or key position in the phase.
+        self.keys = None  # Keys of the running graph, rest or interactions phase.
+        self.hits = 0  # Xforms entries order() reached.
+        self.graph = None  # The vertices map being filled.
+        self.stack = []  # Tree frames being written, root first: node, next raw child, bytes in chunks.
+        self.tree = []  # The framed root, in chunks after the Tree head.
+        self.sections = {name: bytearray() for name in _SECTIONS}  # One per field.
+        self.pieces = []  # The framed sections in message order.
+        self.out = bytearray()  # The joined message.
 
 
 class Session:
@@ -382,6 +473,9 @@ class Session:
         self.node_lookup: dict[str, TreeNode] = {}  # Tree node per live object guid.
         self.revision = 0  # Bumped by every Session mutation.
         self._sweep = []  # Parents whose children died, for the purge to compact.
+        self._pinned = []  # Parents the purge left while a record pinned a child.
+        self._purging = None  # The purge phase: 0..12 objects lists, 13..25 definitions lists, 26 the tree; None between cycles.
+        self._writer = None  # The checkpoint being written, stale once revision moves.
 
         self.tree.add(TreeNode(name=self.name))
         self._indexed = weakref.ref(self.tree.root)  # Root at the last reindex.
@@ -1273,6 +1367,84 @@ class Session:
         return self.history.abort(self)
 
     # ═══════════════════════════════════════════════════════════════════════════
+    # Purge
+    # ═══════════════════════════════════════════════════════════════════════════
+    def number_of_dead(self) -> int:
+        """Return the dead slots not yet purged, over the objects and the definitions lists."""
+
+        count = 0
+
+        for collection, _ in COLLECTIONS:
+            count += getattr(self.objects, collection).number_of_dead()
+            count += getattr(self.definitions, collection).number_of_dead()
+
+        return count
+
+    def purge_due(self) -> bool:
+        """Return whether dropped records left dead entries or swept parents a purge cycle can free."""
+        return self.history.dropped > 0 and (
+            self.number_of_dead() > 0 or bool(self._sweep)
+        )
+
+    def is_purging(self) -> bool:
+        """Return whether a purge cycle is part way."""
+        return self._purging is not None
+
+    def purge_step(self, work: int) -> bool:
+        """Purge what no record reaches for at most work slots or children, resuming the running cycle; True while it is unfinished."""
+
+        fresh = self._writer is not None and self._writer.revision == self.revision
+
+        if fresh or (self._purging is None and not self.purge_due()):
+            return False
+
+        self._purge(work)
+
+        return self._purging is not None
+
+    def purge(self) -> None:
+        """Drop the history and purge everything it pinned in one call: the running and a whole cycle, every live tree node, dense graph indices; O(n + N + V log V + E log E)."""
+
+        self.history.clear()
+        self._writer = None
+
+        if self._purging is not None:
+            self._purge(sys.maxsize)
+
+        self._purge(sys.maxsize)
+
+        for node in self.tree.nodes:
+            node.compact()
+
+        self.graph.renumber()
+        self.revision += 1
+
+    def checkpoint(self, work: int) -> bytes | None:
+        """Write the live session as protobuf bytes for at most work units, purging first when due; bytes once done, history kept, restarted by any edit."""
+
+        if self._writer is not None and self._writer.revision != self.revision:
+            self._writer = None
+
+        if self._writer is None and (self._purging is not None or self.purge_due()):
+            work = self._purge(work)
+
+        if self._purging is not None or work == 0:
+            return None
+
+        writer = self._writer
+        self._writer = None
+
+        if writer is None:
+            writer = _Checkpoint(self.revision)
+
+        if self._write(writer, work):
+            return bytes(writer.out)
+
+        self._writer = writer
+
+        return None
+
+    # ═══════════════════════════════════════════════════════════════════════════
     # Collision detection and ray casting
     # ═══════════════════════════════════════════════════════════════════════════
     @staticmethod
@@ -1448,9 +1620,9 @@ class Session:
         return session
 
     def file_json_dumps(self) -> str:
-        """Serialize to a JSON string."""
+        """Serialize to a JSON string, dropping the history and purging what it pinned."""
 
-        self.history.clear()
+        self.purge()
 
         return json.dumps(self.__jsondump__())
 
@@ -1460,9 +1632,9 @@ class Session:
         return cls.__jsonload__(json.loads(json_string))
 
     def file_json_dump(self, filename: str | Path) -> None:
-        """Write to a JSON file."""
+        """Write to a JSON file, dropping the history and purging what it pinned."""
 
-        self.history.clear()
+        self.purge()
 
         with open(filename, "w") as f:
             json.dump(self.__jsondump__(), f, indent=4)
@@ -1544,11 +1716,11 @@ class Session:
         return session
 
     def pb_dumps(self) -> bytes:
-        """Serialize to protobuf bytes."""
+        """Serialize to protobuf bytes with map entries sorted, dropping the history and purging what it pinned."""
 
-        self.history.clear()
+        self.purge()
 
-        return self.to_proto().SerializeToString()
+        return self.to_proto().SerializeToString(deterministic=True)
 
     @classmethod
     def pb_loads(cls, data: bytes) -> Session:
@@ -1562,7 +1734,7 @@ class Session:
         return cls.from_proto(proto)
 
     def pb_dump(self, filename: str | Path) -> None:
-        """Write to a protobuf file."""
+        """Write to a protobuf file, dropping the history and purging what it pinned."""
 
         with open(filename, "wb") as f:
             f.write(self.pb_dumps())
@@ -1770,6 +1942,449 @@ class Session:
         parent.set_queued(True)
         self._sweep.append(weakref.ref(parent))
 
+    def _purge(self, work: int) -> int:
+        """Run the purge cycle for at most work units, starting one when idle; returns the work left."""
+
+        if self._purging is None:
+            self._purging = 0
+            self.history.dropped = 0
+
+        while work > 0 and self._purging is not None:
+            phase = self._purging
+
+            if phase < 2 * len(COLLECTIONS):
+                objects = self.objects if phase < len(COLLECTIONS) else self.definitions
+                items = getattr(objects, COLLECTIONS[phase % len(COLLECTIONS)][0])
+
+                if items.number_of_dead() > 0 or items.is_compacting():
+                    work -= min(items.compact_step(work), work)
+
+                if not items.is_compacting():
+                    self._purging = phase + 1
+
+                continue
+
+            if not self._sweep:
+                self._sweep = self._pinned
+                self._pinned = []
+                self._purging = None
+
+                break
+
+            parent = self._sweep[-1]()
+
+            if parent is None:
+                self._sweep.pop()
+                work -= 1
+
+                continue
+
+            work -= min(max(parent.compact_step(work), 1), work)
+
+            if parent.is_compacting():
+                continue
+
+            self._sweep.pop()
+
+            if parent.has_dead():
+                self._pinned.append(weakref.ref(parent))
+            else:
+                parent.set_queued(False)
+
+        return work
+
+    def _write(self, writer: _Checkpoint, work: int) -> bool:
+        """Advance a checkpoint writer for at most work units; True once its message is complete."""
+
+        while work > 0:
+            phase = writer.phase
+
+            if phase == _HEAD:
+                spent = self._write_head(writer)
+            elif phase < _TREE:
+                spent = self._write_list(writer, False, work)
+            elif phase == _TREE:
+                spent = self._write_tree(writer, work)
+            elif phase == _VERTICES:
+                spent = self._write_vertices(writer, work)
+            elif phase == _EDGES:
+                spent = self._write_edges(writer, work)
+            elif phase < _REST:
+                spent = self._write_ordered(writer, work)
+            elif phase == _REST:
+                spent = self._write_rest(writer, work)
+            elif phase < _INTERACTIONS:
+                spent = self._write_list(writer, True, work)
+            elif phase == _INTERACTIONS:
+                spent = self._write_interactions(writer, work)
+            else:
+                return self._assemble(writer, work)
+
+            work -= min(max(spent, 1), work)
+
+        return False
+
+    def _write_head(self, writer: _Checkpoint) -> int:
+        """Write the session name and guid and the Objects head; returns one unit."""
+
+        from .proto import session_pb2
+
+        proto = session_pb2.Session()
+        proto.name = self.name
+
+        if self.has_guid():
+            proto.guid = self.guid
+
+        writer.sections["head"] = bytearray(proto.SerializeToString(deterministic=True))
+        writer.sections["objects"] = _objects_head(self.objects)
+        writer.phase = _OBJECTS
+
+        return 1
+
+    def _write_list(self, writer: _Checkpoint, definition: bool, work: int) -> int:
+        """Write the live entries of one objects or definitions list from the cursor slot; returns the slots examined."""
+
+        from .proto import objects_pb2
+
+        first = _DEFINITIONS if definition else _OBJECTS
+        collection = COLLECTIONS[writer.phase - first][0]
+        items = getattr(self.definitions if definition else self.objects, collection)
+        section = writer.sections["definitions" if definition else "objects"]
+        start = writer.cursor
+        end = min(items.number_of_slots(), start + work)
+
+        for slot in range(start, end):
+            if items.is_dead(slot):
+                continue
+
+            proto = objects_pb2.Objects()
+            getattr(proto, collection).add().CopyFrom(items.get_item(slot).to_proto())
+            section += proto.SerializeToString(deterministic=True)
+
+        writer.cursor = end
+
+        if end >= items.number_of_slots():
+            writer.cursor = 0
+            writer.phase += 1
+
+        return end - start
+
+    def _write_tree(self, writer: _Checkpoint, work: int) -> int:
+        """Write the live tree depth first from an explicit stack, a finished node moved to its parent in chunks; returns the children examined."""
+
+        from .proto import tree_pb2
+        from .proto import treenode_pb2
+
+        if writer.cursor == 0:
+            writer.cursor = 1
+            writer.sections["tree"] = self._tree_head()
+            root = self.tree.root
+
+            if root is not None:
+                writer.stack.append([root, 0, [bytearray(node_head(root))]])
+
+        spent = 0
+
+        while spent < work and writer.stack:
+            frame = writer.stack[-1]
+            child = frame[0].get_child(frame[1])
+            frame[1] += 1
+            spent += 1
+
+            if child is not None:
+                if not child.is_dead():
+                    writer.stack.append([child, 0, [bytearray(node_head(child))]])
+
+                continue
+
+            node, _, chunks = writer.stack.pop()
+            _append(chunks, bytearray(node_tail(node)))
+            length = sum(len(chunk) for chunk in chunks)
+
+            if writer.stack:
+                parent = writer.stack[-1][2]
+                field = treenode_pb2.TreeNode.CHILDREN_FIELD_NUMBER
+            else:
+                parent = writer.tree
+                field = tree_pb2.Tree.ROOT_FIELD_NUMBER
+
+            _append(parent, _prefix(field, length))
+
+            for chunk in chunks:
+                _append(parent, chunk)
+
+        if not writer.stack:
+            writer.cursor = 0
+            writer.phase = _VERTICES
+
+        return spent
+
+    def _tree_head(self) -> bytearray:
+        """The guid and name fields of the Tree message."""
+
+        from .proto import tree_pb2
+
+        proto = tree_pb2.Tree()
+
+        if self.tree.has_guid():
+            proto.guid = self.tree.guid
+
+        proto.name = self.tree.name
+
+        return bytearray(proto.SerializeToString(deterministic=True))
+
+    def _write_vertices(self, writer: _Checkpoint, work: int) -> int:
+        """Fill the vertices map from the cursor, then write the graph head and that map with its entries sorted; returns the vertices written."""
+
+        from .proto import graph_pb2
+
+        if writer.keys is None:
+            writer.keys = list(self.graph.vertices)
+            writer.graph = graph_pb2.Graph()
+
+        start = writer.cursor
+        end = min(len(writer.keys), start + work)
+
+        for name in writer.keys[start:end]:
+            vertex_to_proto(self.graph.vertices[name], writer.graph.vertices[name])
+
+        writer.cursor = end
+
+        if end < len(writer.keys):
+            return end - start
+
+        head = graph_pb2.Graph()
+        head.name = self.graph.name
+
+        if self.graph.has_guid():
+            head.guid = self.graph.guid
+
+        writer.sections["graph"] = bytearray(head.SerializeToString(deterministic=True))
+        writer.sections["graph"] += writer.graph.SerializeToString(deterministic=True)
+        writer.keys = None
+        writer.graph = None
+        writer.cursor = 0
+        writer.phase = _EDGES
+
+        return end - start
+
+    def _write_edges(self, writer: _Checkpoint, work: int) -> int:
+        """Write the graph edges in vertex order from the cursor, then the counts and defaults; returns the entries examined."""
+
+        from .proto import graph_pb2
+
+        if writer.keys is None:
+            writer.keys = sorted(self.graph.edges)
+
+        spent = 0
+
+        while writer.cursor < len(writer.keys) and spent < work:
+            u = writer.keys[writer.cursor]
+            neighbors = self.graph.edges[u]
+
+            for v in sorted(neighbors):
+                if u <= v:
+                    proto = graph_pb2.Graph()
+                    edge_to_proto(neighbors[v], proto.edges.add())
+                    writer.sections["graph"] += proto.SerializeToString(
+                        deterministic=True
+                    )
+
+            writer.cursor += 1
+            spent += max(len(neighbors), 1)
+
+        if writer.cursor < len(writer.keys):
+            return spent
+
+        proto = graph_pb2.Graph()
+        proto.vertex_count = self.graph.vertex_count
+        proto.edge_count = self.graph.edge_count
+
+        for name, value in self.graph.default_vertex_attributes.items():
+            proto.default_vertex_attributes[name] = value
+
+        for name, value in self.graph.default_edge_attributes.items():
+            proto.default_edge_attributes[name] = value
+
+        writer.sections["graph"] += proto.SerializeToString(deterministic=True)
+        writer.keys = None
+        writer.cursor = 0
+        writer.phase = _ORDERED
+
+        return spent
+
+    def _write_ordered(self, writer: _Checkpoint, work: int) -> int:
+        """Write the non-identity xforms of the live objects of one order() list; returns the slots examined."""
+
+        items = getattr(self.objects, COLLECTIONS[writer.phase - _ORDERED][0])
+        start = writer.cursor
+        end = min(items.number_of_slots(), start + work)
+
+        for slot in range(start, end):
+            if items.is_dead(slot):
+                continue
+
+            guid = items.get_item(slot).guid
+            xform = self.xforms.get(guid)
+
+            if xform is None:
+                continue
+
+            writer.hits += 1
+
+            if not xform.is_identity():
+                self._write_xform(writer, guid, xform)
+
+        writer.cursor = end
+
+        if end >= items.number_of_slots():
+            writer.cursor = 0
+            writer.phase += 1
+
+        return end - start
+
+    def _write_rest(self, writer: _Checkpoint, work: int) -> int:
+        """Write the non-identity xforms of guids outside order(), sorted, after one scan of xforms that runs only when order() missed some; returns the entries examined."""
+
+        spent = 0
+
+        if writer.keys is None:
+            writer.keys = []
+
+            if writer.hits < len(self.xforms):
+                writer.keys = self._unordered()
+                spent = len(self.xforms)
+
+        start = writer.cursor
+        end = min(len(writer.keys), start + work)
+
+        for guid in writer.keys[start:end]:
+            self._write_xform(writer, guid, self.xforms[guid])
+
+        writer.cursor = end
+
+        if end < len(writer.keys):
+            return spent + end - start
+
+        writer.keys = None
+        writer.cursor = 0
+        writer.phase = _INTERACTIONS
+
+        if self.definition_lookup:
+            writer.sections["definitions"] = _objects_head(self.definitions)
+            writer.phase = _DEFINITIONS
+
+        return spent + end - start
+
+    def _unordered(self) -> list[str]:
+        """The sorted guids of the non-identity xforms whose objects are not in order()."""
+
+        guids = []
+
+        for guid, xform in self.xforms.items():
+            geometry = self.lookup.get(guid)
+            items = None
+
+            if geometry is not None:
+                items = getattr(self.objects, _collection_of(geometry)[0], None)
+
+            if (
+                items is None or items.get_slot(guid) is None
+            ) and not xform.is_identity():
+                guids.append(guid)
+
+        guids.sort()
+
+        return guids
+
+    def _write_xform(self, writer: _Checkpoint, guid: str, xform: Xform) -> None:
+        """Append one XformEntry to the xforms section."""
+
+        from .proto import session_pb2
+
+        proto = session_pb2.Session()
+        item = proto.xforms.add()
+        item.guid = guid
+        item.xform.CopyFrom(xform.to_proto())
+        writer.sections["xforms"] += proto.SerializeToString(deterministic=True)
+
+    def _write_interactions(self, writer: _Checkpoint, work: int) -> int:
+        """Write the interactions per edge guid in guid order from the cursor; returns the entries written."""
+
+        from .proto import session_pb2
+
+        if writer.keys is None:
+            writer.keys = sorted(self.interactions)
+
+        start = writer.cursor
+        end = min(len(writer.keys), start + work)
+
+        for edge in writer.keys[start:end]:
+            proto = session_pb2.Session()
+            item = proto.interactions.add()
+            item.guid = edge
+
+            for interaction in self.interactions[edge]:
+                item.interactions.add().CopyFrom(interaction.to_proto())
+
+            writer.sections["interactions"] += proto.SerializeToString(
+                deterministic=True
+            )
+
+        writer.cursor = end
+
+        if end < len(writer.keys):
+            return end - start
+
+        writer.keys = None
+        writer.cursor = 0
+        writer.phase = _ASSEMBLY
+
+        return end - start
+
+    def _assemble(self, writer: _Checkpoint, work: int) -> bool:
+        """Join the sections into one Session message, copying at most work KiB; True once complete."""
+
+        from .proto import session_pb2
+
+        if writer.phase == _ASSEMBLY:
+            fields = session_pb2.Session.DESCRIPTOR.fields_by_name
+
+            for name in _SECTIONS:
+                if name == "definitions" and not self.definition_lookup:
+                    continue
+
+                body = writer.sections[name]
+                chunks = writer.tree if name == "tree" else []
+
+                if name in _FRAMED:
+                    length = len(body) + sum(len(chunk) for chunk in chunks)
+                    writer.pieces.append(_prefix(fields[name].number, length))
+
+                writer.pieces.append(body)
+                writer.pieces.extend(chunks)
+
+            writer.phase += 1
+
+        budget = work * 1024
+        skip = len(writer.out)
+
+        for piece in writer.pieces:
+            if skip >= len(piece):
+                skip -= len(piece)
+
+                continue
+
+            end = min(len(piece), skip + budget)
+            writer.out += memoryview(piece)[skip:end]
+            budget -= end - skip
+            skip = 0
+
+            if budget == 0:
+                break
+
+        return len(writer.out) == sum(len(piece) for piece in writer.pieces)
+
     def _kill(self, tomb: Tomb) -> None:
         """Flip a tomb dead: its slot and map entry, and for an object tomb its node, transform, vertex, edges and interactions; O(1 + d log V)."""
 
@@ -1804,8 +2419,7 @@ class Session:
         held = table.get(guid)
         owner = held is stored or items.get_slot(guid) == slot
 
-        # the map value is the truth; a twin that took the guid keeps its entry
-        if held is not None and held is not stored:
+        if owner and held is not None and held is not stored:
             items.set_item(slot, held)
 
         items.set_dead(slot, True)
