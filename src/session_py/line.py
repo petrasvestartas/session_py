@@ -121,13 +121,9 @@ class Line:
         return Line.from_points(point, point + direction.normalized() * length)
 
     @staticmethod
-    def fit_points(points: list[Point], length: float = 0.0) -> Line:
-        """Construct the least-squares line through points by power-iteration PCA; length <= 0 spans the projected extent."""
+    def _fit_points_axis(points: list[Point], center: Point) -> Vector:
+        """Principal direction of the points about center by power iteration on their covariance."""
 
-        if len(points) < 2:
-            raise ValueError("At least 2 points are required for line fitting")
-
-        center = Point.centroid(points)
         cxx = 0.0
         cyy = 0.0
         czz = 0.0
@@ -164,6 +160,14 @@ class Line:
 
             axis = next / mag
 
+        return axis
+
+    @staticmethod
+    def _fit_points_half(
+        points: list[Point], center: Point, axis: Vector, length: float
+    ) -> float:
+        """Half length of the fitted line: length / 2, or the projected extent when length <= 0."""
+
         half = length / 2.0
 
         if length <= 0.0:
@@ -179,6 +183,19 @@ class Line:
 
             if half < 1e-10:
                 half = 0.5
+
+        return half
+
+    @staticmethod
+    def fit_points(points: list[Point], length: float = 0.0) -> Line:
+        """Construct the least-squares line through points by power-iteration PCA; length <= 0 spans the projected extent."""
+
+        if len(points) < 2:
+            raise ValueError("At least 2 points are required for line fitting")
+
+        center = Point.centroid(points)
+        axis = Line._fit_points_axis(points, center)
+        half = Line._fit_points_half(points, center, axis, length)
 
         return Line.from_points(center - axis * half, center + axis * half)
 

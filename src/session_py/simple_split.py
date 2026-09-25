@@ -1229,6 +1229,58 @@ def _validate(result: BRep, original: BRep, tolerance: float) -> None:
                     )
 
 
+def _surface_uv_tolerance(surface: NurbsSurface, tolerance: float) -> float:
+    """Parameter-space tolerance of a surface: tolerance over its larger world length per unit parameter."""
+    u0, u1 = surface.domain(0)
+    v0, v1 = surface.domain(1)
+    origin = surface.point_at(u0, v0)
+    scale = max(
+        origin.distance(surface.point_at(u1, v0)) / (u1 - u0),
+        origin.distance(surface.point_at(u0, v1)) / (v1 - v0),
+    )
+    _require(scale > _EPSILON, "Cannot split a degenerate surface domain")
+
+    return tolerance / scale
+
+
+def _region_wires(
+    result: BRep,
+    pieces: list[_Piece],
+    brep: BRep,
+    surface_index: int,
+    sources: list[_Source],
+    regions: list[list[list[_Run]]],
+    tolerance: float,
+) -> list[list[BRepRef]]:
+    """Wires of every region, one new edge per run added to result."""
+    new_wires = []
+
+    for region in regions:
+        wires = []
+
+        for loop in region:
+            refs = []
+
+            for run in loop:
+                refs.append(
+                    _add_run_edge(
+                        result,
+                        pieces,
+                        brep,
+                        surface_index,
+                        sources,
+                        run,
+                        tolerance,
+                    )
+                )
+
+            wires.append(BRepRef(result.add_wire(refs), _FORWARD))
+
+        new_wires.append(wires)
+
+    return new_wires
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Split
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1294,15 +1346,7 @@ def split_brep_face_by_curves(
     surface = brep.m_surfaces[face.surface_index]
     _check_surface(surface)
 
-    u0, u1 = surface.domain(0)
-    v0, v1 = surface.domain(1)
-    origin = surface.point_at(u0, v0)
-    scale = max(
-        origin.distance(surface.point_at(u1, v0)) / (u1 - u0),
-        origin.distance(surface.point_at(u0, v1)) / (v1 - v0),
-    )
-    _require(scale > _EPSILON, "Cannot split a degenerate surface domain")
-    uv_tolerance = tolerance / scale
+    uv_tolerance = _surface_uv_tolerance(surface, tolerance)
 
     sources = []
     original_loops = _boundary_loops(brep, face_index, uv_tolerance, sources)
@@ -1320,34 +1364,13 @@ def split_brep_face_by_curves(
 
     result = copy.deepcopy(brep)
     pieces = []
-    new_wires = []
-
-    for region in regions:
-        wires = []
-
-        for loop in region:
-            refs = []
-
-            for run in loop:
-                refs.append(
-                    _add_run_edge(
-                        result,
-                        pieces,
-                        brep,
-                        face.surface_index,
-                        sources,
-                        run,
-                        tolerance,
-                    )
-                )
-
-            wires.append(BRepRef(result.add_wire(refs), _FORWARD))
-
-        new_wires.append(wires)
-
+    new_wires = _region_wires(
+        result, pieces, brep, face.surface_index, sources, regions, tolerance
+    )
     _replace_wires(result, brep, sources, pieces)
     _add_faces(result, face, face_index, new_wires)
     _validate(result, brep, tolerance)
+
     return result
 
 

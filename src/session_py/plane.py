@@ -233,11 +233,8 @@ class Plane:
         return Plane.from_frame(points[0], x_axis, y_axis, z_axis)
 
     @staticmethod
-    def from_points_pca(points: list[Point]) -> Plane:
-        """Construct the least-squares plane through points by power-iteration PCA."""
-
-        if len(points) < 3:
-            return Plane()
+    def _pca_centroid(points: list[Point]) -> Point:
+        """Mean of the points."""
 
         n = float(len(points))
         cx = 0.0
@@ -253,6 +250,12 @@ class Plane:
         cy /= n
         cz /= n
 
+        return Point(cx, cy, cz)
+
+    @staticmethod
+    def _pca_covariance(points: list[Point], centroid: Point) -> list[list[float]]:
+        """Covariance matrix of the points about their centroid."""
+
         cxx = 0.0
         cyy = 0.0
         czz = 0.0
@@ -261,9 +264,9 @@ class Plane:
         cyz = 0.0
 
         for p in points:
-            dx = p[0] - cx
-            dy = p[1] - cy
-            dz = p[2] - cz
+            dx = p[0] - centroid[0]
+            dy = p[1] - centroid[1]
+            dz = p[2] - centroid[2]
 
             cxx += dx * dx
             cyy += dy * dy
@@ -272,9 +275,14 @@ class Plane:
             cxz += dx * dz
             cyz += dy * dz
 
+        return [[cxx, cxy, cxz], [cxy, cyy, cyz], [cxz, cyz, czz]]
+
+    @staticmethod
+    def _pca_eigenvectors(cov: list[list[float]]) -> list[list[float]]:
+        """Eigenvectors of a covariance matrix by power iteration with deflation, largest eigenvalue first."""
+
         eigvec = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
         eigval = [0.0, 0.0, 0.0]
-        cov = [[cxx, cxy, cxz], [cxy, cyy, cyz], [cxz, cyz, czz]]
 
         for e in range(3):
             vx = 1.0 if e == 0 else 0.0
@@ -310,6 +318,18 @@ class Plane:
                 for j in range(3):
                     cov[i][j] -= eigval[e] * eigvec[e][i] * eigvec[e][j]
 
+        return eigvec
+
+    @staticmethod
+    def from_points_pca(points: list[Point]) -> Plane:
+        """Construct the least-squares plane through points by power-iteration PCA."""
+
+        if len(points) < 3:
+            return Plane()
+
+        centroid = Plane._pca_centroid(points)
+        eigvec = Plane._pca_eigenvectors(Plane._pca_covariance(points, centroid))
+
         x_axis = Vector(eigvec[0][0], eigvec[0][1], eigvec[0][2])
         y_axis = Vector(eigvec[1][0], eigvec[1][1], eigvec[1][2])
 
@@ -320,7 +340,7 @@ class Plane:
         y_axis.normalize_self()
         x_axis.normalize_self()
 
-        return Plane.from_frame(Point(cx, cy, cz), x_axis, y_axis, z_axis)
+        return Plane.from_frame(centroid, x_axis, y_axis, z_axis)
 
     @staticmethod
     def from_two_points(point1: Point, point2: Point) -> Plane:

@@ -10,6 +10,7 @@ from .vector import Vector
 if TYPE_CHECKING:
     from pathlib import Path
     from .proto import pointcloud_pb2
+    from .spatial_octree import SpatialOctree
     from .xform import Xform
 
 
@@ -364,17 +365,8 @@ class PointCloud:
     # ═══════════════════════════════════════════════════════════════════════════
     # LOD octree
     # ═══════════════════════════════════════════════════════════════════════════
-    def build_lod(self, root_spacing: float, leaf_capacity: int) -> None:
-        """Build the octree and permute the arrays into octree order, so a node is one contiguous range."""
-
-        from .spatial_octree import SpatialOctree
-
-        tree = SpatialOctree.from_coords(self._coords, root_spacing, leaf_capacity)
-        order = tree.order()
-
-        if not self._point_ids:
-            for i in range(self.point_count()):
-                self._point_ids.append(i)
+    def _lod_reorder(self, order: list[int]) -> None:
+        """Permute points, ids, colors and normals into the given order."""
 
         has_colors = len(self._colors) == len(order) * 4
         has_normals = len(self._normals) == len(order) * 3
@@ -407,6 +399,9 @@ class PointCloud:
         if has_normals:
             self._normals = normals
 
+    def _lod_store_nodes(self, tree: SpatialOctree) -> None:
+        """Replace the LOD node arrays with the nodes of tree."""
+
         self._lod_min = []
         self._lod_size = []
         self._lod_spacing = []
@@ -431,6 +426,20 @@ class PointCloud:
 
             for k in range(8):
                 self._lod_children.append(kids[k] if k < len(kids) else -1)
+
+    def build_lod(self, root_spacing: float, leaf_capacity: int) -> None:
+        """Build the octree and permute the arrays into octree order, so a node is one contiguous range."""
+
+        from .spatial_octree import SpatialOctree
+
+        tree = SpatialOctree.from_coords(self._coords, root_spacing, leaf_capacity)
+
+        if not self._point_ids:
+            for i in range(self.point_count()):
+                self._point_ids.append(i)
+
+        self._lod_reorder(tree.order())
+        self._lod_store_nodes(tree)
 
     def has_lod(self) -> bool:
         """Return whether an octree has been built."""

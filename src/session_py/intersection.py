@@ -62,11 +62,13 @@ def _load_rows_3x3(rows, ds, i):
     return w
 
 
-def _swap_columns(w, c0, c1):
-    """Swap two coefficient columns in all rows of the 3x4 work array."""
+def _swap_columns(w, slot, c0, c1):
+    """Swap two coefficient columns in all rows of the 3x4 work array, and the unknowns they solve for."""
 
     for r in range(3):
         w[4 * r + c0], w[4 * r + c1] = w[4 * r + c1], w[4 * r + c0]
+
+    slot[c0], slot[c1] = slot[c1], slot[c0]
 
 
 def _eliminate_first_column(w):
@@ -168,8 +170,7 @@ def _solve_3x3(row0, row1, row2, d0, d1, d2):
     w = _load_rows_3x3(rows, [d0, d1, d2], i)
 
     if j != 0:
-        _swap_columns(w, 0, j)
-        slot[0], slot[j] = slot[j], slot[0]
+        _swap_columns(w, slot, 0, j)
 
     _eliminate_first_column(w)
     temp, i, j = _max_pivot_2x2(w)
@@ -180,8 +181,7 @@ def _solve_3x3(row0, row1, row2, d0, d1, d2):
     maxpiv, minpiv = _update_pivot_range(abs(temp), maxpiv, minpiv)
 
     if j != 0:
-        _swap_columns(w, 1, 2)
-        slot[1], slot[2] = slot[2], slot[1]
+        _swap_columns(w, slot, 1, 2)
 
     pivot = 8 if i else 4
     other = 4 if i else 8
@@ -887,55 +887,48 @@ def _curve_refine_intersection_newton(curve, plane, t, tolerance):
     return t
 
 
-def _curve_plane_clip(curve, plane, tolerance, ta, tb, depth, results):
-    """Bezier-clipping recursion of the curve-plane distance on [ta, tb]."""
+def _curve_plane_refine(curve, plane, tolerance, ta, tb, results):
+    """Newton refinement of the plane crossing in a tiny interval [ta, tb], kept when it stays inside and on the plane."""
 
-    if depth > 50:
-        tm = (ta + tb) * 0.5
-        pm = curve.point_at(tm)
-        dist = _curve_signed_distance_to_plane(pm, plane)
+    tm = (ta + tb) * 0.5
+    pm = curve.point_at(tm)
+    dist = _curve_signed_distance_to_plane(pm, plane)
 
-        if abs(dist) < tolerance:
-            results.append(tm)
-
+    if abs(dist) >= tolerance:
         return
 
-    if abs(tb - ta) < tolerance * 0.01:
-        tm = (ta + tb) * 0.5
-        pm = curve.point_at(tm)
-        dist = _curve_signed_distance_to_plane(pm, plane)
+    t = tm
 
-        if abs(dist) < tolerance:
+    for _ in range(10):
+        pt = curve.point_at(t)
+        f = _curve_signed_distance_to_plane(pt, plane)
+        df = _curve_plane_slope(curve, plane, t)
+
+        if abs(df) < 1e-12:
+            break
+
+        dt = -f / df
+        t += dt
+
+        if abs(dt) < tolerance * 0.01:
+            break
+
+        if t < ta or t > tb:
             t = tm
+            break
 
-            for _ in range(10):
-                pt = curve.point_at(t)
-                f = _curve_signed_distance_to_plane(pt, plane)
-                df = _curve_plane_slope(curve, plane, t)
+    pt_final = curve.point_at(t)
 
-                if abs(df) < 1e-12:
-                    break
+    if (
+        abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance
+        and t >= ta
+        and t <= tb
+    ):
+        results.append(t)
 
-                dt = -f / df
-                t += dt
 
-                if abs(dt) < tolerance * 0.01:
-                    break
-
-                if t < ta or t > tb:
-                    t = tm
-                    break
-
-            pt_final = curve.point_at(t)
-
-            if (
-                abs(_curve_signed_distance_to_plane(pt_final, plane)) < tolerance
-                and t >= ta
-                and t <= tb
-            ):
-                results.append(t)
-
-        return
+def _curve_plane_clip_range(curve, plane, tolerance, ta, tb):
+    """Part of [ta, tb] where the sampled distance crosses the plane, the whole interval when unclear; None when it misses."""
 
     num_samples = min(curve.order() + 1, 10)
     distances = []
@@ -952,7 +945,7 @@ def _curve_plane_clip(curve, plane, tolerance, ta, tb, depth, results):
     d_max = max(distances)
 
     if d_min > tolerance or d_max < -tolerance:
-        return
+        return None
 
     t_min = ta
     t_max = tb
@@ -974,6 +967,34 @@ def _curve_plane_clip(curve, plane, tolerance, ta, tb, depth, results):
 
     t_min = max(ta, t_min)
     t_max = min(tb, t_max)
+
+    return t_min, t_max
+
+
+def _curve_plane_clip(curve, plane, tolerance, ta, tb, depth, results):
+    """Bezier-clipping recursion of the curve-plane distance on [ta, tb]."""
+
+    if depth > 50:
+        tm = (ta + tb) * 0.5
+        pm = curve.point_at(tm)
+        dist = _curve_signed_distance_to_plane(pm, plane)
+
+        if abs(dist) < tolerance:
+            results.append(tm)
+
+        return
+
+    if abs(tb - ta) < tolerance * 0.01:
+        _curve_plane_refine(curve, plane, tolerance, ta, tb, results)
+
+        return
+
+    clip_range = _curve_plane_clip_range(curve, plane, tolerance, ta, tb)
+
+    if clip_range is None:
+        return
+
+    t_min, t_max = clip_range
     reduction = (t_max - t_min) / (tb - ta)
 
     if reduction > 0.8 or (t_max - t_min) < tolerance * 0.1:
@@ -1665,6 +1686,27 @@ def _turn_step(field, tu, tv, prev_tu, prev_tv):
     return field.step
 
 
+def _march_tangent(field, u, v, direction, prev_tu, prev_tv):
+    """Midpoint tangent and step at (u, v) along direction, the previous tangent reused where the field has none; None when neither exists."""
+
+    tangent = field.tangent(u, v, direction)
+
+    if tangent is None:
+        if math.hypot(prev_tu, prev_tv) < 1e-14:
+            return None
+
+        tangent = (prev_tu, prev_tv)
+
+    tu, tv = tangent
+    local_step = _turn_step(field, tu, tv, prev_tu, prev_tv)
+    mid = field.tangent(u + local_step * 0.5 * tu, v + local_step * 0.5 * tv, direction)
+
+    if mid is not None:
+        tu, tv = mid
+
+    return tu, tv, local_step
+
+
 def _surface_plane_march(field, su, sv, direction, seeds, out):
     """March the zero set from (su, sv) in direction; true when it closes on its start."""
 
@@ -1677,23 +1719,12 @@ def _surface_plane_march(field, su, sv, direction, seeds, out):
     dist_traveled = 0.0
 
     for _ in range(field.max_steps):
-        tangent = field.tangent(u, v, direction)
+        tangent = _march_tangent(field, u, v, direction, prev_tu, prev_tv)
 
         if tangent is None:
-            if math.hypot(prev_tu, prev_tv) < 1e-14:
-                break
+            break
 
-            tangent = (prev_tu, prev_tv)
-
-        tu, tv = tangent
-        local_step = _turn_step(field, tu, tv, prev_tu, prev_tv)
-        mid = field.tangent(
-            u + local_step * 0.5 * tu, v + local_step * 0.5 * tv, direction
-        )
-
-        if mid is not None:
-            tu, tv = mid
-
+        tu, tv, local_step = tangent
         prev_tu = tu
         prev_tv = tv
 
@@ -2082,16 +2113,10 @@ def _fitted_max_deviation(cand, pts, chords, iterations):
     return max_dev
 
 
-def _fit_planar_freeform(all_pts, is_loop, plane, fit_tol):
-    """Cubic fitted to the points in the plane's frame, CVs doubled until within fit_tol, lifted back to 3D."""
+def _fit_freeform_2d(pts_2d, chords, is_loop, fit_tol):
+    """Best cubic fitted to 2D points, CVs doubled until within fit_tol; invalid when no fit succeeds."""
 
-    m = len(all_pts)
-
-    if m < 4:
-        return NurbsCurve()
-
-    pts_2d = _plane_points_2d(all_pts, plane)
-    chords = _chord_parameters(pts_2d, is_loop)
+    m = len(pts_2d)
     target_cvs = max(8, int(_total_turning(pts_2d) / 0.5) + 6)
     max_cvs = min(m - 1, 128)
     crv_2d = NurbsCurve()
@@ -2117,16 +2142,11 @@ def _fit_planar_freeform(all_pts, is_loop, plane, fit_tol):
 
         target_cvs = min(target_cvs * 2, max_cvs + 1)
 
-    if not crv_2d.is_valid():
-        if is_loop:
-            crv_2d = NurbsCurve.create_interpolated(
-                pts_2d, CurveNurbsKnotStyle.ChordPeriodic
-            )
-        else:
-            crv_2d = NurbsCurve.create_interpolated(pts_2d)
+    return crv_2d
 
-    if not crv_2d.is_valid():
-        return NurbsCurve()
+
+def _lift_to_plane(crv_2d, plane):
+    """Move the CVs of a curve drawn in the plane's 2D frame to 3D, in place."""
 
     ax = plane.x_axis
     ay = plane.y_axis
@@ -2144,6 +2164,32 @@ def _fit_planar_freeform(all_pts, is_loop, plane, fit_tol):
                 po[2] + cx * ax[2] + cy * ay[2],
             ),
         )
+
+
+def _fit_planar_freeform(all_pts, is_loop, plane, fit_tol):
+    """Cubic fitted to the points in the plane's frame, CVs doubled until within fit_tol, lifted back to 3D."""
+
+    m = len(all_pts)
+
+    if m < 4:
+        return NurbsCurve()
+
+    pts_2d = _plane_points_2d(all_pts, plane)
+    chords = _chord_parameters(pts_2d, is_loop)
+    crv_2d = _fit_freeform_2d(pts_2d, chords, is_loop, fit_tol)
+
+    if not crv_2d.is_valid():
+        if is_loop:
+            crv_2d = NurbsCurve.create_interpolated(
+                pts_2d, CurveNurbsKnotStyle.ChordPeriodic
+            )
+        else:
+            crv_2d = NurbsCurve.create_interpolated(pts_2d)
+
+    if not crv_2d.is_valid():
+        return NurbsCurve()
+
+    _lift_to_plane(crv_2d, plane)
 
     return crv_2d
 
@@ -2244,8 +2290,8 @@ def _fit_plane_circle(all_pts, plane):
     )
 
 
-def _fit_plane_conic(all_pts, po, ax, ay):
-    """Least-squares conic A x^2 + B xy + C y^2 + D x + E y = 1 through the points in the plane's frame, None when singular."""
+def _conic_normal_equations(all_pts, po, ax, ay):
+    """Augmented normal equations [AtA | Atb] of the conic fit through the points in the frame (po, ax, ay)."""
 
     ata = [[0.0] * 5 for _ in range(5)]
     atb = [0.0] * 5
@@ -2267,6 +2313,12 @@ def _fit_plane_conic(all_pts, po, ax, ay):
             m[r][c] = ata[r][c]
 
         m[r][5] = atb[r]
+
+    return m
+
+
+def _solve_augmented_5x5(m):
+    """Solve an augmented 5x6 system by Gaussian elimination with partial pivoting; None when singular."""
 
     for col in range(5):
         pivot = col
@@ -2299,6 +2351,32 @@ def _fit_plane_conic(all_pts, po, ax, ay):
         coef[i] = s / m[i][i]
 
     return coef
+
+
+def _fit_plane_conic(all_pts, po, ax, ay):
+    """Least-squares conic A x^2 + B xy + C y^2 + D x + E y = 1 through the points in the plane's frame, None when singular."""
+
+    return _solve_augmented_5x5(_conic_normal_equations(all_pts, po, ax, ay))
+
+
+def _conic_max_deviation(all_pts, po, ax, ay, coef):
+    """Largest residual of the conic coef over the points in the frame (po, ax, ay)."""
+
+    ca = coef[0]
+    cb = coef[1]
+    cc = coef[2]
+    cd = coef[3]
+    ce = coef[4]
+    max_conic_dev = 0.0
+
+    for p in all_pts:
+        x, y = _plane_coords_2d(p, po, ax, ay)
+        max_conic_dev = max(
+            max_conic_dev,
+            abs(ca * x * x + cb * x * y + cc * y * y + cd * x + ce * y - 1.0),
+        )
+
+    return max_conic_dev
 
 
 def _plane_ellipse_deviation(all_pts, po, ax, ay, cx, cy, semi_a, semi_b, cos_t, sin_t):
@@ -2339,14 +2417,7 @@ def _fit_plane_ellipse(all_pts, plane):
     if disc >= -1e-10 or abs(ca) <= 1e-14:
         return NurbsCurve()
 
-    max_conic_dev = 0.0
-
-    for p in all_pts:
-        x, y = _plane_coords_2d(p, po, ax, ay)
-        max_conic_dev = max(
-            max_conic_dev,
-            abs(ca * x * x + cb * x * y + cc * y * y + cd * x + ce * y - 1.0),
-        )
+    max_conic_dev = _conic_max_deviation(all_pts, po, ax, ay, coef)
 
     if max_conic_dev / max(max(abs(ca), abs(cc)), 1e-10) >= 0.01:
         return NurbsCurve()
@@ -2942,6 +3013,33 @@ def _exact_ellipse(cx, cy, cz, ea, eb, semi_a, semi_b):
     return crv
 
 
+def _jacobi_rotate(a, v, p, q):
+    """Jacobi rotation of the symmetric a that zeroes a[p][q], accumulated into the eigenvector columns of v."""
+
+    theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q])
+    t = (1.0 if theta >= 0 else -1.0) / (abs(theta) + math.sqrt(theta * theta + 1.0))
+    c = 1.0 / math.sqrt(t * t + 1.0)
+    s = t * c
+
+    for k in range(3):
+        akp = a[k][p]
+        akq = a[k][q]
+        a[k][p] = c * akp - s * akq
+        a[k][q] = s * akp + c * akq
+
+    for k in range(3):
+        apk = a[p][k]
+        aqk = a[q][k]
+        a[p][k] = c * apk - s * aqk
+        a[q][k] = s * apk + c * aqk
+
+    for k in range(3):
+        vkp = v[k][p]
+        vkq = v[k][q]
+        v[k][p] = c * vkp - s * vkq
+        v[k][q] = s * vkp + c * vkq
+
+
 def _jacobi_eig3(m):
     """Eigenvalues/vectors of a symmetric 3x3 matrix (cyclic Jacobi)."""
 
@@ -2963,30 +3061,7 @@ def _jacobi_eig3(m):
             if abs(a[p][q]) < 1e-300:
                 continue
 
-            theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q])
-            t = (1.0 if theta >= 0 else -1.0) / (
-                abs(theta) + math.sqrt(theta * theta + 1.0)
-            )
-            c = 1.0 / math.sqrt(t * t + 1.0)
-            s = t * c
-
-            for k in range(3):
-                akp = a[k][p]
-                akq = a[k][q]
-                a[k][p] = c * akp - s * akq
-                a[k][q] = s * akp + c * akq
-
-            for k in range(3):
-                apk = a[p][k]
-                aqk = a[q][k]
-                a[p][k] = c * apk - s * aqk
-                a[q][k] = s * apk + c * aqk
-
-            for k in range(3):
-                vkp = v[k][p]
-                vkq = v[k][q]
-                v[k][p] = c * vkp - s * vkq
-                v[k][q] = s * vkp + c * vkq
+            _jacobi_rotate(a, v, p, q)
 
     eigvals = [a[0][0], a[1][1], a[2][2]]
     eigvecs = []
@@ -5830,6 +5905,31 @@ def _ssi_cone_sphere(cone, sph, out):
     return True
 
 
+def _parallel_cylinder_feet(p1, w1, r1, p2, r2, d, ktol):
+    """Points where the cross-section circles of two parallel cylinders at axis distance d meet, one when they touch."""
+
+    off = _ssi_dot([p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]], w1)
+    p2p = [p2[0] - off * w1[0], p2[1] - off * w1[1], p2[2] - off * w1[2]]
+    xdir = _ssi_unit([p2p[0] - p1[0], p2p[1] - p1[1], p2p[2] - p1[2]])
+    ydir = _ssi_unit(_ssi_cross(w1, xdir))
+    aa = (r1 * r1 - r2 * r2 + d * d) / (2.0 * d)
+    h = math.sqrt(max(0.0, r1 * r1 - aa * aa))
+    foot = [p1[0] + aa * xdir[0], p1[1] + aa * xdir[1], p1[2] + aa * xdir[2]]
+    feet = []
+
+    if h <= ktol:
+        feet.append(foot)
+    else:
+        feet.append(
+            [foot[0] + h * ydir[0], foot[1] + h * ydir[1], foot[2] + h * ydir[2]]
+        )
+        feet.append(
+            [foot[0] - h * ydir[0], foot[1] - h * ydir[1], foot[2] - h * ydir[2]]
+        )
+
+    return feet
+
+
 def _ssi_parallel_cylinders(sa, ra, sb, rb, out):
     """Parallel cylinders: shared ruling lines, false when coaxial with equal radii."""
 
@@ -5850,13 +5950,6 @@ def _ssi_parallel_cylinders(sa, ra, sb, rb, out):
     if d > r1 + r2 + ktol or d < abs(r1 - r2) - ktol:
         return True
 
-    off = _ssi_dot([p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]], w1)
-    p2p = [p2[0] - off * w1[0], p2[1] - off * w1[1], p2[2] - off * w1[2]]
-    xdir = _ssi_unit([p2p[0] - p1[0], p2p[1] - p1[1], p2p[2] - p1[2]])
-    ydir = _ssi_unit(_ssi_cross(w1, xdir))
-    aa = (r1 * r1 - r2 * r2 + d * d) / (2.0 * d)
-    h = math.sqrt(max(0.0, r1 * r1 - aa * aa))
-    foot = [p1[0] + aa * xdir[0], p1[1] + aa * xdir[1], p1[2] + aa * xdir[2]]
     s0a, s1a = _cyl_span(sa, p1, w1)
     s0b, s1b = _cyl_span(sb, p1, w1)
     slo = max(s0a, s0b)
@@ -5865,19 +5958,7 @@ def _ssi_parallel_cylinders(sa, ra, sb, rb, out):
     if shi - slo <= ktol:
         return True
 
-    feet = []
-
-    if h <= ktol:
-        feet.append(foot)
-    else:
-        feet.append(
-            [foot[0] + h * ydir[0], foot[1] + h * ydir[1], foot[2] + h * ydir[2]]
-        )
-        feet.append(
-            [foot[0] - h * ydir[0], foot[1] - h * ydir[1], foot[2] - h * ydir[2]]
-        )
-
-    for bp in feet:
+    for bp in _parallel_cylinder_feet(p1, w1, r1, p2, r2, d, ktol):
         line = _axis_segment(bp, w1, slo, shi)
         line.set_domain(0.0, 1.0)
         out.append(line)
@@ -6414,6 +6495,33 @@ def _analytic_ssi(a, b, tolerance):
 # ═══════════════════════════════════════════════════════════════════════════
 # NURBS surfaces
 # ═══════════════════════════════════════════════════════════════════════════
+def _is_duplicate_curve(
+    crv: NurbsCurve, curves: list[NurbsCurve], tolerance: float
+) -> bool:
+    """Whether crv runs through a curve of curves at a quarter, half and three quarters of its domain within tolerance."""
+
+    ct0, ct1 = crv.domain()
+
+    for existing in curves:
+        et0, et1 = existing.domain()
+        all_close = True
+
+        for f in [0.25, 0.5, 0.75]:
+            cp = crv.point_at(ct0 + (ct1 - ct0) * f)
+            ep = existing.point_at(et0 + (et1 - et0) * f)
+            em = existing.point_at((et0 + et1) * 0.5)
+            d = min(cp.distance(ep), cp.distance(em))
+
+            if d > tolerance:
+                all_close = False
+                break
+
+        if all_close:
+            return True
+
+    return False
+
+
 def surface_plane(
     surface: "NurbsSurface", plane: Plane, tolerance: float | None = None
 ) -> list[NurbsCurve]:
@@ -6435,7 +6543,11 @@ def surface_plane(
     for trace in traced.traces:
         uv_trace = trace.uv_trace
         is_loop = trace.is_loop
-        all_pts = [surface.point_at(uv[0], uv[1]) for uv in uv_trace]
+        all_pts = []
+
+        for uv in uv_trace:
+            all_pts.append(surface.point_at(uv[0], uv[1]))
+
         crv = _surface_plane_fit_3d(
             all_pts, is_loop, plane, step, uv_to_3d, uv_to_3d_min
         )
@@ -6443,29 +6555,9 @@ def surface_plane(
         if not crv.is_valid():
             continue
 
-        ct0, ct1 = crv.domain()
         dup_tol = step * uv_to_3d * 3.0
-        dup = False
 
-        for existing in result:
-            et0, et1 = existing.domain()
-            all_close = True
-
-            for f in [0.25, 0.5, 0.75]:
-                cp = crv.point_at(ct0 + (ct1 - ct0) * f)
-                ep = existing.point_at(et0 + (et1 - et0) * f)
-                em = existing.point_at((et0 + et1) * 0.5)
-                d = min(cp.distance(ep), cp.distance(em))
-
-                if d > dup_tol:
-                    all_close = False
-                    break
-
-            if all_close:
-                dup = True
-                break
-
-        if not dup:
+        if not _is_duplicate_curve(crv, result, dup_tol):
             result.append(crv)
 
     return result
@@ -8673,6 +8765,47 @@ def offset_in_3d(polyline: Polyline, plane: Plane, offset: float) -> bool:
     return True
 
 
+def _polyline_boolean_2d(
+    a2d: Polyline, b2d: Polyline, intersection_type: int
+) -> list[Polyline]:
+    """Boolean of two flat polylines, intersection_type 0 intersect, 1 union, 2 difference, 3 xor; empty on failure."""
+
+    if 0 <= intersection_type <= 2:
+        return BooleanPolyline.compute(a2d, b2d, intersection_type)
+
+    if intersection_type != 3:
+        return []
+
+    u = BooleanPolyline.compute(a2d, b2d, 1)
+    inter = BooleanPolyline.compute(a2d, b2d, 0)
+
+    if not u:
+        return []
+
+    if not inter:
+        return u
+
+    return BooleanPolyline.compute(u[0], inter[0], 2)
+
+
+def _collapse_close_points(
+    ring: list[tuple[float, float]], eps: float
+) -> list[tuple[float, float]]:
+    """Ring without consecutive points closer than eps, the closing point included."""
+
+    eps_sq = eps * eps
+    collapsed = []
+
+    for p in ring:
+        if not collapsed or _distance_sq_2d(p, collapsed[-1]) >= eps_sq:
+            collapsed.append(p)
+
+    if len(collapsed) >= 2 and _distance_sq_2d(collapsed[-1], collapsed[0]) < eps_sq:
+        collapsed.pop()
+
+    return collapsed
+
+
 def polyline_boolean_2d_in_plane(
     polyline0: Polyline,
     polyline1: Polyline,
@@ -8699,19 +8832,7 @@ def polyline_boolean_2d_in_plane(
     b2d = _polyline_to_3d(
         _polyline_to_2d(polyline1, origin, xax, yax), flat_origin, flat_x, flat_y
     )
-
-    if 0 <= intersection_type <= 2:
-        result_2d = BooleanPolyline.compute(a2d, b2d, intersection_type)
-    elif intersection_type == 3:
-        u = BooleanPolyline.compute(a2d, b2d, 1)
-        inter = BooleanPolyline.compute(a2d, b2d, 0)
-
-        if not u:
-            return None
-
-        result_2d = u if not inter else BooleanPolyline.compute(u[0], inter[0], 2)
-    else:
-        return None
+    result_2d = _polyline_boolean_2d(a2d, b2d, intersection_type)
 
     if not result_2d:
         return None
@@ -8722,20 +8843,7 @@ def polyline_boolean_2d_in_plane(
         return None
 
     if collapse_eps > 0.0:
-        eps_sq = collapse_eps * collapse_eps
-        collapsed = []
-
-        for p in ring:
-            if not collapsed or _distance_sq_2d(p, collapsed[-1]) >= eps_sq:
-                collapsed.append(p)
-
-        if (
-            len(collapsed) >= 2
-            and _distance_sq_2d(collapsed[-1], collapsed[0]) < eps_sq
-        ):
-            collapsed.pop()
-
-        ring = collapsed
+        ring = _collapse_close_points(ring, collapse_eps)
 
         if len(ring) < 3:
             return None
@@ -8880,15 +8988,11 @@ def closed_and_open_paths_2d(
 # ═══════════════════════════════════════════════════════════════════════════
 # Elements
 # ═══════════════════════════════════════════════════════════════════════════
-def face_to_face(
-    adjacency: list[int],
-    polylines: list[list[Polyline]],
-    planes: list[list[Plane]],
-    coplanar_tolerance: float = 5.0,
-) -> list[tuple[int, int, int, int, int, Polyline]]:
-    """Face-to-face contacts (a, b, face_a, face_b, type, polyline) with type 0 side-side, 1 side-top, 2 top-top."""
+def _padded_face_boxes(
+    polylines: list[list[Polyline]], tolerance: float
+) -> list[list[list[float]]]:
+    """Bounding box (min xyz, max xyz) of every face, padded by tolerance."""
 
-    results = []
     face_boxes = []
 
     for faces in polylines:
@@ -8909,13 +9013,50 @@ def face_to_face(
                 k += 3
 
             for k in range(3):
-                bx[k] -= coplanar_tolerance
-                bx[k + 3] += coplanar_tolerance
+                bx[k] -= tolerance
+                bx[k + 3] += tolerance
 
             boxes.append(bx)
 
         face_boxes.append(boxes)
 
+    return face_boxes
+
+
+def _coplanar_face_overlap(
+    face_a: Polyline, za: Vector, face_b: Polyline
+) -> Polyline | None:
+    """Closed overlap of two coplanar faces in the frame of face_a's first edge and normal za, None when they only touch."""
+
+    pts_i = face_a.get_points()
+    edge = Vector(
+        pts_i[1][0] - pts_i[0][0],
+        pts_i[1][1] - pts_i[0][1],
+        pts_i[1][2] - pts_i[0][2],
+    )
+    edge.normalize_self()
+    zax = za
+    yax = zax.cross(edge)
+    yax.normalize_self()
+    pln = Plane.from_frame(pts_i[0], edge, yax, zax)
+    bools = Polyline.boolean_op(face_a, face_b, 0, plane=pln)
+
+    if not bools or bools[0].point_count() < 3:
+        return None
+
+    return bools[0] if bools[0].is_closed() else bools[0].closed()
+
+
+def face_to_face(
+    adjacency: list[int],
+    polylines: list[list[Polyline]],
+    planes: list[list[Plane]],
+    coplanar_tolerance: float = 5.0,
+) -> list[tuple[int, int, int, int, int, Polyline]]:
+    """Face-to-face contacts (a, b, face_a, face_b, type, polyline) with type 0 side-side, 1 side-top, 2 top-top."""
+
+    results = []
+    face_boxes = _padded_face_boxes(polylines, coplanar_tolerance)
     idx = 0
 
     while idx + 1 < len(adjacency):
@@ -8952,26 +9093,12 @@ def face_to_face(
                 ):
                     continue
 
-                pts_i = polylines[a][i].get_points()
-                edge = Vector(
-                    pts_i[1][0] - pts_i[0][0],
-                    pts_i[1][1] - pts_i[0][1],
-                    pts_i[1][2] - pts_i[0][2],
-                )
-                edge.normalize_self()
-                zax = za
-                yax = zax.cross(edge)
-                yax.normalize_self()
-                pln = Plane.from_frame(pts_i[0], edge, yax, zax)
-                bools = Polyline.boolean_op(
-                    polylines[a][i], polylines[b][j], 0, plane=pln
-                )
+                jpl = _coplanar_face_overlap(polylines[a][i], za, polylines[b][j])
 
-                if not bools or bools[0].point_count() < 3:
+                if jpl is None:
                     continue
 
                 typ = (0 if i > 1 else 1) + (0 if j > 1 else 1)
-                jpl = bools[0] if bools[0].is_closed() else bools[0].closed()
                 results.append((a, b, i, j, typ, jpl))
                 found = True
                 break
@@ -9029,153 +9156,105 @@ def adjacency_search(elements: list[Element], inflate: float = 5.0) -> list[int]
     return adjacency
 
 
-def line_line_classified(
-    s0: Line,
-    s1: Line,
-    n_segs_0: int,
-    n_segs_1: int,
-    cur_seg_0: int,
-    cur_seg_1: int,
-    above_closer_to_edge: float,
-) -> tuple | None:
-    """Classifies two segments as end-to-end, side-to-end or cross with closest points and directions."""
+def _line_line_frame(s0: Line, s1: Line) -> tuple:
+    """Directions of two segments, their unit normal, and whether they are parallel within one degree."""
 
-    DIST_SQ = 1e-6
     EPS_PAR = 1.0
-
     v0 = s0.to_vector()
     v1 = s1.to_vector()
     normal = v0.cross(v1)
-    nmag2 = normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]
     ang = v0.angle(v1, False, True)
-    is_parallel = (nmag2 < 1e-24) or ((90.0 - abs(ang - 90.0)) < EPS_PAR)
+    is_parallel = (
+        normal.magnitude_squared() < 1e-24 or (90.0 - abs(ang - 90.0)) < EPS_PAR
+    )
 
     if is_parallel:
-        tmp_origin = s0.start()
-        tmp_normal = v0
-        pl_tmp = Plane.from_point_normal(tmp_origin, tmp_normal)
-        normal = pl_tmp.base1()
+        normal = Plane.from_point_normal(s0.start(), v0).base1()
 
     normal.normalize_self()
 
-    def eq(a, b):
-        dx = a[0] - b[0]
-        dy = a[1] - b[1]
-        dz = a[2] - b[2]
+    return v0, v1, normal, is_parallel
 
-        return dx * dx + dy * dy + dz * dz < DIST_SQ
 
-    def endcase(pp, dv0, dv1):
-        p0 = pp
-        p1 = pp
-        v0 = dv0
-        v0.normalize_self()
-        v1 = dv1
-        v1.normalize_self()
+def _line_line_shared_end(s0: Line, s1: Line) -> tuple | None:
+    """End shared by two segments as p0 and p1, with unit directions leaving it along each segment."""
 
-        return (p0, p1, v0, v1, normal, 0, 0, is_parallel)
+    DIST_SQ = 1e-6
+    ends0 = (s0.start(), s0.end())
+    ends1 = (s1.start(), s1.end())
 
-    if eq(s0.start(), s1.start()):
-        return endcase(s0.start(), s0.end() - s0.start(), s1.end() - s1.start())
+    for i in range(2):
+        for j in range(2):
+            if (ends0[i] - ends1[j]).magnitude_squared() < DIST_SQ:
+                v0 = ends0[1 - i] - ends0[i]
+                v1 = ends1[1 - j] - ends1[j]
+                v0.normalize_self()
+                v1.normalize_self()
 
-    if eq(s0.start(), s1.end()):
-        return endcase(s0.start(), s0.end() - s0.start(), s1.start() - s1.end())
+                return ends0[i], ends0[i], v0, v1
 
-    if eq(s0.end(), s1.start()):
-        return endcase(s0.end(), s0.start() - s0.end(), s1.end() - s1.start())
+    return None
 
-    if eq(s0.end(), s1.end()):
-        return endcase(s0.end(), s0.start() - s0.end(), s1.start() - s1.end())
 
-    if is_parallel:
-        v0.normalize_self()
-        v1.normalize_self()
+def _line_line_parallel(s0: Line, s1: Line, v0: Vector, v1: Vector) -> tuple:
+    """Closest points of two parallel segments at the middle of their overlap, each unit direction flipped to leave its nearer end."""
 
-        def signed_t(src, unit, q):
-            return (
-                (q[0] - src[0]) * unit[0]
-                + (q[1] - src[1]) * unit[1]
-                + (q[2] - src[2]) * unit[2]
-            )
+    pts = []
 
-        def proj_onto_line(L, q):
-            return L.closest_point(q, False)[1]
+    for q in (s0.start(), s0.end(), s1.start(), s1.end()):
+        q0 = s0.closest_point(q, False)[1]
+        q1 = s1.closest_point(q, False)[1]
+        pts.append(((q0 - s0.start()).dot(v0), (q1 - s1.start()).dot(v1)))
 
-        pts = []
+    pts.sort(key=lambda a: a[0])
+    seg0_a = Point(
+        s0.start()[0] + pts[1][0] * v0[0],
+        s0.start()[1] + pts[1][0] * v0[1],
+        s0.start()[2] + pts[1][0] * v0[2],
+    )
+    seg0_b = Point(
+        s0.start()[0] + pts[2][0] * v0[0],
+        s0.start()[1] + pts[2][0] * v0[1],
+        s0.start()[2] + pts[2][0] * v0[2],
+    )
+    seg1_a = Point(
+        s1.start()[0] + pts[1][1] * v1[0],
+        s1.start()[1] + pts[1][1] * v1[1],
+        s1.start()[2] + pts[1][1] * v1[2],
+    )
+    seg1_b = Point(
+        s1.start()[0] + pts[2][1] * v1[0],
+        s1.start()[1] + pts[2][1] * v1[1],
+        s1.start()[2] + pts[2][1] * v1[2],
+    )
+    m0 = Point(
+        (seg0_a[0] + seg0_b[0]) * 0.5,
+        (seg0_a[1] + seg0_b[1]) * 0.5,
+        (seg0_a[2] + seg0_b[2]) * 0.5,
+    )
+    m1 = Point(
+        (seg1_a[0] + seg1_b[0]) * 0.5,
+        (seg1_a[1] + seg1_b[1]) * 0.5,
+        (seg1_a[2] + seg1_b[2]) * 0.5,
+    )
+    avg = Point((m0[0] + m1[0]) * 0.5, (m0[1] + m1[1]) * 0.5, (m0[2] + m1[2]) * 0.5)
+    p0 = s0.closest_point(avg, False)[1]
+    p1 = s1.closest_point(avg, False)[1]
 
-        def push(q):
-            q0 = proj_onto_line(s0, q)
-            q1 = proj_onto_line(s1, q)
-            pts.append((signed_t(s0.start(), v0, q0), signed_t(s1.start(), v1, q1)))
+    if s0.closest_point(p0, False)[0] > 0.5:
+        v0 = -v0
 
-        push(s0.start())
-        push(s0.end())
-        push(s1.start())
-        push(s1.end())
-        pts.sort(key=lambda a: a[0])
-        seg0_a = Point(
-            s0.start()[0] + pts[1][0] * v0[0],
-            s0.start()[1] + pts[1][0] * v0[1],
-            s0.start()[2] + pts[1][0] * v0[2],
-        )
-        seg0_b = Point(
-            s0.start()[0] + pts[2][0] * v0[0],
-            s0.start()[1] + pts[2][0] * v0[1],
-            s0.start()[2] + pts[2][0] * v0[2],
-        )
-        seg1_a = Point(
-            s1.start()[0] + pts[1][1] * v1[0],
-            s1.start()[1] + pts[1][1] * v1[1],
-            s1.start()[2] + pts[1][1] * v1[2],
-        )
-        seg1_b = Point(
-            s1.start()[0] + pts[2][1] * v1[0],
-            s1.start()[1] + pts[2][1] * v1[1],
-            s1.start()[2] + pts[2][1] * v1[2],
-        )
-        m0 = Point(
-            (seg0_a[0] + seg0_b[0]) * 0.5,
-            (seg0_a[1] + seg0_b[1]) * 0.5,
-            (seg0_a[2] + seg0_b[2]) * 0.5,
-        )
-        m1 = Point(
-            (seg1_a[0] + seg1_b[0]) * 0.5,
-            (seg1_a[1] + seg1_b[1]) * 0.5,
-            (seg1_a[2] + seg1_b[2]) * 0.5,
-        )
-        avg = Point((m0[0] + m1[0]) * 0.5, (m0[1] + m1[1]) * 0.5, (m0[2] + m1[2]) * 0.5)
-        p0 = proj_onto_line(s0, avg)
-        p1 = proj_onto_line(s1, avg)
+    if s1.closest_point(p1, False)[0] > 0.5:
+        v1 = -v1
 
-        def t_of(L, q):
-            return L.closest_point(q, False)[0]
+    return p0, p1, v0, v1
 
-        t0_v = t_of(s0, p0)
-        t1_v = t_of(s1, p1)
 
-        if t0_v > 0.5:
-            v0 = Vector(-v0[0], -v0[1], -v0[2])
+def _line_line_types(
+    tt0: float, tt1: float, above_closer_to_edge: float, v0: Vector, v1: Vector
+) -> tuple:
+    """Types (0 end, 1 side) from the positions tt0 and tt1 along the polylines, the direction of an end past the middle flipped."""
 
-        if t1_v > 0.5:
-            v1 = Vector(-v1[0], -v1[1], -v1[2])
-
-        return (p0, p1, v0, v1, normal, 0, 0, is_parallel)
-
-    v0.normalize_self()
-    v1.normalize_self()
-    result = line_line_parameters(s0, s1, 0.0, False, True)
-
-    if result is None:
-        return None
-
-    t0_v, t1_v = result
-    t0c = max(0.0, min(1.0, t0_v))
-    t1c = max(0.0, min(1.0, t1_v))
-    p0 = s0.point_at(t0c)
-    p1 = s1.point_at(t1c)
-
-    tt0 = (t0c + float(cur_seg_0)) / float(n_segs_0)
-    tt1 = (t1c + float(cur_seg_1)) / float(n_segs_1)
     close0 = 2.0 * abs(0.5 - tt0)
     close1 = 2.0 * abs(0.5 - tt1)
 
@@ -9190,16 +9269,58 @@ def line_line_classified(
         type1 = 0 if close1 > above_closer_to_edge else 1
 
         if close0 > close1 and type0 == 0 and type1 == 0:
-            type0 = 0
             type1 = 1
         elif close0 < close1 and type0 == 0 and type1 == 0:
             type0 = 1
-            type1 = 0
 
     if tt0 > 0.5 and type0 == 0:
-        v0 = Vector(-v0[0], -v0[1], -v0[2])
+        v0 = -v0
 
     if tt1 > 0.5 and type1 == 0:
-        v1 = Vector(-v1[0], -v1[1], -v1[2])
+        v1 = -v1
+
+    return type0, type1, v0, v1
+
+
+def line_line_classified(
+    s0: Line,
+    s1: Line,
+    n_segs_0: int,
+    n_segs_1: int,
+    cur_seg_0: int,
+    cur_seg_1: int,
+    above_closer_to_edge: float,
+) -> tuple | None:
+    """Classifies two segments as end-to-end, side-to-end or cross with closest points and directions."""
+
+    v0, v1, normal, is_parallel = _line_line_frame(s0, s1)
+    shared = _line_line_shared_end(s0, s1)
+
+    if shared is not None:
+        p0, p1, v0, v1 = shared
+
+        return (p0, p1, v0, v1, normal, 0, 0, is_parallel)
+
+    v0.normalize_self()
+    v1.normalize_self()
+
+    if is_parallel:
+        p0, p1, v0, v1 = _line_line_parallel(s0, s1, v0, v1)
+
+        return (p0, p1, v0, v1, normal, 0, 0, is_parallel)
+
+    result = line_line_parameters(s0, s1, 0.0, False, True)
+
+    if result is None:
+        return None
+
+    t0_v, t1_v = result
+    t0c = max(0.0, min(1.0, t0_v))
+    t1c = max(0.0, min(1.0, t1_v))
+    p0 = s0.point_at(t0c)
+    p1 = s1.point_at(t1c)
+    tt0 = (t0c + float(cur_seg_0)) / float(n_segs_0)
+    tt1 = (t1c + float(cur_seg_1)) / float(n_segs_1)
+    type0, type1, v0, v1 = _line_line_types(tt0, tt1, above_closer_to_edge, v0, v1)
 
     return (p0, p1, v0, v1, normal, type0, type1, is_parallel)

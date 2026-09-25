@@ -854,6 +854,42 @@ def _mesh_face_keys(mesh: Mesh) -> list[int]:
     return sorted(mesh.face.keys())
 
 
+def _mesh_triangle_point(
+    mesh: Mesh, face_keys: list[int], object_id: int, test_point: Point
+) -> tuple[Point, int, float]:
+    """Closest point, face key and distance on triangle object_id of mesh; infinite distance for an invalid id."""
+
+    found, face_idx, sub_idx, v0, v1, v2 = mesh.get_triangle_by_id(object_id)
+
+    if not found:
+        return (Point(0, 0, 0), 0, math.inf)
+
+    cp = _closest_point_on_triangle(test_point, v0, v1, v2)
+
+    return (cp, face_keys[face_idx], cp.distance(test_point))
+
+
+def _push_nearer_last(
+    stack: list[int], left: int, right: int, ld: float, rd: float, best_dist: float
+) -> None:
+    """Push the children nearer than best_dist, the nearer one last so it pops first."""
+
+    assert len(stack) + 2 <= STACK_SIZE
+
+    if ld <= rd:
+        if rd < best_dist:
+            stack.append(right)
+
+        if ld < best_dist:
+            stack.append(left)
+    else:
+        if ld < best_dist:
+            stack.append(left)
+
+        if rd < best_dist:
+            stack.append(right)
+
+
 class Closest:
     """Closest-point queries between points, curves, surfaces, meshes and clouds."""
 
@@ -1143,40 +1179,17 @@ class Closest:
                 continue
 
             if node.is_leaf():
-                found, face_idx, sub_idx, v0, v1, v2 = mesh.get_triangle_by_id(
-                    node.object_id
-                )
+                hit = _mesh_triangle_point(mesh, face_keys, node.object_id, test_point)
 
-                if not found:
-                    continue
-
-                cp = _closest_point_on_triangle(test_point, v0, v1, v2)
-                dist = cp.distance(test_point)
-
-                if dist < best_dist:
-                    best_dist = dist
-                    best_point = cp
-                    best_face_key = face_keys[face_idx]
+                if hit[2] < best_dist:
+                    best_point, best_face_key, best_dist = hit
 
                 continue
 
             ld = _aabb_min_distance(bvh.nodes[node.left].aabb, test_point)
             rd = _aabb_min_distance(bvh.nodes[node.right].aabb, test_point)
 
-            assert len(stack) + 2 <= STACK_SIZE
-
-            if ld <= rd:
-                if rd < best_dist:
-                    stack.append(node.right)
-
-                if ld < best_dist:
-                    stack.append(node.left)
-            else:
-                if ld < best_dist:
-                    stack.append(node.left)
-
-                if rd < best_dist:
-                    stack.append(node.right)
+            _push_nearer_last(stack, node.left, node.right, ld, rd, best_dist)
 
         return (best_point, best_face_key, best_dist)
 
@@ -1208,20 +1221,10 @@ class Closest:
                 continue
 
             if node.object_id >= 0:
-                found, face_idx, sub_idx, v0, v1, v2 = mesh.get_triangle_by_id(
-                    node.object_id
-                )
+                hit = _mesh_triangle_point(mesh, face_keys, node.object_id, test_point)
 
-                if not found:
-                    continue
-
-                cp = _closest_point_on_triangle(test_point, v0, v1, v2)
-                dist = cp.distance(test_point)
-
-                if dist < best_dist:
-                    best_dist = dist
-                    best_point = cp
-                    best_face_key = face_keys[face_idx]
+                if hit[2] < best_dist:
+                    best_point, best_face_key, best_dist = hit
 
                 continue
 
@@ -1230,20 +1233,7 @@ class Closest:
             ld = _aabb_min_distance(tree.nodes[left].aabb, test_point)
             rd = _aabb_min_distance(tree.nodes[right].aabb, test_point)
 
-            assert len(stack) + 2 <= STACK_SIZE
-
-            if ld <= rd:
-                if rd < best_dist:
-                    stack.append(right)
-
-                if ld < best_dist:
-                    stack.append(left)
-            else:
-                if ld < best_dist:
-                    stack.append(left)
-
-                if rd < best_dist:
-                    stack.append(right)
+            _push_nearer_last(stack, left, right, ld, rd, best_dist)
 
         return (best_point, best_face_key, best_dist)
 

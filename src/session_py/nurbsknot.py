@@ -790,6 +790,56 @@ def build_fitted_nurbsknots_adaptive(
     return nurbsknots
 
 
+def _periodic_weighted_lengths(
+    params: Sequence[float],
+    points: Sequence[float],
+    n: int,
+    dim: int,
+    scale: float,
+) -> list[float]:
+    """Cumulative chord lengths around closed points, weighted up where the points turn."""
+
+    turn = [0.0] * n
+
+    for i in range(n):
+        turn[i] = _turn_angle(points, dim, n - 1 if i == 0 else i - 1, i, (i + 1) % n)
+
+    cum = [0.0] * (n + 1)
+
+    for i in range(n):
+        chord = max(params[i + 1] - params[i], PIVOT_TOLERANCE)
+        cum[i + 1] = cum[i] + chord * (
+            1.0 + scale * (turn[i] + turn[(i + 1) % n]) * 0.5
+        )
+
+    return cum
+
+
+def _periodic_intervals(
+    params: Sequence[float],
+    cum: Sequence[float],
+    n: int,
+    num_cvs: int,
+    period: float,
+) -> list[float]:
+    """Periodic nurbsknot intervals that split the weighted length into equal shares."""
+
+    total = cum[n]
+    base = [0.0] * num_cvs
+
+    for j in range(num_cvs):
+        base[j] = _locate_target(params, cum, n - 1, total * j / num_cvs)
+
+    intervals = [0.0] * num_cvs
+
+    for j in range(num_cvs - 1):
+        intervals[j] = base[j + 1] - base[j]
+
+    intervals[num_cvs - 1] = period - base[num_cvs - 1]
+
+    return intervals
+
+
 def build_fitted_nurbsknots_periodic_adaptive(
     params: Sequence[float],
     points: Sequence[float] | None,
@@ -835,31 +885,8 @@ def build_fitted_nurbsknots_periodic_adaptive(
     if dim < 1 or not _are_finite(points, n * dim):
         return []
 
-    turn = [0.0] * n
-
-    for i in range(n):
-        turn[i] = _turn_angle(points, dim, n - 1 if i == 0 else i - 1, i, (i + 1) % n)
-
-    cum = [0.0] * (n + 1)
-
-    for i in range(n):
-        chord = max(params[i + 1] - params[i], PIVOT_TOLERANCE)
-        cum[i + 1] = cum[i] + chord * (
-            1.0 + scale * (turn[i] + turn[(i + 1) % n]) * 0.5
-        )
-
-    total = cum[n]
-    base = [0.0] * num_cvs
-
-    for j in range(num_cvs):
-        base[j] = _locate_target(params, cum, n - 1, total * j / num_cvs)
-
-    intervals = [0.0] * num_cvs
-
-    for j in range(num_cvs - 1):
-        intervals[j] = base[j + 1] - base[j]
-
-    intervals[num_cvs - 1] = period - base[num_cvs - 1]
+    cum = _periodic_weighted_lengths(params, points, n, dim, scale)
+    intervals = _periodic_intervals(params, cum, n, num_cvs, period)
 
     for i in range(1, degree):
         nurbsknots[degree - 1 - i] = nurbsknots[degree - i] - intervals[num_cvs - i]
@@ -870,23 +897,8 @@ def build_fitted_nurbsknots_periodic_adaptive(
     return nurbsknots
 
 
-def solve_banded_spd(
-    dim: int,
-    n: int,
-    half_bw: int,
-    band: MutableSequence[float],
-    rhs: MutableSequence[float],
-) -> bool:
-    """Solve a finite banded symmetric positive-definite system in place with Cholesky factorization."""
-
-    if dim < 1 or n < 1 or half_bw < 0:
-        return False
-
-    band_count = n * (half_bw + 1)
-    rhs_count = n * dim
-
-    if not _are_finite(band, band_count) or not _are_finite(rhs, rhs_count):
-        return False
+def _banded_cholesky(n: int, half_bw: int, band: MutableSequence[float]) -> bool:
+    """Cholesky factor of a banded symmetric matrix in place; false when it is not positive definite."""
 
     bw1 = half_bw + 1
 
@@ -911,6 +923,20 @@ def solve_banded_spd(
             else:
                 band[index] = (band[index] - sum) / band[j * bw1]
 
+    return True
+
+
+def _banded_forward_substitute(
+    dim: int,
+    n: int,
+    half_bw: int,
+    band: Sequence[float],
+    rhs: MutableSequence[float],
+) -> None:
+    """Forward substitution with the lower banded Cholesky factor, in place on rhs."""
+
+    bw1 = half_bw + 1
+
     for i in range(n):
         for d in range(dim):
             sum = 0.0
@@ -920,6 +946,18 @@ def solve_banded_spd(
 
             index = i * dim + d
             rhs[index] = (rhs[index] - sum) / band[i * bw1]
+
+
+def _banded_back_substitute(
+    dim: int,
+    n: int,
+    half_bw: int,
+    band: Sequence[float],
+    rhs: MutableSequence[float],
+) -> None:
+    """Back substitution with the transposed banded Cholesky factor, in place on rhs."""
+
+    bw1 = half_bw + 1
 
     for i in range(n - 1, -1, -1):
         for d in range(dim):
@@ -931,5 +969,30 @@ def solve_banded_spd(
 
             index = i * dim + d
             rhs[index] = (rhs[index] - sum) / band[i * bw1]
+
+
+def solve_banded_spd(
+    dim: int,
+    n: int,
+    half_bw: int,
+    band: MutableSequence[float],
+    rhs: MutableSequence[float],
+) -> bool:
+    """Solve a finite banded symmetric positive-definite system in place with Cholesky factorization."""
+
+    if dim < 1 or n < 1 or half_bw < 0:
+        return False
+
+    band_count = n * (half_bw + 1)
+    rhs_count = n * dim
+
+    if not _are_finite(band, band_count) or not _are_finite(rhs, rhs_count):
+        return False
+
+    if not _banded_cholesky(n, half_bw, band):
+        return False
+
+    _banded_forward_substitute(dim, n, half_bw, band, rhs)
+    _banded_back_substitute(dim, n, half_bw, band, rhs)
 
     return True

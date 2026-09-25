@@ -1317,6 +1317,58 @@ class Polyline:
         return Polyline(pts3d)
 
     @staticmethod
+    def _rotated_extents_2d(
+        pts2d: list[tuple[float, float]], ca: float, sa: float
+    ) -> tuple[float, float, float, float]:
+        """Return the extents (min_u, max_u, min_v, max_v) of pts2d in the frame rotated by cosine ca and sine sa."""
+
+        min_u = float("inf")
+        max_u = float("-inf")
+        min_v = float("inf")
+        max_v = float("-inf")
+
+        for h in pts2d:
+            u = h[0] * ca + h[1] * sa
+            v = -h[0] * sa + h[1] * ca
+            min_u = min(min_u, u)
+            max_u = max(max_u, u)
+            min_v = min(min_v, v)
+            max_v = max(max_v, v)
+
+        return (min_u, max_u, min_v, max_v)
+
+    @staticmethod
+    def _unproject_rectangle(
+        origin: Point,
+        x_axis: Vector,
+        y_axis: Vector,
+        extents: tuple[float, float, float, float],
+        angle: float,
+    ) -> Polyline:
+        """Return the closed rectangle of extents rotated by angle in the frame (origin, x_axis, y_axis)."""
+
+        ca = math.cos(angle)
+        sa = math.sin(angle)
+        uv = [
+            (extents[0], extents[2]),
+            (extents[0], extents[3]),
+            (extents[1], extents[3]),
+            (extents[1], extents[2]),
+        ]
+        pts3d = []
+
+        for c in uv:
+            pts3d.append(
+                Polyline._unproject(
+                    origin, x_axis, y_axis, c[0] * ca - c[1] * sa, c[0] * sa + c[1] * ca
+                )
+            )
+
+        pts3d.append(pts3d[0])
+
+        return Polyline(pts3d)
+
+    @staticmethod
     def bounding_rectangle(polygon: Polyline) -> Polyline | None:
         """Return the minimum-area rectangle of the hull as a closed 5-point polyline."""
 
@@ -1329,10 +1381,7 @@ class Polyline:
 
         hull2d = hull._project_to_plane(origin, xa, ya)
         best_area = float("inf")
-        best_min_u = 0.0
-        best_max_u = 0.0
-        best_min_v = 0.0
-        best_max_v = 0.0
+        best_extents = (0.0, 0.0, 0.0, 0.0)
         best_angle = 0.0
         hn = len(hull2d)
 
@@ -1345,51 +1394,15 @@ class Polyline:
             if length < 1e-12:
                 continue
 
-            ca = ex / length
-            sa = ey / length
-            min_u = float("inf")
-            max_u = float("-inf")
-            min_v = float("inf")
-            max_v = float("-inf")
-
-            for h in hull2d:
-                u = h[0] * ca + h[1] * sa
-                v = -h[0] * sa + h[1] * ca
-                min_u = min(min_u, u)
-                max_u = max(max_u, u)
-                min_v = min(min_v, v)
-                max_v = max(max_v, v)
-
-            area = (max_u - min_u) * (max_v - min_v)
+            extents = Polyline._rotated_extents_2d(hull2d, ex / length, ey / length)
+            area = (extents[1] - extents[0]) * (extents[3] - extents[2])
 
             if area < best_area:
                 best_area = area
-                best_min_u = min_u
-                best_max_u = max_u
-                best_min_v = min_v
-                best_max_v = max_v
+                best_extents = extents
                 best_angle = math.atan2(ey, ex)
 
-        ca = math.cos(best_angle)
-        sa = math.sin(best_angle)
-        uv = [
-            (best_min_u, best_min_v),
-            (best_min_u, best_max_v),
-            (best_max_u, best_max_v),
-            (best_max_u, best_min_v),
-        ]
-        pts3d = []
-
-        for c in uv:
-            pts3d.append(
-                Polyline._unproject(
-                    origin, xa, ya, c[0] * ca - c[1] * sa, c[0] * sa + c[1] * ca
-                )
-            )
-
-        pts3d.append(pts3d[0])
-
-        return Polyline(pts3d)
+        return Polyline._unproject_rectangle(origin, xa, ya, best_extents, best_angle)
 
     @staticmethod
     def grid_of_points_in_polygon(
@@ -1978,24 +1991,26 @@ class Polyline:
         Polyline._quick_hull_recurse(right, fx, fy, bx, by, hull)
 
     @staticmethod
-    def _offset_polygon_2d(
-        poly2d: list[tuple[float, float]], offset_dist: float
-    ) -> list[tuple[float, float]]:
-        """Miter-offset a 2D polygon by offset_dist."""
+    def _shoelace_2d(poly2d: list[tuple[float, float]]) -> float:
+        """Return twice the signed area of a 2D polygon by the shoelace formula."""
 
         n = len(poly2d)
-
-        if offset_dist == 0.0 or n < 3:
-            return poly2d
-
-        signed_area = 0.0
+        area = 0.0
 
         for i in range(n):
             a = poly2d[i]
             b = poly2d[(i + 1) % n]
-            signed_area += a[0] * b[1] - b[0] * a[1]
+            area += a[0] * b[1] - b[0] * a[1]
 
-        delta = -offset_dist if signed_area < 0.0 else offset_dist
+        return area
+
+    @staticmethod
+    def _edge_normals_2d(
+        poly2d: list[tuple[float, float]],
+    ) -> list[tuple[float, float]]:
+        """Return the unit normal of every edge of a 2D polygon, zero for a degenerate edge."""
+
+        n = len(poly2d)
         normals = []
 
         for i in range(n):
@@ -2010,6 +2025,21 @@ class Polyline:
             else:
                 normals.append((ey / length, -ex / length))
 
+        return normals
+
+    @staticmethod
+    def _offset_polygon_2d(
+        poly2d: list[tuple[float, float]], offset_dist: float
+    ) -> list[tuple[float, float]]:
+        """Miter-offset a 2D polygon by offset_dist."""
+
+        n = len(poly2d)
+
+        if offset_dist == 0.0 or n < 3:
+            return poly2d
+
+        delta = -offset_dist if Polyline._shoelace_2d(poly2d) < 0.0 else offset_dist
+        normals = Polyline._edge_normals_2d(poly2d)
         out = []
 
         for i in range(n):
@@ -2039,14 +2069,7 @@ class Polyline:
                     )
                 )
 
-        out_area = 0.0
-
-        for i in range(len(out)):
-            a = out[i]
-            b = out[(i + 1) % len(out)]
-            out_area += a[0] * b[1] - b[0] * a[1]
-
-        if len(out) >= 3 and abs(out_area) > 1e-4:
+        if len(out) >= 3 and abs(Polyline._shoelace_2d(out)) > 1e-4:
             return out
 
         return poly2d

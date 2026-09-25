@@ -2018,6 +2018,44 @@ def _chart_eval(an: _AnFace, w: _Window, q: Point) -> Point:
     )
 
 
+def _analytic_chains(lp: _Loop, an: _AnFace, w: _Window) -> list[list[Point]]:
+    """Chart polyline of every edge of a loop, shifted by whole periods so consecutive edges of a projected loop meet."""
+
+    period = 4.0
+    chains = []
+
+    for le in lp.edges:
+        uv = []
+
+        for p in le.uv:
+            uv.append(_chart_point(an, w, p))
+
+        if le.reversed:
+            uv.reverse()
+
+        chains.append(uv)
+
+    for k in range(1, len(chains)):
+        if not lp.projected:
+            break
+
+        if not chains[k] or not chains[k - 1]:
+            continue
+
+        n = _round_half_away((chains[k - 1][-1][0] - chains[k][0][0]) / period)
+        m = (
+            _round_half_away((chains[k - 1][-1][1] - chains[k][0][1]) / period)
+            if an.kind == 5
+            else 0
+        )
+
+        for p in chains[k]:
+            p[0] += n * period
+            p[1] += m * period
+
+    return chains
+
+
 def _analytic_window(loops: list[_Loop], an: _AnFace) -> _Window | None:
     """Chart window of the loops; none when they are empty or wider than 16 quarter arcs."""
 
@@ -2318,38 +2356,7 @@ class _BRepBuilder:
     ) -> list[_PendingEdge]:
         """Pending edges of one loop in the chart, plus a degenerated edge across each pole or apex gap between consecutive edges."""
 
-        period = 4.0
-        chains = []
-
-        for le in lp.edges:
-            uv = []
-
-            for p in le.uv:
-                uv.append(_chart_point(an, w, p))
-
-            if le.reversed:
-                uv.reverse()
-
-            chains.append(uv)
-
-        for k in range(1, len(chains)):
-            if not lp.projected:
-                break
-
-            if not chains[k] or not chains[k - 1]:
-                continue
-
-            n = _round_half_away((chains[k - 1][-1][0] - chains[k][0][0]) / period)
-            m = (
-                _round_half_away((chains[k - 1][-1][1] - chains[k][0][1]) / period)
-                if an.kind == 5
-                else 0
-            )
-
-            for p in chains[k]:
-                p[0] += n * period
-                p[1] += m * period
-
+        chains = _analytic_chains(lp, an, w)
         pl = []
 
         for k in range(len(lp.edges)):
@@ -2638,29 +2645,10 @@ class _BRepBuilder:
 
             _pick_outer_loop(loops)
 
-    def add_face(self, face_id: int) -> None:
-        """ADVANCED_FACE: vertex-loop face, analytic face, or projection onto the plane, cylinder chart or B-spline surface."""
-
-        fent = self.r.get(face_id)
-        face = fent.find("ADVANCED_FACE") if fent is not None else None
-
-        if face is None:
-            return
-
-        bound_refs = _list_refs(face.params)
-        surface_ref = _first_ref(face.params)
-        same_sense = _last_flag(face.params, True)
-        vl_ids = self.vertex_loop_ids(bound_refs)
-
-        if vl_ids and self.add_face_vertex_loop(vl_ids, surface_ref, same_sense):
-            return
-
-        an = self.r.get_analytic_srf(surface_ref)
-
-        if an.kind >= 2 and self.add_face_analytic(
-            bound_refs, surface_ref, same_sense, an
-        ):
-            return
+    def add_face_projected(
+        self, bound_refs: list[int], surface_ref: int, same_sense: bool
+    ) -> None:
+        """Face projected onto its plane, cylinder chart or B-spline surface, with a filled surface when the projection has none."""
 
         proj = self.r.get_projector(surface_ref)
         proj_srf = (
@@ -2696,6 +2684,32 @@ class _BRepBuilder:
             pending.append(_pending_of(lp))
 
         self.finish_face(srf_idx, not same_sense, pending)
+
+    def add_face(self, face_id: int) -> None:
+        """ADVANCED_FACE: vertex-loop face, analytic face, or projection onto the plane, cylinder chart or B-spline surface."""
+
+        fent = self.r.get(face_id)
+        face = fent.find("ADVANCED_FACE") if fent is not None else None
+
+        if face is None:
+            return
+
+        bound_refs = _list_refs(face.params)
+        surface_ref = _first_ref(face.params)
+        same_sense = _last_flag(face.params, True)
+        vl_ids = self.vertex_loop_ids(bound_refs)
+
+        if vl_ids and self.add_face_vertex_loop(vl_ids, surface_ref, same_sense):
+            return
+
+        an = self.r.get_analytic_srf(surface_ref)
+
+        if an.kind >= 2 and self.add_face_analytic(
+            bound_refs, surface_ref, same_sense, an
+        ):
+            return
+
+        self.add_face_projected(bound_refs, surface_ref, same_sense)
 
     def build_from_shell(self, shell_id: int) -> BRep:
         """BRep of a CLOSED_SHELL (one solid) or OPEN_SHELL (one shell), empty for anything else."""
