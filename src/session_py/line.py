@@ -36,6 +36,11 @@ class Arrowhead(Enum):
 
         return self
 
+    @classmethod
+    def _missing_(cls, value) -> Arrowhead:
+        """Return none for an unknown name."""
+        return cls.NONE
+
 
 class Line:
     """A 3D line segment with display width, dash pattern and color."""
@@ -810,7 +815,7 @@ class Line:
             if proto.linecolor_name:
                 line.linecolor.name = proto.linecolor_name
 
-        line.arrowhead = list(Arrowhead)[proto.arrowhead]
+        line.arrowhead = list(Arrowhead)[proto.arrowhead] if 0 <= proto.arrowhead < 4 else Arrowhead.NONE
 
         return line
 

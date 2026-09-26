@@ -2357,7 +2357,7 @@ class NurbsCurve:
         for c in proto.linecolors:
             curve.linecolors.append(Color(c.r, c.g, c.b, c.a))
 
-        curve.arrowhead = list(Arrowhead)[proto.arrowhead]
+        curve.arrowhead = list(Arrowhead)[proto.arrowhead] if 0 <= proto.arrowhead < 4 else Arrowhead.NONE
 
         return curve
 

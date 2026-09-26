@@ -155,6 +155,8 @@ def test_line_json_roundtrip():
 
     j = line.__jsondump__()
     loaded_j = Line.__jsonload__(j)
+    unknown = dict(j)
+    unknown["arrowhead"] = "sideways"
 
     s = line.file_json_dumps()
     loaded_s = Line.file_json_loads(s)
@@ -177,6 +179,7 @@ def test_line_json_roundtrip():
     MINI_CHECK(loaded.dash == [3.0, 2.0])
     MINI_CHECK(loaded.arrowhead == Arrowhead.END and loaded_j.arrowhead == Arrowhead.END)
     MINI_CHECK("arrowhead" not in Line().file_json_dumps())
+    MINI_CHECK(Line.__jsonload__(unknown).arrowhead == Arrowhead.NONE)
 
 
 @MINI_TEST("Line", "Protobuf Roundtrip")
@@ -198,6 +201,8 @@ def test_line_protobuf_roundtrip():
     line.pb_dump(fname)
     loaded = Line.pb_load(fname)
     converted = Line.from_proto(line.to_proto())
+    outside = line.to_proto()
+    outside.arrowhead = 9
 
     MINI_CHECK(loaded_s.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
@@ -212,6 +217,7 @@ def test_line_protobuf_roundtrip():
     MINI_CHECK(loaded.dash == [3.0, 2.0])
     MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(loaded.arrowhead == Arrowhead.END)
+    MINI_CHECK(Line.from_proto(outside).arrowhead == Arrowhead.NONE)
     MINI_CHECK(converted == line)
     MINI_CHECK(converted.guid == guid)
 
