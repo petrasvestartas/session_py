@@ -1442,6 +1442,7 @@ def test_session_checkpoint_keeps_history():
 def test_session_checkpoint_restarts_on_edit():
     from session_py import Point
     from session_py import Session
+    from session_py import Xform
 
     session = Session()
     guids = []
@@ -1449,6 +1450,10 @@ def test_session_checkpoint_restarts_on_edit():
     for i in range(20):
         node = session.add_point(Point(float(i), 0.0, 0.0))
         guids.append(node.name)
+
+    for i in range(25):
+        name = session.add_group(f"group{i}").name
+        session.set_xform(name, Xform.translation(0.0, float(i + 1), 0.0))
 
     first = session.checkpoint(10)
     session.begin("remove")
@@ -1464,6 +1469,7 @@ def test_session_checkpoint_restarts_on_edit():
     MINI_CHECK(first is None)
     MINI_CHECK(data == session.to_proto().SerializeToString(deterministic=True))
     MINI_CHECK(len(loaded.objects.points) == 19)
+    MINI_CHECK(len(loaded.xforms) == 25)
     MINI_CHECK(guids[5] not in loaded.lookup)
     MINI_CHECK(session.history.can_undo())
 
@@ -3068,7 +3074,7 @@ def test_session_history_budget_bounds():
         faces.append([at, at + side, at + side + 1, at + 1])
 
     session = Session()
-    session.history.budget = 1 << 20
+    session.history.budget = 4 << 20
     guids = []
 
     for _ in range(200):

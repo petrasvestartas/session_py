@@ -3,6 +3,7 @@ from typing import Any
 from typing import Iterable
 from typing import NamedTuple
 from typing import TYPE_CHECKING
+import bisect
 import copy
 import heapq
 import itertools
@@ -440,7 +441,10 @@ class _Checkpoint:
         self.unsorted = None  # Keys yet to sort, in runs of at most work.
         self.runs = []  # The sorted runs.
         self.keys = None  # The phase's keys in order, merged lazily.
-        self.seen = set()  # Guids whose xform order() reached.
+        self.hits = (
+            0  # Xforms entries order() reached, every one once the rest scan is done.
+        )
+        self.rest = []  # Xforms guids outside order(), in guid order.
         self.stack = []  # Tree frames being written, root first: node, next raw child, bytes in chunks.
         self.tree = []  # The framed root, in chunks after the Tree head.
         self.sections = {name: bytearray() for name in _SECTIONS}  # One per field.
@@ -2304,10 +2308,10 @@ class Session:
             guid = items.get_item(slot).guid
             xform = self.xforms.get(guid)
 
-            if xform is None or guid in writer.seen:
+            if xform is None:
                 continue
 
-            writer.seen.add(guid)
+            writer.hits += 1
 
             if not xform.is_identity():
                 self._write_xform(writer, guid, xform)
@@ -2321,29 +2325,44 @@ class Session:
         return end - start
 
     def _write_rest(self, writer: _Checkpoint, work: int) -> int:
-        """Write the non-identity xforms of guids outside order(), sorted, after one scan of xforms that runs only when order() missed some; returns the entries examined."""
+        """Write the non-identity xforms of guids outside order() in guid order, after a scan of xforms in slices of work that runs only when order() missed some; returns the entries examined or written."""
 
-        spent = 0
+        if writer.hits < len(self.xforms):
+            start = writer.cursor
+            end = min(len(self.xforms), start + work)
 
-        if writer.keys is None:
-            writer.keys = []
+            for guid, xform in itertools.islice(self.xforms.items(), start, end):
+                geometry = self.lookup.get(guid)
+                ordered = (
+                    geometry is not None
+                    and getattr(self.objects, _collection_of(geometry)[0]).get_slot(
+                        guid
+                    )
+                    is not None
+                )
 
-            if len(writer.seen) < len(self.xforms):
-                writer.keys = self._unordered(writer.seen)
-                spent = len(self.xforms)
+                if not ordered and not xform.is_identity():
+                    bisect.insort(writer.rest, guid)
+
+            writer.cursor = end
+
+            if end >= len(self.xforms):
+                writer.hits = len(self.xforms)
+                writer.cursor = 0
+
+            return end - start
 
         start = writer.cursor
-        end = min(len(writer.keys), start + work)
+        end = min(len(writer.rest), start + work)
 
-        for guid in writer.keys[start:end]:
+        for guid in writer.rest[start:end]:
             self._write_xform(writer, guid, self.xforms[guid])
 
         writer.cursor = end
 
-        if end < len(writer.keys):
-            return spent + end - start
+        if end < len(writer.rest):
+            return end - start
 
-        writer.keys = None
         writer.cursor = 0
         writer.phase = _INTERACTIONS
 
@@ -2351,20 +2370,7 @@ class Session:
             writer.sections["definitions"] = _objects_head(self.definitions)
             writer.phase = _DEFINITIONS
 
-        return spent + end - start
-
-    def _unordered(self, seen: set[str]) -> list[str]:
-        """The sorted guids of the non-identity xforms order() did not reach."""
-
-        guids = []
-
-        for guid, xform in self.xforms.items():
-            if guid not in seen and not xform.is_identity():
-                guids.append(guid)
-
-        guids.sort()
-
-        return guids
+        return end - start
 
     def _write_xform(self, writer: _Checkpoint, guid: str, xform: Xform) -> None:
         """Append one XformEntry to the xforms section."""

@@ -51,24 +51,46 @@ def clone(obj: Any) -> Any:
 
 
 def _mesh_weight(mesh: Mesh) -> int:
-    """Bytes a mesh pins, from its counts."""
-    return 128 + 64 * mesh.number_of_vertices() + 48 * mesh.number_of_faces()
+    """Bytes a mesh pins, from its counts: a vertex owns its halfedge map, a face its vertex list (measured, triangle caches not counted)."""
+    return 128 + 768 * mesh.number_of_vertices() + 192 * mesh.number_of_faces()
 
 
-def _brep_weight(brep: BRep) -> int:
-    """Bytes a brep pins, from its table lengths."""
+def _curve_weight(curve: NurbsCurve) -> int:
+    """Bytes a curve pins, from its control point and knot counts."""
+    return 256 + 32 * curve.cv_count() + 8 * len(curve.m_nurbsknot)
+
+
+def _surface_weight(surface: NurbsSurface) -> int:
+    """Bytes a surface pins, from its control point and knot counts."""
 
     return (
-        512
-        + 256 * len(brep.m_surfaces)
-        + 128 * (len(brep.m_curves_3d) + len(brep.m_curves_2d))
-        + 24 * len(brep.m_vertices)
-        + 64 * (len(brep.m_edges) + len(brep.m_faces))
+        1536
+        + 32 * surface.cv_count()
+        + 8 * (len(surface.m_nurbsknot[0]) + len(surface.m_nurbsknot[1]))
     )
 
 
+def _brep_weight(brep: BRep) -> int:
+    """Bytes a brep pins: every surface and curve of its pools, plus its tables."""
+
+    bytes = (
+        512 + 24 * len(brep.m_vertices) + 64 * (len(brep.m_edges) + len(brep.m_faces))
+    )
+
+    for surface in brep.m_surfaces:
+        bytes += _surface_weight(surface)
+
+    for curve in brep.m_curves_3d:
+        bytes += _curve_weight(curve)
+
+    for curve in brep.m_curves_2d:
+        bytes += _curve_weight(curve)
+
+    return bytes
+
+
 def weight(item: Any) -> int:
-    """An estimate of the bytes an item pins while a record holds it, O(1) from its container lengths."""
+    """An estimate of the bytes an item pins while a record holds it, from its container lengths."""
 
     if isinstance(item, Point):
         return 64
@@ -97,14 +119,10 @@ def weight(item: Any) -> int:
         return _mesh_weight(item)
 
     if isinstance(item, NurbsCurve):
-        return 96 + 32 * item.cv_count() + 8 * len(item.m_nurbsknot)
+        return _curve_weight(item)
 
     if isinstance(item, NurbsSurface):
-        return (
-            128
-            + 32 * item.cv_count()
-            + 8 * (len(item.m_nurbsknot[0]) + len(item.m_nurbsknot[1]))
-        )
+        return _surface_weight(item)
 
     if isinstance(item, BRep):
         return _brep_weight(item)
