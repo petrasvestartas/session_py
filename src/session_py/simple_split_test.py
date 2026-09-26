@@ -253,6 +253,7 @@ def test_split_surface_by_curves():
 
 @MINI_TEST("SimpleSplit", "Split Line By Curves")
 def test_split_line_by_curves():
+    from session_py import Arrowhead
     from session_py import Line
     from session_py import NurbsCurve
     from session_py import Point
@@ -262,6 +263,7 @@ def test_split_line_by_curves():
     line.name = "retained"
     line.width = 3.0
     line.dash = [1.0, 2.0]
+    line.arrowhead = Arrowhead.BOTH
     cutter = NurbsCurve.create(False, 1, [Point(0.0, -2.0, 0.0), Point(0.0, 2.0, 0.0)])
     pieces = split_line_by_curves(line, [cutter], 1e-6)
 
@@ -273,11 +275,14 @@ def test_split_line_by_curves():
         and pieces[0].width == line.width
         and pieces[0].dash == line.dash
     )
+    MINI_CHECK(pieces[0].arrowhead == Arrowhead.START)
+    MINI_CHECK(pieces[1].arrowhead == Arrowhead.END)
     MINI_CHECK(line.length() == 4.0)
 
 
 @MINI_TEST("SimpleSplit", "Split Polyline By Curves")
 def test_split_polyline_by_curves():
+    from session_py import Arrowhead
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Polyline
@@ -289,6 +294,7 @@ def test_split_polyline_by_curves():
     polyline.name = "retained"
     polyline.width = 3.0
     polyline.dash = [1.0, 2.0]
+    polyline.arrowhead = Arrowhead.END
     cutter = NurbsCurve.create(False, 1, [Point(0.0, -2.0, 0.0), Point(0.0, 2.0, 0.0)])
     pieces = split_polyline_by_curves(polyline, [cutter], 1e-6)
 
@@ -301,6 +307,8 @@ def test_split_polyline_by_curves():
         and pieces[0].width == polyline.width
         and pieces[0].dash == polyline.dash
     )
+    MINI_CHECK(pieces[0].arrowhead == Arrowhead.NONE)
+    MINI_CHECK(pieces[1].arrowhead == Arrowhead.END)
     MINI_CHECK(polyline.point_count() == 3)
 
 

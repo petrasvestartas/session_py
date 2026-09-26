@@ -163,7 +163,9 @@ def test_polyline_transformation():
         and pl_transformed.get_point(1)[0] == 11.0
     )
     MINI_CHECK(pl.get_point(0)[0] == 10.0 and pl.get_point(1)[0] == 11.0)
-    MINI_CHECK(pl_transformed.arrowhead == Arrowhead.BOTH and pl.arrowhead == Arrowhead.BOTH)
+    MINI_CHECK(
+        pl_transformed.arrowhead == Arrowhead.BOTH and pl.arrowhead == Arrowhead.BOTH
+    )
 
 
 @MINI_TEST("Polyline", "Json Roundtrip")
@@ -206,7 +208,9 @@ def test_polyline_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
     MINI_CHECK(loaded.dash == [3.0, 2.0])
     MINI_CHECK(loaded.guid == pl.guid)
-    MINI_CHECK(loaded.arrowhead == Arrowhead.END and loaded_j.arrowhead == Arrowhead.END)
+    MINI_CHECK(
+        loaded.arrowhead == Arrowhead.END and loaded_j.arrowhead == Arrowhead.END
+    )
     MINI_CHECK("arrowhead" not in Polyline().file_json_dumps())
 
 

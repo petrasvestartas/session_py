@@ -1878,7 +1878,11 @@ class Polyline:
         if proto.HasField("linecolor"):
             polyline.linecolor = Color.from_proto(proto.linecolor)
 
-        polyline.arrowhead = list(Arrowhead)[proto.arrowhead] if 0 <= proto.arrowhead < 4 else Arrowhead.NONE
+        polyline.arrowhead = (
+            list(Arrowhead)[proto.arrowhead]
+            if 0 <= proto.arrowhead < 4
+            else Arrowhead.NONE
+        )
 
         return polyline
 

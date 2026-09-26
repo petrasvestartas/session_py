@@ -44,7 +44,9 @@ def test_nurbscurve_constructor():
     MINI_CHECK(ccopy.guid != curve.guid)
     MINI_CHECK(ccopy == curve)
     MINI_CHECK(cother != curve)
-    MINI_CHECK(curve.arrowhead == Arrowhead.NONE and carrowcopy == carrow and carrow != curve)
+    MINI_CHECK(
+        curve.arrowhead == Arrowhead.NONE and carrowcopy == carrow and carrow != curve
+    )
 
 
 @MINI_TEST("NurbsCurve", "Create Interpolated")
@@ -600,6 +602,17 @@ def test_nurbscurve_modifications():
 
     MINI_CHECK(TOLERANCE.is_point_close(curve.point_at(split_t), halves[0].point_at_end()))
     MINI_CHECK(TOLERANCE.is_point_close(curve.point_at(split_t), halves[1].point_at_start()))
+
+    curve_arrow = curve.duplicate()
+    curve_arrow.arrowhead = Arrowhead.BOTH
+    arrow_halves = curve_arrow.split(split_t)
+
+    MINI_CHECK(arrow_halves[0].arrowhead == Arrowhead.START)
+    MINI_CHECK(arrow_halves[1].arrowhead == Arrowhead.END)
+
+    arrow_joined = NurbsCurve.join([arrow_halves[0], arrow_halves[1]])
+
+    MINI_CHECK(arrow_joined[0].arrowhead == Arrowhead.BOTH)
 
     curve_extended = curve.duplicate()
     curve_extended.extend(curve.domain_start() - 0.5, curve.domain_end() + 0.5)

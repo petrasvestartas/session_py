@@ -36,6 +36,27 @@ class Arrowhead(Enum):
 
         return self
 
+    def joined(self, last: Arrowhead) -> Arrowhead:
+        """Return this start head combined with the end head of last."""
+
+        start = self in (Arrowhead.START, Arrowhead.BOTH)
+        end = last in (Arrowhead.END, Arrowhead.BOTH)
+
+        if start and end:
+            return Arrowhead.BOTH
+
+        if start:
+            return Arrowhead.START
+
+        return Arrowhead.END if end else Arrowhead.NONE
+
+    def piece(self, first: bool, last: bool) -> Arrowhead:
+        """Return the heads a split piece keeps: the start head when first, the end head when last."""
+
+        none = Arrowhead.NONE
+
+        return (self if first else none).joined(self if last else none)
+
     @classmethod
     def _missing_(cls, value) -> Arrowhead:
         """Return none for an unknown name."""
@@ -815,7 +836,11 @@ class Line:
             if proto.linecolor_name:
                 line.linecolor.name = proto.linecolor_name
 
-        line.arrowhead = list(Arrowhead)[proto.arrowhead] if 0 <= proto.arrowhead < 4 else Arrowhead.NONE
+        line.arrowhead = (
+            list(Arrowhead)[proto.arrowhead]
+            if 0 <= proto.arrowhead < 4
+            else Arrowhead.NONE
+        )
 
         return line
 

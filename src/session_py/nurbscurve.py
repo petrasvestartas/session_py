@@ -1925,6 +1925,8 @@ class NurbsCurve:
 
         left_curve = self.duplicate()
         right_curve = self.duplicate()
+        left_curve.arrowhead = self.arrowhead.piece(True, False)
+        right_curve.arrowhead = self.arrowhead.piece(False, True)
 
         if not left_curve.trim(t0, t):
             return left_curve, right_curve
@@ -2357,7 +2359,11 @@ class NurbsCurve:
         for c in proto.linecolors:
             curve.linecolors.append(Color(c.r, c.g, c.b, c.a))
 
-        curve.arrowhead = list(Arrowhead)[proto.arrowhead] if 0 <= proto.arrowhead < 4 else Arrowhead.NONE
+        curve.arrowhead = (
+            list(Arrowhead)[proto.arrowhead]
+            if 0 <= proto.arrowhead < 4
+            else Arrowhead.NONE
+        )
 
         return curve
 
@@ -3494,6 +3500,7 @@ class NurbsCurve:
                 aligned = False
 
         joined = chain[0].duplicate()
+        joined.arrowhead = chain[0].arrowhead.joined(chain[-1].arrowhead)
 
         if aligned:
             for ci in range(1, len(chain)):

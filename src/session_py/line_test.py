@@ -120,7 +120,9 @@ def test_line_constructor():
     MINI_CHECK(l_pdl[0] == 0.0 and l_pdl[3] == 5.0)
     MINI_CHECK(lc.linecolor[0] == 1.0 and lc.linecolor[1] == 0.0 and lc.width == 2.5)
     MINI_CHECK(line.arrowhead == Arrowhead.NONE and lacopy == la and la != lc)
-    MINI_CHECK(laneg.arrowhead == Arrowhead.START and laneg[0] == 1.0 and laneg[3] == 0.0)
+    MINI_CHECK(
+        laneg.arrowhead == Arrowhead.START and laneg[0] == 1.0 and laneg[3] == 0.0
+    )
     MINI_CHECK(lwn.name == "custom" and lwn[3] == 1.0)
     MINI_CHECK(TOLERANCE.is_close(ms[1], 1.0) and TOLERANCE.is_close(me[1], 1.0))
 
@@ -177,7 +179,9 @@ def test_line_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[4], 210.5))
     MINI_CHECK(TOLERANCE.is_close(loaded[5], 252.6))
     MINI_CHECK(loaded.dash == [3.0, 2.0])
-    MINI_CHECK(loaded.arrowhead == Arrowhead.END and loaded_j.arrowhead == Arrowhead.END)
+    MINI_CHECK(
+        loaded.arrowhead == Arrowhead.END and loaded_j.arrowhead == Arrowhead.END
+    )
     MINI_CHECK("arrowhead" not in Line().file_json_dumps())
     MINI_CHECK(Line.__jsonload__(unknown).arrowhead == Arrowhead.NONE)
 

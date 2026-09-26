@@ -1364,7 +1364,9 @@ def split_curve_by_curves(
     result = []
 
     for i in range(1, len(cuts)):
-        result.append(_interval(curve, cuts[i - 1], cuts[i]))
+        piece = _interval(curve, cuts[i - 1], cuts[i])
+        piece.arrowhead = curve.arrowhead.piece(i == 1, i + 1 == len(cuts))
+        result.append(piece)
 
     if curve.is_closed() and len(result) > 1 and not cut_at_seam:
         joined = NurbsCurve.join([result[-1], result[0]], tolerance)
@@ -1465,6 +1467,7 @@ def split_line_by_curves(
     """Split a line at isolated 3D intersections, retaining line types and display attributes."""
 
     curve = NurbsCurve.create(False, 1, [line.point_at(0.0), line.point_at(1.0)])
+    curve.arrowhead = line.arrowhead
     result = []
 
     for piece in split_curve_by_curves(curve, cutters, tolerance):
@@ -1473,6 +1476,7 @@ def split_line_by_curves(
         next.width = line.width
         next.dash = copy.deepcopy(line.dash)
         next.linecolor = copy.deepcopy(line.linecolor)
+        next.arrowhead = piece.arrowhead
         result.append(next)
 
     return result
@@ -1484,6 +1488,7 @@ def split_polyline_by_curves(
     """Split a polyline, retaining each original corner, piece order and display attributes."""
 
     curve = NurbsCurve.create(False, 1, polyline.get_points())
+    curve.arrowhead = polyline.arrowhead
     result = []
 
     for piece in split_curve_by_curves(curve, cutters, tolerance):
@@ -1497,6 +1502,7 @@ def split_polyline_by_curves(
         next.width = polyline.width
         next.dash = copy.deepcopy(polyline.dash)
         next.linecolor = copy.deepcopy(polyline.linecolor)
+        next.arrowhead = piece.arrowhead
         result.append(next)
 
     return result
