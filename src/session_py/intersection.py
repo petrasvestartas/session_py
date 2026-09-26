@@ -5771,7 +5771,12 @@ def _analytic_pullback(srf, recog, c3d):
 def _run_curves(runs):
     """Degree-1 pcurves of the pull-back runs."""
 
-    return [NurbsCurve.create(False, 1, run.uv) for run in runs]
+    out = []
+
+    for run in runs:
+        out.append(NurbsCurve.create(False, 1, run.uv))
+
+    return out
 
 
 def _run_point(run, t):
@@ -7090,7 +7095,11 @@ class _SurfaceSurfaceField:
         """Newton-project x in place onto the section with parameter k held fixed; x is kept when it fails."""
 
         y = list(x)
-        free = [c for c in range(4) if c != k]
+        free = []
+
+        for c in range(4):
+            if c != k:
+                free.append(c)
 
         for _ in range(8):
             sa, sau, sav = self.eval_a(y[0], y[1])
@@ -7106,7 +7115,12 @@ class _SurfaceSurfaceField:
                 return True
 
             cols = [sau, sav, -sbu, -sbv]
-            jac = [[cols[free[c]][r] for c in range(3)] for r in range(3)]
+            jac = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+
+            for r in range(3):
+                for c in range(3):
+                    jac[r][c] = cols[free[c]][r]
+
             dx = _solve_gauss(jac, res, 3)
 
             if dx is None:
