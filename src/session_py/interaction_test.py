@@ -66,6 +66,7 @@ def test_interaction_abstract_base():
 
 @MINI_TEST("Interaction", "Json Roundtrip")
 def test_interaction_json_roundtrip():
+    from pathlib import Path
     from session_py import Interaction
 
     Interaction.register_type("NamedInteraction", _named_interaction)
@@ -75,7 +76,9 @@ def test_interaction_json_roundtrip():
     loaded_j = Interaction.__jsonload__(data)
     loaded_s = Interaction.file_json_loads(glue.file_json_dumps())
 
-    filename = "serialization/test_interaction.json"
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_interaction.json"
+    )
     glue.file_json_dump(filename)
     loaded = Interaction.file_json_load(filename)
 
@@ -88,6 +91,7 @@ def test_interaction_json_roundtrip():
 
 @MINI_TEST("Interaction", "Protobuf Roundtrip")
 def test_interaction_protobuf_roundtrip():
+    from pathlib import Path
     from session_py import Interaction
 
     Interaction.register_type("NamedInteraction", _named_interaction)
@@ -97,7 +101,9 @@ def test_interaction_protobuf_roundtrip():
     converted = Interaction.from_proto(proto)
     loaded_b = Interaction.pb_loads(glue.pb_dumps())
 
-    filename = "serialization/test_interaction.bin"
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_interaction.bin"
+    )
     glue.pb_dump(filename)
     loaded = Interaction.pb_load(filename)
 

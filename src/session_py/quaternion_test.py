@@ -321,6 +321,7 @@ def test_quaternion_nlerp():
 
 @MINI_TEST("Quaternion", "Json Roundtrip")
 def test_quaternion_json_roundtrip():
+    from pathlib import Path
     from session_py import Quaternion
     from session_py import Vector
 
@@ -328,7 +329,9 @@ def test_quaternion_json_roundtrip():
     q.name = "test_quaternion"
 
     guid = q.guid
-    filename = "serialization/test_quaternion.json"
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_quaternion.json"
+    )
     q.file_json_dump(filename)
 
     loaded = Quaternion.file_json_load(filename)
@@ -344,13 +347,16 @@ def test_quaternion_json_roundtrip():
 
 @MINI_TEST("Quaternion", "Protobuf Roundtrip")
 def test_quaternion_protobuf_roundtrip():
+    from pathlib import Path
     from session_py import Quaternion
     from session_py import Vector
 
     q = Quaternion.from_axis_angle(Vector(0.0, 0.0, 1.0), PI / 2.0)
     q.name = "test_quaternion"
 
-    filename = "serialization/test_quaternion.bin"
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_quaternion.bin"
+    )
     q.pb_dump(filename)
 
     loaded = Quaternion.pb_load(filename)

@@ -600,6 +600,7 @@ def test_dict_of_dicts():
 
 @MINI_TEST("FileEncoders", "Write Error")
 def test_write_error():
+    from pathlib import Path
     from session_py import Point
     from session_py.file_encoders import file_json_dump
 
@@ -607,7 +608,13 @@ def test_write_error():
     threw = False
 
     try:
-        file_json_dump(point, "serialization/missing-directory/test.json")
+        file_json_dump(
+            point,
+            Path(__file__).resolve().parents[2]
+            / "serialization"
+            / "missing-directory"
+            / "test.json",
+        )
     except OSError:
         threw = True
 

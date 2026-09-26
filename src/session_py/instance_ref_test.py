@@ -69,6 +69,7 @@ def test_instance_ref_transformation():
 
 @MINI_TEST("InstanceRef", "Json Roundtrip")
 def test_instance_ref_json_roundtrip():
+    from pathlib import Path
     from session_py import ElementFeature
     from session_py import InstanceRef
     from session_py import Point
@@ -105,7 +106,9 @@ def test_instance_ref_json_roundtrip():
     MINI_CHECK(loaded_s.name == "test_ref")
     MINI_CHECK(loaded_s.definition_guid == "def-abc")
 
-    filename = "serialization/test_instance_ref.json"
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_instance_ref.json"
+    )
     inst.file_json_dump(filename)
     loaded = InstanceRef.file_json_load(filename)
 
@@ -119,6 +122,7 @@ def test_instance_ref_json_roundtrip():
 
 @MINI_TEST("InstanceRef", "Protobuf Roundtrip")
 def test_instance_ref_protobuf_roundtrip():
+    from pathlib import Path
     from session_py import Color
     from session_py import ElementFeature
     from session_py import InstanceRef
@@ -161,7 +165,9 @@ def test_instance_ref_protobuf_roundtrip():
     MINI_CHECK(converted == inst)
     MINI_CHECK(converted.guid == guid)
 
-    filename = "serialization/test_instance_ref.bin"
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_instance_ref.bin"
+    )
     inst.pb_dump(filename)
     loaded = InstanceRef.pb_load(filename)
 
