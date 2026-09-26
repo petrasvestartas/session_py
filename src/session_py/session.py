@@ -1676,7 +1676,7 @@ class Session:
 
         self.purge()
 
-        return json.dumps(self.__jsondump__())
+        return json.dumps(self.__jsondump__(), separators=(",", ":"))
 
     @classmethod
     def file_json_loads(cls, json_string: str) -> Session:
