@@ -2059,17 +2059,258 @@ def _cut_result(
     return result
 
 
-def _arrangement_area(points: list[Point]) -> float:
-    """Signed xy area of a face loop."""
+def _ring_inside_2d(
+    point: tuple[float, float], ring: list[tuple[float, float]]
+) -> bool:
+    """Even-odd test of a 2D point against a 2D ring."""
+
+    inside = False
+
+    for i in range(len(ring)):
+        first = ring[i]
+        second = ring[(i + 1) % len(ring)]
+
+        if (first[1] > point[1]) != (second[1] > point[1]) and point[0] < first[0] + (
+            point[1] - first[1]
+        ) * (second[0] - first[0]) / (second[1] - first[1]):
+            inside = not inside
+
+    return inside
+
+
+def _ring_area_2d(ring: list[tuple[float, float]]) -> float:
+    """Signed area of a 2D ring, positive counter-clockwise."""
 
     area = 0.0
 
-    for i in range(len(points)):
-        a = points[i]
-        b = points[(i + 1) % len(points)]
-        area += a[0] * b[1] - b[0] * a[1]
+    for i in range(len(ring)):
+        area += (
+            ring[i][0] * ring[(i + 1) % len(ring)][1]
+            - ring[(i + 1) % len(ring)][0] * ring[i][1]
+        )
 
     return area / 2.0
+
+
+def _section_sign(distance: float) -> int:
+    """Sign of a snapped plane distance: -1, 0 or 1."""
+    return 1 if distance > 0.0 else -1 if distance < 0.0 else 0
+
+
+def _section_flips(ring: list[int], distance: dict[int, float], i: int) -> bool:
+    """True when the ring passes from one side of the plane to the other through the on-plane run starting at vertex i."""
+
+    n = len(ring)
+    before = 0
+    after = 0
+
+    for k in range(1, n):
+        if before != 0:
+            break
+
+        before = _section_sign(distance[ring[(i + n - k) % n]])
+
+    for k in range(1, n):
+        if after != 0:
+            break
+
+        after = _section_sign(distance[ring[(i + k) % n]])
+
+    return before * after < 0
+
+
+def _section_events(
+    rings: list[list[int]],
+    distance: dict[int, float],
+    points: dict[int, Point],
+    direction: Vector,
+    found: dict[tuple[int, int], Point],
+) -> list[tuple[int, int]]:
+    """Where the rings of one crossing face change side of the plane, keyed (v, v) for a vertex on the plane and (low, high) for a crossed edge, sorted along direction."""
+
+    events = []
+
+    for ring in rings:
+        n = len(ring)
+
+        for i in range(n):
+            current = ring[i]
+            following = ring[(i + 1) % n]
+            side = _section_sign(distance[current])
+
+            if side * _section_sign(distance[following]) < 0:
+                key = (min(current, following), max(current, following))
+                ratio = distance[key[0]] / (distance[key[0]] - distance[key[1]])
+                found[key] = points[key[0]] + (points[key[1]] - points[key[0]]) * ratio
+                events.append(((found[key] - points[ring[0]]).dot(direction), key))
+
+            if (
+                side == 0
+                and _section_sign(distance[ring[(i + n - 1) % n]]) != 0
+                and _section_flips(ring, distance, i)
+            ):
+                found[(current, current)] = points[current]
+                events.append(
+                    (
+                        (points[current] - points[ring[0]]).dot(direction),
+                        (current, current),
+                    )
+                )
+
+    events.sort()
+    keys = []
+
+    for event in events:
+        keys.append(event[1])
+
+    return keys
+
+
+def _section_walk(
+    links: dict[tuple[int, int], list[tuple[int, int]]],
+    start: tuple[int, int],
+    used: set,
+) -> list[tuple[int, int]]:
+    """The walk from start along unused links, marking each link used."""
+
+    chain = [start]
+
+    for _ in range(len(links)):
+        following = None
+
+        for other in links[chain[-1]]:
+            if (
+                following is None
+                and (min(chain[-1], other), max(chain[-1], other)) not in used
+            ):
+                following = other
+
+        if following is None:
+            break
+
+        used.add((min(chain[-1], following), max(chain[-1], following)))
+        chain.append(following)
+
+    return chain
+
+
+def _section_chains(
+    links: dict[tuple[int, int], list[tuple[int, int]]],
+) -> tuple[list[list[tuple[int, int]]], list[list[tuple[int, int]]]]:
+    """The chains of a section graph: the open ones from every dead end, then the closed ones round what is left, each closed on its first key."""
+
+    used = set()
+    closed = []
+    opened = []
+
+    for key in sorted(links):
+        chain = _section_walk(links, key, used) if len(links[key]) == 1 else []
+
+        if len(chain) > 1:
+            opened.append(chain)
+
+    for key in sorted(links):
+        chain = _section_walk(links, key, used)
+
+        if len(chain) > 3 and chain[0] == chain[-1]:
+            closed.append(chain)
+
+    return closed, opened
+
+
+def _section_links(
+    faces: dict[int, list[int]],
+    holes: dict[int, list[list[int]]],
+    distance: dict[int, float],
+    points: dict[int, Point],
+    axis: Vector,
+    found: dict[tuple[int, int], Point],
+) -> dict[tuple[int, int], list[tuple[int, int]]]:
+    """The section graph: every pair of events of a face crossing the plane linked, faces on one side or in the plane skipped."""
+
+    links = {}
+
+    for face, vertices in sorted(faces.items()):
+        normal = _newell_normal(_cut_points(vertices, points))
+        rings = _cut_rings(face, vertices, holes, normal, points)
+        low = 0
+        high = 0
+
+        for ring in rings:
+            for key in ring:
+                low = min(low, _section_sign(distance[key]))
+                high = max(high, _section_sign(distance[key]))
+
+        direction = axis.cross(normal)
+
+        if low == 0 or high == 0 or not direction.normalize_self():
+            continue
+
+        events = _section_events(rings, distance, points, direction, found)
+
+        for i in range(0, len(events) - 1, 2):
+            links.setdefault(events[i], []).append(events[i + 1])
+            links.setdefault(events[i + 1], []).append(events[i])
+
+    return links
+
+
+def _section_polylines(
+    closed: list[list[tuple[int, int]]],
+    opened: list[list[tuple[int, int]]],
+    found: dict[tuple[int, int], Point],
+    plane: Plane,
+) -> list[Polyline]:
+    """The chains as polylines: closed loops turned counter-clockwise about the plane normal at even nesting depth and clockwise at odd, then the open chains."""
+
+    frame = _LoftFrame(plane.origin, plane.x_axis, plane.y_axis)
+    flat = []
+    loops = []
+
+    for chain in closed:
+        loops.append([])
+        flat.append([])
+
+        for i in range(len(chain) - 1):
+            loops[-1].append(found[chain[i]])
+            flat[-1].append(_loft_project(frame, found[chain[i]]))
+
+    section = []
+
+    for i in range(len(loops)):
+        depth = 0
+
+        for j in range(len(loops)):
+            depth += 1 if j != i and _ring_inside_2d(flat[i][0], flat[j]) else 0
+
+        if (_ring_area_2d(flat[i]) > 0.0) != (depth % 2 == 0):
+            loops[i].reverse()
+
+        loops[i].append(loops[i][0])
+        section.append(Polyline(loops[i]))
+
+    for chain in opened:
+        open_points = []
+
+        for key in chain:
+            open_points.append(found[key])
+
+        section.append(Polyline(open_points))
+
+    return section
+
+
+def _arrangement_root(parent: dict[int, int], key: int) -> int:
+    """Union-find root of a vertex key."""
+
+    for _ in range(len(parent)):
+        if parent[key] == key:
+            break
+
+        parent[key] = parent[parent[key]]
+        key = parent[key]
+
+    return key
 
 
 def _arrangement_key(point: Point, tolerance: float) -> tuple[int, int]:
@@ -2078,6 +2319,153 @@ def _arrangement_key(point: Point, tolerance: float) -> tuple[int, int]:
         _round_half_away(point[0] / tolerance),
         _round_half_away(point[1] / tolerance),
     )
+
+
+def _arrangement_sources(
+    mesh: Mesh, pieces: list[Line], sources: list[int], tolerance: float
+) -> dict[tuple[int, int], float]:
+    """The source of every edge: the input line of the split piece it lies on, -1 when none."""
+
+    lookup = {}
+    result = {}
+
+    for i in range(len(pieces)):
+        start = _arrangement_key(pieces[i].start(), tolerance)
+        end = _arrangement_key(pieces[i].end(), tolerance)
+        lookup[(min(start, end), max(start, end))] = sources[i]
+
+    for edge in mesh.edges():
+        start = _arrangement_key(mesh.vertex_point(edge[0]), tolerance)
+        end = _arrangement_key(mesh.vertex_point(edge[1]), tolerance)
+        key = (min(start, end), max(start, end))
+        result[edge] = float(lookup[key]) if key in lookup else -1.0
+
+    return result
+
+
+def _arrangement_roots(mesh: Mesh) -> dict[int, int]:
+    """The component root of every vertex, the vertices joined along the face edges."""
+
+    parent = {}
+    roots = {}
+
+    for key in mesh.vertices():
+        parent[key] = key
+
+    for edge in mesh.edges():
+        parent[_arrangement_root(parent, edge[0])] = _arrangement_root(parent, edge[1])
+
+    for key in mesh.vertices():
+        roots[key] = _arrangement_root(parent, key)
+
+    return roots
+
+
+def _arrangement_faces(
+    mesh: Mesh,
+    roots: dict[int, int],
+    tolerance: float,
+    rings: dict[int, list[tuple[float, float]]],
+    owner: dict[int, int],
+) -> list[int]:
+    """Faces sorted by winding: slivers under tolerance squared removed, every clockwise outer face of a component listed, every other face's xy ring kept with its component."""
+
+    outer = []
+
+    for face in mesh.faces():
+        ring = []
+
+        for key in mesh.face_vertices(face):
+            ring.append((mesh.vertex_point(key)[0], mesh.vertex_point(key)[1]))
+
+        owner[face] = roots[mesh.face_vertices(face)[0]]
+
+        if _ring_area_2d(ring) <= -tolerance * tolerance:
+            outer.append(face)
+        elif abs(_ring_area_2d(ring)) < tolerance * tolerance:
+            mesh.remove_face(face)
+        else:
+            rings[face] = ring
+
+    return outer
+
+
+def _arrangement_holes(
+    mesh: Mesh,
+    outer: list[int],
+    rings: dict[int, list[tuple[float, float]]],
+    owner: dict[int, int],
+    lined: set,
+) -> None:
+    """Every outer face removed, made a hole of the face holding it, and the faces of a boundary-only component inside a face removed as a void."""
+
+    points = {}
+    voids = set()
+    holes = {}
+
+    for key in mesh.vertices():
+        points[key] = mesh.vertex_point(key)
+
+    for face in outer:
+        first = points[mesh.face_vertices(face)[0]]
+
+        if (
+            owner[face] in lined
+            or _arrangement_container(
+                (first[0], first[1]), owner[face], rings, owner, voids
+            )
+            is None
+        ):
+            continue
+
+        for other in sorted(owner):
+            if owner[other] == owner[face] and other in rings:
+                voids.add(other)
+
+    for face in outer:
+        first = points[mesh.face_vertices(face)[0]]
+        container = _arrangement_container(
+            (first[0], first[1]), owner[face], rings, owner, voids
+        )
+
+        if container is not None:
+            holes.setdefault(container, []).append(list(mesh.face_vertices(face)))
+
+        mesh.remove_face(face)
+
+    for face in sorted(voids):
+        mesh.remove_face(face)
+
+    for face in sorted(holes):
+        piece = _CutFace([list(mesh.face_vertices(face))] + holes[face], face)
+        mesh.set_face_holes(face, holes[face])
+        mesh.set_face_triangulation(face, _cut_triangulation(piece, points))
+
+
+def _arrangement_container(
+    point: tuple[float, float],
+    component: int,
+    rings: dict[int, list[tuple[float, float]]],
+    owner: dict[int, int],
+    skipped: set,
+) -> int | None:
+    """The smallest face of another component whose ring holds the point, none when no face does."""
+
+    container = None
+
+    for face in sorted(rings):
+        if (
+            owner[face] != component
+            and face not in skipped
+            and _ring_inside_2d(point, rings[face])
+            and (
+                container is None
+                or _ring_area_2d(rings[face]) < _ring_area_2d(rings[container])
+            )
+        ):
+            container = face
+
+    return container
 
 
 def _cut_tolerance(points: dict[int, Point]) -> float:
@@ -2498,35 +2886,26 @@ class Mesh:
     @staticmethod
     def from_arrangement(
         lines: list[Line], boundary: list[Line], tolerance: float, merge: float
-    ) -> "Mesh":
-        """Construct the planar faces of lines and boundary lines in xy split by Line.split_at_crossings, the outer face and faces under tolerance squared in area dropped; edge attribute line holds the index of the line an edge lies on, boundary lines numbered after lines, -1 when none."""
+    ) -> Mesh:
+        """Construct the planar faces of lines and boundary lines in xy split by Line.split_at_crossings: the outer face of every connected component and faces under tolerance squared in area dropped, a component inside a face becoming a hole of it, a void when it holds only boundary lines; edge attribute line holds the index of the line an edge lies on, boundary lines numbered after lines, -1 when none."""
 
-        pieces, sources = Line.split_at_crossings(lines, boundary, tolerance, merge)
-        mesh = Mesh.from_lines(pieces, True, tolerance * 0.1)
+        pieces, split = Line.split_at_crossings(lines, boundary, tolerance, merge)
+        mesh = Mesh.from_lines(pieces, False, tolerance * 0.1)
+        sources = _arrangement_sources(mesh, pieces, split, tolerance)
+        roots = _arrangement_roots(mesh)
+        lined = set()
 
-        for face in mesh.faces():
-            points = []
+        for edge in sorted(sources):
+            if sources[edge] < float(len(lines)):
+                lined.add(roots[edge[0]])
 
-            for key in mesh.face_vertices(face):
-                points.append(mesh.vertex_point(key))
-
-            if abs(_arrangement_area(points)) < tolerance * tolerance:
-                mesh.remove_face(face)
-
-        lookup = {}
-
-        for i in range(len(pieces)):
-            a = _arrangement_key(pieces[i].start(), tolerance)
-            b = _arrangement_key(pieces[i].end(), tolerance)
-            lookup[(min(a, b), max(a, b))] = sources[i]
+        rings = {}
+        owner = {}
+        outer = _arrangement_faces(mesh, roots, tolerance, rings, owner)
+        _arrangement_holes(mesh, outer, rings, owner, lined)
 
         for edge in mesh.edges():
-            a = _arrangement_key(mesh.vertex_point(edge[0]), tolerance)
-            b = _arrangement_key(mesh.vertex_point(edge[1]), tolerance)
-            key = (min(a, b), max(a, b))
-            mesh.set_edge_attribute(
-                edge, "line", float(lookup[key]) if key in lookup else -1.0
-            )
+            mesh.set_edge_attribute(edge, "line", sources[edge])
 
         return mesh
 
@@ -5273,43 +5652,27 @@ class Mesh:
         return result
 
     def section_by_plane(self, plane: Plane) -> list[Polyline]:
-        """Return the closed loops where the plane cuts the mesh: outer loops counter-clockwise about the plane normal, holes clockwise; empty when the mesh does not reach the plane."""
+        """Return where the plane cuts the faces crossing it: closed loops first, outer loops counter-clockwise about the plane normal and holes clockwise, then the open chains of an open surface; faces lying in the plane are skipped; empty when the mesh does not cross the plane."""
 
-        below = self.cut_by_plane(
-            Plane.from_point_normal(plane.origin, plane.z_axis * -1.0)
+        points = {}
+
+        for key, data in self.vertex.items():
+            points[key] = data.position()
+
+        tolerance = _cut_tolerance(points)
+        distance = {}
+
+        for key, point in points.items():
+            offset = (point - plane.origin).dot(plane.z_axis)
+            distance[key] = 0.0 if abs(offset) <= tolerance else offset
+
+        found = {}
+        links = _section_links(
+            self.face, self.face_holes, distance, points, plane.z_axis, found
         )
-        loops = []
+        closed, opened = _section_chains(links)
 
-        for fk, ring in sorted(below.face.items()):
-            rings = [ring]
-            flat = True
-
-            for hole in below.face_holes.get(fk, []):
-                rings.append(hole)
-
-            for r in rings:
-                for key in r:
-                    distance = (below.vertex[key].position() - plane.origin).dot(
-                        plane.z_axis
-                    )
-                    flat = flat and abs(distance) <= Tolerance.APPROXIMATION
-
-            if not flat:
-                continue
-
-            for i in range(len(rings)):
-                points = []
-
-                for key in rings[i]:
-                    points.append(below.vertex[key].position())
-
-                if (_newell_normal(points).dot(plane.z_axis) > 0.0) != (i == 0):
-                    points.reverse()
-
-                points.append(points[0])
-                loops.append(Polyline(points))
-
-        return loops
+        return _section_polylines(closed, opened, found, plane)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON

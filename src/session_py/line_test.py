@@ -468,5 +468,30 @@ def test_line_split_at_crossings():
     MINI_CHECK(TOLERANCE.is_close(split[0][4].start()[1], 0.0))
 
 
+@MINI_TEST("Line", "Split At Crossings Zero Length")
+def test_line_split_at_crossings_zero_length():
+    from session_py import Line
+    from session_py import Point
+
+    lines = [
+        Line.from_points(Point(-2.0, 5.0, 0.0), Point(12.0, 5.0, 0.0)),
+        Line.from_points(Point(5.0, 5.0, 0.0), Point(5.0, 5.0, 0.0)),
+    ]
+    boundary = [
+        Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)),
+        Line.from_points(Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0)),
+        Line.from_points(Point(10.0, 10.0, 0.0), Point(0.0, 10.0, 0.0)),
+        Line.from_points(Point(0.0, 10.0, 0.0), Point(0.0, 0.0, 0.0)),
+    ]
+    split = Line.split_at_crossings(lines, boundary, 0.01, 0.5)
+    zero = 0
+
+    for i in range(len(split[1])):
+        zero += 1 if split[1][i] == 1 else 0
+
+    MINI_CHECK(len(split[0]) == 7)
+    MINI_CHECK(zero == 0)
+
+
 if __name__ == "__main__":
     run_all("python")

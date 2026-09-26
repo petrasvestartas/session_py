@@ -249,6 +249,41 @@ def test_mesh_from_arrangement():
     MINI_CHECK(sides == 8)
 
 
+@MINI_TEST("Mesh", "From Arrangement Components")
+def test_mesh_from_arrangement_components():
+    from session_py import Line
+    from session_py import Mesh
+    from session_py import Point
+
+    lines = [
+        Line.from_points(Point(-2.0, 8.5, 0.0), Point(12.0, 8.5, 0.0)),
+        Line.from_points(Point(25.0, -2.0, 0.0), Point(25.0, 12.0, 0.0)),
+    ]
+    boundary = [
+        Line.from_points(Point(0.0, 0.0, 0.0), Point(10.0, 0.0, 0.0)),
+        Line.from_points(Point(10.0, 0.0, 0.0), Point(10.0, 10.0, 0.0)),
+        Line.from_points(Point(10.0, 10.0, 0.0), Point(0.0, 10.0, 0.0)),
+        Line.from_points(Point(0.0, 10.0, 0.0), Point(0.0, 0.0, 0.0)),
+        Line.from_points(Point(20.0, 0.0, 0.0), Point(30.0, 0.0, 0.0)),
+        Line.from_points(Point(30.0, 0.0, 0.0), Point(30.0, 10.0, 0.0)),
+        Line.from_points(Point(30.0, 10.0, 0.0), Point(20.0, 10.0, 0.0)),
+        Line.from_points(Point(20.0, 10.0, 0.0), Point(20.0, 0.0, 0.0)),
+        Line.from_points(Point(3.0, 3.0, 0.0), Point(7.0, 3.0, 0.0)),
+        Line.from_points(Point(7.0, 3.0, 0.0), Point(7.0, 7.0, 0.0)),
+        Line.from_points(Point(7.0, 7.0, 0.0), Point(3.0, 7.0, 0.0)),
+        Line.from_points(Point(3.0, 7.0, 0.0), Point(3.0, 3.0, 0.0)),
+    ]
+    mesh = Mesh.from_arrangement(lines, boundary, 0.01, 0.5)
+    rings = 0
+
+    for holes in mesh.get_face_holes().values():
+        rings += len(holes)
+
+    MINI_CHECK(mesh.number_of_faces() == 4)
+    MINI_CHECK(len(mesh.get_face_holes()) == 1)
+    MINI_CHECK(rings == 1)
+
+
 @MINI_TEST("Mesh", "From Polygon With Holes")
 def test_mesh_from_polygon_with_holes():
     from session_py import Mesh
@@ -1902,6 +1937,58 @@ def test_mesh_section_by_plane():
     MINI_CHECK(not rings[0].is_clockwise(plane))
     MINI_CHECK(rings[1].is_clockwise(plane))
     MINI_CHECK(TOLERANCE.is_close(rings[1].get_point(0)[2], 1.0))
+
+
+@MINI_TEST("Mesh", "Section By Plane Coplanar")
+def test_mesh_section_by_plane_coplanar():
+    from session_py import Mesh
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    box = Mesh.create_box(2.0, 2.0, 2.0)
+    top = box.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    )
+    bottom = box.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, -1.0), Vector(0.0, 0.0, 1.0))
+    )
+    flipped = box.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, -1.0))
+    )
+
+    MINI_CHECK(len(top) == 0)
+    MINI_CHECK(len(bottom) == 0)
+    MINI_CHECK(len(flipped) == 0)
+
+
+@MINI_TEST("Mesh", "Section By Plane Open")
+def test_mesh_section_by_plane_open():
+    from session_py import Mesh
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    mesh = Mesh.create_box(2.0, 2.0, 2.0)
+    low_start = mesh.add_vertex(Point(5.0, 0.0, -1.0))
+    low_corner = mesh.add_vertex(Point(7.0, 0.0, -1.0))
+    low_end = mesh.add_vertex(Point(7.0, 2.0, -1.0))
+    high_start = mesh.add_vertex(Point(5.0, 0.0, 1.0))
+    high_corner = mesh.add_vertex(Point(7.0, 0.0, 1.0))
+    high_end = mesh.add_vertex(Point(7.0, 2.0, 1.0))
+    MINI_CHECK(
+        mesh.add_face([low_start, low_corner, high_corner, high_start]) is not None
+    )
+    MINI_CHECK(mesh.add_face([low_corner, low_end, high_end, high_corner]) is not None)
+    section = mesh.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, 0.0, 1.0))
+    )
+
+    MINI_CHECK(len(section) == 2)
+    MINI_CHECK(section[0].is_closed())
+    MINI_CHECK(section[0].point_count() == 5)
+    MINI_CHECK(not section[1].is_closed())
+    MINI_CHECK(section[1].point_count() == 3)
 
 
 @MINI_TEST("Mesh", "Volume Far From Origin")

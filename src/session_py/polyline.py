@@ -958,7 +958,7 @@ class Polyline:
         return cut
 
     def offset_sides(self, distances: list[float]) -> Polyline:
-        """Return the loop closed with side i moved right of its direction in xy by distances[i], outwards for a counter-clockwise loop; corners mitred, the larger distance where two sides are parallel."""
+        """Return the loop closed with side i moved right of its direction in xy by distances[i], outwards for a counter-clockwise loop; corners mitred, the larger distance where two sides are parallel; empty for fewer than three corners or distances than sides."""
 
         points = self.get_points()
 
@@ -966,12 +966,18 @@ class Polyline:
             points.pop()
 
         count = len(points)
+
+        if count < 3 or len(distances) < count:
+            return Polyline()
+
         outward = []
 
         for i in range(count):
-            nxt = points[(i + 1) % count]
+            following = points[(i + 1) % count]
             outward.append(
-                Vector(nxt[1] - points[i][1], points[i][0] - nxt[0], 0.0).normalized()
+                Vector(
+                    following[1] - points[i][1], points[i][0] - following[0], 0.0
+                ).normalized()
             )
 
         result = []
@@ -979,17 +985,19 @@ class Polyline:
         for i in range(count):
             before = outward[(i + count - 1) % count]
             after = outward[i]
-            a = distances[(i + count - 1) % count]
-            b = distances[i]
+            moved_before = distances[(i + count - 1) % count]
+            moved_after = distances[i]
             cosine = before.dot(after)
 
-            if 1.0 - cosine * cosine < 1e-9:
-                result.append(points[i] + before * max(a, b))
+            if 1.0 - cosine * cosine < Tolerance.ABSOLUTE:
+                result.append(points[i] + before * max(moved_before, moved_after))
             else:
                 result.append(
                     points[i]
-                    + before * ((a - cosine * b) / (1.0 - cosine * cosine))
-                    + after * ((b - cosine * a) / (1.0 - cosine * cosine))
+                    + before
+                    * ((moved_before - cosine * moved_after) / (1.0 - cosine * cosine))
+                    + after
+                    * ((moved_after - cosine * moved_before) / (1.0 - cosine * cosine))
                 )
 
         result.append(result[0])

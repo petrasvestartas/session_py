@@ -1,6 +1,7 @@
 from __future__ import annotations
 import heapq
 import math
+from .tolerance import Tolerance
 from .polyline import Polyline
 
 _VF_NONE = 0  # Plain vertex.
@@ -2323,27 +2324,27 @@ class BooleanPolyline:
     def compute_regions(
         a: list[Polyline], b: list[Polyline], clip_type: int
     ) -> list[Polyline]:
-        """Compute the nonzero Vatti boolean of two sets of closed rings in xy, holes clockwise, with clip_type 0 intersection, 1 union, 2 a minus b; closed rings, outer counter-clockwise, holes clockwise."""
+        """Compute the nonzero Vatti boolean of two sets of closed rings in xy with clip_type 0 intersection, 1 union, 2 a minus b, each set first turned outer counter-clockwise and holes clockwise by nesting depth; returns closed rings, outer counter-clockwise and holes clockwise, where compute returns open ones."""
 
+        rings_a = _v_oriented(a)
+        rings_b = _v_oriented(b)
         ca = []
         cb = []
 
-        for ring in a:
-            ca.extend(ring.coords)
+        for ring in rings_a:
+            ca.extend(ring)
 
-        for ring in b:
-            cb.extend(ring.coords)
+        for ring in rings_b:
+            cb.extend(ring)
 
         bool_scale = _v_bool_scale(ca, len(ca) // 3, cb, len(cb) // 3)
         sc = _VattiScratch()
 
-        for ring in a:
-            n = _v_strip_closing(ring.coords, len(ring.coords) // 3)
-            _v_add_path_from_doubles(ring.coords, n, 0, bool_scale, sc)
+        for ring in rings_a:
+            _v_add_path_from_doubles(ring, len(ring) // 3, 0, bool_scale, sc)
 
-        for ring in b:
-            n = _v_strip_closing(ring.coords, len(ring.coords) // 3)
-            _v_add_path_from_doubles(ring.coords, n, 1, bool_scale, sc)
+        for ring in rings_b:
+            _v_add_path_from_doubles(ring, len(ring) // 3, 1, bool_scale, sc)
 
         if not _v_execute_internal(sc, clip_type):
             return []
@@ -2577,3 +2578,59 @@ def _v_flush(cur: list[float], result: list[Polyline]) -> None:
         result.append(Polyline.from_coords(list(cur)))
 
     cur.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Ring sets
+# ═══════════════════════════════════════════════════════════════════════════
+def _v_ring_area(c: list[float], n: int) -> float:
+    """Signed xy area of the first n points of flat coordinates, positive counter-clockwise."""
+
+    area = 0.0
+
+    for i in range(n):
+        area += (
+            c[i * 3] * c[((i + 1) % n) * 3 + 1] - c[((i + 1) % n) * 3] * c[i * 3 + 1]
+        )
+
+    return area / 2.0
+
+
+def _v_oriented(rings: list[Polyline]) -> list[list[float]]:
+    """The rings of one operand as flat coordinates without closing points, outer counter-clockwise and holes clockwise by how many other rings hold a point just inside each."""
+
+    flat = []
+
+    for ring in rings:
+        n = _v_strip_closing(ring.coords, len(ring.coords) // 3)
+
+        if n >= 3:
+            flat.append(list(ring.coords[: n * 3]))
+
+    oriented = []
+
+    for ring in flat:
+        oriented.append(list(ring))
+
+    for i in range(len(flat)):
+        n = len(flat[i]) // 3
+        area = _v_ring_area(flat[i], n)
+        dx = flat[i][3] - flat[i][0]
+        dy = flat[i][4] - flat[i][1]
+        side = Tolerance.RELATIVE if area > 0.0 else -Tolerance.RELATIVE
+        px = (flat[i][0] + flat[i][3]) * 0.5 - dy * side
+        py = (flat[i][1] + flat[i][4]) * 0.5 + dx * side
+        depth = 0
+
+        for j in range(len(flat)):
+            if j != i and _v_point_in_poly(flat[j], len(flat[j]) // 3, px, py):
+                depth += 1
+
+        if (area > 0.0) == (depth % 2 == 0):
+            continue
+
+        for k in range(n):
+            for axis in range(3):
+                oriented[i][k * 3 + axis] = flat[i][(n - 1 - k) * 3 + axis]
+
+    return oriented

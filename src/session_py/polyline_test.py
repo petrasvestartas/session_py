@@ -1279,5 +1279,26 @@ def test_polyline_offset_sides():
     MINI_CHECK(TOLERANCE.is_close(stepped.get_point(2)[1], -2.0))
 
 
+@MINI_TEST("Polyline", "Offset Sides Degenerate")
+def test_polyline_offset_sides_degenerate():
+    from session_py import Point
+    from session_py import Polyline
+
+    square = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 2.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    empty = Polyline().offset_sides([1.0])
+    short_distances = square.offset_sides([1.0, 1.0])
+
+    MINI_CHECK(empty.point_count() == 0)
+    MINI_CHECK(short_distances.point_count() == 0)
+
+
 if __name__ == "__main__":
     run_all("python")
