@@ -397,15 +397,9 @@ class LoftPanel:
         self.top_face_key: int | None = None  # Local key of top cap face.
         self.bot_face_key: int | None = None  # Local key of bot cap face.
         self.wall_faces: list[LoftWallFace] = []  # Wall faces in order.
-        self.face_roles: dict[
-            int, LoftFaceRole
-        ] = {}  # Face key to role for every face in mesh.
-        self.orig_top_to_local: dict[
-            int, int
-        ] = {}  # Original top vertex key to local key.
-        self.orig_bot_to_local: dict[
-            int, int
-        ] = {}  # Original bot vertex key to local key.
+        self.face_roles: dict[int, LoftFaceRole] = {}  # Face key to role for every face in mesh.
+        self.orig_top_to_local: dict[int, int] = {}  # Original top vertex key to local key.
+        self.orig_bot_to_local: dict[int, int] = {}  # Original bot vertex key to local key.
         self.top_vertices: list[int] = []  # Local keys of the top cap.
         self.bot_vertices: list[int] = []  # Local keys of the bot cap.
 
@@ -436,12 +430,8 @@ class LoftResult:
 
         self.panels = panels  # One panel per matched polygon pair.
         self.adjacency = adjacency  # Facing wall pairs.
-        self.top_mesh = (
-            top_mesh  # Top polygons of the matched panels, one face per panel.
-        )
-        self.bot_mesh = (
-            bot_mesh  # Bot polygons of the matched panels, one face per panel.
-        )
+        self.top_mesh = top_mesh  # Top polygons of the matched panels, one face per panel.
+        self.bot_mesh = bot_mesh  # Bot polygons of the matched panels, one face per panel.
 
     def __iter__(self):
         """Unpack as (panels, adjacency, top_mesh, bot_mesh)."""
@@ -2552,11 +2542,7 @@ class Mesh:
         self.face_holes: dict[int, list[list[int]]] = {}  # Face hole rings.
         self.facedata: dict[int, dict[str, float]] = {}  # Face attributes.
         self.edgedata: dict[tuple[int, int], dict[str, float]] = {}  # Edge attributes.
-        self.default_vertex_attributes: dict[str, float] = {
-            "x": 0.0,
-            "y": 0.0,
-            "z": 0.0,
-        }  # Default vertex attrs.
+        self.default_vertex_attributes: dict[str, float] = {"x": 0.0, "y": 0.0, "z": 0.0}  # Default vertex attrs.
         self.default_face_attributes: dict[str, float] = {}  # Default face attrs.
         self.default_edge_attributes: dict[str, float] = {}  # Default edge attrs.
         self._guid: str | None = None  # Lazily minted GUID.
@@ -2573,16 +2559,10 @@ class Mesh:
         self._triangle_bvh_built = False  # Whether the triangle caches are current.
         self._triangle_bvh: SpatialBVH | None = None  # BVH over cached triangle AABBs.
         self._triangle_aabbs_cache: list[AABB] = []  # Per-triangle AABBs.
-        self._triangle_indices_cache: list[
-            tuple[int, int, int]
-        ] = []  # Triangle vertex indices.
-        self._triangle_face_subidx_cache: list[
-            tuple[int, int]
-        ] = []  # Face index and sub-triangle index per triangle.
+        self._triangle_indices_cache: list[tuple[int, int, int]] = []  # Triangle vertex indices.
+        self._triangle_face_subidx_cache: list[tuple[int, int]] = []  # Face index and sub-triangle index per triangle.
         self._vertices_cache: list[Point] = []  # Sequential vertex positions.
-        self._triangle_aabb_tree: SpatialAABBTree | None = (
-            None  # AABB tree over cached triangle AABBs.
-        )
+        self._triangle_aabb_tree: SpatialAABBTree | None = None  # AABB tree over cached triangle AABBs.
 
     def __deepcopy__(self, memo):
         """Copy (same guid, same data)."""
