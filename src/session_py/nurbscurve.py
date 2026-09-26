@@ -3669,6 +3669,9 @@ class NurbsCurve:
         stride = self.m_cv_stride
 
         def knot_at(i: int) -> float:
+            if 0 < i <= len(nurbsknot):
+                return float(nurbsknot[i - 1])
+
             return float(nurbsknot[(i - 1) % period_cv_count]) + ((i - 1) // period_cv_count) * period
 
         k = p
@@ -3681,7 +3684,15 @@ class NurbsCurve:
         for i in range(len(nurbsknot_new)):
             q = (i - k) // new_period_cv_count
             r = i - k - q * new_period_cv_count
-            nurbsknot_new[i] = (nurbsknot_value if r == 0 else knot_at(k + r)) + q * period
+
+            if r != 0:
+                nurbsknot_new[i] = knot_at(k + r + q * period_cv_count)
+            elif q == 0:
+                nurbsknot_new[i] = nurbsknot_value
+            else:
+                lo = knot_at(k + q * period_cv_count)
+                hi = knot_at(k + 1 + q * period_cv_count)
+                nurbsknot_new[i] = min(max(lo + nurbsknot_value - knot_at(k), lo), hi)
 
         cv_new = np.zeros((new_period_cv_count + p) * stride, dtype=np.float64)
 
