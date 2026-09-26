@@ -479,6 +479,119 @@ def test_boolean_polyline_regions_orientation():
         )
 
 
+@MINI_TEST("Boolean Polyline", "Adjacent Rectangles")
+def test_boolean_polyline_adjacent_rectangles():
+    from session_py import BooleanPolyline
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    a = Polyline.rectangle(
+        Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 1.0, 1.0
+    )
+    b = Polyline.rectangle(
+        Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 1.0, 1.0
+    )
+    isect = BooleanPolyline.compute(a, b, 0)
+    uni = BooleanPolyline.compute(a, b, 1)
+    diff = BooleanPolyline.compute(a, b, 2)
+
+    MINI_CHECK(len(isect) == 0)
+    MINI_CHECK(len(uni) == 1)
+    MINI_CHECK(uni[0].point_count() == 4)
+    MINI_CHECK(uni[0].center() == Point(1.0, 0.5, 0.0))
+    MINI_CHECK(len(diff) == 1)
+    MINI_CHECK(diff[0].point_count() == 4)
+    MINI_CHECK(diff[0].center() == Point(0.5, 0.5, 0.0))
+
+
+@MINI_TEST("Boolean Polyline", "Partial Shared Edge")
+def test_boolean_polyline_partial_shared_edge():
+    from session_py import BooleanPolyline
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    a = Polyline.rectangle(
+        Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 2.0, 2.0
+    )
+    b = Polyline.rectangle(
+        Point(2.0, 1.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 1.0, 2.0
+    )
+    isect = BooleanPolyline.compute(a, b, 0)
+    uni = BooleanPolyline.compute(a, b, 1)
+    diff = BooleanPolyline.compute(a, b, 2)
+
+    MINI_CHECK(len(isect) == 0)
+    MINI_CHECK(len(uni) == 1)
+    MINI_CHECK(uni[0].point_count() == 8)
+    MINI_CHECK(uni[0].center() == Point(1.75, 1.5, 0.0))
+    MINI_CHECK(len(diff) == 1)
+    MINI_CHECK(diff[0].point_count() == 4)
+    MINI_CHECK(diff[0].center() == Point(1.0, 1.0, 0.0))
+
+
+@MINI_TEST("Boolean Polyline", "Collinear Overlap")
+def test_boolean_polyline_collinear_overlap():
+    from session_py import BooleanPolyline
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    a = Polyline.rectangle(
+        Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 2.0, 1.0
+    )
+    b = Polyline.rectangle(
+        Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 2.0, 1.0
+    )
+    corner = Polyline.rectangle(
+        Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 1.0, 1.0
+    )
+    isect = BooleanPolyline.compute(a, b, 0)
+    uni = BooleanPolyline.compute(a, b, 1)
+    diff = BooleanPolyline.compute(a, b, 2)
+    notch = BooleanPolyline.compute(a, corner, 2)
+
+    MINI_CHECK(len(isect) == 1)
+    MINI_CHECK(isect[0].point_count() == 4)
+    MINI_CHECK(isect[0].center() == Point(1.5, 0.5, 0.0))
+    MINI_CHECK(len(uni) == 1)
+    MINI_CHECK(uni[0].point_count() == 4)
+    MINI_CHECK(uni[0].center() == Point(1.5, 0.5, 0.0))
+    MINI_CHECK(len(diff) == 1)
+    MINI_CHECK(diff[0].point_count() == 4)
+    MINI_CHECK(diff[0].center() == Point(0.5, 0.5, 0.0))
+    MINI_CHECK(len(notch) == 1)
+    MINI_CHECK(notch[0].point_count() == 4)
+    MINI_CHECK(notch[0].center() == Point(1.5, 0.5, 0.0))
+
+
+@MINI_TEST("Boolean Polyline", "T Junction")
+def test_boolean_polyline_t_junction():
+    from session_py import BooleanPolyline
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    a = Polyline.rectangle(
+        Point(0.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 4.0, 1.0
+    )
+    b = Polyline.rectangle(
+        Point(1.0, 1.0, 0.0), Vector(1.0, 0.0, 0.0), Vector(0.0, 1.0, 0.0), 1.0, 2.0
+    )
+    isect = BooleanPolyline.compute(a, b, 0)
+    uni = BooleanPolyline.compute(a, b, 1)
+    diff = BooleanPolyline.compute(a, b, 2)
+
+    MINI_CHECK(len(isect) == 0)
+    MINI_CHECK(len(uni) == 1)
+    MINI_CHECK(uni[0].point_count() == 8)
+    MINI_CHECK(uni[0].center() == Point(1.75, 1.25, 0.0))
+    MINI_CHECK(len(diff) == 1)
+    MINI_CHECK(diff[0].point_count() == 4)
+    MINI_CHECK(diff[0].center() == Point(2.0, 0.5, 0.0))
+
+
 @MINI_TEST("Boolean Polyline Open", "Horizontal Line Vs Unit Square")
 def test_boolean_polyline_open_horizontal_line_vs_unit_square():
     from session_py import BooleanPolyline

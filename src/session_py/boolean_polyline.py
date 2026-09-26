@@ -264,12 +264,6 @@ def _v_cross_product(p1: _BIVec2, p2: _BIVec2, p3: _BIVec2) -> float:
     )
 
 
-def _v_dot_product(p1: _BIVec2, p2: _BIVec2, p3: _BIVec2) -> float:
-    return float(p2.x - p1.x) * float(p3.x - p2.x) + float(p2.y - p1.y) * float(
-        p3.y - p2.y
-    )
-
-
 def _v_products_equal(a: int, b: int, c: int, d: int) -> bool:
     return a * b == c * d
 
@@ -343,6 +337,14 @@ def _v_segs_intersect(a: _BIVec2, b: _BIVec2, c: _BIVec2, d: _BIVec2) -> bool:
         _v_sign_d(_v_cross_product(a, c, d)) * _v_sign_d(_v_cross_product(b, c, d)) < 0
     ) and (
         _v_sign_d(_v_cross_product(c, a, b)) * _v_sign_d(_v_cross_product(d, a, b)) < 0
+    )
+
+
+def _v_segs_touch(a: _BIVec2, b: _BIVec2, c: _BIVec2, d: _BIVec2) -> bool:
+    return (
+        _v_sign_d(_v_cross_product(a, c, d)) * _v_sign_d(_v_cross_product(b, c, d)) <= 0
+    ) and (
+        _v_sign_d(_v_cross_product(c, a, b)) * _v_sign_d(_v_cross_product(d, a, b)) <= 0
     )
 
 
@@ -1898,11 +1900,7 @@ def _v_clean_collinear(sc: _VattiScratch, outrec: _VOutRec) -> None:
     max_iter = (count + 1) * (count + 1)
 
     for _ in range(max_iter):
-        if _v_is_collinear(op2.prev.pt, op2.pt, op2.next.pt) and (
-            op2.pt == op2.prev.pt
-            or op2.pt == op2.next.pt
-            or _v_dot_product(op2.prev.pt, op2.pt, op2.next.pt) < 0
-        ):
+        if _v_is_collinear(op2.prev.pt, op2.pt, op2.next.pt):
             if op2 is outrec.pts:
                 outrec.pts = op2.prev
 
@@ -2094,7 +2092,7 @@ def _v_bounds(v: list[_BIVec2]) -> tuple[int, int, int, int]:
     return min_x, max_x, min_y, max_y
 
 
-def _v_any_cross(va: list[_BIVec2], vb: list[_BIVec2]) -> bool:
+def _v_any_touch(va: list[_BIVec2], vb: list[_BIVec2]) -> bool:
     na = len(va)
     nb = len(vb)
 
@@ -2118,53 +2116,10 @@ def _v_any_cross(va: list[_BIVec2], vb: list[_BIVec2]) -> bool:
             ):
                 continue
 
-            if _v_segs_intersect(a1, a2, b1, b2):
+            if _v_segs_touch(a1, a2, b1, b2):
                 return True
 
     return False
-
-
-def _v_centroid(v: list[_BIVec2]) -> _BIVec2:
-    c = _BIVec2(0, 0)
-
-    for i in range(len(v)):
-        c.x += v[i].x
-        c.y += v[i].y
-
-    n = len(v)
-    c.x = c.x // n if c.x >= 0 else -(-c.x // n)
-    c.y = c.y // n if c.y >= 0 else -(-c.y // n)
-
-    return c
-
-
-def _v_contains(va: list[_BIVec2], vb: list[_BIVec2]) -> tuple[bool, bool]:
-    """Containment of non-crossing polygons by vertex, centroid and nudged centroid tests."""
-
-    a_in_b = _pip_i(va[0], vb)
-    b_in_a = _pip_i(vb[0], va)
-    ca_cen = _v_centroid(va)
-    cb_cen = _v_centroid(vb)
-
-    if a_in_b and not _pip_i(ca_cen, vb):
-        a_in_b = False
-
-    if b_in_a and not _pip_i(cb_cen, va):
-        b_in_a = False
-
-    if a_in_b or b_in_a:
-        return a_in_b, b_in_a
-
-    a_in_b = _pip_i(ca_cen, vb)
-    b_in_a = _pip_i(cb_cen, va)
-
-    if a_in_b or b_in_a:
-        return a_in_b, b_in_a
-
-    a_in_b = _pip_i(_BIVec2(ca_cen.x + 1, ca_cen.y + 1), vb)
-    b_in_a = _pip_i(_BIVec2(cb_cen.x + 1, cb_cen.y + 1), va)
-
-    return a_in_b, b_in_a
 
 
 def _v_add_small_paths(
@@ -2176,7 +2131,7 @@ def _v_add_small_paths(
     clip_type: int,
     sc: _VattiScratch,
 ) -> list[Polyline] | None:
-    """Add both inputs through an integer copy, or return the result when they do not cross."""
+    """Add both inputs through an integer copy, or return the result when their boundaries do not touch."""
 
     va = []
     vb = []
@@ -2193,10 +2148,8 @@ def _v_add_small_paths(
     if a_max_x < b_min_x or b_max_x < a_min_x or a_max_y < b_min_y or b_max_y < a_min_y:
         return _v_select(a, b, _pip_i(va[0], vb), _pip_i(vb[0], va), clip_type)
 
-    if not _v_any_cross(va, vb):
-        a_in_b, b_in_a = _v_contains(va, vb)
-
-        return _v_select(a, b, a_in_b, b_in_a, clip_type)
+    if not _v_any_touch(va, vb):
+        return _v_select(a, b, _pip_i(va[0], vb), _pip_i(vb[0], va), clip_type)
 
     _v_add_path(va, na, 0, sc)
     _v_add_path(vb, nb, 1, sc)
