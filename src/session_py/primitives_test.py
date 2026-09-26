@@ -1182,6 +1182,111 @@ def test_nurbssurface_loft():
     )
 
 
+@MINI_TEST("Primitives", "Nurbssurface Loft Mixed Knots")
+def test_nurbssurface_loft_mixed_knots():
+    from session_py import Primitives
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    pts_bottom = [
+        Point(2.0, 0.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(-2.0, 0.0, 0.0),
+        Point(0.0, -2.0, 0.0),
+    ]
+    pts_top = [
+        Point(2.0, 0.0, 3.0),
+        Point(0.0, 2.0, 3.0),
+        Point(-2.0, 0.0, 3.0),
+        Point(0.0, -2.0, 3.0),
+    ]
+    periodic = NurbsCurve.create(True, 3, pts_bottom)
+    clamped = NurbsCurve.create(True, 3, pts_top)
+    periodic.set_domain(0.0, 1.0)
+    clamped.set_domain(0.0, 1.0)
+    clamped.clamp_end(2)
+
+    pts_a = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 1.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(3.0, 1.0, 0.0),
+        Point(4.0, 0.0, 0.0),
+    ]
+    pts_b = [
+        Point(0.0, 0.0, 3.0),
+        Point(1.0, 1.0, 3.0),
+        Point(2.0, 0.0, 3.0),
+        Point(3.0, 1.0, 3.0),
+        Point(4.0, 0.0, 3.0),
+    ]
+    single = NurbsCurve.create(False, 3, pts_a)
+    doubled = NurbsCurve.create(False, 3, pts_b)
+    single.set_domain(0.0, 1.0)
+    doubled.set_domain(0.0, 1.0)
+    doubled.insert_nurbsknot(0.5, 2)
+
+    srf_closed = Primitives.create_loft([periodic, clamped], 1)
+    srf_open = Primitives.create_loft([single, doubled], 1)
+
+    MINI_CHECK(srf_closed.is_valid())
+    MINI_CHECK(srf_closed.cv_count(0) == 7)
+    MINI_CHECK(srf_open.is_valid())
+    MINI_CHECK(srf_open.cv_count(0) == 6)
+
+    for i in range(5):
+        t = i / 4.0
+
+        MINI_CHECK(
+            TOLERANCE.is_point_close(srf_closed.point_at(t, 0.0), periodic.point_at(t))
+        )
+        MINI_CHECK(
+            TOLERANCE.is_point_close(srf_closed.point_at(t, 1.0), clamped.point_at(t))
+        )
+        MINI_CHECK(
+            TOLERANCE.is_point_close(srf_open.point_at(t, 0.0), single.point_at(t))
+        )
+        MINI_CHECK(
+            TOLERANCE.is_point_close(srf_open.point_at(t, 1.0), doubled.point_at(t))
+        )
+
+
+@MINI_TEST("Primitives", "Nurbssurface Loft Periodic Sections")
+def test_nurbssurface_loft_periodic_sections():
+    from session_py import Primitives
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    pts_bottom = [
+        Point(2.0, 0.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(-2.0, 0.0, 0.0),
+        Point(0.0, -2.0, 0.0),
+    ]
+    pts_top = [
+        Point(2.0, 0.0, 3.0),
+        Point(1.0, 1.0, 3.0),
+        Point(0.0, 2.0, 3.0),
+        Point(-2.0, 0.0, 3.0),
+        Point(0.0, -2.0, 3.0),
+    ]
+    bottom = NurbsCurve.create(True, 3, pts_bottom)
+    top = NurbsCurve.create(True, 3, pts_top)
+    bottom.set_domain(0.0, 1.0)
+    top.set_domain(0.0, 1.0)
+
+    srf = Primitives.create_loft([bottom, top], 1)
+
+    MINI_CHECK(srf.is_valid())
+    MINI_CHECK(srf.cv_count(0) == 11)
+
+    for i in range(5):
+        t = 0.1 + 0.2 * i
+
+        MINI_CHECK(TOLERANCE.is_point_close(srf.point_at(t, 0.0), bottom.point_at(t)))
+        MINI_CHECK(TOLERANCE.is_point_close(srf.point_at(t, 1.0), top.point_at(t)))
+
+
 @MINI_TEST("Primitives", "Nurbssurface Revolve")
 def test_nurbssurface_revolve():
     from session_py import Primitives

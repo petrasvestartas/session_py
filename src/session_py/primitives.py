@@ -202,26 +202,52 @@ def _unify_curves(curves: list[NurbsCurve]) -> bool:
     if compatible:
         return True
 
+    periodic = True
+
     for c in curves:
         if not c.set_domain(0.0, 1.0):
             return False
 
-    unified = curves[0].get_nurbsknots()
+        periodic = periodic and c.is_periodic()
+
+    for c in curves:
+        if not periodic and not c.is_clamped(2) and not c.clamp_end(2):
+            return False
+
+    def span_nurbsknots(c: NurbsCurve) -> list[float]:
+        nurbsknots = c.get_nurbsknots()
+
+        if not periodic:
+            return nurbsknots
+
+        return nurbsknots[c.degree() - 1 : c.cv_count() - 1]
+
+    unified = span_nurbsknots(curves[0])
 
     for i in range(1, len(curves)):
-        unified = _merge_nurbsknot_vectors(unified, curves[i].get_nurbsknots())
+        unified = _merge_nurbsknot_vectors(unified, span_nurbsknots(curves[i]))
 
     tol = 1e-10
 
     for c in curves:
-        nurbsknots = c.get_nurbsknots()
+        nurbsknots = span_nurbsknots(c)
         ci = 0
+        mult = 0
 
         for ui in range(len(unified)):
+            if ui == 0 or abs(unified[ui] - unified[ui - 1]) >= tol:
+                mult = 0
+
+            mult += 1
+
             if ci < len(nurbsknots) and abs(nurbsknots[ci] - unified[ui]) < tol:
                 ci += 1
-            else:
-                c.insert_nurbsknot(unified[ui], 1)
+            elif not c.insert_nurbsknot(unified[ui], mult):
+                return False
+
+    for c in curves:
+        if not _nurbsknot_vectors_equal(c.get_nurbsknots(), curves[0].get_nurbsknots()):
+            return False
 
     return True
 

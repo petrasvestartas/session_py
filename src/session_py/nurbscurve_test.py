@@ -870,6 +870,110 @@ def test_nurbscurve_length_repeated_knot():
     MINI_CHECK(TOLERANCE.is_close(curve.length(), length))
 
 
+@MINI_TEST("NurbsCurve", "Insert Knot Keeps Shape")
+def test_nurbscurve_insert_knot_keeps_shape():
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 2, 0),
+        Point(3, 2, 1),
+        Point(4, 0, 0),
+        Point(6, 1, 2),
+        Point(7, 3, 0),
+    ]
+
+    curve = NurbsCurve.create(False, 3, points)
+    inserted = curve.duplicate()
+    ok = inserted.insert_nurbsknot(1.5, 1)
+
+    MINI_CHECK(ok)
+    MINI_CHECK(inserted.cv_count() == 7)
+    MINI_CHECK(inserted.nurbsknot_count() == inserted.cv_count() + inserted.order() - 2)
+
+    for i in range(5):
+        t = curve.domain_end() * i / 4.0
+
+        MINI_CHECK(TOLERANCE.is_point_close(inserted.point_at(t), curve.point_at(t)))
+
+
+@MINI_TEST("NurbsCurve", "Insert Knot Periodic Wrap")
+def test_nurbscurve_insert_knot_periodic_wrap():
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    points = [
+        Point(2, 0, 0),
+        Point(0, 2, 0),
+        Point(-2, 0, 0),
+        Point(0, -2, 0),
+    ]
+
+    curve = NurbsCurve.create(True, 3, points)
+    curve.set_domain(0.0, 1.0)
+    inside = curve.duplicate()
+    outside = curve.duplicate()
+    open_curve = NurbsCurve.create(False, 3, points)
+    ok_inside = inside.insert_nurbsknot(0.3, 1)
+    ok_outside = outside.insert_nurbsknot(2.3, 1)
+    ok_open = open_curve.insert_nurbsknot(open_curve.domain_end() + 0.5, 1)
+
+    MINI_CHECK(ok_inside)
+    MINI_CHECK(ok_outside)
+    MINI_CHECK(not ok_open)
+    MINI_CHECK(outside.cv_count() == 8)
+    MINI_CHECK(open_curve.cv_count() == 4)
+
+    for i in range(outside.nurbsknot_count()):
+        MINI_CHECK(TOLERANCE.is_close(outside.nurbsknot(i), inside.nurbsknot(i)))
+
+    for i in range(outside.nurbsknot_count() - 5):
+        MINI_CHECK(TOLERANCE.is_close(outside.nurbsknot(i + 5) - outside.nurbsknot(i), 1.0))
+
+    for i in range(3):
+        MINI_CHECK(TOLERANCE.is_point_close(outside.get_cv(i), outside.get_cv(i + 5)))
+
+    for i in range(5):
+        t = 0.1 + 0.2 * i
+
+        MINI_CHECK(TOLERANCE.is_point_close(outside.point_at(t), curve.point_at(t)))
+
+
+@MINI_TEST("NurbsCurve", "Insert Knot Multiplicity Limit")
+def test_nurbscurve_insert_knot_multiplicity_limit():
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 2, 0),
+        Point(3, 2, 1),
+        Point(4, 0, 0),
+        Point(6, 1, 2),
+        Point(7, 3, 0),
+    ]
+
+    curve = NurbsCurve.create(False, 3, points)
+    periodic = NurbsCurve.create(True, 3, points)
+    point = curve.point_at(1.5)
+    ok_over = curve.insert_nurbsknot(1.5, 4)
+    ok_nan = curve.insert_nurbsknot(math.nan, 1)
+    ok_full = curve.insert_nurbsknot(1.5, 3)
+    ok_again = curve.insert_nurbsknot(1.5, 3)
+    ok_seam = periodic.insert_nurbsknot(periodic.domain_end(), 2)
+
+    MINI_CHECK(not ok_over)
+    MINI_CHECK(not ok_nan)
+    MINI_CHECK(ok_full)
+    MINI_CHECK(ok_again)
+    MINI_CHECK(not ok_seam)
+    MINI_CHECK(curve.cv_count() == 9)
+    MINI_CHECK(curve.nurbsknot_multiplicity(3) == 3)
+    MINI_CHECK(periodic.cv_count() == 9)
+    MINI_CHECK(TOLERANCE.is_point_close(curve.point_at(1.5), point))
+
+
 @MINI_TEST("NurbsCurve", "Span Vector Empty")
 def test_nurbscurve_span_vector_empty():
     from session_py import NurbsCurve

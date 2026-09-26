@@ -1117,7 +1117,7 @@ class NurbsCurve:
     ) -> bool:
         """Insert a nurbsknot by Boehm to the given multiplicity."""
 
-        if not self.is_valid():
+        if not self.is_valid() or not math.isfinite(nurbsknot_value):
             return False
 
         p = self.degree()
@@ -1126,6 +1126,31 @@ class NurbsCurve:
             return False
 
         d0, d1 = self.domain()
+        tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * SQRT_EPSILON
+
+        if self._is_wrapped():
+            t = nurbsknot_value - math.floor((nurbsknot_value - d0) / (d1 - d0)) * (d1 - d0)
+
+            if t > d1 - tol:
+                t = d0
+
+            if abs(t - d0) <= tol:
+                if nurbsknot_multiplicity == p:
+                    return self.clamp_end(2)
+
+                return nurbsknot_multiplicity == 1
+
+            mult = 0
+
+            for i in range(p - 1, self.m_cv_count - 1):
+                if abs(self.m_nurbsknot[i] - t) <= tol:
+                    t = float(self.m_nurbsknot[i])
+                    mult += 1
+
+            for i in range(mult, nurbsknot_multiplicity):
+                self._insert_wrapped_nurbsknot_once(t)
+
+            return True
 
         if nurbsknot_value < d0 or nurbsknot_value > d1:
             return False
@@ -1141,8 +1166,6 @@ class NurbsCurve:
                 return self.clamp_end(1)
 
             return nurbsknot_multiplicity == 1
-
-        tol = (abs(d0) + abs(d1) + abs(d1 - d0)) * SQRT_EPSILON
 
         for insert_iter in range(nurbsknot_multiplicity):
             U = self._full_nurbsknots()
@@ -3607,6 +3630,72 @@ class NurbsCurve:
         U[full_nurbsknot_count - 1] = float(self.m_nurbsknot[-1])
 
         return U
+
+    def _is_wrapped(self) -> bool:
+        """True when the last degree CVs repeat the first and the nurbsknot spacing repeats every period."""
+
+        p = self.degree()
+        period_cv_count = self.m_cv_count - p
+        d0, d1 = self.domain()
+        period = d1 - d0
+        tol = (abs(d0) + abs(d1) + period) * SQRT_EPSILON
+
+        if p < 2 or period_cv_count < p or period <= 0.0:
+            return False
+
+        for i in range(p):
+            for d in range(self.cv_size()):
+                a = self.m_cv[i * self.m_cv_stride + d]
+                b = self.m_cv[(i + period_cv_count) * self.m_cv_stride + d]
+
+                if abs(a - b) > Tolerance.ZERO_TOLERANCE:
+                    return False
+
+        for i in range(self.nurbsknot_count() - period_cv_count):
+            if abs(self.m_nurbsknot[i + period_cv_count] - self.m_nurbsknot[i] - period) > tol:
+                return False
+
+        return True
+
+    def _insert_wrapped_nurbsknot_once(self, nurbsknot_value: float) -> None:
+        """Insert one nurbsknot into a wrapped curve at every period, by Boehm on the periodic sequence."""
+
+        p = self.degree()
+        period_cv_count = self.m_cv_count - p
+        new_period_cv_count = period_cv_count + 1
+        period = self.domain_end() - self.domain_start()
+        nurbsknot = self.m_nurbsknot.copy()
+        cv = self.m_cv.copy()
+        stride = self.m_cv_stride
+
+        def knot_at(i: int) -> float:
+            return float(nurbsknot[(i - 1) % period_cv_count]) + ((i - 1) // period_cv_count) * period
+
+        k = p
+
+        while k < self.m_cv_count - 1 and knot_at(k + 1) <= nurbsknot_value:
+            k += 1
+
+        nurbsknot_new = np.zeros(new_period_cv_count + 2 * p - 1, dtype=np.float64)
+
+        for i in range(len(nurbsknot_new)):
+            q = (i - k) // new_period_cv_count
+            r = i - k - q * new_period_cv_count
+            nurbsknot_new[i] = (nurbsknot_value if r == 0 else knot_at(k + r)) + q * period
+
+        cv_new = np.zeros((new_period_cv_count + p) * stride, dtype=np.float64)
+
+        for i in range(new_period_cv_count + p):
+            idx = i - ((i - (k - p + 1)) // new_period_cv_count) * new_period_cv_count
+            denom = knot_at(idx + p) - knot_at(idx)
+            alpha = (nurbsknot_value - knot_at(idx)) / denom if idx <= k and denom > 0.0 else 0.0
+            a = cv[((idx - 1) % period_cv_count) * stride : ((idx - 1) % period_cv_count + 1) * stride]
+            b = cv[(idx % period_cv_count) * stride : (idx % period_cv_count + 1) * stride]
+            cv_new[i * stride : (i + 1) * stride] = (1.0 - alpha) * a + alpha * b
+
+        self.m_cv_count = new_period_cv_count + p
+        self.m_cv = cv_new
+        self.m_nurbsknot = nurbsknot_new
 
     def _insert_nurbsknot_once(self, nurbsknot_value: float, U: list[float]) -> None:
         """Insert one nurbsknot by Boehm, U the padded nurbsknots."""
