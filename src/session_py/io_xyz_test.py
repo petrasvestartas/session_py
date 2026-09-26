@@ -80,5 +80,61 @@ def test_string_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_points()[1][0], 1.0))
 
 
+@MINI_TEST("IoXyz", "Write Exact Text")
+def test_write_exact_text():
+    from session_py import Point
+    from session_py import PointCloud
+    from session_py import read_xyz
+    from session_py import write_xyz
+    from session_py import write_xyz_to_string
+    from pathlib import Path
+    import os
+
+    os.makedirs(Path(__file__).resolve().parents[2] / "serialization", exist_ok=True)
+
+    original = PointCloud()
+    original.add_point(Point(1.0, 2.5, -3.0))
+    original.add_point(Point(0.1, 1e-05, 1e16))
+    original.add_point(Point(123456.789, -0.0, 1.0 / 3.0))
+
+    filepath = str(
+        Path(__file__).resolve().parents[2] / "serialization" / "test_temp_exact.xyz"
+    )
+    write_xyz(original, filepath)
+    with open(filepath, newline="") as file:
+        text = file.read()
+    loaded = read_xyz(filepath)
+
+    MINI_CHECK(text == "1 2.5 -3\n0.1 1e-05 1e+16\n123456.789 -0 0.3333333333333333\n")
+    MINI_CHECK(write_xyz_to_string(loaded) == text)
+    MINI_CHECK(loaded.get_points()[2][2] == 1.0 / 3.0)
+
+    os.remove(filepath)
+
+
+@MINI_TEST("IoXyz", "File Errors")
+def test_file_errors():
+    from session_py import PointCloud
+    from session_py import read_xyz
+    from session_py import write_xyz
+
+    cloud = PointCloud()
+    read_failed = False
+    write_failed = False
+
+    try:
+        read_xyz("./serialization/test_temp_missing.xyz")
+    except OSError:
+        read_failed = True
+
+    try:
+        write_xyz(cloud, "")
+    except OSError:
+        write_failed = True
+
+    MINI_CHECK(read_failed)
+    MINI_CHECK(write_failed)
+
+
 if __name__ == "__main__":
     run_all("python")

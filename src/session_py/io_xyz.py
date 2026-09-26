@@ -6,21 +6,29 @@ from .pointcloud import PointCloud
 # ═══════════════════════════════════════════════════════════════════════════
 # Write
 # ═══════════════════════════════════════════════════════════════════════════
+def _format_number(value: float) -> str:
+    """Return the shortest round-trip text of value, without a trailing ".0"."""
+
+    text = repr(value)
+
+    return text.removesuffix(".0")
+
+
 def write_xyz_to_string(cloud: PointCloud) -> str:
-    """Return the cloud points as "x y z" lines at full double precision."""
+    """Return the cloud points as "x y z" lines, each number the shortest round-trip text."""
 
     out = ""
 
     for p in cloud.get_points():
-        out += f"{p[0]} {p[1]} {p[2]}\n"
+        out += f"{_format_number(p[0])} {_format_number(p[1])} {_format_number(p[2])}\n"
 
     return out
 
 
 def write_xyz(cloud: PointCloud, filepath: str) -> None:
-    """Write the cloud points as "x y z" lines to filepath."""
+    """Write the cloud points as "x y z" lines to filepath; raises if it cannot be opened."""
 
-    with open(filepath, "w") as file:
+    with open(filepath, "w", newline="") as file:
         file.write(write_xyz_to_string(cloud))
 
 
@@ -54,7 +62,7 @@ def read_xyz_from_str(content: str) -> PointCloud:
 
 
 def read_xyz(filepath: str) -> PointCloud:
-    """Return the cloud read from an .xyz file."""
+    """Return the cloud read from an .xyz file; raises if it cannot be opened."""
 
     with open(filepath) as file:
         content = file.read()
