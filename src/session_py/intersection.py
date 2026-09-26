@@ -5325,13 +5325,38 @@ def _sphere_refine_v(srf, f, um, v, h, v0, v1):
     return v
 
 
+class _PullbackRun:
+    """Seam-free run of pull-back samples with the 3D curve parameter of each."""
+
+    def __init__(self):
+        self.uv = []  # Samples in surface parameters.
+        self.ts = []  # 3D curve parameter of each sample.
+
+
+def _push_run_sample(run, u, v, t):
+    """Append the sample (u, v) at 3D curve parameter t to the run."""
+
+    run.uv.append(Point(u, v, 0.0))
+    run.ts.append(t)
+
+
+def _drop_seam_slivers(runs, step):
+    """Drop an end run shorter than a hundredth of the sample step: an end sample lying just across a seam."""
+
+    if len(runs) > 1 and runs[-1].ts[-1] - runs[-1].ts[0] < step * 0.01:
+        runs.pop()
+
+    if len(runs) > 1 and runs[0].ts[-1] - runs[0].ts[0] < step * 0.01:
+        runs.pop(0)
+
+
 def _split_pullback_u(uv, u0, range_u):
-    """Degree-1 pcurves of (u, v) samples with u unwrapped, split where u crosses the seam."""
+    """Runs of (u, v, t) samples with u unwrapped, split where u crosses the seam."""
 
     out = []
-    seg = []
+    seg = _PullbackRun()
     cur_k = _period_index(uv[0][0], u0, range_u)
-    seg.append(Point(uv[0][0] - cur_k * range_u, uv[0][1], 0.0))
+    _push_run_sample(seg, uv[0][0] - cur_k * range_u, uv[0][1], uv[0][2])
 
     for i in range(1, len(uv)):
         ki = _period_index(uv[i][0], u0, range_u)
@@ -5344,18 +5369,22 @@ def _split_pullback_u(uv, u0, range_u):
             f = (seam_cont - uv[i - 1][0]) / denom if abs(denom) > 1e-15 else 0.0
             f = min(max(f, 0.0), 1.0)
             vc = uv[i - 1][1] + (uv[i][1] - uv[i - 1][1]) * f
-            seg.append(Point(seam_cont - cur_k * range_u, vc, 0.0))
+            tc = uv[i - 1][2] + (uv[i][2] - uv[i - 1][2]) * f
+            _push_run_sample(seg, seam_cont - cur_k * range_u, vc, tc)
 
-            if len(seg) >= 2:
-                out.append(NurbsCurve.create(False, 1, seg))
+            if len(seg.uv) >= 2:
+                out.append(seg)
 
-            seg = [Point(seam_cont - nk * range_u, vc, 0.0)]
+            seg = _PullbackRun()
+            _push_run_sample(seg, seam_cont - nk * range_u, vc, tc)
             cur_k = nk
 
-        seg.append(Point(uv[i][0] - cur_k * range_u, uv[i][1], 0.0))
+        _push_run_sample(seg, uv[i][0] - cur_k * range_u, uv[i][1], uv[i][2])
 
-    if len(seg) >= 2:
-        out.append(NurbsCurve.create(False, 1, seg))
+    if len(seg.uv) >= 2:
+        out.append(seg)
+
+    _drop_seam_slivers(out, (uv[-1][2] - uv[0][2]) / (len(uv) - 1))
 
     return out
 
@@ -5399,7 +5428,8 @@ def _analytic_sphere_pullback(srf, recog, c3d):
     prev_u = 0.0
 
     for i in range(n + 1):
-        p = c3d.point_at(t0 + (t1 - t0) * i / n)
+        t = t0 + (t1 - t0) * i / n
+        p = c3d.point_at(t)
         h = _axis_height(p, frame.o, frame.z)
         u = _map_parameter(lon_map, _frame_longitude(frame, p))
         v = _sphere_refine_v(srf, frame, um, _clamped_table(tv, th, h), h, v0, v1)
@@ -5408,43 +5438,79 @@ def _analytic_sphere_pullback(srf, recog, c3d):
             u = _unwrap_period(u, prev_u, range_u)
 
         prev_u = u
-        uv.append((u, v))
+        uv.append((u, v, t))
 
     return _split_pullback_u(uv, u0, range_u)
 
 
+def _fill_apex_samples(raw, u0, range_u):
+    """Samples (u, v, t) with u unwrapped; an apex sample (u NaN) takes the u of the generator it lies on."""
+
+    uv = []
+
+    for i in range(len(raw)):
+        s = raw[i]
+
+        if not math.isnan(s[0]):
+            uv.append(
+                (
+                    s[0] if not uv else _unwrap_period(s[0], uv[-1][0], range_u),
+                    s[1],
+                    s[2],
+                )
+            )
+            continue
+
+        j = i + 1
+
+        while j < len(raw) and math.isnan(raw[j][0]):
+            j += 1
+
+        if not uv:
+            uv.append((raw[j][0] if j < len(raw) else u0, s[1], s[2]))
+            continue
+
+        u_prev = uv[-1][0]
+        uv.append((u_prev, s[1], s[2]))
+
+        if j != i + 1 or j == len(raw):
+            continue
+
+        u_next = (
+            raw[j][0]
+            + (
+                _period_index(u_prev, u0, range_u)
+                - _period_index(raw[j][0], u0, range_u)
+            )
+            * range_u
+        )
+
+        if abs(u_next - u_prev) > range_u * 1e-12:
+            uv.append((u_next, s[1], s[2]))
+
+    return uv
+
+
 def _cone_pullback_samples(c3d, frame, lon_map, h0, h1, v0, v1):
-    """Samples (u, v) of a curve on a cone or cylinder, u unwrapped and v linear in the axial height."""
+    """Samples (u, v, t) of a curve on a cone or cylinder, u unwrapped and v linear in the axial height."""
 
     t0, t1 = c3d.domain()
-    range_u = lon_map.hi - lon_map.lo
+    apex_tol = abs(h1 - h0) * 1e-9
     n = max(c3d.cv_count() * 8, 120)
-    prev_lon = 0.0
-    uv = []
-    prev_u = 0.0
+    raw = []
 
     for i in range(n + 1):
-        p = c3d.point_at(t0 + (t1 - t0) * i / n)
+        t = t0 + (t1 - t0) * i / n
+        p = c3d.point_at(t)
         r = [p[0] - frame.o[0], p[1] - frame.o[1], p[2] - frame.o[2]]
         rx = _ssi_dot(r, frame.x)
         ry = _ssi_dot(r, frame.y)
-        rad = math.sqrt(max(0.0, rx * rx + ry * ry))
-        lon = math.atan2(ry, rx) if rad > 1e-12 else prev_lon
-        prev_lon = lon
-        u = (
-            _map_parameter(lon_map, lon)
-            if rad > 1e-12
-            else _inverse_table(lon_map.xs, lon_map.ys, lon)
-        )
+        rad = math.sqrt(rx * rx + ry * ry)
+        u = _map_parameter(lon_map, math.atan2(ry, rx)) if rad > apex_tol else math.nan
         v = v0 + (_ssi_dot(r, frame.z) - h0) / (h1 - h0) * (v1 - v0)
+        raw.append((u, v, t))
 
-        if i > 0:
-            u = _unwrap_period(u, prev_u, range_u)
-
-        prev_u = u
-        uv.append((u, v))
-
-    return uv
+    return _fill_apex_samples(raw, lon_map.lo, lon_map.hi - lon_map.lo)
 
 
 def _analytic_cone_pullback(srf, recog, c3d):
@@ -5491,22 +5557,22 @@ class _PeriodGrid:
         self.swapped = swapped  # Whether a is the surface v.
 
 
-def _push_pullback_point(g, seg, a, b, ka, kb):
-    """Append the point (a, b) shifted into cell (ka, kb) in surface (u, v) order."""
+def _push_pullback_point(g, seg, p, ka, kb):
+    """Append the sample (a, b, t) shifted into cell (ka, kb) in surface (u, v) order."""
 
-    uu = a - ka * g.range_a
-    vv = b - kb * g.range_b
-    seg.append(Point(vv, uu, 0.0) if g.swapped else Point(uu, vv, 0.0))
+    uu = p[0] - ka * g.range_a
+    vv = p[1] - kb * g.range_b
+    _push_run_sample(seg, vv if g.swapped else uu, uu if g.swapped else vv, p[2])
 
 
 def _cross_period(g, p, q, ka, kb, seg, out):
-    """Split the step p -> q at its first cell boundary: (crossed, p, ka, kb), false when q is in the current cell."""
+    """Split the step p -> q at its first cell boundary: (crossed, p, ka, kb, seg), false when q is in the current cell."""
 
     kqa = _period_index(q[0], g.a0, g.range_a)
     kqb = _period_index(q[1], g.b0, g.range_b)
 
     if kqa == ka and kqb == kb:
-        return False, p, ka, kb
+        return False, p, ka, kb, seg
 
     fa = 2.0
     fb = 2.0
@@ -5525,56 +5591,55 @@ def _cross_period(g, p, q, ka, kb, seg, out):
         den = q[1] - p[1]
         fb = (bound - p[1]) / den if abs(den) > 1e-15 else 0.0
 
+    f = min(max(min(fa, fb), 0.0), 1.0)
+    c = [p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f, p[2] + (q[2] - p[2]) * f]
+
     if fa <= fb:
-        c = (
-            g.a0 + (ka + 1 if sa > 0 else ka) * g.range_a,
-            p[1] + (q[1] - p[1]) * min(max(fa, 0.0), 1.0),
-        )
+        c[0] = g.a0 + (ka + 1 if sa > 0 else ka) * g.range_a
     else:
-        c = (
-            p[0] + (q[0] - p[0]) * min(max(fb, 0.0), 1.0),
-            g.b0 + (kb + 1 if sb > 0 else kb) * g.range_b,
-        )
+        c[1] = g.b0 + (kb + 1 if sb > 0 else kb) * g.range_b
 
-    _push_pullback_point(g, seg, c[0], c[1], ka, kb)
+    _push_pullback_point(g, seg, c, ka, kb)
 
-    if len(seg) >= 2:
-        out.append(NurbsCurve.create(False, 1, seg))
+    if len(seg.uv) >= 2:
+        out.append(seg)
 
-    seg.clear()
+    seg = _PullbackRun()
 
     if fa <= fb:
         ka += sa
     else:
         kb += sb
 
-    _push_pullback_point(g, seg, c[0], c[1], ka, kb)
+    _push_pullback_point(g, seg, c, ka, kb)
 
-    return True, c, ka, kb
+    return True, c, ka, kb, seg
 
 
 def _split_pullback_ab(ab, g):
-    """Degree-1 pcurves of (a, b) samples with a and b unwrapped, split at both seams."""
+    """Runs of (a, b, t) samples with a and b unwrapped, split at both seams."""
 
     out = []
-    seg = []
+    seg = _PullbackRun()
     ka = _period_index(ab[0][0], g.a0, g.range_a)
     kb = _period_index(ab[0][1], g.b0, g.range_b)
-    _push_pullback_point(g, seg, ab[0][0], ab[0][1], ka, kb)
+    _push_pullback_point(g, seg, ab[0], ka, kb)
 
     for i in range(1, len(ab)):
         p = ab[i - 1]
 
         for _ in range(8):
-            crossed, p, ka, kb = _cross_period(g, p, ab[i], ka, kb, seg, out)
+            crossed, p, ka, kb, seg = _cross_period(g, p, ab[i], ka, kb, seg, out)
 
             if not crossed:
                 break
 
-        _push_pullback_point(g, seg, ab[i][0], ab[i][1], ka, kb)
+        _push_pullback_point(g, seg, ab[i], ka, kb)
 
-    if len(seg) >= 2:
-        out.append(NurbsCurve.create(False, 1, seg))
+    if len(seg.uv) >= 2:
+        out.append(seg)
+
+    _drop_seam_slivers(out, (ab[-1][2] - ab[0][2]) / (len(ab) - 1))
 
     return out
 
@@ -5672,7 +5737,8 @@ def _analytic_torus_pullback(srf, recog, c3d):
     prev_b = 0.0
 
     for i in range(n + 1):
-        q = c3d.point_at(t0 + (t1 - t0) * i / n)
+        t = t0 + (t1 - t0) * i / n
+        q = c3d.point_at(t)
         a = _map_parameter(lon_map, _frame_longitude(frame, q))
         b = _map_parameter(tube_map, _frame_tube_angle(frame, rmaj, rmin, q))
 
@@ -5682,7 +5748,7 @@ def _analytic_torus_pullback(srf, recog, c3d):
 
         prev_a = a
         prev_b = b
-        ab.append((a, b))
+        ab.append((a, b, t))
 
     return _split_pullback_ab(ab, _PeriodGrid(a0, a1 - a0, b0, b1 - b0, swapped))
 
@@ -5700,6 +5766,71 @@ def _analytic_pullback(srf, recog, c3d):
         return _analytic_cone_pullback(srf, recog, c3d)
 
     return []
+
+
+def _run_curves(runs):
+    """Degree-1 pcurves of the pull-back runs."""
+
+    return [NurbsCurve.create(False, 1, run.uv) for run in runs]
+
+
+def _run_point(run, t):
+    """Run sample interpolated at 3D curve parameter t."""
+
+    for i in range(len(run.ts) - 1):
+        if t > run.ts[i + 1]:
+            continue
+
+        dt = run.ts[i + 1] - run.ts[i]
+        f = min(max((t - run.ts[i]) / dt, 0.0), 1.0) if dt > 0.0 else 0.0
+
+        return Point(
+            run.uv[i][0] + (run.uv[i + 1][0] - run.uv[i][0]) * f,
+            run.uv[i][1] + (run.uv[i + 1][1] - run.uv[i][1]) * f,
+            0.0,
+        )
+
+    return run.uv[-1]
+
+
+def _run_span_points(runs, lo, hi):
+    """Samples of the run covering the 3D curve span [lo, hi], empty when none does."""
+
+    mid = 0.5 * (lo + hi)
+
+    for run in runs:
+        if mid < run.ts[0] or mid > run.ts[-1]:
+            continue
+
+        pts = [_run_point(run, lo)]
+
+        for i in range(len(run.ts)):
+            if run.ts[i] > lo and run.ts[i] < hi:
+                pts.append(run.uv[i])
+
+        pts.append(_run_point(run, hi))
+
+        return pts
+
+    return []
+
+
+def _run_span(runs, domain, lo, hi):
+    """Degree-1 pcurve of the runs over [lo, hi]; a span past the domain end wraps onto the start of the closed curve."""
+
+    period = domain[1] - domain[0]
+    pts = _run_span_points(runs, lo, min(hi, domain[1]))
+
+    if hi > domain[1]:
+        head = _run_span_points(runs, domain[0], hi - period)
+
+        if head:
+            pts.extend(head[1:])
+
+    if len(pts) < 2:
+        return NurbsCurve()
+
+    return NurbsCurve.create(False, 1, pts)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -6447,24 +6578,86 @@ def _analytic_curves(a, ra, b, rb, out):
     return _quadric_section_curves(a, ra, b, rb, out)
 
 
-def _analytic_side_pcurve(srf, recog, c3):
-    """Pcurve of an exact section on one recognized surface: analytic, pulled back, then projected."""
+def _analytic_side_runs(srf, recog, c3):
+    """Pull-back runs of an exact section on one recognized surface, empty when the analytic pcurve applies."""
 
-    pc = _analytic_pcurve(srf, recog, c3)
+    if _analytic_pcurve(srf, recog, c3).is_valid():
+        return []
+
+    return _analytic_pullback(srf, recog, c3)
+
+
+class _SectionSide:
+    """One recognized surface of an exact section with the pull-back runs of the section curve."""
+
+    def __init__(self, srf, recog, runs):
+        self.srf = srf  # Recognized surface.
+        self.recog = recog  # Its recognized kind and parameters.
+        self.runs = runs  # Pull-back runs, empty when the analytic pcurve applies.
+
+
+def _analytic_side_pcurve(side, piece, domain, lo, hi):
+    """Pcurve of the piece over [lo, hi] of a section curve with this domain: its pull-back runs, else analytic, then projected."""
+
+    if side.runs:
+        return _run_span(side.runs, domain, lo, hi)
+
+    pc = _analytic_pcurve(side.srf, side.recog, piece)
 
     if not pc.is_valid():
-        v = _analytic_pullback(srf, recog, c3)
-
-        if v:
-            pc = v[0]
-
-    if not pc.is_valid():
-        v = Closest.surface_curve(srf, c3)
+        v = Closest.surface_curve(side.srf, piece)
 
         if v:
             pc = v[0]
 
     return pc
+
+
+def _seam_cuts(c3, runs_a, runs_b):
+    """Parameters of c3 that cut it at every seam crossing of both sides' runs, the domain ends included."""
+
+    domain = c3.domain()
+    eps = (domain[1] - domain[0]) * 1e-9
+    ts = [domain[0], domain[1]]
+
+    for runs in (runs_a, runs_b):
+        for k in range(1, len(runs)):
+            ts.append(runs[k].ts[0])
+
+    ts.sort()
+    cuts = [ts[0]]
+
+    for i in range(1, len(ts)):
+        if ts[i] - cuts[-1] > eps:
+            cuts.append(ts[i])
+
+    cuts[-1] = domain[1]
+
+    return cuts
+
+
+def _runs_close(runs):
+    """Whether the runs end where they start, so the end piece of a closed curve continues onto its first."""
+    return not runs or runs[0].uv[0].distance(runs[-1].uv[-1]) < 1e-9
+
+
+def _push_section_piece(sa, sb, c3, lo, hi, triples):
+    """Push the piece of c3 over [lo, hi] with both pcurves; hi past the domain end wraps the closed curve onto its start."""
+
+    domain = c3.domain()
+    piece = c3.duplicate()
+
+    if hi > domain[1] and not piece.change_closed_curve_seam(lo):
+        return
+
+    if not piece.trim(lo, hi):
+        return
+
+    pa = _analytic_side_pcurve(sa, piece, domain, lo, hi)
+    pb = _analytic_side_pcurve(sb, piece, domain, lo, hi)
+
+    if pa.is_valid() and pb.is_valid():
+        triples.append((piece, pa, pb))
 
 
 def _analytic_ssi(a, b, tolerance):
@@ -6484,11 +6677,25 @@ def _analytic_ssi(a, b, tolerance):
         return res
 
     for cc3 in c3_list:
-        pa = _analytic_side_pcurve(a, ra, cc3)
-        pb = _analytic_side_pcurve(b, rb, cc3)
+        sa = _SectionSide(a, ra, _analytic_side_runs(a, ra, cc3))
+        sb = _SectionSide(b, rb, _analytic_side_runs(b, rb, cc3))
+        cuts = _seam_cuts(cc3, sa.runs, sb.runs)
+        wrap = (
+            len(cuts) > 2
+            and cc3.is_closed()
+            and _runs_close(sa.runs)
+            and _runs_close(sb.runs)
+        )
+        first = 1 if wrap else 0
+        last = len(cuts) - (2 if wrap else 1)
 
-        if pa.is_valid() and pb.is_valid():
-            res.triples.append((cc3, pa, pb))
+        for k in range(first, last):
+            _push_section_piece(sa, sb, cc3, cuts[k], cuts[k + 1], res.triples)
+
+        if wrap:
+            _push_section_piece(
+                sa, sb, cc3, cuts[last], cuts[first] + cuts[-1] - cuts[0], res.triples
+            )
 
     res.status = _AnalyticResult.HIT
 
@@ -6878,6 +7085,52 @@ class _SurfaceSurfaceField:
         )
 
         return g < self.conv_tol * 10.0
+
+    def correct_on_seam(self, x, k):
+        """Newton-project x in place onto the section with parameter k held fixed; x is kept when it fails."""
+
+        y = list(x)
+        free = [c for c in range(4) if c != k]
+
+        for _ in range(8):
+            sa, sau, sav = self.eval_a(y[0], y[1])
+            sb, sbu, sbv = self.eval_b(y[2], y[3])
+            res = [sa[0] - sb[0], sa[1] - sb[1], sa[2] - sb[2]]
+
+            if (
+                math.sqrt(res[0] * res[0] + res[1] * res[1] + res[2] * res[2])
+                < self.conv_tol
+            ):
+                x[:] = y
+
+                return True
+
+            cols = [sau, sav, -sbu, -sbv]
+            jac = [[cols[free[c]][r] for c in range(3)] for r in range(3)]
+            dx = _solve_gauss(jac, res, 3)
+
+            if dx is None:
+                return False
+
+            for c in range(3):
+                y[free[c]] -= dx[c]
+
+            self.clamp_open(y)
+
+        sa = self.eval_a(y[0], y[1])[0]
+        sb = self.eval_b(y[2], y[3])[0]
+        g = math.sqrt(
+            (sa[0] - sb[0]) * (sa[0] - sb[0])
+            + (sa[1] - sb[1]) * (sa[1] - sb[1])
+            + (sa[2] - sb[2]) * (sa[2] - sb[2])
+        )
+
+        if g >= self.conv_tol * 10.0:
+            return False
+
+        x[:] = y
+
+        return True
 
     def tangent(self, x, dir_sign):
         """Unit 3D section tangent at x in direction dir_sign, and both surfaces' derivatives: (dir or None, sa, sau, sav, sbu, sbv)."""
@@ -7484,7 +7737,6 @@ def _snap_quad_to_seam(field, prev, p):
 def _split_quad_at_seams(field, quad):
     """Insert corrected seam crossings into the run: (samples, indices of every seam sample)."""
 
-    dummy3 = [0.0, 0.0, 0.0]
     out_pts = [list(quad[0])]
     cross_idx = []
 
@@ -7495,7 +7747,7 @@ def _split_quad_at_seams(field, quad):
         for t, idx, seam in _quad_seam_crossings(field, pa, pb):
             cp = [pa[k] + (pb[k] - pa[k]) * t for k in range(4)]
             cp[idx] = seam
-            field.correct(cp, False, dummy3, dummy3)
+            field.correct_on_seam(cp, idx)
             out_pts.append(cp)
             cross_idx.append(len(out_pts) - 1)
 
@@ -8047,7 +8299,7 @@ def _target_pcurves(target, rt, tr, tolerance):
 
         return Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance)
 
-    pcs = _analytic_pullback(target, rt, c3d)
+    pcs = _run_curves(_analytic_pullback(target, rt, c3d))
 
     if not pcs:
         pcs = Closest.surface_curve(target, c3d, 0.0, 0.0, tolerance)

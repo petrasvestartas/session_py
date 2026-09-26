@@ -149,6 +149,38 @@ def distance_slanted(p):
     return abs(-2.0 * p[0] + p[1] + 10.0 * p[2] - 3.0) / math.sqrt(105.0)
 
 
+def pcurve_end_gap(curve3d, pcurve, surface):
+    """Larger distance of the pcurve's lifted ends from the section curve's ends."""
+
+    uv0 = pcurve.point_at_start()
+    uv1 = pcurve.point_at_end()
+
+    return max(
+        surface.point_at(uv0[0], uv0[1]).distance(curve3d.point_at_start()),
+        surface.point_at(uv1[0], uv1[1]).distance(curve3d.point_at_end()),
+    )
+
+
+def pcurve_line_deviation(line, pcurve, surface):
+    """Worst distance from the line of the pcurve lifted over its first and last twentieth, ends included."""
+
+    t0, t1 = pcurve.domain()
+    a = line.point_at_start()
+    d = line.point_at_end() - a
+    worst = pcurve_end_gap(line, pcurve, surface)
+
+    for i in range(33):
+        for f in (i / 640.0, 1.0 - i / 640.0):
+            uv = pcurve.point_at(t0 + (t1 - t0) * f)
+            worst = max(
+                worst,
+                (surface.point_at(uv[0], uv[1]) - a).cross(d).magnitude()
+                / d.magnitude(),
+            )
+
+    return worst
+
+
 @MINI_TEST("Intersection", "Line Line")
 def test_intersection_line_line():
     from session_py import intersection
@@ -1475,13 +1507,14 @@ def test_intersection_surface_surface_cylinders():
 
     ellipses = intersection.surface_surface(cyl, across)
 
-    MINI_CHECK(len(ellipses) == 2)
+    MINI_CHECK(len(ellipses) == 3)
 
     for ellipse in ellipses:
-        MINI_CHECK(ellipse[0].is_closed())
         MINI_CHECK(
             on_both(ellipse[0], distance_unit_cylinder, distance_x_cylinder) < 1e-9
         )
+        MINI_CHECK(pcurve_end_gap(ellipse[0], ellipse[1], cyl) < 1e-4)
+        MINI_CHECK(pcurve_end_gap(ellipse[0], ellipse[2], across) < 1e-4)
 
 
 @MINI_TEST("Intersection", "Surface Surface Coaxial Quadrics")
@@ -1561,6 +1594,91 @@ def test_intersection_surface_surface_coaxial_tori():
         MINI_CHECK(lies_on_curve(t[0], t[1], torus) < 1e-9)
 
 
+@MINI_TEST("Intersection", "Surface Surface Cone Apex")
+def test_intersection_surface_surface_cone_apex():
+    from session_py import intersection
+    from session_py import Point
+    from session_py import Primitives
+
+    cone = Primitives.cone_surface(0.0, 0.0, 0.0, 1.5, 3.0)
+    axial = bilinear(
+        Point(0.0, -3.0, -3.0),
+        Point(0.0, -3.0, 4.0),
+        Point(0.0, 3.0, -3.0),
+        Point(0.0, 3.0, 4.0),
+    )
+    lines = intersection.surface_surface(cone, axial)
+
+    MINI_CHECK(len(lines) == 2)
+
+    for line in lines:
+        MINI_CHECK(pcurve_line_deviation(line[0], line[1], cone) < 1e-9)
+
+
+@MINI_TEST("Intersection", "Surface Surface Seam Pieces")
+def test_intersection_surface_surface_seam_pieces():
+    from session_py import intersection
+    from session_py import Point
+    from session_py import Primitives
+    from session_py import Tolerance
+
+    sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
+    cone = Primitives.cone_surface(0.0, 0.0, 0.0, 1.5, 3.0)
+    wall = bilinear(
+        Point(0.2, -3.0, -3.0),
+        Point(0.2, -3.0, 3.0),
+        Point(0.2, 3.0, -3.0),
+        Point(0.2, 3.0, 3.0),
+    )
+    slanted = bilinear(
+        Point(-3.0, -3.0, 0.0),
+        Point(-3.0, 3.0, -0.6),
+        Point(3.0, -3.0, 1.2),
+        Point(3.0, 3.0, 0.6),
+    )
+    circle = intersection.surface_surface(sphere, wall)
+    length = 0.0
+
+    MINI_CHECK(len(circle) == 2)
+
+    for t in circle:
+        length += t[0].length()
+
+        MINI_CHECK(pcurve_end_gap(t[0], t[1], sphere) < 1e-9)
+        MINI_CHECK(lifted_distance(t[1], sphere, distance_wall) < 5e-3)
+
+    MINI_CHECK(abs(length - 2.0 * Tolerance.PI * math.sqrt(3.96)) < 1e-4)
+
+    conic = intersection.surface_surface(cone, slanted)
+
+    MINI_CHECK(len(conic) == 2)
+
+    for t in conic:
+        MINI_CHECK(pcurve_end_gap(t[0], t[1], cone) < 1e-4)
+        MINI_CHECK(lifted_distance(t[1], cone, distance_slanted) < 1e-3)
+
+
+@MINI_TEST("Intersection", "Surface Surface Seam Crossings")
+def test_intersection_surface_surface_seam_crossings():
+    from session_py import intersection
+    from session_py import Primitives
+
+    sphere = Primitives.sphere_surface(0.0, 0.0, 0.0, 2.0)
+    cyl = Primitives.cylinder_surface(1.3, 0.0, -3.0, 0.3, 6.0)
+    tr = intersection.surface_surface(sphere, cyl)
+    seam_gap = 0.0
+
+    MINI_CHECK(len(tr) == 4)
+
+    for t in tr:
+        for uv in (t[1].point_at_start(), t[1].point_at_end()):
+            seam_gap = max(seam_gap, min(abs(uv[0]), abs(uv[0] - 4.0)))
+
+        MINI_CHECK(on_both(t[0], distance_sphere, distance_cylinder) < 1e-5)
+
+    MINI_CHECK(seam_gap < 1e-8)
+
+
 @MINI_TEST("Intersection", "Cut Curves On Surface")
 def test_intersection_cut_curves_on_surface():
     from session_py import intersection
@@ -1620,7 +1738,7 @@ def test_intersection_cut_curves_on_surface_pullbacks():
     )
     sphere_cuts = intersection.cut_curves_on_surface(sphere, wall)
 
-    MINI_CHECK(len(sphere_cuts) == 3)
+    MINI_CHECK(len(sphere_cuts) == 2)
 
     for pc in sphere_cuts:
         MINI_CHECK(lifted_distance(pc, sphere, distance_wall) < 5e-3)
@@ -1655,7 +1773,7 @@ def test_intersection_cut_curves_on_surface_torus():
     )
     cuts = intersection.cut_curves_on_surface(torus, wall)
 
-    MINI_CHECK(len(cuts) == 4)
+    MINI_CHECK(len(cuts) == 2)
 
     for pc in cuts:
         MINI_CHECK(lifted_distance(pc, torus, distance_wall) < 1e-5)
