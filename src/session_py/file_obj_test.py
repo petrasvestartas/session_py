@@ -9,10 +9,9 @@ def test_read_bunny():
     from session_py import read_file_obj
     from pathlib import Path
 
-    bunny_path = Path(__file__).resolve().parents[3] / "session_data" / "bunny.obj"
+    bunny_path = Path(__file__).resolve().parents[2] / "session_data" / "bunny.obj"
 
-    if not bunny_path.exists():
-        return
+    MINI_CHECK(bunny_path.exists())
 
     mesh = read_file_obj(str(bunny_path))
     indexed = mesh.to_vertices_and_faces()
