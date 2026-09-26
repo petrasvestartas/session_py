@@ -151,7 +151,9 @@ def test_collection_compact_step():
                 expected.append(m[0])
 
         exact &= len(points) == len(expected)
-        exact &= all(p is q for p, q in zip(points, expected))
+
+        for p, q in zip(points, expected):
+            exact &= p is q
 
         for p in points:
             s = points.get_slot(p.guid)

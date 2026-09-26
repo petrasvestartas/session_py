@@ -747,8 +747,10 @@ def test_session_get_geometry_is_pure():
 
 @MINI_TEST("Session", "Json Roundtrip")
 def test_session_json_roundtrip():
+    from session_py import InstanceRef
     from session_py import Session
     from session_py import Point
+    from session_py import Xform
     from pathlib import Path
 
     session = Session()
@@ -757,6 +759,10 @@ def test_session_json_roundtrip():
     session.add_point(p1)
     session.add_point(p2)
     session.add_edge(p1.guid, p2.guid, "connection")
+    session.set_xform(p1.guid, Xform.translation(1.0, 0.0, 0.0))
+    definition = session.add_definition(Point(0.0, 0.0, 0.0))
+    instance = InstanceRef(definition, Xform.translation(0.0, 1.0, 0.0))
+    session.add_instance(instance, Xform.translation(2.0, 0.0, 0.0))
 
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_session.json"
     session.file_json_dump(fname)
@@ -765,6 +771,9 @@ def test_session_json_roundtrip():
     MINI_CHECK(loaded.name == session.name)
     MINI_CHECK(len(loaded.lookup) == len(session.lookup))
     MINI_CHECK(loaded.graph.number_of_vertices() == session.graph.number_of_vertices())
+    MINI_CHECK(loaded.xforms[p1.guid].guid == session.xforms[p1.guid].guid)
+    MINI_CHECK(loaded.xforms[instance.guid].guid == session.xforms[instance.guid].guid)
+    MINI_CHECK(loaded.objects.instances[0].xform.guid == instance.xform.guid)
 
 
 @MINI_TEST("Session", "Protobuf Roundtrip")
@@ -2975,19 +2984,6 @@ def test_session_checkpoint_tags():
     from session_py.proto import treenode_pb2
     from session_py.session import _TAGS
 
-    def first(data: bytes) -> int:
-        key = 0
-        shift = 0
-
-        for byte in data:
-            key |= (byte & 0x7F) << shift
-            shift += 7
-
-            if byte < 0x80:
-                break
-
-        return key >> 3
-
     objects = session_pb2.Session()
     objects.objects.SetInParent()
     tree = session_pb2.Session()
@@ -2996,15 +2992,6 @@ def test_session_checkpoint_tags():
     graph.graph.SetInParent()
     definitions = session_pb2.Session()
     definitions.definitions.SetInParent()
-    sections = (
-        0,
-        first(objects.SerializeToString()),
-        first(tree.SerializeToString()),
-        first(graph.SerializeToString()),
-        0,
-        first(definitions.SerializeToString()),
-        0,
-    )
     root = tree_pb2.Tree()
     root.root.SetInParent()
     children = treenode_pb2.TreeNode()
@@ -3024,17 +3011,44 @@ def test_session_checkpoint_tags():
         "components",
         "instances",
     )
-
-    MINI_CHECK(_TAGS.sections == sections)
-    MINI_CHECK(_TAGS.root == first(root.SerializeToString()))
-    MINI_CHECK(_TAGS.children == first(children.SerializeToString()))
-    tags = []
+    messages = [
+        objects.SerializeToString(),
+        tree.SerializeToString(),
+        graph.SerializeToString(),
+        definitions.SerializeToString(),
+        root.SerializeToString(),
+        children.SerializeToString(),
+    ]
 
     for name in names:
         message = objects_pb2.Objects()
         getattr(message, name).add()
-        tags.append(first(message.SerializeToString()))
+        messages.append(message.SerializeToString())
 
+    fields = []
+
+    for data in messages:
+        key = 0
+        shift = 0
+
+        for byte in data:
+            key |= (byte & 0x7F) << shift
+            shift += 7
+
+            if byte < 0x80:
+                break
+
+        fields.append(key >> 3)
+
+    sections = (0, fields[0], fields[1], fields[2], 0, fields[3], 0)
+    tags = []
+
+    for i in range(len(names)):
+        tags.append(fields[6 + i])
+
+    MINI_CHECK(_TAGS.sections == sections)
+    MINI_CHECK(_TAGS.root == fields[4])
+    MINI_CHECK(_TAGS.children == fields[5])
     MINI_CHECK(_TAGS.lists == tuple(tags))
 
 

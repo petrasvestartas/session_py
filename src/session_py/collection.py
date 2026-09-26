@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Any
-from typing import Iterable
-from typing import Iterator
+from collections.abc import Iterable
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 import copy
 import sys
@@ -235,18 +235,7 @@ class Collection:
                 self._count -= 1
             else:
                 if w != r:
-                    self._items[w], self._items[r] = self._items[r], self._items[w]
-                    self._dead[w], self._dead[r] = self._dead[r], self._dead[w]
-                    self._tombs.pop(r, None)
-
-                    for tomb in held:
-                        tomb.slot = w
-
-                    if held:
-                        self._tombs[w] = [weakref.ref(tomb) for tomb in held]
-
-                    if not self._dead[w]:
-                        self._slots[self._items[w].guid] = w
+                    self._move(r, w, held)
 
                 if self._dead[w]:
                     self._low = min(self._low, w)
@@ -328,6 +317,22 @@ class Collection:
         for slot in range(len(self._items)):
             if not self._dead[slot]:
                 yield self._items[slot]
+
+    def _move(self, r: int, w: int, held: list[Tomb]) -> None:
+        """Move the entry of slot r down to slot w with its dead flag and the pins a record holds."""
+
+        self._items[w], self._items[r] = self._items[r], self._items[w]
+        self._dead[w], self._dead[r] = self._dead[r], self._dead[w]
+        self._tombs.pop(r, None)
+
+        for tomb in held:
+            tomb.slot = w
+
+        if held:
+            self._tombs[w] = [weakref.ref(tomb) for tomb in held]
+
+        if not self._dead[w]:
+            self._slots[self._items[w].guid] = w
 
 
 def _held(pins: list[weakref.ref] | None) -> list[Tomb]:

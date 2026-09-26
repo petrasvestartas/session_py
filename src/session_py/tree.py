@@ -122,7 +122,7 @@ class TreeNode:
         """Return whether the last finished compaction kept a dead child a record still pins."""
         return self._kept
 
-    def get_child(self, at: int) -> TreeNode | None:
+    def _get_child(self, at: int) -> TreeNode | None:
         """Return the raw child at an index, dead or alive, None past the end."""
         return self._children[at] if at < len(self._children) else None
 

@@ -179,7 +179,8 @@ class InstanceRef:
 
         from .file_encoders import file_decode_node
 
-        ref = cls(data["definition_guid"], file_decode_node(data["xform"]))
+        ref = cls(data["definition_guid"])
+        ref.xform = file_decode_node(data["xform"])
         ref.color = file_decode_node(data["color"])
         ref.flags = data.get("flags", 0)
         ref.guid = guid if guid is not None else data["guid"]

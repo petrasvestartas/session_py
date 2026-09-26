@@ -242,9 +242,13 @@ def test_treenode_compact():
     q = TreeNode("q")
     q.add(kids[5])
     moved = p.children
+    same = len(after) == len(before)
+
+    for x, y in zip(after, before):
+        same = same and x is y
 
     MINI_CHECK(raw == 4 and not p.is_compacting())
-    MINI_CHECK(len(after) == 3 and all(x is y for x, y in zip(after, before)))
+    MINI_CHECK(len(after) == 3 and same)
     MINI_CHECK(kids[3].is_dead() and kids[3].get_tomb() is tomb)
     MINI_CHECK(kids[1].get_tomb() is None)
     MINI_CHECK(len(moved) == 2 and moved[0] is kids[0] and moved[1] is kids[2])
@@ -551,21 +555,34 @@ def test_tree_dead_nodes():
     c_guid = c.guid
     g_guid = g.guid
 
-    def names(nodes):
-        result = []
-
-        for node in nodes:
-            result.append(node.name)
-
-        return result
-
     json = tree.file_json_dumps()
     from_json = Tree.file_json_loads(json)
     from_pb = Tree.pb_loads(tree.pb_dumps())
     expected = ["root", "group", "alpha", "delta"]
+    orders = [
+        tree.nodes,
+        tree.traverse("depthfirst", "preorder"),
+        tree.traverse("breadthfirst", "preorder"),
+        from_json.nodes,
+        from_pb.nodes,
+    ]
+    ordered = True
 
-    MINI_CHECK(names(tree.nodes) == expected)
-    MINI_CHECK(names(tree.leaves) == ["alpha", "delta"])
+    for nodes in orders:
+        names = []
+
+        for node in nodes:
+            names.append(node.name)
+
+        ordered = ordered and names == expected
+
+    leaves = []
+
+    for node in tree.leaves:
+        leaves.append(node.name)
+
+    MINI_CHECK(ordered)
+    MINI_CHECK(leaves == ["alpha", "delta"])
     MINI_CHECK(
         tree.get_node_by_name("beta") is None and tree.get_nodes_by_name("gamma") == []
     )
@@ -574,14 +591,11 @@ def test_tree_dead_nodes():
         and tree.find_node_by_guid(c_guid) is None
     )
     MINI_CHECK(len(tree.get_children_guids(g_guid)) == 2)
-    MINI_CHECK(names(tree.traverse("depthfirst", "preorder")) == expected)
-    MINI_CHECK(names(tree.traverse("breadthfirst", "preorder")) == expected)
     MINI_CHECK("beta" not in str(tree) and "gamma" not in str(tree))
     MINI_CHECK(
         repr(tree) == "Tree(t, 4 nodes)" and str(g) == "TreeNode(group, 2 children)"
     )
     MINI_CHECK("beta" not in json and "gamma" not in json)
-    MINI_CHECK(names(from_json.nodes) == expected and names(from_pb.nodes) == expected)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any
-from typing import Iterable
+from collections.abc import Iterable
 from typing import NamedTuple
 from typing import TYPE_CHECKING
 import bisect
@@ -349,6 +349,27 @@ def _ray_mesh(
     return placement.transform_point(hits[0])
 
 
+def _brep_points(brep: BRep) -> list[Point]:
+    """The vertices of a BRep and a 3x3 sample of each of its surfaces."""
+
+    points = []
+
+    for vertex in brep.m_vertices:
+        points.append(vertex.point)
+
+    for surface in brep.m_surfaces:
+        u0, u1 = surface.domain(0)
+        v0, v1 = surface.domain(1)
+
+        for i in range(3):
+            for j in range(3):
+                points.append(
+                    surface.point_at(u0 + (u1 - u0) * i / 2.0, v0 + (v1 - v0) * j / 2.0)
+                )
+
+    return points
+
+
 def _box_points(geometry: Any) -> list[Point]:
     """The points whose box bounds a geometry: vertices, control points or surface samples."""
 
@@ -363,20 +384,7 @@ def _box_points(geometry: Any) -> list[Point]:
         for vertex in geometry.vertex.values():
             points.append(vertex.position())
     elif isinstance(geometry, BRep):
-        for vertex in geometry.m_vertices:
-            points.append(vertex.point)
-
-        for surface in geometry.m_surfaces:
-            u0, u1 = surface.domain(0)
-            v0, v1 = surface.domain(1)
-
-            for i in range(3):
-                for j in range(3):
-                    points.append(
-                        surface.point_at(
-                            u0 + (u1 - u0) * i / 2.0, v0 + (v1 - v0) * j / 2.0
-                        )
-                    )
+        points = _brep_points(geometry)
     elif isinstance(geometry, NurbsCurve):
         for i in range(geometry.cv_count()):
             points.append(geometry.get_cv(i))
@@ -578,9 +586,14 @@ class Session:
         indexed = None if self._indexed is None else self._indexed()
         node = self.node_lookup.get(guid)
 
-        if indexed is not None and indexed is self.tree.root and node is not None:
-            if node.name == guid and node.parent is not None:
-                return node
+        if (
+            indexed is not None
+            and indexed is self.tree.root
+            and node is not None
+            and node.name == guid
+            and node.parent is not None
+        ):
+            return node
 
         return self.tree.get_node_by_name(guid)
 
@@ -1004,28 +1017,19 @@ class Session:
 
         tomb = node.get_tomb()
 
-        if was_dead and tomb is not None and tomb.collection == "":
-            if tomb.xform is not None:
-                self.xforms[name] = tomb.xform
-                tomb.xform = None
+        if (
+            was_dead
+            and tomb is not None
+            and tomb.collection == ""
+            and tomb.xform is not None
+        ):
+            self.xforms[name] = tomb.xform
+            tomb.xform = None
 
         if self._is_live(name):
             self.node_lookup[name] = node
 
-        if self.history.current is None:
-            self.history.dropped += 1 if ghost is not None else 0
-
-            return
-
-        tomb = self._node_tomb(ghost if ghost is not None else node)
-        color = node.color
-        dead_before = was_dead or ghost is None
-        self.history.record(
-            TreeOp(
-                name, node, tomb, ghost, name, name, color, color, dead_before, False
-            ),
-            RECORD,
-        )
+        self._record_add(node, ghost, was_dead)
 
     def add_group(self, group_name: str) -> TreeNode:
         """Create a named group (TreeNode) and add it to the root of the tree."""
@@ -1974,6 +1978,27 @@ class Session:
 
         return tomb
 
+    def _record_add(
+        self, node: TreeNode, ghost: TreeNode | None, was_dead: bool
+    ) -> None:
+        """Record a tree add of node, which left ghost at its old parent or revived when was_dead; outside a transaction it only counts a dropped move."""
+
+        if self.history.current is None:
+            self.history.dropped += 1 if ghost is not None else 0
+
+            return
+
+        name = node.name
+        tomb = self._node_tomb(ghost if ghost is not None else node)
+        color = node.color
+        dead_before = was_dead or ghost is None
+        self.history.record(
+            TreeOp(
+                name, node, tomb, ghost, name, name, color, color, dead_before, False
+            ),
+            RECORD,
+        )
+
     def _half(self, definition: bool, collection: str, guid: str) -> Tomb:
         """A slot-only tomb on the live slot of guid in the list of that name, reused while a record still holds it; a map-only entry is appended first."""
 
@@ -2050,15 +2075,7 @@ class Session:
             phase = self._purging
 
             if phase < 2 * len(COLLECTIONS):
-                objects = self.objects if phase < len(COLLECTIONS) else self.definitions
-                items = getattr(objects, COLLECTIONS[phase % len(COLLECTIONS)][0])
-
-                if items.number_of_dead() > 0 or items.is_compacting():
-                    work -= min(items.compact_step(work), work)
-
-                if not items.is_compacting():
-                    self._purging = phase + 1
-
+                work = self._purge_list(phase, work)
                 continue
 
             if not self._sweep:
@@ -2087,6 +2104,20 @@ class Session:
                 self._pinned.append(weakref.ref(parent))
             else:
                 parent.set_queued(False)
+
+        return work
+
+    def _purge_list(self, phase: int, work: int) -> int:
+        """Compact the list of a purge phase (objects first, then definitions) for at most work slots, stepping to the next phase once it is done; returns the work left."""
+
+        objects = self.objects if phase < len(COLLECTIONS) else self.definitions
+        items = getattr(objects, COLLECTIONS[phase % len(COLLECTIONS)][0])
+
+        if items.number_of_dead() > 0 or items.is_compacting():
+            work -= min(items.compact_step(work), work)
+
+        if not items.is_compacting():
+            self._purging = phase + 1
 
         return work
 
@@ -2180,7 +2211,7 @@ class Session:
 
         while spent < work and writer.stack:
             frame = writer.stack[-1]
-            child = frame[0].get_child(frame[1])
+            child = frame[0]._get_child(frame[1])
             frame[1] += 1
             spent += 1
 
@@ -2335,29 +2366,7 @@ class Session:
         """Write the non-identity xforms of guids outside order() in guid order, after a scan of xforms in slices of work that runs only when order() missed some; returns the entries examined or written."""
 
         if writer.hits < len(self.xforms):
-            start = writer.cursor
-            end = min(len(self.xforms), start + work)
-
-            for guid, xform in itertools.islice(self.xforms.items(), start, end):
-                geometry = self.lookup.get(guid)
-                ordered = (
-                    geometry is not None
-                    and getattr(self.objects, _collection_of(geometry)[0]).get_slot(
-                        guid
-                    )
-                    is not None
-                )
-
-                if not ordered and not xform.is_identity():
-                    bisect.insort(writer.rest, guid)
-
-            writer.cursor = end
-
-            if end >= len(self.xforms):
-                writer.hits = len(self.xforms)
-                writer.cursor = 0
-
-            return end - start
+            return self._scan_rest(writer, work)
 
         start = writer.cursor
         end = min(len(writer.rest), start + work)
@@ -2376,6 +2385,31 @@ class Session:
         if self.definition_lookup:
             writer.sections["definitions"] = _objects_head(self.definitions)
             writer.phase = _DEFINITIONS
+
+        return end - start
+
+    def _scan_rest(self, writer: _Checkpoint, work: int) -> int:
+        """Scan a slice of at most work xforms for non-identity ones whose guid order() misses, into the rest set; returns the entries scanned."""
+
+        start = writer.cursor
+        end = min(len(self.xforms), start + work)
+
+        for guid, xform in itertools.islice(self.xforms.items(), start, end):
+            geometry = self.lookup.get(guid)
+            ordered = (
+                geometry is not None
+                and getattr(self.objects, _collection_of(geometry)[0]).get_slot(guid)
+                is not None
+            )
+
+            if not ordered and not xform.is_identity():
+                bisect.insort(writer.rest, guid)
+
+        writer.cursor = end
+
+        if end >= len(self.xforms):
+            writer.hits = len(self.xforms)
+            writer.cursor = 0
 
         return end - start
 
