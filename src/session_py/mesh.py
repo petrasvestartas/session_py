@@ -397,9 +397,15 @@ class LoftPanel:
         self.top_face_key: int | None = None  # Local key of top cap face.
         self.bot_face_key: int | None = None  # Local key of bot cap face.
         self.wall_faces: list[LoftWallFace] = []  # Wall faces in order.
-        self.face_roles: dict[int, LoftFaceRole] = {}  # Face key to role for every face in mesh.
-        self.orig_top_to_local: dict[int, int] = {}  # Original top vertex key to local key.
-        self.orig_bot_to_local: dict[int, int] = {}  # Original bot vertex key to local key.
+        self.face_roles: dict[
+            int, LoftFaceRole
+        ] = {}  # Face key to role for every face in mesh.
+        self.orig_top_to_local: dict[
+            int, int
+        ] = {}  # Original top vertex key to local key.
+        self.orig_bot_to_local: dict[
+            int, int
+        ] = {}  # Original bot vertex key to local key.
         self.top_vertices: list[int] = []  # Local keys of the top cap.
         self.bot_vertices: list[int] = []  # Local keys of the bot cap.
 
@@ -430,8 +436,12 @@ class LoftResult:
 
         self.panels = panels  # One panel per matched polygon pair.
         self.adjacency = adjacency  # Facing wall pairs.
-        self.top_mesh = top_mesh  # Top polygons of the matched panels, one face per panel.
-        self.bot_mesh = bot_mesh  # Bot polygons of the matched panels, one face per panel.
+        self.top_mesh = (
+            top_mesh  # Top polygons of the matched panels, one face per panel.
+        )
+        self.bot_mesh = (
+            bot_mesh  # Bot polygons of the matched panels, one face per panel.
+        )
 
     def __iter__(self):
         """Unpack as (panels, adjacency, top_mesh, bot_mesh)."""
@@ -2100,21 +2110,21 @@ def _section_sign(distance: float) -> int:
 def _section_flips(ring: list[int], distance: dict[int, float], i: int) -> bool:
     """True when the ring passes from one side of the plane to the other through the on-plane run starting at vertex i."""
 
-    n = len(ring)
+    count = len(ring)
     before = 0
     after = 0
 
-    for k in range(1, n):
+    for k in range(1, count):
         if before != 0:
             break
 
-        before = _section_sign(distance[ring[(i + n - k) % n]])
+        before = _section_sign(distance[ring[(i + count - k) % count]])
 
-    for k in range(1, n):
+    for k in range(1, count):
         if after != 0:
             break
 
-        after = _section_sign(distance[ring[(i + k) % n]])
+        after = _section_sign(distance[ring[(i + k) % count]])
 
     return before * after < 0
 
@@ -2131,11 +2141,11 @@ def _section_events(
     events = []
 
     for ring in rings:
-        n = len(ring)
+        count = len(ring)
 
-        for i in range(n):
+        for i in range(count):
             current = ring[i]
-            following = ring[(i + 1) % n]
+            following = ring[(i + 1) % count]
             side = _section_sign(distance[current])
 
             if side * _section_sign(distance[following]) < 0:
@@ -2146,7 +2156,7 @@ def _section_events(
 
             if (
                 side == 0
-                and _section_sign(distance[ring[(i + n - 1) % n]]) != 0
+                and _section_sign(distance[ring[(i + count - 1) % count]]) != 0
                 and _section_flips(ring, distance, i)
             ):
                 found[(current, current)] = points[current]
@@ -2218,6 +2228,38 @@ def _section_chains(
     return closed, opened
 
 
+def _section_link(
+    links: dict[tuple[int, int], list[tuple[int, int]]],
+    first: tuple[int, int],
+    second: tuple[int, int],
+) -> None:
+    """Links first and second once."""
+
+    if first == second or second in links.get(first, []):
+        return
+
+    links.setdefault(first, []).append(second)
+    links.setdefault(second, []).append(first)
+
+
+def _section_edges(
+    rings: list[list[int]],
+    distance: dict[int, float],
+    sides: int,
+    edges: dict[tuple[int, int], int],
+) -> None:
+    """The ring edges lying in the plane marked with the sides the face reaches: 1 below, 2 above."""
+
+    for ring in rings:
+        for i in range(len(ring)):
+            first = ring[i]
+            second = ring[(i + 1) % len(ring)]
+
+            if distance[first] == 0.0 and distance[second] == 0.0:
+                key = (min(first, second), max(first, second))
+                edges[key] = edges.get(key, 0) | sides
+
+
 def _section_links(
     faces: dict[int, list[int]],
     holes: dict[int, list[list[int]]],
@@ -2226,9 +2268,10 @@ def _section_links(
     axis: Vector,
     found: dict[tuple[int, int], Point],
 ) -> dict[tuple[int, int], list[tuple[int, int]]]:
-    """The section graph: every pair of events of a face crossing the plane linked, faces on one side or in the plane skipped."""
+    """The section graph: the events of every face crossing the plane linked in pairs, then every edge in the plane where faces from both sides meet; faces lying in the plane skipped."""
 
     links = {}
+    edges = {}
 
     for face, vertices in sorted(faces.items()):
         normal = _newell_normal(_cut_points(vertices, points))
@@ -2241,6 +2284,9 @@ def _section_links(
                 low = min(low, _section_sign(distance[key]))
                 high = max(high, _section_sign(distance[key]))
 
+        _section_edges(
+            rings, distance, (1 if low < 0 else 0) | (2 if high > 0 else 0), edges
+        )
         direction = axis.cross(normal)
 
         if low == 0 or high == 0 or not direction.normalize_self():
@@ -2249,8 +2295,13 @@ def _section_links(
         events = _section_events(rings, distance, points, direction, found)
 
         for i in range(0, len(events) - 1, 2):
-            links.setdefault(events[i], []).append(events[i + 1])
-            links.setdefault(events[i + 1], []).append(events[i])
+            _section_link(links, events[i], events[i + 1])
+
+    for edge, sides in sorted(edges.items()):
+        if sides == 3:
+            found[(edge[0], edge[0])] = points[edge[0]]
+            found[(edge[1], edge[1])] = points[edge[1]]
+            _section_link(links, (edge[0], edge[0]), (edge[1], edge[1]))
 
     return links
 
@@ -2298,6 +2349,9 @@ def _section_polylines(
         section.append(Polyline(open_points))
 
     return section
+
+
+_ARRANGEMENT_PRECISION = 0.1  # Vertex weld of from_lines as a share of the tolerance.
 
 
 def _arrangement_root(parent: dict[int, int], key: int) -> int:
@@ -2498,7 +2552,11 @@ class Mesh:
         self.face_holes: dict[int, list[list[int]]] = {}  # Face hole rings.
         self.facedata: dict[int, dict[str, float]] = {}  # Face attributes.
         self.edgedata: dict[tuple[int, int], dict[str, float]] = {}  # Edge attributes.
-        self.default_vertex_attributes: dict[str, float] = {"x": 0.0, "y": 0.0, "z": 0.0}  # Default vertex attrs.
+        self.default_vertex_attributes: dict[str, float] = {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+        }  # Default vertex attrs.
         self.default_face_attributes: dict[str, float] = {}  # Default face attrs.
         self.default_edge_attributes: dict[str, float] = {}  # Default edge attrs.
         self._guid: str | None = None  # Lazily minted GUID.
@@ -2515,10 +2573,16 @@ class Mesh:
         self._triangle_bvh_built = False  # Whether the triangle caches are current.
         self._triangle_bvh: SpatialBVH | None = None  # BVH over cached triangle AABBs.
         self._triangle_aabbs_cache: list[AABB] = []  # Per-triangle AABBs.
-        self._triangle_indices_cache: list[tuple[int, int, int]] = []  # Triangle vertex indices.
-        self._triangle_face_subidx_cache: list[tuple[int, int]] = []  # Face index and sub-triangle index per triangle.
+        self._triangle_indices_cache: list[
+            tuple[int, int, int]
+        ] = []  # Triangle vertex indices.
+        self._triangle_face_subidx_cache: list[
+            tuple[int, int]
+        ] = []  # Face index and sub-triangle index per triangle.
         self._vertices_cache: list[Point] = []  # Sequential vertex positions.
-        self._triangle_aabb_tree: SpatialAABBTree | None = None  # AABB tree over cached triangle AABBs.
+        self._triangle_aabb_tree: SpatialAABBTree | None = (
+            None  # AABB tree over cached triangle AABBs.
+        )
 
     def __deepcopy__(self, memo):
         """Copy (same guid, same data)."""
@@ -2890,7 +2954,7 @@ class Mesh:
         """Construct the planar faces of lines and boundary lines in xy split by Line.split_at_crossings: the outer face of every connected component and faces under tolerance squared in area dropped, a component inside a face becoming a hole of it, a void when it holds only boundary lines; edge attribute line holds the index of the line an edge lies on, boundary lines numbered after lines, -1 when none."""
 
         pieces, split = Line.split_at_crossings(lines, boundary, tolerance, merge)
-        mesh = Mesh.from_lines(pieces, False, tolerance * 0.1)
+        mesh = Mesh.from_lines(pieces, False, tolerance * _ARRANGEMENT_PRECISION)
         sources = _arrangement_sources(mesh, pieces, split, tolerance)
         roots = _arrangement_roots(mesh)
         lined = set()

@@ -1991,6 +1991,60 @@ def test_mesh_section_by_plane_open():
     MINI_CHECK(section[1].point_count() == 3)
 
 
+@MINI_TEST("Mesh", "Section By Plane Vertex Ring")
+def test_mesh_section_by_plane_vertex_ring():
+    from session_py import Mesh
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    vertices = [
+        Point(0.0, 0.0, 0.0),
+        Point(2.0, 0.0, 0.0),
+        Point(2.0, 2.0, 0.0),
+        Point(0.0, 2.0, 0.0),
+        Point(0.0, 0.0, 1.0),
+        Point(2.0, 0.0, 1.0),
+        Point(2.0, 2.0, 1.0),
+        Point(0.0, 2.0, 1.0),
+        Point(0.0, 0.0, 2.0),
+        Point(2.0, 0.0, 2.0),
+        Point(2.0, 2.0, 2.0),
+        Point(0.0, 2.0, 2.0),
+    ]
+    faces = [[0, 3, 2, 1], [8, 9, 10, 11]]
+
+    for k in range(4):
+        faces.append([k, (k + 1) % 4, 4 + (k + 1) % 4, 4 + k])
+        faces.append([4 + k, 4 + (k + 1) % 4, 8 + (k + 1) % 4, 8 + k])
+
+    prism = Mesh.from_vertices_and_faces(vertices, faces)
+    ring = prism.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    )
+
+    MINI_CHECK(len(ring) == 1)
+    MINI_CHECK(ring[0].is_closed())
+    MINI_CHECK(ring[0].point_count() == 5)
+
+
+@MINI_TEST("Mesh", "Section By Plane Diagonal")
+def test_mesh_section_by_plane_diagonal():
+    from session_py import Mesh
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    box = Mesh.create_box(2.0, 2.0, 2.0)
+    diagonal = box.section_by_plane(
+        Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, -1.0, 0.0))
+    )
+
+    MINI_CHECK(len(diagonal) == 1)
+    MINI_CHECK(diagonal[0].is_closed())
+    MINI_CHECK(diagonal[0].point_count() == 5)
+
+
 @MINI_TEST("Mesh", "Volume Far From Origin")
 def test_mesh_volume_far_from_origin():
     from session_py import Mesh

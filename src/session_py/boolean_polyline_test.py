@@ -462,14 +462,21 @@ def test_boolean_polyline_regions_orientation():
     )
     frame = BooleanPolyline.compute_regions([outer, inner], [], 1)
     turned = BooleanPolyline.compute_regions([outer.reversed(), inner], [], 1)
-    clockwise = 0
-
-    for ring in frame:
-        clockwise += 1 if ring.is_clockwise(plane) else 0
 
     MINI_CHECK(len(frame) == 2)
-    MINI_CHECK(clockwise == 1)
     MINI_CHECK(len(turned) == 2)
+
+    for ring in frame:
+        MINI_CHECK(
+            ring.is_clockwise(plane)
+            == (ring.get_point(0)[0] > 1.0 and ring.get_point(0)[0] < 9.0)
+        )
+
+    for ring in turned:
+        MINI_CHECK(
+            ring.is_clockwise(plane)
+            == (ring.get_point(0)[0] > 1.0 and ring.get_point(0)[0] < 9.0)
+        )
 
 
 @MINI_TEST("Boolean Polyline Open", "Horizontal Line Vs Unit Square")

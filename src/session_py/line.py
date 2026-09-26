@@ -16,272 +16,6 @@ if TYPE_CHECKING:
     from .xform import Xform
 
 
-class _SplitSegment:
-    """A piece of an input line while the crossings are computed."""
-
-    def __init__(self, start: Point, end: Point, source: int, boundary: bool):
-        self.start = start  # Start at z 0.
-        self.end = end  # End at z 0.
-        self.source = source  # Index of the input line, boundary lines after lines.
-        self.boundary = boundary  # True for a boundary line.
-        self.alive = True  # False once a stronger collinear segment took it.
-        self.stops = []  # Distance along it and index of each of its stops.
-
-
-class _SplitStop:
-    """A point every piece ends on: a segment end or a crossing."""
-
-    def __init__(self, point: Point, order: int):
-        self.point = point  # At z 0.
-        self.order = order  # Weld order: 0 boundary end, 1 boundary crossing, 2 rest.
-
-
-def _split_direction(start: Point, end: Point) -> Vector:
-    """Unit xy direction from start to end."""
-    return Vector(end[0] - start[0], end[1] - start[1], 0.0).normalized()
-
-
-def _split_distance(start: Point, end: Point) -> float:
-    """Distance in xy from start to end."""
-    return math.hypot(end[0] - start[0], end[1] - start[1])
-
-
-def _split_is_stronger(strong: _SplitSegment, weak: _SplitSegment) -> bool:
-    """True when segment strong takes a collinear overlap from weak: the boundary first, then the earlier line."""
-
-    if strong.boundary != weak.boundary:
-        return strong.boundary
-
-    return strong.source < weak.source
-
-
-def _split_parameter(segment: _SplitSegment, point: Point) -> float:
-    """Distance along a segment from its start to the foot of a point."""
-    return (point - segment.start).dot(_split_direction(segment.start, segment.end))
-
-
-def _split_overlap(
-    segments: list[_SplitSegment], strong: int, weak: int, tolerance: float
-) -> None:
-    """The weak segment of a collinear pair loses the stretch the strong one covers and keeps the rest as new pieces."""
-
-    along = _split_direction(segments[strong].start, segments[strong].end)
-    direction = _split_direction(segments[weak].start, segments[weak].end)
-
-    if (
-        abs(along.cross(direction)[2]) > Tolerance.ANGULAR
-        or abs((segments[weak].start - segments[strong].start).cross(along)[2])
-        > tolerance
-    ):
-        return
-
-    length = _split_distance(segments[weak].start, segments[weak].end)
-    low = max(
-        0.0,
-        min(
-            _split_parameter(segments[weak], segments[strong].start),
-            _split_parameter(segments[weak], segments[strong].end),
-        ),
-    )
-    high = min(
-        length,
-        max(
-            _split_parameter(segments[weak], segments[strong].start),
-            _split_parameter(segments[weak], segments[strong].end),
-        ),
-    )
-
-    if high - low <= tolerance:
-        return
-
-    loser = segments[weak]
-    segments[weak].alive = False
-
-    if low > tolerance:
-        segments.append(
-            _SplitSegment(
-                loser.start, loser.start + direction * low, loser.source, loser.boundary
-            )
-        )
-
-    if length - high > tolerance:
-        segments.append(
-            _SplitSegment(
-                loser.start + direction * high, loser.end, loser.source, loser.boundary
-            )
-        )
-
-
-def _split_overlaps(segments: list[_SplitSegment], tolerance: float) -> None:
-    """Collinear overlaps resolved over every pair, the weaker segment of each giving way."""
-
-    i = 0
-
-    while i < len(segments):
-        j = 0
-
-        while j < len(segments):
-            if (
-                i != j
-                and segments[i].alive
-                and segments[j].alive
-                and not _split_is_stronger(segments[j], segments[i])
-            ):
-                _split_overlap(segments, i, j, tolerance)
-
-            j += 1
-
-        i += 1
-
-
-def _split_crossing(
-    segments: list[_SplitSegment],
-    first: int,
-    second: int,
-    tolerance: float,
-    stops: list[_SplitStop],
-) -> None:
-    """The crossing of segments first and second as a stop on both, when they cross within tolerance."""
-
-    along = segments[first].end - segments[first].start
-    across = segments[second].end - segments[second].start
-    denominator = along.cross(across)[2]
-
-    if abs(denominator) < Tolerance.ABSOLUTE * along.magnitude() * across.magnitude():
-        return
-
-    offset = segments[second].start - segments[first].start
-    on_first = offset.cross(across)[2] / denominator
-    on_second = offset.cross(along)[2] / denominator
-
-    if (
-        on_first < -tolerance / along.magnitude()
-        or on_first > 1.0 + tolerance / along.magnitude()
-        or on_second < -tolerance / across.magnitude()
-        or on_second > 1.0 + tolerance / across.magnitude()
-    ):
-        return
-
-    segments[first].stops.append(
-        (min(max(on_first, 0.0), 1.0) * along.magnitude(), len(stops))
-    )
-    segments[second].stops.append(
-        (min(max(on_second, 0.0), 1.0) * across.magnitude(), len(stops))
-    )
-    order = 1 if segments[first].boundary or segments[second].boundary else 2
-    stops.append(
-        _SplitStop(segments[first].start + along * min(max(on_first, 0.0), 1.0), order)
-    )
-
-
-def _split_stops(segments: list[_SplitSegment], tolerance: float) -> list[_SplitStop]:
-    """The stops of every live segment: its ends, then every crossing with a later one."""
-
-    stops = []
-
-    for segment in segments:
-        if not segment.alive:
-            continue
-
-        segment.stops.append((0.0, len(stops)))
-        stops.append(_SplitStop(segment.start, 0 if segment.boundary else 2))
-        segment.stops.append((_split_distance(segment.start, segment.end), len(stops)))
-        stops.append(_SplitStop(segment.end, 0 if segment.boundary else 2))
-
-    for i in range(len(segments)):
-        for j in range(i + 1, len(segments)):
-            if segments[i].alive and segments[j].alive:
-                _split_crossing(segments, i, j, tolerance, stops)
-
-    return stops
-
-
-def _split_welds(
-    stops: list[_SplitStop], merge: float
-) -> tuple[list[Point], list[int]]:
-    """Stops within merge of an earlier stop in priority order welded onto it: the kept points and the kept index of every stop."""
-
-    points = []
-    kept = [0] * len(stops)
-
-    for order in range(3):
-        for index in range(len(stops)):
-            if stops[index].order != order:
-                continue
-
-            found = len(points)
-
-            for k in range(len(points)):
-                if _split_distance(points[k], stops[index].point) <= merge:
-                    found = k
-                    break
-
-            if found == len(points):
-                points.append(stops[index].point)
-
-            kept[index] = found
-
-    return points, kept
-
-
-def _split_pieces(
-    segments: list[_SplitSegment], canonical: list[int]
-) -> tuple[list[tuple[int, int]], list[int]]:
-    """Pieces of every live segment between consecutive stops as welded vertex pairs with their source, each pair once."""
-
-    seen = set()
-    pairs = []
-    sources = []
-
-    for segment in segments:
-        segment.stops.sort()
-
-        if not segment.alive:
-            continue
-
-        for k in range(len(segment.stops) - 1):
-            first = canonical[segment.stops[k][1]]
-            second = canonical[segment.stops[k + 1][1]]
-            piece = (min(first, second), max(first, second))
-
-            if piece[0] != piece[1] and piece not in seen:
-                seen.add(piece)
-                pairs.append(piece)
-                sources.append(segment.source)
-
-    return pairs, sources
-
-
-def _split_pruned(
-    pairs: list[tuple[int, int]], sources: list[int], vertices: int
-) -> tuple[list[tuple[int, int]], list[int]]:
-    """Pieces with a dangling end removed until every end is shared."""
-
-    for _ in range(len(pairs) + 1):
-        degree = [0] * vertices
-
-        for piece in pairs:
-            degree[piece[0]] += 1
-            degree[piece[1]] += 1
-
-        kept_pairs = []
-        kept_sources = []
-
-        for k in range(len(pairs)):
-            if degree[pairs[k][0]] >= 2 and degree[pairs[k][1]] >= 2:
-                kept_pairs.append(pairs[k])
-                kept_sources.append(sources[k])
-
-        pruned = len(kept_pairs) != len(pairs)
-        pairs = kept_pairs
-        sources = kept_sources
-
-        if not pruned:
-            break
-
-    return pairs, sources
-
-
 class Line:
     """A 3D line segment with display width, dash pattern and color."""
 
@@ -1081,3 +815,272 @@ class Line:
         prec = Tolerance.ROUNDING
 
         return f"Line({self.name}, {TOLERANCE.format_number(self._x0, prec)}, {TOLERANCE.format_number(self._y0, prec)}, {TOLERANCE.format_number(self._z0, prec)}, {TOLERANCE.format_number(self._x1, prec)}, {TOLERANCE.format_number(self._y1, prec)}, {TOLERANCE.format_number(self._z1, prec)}, {repr(self.linecolor)}, {TOLERANCE.format_number(self.width, prec)})"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Crossings
+# ═══════════════════════════════════════════════════════════════════════════
+class _SplitSegment:
+    """A piece of an input line while the crossings are computed."""
+
+    def __init__(self, start: Point, end: Point, source: int, boundary: bool):
+        self.start = start  # Start at z 0.
+        self.end = end  # End at z 0.
+        self.source = source  # Index of the input line, boundary lines after lines.
+        self.boundary = boundary  # True for a boundary line.
+        self.alive = True  # False once a stronger collinear segment took it.
+        self.stops = []  # Distance along it and index of each of its stops.
+
+
+class _SplitStop:
+    """A point every piece ends on: a segment end or a crossing."""
+
+    def __init__(self, point: Point, order: int):
+        self.point = point  # At z 0.
+        self.order = order  # Weld order: 0 boundary end, 1 boundary crossing, 2 rest.
+
+
+def _split_direction(start: Point, end: Point) -> Vector:
+    """Unit xy direction from start to end."""
+    return Vector(end[0] - start[0], end[1] - start[1], 0.0).normalized()
+
+
+def _split_distance(start: Point, end: Point) -> float:
+    """Distance in xy from start to end."""
+    return math.hypot(end[0] - start[0], end[1] - start[1])
+
+
+def _split_is_stronger(strong: _SplitSegment, weak: _SplitSegment) -> bool:
+    """True when segment strong takes a collinear overlap from weak: the boundary first, then the earlier line."""
+
+    if strong.boundary != weak.boundary:
+        return strong.boundary
+
+    return strong.source < weak.source
+
+
+def _split_parameter(segment: _SplitSegment, point: Point) -> float:
+    """Distance along a segment from its start to the foot of a point."""
+    return (point - segment.start).dot(_split_direction(segment.start, segment.end))
+
+
+def _split_overlap(
+    segments: list[_SplitSegment], strong: int, weak: int, tolerance: float
+) -> None:
+    """The weak segment of a collinear pair loses the stretch the strong one covers and keeps the rest as new pieces."""
+
+    along = _split_direction(segments[strong].start, segments[strong].end)
+    direction = _split_direction(segments[weak].start, segments[weak].end)
+
+    if (
+        abs(along.cross(direction)[2]) > Tolerance.ANGULAR
+        or abs((segments[weak].start - segments[strong].start).cross(along)[2])
+        > tolerance
+    ):
+        return
+
+    length = _split_distance(segments[weak].start, segments[weak].end)
+    low = max(
+        0.0,
+        min(
+            _split_parameter(segments[weak], segments[strong].start),
+            _split_parameter(segments[weak], segments[strong].end),
+        ),
+    )
+    high = min(
+        length,
+        max(
+            _split_parameter(segments[weak], segments[strong].start),
+            _split_parameter(segments[weak], segments[strong].end),
+        ),
+    )
+
+    if high - low <= tolerance:
+        return
+
+    loser = segments[weak]
+    segments[weak].alive = False
+
+    if low > tolerance:
+        segments.append(
+            _SplitSegment(
+                loser.start, loser.start + direction * low, loser.source, loser.boundary
+            )
+        )
+
+    if length - high > tolerance:
+        segments.append(
+            _SplitSegment(
+                loser.start + direction * high, loser.end, loser.source, loser.boundary
+            )
+        )
+
+
+def _split_overlaps(segments: list[_SplitSegment], tolerance: float) -> None:
+    """Collinear overlaps resolved over every pair, the weaker segment of each giving way."""
+
+    i = 0
+
+    while i < len(segments):
+        j = 0
+
+        while j < len(segments):
+            if (
+                i != j
+                and segments[i].alive
+                and segments[j].alive
+                and not _split_is_stronger(segments[j], segments[i])
+            ):
+                _split_overlap(segments, i, j, tolerance)
+
+            j += 1
+
+        i += 1
+
+
+def _split_crossing(
+    segments: list[_SplitSegment],
+    first: int,
+    second: int,
+    tolerance: float,
+    stops: list[_SplitStop],
+) -> None:
+    """The crossing of segments first and second as a stop on both, when they cross within tolerance."""
+
+    along = segments[first].end - segments[first].start
+    across = segments[second].end - segments[second].start
+    denominator = along.cross(across)[2]
+
+    if abs(denominator) < Tolerance.ABSOLUTE * along.magnitude() * across.magnitude():
+        return
+
+    offset = segments[second].start - segments[first].start
+    on_first = offset.cross(across)[2] / denominator
+    on_second = offset.cross(along)[2] / denominator
+
+    if (
+        on_first < -tolerance / along.magnitude()
+        or on_first > 1.0 + tolerance / along.magnitude()
+        or on_second < -tolerance / across.magnitude()
+        or on_second > 1.0 + tolerance / across.magnitude()
+    ):
+        return
+
+    segments[first].stops.append(
+        (min(max(on_first, 0.0), 1.0) * along.magnitude(), len(stops))
+    )
+    segments[second].stops.append(
+        (min(max(on_second, 0.0), 1.0) * across.magnitude(), len(stops))
+    )
+    order = 1 if segments[first].boundary or segments[second].boundary else 2
+    stops.append(
+        _SplitStop(segments[first].start + along * min(max(on_first, 0.0), 1.0), order)
+    )
+
+
+def _split_stops(segments: list[_SplitSegment], tolerance: float) -> list[_SplitStop]:
+    """The stops of every live segment: its ends, then every crossing with a later one."""
+
+    stops = []
+
+    for segment in segments:
+        if not segment.alive:
+            continue
+
+        segment.stops.append((0.0, len(stops)))
+        stops.append(_SplitStop(segment.start, 0 if segment.boundary else 2))
+        segment.stops.append((_split_distance(segment.start, segment.end), len(stops)))
+        stops.append(_SplitStop(segment.end, 0 if segment.boundary else 2))
+
+    for i in range(len(segments)):
+        for j in range(i + 1, len(segments)):
+            if segments[i].alive and segments[j].alive:
+                _split_crossing(segments, i, j, tolerance, stops)
+
+    return stops
+
+
+def _split_welds(
+    stops: list[_SplitStop], merge: float
+) -> tuple[list[Point], list[int]]:
+    """Stops within merge of an earlier stop in priority order welded onto it: the kept points and the kept index of every stop."""
+
+    points = []
+    kept = [0] * len(stops)
+
+    for order in range(3):
+        for index in range(len(stops)):
+            if stops[index].order != order:
+                continue
+
+            found = len(points)
+
+            for k in range(len(points)):
+                if _split_distance(points[k], stops[index].point) <= merge:
+                    found = k
+                    break
+
+            if found == len(points):
+                points.append(stops[index].point)
+
+            kept[index] = found
+
+    return points, kept
+
+
+def _split_pieces(
+    segments: list[_SplitSegment], canonical: list[int]
+) -> tuple[list[tuple[int, int]], list[int]]:
+    """Pieces of every live segment between consecutive stops as welded vertex pairs with their source, each pair once."""
+
+    seen = set()
+    pairs = []
+    sources = []
+
+    for segment in segments:
+        segment.stops.sort()
+
+        if not segment.alive:
+            continue
+
+        for k in range(len(segment.stops) - 1):
+            first = canonical[segment.stops[k][1]]
+            second = canonical[segment.stops[k + 1][1]]
+            piece = (min(first, second), max(first, second))
+
+            if piece[0] != piece[1] and piece not in seen:
+                seen.add(piece)
+                pairs.append(piece)
+                sources.append(segment.source)
+
+    return pairs, sources
+
+
+def _split_pruned(
+    pairs: list[tuple[int, int]], sources: list[int], vertices: int
+) -> tuple[list[tuple[int, int]], list[int]]:
+    """Pieces with a dangling end removed until every end is shared."""
+
+    for _ in range(len(pairs) + 1):
+        degree = [0] * vertices
+
+        for piece in pairs:
+            degree[piece[0]] += 1
+            degree[piece[1]] += 1
+
+        kept_pairs = []
+        kept_sources = []
+
+        for k in range(len(pairs)):
+            if degree[pairs[k][0]] >= 2 and degree[pairs[k][1]] >= 2:
+                kept_pairs.append(pairs[k])
+                kept_sources.append(sources[k])
+
+        pruned = len(kept_pairs) != len(pairs)
+        pairs = kept_pairs
+        sources = kept_sources
+
+        if not pruned:
+            break
+
+    return pairs, sources

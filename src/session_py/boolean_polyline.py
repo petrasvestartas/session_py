@@ -2583,14 +2583,15 @@ def _v_flush(cur: list[float], result: list[Polyline]) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 # Ring sets
 # ═══════════════════════════════════════════════════════════════════════════
-def _v_ring_area(c: list[float], n: int) -> float:
-    """Signed xy area of the first n points of flat coordinates, positive counter-clockwise."""
+def _v_ring_area(coords: list[float], count: int) -> float:
+    """Signed xy area of the first count points of flat coordinates, positive counter-clockwise."""
 
     area = 0.0
 
-    for i in range(n):
+    for i in range(count):
         area += (
-            c[i * 3] * c[((i + 1) % n) * 3 + 1] - c[((i + 1) % n) * 3] * c[i * 3 + 1]
+            coords[i * 3] * coords[((i + 1) % count) * 3 + 1]
+            - coords[((i + 1) % count) * 3] * coords[i * 3 + 1]
         )
 
     return area / 2.0
@@ -2602,10 +2603,10 @@ def _v_oriented(rings: list[Polyline]) -> list[list[float]]:
     flat = []
 
     for ring in rings:
-        n = _v_strip_closing(ring.coords, len(ring.coords) // 3)
+        count = _v_strip_closing(ring.coords, len(ring.coords) // 3)
 
-        if n >= 3:
-            flat.append(list(ring.coords[: n * 3]))
+        if count >= 3:
+            flat.append(list(ring.coords[: count * 3]))
 
     oriented = []
 
@@ -2613,8 +2614,8 @@ def _v_oriented(rings: list[Polyline]) -> list[list[float]]:
         oriented.append(list(ring))
 
     for i in range(len(flat)):
-        n = len(flat[i]) // 3
-        area = _v_ring_area(flat[i], n)
+        count = len(flat[i]) // 3
+        area = _v_ring_area(flat[i], count)
         dx = flat[i][3] - flat[i][0]
         dy = flat[i][4] - flat[i][1]
         side = Tolerance.RELATIVE if area > 0.0 else -Tolerance.RELATIVE
@@ -2629,8 +2630,8 @@ def _v_oriented(rings: list[Polyline]) -> list[list[float]]:
         if (area > 0.0) == (depth % 2 == 0):
             continue
 
-        for k in range(n):
+        for k in range(count):
             for axis in range(3):
-                oriented[i][k * 3 + axis] = flat[i][(n - 1 - k) * 3 + axis]
+                oriented[i][k * 3 + axis] = flat[i][(count - 1 - k) * 3 + axis]
 
     return oriented
