@@ -7,6 +7,7 @@ from .tolerance import Tolerance
 
 @MINI_TEST("Polyline", "Constructor")
 def test_polyline_constructor():
+    from session_py import Arrowhead
     from session_py import Polyline
     from session_py import Point
     from session_py import Vector
@@ -71,6 +72,10 @@ def test_polyline_constructor():
     plc.linecolor = Color(1.0, 0.0, 0.0, 1.0, "red")
     plc.width = 2.5
 
+    pla = plc.duplicate()
+    pla.arrowhead = Arrowhead.START
+    placopy = pla.duplicate()
+
     MINI_CHECK(pl.name == "my_polyline" and pl.guid != "" and point_count == 4)
     MINI_CHECK(segment_count == 3 and not is_empty)
     MINI_CHECK(pt[0] == 1.0 and pt[1] == 0.0 and pt[2] == 0.0)
@@ -90,6 +95,7 @@ def test_polyline_constructor():
     MINI_CHECK(rdif.get_point(0)[0] == -1.0 and rdif.get_point(0)[1] == -1.0)
     MINI_CHECK(neg.get_point(0)[0] == 3.0 and neg.get_point(3)[0] == 0.0)
     MINI_CHECK(plc.linecolor[0] == 1.0 and plc.linecolor[1] == 0.0 and plc.width == 2.5)
+    MINI_CHECK(pl.arrowhead == Arrowhead.NONE and placopy == pla and pla != plc)
 
 
 @MINI_TEST("Polyline", "From Coords")
@@ -134,6 +140,7 @@ def test_polyline_rectangle():
 
 @MINI_TEST("Polyline", "Transformation")
 def test_polyline_transformation():
+    from session_py import Arrowhead
     from session_py import Polyline
     from session_py import Point
     from session_py import Xform
@@ -146,6 +153,7 @@ def test_polyline_transformation():
             Point(0.0, 1.0, 0.0),
         ]
     )
+    pl.arrowhead = Arrowhead.BOTH
     pl_xf = Xform.translation(10.0, 0.0, 0.0)
     pl_transformed = pl.transformed(pl_xf)
     pl.transform(pl_xf)
@@ -155,10 +163,12 @@ def test_polyline_transformation():
         and pl_transformed.get_point(1)[0] == 11.0
     )
     MINI_CHECK(pl.get_point(0)[0] == 10.0 and pl.get_point(1)[0] == 11.0)
+    MINI_CHECK(pl_transformed.arrowhead == Arrowhead.BOTH and pl.arrowhead == Arrowhead.BOTH)
 
 
 @MINI_TEST("Polyline", "Json Roundtrip")
 def test_polyline_json_roundtrip():
+    from session_py import Arrowhead
     from session_py import Polyline
     from session_py import Point
     from pathlib import Path
@@ -173,6 +183,7 @@ def test_polyline_json_roundtrip():
     )
     pl.name = "test_polyline"
     pl.dash = [3.0, 2.0]
+    pl.arrowhead = Arrowhead.END
 
     j = pl.__jsondump__()
     loaded_j = Polyline.__jsonload__(j)
@@ -195,10 +206,13 @@ def test_polyline_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
     MINI_CHECK(loaded.dash == [3.0, 2.0])
     MINI_CHECK(loaded.guid == pl.guid)
+    MINI_CHECK(loaded.arrowhead == Arrowhead.END and loaded_j.arrowhead == Arrowhead.END)
+    MINI_CHECK("arrowhead" not in Polyline().file_json_dumps())
 
 
 @MINI_TEST("Polyline", "Protobuf Roundtrip")
 def test_polyline_protobuf_roundtrip():
+    from session_py import Arrowhead
     from session_py import Polyline
     from session_py import Point
     from pathlib import Path
@@ -213,6 +227,7 @@ def test_polyline_protobuf_roundtrip():
     )
     pl.name = "test_polyline"
     pl.dash = [3.0, 2.0]
+    pl.arrowhead = Arrowhead.END
 
     guid = pl.guid
     s = pl.pb_dumps()
@@ -233,6 +248,7 @@ def test_polyline_protobuf_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded.get_point(2)[2], 9.0))
     MINI_CHECK(loaded.dash == [3.0, 2.0])
     MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(loaded.arrowhead == Arrowhead.END)
     MINI_CHECK(converted == pl)
     MINI_CHECK(converted.guid == guid)
 
@@ -340,6 +356,7 @@ def test_polyline_closed():
 
 @MINI_TEST("Polyline", "Reverse")
 def test_polyline_reverse():
+    from session_py import Arrowhead
     from session_py import Polyline
     from session_py import Point
 
@@ -351,6 +368,7 @@ def test_polyline_reverse():
             Point(3.0, 0.0, 0.0),
         ]
     )
+    pl.arrowhead = Arrowhead.END
 
     rev = pl.reversed()
     orig_first = pl.get_point(0)[0]
@@ -362,6 +380,7 @@ def test_polyline_reverse():
     MINI_CHECK(orig_first == 0.0)
     MINI_CHECK(rev_first == 3.0)
     MINI_CHECK(in_place_first == 3.0)
+    MINI_CHECK(rev.arrowhead == Arrowhead.START and pl.arrowhead == Arrowhead.START)
 
 
 @MINI_TEST("Polyline", "Closest Point")

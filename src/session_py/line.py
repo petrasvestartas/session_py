@@ -4,6 +4,7 @@ import copy
 import json
 import math
 import uuid
+from enum import Enum
 from .color import Color
 from .point import Point
 from .tolerance import Tolerance
@@ -14,6 +15,26 @@ if TYPE_CHECKING:
     from pathlib import Path
     from .proto import line_pb2
     from .xform import Xform
+
+
+class Arrowhead(Enum):
+    """Which ends of a curve carry an arrowhead."""
+
+    NONE = "none"
+    START = "start"
+    END = "end"
+    BOTH = "both"
+
+    def flipped(self) -> Arrowhead:
+        """Return the arrowhead with start and end swapped."""
+
+        if self == Arrowhead.START:
+            return Arrowhead.END
+
+        if self == Arrowhead.END:
+            return Arrowhead.START
+
+        return self
 
 
 class Line:
@@ -31,6 +52,7 @@ class Line:
         "width",
         "dash",
         "linecolor",
+        "arrowhead",
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -58,6 +80,7 @@ class Line:
         self.width = 1.0  # Display width.
         self.dash = []  # Dash pattern lengths.
         self.linecolor = Color.black()  # Display color.
+        self.arrowhead = Arrowhead.NONE  # Arrowhead ends.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -67,6 +90,7 @@ class Line:
         result.width = self.width
         result.dash = list(self.dash)
         result.linecolor = copy.deepcopy(self.linecolor, memo)
+        result.arrowhead = self.arrowhead
         memo[id(self)] = result
 
         return result
@@ -275,7 +299,7 @@ class Line:
             raise IndexError("Index out of bounds")
 
     def __eq__(self, other) -> bool:
-        """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
+        """Compare name, coordinates to 1e-6, width, linecolor and arrowhead; guid ignored."""
 
         if not isinstance(other, Line):
             return False
@@ -290,10 +314,11 @@ class Line:
             and round(self._z1 * 1000000.0) == round(other._z1 * 1000000.0)
             and round(self.width * 1000000.0) == round(other.width * 1000000.0)
             and self.linecolor == other.linecolor
+            and self.arrowhead == other.arrowhead
         )
 
     def __ne__(self, other) -> bool:
-        """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
+        """Compare name, coordinates to 1e-6, width, linecolor and arrowhead; guid ignored."""
         return not self == other
 
     def __iadd__(self, other: Vector) -> Line:
@@ -377,8 +402,15 @@ class Line:
         return result
 
     def __neg__(self) -> Line:
-        """Return a flipped copy (end to start)."""
-        return Line(self._x1, self._y1, self._z1, self._x0, self._y0, self._z0)
+        """Return a flipped copy (end to start, arrowhead ends swapped)."""
+
+        result = self.duplicate()
+        result._x0, result._x1 = self._x1, self._x0
+        result._y0, result._y1 = self._y1, self._y0
+        result._z0, result._z1 = self._z1, self._z0
+        result.arrowhead = self.arrowhead.flipped()
+
+        return result
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
@@ -642,7 +674,12 @@ class Line:
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
-        return {
+        data = {}
+
+        if self.arrowhead != Arrowhead.NONE:
+            data["arrowhead"] = self.arrowhead.value
+
+        return data | {
             "dash": list(self.dash),
             "guid": self.guid,
             "linecolor": self.linecolor.__jsondump__(),
@@ -679,6 +716,9 @@ class Line:
 
         if "width" in data:
             line.width = data["width"]
+
+        if "arrowhead" in data:
+            line.arrowhead = Arrowhead(data["arrowhead"])
 
         return line
 
@@ -731,6 +771,7 @@ class Line:
         proto.linecolor_rgba.append(self.linecolor.b)
         proto.linecolor_rgba.append(self.linecolor.a)
         proto.linecolor_name = self.linecolor.name
+        proto.arrowhead = list(Arrowhead).index(self.arrowhead)
 
         return proto
 
@@ -768,6 +809,8 @@ class Line:
 
             if proto.linecolor_name:
                 line.linecolor.name = proto.linecolor_name
+
+        line.arrowhead = list(Arrowhead)[proto.arrowhead]
 
         return line
 

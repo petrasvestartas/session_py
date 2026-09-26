@@ -6,6 +6,7 @@ import json
 import math
 import uuid
 from .color import Color
+from .line import Arrowhead
 from .plane import Plane
 from .point import Point
 from .tolerance import Tolerance
@@ -211,6 +212,7 @@ class Polyline:
         self.width = 1.0  # Display width.
         self.dash = []  # Dash pattern lengths.
         self.linecolor = Color.black()  # Display color.
+        self.arrowhead = Arrowhead.NONE  # Arrowhead ends.
 
         if points is not None:
             for p in points:
@@ -227,6 +229,7 @@ class Polyline:
         result.width = self.width
         result.dash = list(self.dash)
         result.linecolor = copy.deepcopy(self.linecolor, memo)
+        result.arrowhead = self.arrowhead
         memo[id(self)] = result
 
         return result
@@ -687,7 +690,7 @@ class Polyline:
         return out_point
 
     def reverse(self) -> None:
-        """Reverse the point order in place."""
+        """Reverse the point order and swap the arrowhead ends in place."""
 
         n = self.point_count()
         coords = []
@@ -700,6 +703,7 @@ class Polyline:
 
         self.coords = coords
         self.plane.reverse()
+        self.arrowhead = self.arrowhead.flipped()
 
     def reversed(self) -> Polyline:
         """Return a reversed copy."""
@@ -1008,7 +1012,7 @@ class Polyline:
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
     def __eq__(self, other) -> bool:
-        """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
+        """Compare name, coordinates to 1e-6, width, linecolor and arrowhead; guid ignored."""
 
         if not isinstance(other, Polyline):
             return False
@@ -1030,10 +1034,10 @@ class Polyline:
         ):
             return False
 
-        return self.linecolor == other.linecolor
+        return self.linecolor == other.linecolor and self.arrowhead == other.arrowhead
 
     def __ne__(self, other) -> bool:
-        """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
+        """Compare name, coordinates to 1e-6, width, linecolor and arrowhead; guid ignored."""
         return not self == other
 
     def __getitem__(self, index: int) -> Point:
@@ -1760,7 +1764,12 @@ class Polyline:
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
-        return {
+        data = {}
+
+        if self.arrowhead != Arrowhead.NONE:
+            data["arrowhead"] = self.arrowhead.value
+
+        return data | {
             "coords": self.coords,
             "dash": list(self.dash),
             "guid": self.guid,
@@ -1796,6 +1805,9 @@ class Polyline:
 
         if "linecolor" in data:
             polyline.linecolor = file_decode_node(data["linecolor"])
+
+        if "arrowhead" in data:
+            polyline.arrowhead = Arrowhead(data["arrowhead"])
 
         polyline._recompute_plane_if_needed()
 
@@ -1846,6 +1858,7 @@ class Polyline:
             proto.coords.append(c)
 
         proto.linecolor.CopyFrom(self.linecolor.to_proto())
+        proto.arrowhead = list(Arrowhead).index(self.arrowhead)
 
         return proto
 
@@ -1864,6 +1877,8 @@ class Polyline:
 
         if proto.HasField("linecolor"):
             polyline.linecolor = Color.from_proto(proto.linecolor)
+
+        polyline.arrowhead = list(Arrowhead)[proto.arrowhead]
 
         return polyline
 

@@ -14,6 +14,7 @@ from .color import Color
 from .point import Point
 from .vector import Vector
 from .plane import Plane
+from .line import Arrowhead
 from .line import Line
 from .instance_ref import InstanceRef
 from .interaction import Interaction
@@ -81,6 +82,7 @@ __all__ = [
     "Point",
     "Vector",
     "Plane",
+    "Arrowhead",
     "Line",
     "InstanceRef",
     "Interaction",

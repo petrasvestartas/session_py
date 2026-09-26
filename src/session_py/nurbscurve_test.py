@@ -8,6 +8,7 @@ from .tolerance import PI
 
 @MINI_TEST("NurbsCurve", "Constructor")
 def test_nurbscurve_constructor():
+    from session_py import Arrowhead
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -27,6 +28,10 @@ def test_nurbscurve_constructor():
     ccopy = curve.duplicate()
     cother = NurbsCurve.create(False, 2, points)
 
+    carrow = curve.duplicate()
+    carrow.arrowhead = Arrowhead.BOTH
+    carrowcopy = carrow.duplicate()
+
     MINI_CHECK(curve.is_valid())
     MINI_CHECK(curve.cv_count() == 4)
     MINI_CHECK(curve.degree() == 2)
@@ -39,6 +44,7 @@ def test_nurbscurve_constructor():
     MINI_CHECK(ccopy.guid != curve.guid)
     MINI_CHECK(ccopy == curve)
     MINI_CHECK(cother != curve)
+    MINI_CHECK(curve.arrowhead == Arrowhead.NONE and carrowcopy == carrow and carrow != curve)
 
 
 @MINI_TEST("NurbsCurve", "Create Interpolated")
@@ -553,6 +559,7 @@ def test_nurbscurve_evaluation():
 
 @MINI_TEST("NurbsCurve", "Modifications")
 def test_nurbscurve_modifications():
+    from session_py import Arrowhead
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -567,9 +574,11 @@ def test_nurbscurve_modifications():
     curve = NurbsCurve.create(False, 2, points)
 
     curve_reversed = curve.duplicate()
+    curve_reversed.arrowhead = Arrowhead.START
     curve_reversed.reverse()
 
     MINI_CHECK(TOLERANCE.is_point_close(curve_reversed.point_at_start(), curve.point_at_end()))
+    MINI_CHECK(curve_reversed.arrowhead == Arrowhead.END)
 
     curve.swap_coordinates(0, 1)
 
@@ -646,6 +655,7 @@ def test_nurbscurve_modifications():
 
 @MINI_TEST("NurbsCurve", "Transformations")
 def test_nurbscurve_transformations():
+    from session_py import Arrowhead
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Xform
@@ -659,6 +669,7 @@ def test_nurbscurve_transformations():
     ]
 
     curve1 = NurbsCurve.create(False, 2, points)
+    curve1.arrowhead = Arrowhead.BOTH
     curve1_xf = Xform.translation(0.0, 0.0, 1.0)
     curve1.transform(curve1_xf)
 
@@ -674,7 +685,7 @@ def test_nurbscurve_transformations():
     x = Xform.translation(0.0, 0.0, 10.0)
     curve4_transformed = curve4.transformed(x)
 
-    MINI_CHECK(curve1.cv(0)[2] == 1.0)
+    MINI_CHECK(curve1.cv(0)[2] == 1.0 and curve1.arrowhead == Arrowhead.BOTH)
     MINI_CHECK(curve2.cv(0)[2] == 1.0)
     MINI_CHECK(curve3_transformed.cv(0)[2] == 10.0)
     MINI_CHECK(curve4_transformed.cv(0)[2] == 10.0)
@@ -682,6 +693,7 @@ def test_nurbscurve_transformations():
 
 @MINI_TEST("NurbsCurve", "Json Roundtrip")
 def test_nurbscurve_json_roundtrip():
+    from session_py import Arrowhead
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -694,6 +706,7 @@ def test_nurbscurve_json_roundtrip():
     ]
 
     curve = NurbsCurve.create(False, 2, points)
+    curve.arrowhead = Arrowhead.END
     guid = curve.guid
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.json"
     curve.file_json_dump(filename)
@@ -707,10 +720,13 @@ def test_nurbscurve_json_roundtrip():
     MINI_CHECK(loaded_json_string == curve)
     MINI_CHECK(loaded_from_file == curve)
     MINI_CHECK(loaded_from_file.guid == guid)
+    MINI_CHECK(loaded_from_file.arrowhead == Arrowhead.END)
+    MINI_CHECK('"arrowhead":"end"' in curve.file_json_dumps())
 
 
 @MINI_TEST("NurbsCurve", "Protobuf Roundtrip")
 def test_nurbscurve_protobuf_roundtrip():
+    from session_py import Arrowhead
     from session_py import NurbsCurve
     from session_py import Point
 
@@ -723,6 +739,7 @@ def test_nurbscurve_protobuf_roundtrip():
     ]
 
     curve = NurbsCurve.create(False, 2, points)
+    curve.arrowhead = Arrowhead.END
     guid = curve.guid
     filename = Path(__file__).resolve().parents[2] / "serialization" / "test_nurbscurve.bin"
     curve.pb_dump(filename)
@@ -734,6 +751,7 @@ def test_nurbscurve_protobuf_roundtrip():
     MINI_CHECK(loaded_proto_string == curve)
     MINI_CHECK(loaded == curve)
     MINI_CHECK(loaded.guid == guid)
+    MINI_CHECK(loaded.arrowhead == Arrowhead.END)
     MINI_CHECK(converted == curve)
     MINI_CHECK(converted.guid == guid)
 

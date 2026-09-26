@@ -7,6 +7,7 @@ import math
 import uuid
 import numpy as np
 from .color import Color
+from .line import Arrowhead
 from .plane import Plane
 from .point import Point
 from .tolerance import Tolerance
@@ -76,6 +77,7 @@ class NurbsCurve:
         self.width = 1.0  # Display width.
         self.pointcolors: list[Color] = []  # Display color per control point.
         self.linecolors: list[Color] = []  # Display color per control polygon segment.
+        self.arrowhead = Arrowhead.NONE  # Arrowhead ends.
         self.m_dim = 0  # Coordinate dimension.
         self.m_is_rat = 0  # 1 when rational, 0 otherwise.
         self.m_order = 0  # Degree + 1.
@@ -269,7 +271,7 @@ class NurbsCurve:
     # Operators
     # ═══════════════════════════════════════════════════════════════════════════
     def __eq__(self, other) -> bool:
-        """Compare name, width, colors, layout, nurbsknots and CVs to 1e-12; guid ignored."""
+        """Compare name, width, colors, arrowhead, layout, nurbsknots and CVs to 1e-12; guid ignored."""
 
         if not isinstance(other, NurbsCurve):
             return False
@@ -295,6 +297,9 @@ class NurbsCurve:
         if self.linecolors != other.linecolors:
             return False
 
+        if self.arrowhead != other.arrowhead:
+            return False
+
         if len(self.m_nurbsknot) != len(other.m_nurbsknot):
             return False
 
@@ -318,7 +323,7 @@ class NurbsCurve:
         return True
 
     def __ne__(self, other) -> bool:
-        """Compare name, width, colors, layout, nurbsknots and CVs to 1e-12; guid ignored."""
+        """Compare name, width, colors, arrowhead, layout, nurbsknots and CVs to 1e-12; guid ignored."""
         return not self.__eq__(other)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1816,7 +1821,7 @@ class NurbsCurve:
     # Modifications
     # ═══════════════════════════════════════════════════════════════════════════
     def reverse(self) -> bool:
-        """Reverse the direction keeping the domain."""
+        """Reverse the direction keeping the domain and swap the arrowhead ends."""
 
         if not self.is_valid():
             return False
@@ -1834,6 +1839,8 @@ class NurbsCurve:
             xj, yj, zj, wj = self.get_cv_4d(j)
             self.set_cv_4d(i, xj, yj, zj, wj)
             self.set_cv_4d(j, xi, yi, zi, wi)
+
+        self.arrowhead = self.arrowhead.flipped()
 
         return True
 
@@ -2197,7 +2204,12 @@ class NurbsCurve:
         for c in self.pointcolors:
             pointcolors_arr.extend([c.r, c.g, c.b, c.a])
 
-        return {
+        data = {}
+
+        if self.arrowhead != Arrowhead.NONE:
+            data["arrowhead"] = self.arrowhead.value
+
+        return data | {
             "control_points": control_points,
             "cv_count": int(self.m_cv_count),
             "cv_stride": int(self.m_cv_stride),
@@ -2248,6 +2260,7 @@ class NurbsCurve:
         curve.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         curve.name = name if name is not None else data.get("name", "my_nurbscurve")
         curve.width = data.get("width", 1.0)
+        curve.arrowhead = Arrowhead(data.get("arrowhead", "none"))
 
         arr = data.get("pointcolors", [])
 
@@ -2320,6 +2333,8 @@ class NurbsCurve:
             cp.b = c.b
             cp.a = c.a
 
+        proto.arrowhead = list(Arrowhead).index(self.arrowhead)
+
         return proto
 
     @classmethod
@@ -2341,6 +2356,8 @@ class NurbsCurve:
 
         for c in proto.linecolors:
             curve.linecolors.append(Color(c.r, c.g, c.b, c.a))
+
+        curve.arrowhead = list(Arrowhead)[proto.arrowhead]
 
         return curve
 
@@ -2622,6 +2639,7 @@ class NurbsCurve:
         self.width = src.width
         self.pointcolors = list(src.pointcolors)
         self.linecolors = list(src.linecolors)
+        self.arrowhead = src.arrowhead
 
     @staticmethod
     def _evaluate_nurbs_de_boor(
