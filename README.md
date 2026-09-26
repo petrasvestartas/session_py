@@ -2,6 +2,8 @@
 
 Python geometry kernel. Published to [PyPI](https://pypi.org/project/session-py/) automatically on every push to main.
 
+Undo, history and purge: [docs/history.md](docs/history.md).
+
 ## Install
 
 ```bash
