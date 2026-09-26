@@ -99,7 +99,18 @@ _SECTIONS = (  # Checkpoint buffers in Session field order.
     "definitions",
     "interactions",
 )
-_FRAMED = ("objects", "tree", "graph", "definitions")  # Framed as one field.
+
+
+class _Tags(NamedTuple):
+    """Field numbers the checkpoint writer frames by hand, mirrored from session.proto; the tests check them against the generated messages."""
+
+    sections: tuple[int, ...]  # Session field per section, 0 for one written framed: head, objects, tree, graph, xforms, definitions, interactions.
+    root: int  # Tree.root
+    children: int  # TreeNode.children
+    lists: tuple[int, ...]  # Objects field per COLLECTIONS entry.
+
+
+_TAGS = _Tags((0, 3, 4, 5, 0, 8, 0), 3, 4, (3, 4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 18))
 
 
 class RayHit(NamedTuple):
@@ -2130,10 +2141,9 @@ class Session:
     def _write_list(self, writer: _Checkpoint, definition: bool, work: int) -> int:
         """Write the live entries of one objects or definitions list from the cursor slot; returns the slots examined."""
 
-        from .proto import objects_pb2
-
         first = _DEFINITIONS if definition else _OBJECTS
         collection = COLLECTIONS[writer.phase - first][0]
+        tag = _TAGS.lists[writer.phase - first]
         items = getattr(self.definitions if definition else self.objects, collection)
         section = writer.sections["definitions" if definition else "objects"]
         start = writer.cursor
@@ -2143,9 +2153,9 @@ class Session:
             if items.is_dead(slot):
                 continue
 
-            proto = objects_pb2.Objects()
-            getattr(proto, collection).add().CopyFrom(items.get_item(slot).to_proto())
-            section += proto.SerializeToString(deterministic=True)
+            body = items.get_item(slot).to_proto().SerializeToString(deterministic=True)
+            section += _prefix(tag, len(body))
+            section += body
 
         writer.cursor = end
 
@@ -2157,9 +2167,6 @@ class Session:
 
     def _write_tree(self, writer: _Checkpoint, work: int) -> int:
         """Write the live tree depth first from an explicit stack, a finished node moved to its parent in chunks; returns the children examined."""
-
-        from .proto import tree_pb2
-        from .proto import treenode_pb2
 
         if writer.cursor == 0:
             writer.cursor = 1
@@ -2189,10 +2196,10 @@ class Session:
 
             if writer.stack:
                 parent = writer.stack[-1][2]
-                field = treenode_pb2.TreeNode.CHILDREN_FIELD_NUMBER
+                field = _TAGS.children
             else:
                 parent = writer.tree
-                field = tree_pb2.Tree.ROOT_FIELD_NUMBER
+                field = _TAGS.root
 
             _append(parent, _prefix(field, length))
 
@@ -2416,21 +2423,17 @@ class Session:
     def _assemble(self, writer: _Checkpoint, work: int) -> bool:
         """Join the sections into one Session message, copying at most work KiB; True once complete."""
 
-        from .proto import session_pb2
-
         if writer.phase == _ASSEMBLY:
-            fields = session_pb2.Session.DESCRIPTOR.fields_by_name
-
-            for name in _SECTIONS:
+            for i, name in enumerate(_SECTIONS):
                 if name == "definitions" and not self.definition_lookup:
                     continue
 
                 body = writer.sections[name]
                 chunks = writer.tree if name == "tree" else []
 
-                if name in _FRAMED:
+                if _TAGS.sections[i] > 0:
                     length = len(body) + sum(len(chunk) for chunk in chunks)
-                    writer.pieces.append(_prefix(fields[name].number, length))
+                    writer.pieces.append(_prefix(_TAGS.sections[i], length))
 
                 writer.pieces.append(body)
                 writer.pieces.extend(chunks)

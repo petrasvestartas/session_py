@@ -2967,6 +2967,77 @@ def test_session_purge_clears_history():
     MINI_CHECK(len(session.tree.nodes) == 3)
 
 
+@MINI_TEST("Session", "Checkpoint Tags")
+def test_session_checkpoint_tags():
+    from session_py.proto import objects_pb2
+    from session_py.proto import session_pb2
+    from session_py.proto import tree_pb2
+    from session_py.proto import treenode_pb2
+    from session_py.session import _TAGS
+
+    def first(data: bytes) -> int:
+        key = 0
+        shift = 0
+
+        for byte in data:
+            key |= (byte & 0x7F) << shift
+            shift += 7
+
+            if byte < 0x80:
+                break
+
+        return key >> 3
+
+    objects = session_pb2.Session()
+    objects.objects.SetInParent()
+    tree = session_pb2.Session()
+    tree.tree.SetInParent()
+    graph = session_pb2.Session()
+    graph.graph.SetInParent()
+    definitions = session_pb2.Session()
+    definitions.definitions.SetInParent()
+    sections = (
+        0,
+        first(objects.SerializeToString()),
+        first(tree.SerializeToString()),
+        first(graph.SerializeToString()),
+        0,
+        first(definitions.SerializeToString()),
+        0,
+    )
+    root = tree_pb2.Tree()
+    root.root.SetInParent()
+    children = treenode_pb2.TreeNode()
+    children.children.add()
+    names = (
+        "points",
+        "lines",
+        "planes",
+        "bboxes",
+        "polylines",
+        "pointclouds",
+        "meshes",
+        "nurbscurves",
+        "nurbssurfaces",
+        "breps",
+        "elements",
+        "components",
+        "instances",
+    )
+
+    MINI_CHECK(_TAGS.sections == sections)
+    MINI_CHECK(_TAGS.root == first(root.SerializeToString()))
+    MINI_CHECK(_TAGS.children == first(children.SerializeToString()))
+    tags = []
+
+    for name in names:
+        message = objects_pb2.Objects()
+        getattr(message, name).add()
+        tags.append(first(message.SerializeToString()))
+
+    MINI_CHECK(_TAGS.lists == tuple(tags))
+
+
 @MINI_TEST("Session", "Checkpoint After Purge Steps")
 def test_session_checkpoint_after_purge_steps():
     from session_py import Point
