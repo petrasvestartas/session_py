@@ -1036,10 +1036,74 @@ def test_brep_strip_fast_path():
     volume = bh.mesh().volume()
     ref = 8.0 * 6.0 * 4.0 - PI * 1.5 * 1.5 * 4.0
 
-    MINI_CHECK(len(bore.face) == 36 and len(bore.vertex) == 74)
+    MINI_CHECK(len(bore.face) == 72 and len(bore.vertex) == 74)
     MINI_CHECK(round_count == 74 and rim == 37 and seam == 4 and shared == 74)
-    MINI_CHECK(len(body[0].face) == 18 and len(body[0].vertex) == 38)
+    MINI_CHECK(len(body[0].face) == 72 and len(body[0].vertex) == 74)
     MINI_CHECK(abs(volume - ref) / ref < 0.005)
+
+
+@MINI_TEST("BRep", "Mesh Watertight")
+def test_brep_mesh_watertight():
+    from session_py import BRep
+
+    bodies = [
+        BRep.create_box(8.0, 6.0, 4.0),
+        BRep.create_cylinder(2.0, 5.0),
+        BRep.create_sphere(2.0),
+        BRep.create_cone(2.0, 5.0),
+        BRep.create_torus(4.0, 1.0),
+        BRep.create_block_with_hole(8.0, 6.0, 4.0, 1.5),
+    ]
+    key = lambda p: (p[0] + 0.0, p[1] + 0.0, p[2] + 0.0)
+    empty = 0
+    open_edges = 0
+    missing = 0
+
+    for b in bodies:
+        fms = b.face_meshes_q(True, 10.0, 0.005)
+        edges = {}
+
+        for fm in fms:
+            if not fm.face:
+                empty += 1
+
+            local = {}
+
+            for verts in fm.face.values():
+                n = len(verts)
+
+                for i in range(n):
+                    a = key(fm.vertex[verts[i]].position())
+                    c = key(fm.vertex[verts[(i + 1) % n]].position())
+                    local[(a, c)] = local.get((a, c), 0) + 1
+                    local[(c, a)] = local.get((c, a), 0) - 1
+
+            for edge, count in local.items():
+                if count > 0:
+                    edges[edge] = edges.get(edge, 0) + count
+
+        for (a, c), count in edges.items():
+            if edges.get((c, a), 0) != count:
+                open_edges += 1
+
+        for ei in range(b.edge_count()):
+            if b.m_edges[ei].degenerated:
+                continue
+
+            for fr in b.edge_faces(ei):
+                for vi in [b.m_edges[ei].start_vertex, b.m_edges[ei].end_vertex]:
+                    p = key(b.m_vertices[vi].point)
+                    found = False
+
+                    for vd in fms[fr.index].vertex.values():
+                        found = found or key(vd.position()) == p
+
+                    if not found:
+                        missing += 1
+
+    MINI_CHECK(empty == 0)
+    MINI_CHECK(open_edges == 0)
+    MINI_CHECK(missing == 0)
 
 
 @MINI_TEST("BRep", "Mesh Orientation")

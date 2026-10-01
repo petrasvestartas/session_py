@@ -835,27 +835,11 @@ def _lifted_distance(
     return surface.point_at(uv[0], uv[1]).distance(point)
 
 
-def _boundary_parameter(
-    surface: NurbsSurface, curve: NurbsCurve, point: Point
-) -> float:
-    """Parameter of the lifted pcurve closest to `point`: a coarse scan then 64 golden-section steps in the best cell"""
+def _golden_parameter(
+    surface: NurbsSurface, curve: NurbsCurve, point: Point, left: float, right: float
+) -> tuple[float, float]:
+    """Parameter and distance of the lifted pcurve closest to `point` within [left, right] by 64 golden-section steps"""
 
-    start, end = curve.domain()
-    count = min(max(curve.cv_count() * 4, 32), 4096)
-    step = (end - start) / count
-    best = start
-    error = _lifted_distance(surface, curve, point, start)
-
-    for index in range(1, count + 1):
-        t = end if index == count else start + index * step
-        candidate = _lifted_distance(surface, curve, point, t)
-
-        if candidate < error:
-            best = t
-            error = candidate
-
-    left = max(best - step, start)
-    right = min(best + step, end)
     ratio = (math.sqrt(5.0) - 1.0) * 0.5
     a = right - ratio * (right - left)
     b = left + ratio * (right - left)
@@ -876,12 +860,46 @@ def _boundary_parameter(
             b = left + ratio * (right - left)
             db = _lifted_distance(surface, curve, point, b)
 
-    if da < error:
-        best = a
-        error = da
+    return (a, da) if da < db else (b, db)
 
-    if db < error:
-        best = b
+
+def _boundary_parameter(
+    surface: NurbsSurface, curve: NurbsCurve, point: Point
+) -> float:
+    """Parameter of the lifted pcurve closest to `point`: a coarse scan then golden-section steps in the best cell, and in the cell at the other end too when a closed pcurve scans best at an end, since both ends are one point"""
+
+    start, end = curve.domain()
+    count = min(max(curve.cv_count() * 4, 32), 4096)
+    step = (end - start) / count
+    best = start
+    error = _lifted_distance(surface, curve, point, start)
+
+    for index in range(1, count + 1):
+        t = end if index == count else start + index * step
+        candidate = _lifted_distance(surface, curve, point, t)
+
+        if candidate < error:
+            best = t
+            error = candidate
+
+    cells = [(max(best - step, start), min(best + step, end))]
+    closed = (
+        curve.point_at(start).distance(curve.point_at(end))
+        <= Tolerance.ZERO_TOLERANCE
+    )
+
+    if closed and best == start:
+        cells.append((end - step, end))
+
+    if closed and best == end:
+        cells.append((start, start + step))
+
+    for left, right in cells:
+        t, distance = _golden_parameter(surface, curve, point, left, right)
+
+        if distance < error:
+            best = t
+            error = distance
 
     return best
 
@@ -997,6 +1015,61 @@ def _same_boundary_point(a: Point, b: Point) -> bool:
     """Compare canonical boundary positions exactly, without tolerance"""
 
     return a[0] == b[0] and a[1] == b[1] and a[2] == b[2]
+
+
+def _edge_ends(b: BRep, ei: int) -> tuple[Point, Point]:
+    """Positions of the start and end vertex of an edge: the one point every face must place at each end of the edge"""
+
+    edge = b.m_edges[ei]
+
+    return (b.m_vertices[edge.start_vertex].point, b.m_vertices[edge.end_vertex].point)
+
+
+def _snap_sample_ends(
+    samples: list[tuple[float, Point, Point]], ends: tuple[Point, Point]
+) -> None:
+    """Place the first and last sample of an edge on its vertices, so every incident face meets there bit for bit"""
+
+    if not samples:
+        return
+
+    samples[0] = (samples[0][0], samples[0][1], ends[0])
+    samples[-1] = (samples[-1][0], samples[-1][1], ends[1])
+
+
+def _snap_grid_corners(b: BRep, fi: int, grid: Mesh) -> None:
+    """Phase 1: move the grid vertices of a direct face that sit on a pcurve end onto that edge's vertex, as every other face does"""
+
+    face = b.m_faces[fi]
+    srf = b.m_surfaces[face.surface_index]
+    u0, u1 = srf.domain(0)
+    v0, v1 = srf.domain(1)
+    utol = (u1 - u0) * 1e-4
+    vtol = (v1 - v0) * 1e-4
+    corners = []
+
+    for er in b.wire_edges(face.wires[0]):
+        ci = b.pcurve_index(er.index, fi, er.orientation)
+
+        if ci < 0:
+            continue
+
+        crv = b.m_curves_2d[ci]
+        ends = _edge_ends(b, er.index)
+        corners.append((crv.get_cv(0), ends[0]))
+        corners.append((crv.get_cv(crv.cv_count() - 1), ends[1]))
+
+    for vd in grid.vertex.values():
+        if "u" not in vd.attributes or "v" not in vd.attributes:
+            continue
+
+        u = vd.attributes["u"]
+        v = vd.attributes["v"]
+
+        for uv, point in corners:
+            if abs(uv[0] - u) <= utol and abs(uv[1] - v) <= vtol:
+                vd.set_position(point)
+                break
 
 
 def _direct_face(b: BRep, fi: int) -> bool:
@@ -1202,8 +1275,7 @@ def _refine_shared_boundaries(
             fi = incident.index
             cdt = not face_direct[fi] or rebuild_grid[fi]
             curved_cdt = curved_cdt or (
-                cdt
-                and not b.m_surfaces[b.m_faces[fi].surface_index].is_planar(None, 0.0)
+                cdt and not _is_planar_patch(b.m_surfaces[b.m_faces[fi].surface_index])
             )
 
         if not curved_cdt:
@@ -1354,6 +1426,54 @@ def _linear_pcurve_parameter(crv: NurbsCurve, uv: tuple[float, float]) -> float 
     return t0 + fraction * (t1 - t0)
 
 
+def _pcurve_newton(crv: NurbsCurve, uv: Point, seed: float) -> float:
+    """Parameter of the pcurve closest to `uv` by Newton steps from `seed`, clamped to the domain; the model-space check of the caller decides whether it is the right one"""
+
+    t0, t1 = crv.domain()
+    t = min(max(seed, t0), t1)
+
+    for _ in range(16):
+        d = crv.evaluate(t, 2)
+
+        if len(d) < 3:
+            break
+
+        rx = d[0][0] - uv[0]
+        ry = d[0][1] - uv[1]
+        f = rx * d[1][0] + ry * d[1][1]
+        df = d[1][0] * d[1][0] + d[1][1] * d[1][1] + rx * d[2][0] + ry * d[2][1]
+
+        if df == 0.0:
+            break
+
+        nxt = min(max(t - f / df, t0), t1)
+        moved = abs(nxt - t)
+        t = nxt
+
+        if moved <= (t1 - t0) * 1e-14:
+            break
+
+    return t
+
+
+def _canonical_parameter(
+    srf: NurbsSurface, crv: NurbsCurve, p: Point, planar: bool, seed: float | None
+) -> float:
+    """Phase 3: first guess of the pcurve parameter of a canonical point: two dot products on a planar patch with a straight pcurve, Newton from the seed when the previous points of the edge give one, else the full closest-point search"""
+
+    uv = _planar_patch_uv(srf, p) if planar else None
+    u, v = uv if uv is not None else srf.closest_parameters(p)
+    t = _linear_pcurve_parameter(crv, (u, v)) if uv is not None else None
+
+    if t is not None:
+        return t
+
+    if seed is not None:
+        return _pcurve_newton(crv, Point(u, v, 0.0), seed)
+
+    return crv.closest_parameter(Point(u, v, 0.0))
+
+
 def _lift_canonical(
     b: BRep,
     fi: int,
@@ -1361,8 +1481,8 @@ def _lift_canonical(
     ci: int,
     boundary: _EdgeBoundary,
     samples: list[tuple[float, Point, Point]],
-) -> bool:
-    """Phase 3: map the canonical points of edge `ei` onto pcurve `ci` of face `fi`, checked in model space; False when a point cannot be lifted"""
+) -> None:
+    """Phase 3: map the canonical points of edge `ei` onto pcurve `ci` of face `fi`, checked in model space, each point seeded by the parameters of the two before it since the points run along the edge; a point the pcurve cannot reach within tolerance keeps the nearest parameter, since the canonical position is what the face places and the parameter only orders the loop"""
 
     face = b.m_faces[fi]
     edge = b.m_edges[ei]
@@ -1376,20 +1496,21 @@ def _lift_canonical(
     )
     points = boundary.points[ei]
     planar = _is_planar_patch(srf)
+    lifted = []
 
     for index in range(len(points)):
         p = points[index]
+        seed = None
+
+        if len(lifted) == 1:
+            seed = lifted[0]
+        elif len(lifted) >= 2:
+            seed = 2.0 * lifted[-1] - lifted[-2]
 
         if cached:
             t, q = boundary.samples[ei][index]
         else:
-            uv = _planar_patch_uv(srf, p) if planar else None
-            u, v = uv if uv is not None else srf.closest_parameters(p)
-            t = _linear_pcurve_parameter(crv, (u, v)) if uv is not None else None
-
-            if t is None:
-                t = crv.closest_parameter(Point(u, v, 0.0))
-
+            t = _canonical_parameter(srf, crv, p, planar, seed)
             q = crv.point_at(t)
 
         scale = max(abs(p[0]), abs(p[1]), abs(p[2]), 1.0)
@@ -1401,9 +1522,7 @@ def _lift_canonical(
             t = _boundary_parameter(srf, crv, p)
             q = crv.point_at(t)
 
-            if srf.point_at(q[0], q[1]).distance(p) > tolerance:
-                return False
-
+        lifted.append(t)
         samples.append((t, q, p))
 
     samples.sort(key=_parameter)
@@ -1415,13 +1534,15 @@ def _lift_canonical(
 
     samples[:] = unique
 
-    return True
-
 
 def _fresh_samples(
-    srf: NurbsSurface, crv: NurbsCurve, angle: float, chord: float
+    srf: NurbsSurface,
+    crv: NurbsCurve,
+    ends: tuple[Point, Point],
+    angle: float,
+    chord: float,
 ) -> list[tuple[float, Point, Point]]:
-    """Phase 3: fresh samples of a pcurve nobody has sampled yet, refined to the face's angle and chord"""
+    """Phase 3: fresh samples of a pcurve nobody has sampled yet, its ends on the edge's vertices, refined to the face's angle and chord"""
 
     points = []
     parameters = []
@@ -1440,6 +1561,8 @@ def _fresh_samples(
         q = points[k]
         samples.append((parameters[k], q, srf.point_at(q[0], q[1])))
 
+    _snap_sample_ends(samples, ends)
+
     return _refine_surface_boundary(srf, crv, samples, angle, chord)
 
 
@@ -1452,7 +1575,7 @@ def _edge_use_samples(
     chord: float,
     samples: list[tuple[float, Point, Point]],
 ) -> bool:
-    """Phase 3: samples of one edge use of a CDT face in traversal direction, a closed edge repeating its first point at the end; False when the edge has no pcurve or cannot be lifted"""
+    """Phase 3: samples of one edge use of a CDT face in traversal direction, a closed edge repeating its first point at the end; False when the edge has no pcurve"""
 
     ei = er.index
     edge = b.m_edges[ei]
@@ -1464,11 +1587,14 @@ def _edge_use_samples(
     crv = b.m_curves_2d[ci]
 
     if ei in boundary.points:
-        if not _lift_canonical(b, fi, ei, ci, boundary, samples):
-            return False
+        _lift_canonical(b, fi, ei, ci, boundary, samples)
     else:
         samples[:] = _fresh_samples(
-            b.m_surfaces[b.m_faces[fi].surface_index], crv, angle, chord
+            b.m_surfaces[b.m_faces[fi].surface_index],
+            crv,
+            _edge_ends(b, ei),
+            angle,
+            chord,
         )
         positions = []
 
@@ -1635,10 +1761,25 @@ def _planar_loops_mesh(srf: NurbsSurface, loops: TrimLoops) -> Mesh:
     return mesh
 
 
+def _boundary_lookup(mesh: Mesh) -> dict[str, list[int]]:
+    """Vertex keys per boundary attribute name, so tagging edge uses touches only the vertices each sample owns"""
+
+    lookup: dict[str, list[int]] = {}
+
+    for vk, vd in mesh.vertex.items():
+        for name in vd.attributes:
+            if name.startswith("boundary"):
+                lookup.setdefault(name, []).append(vk)
+
+    return lookup
+
+
 def _tag_edge_uses(
     mesh: Mesh, loops: TrimLoops, uses: list[tuple[int, int, int, int]]
 ) -> None:
     """Tag every boundary vertex of a CDT mesh with the edge use it samples; each use keeps both ends, including the next edge's start"""
+
+    lookup = _boundary_lookup(mesh)
 
     for use_id in range(len(uses)):
         edge, li, start, count = uses[use_id]
@@ -1651,9 +1792,8 @@ def _tag_edge_uses(
             key = f"boundary/{li}/{(start + sample) % length}"
             tag = f"brep_edge/{edge}/{use_id}/{sample}"
 
-            for vd in mesh.vertex.values():
-                if key in vd.attributes:
-                    vd.attributes[tag] = 1.0
+            for vk in lookup.get(key, []):
+                mesh.vertex[vk].attributes[tag] = 1.0
 
             if sample + 1 >= count:
                 continue
@@ -1661,7 +1801,9 @@ def _tag_edge_uses(
             interval = f"boundary_interval/{li}/{(start + sample) % length}"
             interval_tag = f"brep_edge_interval/{edge}/{use_id}/{sample}"
 
-            for vd in mesh.vertex.values():
+            for vk in lookup.get(interval, []):
+                vd = mesh.vertex[vk]
+
                 if interval in vd.attributes:
                     vd.attributes[interval_tag] = vd.attributes[interval]
 
@@ -1760,19 +1902,29 @@ def _strip_sag(srf: NurbsSurface, crv: NurbsCurve, count: int) -> float:
     return sag
 
 
-def _strip_steps(crv: NurbsCurve) -> int:
-    """Phase 0: the steps a pcurve asks for on its own: four per control point when curved, none when straight"""
+def _strip_steps(srf: NurbsSurface, crv: NurbsCurve) -> int:
+    """Phase 0: the steps a loop asks for on its own: four per control point of its pcurve when that is curved, and four per control point of the surface across u when that is curved, as fresh samples ask of a curve"""
 
-    return crv.cv_count() * 4 if crv.degree() > 1 else 0
+    steps = 0
+
+    if crv.degree() > 1:
+        steps = crv.cv_count() * 4
+
+    if srf.degree(0) > 1:
+        steps = max(steps, srf.cv_count(0) * 4)
+
+    return steps
 
 
 def _strip_count(
     srf: NurbsSurface, a: NurbsCurve, c: NurbsCurve, angle: float, chord: float
 ) -> int:
-    """Phase 0: the steps of a strip: the angle's share of a turn and what the pcurves ask for, doubled until both loops sag within the chord tolerance"""
+    """Phase 0: the steps of a strip: the angle's share of a turn and what the loops ask for, doubled until both loops sag within the chord tolerance"""
 
     tolerance = _bbox_diagonal(srf) * chord
-    count = max(_strip_steps(a), _strip_steps(c), math.ceil(360.0 / max(angle, 0.1)))
+    count = max(
+        _strip_steps(srf, a), _strip_steps(srf, c), math.ceil(360.0 / max(angle, 0.1))
+    )
 
     while (
         count < 4096
@@ -1804,7 +1956,7 @@ def _strip_vertex(
 def _strip_mesh(
     b: BRep, fi: int, boundary: _EdgeBoundary, angle: float, chord: float
 ) -> Mesh:
-    """Phase 0: the strip of a face: both loops sampled at the same steps and made the canonical boundary of their edges, a quad between every pair of steps, the vertices numbered as the keyhole polygon a CDT face runs (first loop, seam, second loop backwards, seam) so the edge uses tag as there; no surface refinement, no lifting"""
+    """Phase 0: the strip of a face: both loops sampled at the same steps, closed on their vertex, and made the canonical boundary of their edges, two triangles between every pair of steps, the vertices numbered as the keyhole polygon a CDT face runs (first loop, seam, second loop backwards, seam) so the edge uses tag as there; no surface refinement, no lifting"""
 
     face = b.m_faces[fi]
     srf = b.m_surfaces[face.surface_index]
@@ -1814,6 +1966,8 @@ def _strip_mesh(
     count = _strip_count(srf, a, c, angle, chord)
     first = _strip_samples(srf, a, count)
     second = _strip_samples(srf, c, count)
+    _snap_sample_ends(first, _edge_ends(b, edges[0].index))
+    _snap_sample_ends(second, _edge_ends(b, edges[2].index))
     mesh = Mesh()
     loops = TrimLoops()
     loops.uv = [[Point(0.0, 0.0, 0.0)] * (2 * count + 2)]
@@ -1834,7 +1988,8 @@ def _strip_mesh(
         boundary.points[edges[2].index].append(second[k][2])
 
     for k in range(count):
-        mesh.add_face([bottom[k], bottom[k + 1], top[k + 1], top[k]])
+        mesh.add_face([bottom[k], bottom[k + 1], top[k + 1]])
+        mesh.add_face([bottom[k], top[k + 1], top[k]])
 
     start = first[0][1]
     _wind_to_normal(mesh, srf.normal_at(start[0], start[1]))
@@ -2974,6 +3129,7 @@ class BRep:
                 if has_quality
                 else srf.mesh()
             )
+            _snap_grid_corners(self, fi, fmesh[fi])
             rebuild_grid[fi] = _grid_boundaries(self, fi, fmesh[fi], boundary)
 
         _refine_shared_boundaries(
