@@ -456,6 +456,35 @@ def test_remesh_cdt_large_coordinates():
     MINI_CHECK(len(tris) == 2)
 
 
+@MINI_TEST("RemeshCDT", "Collinear Boundary Vertices")
+def test_remesh_cdt_collinear_boundary_vertices():
+    from session_py.remesh_cdt import cdt_triangulate
+    from session_py import Point
+
+    border = [
+        Point(0.0, 0.0, 0.0),
+        Point(10.0, 0.0, 0.0),
+        Point(10.0, 10.0, 0.0),
+        Point(6.0, 10.0, 0.0),
+        Point(3.0, 10.0, 0.0),
+        Point(0.0, 10.0, 0.0),
+    ]
+    tris = cdt_triangulate(border, [])
+    used = [False] * len(border)
+    area = 0.0
+
+    for a, b, c in tris:
+        used[a] = True
+        used[b] = True
+        used[c] = True
+        p, q, r = border[a], border[b], border[c]
+        area += 0.5 * ((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]))
+
+    MINI_CHECK(len(tris) == 4)
+    MINI_CHECK(all(used))
+    MINI_CHECK(abs(area - 100.0) < 1e-9)
+
+
 @MINI_TEST("RemeshCDT", "Plate Four Holes")
 def test_remesh_cdt_plate_four_holes():
     from session_py import RemeshCDT

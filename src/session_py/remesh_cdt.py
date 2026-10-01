@@ -61,6 +61,18 @@ def _cross_sign(p1, p2, p3) -> int:
     return 0
 
 
+def _redundant(prev, cur, nxt) -> bool:
+    """True when path vertex `cur` adds nothing between `prev` and `nxt`: it repeats `prev`, or `nxt` lies back along the way it came; a vertex that only continues straight on stays, since every input vertex must reach the triangulation."""
+
+    if _cross_sign(prev, cur, nxt) != 0:
+        return False
+
+    dx = float(cur[0] - prev[0])
+    dy = float(cur[1] - prev[1])
+
+    return dx * float(nxt[0] - cur[0]) + dy * float(nxt[1] - cur[1]) <= 0.0
+
+
 def _left_turning(p1, p2, p3) -> bool:
     """True when p1 -> p2 -> p3 turns left."""
     return _cross_sign(p1, p2, p3) < 0
@@ -757,7 +769,7 @@ class _Delaunay:
         self._rewire(tb, ta, edge, b1, b2)
 
     def _walk_path(self, path, i0: int, i: int, v0: int) -> bool:
-        """Walk the path from i back round to i0 creating boundary edges; false when the step budget of a degenerate path is blown."""
+        """Walk the path from i back round to i0 creating boundary edges, keeping every vertex that continues the path; false when the step budget of a degenerate path is blown."""
 
         n = len(path)
         budget = 16 * n + 256
@@ -776,7 +788,7 @@ class _Delaunay:
 
             i_next = _next_index(i, n)
 
-            if _cross_sign(self.vs[v_prev].pt, path[i], path[i_next]) == 0:
+            if _redundant(self.vs[v_prev].pt, path[i], path[i_next]):
                 i = i_next
                 continue
 
@@ -793,7 +805,7 @@ class _Delaunay:
                 i = i_next
                 i_next = _next_index(i, n)
 
-                while _cross_sign(self.vs[v_prev].pt, path[i], path[i_next]) == 0:
+                while _redundant(self.vs[v_prev].pt, path[i], path[i_next]):
                     steps += 1
 
                     if steps > budget:
@@ -818,7 +830,7 @@ class _Delaunay:
                 i = i_next
                 i_next = _next_index(i, n)
 
-                while _cross_sign(self.vs[v_prev].pt, path[i], path[i_next]) == 0:
+                while _redundant(self.vs[v_prev].pt, path[i], path[i_next]):
                     steps += 1
 
                     if steps > budget:
