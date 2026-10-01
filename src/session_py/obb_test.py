@@ -410,5 +410,22 @@ def test_obb_is_visible_round_trip():
     MINI_CHECK(not proto.is_visible)
 
 
+@MINI_TEST("OBB", "Is Locked Round Trip")
+def test_obb_is_locked_round_trip():
+    from session_py import OBB
+    from session_py import Point
+
+    locked = OBB.from_point(Point(1.0, 2.0, 3.0), 5.0)
+
+    MINI_CHECK(not locked.is_locked)
+
+    locked.is_locked = True
+    json = OBB.file_json_loads(locked.file_json_dumps())
+    proto = OBB.pb_loads(locked.pb_dumps())
+
+    MINI_CHECK(json.is_locked)
+    MINI_CHECK(proto.is_locked)
+
+
 if __name__ == "__main__":
     run_all(language="python")

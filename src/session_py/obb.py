@@ -36,6 +36,7 @@ class OBB:
         "half_size",
         "name",
         "is_visible",
+        "is_locked",
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -59,6 +60,7 @@ class OBB:
         self.half_size = half_size if half_size is not None else Vector(0.5, 0.5, 0.5)  # Half extent along each axis.
         self.name = "my_obb"  # Box name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -72,6 +74,7 @@ class OBB:
         )
         result.name = self.name
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         memo[id(self)] = result
 
         return result
@@ -757,6 +760,7 @@ class OBB:
             "center": self.center.__jsondump__(),
             "guid": self.guid,
             "half_size": self.half_size.__jsondump__(),
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "name": self.name,
             "type": "OBB",
@@ -784,6 +788,7 @@ class OBB:
         obb.guid = guid if guid is not None else data["guid"]
         obb.name = name if name is not None else data["name"]
         obb.is_visible = data.get("is_visible", True)
+        obb.is_locked = data.get("is_locked", False)
 
         return obb
 
@@ -832,6 +837,9 @@ class OBB:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         return proto
 
     @classmethod
@@ -851,6 +859,7 @@ class OBB:
 
         obb.name = proto.name
         obb.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        obb.is_locked = proto.is_locked
 
         return obb
 

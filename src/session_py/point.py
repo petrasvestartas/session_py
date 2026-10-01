@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class Point:
     """A 3D point with display width and color."""
 
-    __slots__ = ("_guid", "_x", "_y", "_z", "name", "is_visible", "width", "pointcolor")
+    __slots__ = ("_guid", "_x", "_y", "_z", "name", "is_visible", "is_locked", "width", "pointcolor")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Constructors
@@ -32,6 +32,7 @@ class Point:
         self._z = z  # Z coordinate.
         self.name = name  # Point name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self.width = 1.0  # Display width.
         self.pointcolor = Color.black()  # Display color.
 
@@ -40,6 +41,7 @@ class Point:
 
         result = Point(self._x, self._y, self._z, self.name)
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         result.width = self.width
         result.pointcolor = copy.deepcopy(self.pointcolor, memo)
         memo[id(self)] = result
@@ -113,6 +115,7 @@ class Point:
         return (
             self.name == other.name
             and self.is_visible == other.is_visible
+            and self.is_locked == other.is_locked
             and round(self._x * 1000000.0) == round(other._x * 1000000.0)
             and round(self._y * 1000000.0) == round(other._y * 1000000.0)
             and round(self._z * 1000000.0) == round(other._z * 1000000.0)
@@ -375,6 +378,7 @@ class Point:
 
         return {
             "guid": self.guid,
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "name": self.name,
             "pointcolor": self.pointcolor.__jsondump__(),
@@ -395,6 +399,7 @@ class Point:
         point.guid = guid or data["guid"]
         point.name = name or data["name"]
         point.is_visible = data.get("is_visible", True)
+        point.is_locked = data.get("is_locked", False)
         point.pointcolor = file_decode_node(data["pointcolor"])
         point.width = data["width"]
 
@@ -440,6 +445,9 @@ class Point:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         proto.x = self._x
         proto.y = self._y
         proto.z = self._z
@@ -459,6 +467,7 @@ class Point:
 
         point.name = proto.name
         point.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        point.is_locked = proto.is_locked
         point.width = proto.width
         point.pointcolor = Color.from_proto(proto.pointcolor)
 

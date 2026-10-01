@@ -333,5 +333,21 @@ def test_plane_is_visible_round_trip():
     MINI_CHECK(not proto.is_visible)
 
 
+@MINI_TEST("Plane", "Is Locked Round Trip")
+def test_plane_is_locked_round_trip():
+    from session_py import Plane
+
+    locked = Plane.xy_plane()
+
+    MINI_CHECK(not locked.is_locked)
+
+    locked.is_locked = True
+    json = Plane.file_json_loads(locked.file_json_dumps())
+    proto = Plane.pb_loads(locked.pb_dumps())
+
+    MINI_CHECK(json.is_locked)
+    MINI_CHECK(proto.is_locked)
+
+
 if __name__ == "__main__":
     run_all("python")

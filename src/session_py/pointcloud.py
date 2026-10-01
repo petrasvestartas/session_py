@@ -32,6 +32,7 @@ class PointCloud:
         "_point_ids",
         "name",
         "is_visible",
+        "is_locked",
         "point_size",
     )
 
@@ -60,6 +61,7 @@ class PointCloud:
         self._point_ids = []  # Stable point ids parallel to the points.
         self.name = "my_pointcloud"  # Cloud name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self.point_size = 1.0  # Display point size.
 
         for point in points or []:
@@ -88,6 +90,7 @@ class PointCloud:
         result._point_ids = list(self._point_ids)
         result.name = self.name
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         result.point_size = self.point_size
         memo[id(self)] = result
 
@@ -152,6 +155,7 @@ class PointCloud:
         return (
             self.name == other.name
             and self.is_visible == other.is_visible
+            and self.is_locked == other.is_locked
             and self._coords == other._coords
             and self._colors == other._colors
             and self._normals == other._normals
@@ -512,6 +516,7 @@ class PointCloud:
             "colors": self._colors,
             "coords": self._coords,
             "guid": self.guid,
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "lod_children": self._lod_children,
             "lod_count": self._lod_count,
@@ -540,6 +545,7 @@ class PointCloud:
         cloud.guid = guid if guid is not None else data.get("guid", cloud.guid)
         cloud.name = name if name is not None else data.get("name", cloud.name)
         cloud.is_visible = data.get("is_visible", True)
+        cloud.is_locked = data.get("is_locked", False)
         cloud.point_size = data.get("point_size", 1.0)
         cloud._lod_min = data.get("lod_min", [])
         cloud._lod_size = data.get("lod_size", [])
@@ -592,6 +598,9 @@ class PointCloud:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         proto.point_size = self.point_size
         proto.coords.extend(self._coords)
         proto.colors.extend(self._colors)
@@ -620,6 +629,7 @@ class PointCloud:
 
         cloud.name = proto.name
         cloud.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        cloud.is_locked = proto.is_locked
 
         if proto.point_size > 0.0:
             cloud.point_size = proto.point_size

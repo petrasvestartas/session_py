@@ -2612,6 +2612,7 @@ class Mesh:
         self._guid: str | None = None  # Lazily minted GUID.
         self.name = "my_mesh"  # Mesh name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self.color_mode = ColorMode.OBJECTCOLOR  # Active color mode.
         self._pointcolors: list[Color] = []  # Vertex colors.
         self._facecolors: list[Color] = []  # Face colors.
@@ -2636,6 +2637,7 @@ class Mesh:
         m._guid = self._guid
         m.name = self.name
         m.is_visible = self.is_visible
+        m.is_locked = self.is_locked
         m.halfedge = {u: dict(v) for u, v in self.halfedge.items()}
 
         for k, v in self.vertex.items():
@@ -6036,6 +6038,7 @@ class Mesh:
             if not self.halfedge and self.face
             else self.halfedge
         )
+        data["is_locked"] = self.is_locked
         data["is_visible"] = self.is_visible
         data["linecolors"] = Mesh._colors_to_json(self._linecolors)
         data["max_face"] = self._max_face
@@ -6151,6 +6154,7 @@ class Mesh:
             mesh.name = data["name"]
 
         mesh.is_visible = data.get("is_visible", True)
+        mesh.is_locked = data.get("is_locked", False)
 
         if guid is not None:
             mesh.guid = guid
@@ -6313,6 +6317,9 @@ class Mesh:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         Mesh._vertices_to_proto(self.vertex, proto)
         Mesh._faces_to_proto(self.face, self.facedata, self.face_holes, proto)
 
@@ -6406,6 +6413,7 @@ class Mesh:
 
         mesh.name = proto.name
         mesh.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        mesh.is_locked = proto.is_locked
 
         mesh.vertex = Mesh._vertices_from_proto(proto)
         Mesh._faces_from_proto(proto, mesh)

@@ -293,6 +293,7 @@ class Element:
         self._guid: str | None = None  # Lazily minted guid.
         self.name = name  # Element name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self._geometry = geometry  # Mesh, BRep or nothing.
         self._geometry_ops: list[Callable] = []  # In-memory mesh operations, never written.
         self._features: list[ElementFeature] = []  # Serialized modifications.
@@ -312,6 +313,7 @@ class Element:
         result._guid = None
         result.name = self.name
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         result._geometry = copy.deepcopy(self._geometry, memo)
         result._geometry_ops = list(self._geometry_ops)
         result._features = copy.deepcopy(self._features, memo)
@@ -764,6 +766,7 @@ class Element:
             and self._dimensions == other._dimensions
             and self._features == other._features
             and self.is_visible == other.is_visible
+            and self.is_locked == other.is_locked
         )
 
     def __ne__(self, other) -> bool:
@@ -814,6 +817,7 @@ class Element:
             "geometry_type": self.geometry_type_name,
             "guid": self.guid,
             "insertion_vectors": ivs,
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "name": self.name,
             "type": "Element",
@@ -842,6 +846,7 @@ class Element:
 
         elem.name = name if name is not None else data.get("name", elem.name)
         elem.is_visible = data.get("is_visible", True)
+        elem.is_locked = data.get("is_locked", False)
         dims = data.get("dimensions")
 
         if dims is not None:
@@ -920,6 +925,9 @@ class Element:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         return proto
 
     @classmethod
@@ -937,6 +945,7 @@ class Element:
 
         elem.name = proto.name
         elem.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        elem.is_locked = proto.is_locked
 
         has_data = len(proto.geometry_data) > 0
 

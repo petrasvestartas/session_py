@@ -235,6 +235,7 @@ class NurbsSurface:
         self._guid = None  # Lazily minted GUID.
         self.name = "my_nurbssurface"  # Surface name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self.width = 1.0  # Display width.
         self.pointcolors: list[Color] = []  # Display color per control point.
         self.facecolors: list[Color] = []  # Display color per mesh face.
@@ -249,6 +250,7 @@ class NurbsSurface:
 
         result = NurbsSurface()
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         result._deep_copy_from(self)
         memo[id(self)] = result
 
@@ -1632,6 +1634,7 @@ class NurbsSurface:
             "facecolors": _colors_to_json(self.facecolors),
             "guid": self.guid,
             "is_rational": self.m_is_rat != 0,
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "linecolors": _colors_to_json(self.linecolors),
         }
@@ -1676,6 +1679,7 @@ class NurbsSurface:
         surface.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         surface.name = name if name is not None else data.get("name", "my_nurbssurface")
         surface.is_visible = data.get("is_visible", True)
+        surface.is_locked = data.get("is_locked", False)
         surface.width = data.get("width", 1.0)
         surface.pointcolors = _colors_from_json(data, "pointcolors")
         surface.facecolors = _colors_from_json(data, "facecolors")
@@ -1736,6 +1740,9 @@ class NurbsSurface:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         proto.dimension = int(self.m_dim)
         proto.is_rational = self.m_is_rat != 0
         proto.order_u = int(self.m_order[0])
@@ -1780,6 +1787,7 @@ class NurbsSurface:
 
         surface.name = proto.name
         surface.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        surface.is_locked = proto.is_locked
         surface.width = proto.width
         surface.pointcolors = _colors_from_proto(proto.pointcolors)
         surface.facecolors = _colors_from_proto(proto.facecolors)
@@ -1869,6 +1877,7 @@ class NurbsSurface:
         self._guid = None
         self.name = src.name
         self.is_visible = src.is_visible
+        self.is_locked = src.is_locked
         self.width = src.width
         self.pointcolors = list(src.pointcolors)
         self.facecolors = list(src.facecolors)

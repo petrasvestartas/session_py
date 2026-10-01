@@ -870,6 +870,28 @@ def test_is_visible_round_trip():
     MINI_CHECK(shown != hidden)
 
 
+@MINI_TEST("Element", "Is Locked Round Trip")
+def test_is_locked_round_trip():
+    from session_py import Element
+
+    locked = Element(_unit_quad(), "joint")
+
+    MINI_CHECK(not locked.is_locked)
+
+    locked.is_locked = True
+    json = Element.file_json_loads(locked.file_json_dumps())
+    proto = Element.pb_loads(locked.pb_dumps())
+
+    MINI_CHECK(json.is_locked)
+    MINI_CHECK(proto.is_locked)
+    MINI_CHECK(json == locked)
+    MINI_CHECK(proto == locked)
+
+    free = Element(_unit_quad(), "joint")
+
+    MINI_CHECK(free != locked)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ElementFeature
 # ═══════════════════════════════════════════════════════════════════════════

@@ -509,5 +509,21 @@ def test_line_is_visible_round_trip():
     MINI_CHECK(not proto.is_visible)
 
 
+@MINI_TEST("Line", "Is Locked Round Trip")
+def test_line_is_locked_round_trip():
+    from session_py import Line
+
+    locked = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+    MINI_CHECK(not locked.is_locked)
+
+    locked.is_locked = True
+    json = Line.file_json_loads(locked.file_json_dumps())
+    proto = Line.pb_loads(locked.pb_dumps())
+
+    MINI_CHECK(json.is_locked)
+    MINI_CHECK(proto.is_locked)
+
+
 if __name__ == "__main__":
     run_all("python")

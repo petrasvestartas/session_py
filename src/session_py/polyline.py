@@ -207,6 +207,7 @@ class Polyline:
         self._plane_dirty = True  # True until get_plane recomputes.
         self.name = "my_polyline"  # Polyline name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self.coords: list[float] = []  # Flat [x, y, z, ...].
         self.plane = Plane()  # Lazily computed plane, see get_plane.
         self.width = 1.0  # Display width.
@@ -224,6 +225,7 @@ class Polyline:
         result._plane_dirty = self._plane_dirty
         result.name = self.name
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         result.coords = list(self.coords)
         result.plane = copy.deepcopy(self.plane, memo)
         result.width = self.width
@@ -1766,6 +1768,7 @@ class Polyline:
             "coords": self.coords,
             "dash": list(self.dash),
             "guid": self.guid,
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
@@ -1785,6 +1788,7 @@ class Polyline:
         polyline.guid = guid if guid is not None else data.get("guid", polyline.guid)
         polyline.name = name if name is not None else data.get("name", polyline.name)
         polyline.is_visible = data.get("is_visible", True)
+        polyline.is_locked = data.get("is_locked", False)
 
         if "coords" in data:
             polyline.coords = list(data["coords"])
@@ -1845,6 +1849,9 @@ class Polyline:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         proto.width = self.width
 
         for d in self.dash:
@@ -1868,6 +1875,7 @@ class Polyline:
 
         polyline.name = proto.name
         polyline.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        polyline.is_locked = proto.is_locked
         polyline.width = proto.width
         polyline.dash = list(proto.dash)
 

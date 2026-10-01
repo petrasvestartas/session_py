@@ -74,6 +74,7 @@ class NurbsCurve:
         self._guid = None  # Lazily minted GUID.
         self.name = "my_nurbscurve"  # Curve name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self.width = 1.0  # Display width.
         self.pointcolors: list[Color] = []  # Display color per control point.
         self.linecolors: list[Color] = []  # Display color per control polygon segment.
@@ -91,6 +92,7 @@ class NurbsCurve:
 
         result = NurbsCurve()
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         result._deep_copy_from(self)
         memo[id(self)] = result
 
@@ -2206,6 +2208,7 @@ class NurbsCurve:
             "dimension": int(self.m_dim),
             "guid": self.guid,
             "is_rational": self.m_is_rat != 0,
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "linecolors": linecolors_arr,
             "name": self.name,
@@ -2251,6 +2254,7 @@ class NurbsCurve:
         curve.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         curve.name = name if name is not None else data.get("name", "my_nurbscurve")
         curve.is_visible = data.get("is_visible", True)
+        curve.is_locked = data.get("is_locked", False)
         curve.width = data.get("width", 1.0)
 
         arr = data.get("pointcolors", [])
@@ -2305,6 +2309,9 @@ class NurbsCurve:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         proto.dimension = int(self.m_dim)
         proto.is_rational = self.m_is_rat != 0
         proto.order = int(self.m_order)
@@ -2341,6 +2348,7 @@ class NurbsCurve:
 
         curve.name = proto.name
         curve.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        curve.is_locked = proto.is_locked
         curve.width = proto.width if proto.width != 0.0 else 1.0
         curve.m_nurbsknot = np.array(list(proto.nurbsknots), dtype=np.float64)
         curve.m_cv = np.array(list(proto.cvs), dtype=np.float64)
@@ -2629,6 +2637,7 @@ class NurbsCurve:
         self._guid = None
         self.name = src.name
         self.is_visible = src.is_visible
+        self.is_locked = src.is_locked
         self.width = src.width
         self.pointcolors = list(src.pointcolors)
         self.linecolors = list(src.linecolors)

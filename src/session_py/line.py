@@ -29,6 +29,7 @@ class Line:
         "_z1",
         "name",
         "is_visible",
+        "is_locked",
         "width",
         "dash",
         "linecolor",
@@ -57,6 +58,7 @@ class Line:
         self._z1 = z1  # End z.
         self.name = "my_line"  # Line name.
         self.is_visible = True  # Whether a viewer draws it.
+        self.is_locked = False  # Whether a viewer keeps it from moving.
         self.width = 1.0  # Display width.
         self.dash = []  # Dash pattern lengths.
         self.linecolor = Color.black()  # Display color.
@@ -67,6 +69,7 @@ class Line:
         result = Line(self._x0, self._y0, self._z0, self._x1, self._y1, self._z1)
         result.name = self.name
         result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
         result.width = self.width
         result.dash = list(self.dash)
         result.linecolor = copy.deepcopy(self.linecolor, memo)
@@ -286,6 +289,7 @@ class Line:
         return (
             self.name == other.name
             and self.is_visible == other.is_visible
+            and self.is_locked == other.is_locked
             and round(self._x0 * 1000000.0) == round(other._x0 * 1000000.0)
             and round(self._y0 * 1000000.0) == round(other._y0 * 1000000.0)
             and round(self._z0 * 1000000.0) == round(other._z0 * 1000000.0)
@@ -649,6 +653,7 @@ class Line:
         return {
             "dash": list(self.dash),
             "guid": self.guid,
+            "is_locked": self.is_locked,
             "is_visible": self.is_visible,
             "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
@@ -676,6 +681,7 @@ class Line:
         line.guid = guid if guid is not None else data["guid"]
         line.name = name if name is not None else data["name"]
         line.is_visible = data.get("is_visible", True)
+        line.is_locked = data.get("is_locked", False)
 
         if "dash" in data:
             line.dash = list(data["dash"])
@@ -728,6 +734,9 @@ class Line:
         if not self.is_visible:
             proto.is_visible = False
 
+        if self.is_locked:
+            proto.is_locked = True
+
         proto.width = self.width
 
         for i in range(6):
@@ -765,6 +774,7 @@ class Line:
 
         line.name = proto.name
         line.is_visible = not proto.HasField("is_visible") or proto.is_visible
+        line.is_locked = proto.is_locked
 
         if proto.width > 0.0:
             line.width = proto.width
