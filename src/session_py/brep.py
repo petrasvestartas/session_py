@@ -295,6 +295,27 @@ def _bbox_diagonal(srf: NurbsSurface) -> float:
     return hi.distance(lo)
 
 
+def _brep_diagonal(b: BRep) -> float:
+    """Diagonal of the bounding box of every surface's control points: the size a chord tolerance and a face's share of the sampling are measured against"""
+
+    lo = Point(1e30, 1e30, 1e30)
+    hi = Point(-1e30, -1e30, -1e30)
+
+    for srf in b.m_surfaces:
+        for i in range(srf.cv_count(0)):
+            for j in range(srf.cv_count(1)):
+                p = srf.get_cv(i, j)
+
+                for k in range(3):
+                    lo[k] = min(lo[k], p[k])
+                    hi[k] = max(hi[k], p[k])
+
+    if not b.m_surfaces:
+        return 0.0
+
+    return hi.distance(lo)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Factory helpers
 # ═══════════════════════════════════════════════════════════════════════════
@@ -962,15 +983,16 @@ def _refine_surface_boundary(
     surface: NurbsSurface,
     curve: NurbsCurve,
     samples: list[tuple[float, Point, Point]],
+    scale: float,
     angle: float,
     chord: float,
 ) -> list[tuple[float, Point, Point]]:
-    """Refine samples of a lifted pcurve until chord and angle hold; existing samples stay exact, eight split levels and 4096 added points per edge bound the work"""
+    """Refine samples of a lifted pcurve until chord and angle hold, the chord measured against the whole BRep's size `scale`; existing samples stay exact, eight split levels and 4096 added points per edge bound the work"""
 
     if len(samples) < 2:
         return samples
 
-    tolerance = _bbox_diagonal(surface) * chord
+    tolerance = scale * chord
     cosine = math.cos(min(max(angle, 0.1), 179.0) * PI / 180.0)
     result = []
     added = 0
@@ -1262,6 +1284,7 @@ def _refine_shared_boundaries(
     face_direct: list[bool],
     rebuild_grid: list[bool],
     boundary: _EdgeBoundary,
+    scale: float,
     angle: float,
     chord: float,
 ) -> None:
@@ -1299,7 +1322,9 @@ def _refine_shared_boundaries(
         ):
             samples.append((end, curve.point_at(end), samples[0][2]))
 
-        refined = _refine_surface_boundary(surface, curve, samples, angle, chord)
+        refined = _refine_surface_boundary(
+            surface, curve, samples, scale, angle, chord
+        )
 
         if len(refined) <= len(samples):
             continue
@@ -1539,6 +1564,7 @@ def _fresh_samples(
     srf: NurbsSurface,
     crv: NurbsCurve,
     ends: tuple[Point, Point],
+    scale: float,
     angle: float,
     chord: float,
 ) -> list[tuple[float, Point, Point]]:
@@ -1563,7 +1589,7 @@ def _fresh_samples(
 
     _snap_sample_ends(samples, ends)
 
-    return _refine_surface_boundary(srf, crv, samples, angle, chord)
+    return _refine_surface_boundary(srf, crv, samples, scale, angle, chord)
 
 
 def _edge_use_samples(
@@ -1571,6 +1597,7 @@ def _edge_use_samples(
     fi: int,
     er: BRepRef,
     boundary: _EdgeBoundary,
+    scale: float,
     angle: float,
     chord: float,
     samples: list[tuple[float, Point, Point]],
@@ -1593,6 +1620,7 @@ def _edge_use_samples(
             b.m_surfaces[b.m_faces[fi].surface_index],
             crv,
             _edge_ends(b, ei),
+            scale,
             angle,
             chord,
         )
@@ -1619,6 +1647,7 @@ def _trim_loops(
     b: BRep,
     fi: int,
     boundary: _EdgeBoundary,
+    scale: float,
     angle: float,
     chord: float,
     loops: TrimLoops,
@@ -1635,7 +1664,9 @@ def _trim_loops(
         for er in b.wire_edges(face.wires[wi]):
             samples: list[tuple[float, Point, Point]] = []
 
-            if not _edge_use_samples(b, fi, er, boundary, angle, chord, samples):
+            if not _edge_use_samples(
+                b, fi, er, boundary, scale, angle, chord, samples
+            ):
                 return False
 
             uses.append((er.index, wi, len(uv), len(samples)))
@@ -1917,14 +1948,21 @@ def _strip_steps(srf: NurbsSurface, crv: NurbsCurve) -> int:
 
 
 def _strip_count(
-    srf: NurbsSurface, a: NurbsCurve, c: NurbsCurve, angle: float, chord: float
+    srf: NurbsSurface,
+    a: NurbsCurve,
+    c: NurbsCurve,
+    scale: float,
+    angle: float,
+    chord: float,
 ) -> int:
-    """Phase 0: the steps of a strip: the angle's share of a turn and what the loops ask for, doubled until both loops sag within the chord tolerance"""
+    """Phase 0: the steps of a strip: the angle's share of a turn and what the loops ask for, scaled by the face's size against the whole BRep so a small bore in a large body keeps few steps, never under sixteen, doubled until both loops sag within the chord tolerance measured against the BRep"""
 
-    tolerance = _bbox_diagonal(srf) * chord
-    count = max(
+    tolerance = scale * chord
+    asked = max(
         _strip_steps(srf, a), _strip_steps(srf, c), math.ceil(360.0 / max(angle, 0.1))
     )
+    share = min(_bbox_diagonal(srf) / scale, 1.0) if scale > 0.0 else 1.0
+    count = max(math.ceil(asked * share), 16)
 
     while (
         count < 4096
@@ -1954,7 +1992,7 @@ def _strip_vertex(
 
 
 def _strip_mesh(
-    b: BRep, fi: int, boundary: _EdgeBoundary, angle: float, chord: float
+    b: BRep, fi: int, boundary: _EdgeBoundary, scale: float, angle: float, chord: float
 ) -> Mesh:
     """Phase 0: the strip of a face: both loops sampled at the same steps, closed on their vertex, and made the canonical boundary of their edges, two triangles between every pair of steps, the vertices numbered as the keyhole polygon a CDT face runs (first loop, seam, second loop backwards, seam) so the edge uses tag as there; no surface refinement, no lifting"""
 
@@ -1963,7 +2001,7 @@ def _strip_mesh(
     edges = b.wire_edges(face.wires[0])
     a = b.m_curves_2d[b.pcurve_index(edges[0].index, fi, edges[0].orientation)]
     c = b.m_curves_2d[b.pcurve_index(edges[2].index, fi, edges[2].orientation)]
-    count = _strip_count(srf, a, c, angle, chord)
+    count = _strip_count(srf, a, c, scale, angle, chord)
     first = _strip_samples(srf, a, count)
     second = _strip_samples(srf, c, count)
     _snap_sample_ends(first, _edge_ends(b, edges[0].index))
@@ -3101,6 +3139,7 @@ class BRep:
         nf = len(self.m_faces)
         angle = max_angle_deg if has_quality else 20.0
         chord = chord_factor if has_quality else 0.005
+        scale = _brep_diagonal(self)
         face_strip = [False] * nf
         face_direct = [False] * nf
         rebuild_grid = [False] * nf
@@ -3112,7 +3151,7 @@ class BRep:
             fmesh.append(Mesh())
 
             if face_strip[fi]:
-                fmesh[fi] = _strip_mesh(self, fi, boundary, angle, chord)
+                fmesh[fi] = _strip_mesh(self, fi, boundary, scale, angle, chord)
 
         for fi in range(nf):
             face_direct[fi] = not face_strip[fi] and _direct_face(self, fi)
@@ -3133,7 +3172,7 @@ class BRep:
             rebuild_grid[fi] = _grid_boundaries(self, fi, fmesh[fi], boundary)
 
         _refine_shared_boundaries(
-            self, face_direct, rebuild_grid, boundary, angle, chord
+            self, face_direct, rebuild_grid, boundary, scale, angle, chord
         )
 
         for fi in range(nf):
@@ -3152,7 +3191,9 @@ class BRep:
 
             uses: list[tuple[int, int, int, int]] = []
 
-            if not _trim_loops(self, fi, boundary, angle, chord, loops, uses):
+            if not _trim_loops(
+                self, fi, boundary, scale, angle, chord, loops, uses
+            ):
                 continue
 
             if not loops.interior_uv and _is_planar_patch(srf):
