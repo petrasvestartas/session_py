@@ -848,6 +848,28 @@ def test_equality_compares_carried_fields():
     MINI_CHECK(a != b)
 
 
+@MINI_TEST("Element", "Is Visible Round Trip")
+def test_is_visible_round_trip():
+    from session_py import Element
+
+    hidden = Element(_unit_quad(), "joint")
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = Element.file_json_loads(hidden.file_json_dumps())
+    proto = Element.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+    MINI_CHECK(json == hidden)
+    MINI_CHECK(proto == hidden)
+
+    shown = Element(_unit_quad(), "joint")
+
+    MINI_CHECK(shown != hidden)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ElementFeature
 # ═══════════════════════════════════════════════════════════════════════════

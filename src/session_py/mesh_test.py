@@ -3128,5 +3128,196 @@ def test_mesh_triangle_aabb_tree():
     MINI_CHECK(mesh.get_cached_bvh() is not None)
 
 
+@MINI_TEST("Mesh", "Offset")
+def test_mesh_offset():
+    from session_py import Mesh
+    from session_py import Point
+    from copy import deepcopy
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
+    mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
+    result = mesh.offset(1.0)
+    copy = deepcopy(result)
+
+    MINI_CHECK(result.is_valid())
+    MINI_CHECK(result.is_closed())
+    MINI_CHECK(result == copy)
+    MINI_CHECK(not (result != copy))
+    MINI_CHECK(result.number_of_vertices() == 8)
+    MINI_CHECK(result.number_of_faces() == 6)
+
+
+@MINI_TEST("Mesh", "Offset Grid")
+def test_mesh_offset_grid():
+    from session_py import Mesh
+    from session_py import Point
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(2, 0, 0),
+        Point(0, 1, 0),
+        Point(1, 1, 0),
+        Point(2, 1, 0),
+        Point(0, 2, 0),
+        Point(1, 2, 0),
+        Point(2, 2, 0),
+    ]
+    faces = [
+        [0, 1, 4, 3],
+        [1, 2, 5, 4],
+        [3, 4, 7, 6],
+        [4, 5, 8, 7],
+    ]
+    mesh = Mesh.from_vertices_and_faces(points, faces)
+    result = mesh.offset(2.0)
+
+    MINI_CHECK(result.is_valid())
+    MINI_CHECK(result.is_closed())
+    MINI_CHECK(result.number_of_vertices() == 18)
+    MINI_CHECK(result.number_of_faces() == 16)
+
+
+@MINI_TEST("Mesh", "Offset Layers")
+def test_mesh_offset_layers():
+    from session_py import Mesh
+    from session_py import Point
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
+    mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
+    layers = mesh.offset_layers(1.0)
+
+    MINI_CHECK(layers.bottom.is_valid())
+    MINI_CHECK(layers.top.is_valid())
+    MINI_CHECK(layers.sides.is_valid())
+    MINI_CHECK(layers.bottom.number_of_vertices() == 4)
+    MINI_CHECK(layers.bottom.number_of_faces() == 1)
+    MINI_CHECK(layers.top.number_of_vertices() == 4)
+    MINI_CHECK(layers.top.number_of_faces() == 1)
+    MINI_CHECK(layers.sides.number_of_faces() == 4)
+
+
+@MINI_TEST("Mesh", "Offset Planes")
+def test_mesh_offset_planes():
+    from session_py import Mesh
+    from session_py import Point
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
+    mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
+    planes = mesh.offset_planes(1.0)
+
+    MINI_CHECK(len(planes) == 1)
+
+    plane = planes[0]
+
+    MINI_CHECK(TOLERANCE.is_close(plane.a, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(plane.b, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(plane.c, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(plane.d, -1.0))
+    MINI_CHECK(TOLERANCE.is_close(plane.origin[2], 1.0))
+
+
+@MINI_TEST("Mesh", "Offset Vertices")
+def test_mesh_offset_vertices():
+    from session_py import Mesh
+    from session_py import Point
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(2, 0, 0),
+        Point(0, 1, 0),
+        Point(1, 1, 0),
+        Point(2, 1, 0),
+        Point(0, 2, 0),
+        Point(1, 2, 0),
+        Point(2, 2, 0),
+    ]
+    faces = [
+        [0, 1, 4, 3],
+        [1, 2, 5, 4],
+        [3, 4, 7, 6],
+        [4, 5, 8, 7],
+    ]
+    mesh = Mesh.from_vertices_and_faces(points, faces)
+    planes = mesh.offset_planes(2.0)
+    offsets = mesh.offset_vertices(planes)
+
+    MINI_CHECK(len(planes) == 4)
+    MINI_CHECK(len(offsets) == 9)
+
+    for vkey in range(9):
+        MINI_CHECK(TOLERANCE.is_close(offsets[vkey][0], points[vkey][0]))
+        MINI_CHECK(TOLERANCE.is_close(offsets[vkey][1], points[vkey][1]))
+        MINI_CHECK(TOLERANCE.is_close(offsets[vkey][2], 2.0))
+
+
+@MINI_TEST("Mesh", "Offset Json Roundtrip")
+def test_mesh_offset_json_roundtrip():
+    from session_py import Mesh
+    from session_py import Point
+    from pathlib import Path
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
+    mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
+    result = mesh.offset(1.0)
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.json"
+    )
+
+    result.file_json_dump(filename)
+    loaded = Mesh.file_json_load(filename)
+
+    MINI_CHECK(loaded == result)
+    MINI_CHECK(loaded.number_of_vertices() == 8)
+    MINI_CHECK(loaded.number_of_faces() == 6)
+
+
+@MINI_TEST("Mesh", "Offset Protobuf Roundtrip")
+def test_mesh_offset_protobuf_roundtrip():
+    from session_py import Mesh
+    from session_py import Point
+    from pathlib import Path
+
+    points = [
+        Point(0, 0, 0),
+        Point(1, 0, 0),
+        Point(1, 1, 0),
+        Point(0, 1, 0),
+    ]
+    mesh = Mesh.from_vertices_and_faces(points, [[0, 1, 2, 3]])
+    result = mesh.offset(1.0)
+    filename = (
+        Path(__file__).resolve().parents[2] / "serialization" / "test_mesh_offset.bin"
+    )
+
+    result.pb_dump(filename)
+    loaded = Mesh.pb_load(filename)
+
+    MINI_CHECK(loaded == result)
+    MINI_CHECK(loaded.number_of_vertices() == 8)
+    MINI_CHECK(loaded.number_of_faces() == 6)
+
+
 if __name__ == "__main__":
     run_all(language="python")

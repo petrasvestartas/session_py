@@ -50,10 +50,10 @@ from .file_obj import read_file_obj_from_str
 from .file_obj import write_file_obj_to_string
 from .file_obj import read_file_obj_polylines
 from . import file_step
-from .io_xyz import read_xyz
-from .io_xyz import write_xyz
-from .io_xyz import read_xyz_from_str
-from .io_xyz import write_xyz_to_string
+from .file_xyz import read_xyz
+from .file_xyz import write_xyz
+from .file_xyz import read_xyz_from_str
+from .file_xyz import write_xyz_to_string
 from . import intersection
 from .nurbscurve import NurbsCurve
 from .nurbssurface import NurbsSurface
@@ -74,7 +74,6 @@ from .matrix import Matrix
 from .convex_hull import ConvexHull
 from .spatial_kdtree import SpatialKDTree
 from .spatial_octree import SpatialOctree
-from .mesh_offset import MeshOffset
 
 __all__ = [
     "Color",
@@ -140,5 +139,4 @@ __all__ = [
     "ConvexHull",
     "SpatialKDTree",
     "SpatialOctree",
-    "MeshOffset",
 ]

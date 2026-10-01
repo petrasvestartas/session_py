@@ -11,12 +11,12 @@ def _mapped(surface, x, y):
     return a + (surface.get_cv(1, 0) - a) * x + (surface.get_cv(0, 1) - a) * y
 
 
-@MINI_TEST("SimpleSplit", "Split Curve By Curves")
+@MINI_TEST("Split", "Split Curve By Curves")
 def test_split_curve_by_curves():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Primitives
-    from session_py.simple_split import split_curve_by_curves
+    from session_py.split import split_curve_by_curves
 
     curve = NurbsCurve.create(False, 1, [Point(-2.0, 0.0, 0.0), Point(2.0, 0.0, 0.0)])
     cutter = NurbsCurve.create(False, 1, [Point(0.0, -2.0, 0.0), Point(0.0, 2.0, 0.0)])
@@ -78,13 +78,13 @@ def test_split_curve_by_curves():
     MINI_CHECK(rejected)
 
 
-@MINI_TEST("SimpleSplit", "Split BRep Face By Curves")
+@MINI_TEST("Split", "Split BRep Face By Curves")
 def test_split_brep_face_by_curves():
     from session_py import BRep
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Primitives
-    from session_py.simple_split import split_brep_face_by_curves
+    from session_py.split import split_brep_face_by_curves
 
     box = BRep.create_box(10.0, 10.0, 10.0)
     surface = box.m_surfaces[0]
@@ -215,12 +215,12 @@ def test_split_brep_face_by_curves():
     MINI_CHECK(cylinder.face_count() == 3)
 
 
-@MINI_TEST("SimpleSplit", "Split Surface By Curves")
+@MINI_TEST("Split", "Split Surface By Curves")
 def test_split_surface_by_curves():
     from session_py import BRep
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.simple_split import split_surface_by_curves
+    from session_py.split import split_surface_by_curves
 
     surface = BRep.create_box(10.0, 10.0, 10.0).m_surfaces[0]
     cutter = NurbsCurve.create(
@@ -251,12 +251,12 @@ def test_split_surface_by_curves():
     MINI_CHECK(rejected)
 
 
-@MINI_TEST("SimpleSplit", "Split Line By Curves")
+@MINI_TEST("Split", "Split Line By Curves")
 def test_split_line_by_curves():
     from session_py import Line
     from session_py import NurbsCurve
     from session_py import Point
-    from session_py.simple_split import split_line_by_curves
+    from session_py.split import split_line_by_curves
 
     line = Line.from_points(Point(-2.0, 0.0, 0.0), Point(2.0, 0.0, 0.0))
     line.name = "retained"
@@ -276,12 +276,12 @@ def test_split_line_by_curves():
     MINI_CHECK(line.length() == 4.0)
 
 
-@MINI_TEST("SimpleSplit", "Split Polyline By Curves")
+@MINI_TEST("Split", "Split Polyline By Curves")
 def test_split_polyline_by_curves():
     from session_py import NurbsCurve
     from session_py import Point
     from session_py import Polyline
-    from session_py.simple_split import split_polyline_by_curves
+    from session_py.split import split_polyline_by_curves
 
     polyline = Polyline(
         [Point(-2.0, 0.0, 0.0), Point(2.0, 0.0, 0.0), Point(2.0, 3.0, 0.0)]

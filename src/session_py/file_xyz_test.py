@@ -4,7 +4,7 @@ from .mini_test import run_all
 from .tolerance import TOLERANCE
 
 
-@MINI_TEST("IoXyz", "Read Bunny")
+@MINI_TEST("FileXyz", "Read Bunny")
 def test_read_bunny():
     from session_py import read_xyz
     from pathlib import Path
@@ -27,7 +27,7 @@ def test_read_bunny():
     MINI_CHECK(has_non_zero)
 
 
-@MINI_TEST("IoXyz", "Write Read Roundtrip")
+@MINI_TEST("FileXyz", "Write Read Roundtrip")
 def test_write_read_roundtrip():
     from session_py import Point
     from session_py import PointCloud
@@ -60,7 +60,7 @@ def test_write_read_roundtrip():
     os.remove(filepath)
 
 
-@MINI_TEST("IoXyz", "String Roundtrip")
+@MINI_TEST("FileXyz", "String Roundtrip")
 def test_string_roundtrip():
     from session_py import Point
     from session_py import PointCloud

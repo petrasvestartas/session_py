@@ -2527,6 +2527,70 @@ def _cut_tolerance(points: dict[int, Point]) -> float:
     return 1e-9 * low.distance(high)
 
 
+def _offset_meet(planes: list[Plane], fallback: Point) -> Point:
+    """Least-squares point on the planes, fallback fills any free direction."""
+
+    if len(planes) == 0:
+        return fallback
+
+    if len(planes) == 1:
+        plane = planes[0]
+        t = -plane.d - (
+            plane.a * fallback[0] + plane.b * fallback[1] + plane.c * fallback[2]
+        )
+
+        return fallback + plane.z_axis * t
+
+    from .matrix import Matrix
+
+    eps = 1e-8
+
+    lhs = Matrix(3, 3)
+    rhs = Matrix(3, 1)
+
+    for plane in planes:
+        row = [plane.a, plane.b, plane.c]
+
+        for i in range(3):
+            for j in range(3):
+                lhs[i, j] += row[i] * row[j]
+
+            rhs[i, 0] -= row[i] * plane.d
+
+    for i in range(3):
+        lhs[i, i] += eps
+        rhs[i, 0] += eps * fallback[i]
+
+    solution = lhs.solve(rhs)
+
+    if solution is None:
+        return fallback
+
+    return Point(solution[0, 0], solution[1, 0], solution[2, 0])
+
+
+def _offset_naked_edges(mesh: "Mesh") -> list[tuple[int, int]]:
+    """Naked edges wound the way their face walks them."""
+
+    directed = set()
+
+    for fkey in mesh.faces():
+        vertices = mesh.face[fkey]
+
+        for i in range(len(vertices)):
+            directed.add((vertices[i], vertices[(i + 1) % len(vertices)]))
+
+    edges = []
+
+    for edge in mesh.naked_edges(True):
+        if edge in directed:
+            edges.append(edge)
+        else:
+            edges.append((edge[1], edge[0]))
+
+    return edges
+
+
 class Mesh:
     """A halfedge mesh data structure for representing polygonal surfaces."""
 
@@ -5717,6 +5781,145 @@ class Mesh:
         closed, opened = _section_chains(links)
 
         return _section_polylines(closed, opened, found, plane)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Offset
+    # ═══════════════════════════════════════════════════════════════════════════
+    class OffsetLayers:
+        """Top, bottom and side meshes of a shell."""
+
+        def __init__(self, top: Mesh, bottom: Mesh, sides: Mesh):
+            """Construct from the three meshes."""
+
+            self.top = top  # Offset faces.
+            self.bottom = bottom  # Reversed original faces.
+            self.sides = sides  # One quad per naked edge.
+
+    def offset(self, distance: float) -> Mesh:
+        """Return one closed shell: reversed bottom, offset top, one quad per naked edge."""
+
+        planes = self.offset_planes(distance)
+        offsets = self.offset_vertices(planes)
+
+        result = Mesh()
+        bottom = {}
+        top = {}
+
+        for vkey in self.vertices():
+            bottom[vkey] = result.add_vertex(self.vertex_point(vkey))
+            top[vkey] = result.add_vertex(offsets[vkey])
+
+        for fkey in self.faces():
+            ring = self.face_vertices(fkey)
+            bottom_face = []
+            top_face = []
+
+            for vkey in ring:
+                bottom_face.append(bottom[vkey])
+                top_face.append(top[vkey])
+
+            bottom_face.reverse()
+            result.add_face(bottom_face)
+            result.add_face(top_face)
+
+        for edge in _offset_naked_edges(self):
+            result.add_face(
+                [bottom[edge[0]], bottom[edge[1]], top[edge[1]], top[edge[0]]]
+            )
+
+        return result
+
+    def offset_layers(self, distance: float) -> Mesh.OffsetLayers:
+        """Return the same shell as three meshes: top, bottom and sides."""
+
+        planes = self.offset_planes(distance)
+        offsets = self.offset_vertices(planes)
+
+        layers = Mesh.OffsetLayers(Mesh(), Mesh(), Mesh())
+        bottom = {}
+        top = {}
+
+        for vkey in self.vertices():
+            bottom[vkey] = layers.bottom.add_vertex(self.vertex_point(vkey))
+            top[vkey] = layers.top.add_vertex(offsets[vkey])
+
+        for fkey in self.faces():
+            ring = self.face_vertices(fkey)
+            bottom_face = []
+            top_face = []
+
+            for vkey in ring:
+                bottom_face.append(bottom[vkey])
+                top_face.append(top[vkey])
+
+            bottom_face.reverse()
+            layers.bottom.add_face(bottom_face)
+            layers.top.add_face(top_face)
+
+        side_bottom = {}
+        side_top = {}
+
+        for edge in _offset_naked_edges(self):
+            for vkey in edge:
+                if vkey not in side_bottom:
+                    side_bottom[vkey] = layers.sides.add_vertex(self.vertex_point(vkey))
+
+                if vkey not in side_top:
+                    side_top[vkey] = layers.sides.add_vertex(offsets[vkey])
+
+            layers.sides.add_face(
+                [
+                    side_bottom[edge[0]],
+                    side_bottom[edge[1]],
+                    side_top[edge[1]],
+                    side_top[edge[0]],
+                ]
+            )
+
+        return layers
+
+    def offset_planes(self, distance: float) -> dict[int, Plane]:
+        """Return the plane of each face translated by distance along its normal, by face key."""
+
+        planes = {}
+
+        for fkey in self.faces():
+            centroid = self.face_centroid(fkey)
+            normal = self.face_normal(fkey)
+
+            if centroid is None or normal is None:
+                continue
+
+            planes[fkey] = Plane.from_point_normal(centroid + normal * distance, normal)
+
+        return planes
+
+    def offset_vertices(self, planes: dict[int, Plane]) -> dict[int, Point]:
+        """Return the offset position of each vertex, the least-squares meet of its face planes, by vertex key."""
+
+        vertex_faces = {}
+
+        for fkey in self.faces():
+            for vkey in self.face[fkey]:
+                vertex_faces.setdefault(vkey, []).append(fkey)
+
+        result = {}
+
+        for vkey in self.vertices():
+            point = self.vertex_point(vkey)
+
+            if point is None:
+                continue
+
+            adjacent = []
+
+            for fkey in vertex_faces.get(vkey, []):
+                if fkey in planes:
+                    adjacent.append(planes[fkey])
+
+            result[vkey] = _offset_meet(adjacent, point)
+
+        return result
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON

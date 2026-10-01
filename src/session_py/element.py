@@ -292,6 +292,7 @@ class Element:
 
         self._guid: str | None = None  # Lazily minted guid.
         self.name = name  # Element name.
+        self.is_visible = True  # Whether a viewer draws it.
         self._geometry = geometry  # Mesh, BRep or nothing.
         self._geometry_ops: list[Callable] = []  # In-memory mesh operations, never written.
         self._features: list[ElementFeature] = []  # Serialized modifications.
@@ -310,6 +311,7 @@ class Element:
         memo[id(self)] = result
         result._guid = None
         result.name = self.name
+        result.is_visible = self.is_visible
         result._geometry = copy.deepcopy(self._geometry, memo)
         result._geometry_ops = list(self._geometry_ops)
         result._features = copy.deepcopy(self._features, memo)
@@ -761,6 +763,7 @@ class Element:
             and self._insertion_vectors == other._insertion_vectors
             and self._dimensions == other._dimensions
             and self._features == other._features
+            and self.is_visible == other.is_visible
         )
 
     def __ne__(self, other) -> bool:
@@ -811,6 +814,7 @@ class Element:
             "geometry_type": self.geometry_type_name,
             "guid": self.guid,
             "insertion_vectors": ivs,
+            "is_visible": self.is_visible,
             "name": self.name,
             "type": "Element",
         }
@@ -837,6 +841,7 @@ class Element:
             elem.guid = g
 
         elem.name = name if name is not None else data.get("name", elem.name)
+        elem.is_visible = data.get("is_visible", True)
         dims = data.get("dimensions")
 
         if dims is not None:
@@ -912,6 +917,9 @@ class Element:
         for f in self._features:
             proto.features.add().CopyFrom(f.to_proto())
 
+        if not self.is_visible:
+            proto.is_visible = False
+
         return proto
 
     @classmethod
@@ -928,6 +936,7 @@ class Element:
             elem.guid = proto.guid
 
         elem.name = proto.name
+        elem.is_visible = not proto.HasField("is_visible") or proto.is_visible
 
         has_data = len(proto.geometry_data) > 0
 
