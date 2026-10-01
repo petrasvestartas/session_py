@@ -393,5 +393,22 @@ def test_obb_two_rectangles():
     MINI_CHECK(rects[9] == rects[5])
 
 
+@MINI_TEST("OBB", "Is Visible Round Trip")
+def test_obb_is_visible_round_trip():
+    from session_py import OBB
+    from session_py import Point
+
+    hidden = OBB.from_point(Point(1.0, 2.0, 3.0), 5.0)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = OBB.file_json_loads(hidden.file_json_dumps())
+    proto = OBB.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all(language="python")

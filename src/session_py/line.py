@@ -28,6 +28,7 @@ class Line:
         "_y1",
         "_z1",
         "name",
+        "is_visible",
         "width",
         "dash",
         "linecolor",
@@ -55,6 +56,7 @@ class Line:
         self._y1 = y1  # End y.
         self._z1 = z1  # End z.
         self.name = "my_line"  # Line name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.width = 1.0  # Display width.
         self.dash = []  # Dash pattern lengths.
         self.linecolor = Color.black()  # Display color.
@@ -64,6 +66,7 @@ class Line:
 
         result = Line(self._x0, self._y0, self._z0, self._x1, self._y1, self._z1)
         result.name = self.name
+        result.is_visible = self.is_visible
         result.width = self.width
         result.dash = list(self.dash)
         result.linecolor = copy.deepcopy(self.linecolor, memo)
@@ -282,6 +285,7 @@ class Line:
 
         return (
             self.name == other.name
+            and self.is_visible == other.is_visible
             and round(self._x0 * 1000000.0) == round(other._x0 * 1000000.0)
             and round(self._y0 * 1000000.0) == round(other._y0 * 1000000.0)
             and round(self._z0 * 1000000.0) == round(other._z0 * 1000000.0)
@@ -645,6 +649,7 @@ class Line:
         return {
             "dash": list(self.dash),
             "guid": self.guid,
+            "is_visible": self.is_visible,
             "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
             "type": "Line",
@@ -670,6 +675,7 @@ class Line:
         )
         line.guid = guid if guid is not None else data["guid"]
         line.name = name if name is not None else data["name"]
+        line.is_visible = data.get("is_visible", True)
 
         if "dash" in data:
             line.dash = list(data["dash"])
@@ -718,6 +724,10 @@ class Line:
             proto.guid = self.guid
 
         proto.name = self.name
+
+        if not self.is_visible:
+            proto.is_visible = False
+
         proto.width = self.width
 
         for i in range(6):
@@ -754,6 +764,7 @@ class Line:
             line.guid = proto.guid
 
         line.name = proto.name
+        line.is_visible = not proto.HasField("is_visible") or proto.is_visible
 
         if proto.width > 0.0:
             line.width = proto.width

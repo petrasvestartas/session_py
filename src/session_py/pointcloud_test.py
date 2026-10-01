@@ -491,5 +491,23 @@ def test_pointcloud_protobuf_roundtrip():
     MINI_CHECK(converted.guid == guid)
 
 
+@MINI_TEST("PointCloud", "Is Visible Round Trip")
+def test_pointcloud_is_visible_round_trip():
+    from session_py import PointCloud
+    from session_py import Point
+
+    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    hidden = PointCloud(points, [], [])
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = PointCloud.file_json_loads(hidden.file_json_dumps())
+    proto = PointCloud.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all("python")

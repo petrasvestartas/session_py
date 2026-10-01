@@ -31,6 +31,7 @@ class Plane:
         "_c",
         "_d",
         "name",
+        "is_visible",
         "width",
         "linecolor",
     )
@@ -57,6 +58,7 @@ class Plane:
         self._c = 1.0  # Plane equation coefficient c.
         self._d = 0.0  # Plane equation coefficient d.
         self.name = name  # Plane name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.width = 1.0  # Display width.
         self.linecolor = Color.blue()  # Display color.
 
@@ -82,6 +84,7 @@ class Plane:
             self._origin, self._x_axis, self._y_axis, self._z_axis
         )
         result.name = self.name
+        result.is_visible = self.is_visible
         result.width = self.width
         result.linecolor = copy.deepcopy(self.linecolor, memo)
         memo[id(self)] = result
@@ -441,6 +444,7 @@ class Plane:
 
         return (
             self.name == other.name
+            and self.is_visible == other.is_visible
             and self._origin == other._origin
             and self._x_axis == other._x_axis
             and self._y_axis == other._y_axis
@@ -744,6 +748,7 @@ class Plane:
                 self._z_axis[2],
             ],
             "guid": self.guid,
+            "is_visible": self.is_visible,
             "linecolor": self.linecolor.__jsondump__(),
             "name": self.name,
             "type": "Plane",
@@ -768,6 +773,7 @@ class Plane:
 
         plane.guid = guid if guid is not None else data["guid"]
         plane.name = name if name is not None else data["name"]
+        plane.is_visible = data.get("is_visible", True)
 
         if "linecolor" in data:
             plane.linecolor = file_decode_node(data["linecolor"])
@@ -814,6 +820,9 @@ class Plane:
 
         proto.name = self.name
 
+        if not self.is_visible:
+            proto.is_visible = False
+
         for i in range(3):
             proto.frame.append(self._origin[i])
 
@@ -849,6 +858,7 @@ class Plane:
             plane.guid = proto.guid
 
         plane.name = proto.name
+        plane.is_visible = not proto.HasField("is_visible") or proto.is_visible
 
         if proto.width > 0.0:
             plane.width = proto.width

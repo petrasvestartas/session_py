@@ -35,6 +35,7 @@ class OBB:
         "z_axis",
         "half_size",
         "name",
+        "is_visible",
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -57,6 +58,7 @@ class OBB:
         self.z_axis = z_axis if z_axis is not None else Vector(0.0, 0.0, 1.0)  # Unit z axis.
         self.half_size = half_size if half_size is not None else Vector(0.5, 0.5, 0.5)  # Half extent along each axis.
         self.name = "my_obb"  # Box name.
+        self.is_visible = True  # Whether a viewer draws it.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -69,6 +71,7 @@ class OBB:
             copy.deepcopy(self.half_size, memo),
         )
         result.name = self.name
+        result.is_visible = self.is_visible
         memo[id(self)] = result
 
         return result
@@ -754,6 +757,7 @@ class OBB:
             "center": self.center.__jsondump__(),
             "guid": self.guid,
             "half_size": self.half_size.__jsondump__(),
+            "is_visible": self.is_visible,
             "name": self.name,
             "type": "OBB",
             "x_axis": self.x_axis.__jsondump__(),
@@ -779,6 +783,7 @@ class OBB:
 
         obb.guid = guid if guid is not None else data["guid"]
         obb.name = name if name is not None else data["name"]
+        obb.is_visible = data.get("is_visible", True)
 
         return obb
 
@@ -824,6 +829,9 @@ class OBB:
 
         proto.name = self.name
 
+        if not self.is_visible:
+            proto.is_visible = False
+
         return proto
 
     @classmethod
@@ -842,6 +850,7 @@ class OBB:
             obb.guid = proto.guid
 
         obb.name = proto.name
+        obb.is_visible = not proto.HasField("is_visible") or proto.is_visible
 
         return obb
 

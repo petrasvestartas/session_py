@@ -73,6 +73,7 @@ class NurbsCurve:
 
         self._guid = None  # Lazily minted GUID.
         self.name = "my_nurbscurve"  # Curve name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.width = 1.0  # Display width.
         self.pointcolors: list[Color] = []  # Display color per control point.
         self.linecolors: list[Color] = []  # Display color per control polygon segment.
@@ -89,6 +90,7 @@ class NurbsCurve:
         """Copy with a new guid and the same data."""
 
         result = NurbsCurve()
+        result.is_visible = self.is_visible
         result._deep_copy_from(self)
         memo[id(self)] = result
 
@@ -2204,6 +2206,7 @@ class NurbsCurve:
             "dimension": int(self.m_dim),
             "guid": self.guid,
             "is_rational": self.m_is_rat != 0,
+            "is_visible": self.is_visible,
             "linecolors": linecolors_arr,
             "name": self.name,
             "nurbsknots": self.m_nurbsknot.tolist(),
@@ -2247,6 +2250,7 @@ class NurbsCurve:
 
         curve.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         curve.name = name if name is not None else data.get("name", "my_nurbscurve")
+        curve.is_visible = data.get("is_visible", True)
         curve.width = data.get("width", 1.0)
 
         arr = data.get("pointcolors", [])
@@ -2297,6 +2301,10 @@ class NurbsCurve:
             proto.guid = self.guid
 
         proto.name = self.name
+
+        if not self.is_visible:
+            proto.is_visible = False
+
         proto.dimension = int(self.m_dim)
         proto.is_rational = self.m_is_rat != 0
         proto.order = int(self.m_order)
@@ -2332,6 +2340,7 @@ class NurbsCurve:
             curve.guid = proto.guid
 
         curve.name = proto.name
+        curve.is_visible = not proto.HasField("is_visible") or proto.is_visible
         curve.width = proto.width if proto.width != 0.0 else 1.0
         curve.m_nurbsknot = np.array(list(proto.nurbsknots), dtype=np.float64)
         curve.m_cv = np.array(list(proto.cvs), dtype=np.float64)
@@ -2619,6 +2628,7 @@ class NurbsCurve:
         self.m_cv = np.array(src.m_cv, dtype=np.float64)
         self._guid = None
         self.name = src.name
+        self.is_visible = src.is_visible
         self.width = src.width
         self.pointcolors = list(src.pointcolors)
         self.linecolors = list(src.linecolors)

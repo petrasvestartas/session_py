@@ -1286,5 +1286,21 @@ def test_brep_face_planes_outward_under_mirrored_winding():
             MINI_CHECK(actual[k] == expected[k])
 
 
+@MINI_TEST("BRep", "Is Visible Round Trip")
+def test_brep_is_visible_round_trip():
+    from session_py import BRep
+
+    hidden = BRep.create_box(1.0, 1.0, 1.0)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = BRep.file_json_loads(hidden.file_json_dumps())
+    proto = BRep.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all()

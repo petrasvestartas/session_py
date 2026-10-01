@@ -317,5 +317,21 @@ def test_plane_axis_point():
     MINI_CHECK(TOLERANCE.is_close(pl.squared_distance(p), 0.0))
 
 
+@MINI_TEST("Plane", "Is Visible Round Trip")
+def test_plane_is_visible_round_trip():
+    from session_py import Plane
+
+    hidden = Plane.xy_plane()
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = Plane.file_json_loads(hidden.file_json_dumps())
+    proto = Plane.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all("python")

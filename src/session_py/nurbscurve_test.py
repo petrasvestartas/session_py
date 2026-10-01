@@ -879,6 +879,24 @@ def test_nurbscurve_circle_length():
     MINI_CHECK(abs(circle.length() - 4.0 * PI) < 1e-9)
 
 
+@MINI_TEST("NurbsCurve", "Is Visible Round Trip")
+def test_nurbscurve_is_visible_round_trip():
+    from session_py import NurbsCurve
+    from session_py import Point
+
+    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    hidden = NurbsCurve.create(False, 2, points)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = NurbsCurve.file_json_loads(hidden.file_json_dumps())
+    proto = NurbsCurve.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     from .mini_test import run_all
 

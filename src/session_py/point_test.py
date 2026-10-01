@@ -289,5 +289,21 @@ def test_point_dihedral_angle_deg():
     MINI_CHECK(TOLERANCE.is_close(angle, 90.0))
 
 
+@MINI_TEST("Point", "Is Visible Round Trip")
+def test_point_is_visible_round_trip():
+    from session_py import Point
+
+    hidden = Point(1.0, 2.0, 3.0)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = Point.file_json_loads(hidden.file_json_dumps())
+    proto = Point.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all(language="python")

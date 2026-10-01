@@ -493,5 +493,21 @@ def test_line_split_at_crossings_zero_length():
     MINI_CHECK(zero == 0)
 
 
+@MINI_TEST("Line", "Is Visible Round Trip")
+def test_line_is_visible_round_trip():
+    from session_py import Line
+
+    hidden = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = Line.file_json_loads(hidden.file_json_dumps())
+    proto = Line.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all("python")

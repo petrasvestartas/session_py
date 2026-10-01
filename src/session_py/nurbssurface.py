@@ -234,6 +234,7 @@ class NurbsSurface:
 
         self._guid = None  # Lazily minted GUID.
         self.name = "my_nurbssurface"  # Surface name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.width = 1.0  # Display width.
         self.pointcolors: list[Color] = []  # Display color per control point.
         self.facecolors: list[Color] = []  # Display color per mesh face.
@@ -247,6 +248,7 @@ class NurbsSurface:
         """Copy with a new guid and the same data."""
 
         result = NurbsSurface()
+        result.is_visible = self.is_visible
         result._deep_copy_from(self)
         memo[id(self)] = result
 
@@ -1630,6 +1632,7 @@ class NurbsSurface:
             "facecolors": _colors_to_json(self.facecolors),
             "guid": self.guid,
             "is_rational": self.m_is_rat != 0,
+            "is_visible": self.is_visible,
             "linecolors": _colors_to_json(self.linecolors),
         }
 
@@ -1672,6 +1675,7 @@ class NurbsSurface:
 
         surface.guid = guid if guid is not None else data.get("guid", str(uuid.uuid4()))
         surface.name = name if name is not None else data.get("name", "my_nurbssurface")
+        surface.is_visible = data.get("is_visible", True)
         surface.width = data.get("width", 1.0)
         surface.pointcolors = _colors_from_json(data, "pointcolors")
         surface.facecolors = _colors_from_json(data, "facecolors")
@@ -1728,6 +1732,10 @@ class NurbsSurface:
             proto.guid = self.guid
 
         proto.name = self.name
+
+        if not self.is_visible:
+            proto.is_visible = False
+
         proto.dimension = int(self.m_dim)
         proto.is_rational = self.m_is_rat != 0
         proto.order_u = int(self.m_order[0])
@@ -1771,6 +1779,7 @@ class NurbsSurface:
             surface.guid = proto.guid
 
         surface.name = proto.name
+        surface.is_visible = not proto.HasField("is_visible") or proto.is_visible
         surface.width = proto.width
         surface.pointcolors = _colors_from_proto(proto.pointcolors)
         surface.facecolors = _colors_from_proto(proto.facecolors)
@@ -1859,6 +1868,7 @@ class NurbsSurface:
 
         self._guid = None
         self.name = src.name
+        self.is_visible = src.is_visible
         self.width = src.width
         self.pointcolors = list(src.pointcolors)
         self.facecolors = list(src.facecolors)

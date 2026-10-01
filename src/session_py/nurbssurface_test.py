@@ -1137,5 +1137,23 @@ def test_curvature():
     MINI_CHECK(abs(abs(sphere.mean_curvature(um, vm)) - 1.0 / R) < 1e-3)
 
 
+@MINI_TEST("NurbsSurface", "Is Visible Round Trip")
+def test_nurbssurface_is_visible_round_trip():
+    from session_py import NurbsSurface
+    from session_py import Point
+
+    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(0.0, 1.0, 0.0), Point(1.0, 1.0, 0.0)]
+    hidden = NurbsSurface.create(False, False, 1, 1, 2, 2, points)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = NurbsSurface.file_json_loads(hidden.file_json_dumps())
+    proto = NurbsSurface.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all(language="python")

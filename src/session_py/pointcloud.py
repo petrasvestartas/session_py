@@ -31,6 +31,7 @@ class PointCloud:
         "_lod_children",
         "_point_ids",
         "name",
+        "is_visible",
         "point_size",
     )
 
@@ -58,6 +59,7 @@ class PointCloud:
         self._lod_children = []  # Node child indices, 8 per node, -1 unused.
         self._point_ids = []  # Stable point ids parallel to the points.
         self.name = "my_pointcloud"  # Cloud name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.point_size = 1.0  # Display point size.
 
         for point in points or []:
@@ -85,6 +87,7 @@ class PointCloud:
         result._lod_children = list(self._lod_children)
         result._point_ids = list(self._point_ids)
         result.name = self.name
+        result.is_visible = self.is_visible
         result.point_size = self.point_size
         memo[id(self)] = result
 
@@ -148,6 +151,7 @@ class PointCloud:
 
         return (
             self.name == other.name
+            and self.is_visible == other.is_visible
             and self._coords == other._coords
             and self._colors == other._colors
             and self._normals == other._normals
@@ -508,6 +512,7 @@ class PointCloud:
             "colors": self._colors,
             "coords": self._coords,
             "guid": self.guid,
+            "is_visible": self.is_visible,
             "lod_children": self._lod_children,
             "lod_count": self._lod_count,
             "lod_first": self._lod_first,
@@ -534,6 +539,7 @@ class PointCloud:
 
         cloud.guid = guid if guid is not None else data.get("guid", cloud.guid)
         cloud.name = name if name is not None else data.get("name", cloud.name)
+        cloud.is_visible = data.get("is_visible", True)
         cloud.point_size = data.get("point_size", 1.0)
         cloud._lod_min = data.get("lod_min", [])
         cloud._lod_size = data.get("lod_size", [])
@@ -582,6 +588,10 @@ class PointCloud:
             proto.guid = self.guid
 
         proto.name = self.name
+
+        if not self.is_visible:
+            proto.is_visible = False
+
         proto.point_size = self.point_size
         proto.coords.extend(self._coords)
         proto.colors.extend(self._colors)
@@ -609,6 +619,7 @@ class PointCloud:
             cloud.guid = proto.guid
 
         cloud.name = proto.name
+        cloud.is_visible = not proto.HasField("is_visible") or proto.is_visible
 
         if proto.point_size > 0.0:
             cloud.point_size = proto.point_size

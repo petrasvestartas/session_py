@@ -1300,5 +1300,23 @@ def test_polyline_offset_sides_degenerate():
     MINI_CHECK(short_distances.point_count() == 0)
 
 
+@MINI_TEST("Polyline", "Is Visible Round Trip")
+def test_polyline_is_visible_round_trip():
+    from session_py import Polyline
+    from session_py import Point
+
+    points = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0)]
+    hidden = Polyline(points)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = Polyline.file_json_loads(hidden.file_json_dumps())
+    proto = Polyline.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all("python")

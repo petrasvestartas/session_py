@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class Point:
     """A 3D point with display width and color."""
 
-    __slots__ = ("_guid", "_x", "_y", "_z", "name", "width", "pointcolor")
+    __slots__ = ("_guid", "_x", "_y", "_z", "name", "is_visible", "width", "pointcolor")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Constructors
@@ -31,6 +31,7 @@ class Point:
         self._y = y  # Y coordinate.
         self._z = z  # Z coordinate.
         self.name = name  # Point name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.width = 1.0  # Display width.
         self.pointcolor = Color.black()  # Display color.
 
@@ -38,6 +39,7 @@ class Point:
         """Copy with a new guid and the same data."""
 
         result = Point(self._x, self._y, self._z, self.name)
+        result.is_visible = self.is_visible
         result.width = self.width
         result.pointcolor = copy.deepcopy(self.pointcolor, memo)
         memo[id(self)] = result
@@ -110,6 +112,7 @@ class Point:
 
         return (
             self.name == other.name
+            and self.is_visible == other.is_visible
             and round(self._x * 1000000.0) == round(other._x * 1000000.0)
             and round(self._y * 1000000.0) == round(other._y * 1000000.0)
             and round(self._z * 1000000.0) == round(other._z * 1000000.0)
@@ -372,6 +375,7 @@ class Point:
 
         return {
             "guid": self.guid,
+            "is_visible": self.is_visible,
             "name": self.name,
             "pointcolor": self.pointcolor.__jsondump__(),
             "type": "Point",
@@ -390,6 +394,7 @@ class Point:
         point = cls(data["x"], data["y"], data["z"])
         point.guid = guid or data["guid"]
         point.name = name or data["name"]
+        point.is_visible = data.get("is_visible", True)
         point.pointcolor = file_decode_node(data["pointcolor"])
         point.width = data["width"]
 
@@ -431,6 +436,10 @@ class Point:
             proto.guid = self.guid
 
         proto.name = self.name
+
+        if not self.is_visible:
+            proto.is_visible = False
+
         proto.x = self._x
         proto.y = self._y
         proto.z = self._z
@@ -449,6 +458,7 @@ class Point:
             point.guid = proto.guid
 
         point.name = proto.name
+        point.is_visible = not proto.HasField("is_visible") or proto.is_visible
         point.width = proto.width
         point.pointcolor = Color.from_proto(proto.pointcolor)
 

@@ -1945,6 +1945,7 @@ class BRep:
 
         self._guid = None  # Lazily minted GUID.
         self.name = "my_brep"  # BRep name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.width = 1.0  # Display width.
         self.surfacecolor = Color.lightgrey()  # Display color of the faces.
         self.m_surfaces: list[NurbsSurface] = []  # Surface pool.
@@ -2339,6 +2340,7 @@ class BRep:
 
         return (
             self.name == other.name
+            and self.is_visible == other.is_visible
             and self.width == other.width
             and self.surfacecolor == other.surfacecolor
             and len(self.m_surfaces) == len(other.m_surfaces)
@@ -2935,6 +2937,7 @@ class BRep:
             j["faces"].append(_face_to_json(f))
 
         j["guid"] = self.guid
+        j["is_visible"] = self.is_visible
         j["name"] = self.name
         j["shells"] = []
 
@@ -2980,6 +2983,7 @@ class BRep:
         b = cls()
         b.guid = guid if guid is not None else data.get("guid", b.guid)
         b.name = name if name is not None else data.get("name", "my_brep")
+        b.is_visible = data.get("is_visible", True)
         b.width = data.get("width", 1.0)
 
         if "surfacecolor" in data:
@@ -3056,6 +3060,10 @@ class BRep:
             proto.guid = self.guid
 
         proto.name = self.name
+
+        if not self.is_visible:
+            proto.is_visible = False
+
         proto.width = self.width
 
         for c in self.m_curves_2d:
@@ -3103,6 +3111,7 @@ class BRep:
             b.guid = proto.guid
 
         b.name = proto.name
+        b.is_visible = not proto.HasField("is_visible") or proto.is_visible
         b.width = proto.width
 
         for c in proto.curves_2d:

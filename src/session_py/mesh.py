@@ -2611,6 +2611,7 @@ class Mesh:
         self.default_edge_attributes: dict[str, float] = {}  # Default edge attrs.
         self._guid: str | None = None  # Lazily minted GUID.
         self.name = "my_mesh"  # Mesh name.
+        self.is_visible = True  # Whether a viewer draws it.
         self.color_mode = ColorMode.OBJECTCOLOR  # Active color mode.
         self._pointcolors: list[Color] = []  # Vertex colors.
         self._facecolors: list[Color] = []  # Face colors.
@@ -2634,6 +2635,7 @@ class Mesh:
         m = Mesh()
         m._guid = self._guid
         m.name = self.name
+        m.is_visible = self.is_visible
         m.halfedge = {u: dict(v) for u, v in self.halfedge.items()}
 
         for k, v in self.vertex.items():
@@ -6034,6 +6036,7 @@ class Mesh:
             if not self.halfedge and self.face
             else self.halfedge
         )
+        data["is_visible"] = self.is_visible
         data["linecolors"] = Mesh._colors_to_json(self._linecolors)
         data["max_face"] = self._max_face
         data["max_vertex"] = self._max_vertex
@@ -6146,6 +6149,8 @@ class Mesh:
 
         if "name" in data:
             mesh.name = data["name"]
+
+        mesh.is_visible = data.get("is_visible", True)
 
         if guid is not None:
             mesh.guid = guid
@@ -6305,6 +6310,9 @@ class Mesh:
 
         proto.name = self.name
 
+        if not self.is_visible:
+            proto.is_visible = False
+
         Mesh._vertices_to_proto(self.vertex, proto)
         Mesh._faces_to_proto(self.face, self.facedata, self.face_holes, proto)
 
@@ -6397,6 +6405,7 @@ class Mesh:
             mesh.guid = proto.guid
 
         mesh.name = proto.name
+        mesh.is_visible = not proto.HasField("is_visible") or proto.is_visible
 
         mesh.vertex = Mesh._vertices_from_proto(proto)
         Mesh._faces_from_proto(proto, mesh)

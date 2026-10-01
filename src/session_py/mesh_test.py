@@ -3319,5 +3319,21 @@ def test_mesh_offset_protobuf_roundtrip():
     MINI_CHECK(loaded.number_of_faces() == 6)
 
 
+@MINI_TEST("Mesh", "Is Visible Round Trip")
+def test_mesh_is_visible_round_trip():
+    from session_py import Mesh
+
+    hidden = Mesh.create_box(1.0, 1.0, 1.0)
+
+    MINI_CHECK(hidden.is_visible)
+
+    hidden.is_visible = False
+    json = Mesh.file_json_loads(hidden.file_json_dumps())
+    proto = Mesh.pb_loads(hidden.pb_dumps())
+
+    MINI_CHECK(not json.is_visible)
+    MINI_CHECK(not proto.is_visible)
+
+
 if __name__ == "__main__":
     run_all(language="python")
