@@ -996,6 +996,52 @@ def test_brep_planar_fast_path():
     MINI_CHECK(tagged == 8)
 
 
+@MINI_TEST("BRep", "Strip Fast Path")
+def test_brep_strip_fast_path():
+    import math
+    from session_py import BRep
+    from session_py.tolerance import PI
+
+    bh = BRep.create_block_with_hole(8.0, 6.0, 4.0, 1.5)
+    fm = bh.face_meshes_q(True, 10.0, 0.005)
+    bore = fm[4]
+    round_count = 0
+    rim = 0
+    seam = 0
+    shared = 0
+
+    for vd in bore.vertex.values():
+        p = vd.position()
+
+        if abs(math.sqrt(p[0] * p[0] + p[1] * p[1]) - 1.5) < 1e-9 and "u" in vd.attributes and "v" in vd.attributes:
+            round_count += 1
+
+        for key in vd.attributes.keys():
+            if str(key).startswith("brep_edge/12/0/"):
+                rim += 1
+
+            if str(key).startswith("brep_edge/14/"):
+                seam += 1
+
+        on_cap = False
+
+        for cap in (5, 6):
+            for other in fm[cap].vertex.values():
+                on_cap = on_cap or other.position().distance(p) == 0.0
+
+        if on_cap:
+            shared += 1
+
+    body = BRep.create_cylinder(1.0, 2.0).face_meshes()
+    volume = bh.mesh().volume()
+    ref = 8.0 * 6.0 * 4.0 - PI * 1.5 * 1.5 * 4.0
+
+    MINI_CHECK(len(bore.face) == 36 and len(bore.vertex) == 74)
+    MINI_CHECK(round_count == 74 and rim == 37 and seam == 4 and shared == 74)
+    MINI_CHECK(len(body[0].face) == 18 and len(body[0].vertex) == 38)
+    MINI_CHECK(abs(volume - ref) / ref < 0.005)
+
+
 @MINI_TEST("BRep", "Mesh Orientation")
 def test_brep_mesh_orientation():
     from session_py import BRep

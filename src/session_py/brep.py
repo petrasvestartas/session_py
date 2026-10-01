@@ -1666,6 +1666,189 @@ def _tag_edge_uses(
                     vd.attributes[interval_tag] = vd.attributes[interval]
 
 
+def _strip_uv(crv: NurbsCurve, fraction: float) -> Point:
+    """Phase 0: UV of a pcurve at a fraction of its domain"""
+
+    t0, t1 = crv.domain()
+
+    return crv.point_at(t0 + fraction * (t1 - t0))
+
+
+def _strip_face(b: BRep, fi: int, boundary: _EdgeBoundary) -> bool:
+    """Phase 0: a face ruled between two closed loops along one seam, as a cylinder body or a drilled bore: one wire of a loop forward, the seam forward, a loop reversed and the seam reversed, on a surface straight across its rulings, both loops crossing the whole u domain at the same pace and neither sampled yet"""
+
+    face = b.m_faces[fi]
+
+    if len(face.wires) != 1:
+        return False
+
+    edges = b.wire_edges(face.wires[0])
+
+    if (
+        len(edges) != 4
+        or edges[1].index != edges[3].index
+        or edges[1].orientation == edges[3].orientation
+        or edges[0].index == edges[2].index
+    ):
+        return False
+
+    srf = b.m_surfaces[face.surface_index]
+
+    if srf.degree(1) != 1 or srf.cv_count(1) != 2 or srf.is_singular(0) or srf.is_singular(2):
+        return False
+
+    loops = []
+
+    for k in (0, 2):
+        edge = b.m_edges[edges[k].index]
+        ci = b.pcurve_index(edges[k].index, fi, edges[k].orientation)
+
+        if (
+            edge.degenerated
+            or edge.start_vertex != edge.end_vertex
+            or ci < 0
+            or edges[k].index in boundary.points
+        ):
+            return False
+
+        loops.append(b.m_curves_2d[ci])
+
+    du = srf.domain(0)
+    tolerance = 1e-9 * (du[1] - du[0])
+    u0 = _strip_uv(loops[0], 0.0)[0]
+    u1 = _strip_uv(loops[0], 1.0)[0]
+
+    if abs(min(u0, u1) - du[0]) > tolerance or abs(max(u0, u1) - du[1]) > tolerance:
+        return False
+
+    for k in range(9):
+        if abs(_strip_uv(loops[0], k / 8.0)[0] - _strip_uv(loops[1], k / 8.0)[0]) > tolerance:
+            return False
+
+    return True
+
+
+def _strip_samples(
+    srf: NurbsSurface, crv: NurbsCurve, count: int
+) -> list[tuple[float, Point, Point]]:
+    """Phase 0: a loop sampled at count equal parameter steps as (t, uv, point), closed on its first point"""
+
+    t0, t1 = crv.domain()
+    samples = []
+
+    for k in range(count + 1):
+        t = t0 + (t1 - t0) * k / count
+        uv = crv.point_at(t)
+        point = srf.point_at(uv[0], uv[1]) if k < count else samples[0][2]
+        samples.append((t, uv, point))
+
+    return samples
+
+
+def _strip_sag(srf: NurbsSurface, crv: NurbsCurve, count: int) -> float:
+    """Phase 0: how far the chords of a loop at count steps sag from it"""
+
+    coarse = _strip_samples(srf, crv, count)
+    fine = _strip_samples(srf, crv, 2 * count)
+    sag = 0.0
+
+    for k in range(count):
+        a = coarse[k][2]
+        z = coarse[k + 1][2]
+        sag = max(sag, fine[2 * k + 1][2].distance(a + (z - a) * 0.5))
+
+    return sag
+
+
+def _strip_steps(crv: NurbsCurve) -> int:
+    """Phase 0: the steps a pcurve asks for on its own: four per control point when curved, none when straight"""
+
+    return crv.cv_count() * 4 if crv.degree() > 1 else 0
+
+
+def _strip_count(
+    srf: NurbsSurface, a: NurbsCurve, c: NurbsCurve, angle: float, chord: float
+) -> int:
+    """Phase 0: the steps of a strip: the angle's share of a turn and what the pcurves ask for, doubled until both loops sag within the chord tolerance"""
+
+    tolerance = _bbox_diagonal(srf) * chord
+    count = max(_strip_steps(a), _strip_steps(c), math.ceil(360.0 / max(angle, 0.1)))
+
+    while (
+        count < 4096
+        and tolerance > 0.0
+        and max(_strip_sag(srf, a, count), _strip_sag(srf, c, count)) > tolerance
+    ):
+        count *= 2
+
+    return count
+
+
+def _strip_vertex(
+    srf: NurbsSurface, mesh: Mesh, sample: tuple[float, Point, Point], index: int
+) -> int:
+    """Phase 0: a strip vertex at a sample, tagged with its parameters, its normal and its index in the keyhole loop"""
+
+    uv = sample[1]
+    normal = srf.normal_at(uv[0], uv[1])
+    key = mesh.add_vertex(sample[2])
+
+    mesh.vertex[key].attributes["u"] = uv[0]
+    mesh.vertex[key].attributes["v"] = uv[1]
+    mesh.vertex[key].attributes[f"boundary/0/{index}"] = 1.0
+    mesh.vertex[key].set_normal(normal[0], normal[1], normal[2])
+
+    return key
+
+
+def _strip_mesh(
+    b: BRep, fi: int, boundary: _EdgeBoundary, angle: float, chord: float
+) -> Mesh:
+    """Phase 0: the strip of a face: both loops sampled at the same steps and made the canonical boundary of their edges, a quad between every pair of steps, the vertices numbered as the keyhole polygon a CDT face runs (first loop, seam, second loop backwards, seam) so the edge uses tag as there; no surface refinement, no lifting"""
+
+    face = b.m_faces[fi]
+    srf = b.m_surfaces[face.surface_index]
+    edges = b.wire_edges(face.wires[0])
+    a = b.m_curves_2d[b.pcurve_index(edges[0].index, fi, edges[0].orientation)]
+    c = b.m_curves_2d[b.pcurve_index(edges[2].index, fi, edges[2].orientation)]
+    count = _strip_count(srf, a, c, angle, chord)
+    first = _strip_samples(srf, a, count)
+    second = _strip_samples(srf, c, count)
+    mesh = Mesh()
+    loops = TrimLoops()
+    loops.uv = [[Point(0.0, 0.0, 0.0)] * (2 * count + 2)]
+    loops.xyz = [[Point(0.0, 0.0, 0.0)] * (2 * count + 2)]
+    bottom = []
+    top = []
+    boundary.points[edges[0].index] = []
+    boundary.points[edges[2].index] = []
+
+    for k in range(count + 1):
+        bottom.append(_strip_vertex(srf, mesh, first[k], k))
+        top.append(_strip_vertex(srf, mesh, second[k], 2 * count + 1 - k))
+        loops.uv[0][k] = first[k][1]
+        loops.xyz[0][k] = first[k][2]
+        loops.uv[0][2 * count + 1 - k] = second[k][1]
+        loops.xyz[0][2 * count + 1 - k] = second[k][2]
+        boundary.points[edges[0].index].append(first[k][2])
+        boundary.points[edges[2].index].append(second[k][2])
+
+    for k in range(count):
+        mesh.add_face([bottom[k], bottom[k + 1], top[k + 1], top[k]])
+
+    start = first[0][1]
+    _wind_to_normal(mesh, srf.normal_at(start[0], start[1]))
+    uses = [
+        (edges[0].index, 0, 0, count + 1),
+        (edges[1].index, 0, count, 2),
+        (edges[2].index, 0, count + 1, count + 1),
+        (edges[3].index, 0, 2 * count + 1, 2),
+    ]
+    _tag_edge_uses(mesh, loops, uses)
+
+    return mesh
+
+
 def _flip_reversed_faces(b: BRep, fmesh: list[Mesh]) -> None:
     """Flip every face mesh of a face Reversed in its shell, vertex normals included"""
 
@@ -2763,14 +2946,21 @@ class BRep:
         nf = len(self.m_faces)
         angle = max_angle_deg if has_quality else 20.0
         chord = chord_factor if has_quality else 0.005
+        face_strip = [False] * nf
         face_direct = [False] * nf
         rebuild_grid = [False] * nf
         fmesh = []
         boundary = _EdgeBoundary()
 
         for fi in range(nf):
-            face_direct[fi] = _direct_face(self, fi)
+            face_strip[fi] = _strip_face(self, fi, boundary)
             fmesh.append(Mesh())
+
+            if face_strip[fi]:
+                fmesh[fi] = _strip_mesh(self, fi, boundary, angle, chord)
+
+        for fi in range(nf):
+            face_direct[fi] = not face_strip[fi] and _direct_face(self, fi)
 
         for fi in range(nf):
             if not face_direct[fi]:
@@ -2795,7 +2985,7 @@ class BRep:
                 face_direct[fi] = False
 
         for fi in range(nf):
-            if face_direct[fi]:
+            if face_strip[fi] or face_direct[fi]:
                 continue
 
             srf = self.m_surfaces[self.m_faces[fi].surface_index]
