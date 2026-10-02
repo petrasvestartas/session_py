@@ -1955,14 +1955,14 @@ def _strip_count(
     angle: float,
     chord: float,
 ) -> int:
-    """Phase 0: the steps of a strip: the angle's share of a turn and what the loops ask for, scaled by the face's size against the whole BRep so a small bore in a large body keeps few steps, never under sixteen, doubled until both loops sag within the chord tolerance measured against the BRep"""
+    """Phase 0: the steps of a strip: the angle's share of a turn and what the loops ask for, scaled by the face's size against the whole BRep so a small bore in a large body keeps few steps, never under thirty-two so a bore still reads round up close, doubled until both loops sag within the chord tolerance measured against the BRep"""
 
     tolerance = scale * chord
     asked = max(
         _strip_steps(srf, a), _strip_steps(srf, c), math.ceil(360.0 / max(angle, 0.1))
     )
     share = min(_bbox_diagonal(srf) / scale, 1.0) if scale > 0.0 else 1.0
-    count = max(math.ceil(asked * share), 16)
+    count = max(math.ceil(asked * share), 32)
 
     while (
         count < 4096

@@ -1036,8 +1036,8 @@ def test_brep_strip_fast_path():
     volume = bh.mesh().volume()
     ref = 8.0 * 6.0 * 4.0 - PI * 1.5 * 1.5 * 4.0
 
-    MINI_CHECK(len(bore.face) == 40 and len(bore.vertex) == 42)
-    MINI_CHECK(round_count == 42 and rim == 21 and seam == 4 and shared == 42)
+    MINI_CHECK(len(bore.face) == 64 and len(bore.vertex) == 66)
+    MINI_CHECK(round_count == 66 and rim == 33 and seam == 4 and shared == 66)
     MINI_CHECK(len(body[0].face) == 72 and len(body[0].vertex) == 74)
     MINI_CHECK(abs(volume - ref) / ref < 0.005)
 
@@ -1055,9 +1055,9 @@ def test_brep_strip_step_share():
     )
 
     MINI_CHECK(len(body[0].face) == 144 and len(body[0].vertex) == 146)
-    MINI_CHECK(len(bore[4].face) == 56 and len(bore[4].vertex) == 58)
-    MINI_CHECK(len(rib[4].face) == 32 and len(rib[4].vertex) == 34)
-    MINI_CHECK(len(rib[5].vertex) == 20 and len(rib[6].vertex) == 20)
+    MINI_CHECK(len(bore[4].face) == 64 and len(bore[4].vertex) == 66)
+    MINI_CHECK(len(rib[4].face) == 64 and len(rib[4].vertex) == 66)
+    MINI_CHECK(len(rib[5].vertex) == 36 and len(rib[6].vertex) == 36)
 
 
 @MINI_TEST("BRep", "Mesh Watertight")
