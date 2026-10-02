@@ -485,6 +485,91 @@ def test_remesh_cdt_collinear_boundary_vertices():
     MINI_CHECK(abs(area - 100.0) < 1e-9)
 
 
+def _run_side(a, b, inner, out):
+    """Points of a side from a to b with `inner` evenly spaced vertices between them, the end left to the next side"""
+    from session_py import Point
+
+    for k in range(inner + 1):
+        t = k / (inner + 1)
+        out.append(Point(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0.0))
+
+
+def _run_area(pts):
+    """Twice the signed area of a closed polygon"""
+
+    area = 0.0
+
+    for i in range(len(pts)):
+        p = pts[i]
+        q = pts[(i + 1) % len(pts)]
+        area += p[0] * q[1] - q[0] * p[1]
+
+    return area
+
+
+def _run_covers(border, holes):
+    """True when the triangulation of border and holes uses every vertex and covers exactly their area"""
+    from session_py.remesh_cdt import cdt_triangulate
+
+    all_pts = list(border)
+
+    for hole in holes:
+        all_pts.extend(hole)
+
+    used = [False] * len(all_pts)
+    area = 0.0
+
+    for a, b, c in cdt_triangulate(border, holes):
+        used[a] = True
+        used[b] = True
+        used[c] = True
+        p, q, r = all_pts[a], all_pts[b], all_pts[c]
+        area += (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    expect = abs(_run_area(border))
+
+    for hole in holes:
+        expect -= abs(_run_area(hole))
+
+    return abs(area - expect) < 1e-6 * expect and all(used)
+
+
+@MINI_TEST("RemeshCDT", "Collinear Boundary Runs")
+def test_remesh_cdt_collinear_boundary_runs():
+    from session_py import Point
+
+    failures = 0
+
+    for inner in range(3, 13):
+        for which in range(5):
+            ins = lambda s: inner if which == 4 or which == s else 0
+            border = []
+            _run_side((0.0, 0.0), (100.0, 0.0), ins(0), border)
+            _run_side((100.0, 0.0), (100.0, 10.0), ins(1), border)
+            _run_side((100.0, 10.0), (0.0, 10.0), ins(2), border)
+            _run_side((0.0, 10.0), (0.0, 0.0), ins(3), border)
+            hole = []
+            _run_side((30.0, 3.0), (30.0, 7.0), ins(0), hole)
+            _run_side((30.0, 7.0), (70.0, 7.0), ins(1), hole)
+            _run_side((70.0, 7.0), (70.0, 3.0), ins(2), hole)
+            _run_side((70.0, 3.0), (30.0, 3.0), ins(3), hole)
+            plain = [
+                Point(0.0, 0.0, 0.0),
+                Point(100.0, 0.0, 0.0),
+                Point(100.0, 10.0, 0.0),
+                Point(0.0, 10.0, 0.0),
+            ]
+
+            if (
+                not _run_covers(border, [])
+                or not _run_covers(plain, [hole])
+                or not _run_covers(border, [hole])
+            ):
+                failures += 1
+
+    MINI_CHECK(failures == 0)
+
+
 @MINI_TEST("RemeshCDT", "Plate Four Holes")
 def test_remesh_cdt_plate_four_holes():
     from session_py import RemeshCDT

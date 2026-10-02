@@ -963,20 +963,29 @@ class _Delaunay:
 
         return True
 
-    def _sweep_horizontals(self, curr_y: int) -> None:
-        """Fan the horizontal edges deferred from the finished row."""
+    def _sweep_horizontals(self, curr_y: int, last_row: bool) -> None:
+        """Fan the horizontal edges deferred from the finished row, passing over them again while a pass still adds triangles: on a straight run of horizontals each fan needs the diagonal the fan of its neighbour creates, whichever is visited first."""
 
-        while self.horz:
-            e = self.horz.pop()
+        deferred = self.horz
+        self.horz = []
+        progress = True
 
-            if self._completed(e):
-                continue
+        while progress:
+            progress = False
 
-            if self.es[e].vb == self.es[e].vl:
-                if self.es[e].kind == ASCEND:
-                    self._triangulate_fan(e, self.es[e].vb, curr_y, True)
-            elif self.es[e].kind == DESCEND:
-                self._triangulate_fan(e, self.es[e].vb, curr_y, False)
+            for e in deferred:
+                if self._completed(e):
+                    continue
+
+                before = len(self.ts)
+
+                if self.es[e].vb == self.es[e].vl:
+                    if last_row or self.es[e].kind == ASCEND:
+                        self._triangulate_fan(e, self.es[e].vb, curr_y, True)
+                elif not last_row and self.es[e].kind == DESCEND:
+                    self._triangulate_fan(e, self.es[e].vb, curr_y, False)
+
+                progress = progress or len(self.ts) > before
 
     def _sweep_vertex(self, v: int) -> None:
         """Activate the boundary edges starting at v and fan the ones ending at it."""
@@ -1014,7 +1023,7 @@ class _Delaunay:
                 if not self._sweep_loc_mins(curr_y):
                     return False
 
-                self._sweep_horizontals(curr_y)
+                self._sweep_horizontals(curr_y, False)
                 curr_y = self.vs[v].pt[1]
 
             self._sweep_vertex(v)
@@ -1022,11 +1031,7 @@ class _Delaunay:
             if self.vs[v].inner_lm:
                 self.loc_mins.append(v)
 
-        while self.horz:
-            e = self.horz.pop()
-
-            if not self._completed(e) and self.es[e].vb == self.es[e].vl:
-                self._triangulate_fan(e, self.es[e].vb, curr_y, True)
+        self._sweep_horizontals(curr_y, True)
 
         return True
 
