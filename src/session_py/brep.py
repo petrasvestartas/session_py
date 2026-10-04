@@ -255,7 +255,10 @@ def _project_to_patch(crv: NurbsCurve, srf: NurbsSurface) -> NurbsCurve:
 def _uv_signed_area(c2d: NurbsCurve) -> float:
     """Signed area of a closed pcurve's sampled polygon (positive = counter-clockwise)"""
 
-    pts = c2d.divide_by_count(max(c2d.cv_count() * 4, 16), True)[0]
+    # even steps of the parameter: only the sign matters, so no arc-length integration
+    count = max(c2d.cv_count() * 4, 16)
+    start, end = c2d.domain()
+    pts = [c2d.point_at(start + (end - start) * i / count) for i in range(count + 1)]
     area = 0.0
 
     for i in range(len(pts) - 1):
