@@ -3287,5 +3287,119 @@ def test_session_checkpoint_keeps_replaced_definition():
     MINI_CHECK(session.definitions.points.get_item(0) is c)
 
 
+@MINI_TEST("Session", "Merge")
+def test_session_merge():
+    from session_py import Session
+    from session_py import Element
+    from session_py import Point
+    from session_py import Color
+    from session_py import Xform
+
+    NamedInteraction = _named_interaction_class()
+
+    scene = Session("scene")
+    floor = Session("floor")
+    a = Element(name="a")
+    b = Element(name="b")
+    group = floor.add_group("floor_model")
+    floor.add_element(a, group)
+    floor.add_element(b, group)
+    floor.set_node_color(group, Color.red())
+    floor.add_edge(a.guid, b.guid, "joint")
+    floor.add_interaction(a, b, NamedInteraction("glue"))
+    floor.set_xform(b.guid, Xform.translation(1.0, 0.0, 0.0))
+    scene.add_point(Point(0.0, 0.0, 0.0))
+    scene.merge(floor)
+    id = scene.graph.edges[a.guid][b.guid].guid
+
+    MINI_CHECK(len(scene.tree.root.children) == 2)
+    MINI_CHECK(scene.tree.root.children[1].name == "floor_model")
+    MINI_CHECK(scene.tree.root.children[1].color == Color.red())
+    MINI_CHECK(scene.get_node(a.guid).parent.name == "floor_model")
+    MINI_CHECK(scene.get_object(a.guid) is not a)
+    MINI_CHECK(scene.graph.edges[a.guid][b.guid].attribute == "joint")
+    MINI_CHECK(len(scene.interactions[id]) == 1)
+    MINI_CHECK(scene.world_xform(b.guid) == Xform.translation(1.0, 0.0, 0.0))
+
+    duplicate_rejected = False
+
+    try:
+        scene.merge(floor)
+    except ValueError:
+        duplicate_rejected = True
+
+    MINI_CHECK(duplicate_rejected)
+
+
+@MINI_TEST("Session", "Graft")
+def test_session_graft():
+    from session_py import Session
+    from session_py import Point
+
+    scene = Session("scene")
+    floor = Session("floor")
+    point = Point(1.0, 2.0, 3.0)
+    floor.add_point(point, floor.add_group("floor_model"))
+    level = scene.add_group("level_1")
+    scene.graft(floor, level)
+
+    MINI_CHECK(len(scene.tree.root.children) == 1)
+    MINI_CHECK(scene.get_node(point.guid).parent.name == "floor_model")
+    MINI_CHECK(scene.get_node(point.guid).parent.parent is level)
+
+
+@MINI_TEST("Session", "Flatten")
+def test_session_flatten():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(0.0, 0.0, 0.0)
+    a_node = session.add_point(a, session.add_group("group"))
+    session.add_point(b, a_node)
+    session.set_xform(a.guid, Xform.translation(1.0, 0.0, 0.0))
+    session.set_xform(b.guid, Xform.translation(0.0, 2.0, 0.0))
+    session.flatten()
+
+    MINI_CHECK(len(session.tree.root.children) == 2)
+    MINI_CHECK(session.get_node(b.guid).parent is session.tree.root)
+    MINI_CHECK(session.world_xform(a.guid) == Xform.translation(1.0, 0.0, 0.0))
+    MINI_CHECK(session.world_xform(b.guid) == Xform.translation(1.0, 2.0, 0.0))
+
+
+@MINI_TEST("Session", "Get Branch")
+def test_session_get_branch():
+    from session_py import Session
+    from session_py import Element
+    from session_py import Xform
+
+    NamedInteraction = _named_interaction_class()
+
+    session = Session()
+    a = Element(name="a")
+    b = Element(name="b")
+    c = Element(name="c")
+    quarter = session.add_group("quarter_0")
+    session.add_element(a, quarter)
+    session.add_element(b, quarter)
+    session.add_element(c)
+    session.add_interaction(a, b, NamedInteraction("glue"))
+    session.add_interaction(b, c, NamedInteraction("screw"))
+    session.set_xform("quarter_0", Xform.translation(0.0, 0.0, 5.0))
+    session.set_xform(a.guid, Xform.translation(1.0, 0.0, 0.0))
+    part = session.get_branch("quarter_0")
+
+    MINI_CHECK(part.name == "quarter_0")
+    MINI_CHECK(len(part.tree.root.children) == 2)
+    MINI_CHECK(a.guid in part.lookup and c.guid not in part.lookup)
+    MINI_CHECK(part.get_object(a.guid) is not session.get_object(a.guid))
+    MINI_CHECK(part.graph.number_of_edges() == 1 and len(part.interactions) == 1)
+    MINI_CHECK(part.world_xform(a.guid) == Xform.translation(1.0, 0.0, 5.0))
+    MINI_CHECK(part.world_xform(b.guid) == Xform.translation(0.0, 0.0, 5.0))
+    MINI_CHECK(len(session.lookup) == 3 and session.graph.number_of_edges() == 2)
+
+
 if __name__ == "__main__":
     run_all(language="python")
