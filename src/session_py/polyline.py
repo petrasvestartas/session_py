@@ -1018,27 +1018,6 @@ class Polyline:
 
         return cut
 
-    def clip_by_plane(self, plane: Plane) -> Polyline:
-        """Return the closed polygon clipped to the side plane's normal points to, empty when nothing is left."""
-
-        points = self.open_points()
-        n = len(points)
-        result = []
-
-        for i in range(n):
-            a = points[i]
-            b = points[(i + 1) % n]
-            da = plane.signed_distance(a)
-            db = plane.signed_distance(b)
-
-            if da >= 0.0:
-                result.append(a)
-
-            if (da >= 0.0) != (db >= 0.0):
-                result.append(a + (b - a) * (da / (da - db)))
-
-        return Polyline(result).closed() if result else Polyline()
-
     def offset_sides(self, distances: list[float]) -> Polyline:
         """Return the loop closed with side i moved right of its direction in xy by distances[i], outwards for a counter-clockwise loop; corners mitred, the larger distance where two sides are parallel; empty for fewer than three corners or distances than sides."""
 
@@ -1153,30 +1132,6 @@ class Polyline:
             .cut_by_plane(plane0, plane0.signed_distance(middle) >= 0.0)
             .cut_by_plane(plane1, plane1.signed_distance(middle) >= 0.0)
         )
-
-    def overlap(self, other: Polyline, plane: Plane) -> Polyline:
-        """Return the polygon both closed polygons share on plane, in this winding from the corner nearest this first point, closed; this polygon when they share nothing or all of it."""
-
-        loop = self.open_points()
-        shared = Polyline.boolean_op(self, other, 0, plane)
-
-        if not shared or abs(shared[0].area() - self.area()) <= 1e-6 * self.area():
-            return self.closed()
-
-        points = shared[0].open_points()
-
-        if Polyline._newell_normal(points).dot(Polyline._newell_normal(loop)) < 0.0:
-            points.reverse()
-
-        nearest = 0
-
-        for i in range(1, len(points)):
-            if points[i].distance(loop[0]) < points[nearest].distance(loop[0]):
-                nearest = i
-
-        points = points[nearest:] + points[:nearest]
-
-        return Polyline(points).closed()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators

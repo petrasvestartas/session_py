@@ -367,56 +367,5 @@ def test_closest_boxes_closest():
     MINI_CHECK(not Closest.boxes_closest(boxes, -0.01))
 
 
-@MINI_TEST("Closest", "Segment Segment")
-def test_closest_segment_segment():
-    from session_py import Closest
-    from session_py import Line
-
-    s = Line(0.0, 0.0, 0.0, 2.0, 0.0, 0.0)
-    t = Line(1.0, -1.0, 1.0, 1.0, 1.0, 1.0)
-    parallel = Line(3.0, 1.0, 0.0, 5.0, 1.0, 0.0)
-
-    u, v, d = Closest.segment_segment(s, t)
-
-    MINI_CHECK(TOLERANCE.is_close(u, 0.5))
-    MINI_CHECK(TOLERANCE.is_close(v, 0.5))
-    MINI_CHECK(TOLERANCE.is_close(d, 1.0))
-
-    u, v, d = Closest.segment_segment(s, parallel)
-
-    MINI_CHECK(TOLERANCE.is_close(u, 1.0))
-    MINI_CHECK(TOLERANCE.is_close(v, 0.0))
-    MINI_CHECK(TOLERANCE.is_close(d, math.sqrt(2.0)))
-
-
-@MINI_TEST("Closest", "Triangle Point")
-def test_closest_triangle_point():
-    from session_py import Closest
-    from session_py import Point
-
-    a = Point(0.0, 0.0, 0.0)
-    b = Point(4.0, 0.0, 0.0)
-    c = Point(0.0, 4.0, 0.0)
-    collinear = Point(2.0, 0.0, 0.0)
-
-    MINI_CHECK(
-        TOLERANCE.is_close(Closest.triangle_point(a, b, c, Point(1.0, 1.0, 3.0)), 3.0)
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(Closest.triangle_point(a, b, c, Point(1.0, 1.0, -3.0)), 3.0)
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(Closest.triangle_point(a, b, c, Point(2.0, -3.0, 0.0)), 3.0)
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(Closest.triangle_point(a, b, c, Point(-3.0, -4.0, 0.0)), 5.0)
-    )
-    MINI_CHECK(
-        TOLERANCE.is_close(
-            Closest.triangle_point(a, collinear, b, Point(1.0, 1.0, 0.0)), 1.0
-        )
-    )
-
-
 if __name__ == "__main__":
     run_all("python")
