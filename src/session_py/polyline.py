@@ -317,6 +317,25 @@ class Polyline:
 
         return Polyline(points)
 
+    @staticmethod
+    def from_planes(sides: list[Plane], base: Plane) -> Polyline:
+        """Construct the closed polygon whose corner i is where sides i and i + 1 meet base; raises ValueError when three of them share no point."""
+
+        from .intersection import plane_plane_plane
+
+        n = len(sides)
+        points = []
+
+        for i in range(n):
+            corner = plane_plane_plane(sides[i], sides[(i + 1) % n], base)
+
+            if corner is None:
+                raise ValueError("from_planes: three planes share no point")
+
+            points.append(corner)
+
+        return Polyline(points).closed() if points else Polyline()
+
     # ═══════════════════════════════════════════════════════════════════════════
     # Accessors
     # ═══════════════════════════════════════════════════════════════════════════
@@ -496,6 +515,16 @@ class Polyline:
 
         return Polyline.from_coords(coords)
 
+    def open_points(self) -> list[Point]:
+        """Return the points without the closing duplicate."""
+
+        points = self.get_points()
+
+        if self.is_closed():
+            points.pop()
+
+        return points
+
     def center(self) -> Point:
         """Return the average of the points, closing duplicate excluded."""
 
@@ -513,6 +542,34 @@ class Polyline:
             z += self.coords[i * 3 + 2]
 
         return Point(x / n, y / n, z / n)
+
+    def area(self) -> float:
+        """Return the area of the planar polygon."""
+
+        points = self.open_points()
+        twice = Vector(0.0, 0.0, 0.0)
+
+        for i in range(1, len(points) - 1):
+            twice += (points[i] - points[0]).cross(points[i + 1] - points[0])
+
+        return 0.5 * twice.magnitude()
+
+    def area_centroid(self) -> Point:
+        """Return the area centroid of the planar polygon."""
+
+        points = self.open_points()
+        n = len(points)
+        normal = Polyline._newell_normal(points).normalized()
+        origin = points[0]
+        sum = Vector(0.0, 0.0, 0.0)
+        area = 0.0
+
+        for i in range(1, n - 1):
+            weight = (points[i] - origin).cross(points[i + 1] - origin).dot(normal)
+            sum += ((points[i] - origin) + (points[i + 1] - origin)) * (weight / 3.0)
+            area += weight
+
+        return origin + sum / area
 
     def get_average_plane(self) -> tuple[Point, Vector, Vector, Vector]:
         """Compute the frame with origin at center, x along the first segment, z the average normal."""
@@ -961,6 +1018,27 @@ class Polyline:
 
         return cut
 
+    def clip_by_plane(self, plane: Plane) -> Polyline:
+        """Return the closed polygon clipped to the side plane's normal points to, empty when nothing is left."""
+
+        points = self.open_points()
+        n = len(points)
+        result = []
+
+        for i in range(n):
+            a = points[i]
+            b = points[(i + 1) % n]
+            da = plane.signed_distance(a)
+            db = plane.signed_distance(b)
+
+            if da >= 0.0:
+                result.append(a)
+
+            if (da >= 0.0) != (db >= 0.0):
+                result.append(a + (b - a) * (da / (da - db)))
+
+        return Polyline(result).closed() if result else Polyline()
+
     def offset_sides(self, distances: list[float]) -> Polyline:
         """Return the loop closed with side i moved right of its direction in xy by distances[i], outwards for a counter-clockwise loop; corners mitred, the larger distance where two sides are parallel; empty for fewer than three corners or distances than sides."""
 
@@ -1007,6 +1085,98 @@ class Polyline:
         result.append(result[0])
 
         return Polyline(result)
+
+    def offset_toward(self, distance: float, up: Vector) -> Polyline:
+        """Return the copy with each segment moved by distance across it in the plane of the segment and up, the ends kept on the end planes; raises ValueError when three planes share no point."""
+
+        from .intersection import plane_plane_plane
+        from .line import Line
+
+        points = self.get_points()
+        n = len(points)
+
+        if n < 2:
+            return self.duplicate()
+
+        planes = [Plane.from_point_normal(points[0], points[1] - points[0])]
+
+        for i in range(n - 1):
+            line = Line.from_points(points[i], points[i + 1])
+            x = line.to_direction()
+            y = up.cross(x)
+            planes.append(
+                Plane.from_point_normal(line.center(), x.cross(y)).translate_by_normal(
+                    distance
+                )
+            )
+
+        planes.append(
+            Plane.from_point_normal(points[n - 1], points[n - 2] - points[n - 1])
+        )
+
+        base = Plane.from_point_normal(points[0], up.cross(points[n - 1] - points[0]))
+        result = []
+
+        for i in range(len(planes) - 1):
+            point = plane_plane_plane(planes[i], planes[i + 1], base)
+
+            if point is None:
+                raise ValueError("offset_toward: three planes share no point")
+
+            result.append(point)
+
+        return Polyline(result)
+
+    def extended(self, start: float, end: float) -> Polyline:
+        """Return a copy with the first point pushed out by start and the last by end along their segments."""
+
+        points = self.get_points()
+        n = len(points)
+
+        if n < 2:
+            return self.duplicate()
+
+        points[0] = points[0] + (points[0] - points[1]).normalized() * start
+        points[n - 1] = (
+            points[n - 1] + (points[n - 1] - points[n - 2]).normalized() * end
+        )
+
+        return Polyline(points)
+
+    def trimmed(self, plane0: Plane, plane1: Plane, extension: float) -> Polyline:
+        """Return the copy extended by extension at both ends and cut by both planes, each keeping the side of the original center."""
+
+        middle = self.center()
+
+        return (
+            self.extended(extension, extension)
+            .cut_by_plane(plane0, plane0.signed_distance(middle) >= 0.0)
+            .cut_by_plane(plane1, plane1.signed_distance(middle) >= 0.0)
+        )
+
+    def overlap(self, other: Polyline, plane: Plane) -> Polyline:
+        """Return the polygon both closed polygons share on plane, in this winding from the corner nearest this first point, closed; this polygon when they share nothing or all of it."""
+
+        loop = self.open_points()
+        shared = Polyline.boolean_op(self, other, 0, plane)
+
+        if not shared or abs(shared[0].area() - self.area()) <= 1e-6 * self.area():
+            return self.closed()
+
+        points = shared[0].open_points()
+
+        if Polyline._newell_normal(points).dot(Polyline._newell_normal(loop)) < 0.0:
+            points.reverse()
+
+        nearest = 0
+
+        for i in range(1, len(points)):
+            if points[i].distance(loop[0]) < points[nearest].distance(loop[0]):
+                nearest = i
+
+        points = points[nearest:] + points[:nearest]
+
+        return Polyline(points).closed()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
@@ -1454,6 +1624,55 @@ class Polyline:
                 best_angle = math.atan2(ey, ex)
 
         return Polyline._unproject_rectangle(origin, xa, ya, best_extents, best_angle)
+
+    @staticmethod
+    def trimmed_alike(
+        polylines: list[Polyline], plane0: Plane, plane1: Plane, extension: float
+    ) -> list[Polyline]:
+        """Return polylines of one vertex count extended by extension and cut on the segments the first crosses, so quads between them stay quads; raises ValueError on mixed counts or a missed plane."""
+
+        from .intersection import line_plane
+        from .line import Line
+
+        if not polylines:
+            return []
+
+        first = polylines[0].extended(extension, extension).get_points()
+        a = Polyline._crossed_segment(first, plane0)
+        b = Polyline._crossed_segment(first, plane1)
+
+        if a == len(first) or b == len(first):
+            raise ValueError("trimmed_alike: a plane misses the extended polyline")
+
+        start = min(a, b)
+        end = max(a, b)
+        cut0 = plane0 if a <= b else plane1
+        cut1 = plane1 if a <= b else plane0
+        result = []
+
+        for polyline in polylines:
+            if polyline.point_count() != polylines[0].point_count():
+                raise ValueError("trimmed_alike: polylines of different vertex counts")
+
+            points = polyline.extended(extension, extension).get_points()
+            head = line_plane(
+                Line.from_points(points[start], points[start + 1]), cut0, False
+            )
+            tail = line_plane(
+                Line.from_points(points[end], points[end + 1]), cut1, False
+            )
+
+            if head is None or tail is None:
+                raise ValueError(
+                    "trimmed_alike: an end segment runs parallel to its plane"
+                )
+
+            kept = [head]
+            kept.extend(points[start + 1 : end + 1])
+            kept.append(tail)
+            result.append(Polyline(kept))
+
+        return result
 
     @staticmethod
     def grid_of_points_in_polygon(
@@ -2193,6 +2412,31 @@ class Polyline:
                     edge_j = j
 
         return (best_sq < float("inf"), edge_i, edge_j)
+
+    @staticmethod
+    def _newell_normal(points: list[Point]) -> Vector:
+        """Return Newell's unit normal of the loop through points, the closing edge included."""
+
+        n = len(points)
+        zero = Point(0.0, 0.0, 0.0)
+        normal = Vector(0.0, 0.0, 0.0)
+
+        for i in range(n):
+            normal += (points[i] - zero).cross(points[(i + 1) % n] - zero)
+
+        return normal.normalized()
+
+    @staticmethod
+    def _crossed_segment(points: list[Point], plane: Plane) -> int:
+        """Return the first segment whose ends lie on both sides of plane, len(points) when none."""
+
+        for i in range(len(points) - 1):
+            if (plane.signed_distance(points[i]) >= 0.0) != (
+                plane.signed_distance(points[i + 1]) >= 0.0
+            ):
+                return i
+
+        return len(points)
 
     @staticmethod
     def _boolean_project(pl: Polyline, plane: Plane) -> Polyline:

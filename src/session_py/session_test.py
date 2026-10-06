@@ -3617,5 +3617,54 @@ def test_session_merge_keeps_feature_guids():
     MINI_CHECK(part.get_object(element.guid).features[0].guid == guid)
 
 
+@MINI_TEST("Session", "Add Group Parent")
+def test_session_add_group_parent():
+    from session_py import Session
+
+    session = Session()
+    floor = session.add_group("floor")
+    quarter = session.add_group("quarter_0", floor)
+
+    MINI_CHECK(floor.parent is session.tree.root)
+    MINI_CHECK(quarter.parent is floor)
+    MINI_CHECK(len(floor.children) == 1)
+
+
+@MINI_TEST("Session", "Group Named")
+def test_session_group_named():
+    from session_py import Session
+
+    session = Session()
+    floor = session.add_group("floor")
+    session.add_group("beds", floor)
+    first = session.group_named("quarter_0", floor)
+    second = session.group_named("quarter_0", floor)
+
+    MINI_CHECK(first is second)
+    MINI_CHECK(len(floor.children) == 2)
+    MINI_CHECK(floor.children[1].name == "quarter_0")
+    MINI_CHECK(session.group_named("floor") is floor)
+    MINI_CHECK(session.group_named("top").parent is session.tree.root)
+
+
+@MINI_TEST("Session", "Set Node Color Descendants")
+def test_session_set_node_color_descendants():
+    from session_py import Color
+    from session_py import Point
+    from session_py import Session
+
+    session = Session()
+    floor = session.add_group("floor")
+    quarter = session.add_group("quarter_0", floor)
+    point = session.add_point(Point(1.0, 2.0, 3.0), quarter)
+    painted = session.set_node_color(floor, Color.red(), True)
+    session.set_node_color(floor, Color.blue())
+
+    MINI_CHECK(painted)
+    MINI_CHECK(floor.color == Color.blue())
+    MINI_CHECK(quarter.color == Color.red())
+    MINI_CHECK(point.color == Color.red())
+
+
 if __name__ == "__main__":
     run_all(language="python")

@@ -3,6 +3,7 @@ from .mini_test import MINI_CHECK
 from .mini_test import run_all
 from .tolerance import TOLERANCE
 from .tolerance import Tolerance
+import math
 
 
 @MINI_TEST("Polyline", "Constructor")
@@ -1334,6 +1335,338 @@ def test_polyline_is_locked_round_trip():
 
     MINI_CHECK(json.is_locked)
     MINI_CHECK(proto.is_locked)
+
+
+@MINI_TEST("Polyline", "From Planes")
+def test_polyline_from_planes():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    base = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    sides = [
+        Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(-1.0, 0.0, 0.0)),
+        Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(0.0, -1.0, 0.0)),
+        Plane.from_point_normal(Point(2.0, 2.0, 0.0), Vector(1.0, 0.0, 0.0)),
+        Plane.from_point_normal(Point(2.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0)),
+    ]
+    square = Polyline.from_planes(sides, base)
+    parallel = False
+
+    try:
+        Polyline.from_planes([sides[0], sides[2], sides[1]], base)
+    except ValueError:
+        parallel = True
+
+    MINI_CHECK(square.point_count() == 5)
+    MINI_CHECK(square.is_closed())
+    MINI_CHECK(TOLERANCE.is_close(square.get_point(1)[0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(square.get_point(1)[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(square.get_point(1)[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(square.get_point(3)[1], 2.0))
+    MINI_CHECK(parallel)
+
+
+@MINI_TEST("Polyline", "Open Points")
+def test_polyline_open_points():
+    from session_py import Point
+    from session_py import Polyline
+
+    square = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 2.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    path = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 2.0, 0.0),
+        ]
+    )
+
+    MINI_CHECK(len(square.open_points()) == 4)
+    MINI_CHECK(TOLERANCE.is_close(square.open_points()[3][1], 2.0))
+    MINI_CHECK(len(path.open_points()) == 3)
+
+
+@MINI_TEST("Polyline", "Area")
+def test_polyline_area():
+    from session_py import Point
+    from session_py import Polyline
+
+    square = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 2.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    standing = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(4.0, 0.0, 0.0),
+            Point(0.0, 0.0, 3.0),
+        ]
+    )
+    segment = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(4.0, 0.0, 0.0),
+        ]
+    )
+
+    MINI_CHECK(TOLERANCE.is_close(square.area(), 4.0))
+    MINI_CHECK(TOLERANCE.is_close(standing.area(), 6.0))
+    MINI_CHECK(segment.area() == 0.0)
+
+
+@MINI_TEST("Polyline", "Area Centroid")
+def test_polyline_area_centroid():
+    from session_py import Point
+    from session_py import Polyline
+
+    shape = Polyline(
+        [
+            Point(0.0, 0.0, 2.0),
+            Point(4.0, 0.0, 2.0),
+            Point(4.0, 1.0, 2.0),
+            Point(1.0, 1.0, 2.0),
+            Point(1.0, 3.0, 2.0),
+            Point(0.0, 3.0, 2.0),
+            Point(0.0, 0.0, 2.0),
+        ]
+    )
+    centroid = shape.area_centroid()
+    reversed = shape.reversed().area_centroid()
+
+    MINI_CHECK(TOLERANCE.is_close(centroid[0], 1.5))
+    MINI_CHECK(TOLERANCE.is_close(centroid[1], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(centroid[2], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(reversed[0], 1.5))
+    MINI_CHECK(TOLERANCE.is_close(reversed[1], 1.0))
+
+
+@MINI_TEST("Polyline", "Clip By Plane")
+def test_polyline_clip_by_plane():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    square = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(2.0, 0.0, 0.0),
+            Point(2.0, 2.0, 0.0),
+            Point(0.0, 2.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    half = square.clip_by_plane(
+        Plane.from_point_normal(Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    )
+    all = square.clip_by_plane(
+        Plane.from_point_normal(Point(-1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    )
+    none = square.clip_by_plane(
+        Plane.from_point_normal(Point(3.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    )
+
+    MINI_CHECK(half.point_count() == 5)
+    MINI_CHECK(half.is_closed())
+    MINI_CHECK(TOLERANCE.is_close(half.get_point(0)[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(half.area(), 2.0))
+    MINI_CHECK(all.point_count() == 5)
+    MINI_CHECK(TOLERANCE.is_close(all.area(), 4.0))
+    MINI_CHECK(none.point_count() == 0)
+
+
+@MINI_TEST("Polyline", "Offset Toward")
+def test_polyline_offset_toward():
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    arch = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(5.0, 0.0, 5.0),
+            Point(10.0, 0.0, 0.0),
+        ]
+    )
+    offset = arch.offset_toward(1.0, Vector(0.0, 0.0, 1.0))
+    same = arch.offset_toward(0.0, Vector(0.0, 0.0, 1.0))
+
+    MINI_CHECK(offset.point_count() == 3)
+    MINI_CHECK(TOLERANCE.is_close(offset.get_point(0)[0], -0.5 * math.sqrt(2.0)))
+    MINI_CHECK(TOLERANCE.is_close(offset.get_point(0)[2], 0.5 * math.sqrt(2.0)))
+    MINI_CHECK(TOLERANCE.is_close(offset.get_point(1)[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(offset.get_point(1)[2], 5.0 + math.sqrt(2.0)))
+    MINI_CHECK(TOLERANCE.is_close(offset.get_point(2)[0], 10.0 + 0.5 * math.sqrt(2.0)))
+    MINI_CHECK(TOLERANCE.is_close(same.get_point(1)[2], 5.0))
+
+
+@MINI_TEST("Polyline", "Extended")
+def test_polyline_extended():
+    from session_py import Point
+    from session_py import Polyline
+
+    path = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(1.0, 1.0, 0.0),
+        ]
+    )
+    single = Polyline([Point(1.0, 2.0, 3.0)])
+    longer = path.extended(2.0, 3.0)
+    shorter = path.extended(-0.5, 0.0)
+
+    MINI_CHECK(longer.point_count() == 3)
+    MINI_CHECK(TOLERANCE.is_close(longer.get_point(0)[0], -2.0))
+    MINI_CHECK(TOLERANCE.is_close(longer.get_point(1)[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(longer.get_point(2)[1], 4.0))
+    MINI_CHECK(TOLERANCE.is_close(shorter.get_point(0)[0], 0.5))
+    MINI_CHECK(TOLERANCE.is_close(shorter.get_point(2)[1], 1.0))
+    MINI_CHECK(single.extended(2.0, 3.0).point_count() == 1)
+
+
+@MINI_TEST("Polyline", "Trimmed")
+def test_polyline_trimmed():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    path = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(10.0, 0.0, 0.0),
+            Point(20.0, 0.0, 0.0),
+        ]
+    )
+    plane0 = Plane.from_point_normal(Point(5.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    plane1 = Plane.from_point_normal(Point(15.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    beyond0 = Plane.from_point_normal(Point(-5.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    beyond1 = Plane.from_point_normal(Point(25.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    inside = path.trimmed(plane0, plane1, 100.0)
+    outside = path.trimmed(beyond0, beyond1, 100.0)
+
+    MINI_CHECK(inside.point_count() == 3)
+    MINI_CHECK(TOLERANCE.is_close(inside.get_point(0)[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(inside.get_point(2)[0], 15.0))
+    MINI_CHECK(outside.point_count() == 3)
+    MINI_CHECK(TOLERANCE.is_close(outside.get_point(0)[0], -5.0))
+    MINI_CHECK(TOLERANCE.is_close(outside.get_point(2)[0], 25.0))
+
+
+@MINI_TEST("Polyline", "Trimmed Alike")
+def test_polyline_trimmed_alike():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+    from session_py import Vector
+
+    a = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(10.0, 0.0, 0.0),
+            Point(20.0, 0.0, 0.0),
+        ]
+    )
+    b = Polyline(
+        [
+            Point(0.0, 5.0, 0.0),
+            Point(10.0, 5.0, 0.0),
+            Point(20.0, 5.0, 0.0),
+        ]
+    )
+    c = Polyline(
+        [
+            Point(0.0, 9.0, 0.0),
+            Point(20.0, 9.0, 0.0),
+        ]
+    )
+    plane0 = Plane.from_point_normal(Point(5.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    plane1 = Plane.from_point_normal(Point(15.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    missing = Plane.from_point_normal(Point(500.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    trimmed = Polyline.trimmed_alike([a, b], plane1, plane0, 100.0)
+    mixed = False
+    missed = False
+
+    try:
+        Polyline.trimmed_alike([a, c], plane0, plane1, 100.0)
+    except ValueError:
+        mixed = True
+
+    try:
+        Polyline.trimmed_alike([a, b], plane0, missing, 100.0)
+    except ValueError:
+        missed = True
+
+    MINI_CHECK(len(trimmed) == 2)
+    MINI_CHECK(trimmed[1].point_count() == 3)
+    MINI_CHECK(TOLERANCE.is_close(trimmed[1].get_point(0)[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(trimmed[1].get_point(0)[1], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(trimmed[1].get_point(2)[0], 15.0))
+    MINI_CHECK(mixed)
+    MINI_CHECK(missed)
+
+
+@MINI_TEST("Polyline", "Overlap")
+def test_polyline_overlap():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Polyline
+
+    a = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(4.0, 0.0, 0.0),
+            Point(4.0, 4.0, 0.0),
+            Point(0.0, 4.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    b = Polyline(
+        [
+            Point(2.0, -1.0, 0.0),
+            Point(6.0, -1.0, 0.0),
+            Point(6.0, 3.0, 0.0),
+            Point(2.0, 3.0, 0.0),
+            Point(2.0, -1.0, 0.0),
+        ]
+    )
+    apart = Polyline(
+        [
+            Point(10.0, 10.0, 0.0),
+            Point(11.0, 10.0, 0.0),
+            Point(11.0, 11.0, 0.0),
+            Point(10.0, 11.0, 0.0),
+            Point(10.0, 10.0, 0.0),
+        ]
+    )
+    shared = a.overlap(b, Plane.xy_plane())
+    none = a.overlap(apart, Plane.xy_plane())
+
+    MINI_CHECK(shared.point_count() == 5)
+    MINI_CHECK(shared.is_closed())
+    MINI_CHECK(TOLERANCE.is_close(shared.area(), 6.0))
+    MINI_CHECK(TOLERANCE.is_close(shared.get_point(0)[0], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(shared.get_point(0)[1], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(shared.get_point(1)[0], 4.0))
+    MINI_CHECK(TOLERANCE.is_close(shared.get_point(1)[1], 0.0))
+    MINI_CHECK(none.point_count() == 5)
+    MINI_CHECK(TOLERANCE.is_close(none.area(), 16.0))
+    MINI_CHECK(TOLERANCE.is_close(none.get_point(0)[0], 0.0))
 
 
 if __name__ == "__main__":

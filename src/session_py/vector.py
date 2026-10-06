@@ -355,6 +355,10 @@ class Vector:
 
         return angle * TO_DEGREES if degrees else angle
 
+    def flattened(self) -> Vector:
+        """Return a copy with z set to zero."""
+        return Vector(self._x, self._y, 0.0)
+
     def projection(
         self, projection_vector: Vector, tolerance: float = Tolerance.ZERO_TOLERANCE
     ) -> tuple[Vector, float, Vector, float]:

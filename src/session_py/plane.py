@@ -12,6 +12,7 @@ from .vector import Vector
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .line import Line
     from .polyline import Polyline
     from .proto import plane_pb2
     from .xform import Xform
@@ -365,6 +366,11 @@ class Plane:
         return Plane.from_frame(point1, x_axis, y_axis, z_axis)
 
     @staticmethod
+    def from_line(line: Line, along: Vector) -> Plane:
+        """Construct the plane through the line containing along, normal the line direction × along."""
+        return Plane.from_point_normal(line.center(), line.to_direction().cross(along))
+
+    @staticmethod
     def invalid() -> Plane:
         """Construct an all-zero frame that fails is_valid()."""
         return Plane.from_frame(
@@ -409,6 +415,11 @@ class Plane:
         plane.name = "xz_plane"
 
         return plane
+
+    @staticmethod
+    def xy_plane_at(z: float) -> Plane:
+        """Construct the world XY plane lifted to z."""
+        return Plane.xy_plane() + Vector(0.0, 0.0, z)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Operators
@@ -633,6 +644,10 @@ class Plane:
             self._origin + normal * distance, self._x_axis, self._y_axis, self.name
         )
 
+    def moved_to(self, point: Point) -> Plane:
+        """Return the parallel plane through point, axes kept."""
+        return Plane.from_frame(point, self._x_axis, self._y_axis, self._z_axis)
+
     def project(self, p: Point) -> Point:
         """Return the orthogonal projection of p onto the plane."""
 
@@ -670,6 +685,10 @@ class Plane:
         normal_sq = self._a * self._a + self._b * self._b + self._c * self._c
 
         return value * value / normal_sq if normal_sq > 1e-20 else value * value
+
+    def signed_distance(self, point: Point) -> float:
+        """Return the distance from point along the z axis, negative below."""
+        return (point - self._origin).dot(self._z_axis)
 
     def base1(self) -> Vector:
         """Return the canonical in-plane axis from the normal alone: zero the smallest normal coordinate, negate-swap the other two."""

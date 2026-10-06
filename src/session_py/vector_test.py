@@ -512,5 +512,18 @@ def test_vector_protobuf_roundtrip():
     MINI_CHECK(converted == v)
 
 
+@MINI_TEST("Vector", "Flattened")
+def test_vector_flattened():
+    from session_py import Vector
+
+    v = Vector(1.0, 2.0, 3.0)
+    flat = v.flattened()
+
+    MINI_CHECK(TOLERANCE.is_close(flat[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(flat[1], 2.0))
+    MINI_CHECK(flat[2] == 0.0)
+    MINI_CHECK(TOLERANCE.is_close(v[2], 3.0))
+
+
 if __name__ == "__main__":
     run_all("python")

@@ -2349,5 +2349,64 @@ def test_intersection_line_line_classified():
     MINI_CHECK(not type1)
 
 
+@MINI_TEST("Intersection", "Plane Plane Optional")
+def test_intersection_plane_plane_optional():
+    from session_py import intersection
+    from session_py import Plane
+    from session_py import Vector
+
+    xy = Plane.xy_plane()
+    xz = Plane.xz_plane()
+    line = intersection.plane_plane(xy, xz)
+    parallel = intersection.plane_plane(xy, xy + Vector(0.0, 0.0, 1.0))
+
+    MINI_CHECK(line is not None)
+    MINI_CHECK(TOLERANCE.is_close(abs(line.to_direction()[0]), 1.0))
+    MINI_CHECK(parallel is None)
+
+
+@MINI_TEST("Intersection", "Line Plane Optional")
+def test_intersection_line_plane_optional():
+    from session_py import intersection
+    from session_py import Line
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    plane = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 1.0))
+    line = Line(0.0, 0.0, 0.0, 0.0, 0.0, 2.0)
+    short_line = Line(0.0, 0.0, 0.0, 0.0, 0.0, 0.5)
+    flat = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    hit = intersection.line_plane(line, plane)
+    beyond = intersection.line_plane(short_line, plane, False)
+
+    MINI_CHECK(hit is not None)
+    MINI_CHECK(TOLERANCE.is_close(hit[2], 1.0))
+    MINI_CHECK(intersection.line_plane(short_line, plane) is None)
+    MINI_CHECK(beyond is not None)
+    MINI_CHECK(TOLERANCE.is_close(beyond[2], 1.0))
+    MINI_CHECK(intersection.line_plane(flat, plane, False) is None)
+
+
+@MINI_TEST("Intersection", "Plane Plane Plane Optional")
+def test_intersection_plane_plane_plane_optional():
+    from session_py import intersection
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    xy = Plane.from_point_normal(Point(0.0, 0.0, 3.0), Vector(0.0, 0.0, 1.0))
+    yz = Plane.from_point_normal(Point(1.0, 0.0, 0.0), Vector(1.0, 0.0, 0.0))
+    xz = Plane.from_point_normal(Point(0.0, 2.0, 0.0), Vector(0.0, 1.0, 0.0))
+    corner = intersection.plane_plane_plane(xy, yz, xz)
+    parallel = intersection.plane_plane_plane(xy, yz, xy + Vector(0.0, 0.0, 1.0))
+
+    MINI_CHECK(corner is not None)
+    MINI_CHECK(TOLERANCE.is_close(corner[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(corner[1], 2.0))
+    MINI_CHECK(TOLERANCE.is_close(corner[2], 3.0))
+    MINI_CHECK(parallel is None)
+
+
 if __name__ == "__main__":
     run_all("python")

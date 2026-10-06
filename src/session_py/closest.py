@@ -1024,6 +1024,35 @@ class Closest:
         return (closest, t, closest.distance(test_point))
 
     @staticmethod
+    def segment_segment(s: Line, t: Line) -> tuple[float, float, float]:
+        """Return the parameters in [0, 1] on both segments and the distance of their closest approach."""
+
+        d1 = s.to_vector()
+        d2 = t.to_vector()
+        r = s.start() - t.start()
+        a = d1.dot(d1)
+        e = d2.dot(d2)
+        f = d2.dot(r)
+        c = d1.dot(r)
+        b = d1.dot(d2)
+        denominator = a * e - b * b
+        u = (
+            min(max((b * f - c * e) / denominator, 0.0), 1.0)
+            if denominator > 1e-12
+            else 0.0
+        )
+        v = (b * u + f) / e
+
+        if v < 0.0:
+            v = 0.0
+            u = min(max(-c / a, 0.0), 1.0)
+        elif v > 1.0:
+            v = 1.0
+            u = min(max((b - c) / a, 0.0), 1.0)
+
+        return (u, v, ((s.start() + d1 * u) - (t.start() + d2 * v)).magnitude())
+
+    @staticmethod
     def polyline_point(
         polyline: Polyline, test_point: Point
     ) -> tuple[Point, float, float]:
@@ -1152,6 +1181,37 @@ class Closest:
     # ═══════════════════════════════════════════════════════════════════════════
     # Meshes and clouds
     # ═══════════════════════════════════════════════════════════════════════════
+    @staticmethod
+    def triangle_point(a: Point, b: Point, c: Point, point: Point) -> float:
+        """Return the distance from point to the triangle a b c, to its nearest edge when degenerate."""
+
+        tri = [a, b, c]
+        n = (b - a).cross(c - a)
+        area = n.magnitude()
+
+        if area >= 1e-12:
+            unit = n * (1.0 / area)
+            height = (point - a).dot(unit)
+            q = point - unit * height
+            inside = True
+
+            for i in range(3):
+                inside = (
+                    inside
+                    and (tri[(i + 1) % 3] - tri[i]).cross(q - tri[i]).dot(unit) >= 0.0
+                )
+
+            if inside:
+                return abs(height)
+
+        best = 1e300
+
+        for i in range(3):
+            edge = Line.from_points(tri[i], tri[(i + 1) % 3])
+            best = min(best, (point - edge.closest_point(point)[1]).magnitude())
+
+        return best
+
     @staticmethod
     def mesh_point(mesh: Mesh, test_point: Point) -> tuple[Point, int, float]:
         """Return the closest point, face key and distance on a mesh via its triangle BVH."""

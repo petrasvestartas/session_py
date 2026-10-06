@@ -1031,13 +1031,25 @@ class Session:
 
         self._record_add(node, ghost, was_dead)
 
-    def add_group(self, group_name: str) -> TreeNode:
-        """Create a named group (TreeNode) and add it to the root of the tree."""
+    def add_group(self, group_name: str, parent: TreeNode | None = None) -> TreeNode:
+        """Create a named group (TreeNode) under parent, the root when none is given."""
 
         node = TreeNode(name=group_name)
-        self.add(node)
+        self.add(node, parent)
 
         return node
+
+    def group_named(self, name: str, parent: TreeNode | None = None) -> TreeNode:
+        """Return the live child of parent (the root when none is given) named name, added as a group after its other children the first time."""
+
+        host = parent if parent is not None else self.tree.root
+
+        if host is not None:
+            for child in host.children:
+                if child.name == name:
+                    return child
+
+        return self.add_group(name, parent)
 
     def rename_node(self, node: TreeNode, name: str) -> bool:
         """Rename a group node; False for an object node, a dead node or the same name."""
@@ -1062,8 +1074,10 @@ class Session:
 
         return True
 
-    def set_node_color(self, node: TreeNode, color: Color | None) -> bool:
-        """Set or clear (None) the display colour of a node; False for a dead node."""
+    def set_node_color(
+        self, node: TreeNode, color: Color | None, descendants: bool = False
+    ) -> bool:
+        """Set or clear (None) the display colour of a node and, with descendants, of every node nested under it; False for a dead node."""
 
         if node.is_dead():
             return False
@@ -1079,6 +1093,10 @@ class Session:
                 TreeOp(name, node, tomb, None, name, name, before, color, False, False),
                 RECORD,
             )
+
+        if descendants:
+            for child in node.descendants():
+                self.set_node_color(child, color)
 
         return True
 

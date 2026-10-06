@@ -349,5 +349,65 @@ def test_plane_is_locked_round_trip():
     MINI_CHECK(proto.is_locked)
 
 
+@MINI_TEST("Plane", "From Line")
+def test_plane_from_line():
+    from session_py import Line
+    from session_py import Plane
+    from session_py import Vector
+
+    line = Line(0.0, 0.0, 0.0, 2.0, 0.0, 0.0)
+    back = Line(2.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    pl = Plane.from_line(line, Vector(0.0, 0.0, 1.0))
+    flipped = Plane.from_line(back, Vector(0.0, 0.0, 1.0))
+
+    MINI_CHECK(TOLERANCE.is_close(pl.origin[0], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.z_axis[0], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.z_axis[1], -1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.z_axis[2], 0.0))
+    MINI_CHECK(TOLERANCE.is_close(flipped.z_axis[1], 1.0))
+
+
+@MINI_TEST("Plane", "Moved To")
+def test_plane_moved_to():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    pl = Plane.from_point_normal(Point(0.0, 0.0, 0.0), Vector(1.0, 1.0, 0.0))
+    moved = pl.moved_to(Point(5.0, 0.0, 0.0))
+    same = pl.moved_to(Point(0.0, 0.0, 3.0))
+
+    MINI_CHECK(TOLERANCE.is_close(moved.origin[0], 5.0))
+    MINI_CHECK(TOLERANCE.is_close(moved.x_axis[2], pl.x_axis[2]))
+    MINI_CHECK(TOLERANCE.is_close(moved.z_axis[0], pl.z_axis[0]))
+    MINI_CHECK(TOLERANCE.is_close(moved.d * moved.d, 12.5))
+    MINI_CHECK(Plane.is_coplanar(pl, same))
+
+
+@MINI_TEST("Plane", "Signed Distance")
+def test_plane_signed_distance():
+    from session_py import Plane
+    from session_py import Point
+    from session_py import Vector
+
+    pl = Plane.from_point_normal(Point(0.0, 0.0, 1.0), Vector(0.0, 0.0, 2.0))
+
+    MINI_CHECK(TOLERANCE.is_close(pl.signed_distance(Point(3.0, 4.0, 5.0)), 4.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.signed_distance(Point(3.0, 4.0, -1.0)), -2.0))
+    MINI_CHECK(pl.signed_distance(Point(3.0, 4.0, 1.0)) == 0.0)
+
+
+@MINI_TEST("Plane", "Xy Plane At")
+def test_plane_xy_plane_at():
+    from session_py import Plane
+
+    pl = Plane.xy_plane_at(2.5)
+
+    MINI_CHECK(TOLERANCE.is_close(pl.origin[2], 2.5))
+    MINI_CHECK(TOLERANCE.is_close(pl.z_axis[2], 1.0))
+    MINI_CHECK(TOLERANCE.is_close(pl.d, -2.5))
+    MINI_CHECK(Plane.xy_plane_at(0.0) == Plane.xy_plane())
+
+
 if __name__ == "__main__":
     run_all("python")
