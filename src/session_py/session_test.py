@@ -3401,5 +3401,221 @@ def test_session_get_branch():
     MINI_CHECK(len(session.lookup) == 3 and session.graph.number_of_edges() == 2)
 
 
+@MINI_TEST("Session", "Graft Parent Not In Tree")
+def test_session_graft_parent_not_in_tree():
+    from session_py import Session
+    from session_py import Point
+
+    scene = Session("scene")
+    floor = Session("floor")
+    other = Session("other")
+    floor.add_point(Point(1.0, 2.0, 3.0))
+    level = scene.add_group("level_1")
+    scene.remove_group(level)
+    dead_rejected = False
+    foreign_rejected = False
+
+    try:
+        scene.graft(floor, level)
+    except ValueError:
+        dead_rejected = True
+
+    try:
+        scene.graft(floor, other.add_group("level_2"))
+    except ValueError:
+        foreign_rejected = True
+
+    MINI_CHECK(dead_rejected)
+    MINI_CHECK(foreign_rejected)
+    MINI_CHECK(len(scene.lookup) == 0 and len(other.lookup) == 0)
+
+
+@MINI_TEST("Session", "Merge Group Xform Clash")
+def test_session_merge_group_xform_clash():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    scene = Session("floor")
+    floor = Session("floor")
+    level = Session("floor")
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(0.0, 0.0, 0.0)
+    c = Point(0.0, 0.0, 0.0)
+    scene.add_point(a, scene.add_group("floor_model"))
+    floor.add_point(b, floor.add_group("floor_model"))
+    floor.set_xform("floor_model", Xform.translation(0.0, 0.0, 3.0))
+    level.add_point(c)
+    level.set_xform("floor", Xform.translation(0.0, 0.0, 3.0))
+    clash_rejected = False
+
+    try:
+        scene.merge(floor)
+    except ValueError:
+        clash_rejected = True
+
+    scene.merge(level)
+
+    MINI_CHECK(clash_rejected)
+    MINI_CHECK(len(scene.lookup) == 2)
+    MINI_CHECK(scene.world_xform(a.guid) == Xform.identity())
+    MINI_CHECK(scene.world_xform(c.guid) == Xform.translation(0.0, 0.0, 3.0))
+
+
+@MINI_TEST("Session", "Get Branch Shared Child Name")
+def test_session_get_branch_shared_child_name():
+    from session_py import Session
+    from session_py import Point
+    from session_py import TreeNode
+    from session_py import Xform
+
+    session = Session()
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(0.0, 0.0, 0.0)
+    level = session.add_group("level")
+    first = TreeNode(name="floor_model")
+    second = TreeNode(name="floor_model")
+    session.add(first, level)
+    session.add(second, level)
+    session.add_point(a, first)
+    session.add_point(b, second)
+    session.set_xform("level", Xform.translation(0.0, 0.0, 3.0))
+    part = session.get_branch("level")
+
+    MINI_CHECK(part.world_xform(a.guid) == Xform.translation(0.0, 0.0, 3.0))
+    MINI_CHECK(part.world_xform(b.guid) == Xform.translation(0.0, 0.0, 3.0))
+
+
+@MINI_TEST("Session", "Flatten Root Xform")
+def test_session_flatten_root_xform():
+    from session_py import Session
+    from session_py import Point
+    from session_py import Xform
+
+    session = Session()
+    point = Point(0.0, 0.0, 0.0)
+    session.add_point(point)
+    session.set_xform(session.name, Xform.translation(0.0, 0.0, 3.0))
+    session.flatten()
+
+    MINI_CHECK(session.world_xform(point.guid) == Xform.translation(0.0, 0.0, 3.0))
+
+
+@MINI_TEST("Session", "Graft Definition Guid")
+def test_session_graft_definition_guid():
+    from session_py import Session
+    from session_py import Point
+
+    scene = Session("scene")
+    floor = Session("floor")
+    library = Session("library")
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(1.0, 0.0, 0.0)
+    scene.add_definition(a)
+    floor.add_point(a)
+    scene.add_point(b)
+    library.add_definition(b)
+    object_rejected = False
+    definition_rejected = False
+
+    try:
+        scene.merge(floor)
+    except ValueError:
+        object_rejected = True
+
+    try:
+        scene.merge(library)
+    except ValueError:
+        definition_rejected = True
+
+    MINI_CHECK(object_rejected)
+    MINI_CHECK(definition_rejected)
+    MINI_CHECK(len(scene.lookup) == 1 and len(scene.definition_lookup) == 1)
+
+
+@MINI_TEST("Session", "Add Value Keeps Guid")
+def test_session_add_value_keeps_guid():
+    from session_py import Session
+    from session_py import Point
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+    session.add_point(point)
+    session.add_point(point)
+
+    MINI_CHECK(session.get_node(guid) is not None)
+    MINI_CHECK(len(session.lookup) == 1)
+
+
+@MINI_TEST("Session", "Merge Graph Attributes")
+def test_session_merge_graph_attributes():
+    from session_py import Session
+    from session_py import Point
+
+    scene = Session("scene")
+    floor = Session("floor")
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(1.0, 0.0, 0.0)
+    floor.add_point(a)
+    floor.add_point(b)
+    floor.add_edge(a.guid, b.guid, "joint")
+    floor.graph.edges[a.guid][b.guid].name = "seam"
+    floor.graph.edges[b.guid][a.guid].name = "seam"
+    floor.graph.set_edge_attribute((a.guid, b.guid), "stiffness", 5.0)
+    floor.graph.set_vertex_attribute(a.guid, "mass", 2.0)
+    scene.merge(floor)
+    part = floor.get_branch("floor")
+
+    MINI_CHECK(scene.graph.edges[a.guid][b.guid].name == "seam")
+    MINI_CHECK(scene.graph.edge_attribute((a.guid, b.guid), "stiffness") == 5.0)
+    MINI_CHECK(scene.graph.vertex_attribute(a.guid, "mass") == 2.0)
+    MINI_CHECK(part.graph.edges[a.guid][b.guid].name == "seam")
+    MINI_CHECK(part.graph.edge_attribute((a.guid, b.guid), "stiffness") == 5.0)
+    MINI_CHECK(part.graph.vertex_attribute(a.guid, "mass") == 2.0)
+
+
+@MINI_TEST("Session", "Flatten Nested Groups")
+def test_session_flatten_nested_groups():
+    from session_py import Session
+    from session_py import Point
+    from session_py import TreeNode
+    from session_py import Xform
+
+    session = Session()
+    a = Point(0.0, 0.0, 0.0)
+    b = Point(0.0, 0.0, 0.0)
+    inner = TreeNode(name="inner")
+    held = TreeNode(name="held")
+    session.add(inner, session.add_group("outer"))
+    session.add(held, session.add_point(a, inner))
+    session.add_point(b, held)
+    session.set_xform("inner", Xform.translation(0.0, 0.0, 3.0))
+    session.flatten()
+
+    MINI_CHECK("inner" not in session.xforms)
+    MINI_CHECK(session.tree.get_node_by_name("held") is None)
+    MINI_CHECK(session.world_xform(b.guid) == Xform.translation(0.0, 0.0, 3.0))
+
+
+@MINI_TEST("Session", "Merge Keeps Feature Guids")
+def test_session_merge_keeps_feature_guids():
+    from session_py import Session
+    from session_py import Element
+    from session_py import ElementFeature
+
+    scene = Session("scene")
+    floor = Session("floor")
+    element = Element(name="plate")
+    element.add_feature(ElementFeature("drill", -1, [], "hole"))
+    guid = element.features[0].guid
+    floor.add_element(element)
+    scene.merge(floor)
+    part = floor.get_branch("floor")
+
+    MINI_CHECK(scene.get_object(element.guid).features[0].guid == guid)
+    MINI_CHECK(part.get_object(element.guid).features[0].guid == guid)
+
+
 if __name__ == "__main__":
     run_all(language="python")

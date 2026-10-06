@@ -1111,54 +1111,71 @@ class Session:
         return True
 
     def merge(self, other: Session) -> None:
-        """Copy every live object of other with its tree, graph edges and their interactions, transforms, definitions and components into this session, other's top-level nodes beside this session's under the root; raises ValueError when an object guid of other is already live here."""
+        """Copy every live object of other with its tree, graph edges with their attributes and interactions, transforms, definitions and components into this session, other's top-level nodes beside this session's under the root with other's root transform folded into them; raises ValueError, changing nothing, when an object guid of other is live or a definition here, a definition guid of other is live here, or a group transform of other would land on a node name this session has."""
         self.graft(other, None)
 
     def graft(self, other: Session, parent: TreeNode | None) -> None:
-        """The same as merge, other's top-level nodes under parent instead of the root."""
+        """The same as merge, other's top-level nodes under parent instead of the root; raises ValueError when parent is dead or outside this session's tree."""
+
+        host = parent if parent is not None else self.tree.root
+        at = host
+
+        while at is not self.tree.root:
+            if at is None or at.is_dead():
+                raise ValueError("Session.graft: the parent is not a live node of this session")
+
+            at = at.parent
 
         copied = copy.deepcopy(other)
+        top = copied.tree.root
+        placed = {}
+
+        for guid, xform in copied.xforms.items():
+            if guid != top.name:
+                placed[guid] = xform
+
+        if top.name in copied.xforms:
+            for child in top.children:
+                placed[child.name] = copied.xforms[top.name] * copied.xform(child.name)
 
         for guid in copied.node_lookup:
-            if copied._is_live(guid) and self._is_live(guid):
+            if copied._is_live(guid) and (
+                self._is_live(guid) or guid in self.definition_lookup
+            ):
                 raise ValueError(f"Session.graft: {guid} is already in the session")
+
+        for guid in copied.definition_lookup:
+            if self._is_live(guid):
+                raise ValueError(f"Session.graft: {guid} is already in the session")
+
+        for name in placed:
+            if not copied._is_live(name) and self.tree.get_node_by_name(name) is not None:
+                raise ValueError(
+                    f"Session.graft: the transform of {name} would move the node of that name"
+                )
 
         for guid, definition in copied.definition_lookup.items():
             if guid not in self.definition_lookup:
                 self.add_definition(definition)
 
-        self._graft_children(
-            copied, copied.tree.root, parent if parent is not None else self.tree.root
-        )
+        self._graft_children(copied, top, host)
+        self._graft_graph(copied)
 
-        for u, v in copied.graph.get_edges():
-            source = copied.graph.edges[u][v]
-            self.add_edge(u, v, source.attribute)
-            found = copied.interactions.get(source.guid)
-
-            if found is not None:
-                self.interactions.setdefault(self.graph.edges[u][v].guid, []).extend(
-                    found
-                )
-
-        for guid, xform in copied.xforms.items():
-            if guid not in self.xforms:
-                self.set_xform(guid, xform)
+        for name, xform in placed.items():
+            self.set_xform(name, xform)
 
     def flatten(self) -> None:
-        """Move every live object node directly under the root, its world placement its own transform, and remove the groups left behind."""
+        """Move every live object node directly under the root, its world placement its own transform, and remove every group left behind with its transform, and the root's transform."""
 
         root = self.tree.root
         groups = []
         nodes = []
 
-        for child in root.children:
-            if not child.is_dead() and not self._is_live(child.name):
-                groups.append(child)
-
         for node in self.tree.traverse():
-            if not node.is_dead() and self._is_live(node.name):
+            if self._is_live(node.name):
                 nodes.append((node, self.world_xform(node.name)))
+            elif node is not root:
+                groups.append(node)
 
         for node, xform in nodes:
             self.add(node, root)
@@ -1168,8 +1185,10 @@ class Session:
             else:
                 self.set_xform(node.name, xform)
 
-        for group in groups:
+        for group in reversed(groups):
             self.remove_group(group)
+
+        self.remove_xform(root.name)
 
     def get_branch(self, name: str) -> Session:
         """A new session named name holding a copy of the branch under the first node of that name, any later one ignored, the node's children under its root: their objects, the graph edges and interactions between them, their transforms with the node's placement baked into the top-level children, and the definitions their instances use; this session is unchanged; raises ValueError when no node has that name or the first is dead."""
@@ -1208,17 +1227,7 @@ class Session:
                 )
 
         part._graft_children(copied, from_, part.tree.root)
-
-        for u, v in copied.graph.get_edges():
-            if not part._is_live(u) or not part._is_live(v):
-                continue
-
-            source = copied.graph.edges[u][v]
-            part.add_edge(u, v, source.attribute)
-            found = copied.interactions.get(source.guid)
-
-            if found is not None:
-                part.interactions[part.graph.edges[u][v].guid] = found
+        part._graft_graph(copied)
 
         for child in below:
             if child.name in copied.xforms:
@@ -1235,10 +1244,7 @@ class Session:
 
         if not placement.is_identity():
             for child in from_.children:
-                part.set_xform(
-                    child.name,
-                    placement * part.xforms.get(child.name, Xform.identity()),
-                )
+                part.set_xform(child.name, placement * copied.xform(child.name))
 
         return part
 
@@ -1992,6 +1998,29 @@ class Session:
                 self.set_node_color(node, child.color)
 
             self._graft_children(source, child, node)
+
+    def _graft_graph(self, source: Session) -> None:
+        """Copy the graph vertex attributes of source's live objects live here, and source's edges between objects live here with their name, attributes and interactions."""
+
+        for vertex in source.graph.get_vertices():
+            if source._is_live(vertex.name) and self._is_live(vertex.name):
+                for key, value in vertex.attributes.items():
+                    self.graph.set_vertex_attribute(vertex.name, key, value)
+
+        for u, v in source.graph.get_edges():
+            if not self._is_live(u) or not self._is_live(v):
+                continue
+
+            from_ = source.graph.edges[u][v]
+            self.add_edge(u, v, from_.attribute)
+            edge = self.graph.edges[u][v]
+            edge.name = from_.name
+            edge.attributes = dict(from_.attributes)
+            self.graph.edges[v][u] = edge
+            found = source.interactions.get(from_.guid)
+
+            if found is not None:
+                self.interactions.setdefault(edge.guid, []).extend(found)
 
     def _add_object(
         self, collection: str, obj: Any, type_prefix: str, parent: TreeNode | None

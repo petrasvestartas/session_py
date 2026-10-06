@@ -33,6 +33,11 @@ def _clone_list(items: Collection, memo: dict) -> Collection:
         if item.has_guid():
             clone.guid = item.guid
 
+        if isinstance(item, Element):
+            for feature, kept in zip(item._features, clone._features):
+                if feature.has_guid():
+                    kept.guid = feature.guid
+
         out.append(clone)
 
     return out
