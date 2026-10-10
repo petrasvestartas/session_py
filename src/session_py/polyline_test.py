@@ -565,8 +565,21 @@ def test_polyline_extend_segment_equally():
     first = pl.get_point(0)[0]
     second = pl.get_point(1)[0]
 
+    ring = Polyline(
+        [
+            Point(0.0, 0.0, 0.0),
+            Point(1.0, 0.0, 0.0),
+            Point(1.0, 1.0, 0.0),
+            Point(0.0, 0.0, 0.0),
+        ]
+    )
+    ring.extend_segment_equally(0, 0.5, 0.0)
+    ring.extend_segment_equally(2, 0.5, 0.0)
+
     MINI_CHECK(TOLERANCE.is_close(first, -0.5))
     MINI_CHECK(TOLERANCE.is_close(second, 1.5))
+    MINI_CHECK(ring.is_closed())
+    MINI_CHECK(ring.get_point(0) == ring.get_point(3))
 
 
 @MINI_TEST("Polyline", "Extend Line Segment")
