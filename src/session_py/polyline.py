@@ -858,13 +858,14 @@ class Polyline:
         if segment_id < 0 or segment_id >= self.segment_count():
             return
 
+        closed = self.point_count() > 2 and self.is_closed()
         p0 = self.get_point(segment_id)
         p1 = self.get_point(segment_id + 1)
         Polyline.extend_segment_equally_static(p0, p1, dist, proportion)
         self.set_point(segment_id, p0)
         self.set_point(segment_id + 1, p1)
 
-        if self.point_count() <= 2 or not self.is_closed():
+        if not closed:
             return
 
         if segment_id == 0:
