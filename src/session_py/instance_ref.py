@@ -40,7 +40,7 @@ class InstanceRef:
         self._guid = None  # Lazily minted GUID.
         self.name = "my_instance_ref"  # Instance name.
         self.definition_guid = definition_guid  # Guid of the referenced definition.
-        self.xform = Xform.identity()  # Placement outside a Session; inside one Session.xforms places the instance and this stays identity.
+        self.xform = Xform.identity()  # Outside-Session placement; inside one the central xforms table holds the LOCAL placement.
         self.color = Color.white()  # Display color, used when flags has FLAG_COLOR.
         self.flags = 0  # FLAG_* bits.
         self.features: list[ElementFeature] = []  # In the definition frame.

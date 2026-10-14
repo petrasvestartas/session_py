@@ -508,7 +508,7 @@ class Session:
         self.tree = Tree(name=f"{name}_tree")  # Tree structure for hierarchy.
         self.graph = Graph(name=f"{name}_graph")  # Graph structure for relationships.
         self.component_lookup: dict[str, Component] = {}  # Components by GUID.
-        self.xforms: dict[str, Xform] = {}  # Guid -> LOCAL transform.
+        self.xforms: dict[str, Xform] = {}  # Central table by tree-node name/object guid; values are LOCAL to the tree parent.
         self.definitions = Objects()  # Shared geometry instances place, each in its own frame; never in order(), the tree, the graph or xforms.
         self.definition_lookup: dict[str, Any] = {}  # Definitions by guid.
         self.instance_lookup: dict[str, InstanceRef] = {}  # Instances by guid.
@@ -673,11 +673,11 @@ class Session:
         return order
 
     def xform(self, guid: str) -> Xform:
-        """The LOCAL transform of an object, identity when none was set."""
+        """The LOCAL transform stored centrally under tree-node name/object guid, relative to its parent; identity if absent."""
         return self.xforms.get(guid, Xform.identity())
 
     def world_xform(self, guid: str) -> Xform:
-        """The CUMULATIVE placement of an object: every ancestor's transform multiplied down the tree onto its own."""
+        """The WORLD transform: the product of LOCAL transforms from the tree root through the object."""
 
         acc = self.xform(guid)
         node = self.get_node(guid)
@@ -694,7 +694,7 @@ class Session:
         return acc
 
     def world_xforms(self) -> dict[str, Xform]:
-        """Every object's cumulative placement, computed in one downward pass."""
+        """Every object's WORLD transform, computed by multiplying LOCAL transforms down the tree."""
 
         out: dict[str, Xform] = {}
 
@@ -1466,7 +1466,7 @@ class Session:
         return True
 
     def set_xform(self, guid: str, xform: Xform) -> None:
-        """Sets the LOCAL transform of an object, relative to its tree parent; a guid that names only a definition is ignored."""
+        """Set the central LOCAL transform under tree-node name/object guid, relative to its parent; a definition-only guid is ignored."""
 
         if (
             guid in self.definition_lookup
