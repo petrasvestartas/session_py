@@ -1039,6 +1039,25 @@ def test_session_add_component():
     MINI_CHECK(session.graph.has_node(guid))
 
 
+@MINI_TEST("Session", "Add Matrix")
+def test_session_add_matrix():
+    from session_py import Matrix
+    from session_py import Session
+
+    session = Session()
+    m = Matrix.from_rows([[1.0, -2.0], [0.0, 3.0]])
+    m.name = "stiffness"
+
+    session.add_matrix(m)
+    component = session.objects.components[0]
+    restored = Matrix.from_component(component)
+
+    MINI_CHECK(len(session.objects.components) == 1)
+    MINI_CHECK(component.type_name == "Matrix" and component.guid == m.guid)
+    MINI_CHECK(session.graph.has_node(m.guid))
+    MINI_CHECK(restored == m and restored.guid == m.guid)
+
+
 @MINI_TEST("Session", "Component Json Roundtrip")
 def test_session_component_json_roundtrip():
     from session_py import Session

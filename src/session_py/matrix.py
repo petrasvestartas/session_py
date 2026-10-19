@@ -5,10 +5,12 @@ import math
 import uuid
 from typing import TYPE_CHECKING
 
+from .color import Color
 from .tolerance import Tolerance
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from .objects import Component
     from .proto import matrix_pb2
 
 
@@ -49,6 +51,12 @@ class Matrix:
         self.rows = rows  # Row count.
         self.cols = cols  # Column count.
         self.data = [0.0] * _matrix_size(rows, cols)  # Row-major values.
+        self.mincolor = Color(11 / 255, 25 / 255, 87 / 255)  # Cell colour at the smallest non-zero entry.
+        self.maxcolor = Color(206 / 255, 64 / 255, 149 / 255)  # Cell colour at the largest non-zero entry.
+        self.zerocolor = Color(185 / 255, 185 / 255, 189 / 255)  # Cell colour of a zero entry.
+        self.textcolor = Color.white()  # Colour of the values written in the cells.
+        self.linecolor = Color.black()  # Colour of the cell edges and the title.
+        self.cell = 1.0  # Edge length of one square cell.
 
     @staticmethod
     def zeros(rows: int, cols: int) -> "Matrix":
@@ -121,6 +129,12 @@ class Matrix:
 
         m = Matrix.from_vec(self.rows, self.cols, self.data)
         m.name = self.name
+        m.mincolor = self.mincolor.duplicate()
+        m.maxcolor = self.maxcolor.duplicate()
+        m.zerocolor = self.zerocolor.duplicate()
+        m.textcolor = self.textcolor.duplicate()
+        m.linecolor = self.linecolor.duplicate()
+        m.cell = self.cell
 
         return m
 
@@ -244,12 +258,18 @@ class Matrix:
         return result
 
     def __eq__(self, other: object) -> bool:
-        """Compare dimensions and values within the matrix comparison tolerance."""
+        """Compare dimensions, values within the matrix comparison tolerance, colours and cell size."""
 
         if not isinstance(other, Matrix):
             return False
 
         if self.rows != other.rows or self.cols != other.cols:
+            return False
+
+        if self.mincolor != other.mincolor or self.maxcolor != other.maxcolor or self.zerocolor != other.zerocolor:
+            return False
+
+        if self.textcolor != other.textcolor or self.linecolor != other.linecolor or self.cell != other.cell:
             return False
 
         for i in range(len(self.data)):
@@ -701,12 +721,18 @@ class Matrix:
         """Serialize to an ordered JSON object."""
 
         return {
+            "cell": self.cell,
             "cols": self.cols,
             "data": self.data,
             "guid": self.guid,
+            "linecolor": self.linecolor.__jsondump__(),
+            "maxcolor": self.maxcolor.__jsondump__(),
+            "mincolor": self.mincolor.__jsondump__(),
             "name": self.name,
             "rows": self.rows,
+            "textcolor": self.textcolor.__jsondump__(),
             "type": "Matrix",
+            "zerocolor": self.zerocolor.__jsondump__(),
         }
 
     @classmethod
@@ -721,6 +747,24 @@ class Matrix:
         m = cls.from_vec(data["rows"], data["cols"], data["data"])
         m.guid = guid or data["guid"]
         m.name = name or data["name"]
+
+        if "mincolor" in data:
+            m.mincolor = Color.__jsonload__(data["mincolor"])
+
+        if "maxcolor" in data:
+            m.maxcolor = Color.__jsonload__(data["maxcolor"])
+
+        if "zerocolor" in data:
+            m.zerocolor = Color.__jsonload__(data["zerocolor"])
+
+        if "textcolor" in data:
+            m.textcolor = Color.__jsonload__(data["textcolor"])
+
+        if "linecolor" in data:
+            m.linecolor = Color.__jsonload__(data["linecolor"])
+
+        if "cell" in data:
+            m.cell = data["cell"]
 
         return m
 
@@ -761,6 +805,12 @@ class Matrix:
         proto.rows = self.rows
         proto.cols = self.cols
         proto.data.extend(self.data)
+        proto.mincolor.CopyFrom(self.mincolor.to_proto())
+        proto.maxcolor.CopyFrom(self.maxcolor.to_proto())
+        proto.zerocolor.CopyFrom(self.zerocolor.to_proto())
+        proto.textcolor.CopyFrom(self.textcolor.to_proto())
+        proto.linecolor.CopyFrom(self.linecolor.to_proto())
+        proto.cell = self.cell
 
         return proto
 
@@ -774,6 +824,24 @@ class Matrix:
             m.guid = proto.guid
 
         m.name = proto.name
+
+        if proto.HasField("mincolor"):
+            m.mincolor = Color.from_proto(proto.mincolor)
+
+        if proto.HasField("maxcolor"):
+            m.maxcolor = Color.from_proto(proto.maxcolor)
+
+        if proto.HasField("zerocolor"):
+            m.zerocolor = Color.from_proto(proto.zerocolor)
+
+        if proto.HasField("textcolor"):
+            m.textcolor = Color.from_proto(proto.textcolor)
+
+        if proto.HasField("linecolor"):
+            m.linecolor = Color.from_proto(proto.linecolor)
+
+        if proto.cell > 0.0:
+            m.cell = proto.cell
 
         return m
 
@@ -808,6 +876,35 @@ class Matrix:
             data = f.read()
 
         return cls.pb_loads(data)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Component
+    # ═══════════════════════════════════════════════════════════════════════════
+    def to_component(self) -> Component:
+        """Return a Session component of type Matrix with this guid and name, every other JSON field in extra."""
+
+        from .objects import Component
+
+        component = Component()
+        component.type_name = "Matrix"
+        component.guid = self.guid
+        component.name = self.name
+        component.extra = self.__jsondump__()
+        del component.extra["guid"]
+        del component.extra["name"]
+        del component.extra["type"]
+
+        return component
+
+    @classmethod
+    def from_component(cls, component: Component) -> "Matrix":
+        """Construct from a component made by to_component, guid and name from the component."""
+
+        data = dict(component.extra)
+        data["guid"] = component.guid
+        data["name"] = component.name
+
+        return cls.__jsonload__(data)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # String

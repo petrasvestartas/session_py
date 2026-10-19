@@ -8,6 +8,7 @@ from .tolerance import TOLERANCE
 
 @MINI_TEST("Matrix", "Constructor")
 def test_matrix_constructor():
+    from session_py import Color
     from session_py import Matrix
 
     m = Matrix.zeros(2, 3)
@@ -40,6 +41,11 @@ def test_matrix_constructor():
     MINI_CHECK("Matrix(" in srepr)
     MINI_CHECK(d == ml and d.guid != ml.guid)
     MINI_CHECK("guid='id...'" in short_repr)
+    MINI_CHECK(m.mincolor == Color(11 / 255, 25 / 255, 87 / 255))
+    MINI_CHECK(m.maxcolor == Color(206 / 255, 64 / 255, 149 / 255))
+    MINI_CHECK(m.zerocolor == Color(185 / 255, 185 / 255, 189 / 255))
+    MINI_CHECK(m.textcolor == Color.white() and m.linecolor == Color.black())
+    MINI_CHECK(m.cell == 1.0)
 
 
 @MINI_TEST("Matrix", "Properties")
@@ -296,10 +302,17 @@ def test_matrix_rank():
 def test_matrix_json_roundtrip():
     from pathlib import Path
 
+    from session_py import Color
     from session_py import Matrix
 
     a = Matrix.from_vec(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     a.name = "test_matrix"
+    a.mincolor = Color.blue()
+    a.maxcolor = Color.red()
+    a.zerocolor = Color.grey()
+    a.textcolor = Color.black()
+    a.linecolor = Color.white()
+    a.cell = 2.5
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_matrix.json"
 
     a.file_json_dump(fname)
@@ -309,6 +322,9 @@ def test_matrix_json_roundtrip():
     MINI_CHECK(loaded.name == "test_matrix")
     MINI_CHECK(loaded.rows == 2 and loaded.cols == 3)
     MINI_CHECK(TOLERANCE.is_close(loaded[0, 0], 1.0) and TOLERANCE.is_close(loaded[1, 2], 6.0))
+    MINI_CHECK(loaded.mincolor == Color.blue() and loaded.maxcolor == Color.red())
+    MINI_CHECK(loaded.zerocolor == Color.grey() and loaded.textcolor == Color.black())
+    MINI_CHECK(loaded.linecolor == Color.white() and loaded.cell == 2.5)
     MINI_CHECK(parsed == a)
 
 
@@ -316,12 +332,19 @@ def test_matrix_json_roundtrip():
 def test_matrix_protobuf_roundtrip():
     from pathlib import Path
 
+    from session_py import Color
     from session_py import Matrix
 
     fresh = Matrix()
     fresh_proto = fresh.to_proto()
     a = Matrix.from_vec(2, 3, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     a.name = "test_matrix_proto"
+    a.mincolor = Color.blue()
+    a.maxcolor = Color.red()
+    a.zerocolor = Color.grey()
+    a.textcolor = Color.black()
+    a.linecolor = Color.white()
+    a.cell = 2.5
     guid = a.guid
     fname = Path(__file__).resolve().parents[2] / "serialization" / "test_matrix.bin"
 
@@ -338,6 +361,43 @@ def test_matrix_protobuf_roundtrip():
     MINI_CHECK(parsed == a)
     MINI_CHECK(converted == a)
     MINI_CHECK(loaded.guid == guid and parsed.guid == guid and converted.guid == guid)
+    MINI_CHECK(loaded.mincolor == Color.blue() and loaded.maxcolor == Color.red())
+    MINI_CHECK(loaded.zerocolor == Color.grey() and loaded.textcolor == Color.black())
+    MINI_CHECK(loaded.linecolor == Color.white() and loaded.cell == 2.5)
+
+
+@MINI_TEST("Matrix", "To Component")
+def test_matrix_to_component():
+    from session_py import Matrix
+
+    m = Matrix.from_rows([[1.0, -2.0], [0.0, 3.0]])
+    m.name = "stiffness"
+    component = m.to_component()
+    extra = component.extra
+
+    MINI_CHECK(component.type_name == "Matrix")
+    MINI_CHECK(component.guid == m.guid and component.name == "stiffness")
+    MINI_CHECK(len(extra) == 9)
+    MINI_CHECK("cell" in extra and "zerocolor" in extra)
+    MINI_CHECK("guid" not in extra and "name" not in extra)
+    MINI_CHECK("type" not in extra)
+    MINI_CHECK(extra["data"] == [1.0, -2.0, 0.0, 3.0])
+
+
+@MINI_TEST("Matrix", "From Component")
+def test_matrix_from_component():
+    from session_py import Color
+    from session_py import Matrix
+
+    m = Matrix.from_rows([[1.0, -2.0], [0.0, 3.0]])
+    m.name = "stiffness"
+    m.maxcolor = Color.red()
+    m.cell = 0.5
+    restored = Matrix.from_component(m.to_component())
+
+    MINI_CHECK(restored == m)
+    MINI_CHECK(restored.guid == m.guid and restored.name == "stiffness")
+    MINI_CHECK(restored.maxcolor == Color.red() and restored.cell == 0.5)
 
 
 @MINI_TEST("Matrix", "Serialization Errors")

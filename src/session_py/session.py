@@ -57,6 +57,7 @@ from .intersection import ray_mesh_bvh
 if TYPE_CHECKING:
     from pathlib import Path
     from .color import Color
+    from .matrix import Matrix
     from .proto import session_pb2
 
 
@@ -936,6 +937,12 @@ class Session:
         node = self._add_object("components", component, "component", parent)
 
         return node if node is not None else self._node_of(component.guid)
+
+    def add_matrix(
+        self, matrix: Matrix, parent: TreeNode | None = None
+    ) -> TreeNode:
+        """Add a matrix as its component (type_name Matrix, the matrix's guid), placed by set_xform on that guid; a guid already live adds nothing and returns the node that guid has."""
+        return self.add_component(matrix.to_component(), parent)
 
     def add_definition(self, definition: Any) -> str:
         """Add a definition, geometry in its own frame that instances share; returns its guid, also when that guid is already defined, and "" for None or a guid an object, instance or component holds."""
