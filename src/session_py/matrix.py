@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import math
 import uuid
+
+import numpy as np
 from typing import TYPE_CHECKING
 
 from .color import Color
@@ -64,6 +66,43 @@ class Matrix:
         return Matrix(rows, cols)
 
     @staticmethod
+    def array(values: list[list[float]]) -> "Matrix":
+        """Construct a matrix from rows, like a two-dimensional NumPy array."""
+        return Matrix.from_rows(values)
+
+    @staticmethod
+    def column(values: list[float]) -> "Matrix":
+        """Construct a column vector."""
+        return Matrix.from_vec(len(values), 1, values)
+
+    @staticmethod
+    def full(rows: int, cols: int, value: float) -> "Matrix":
+        """Construct a constant matrix."""
+        result = Matrix(rows, cols)
+        result.data = [float(value)] * len(result.data)
+        return result
+
+    @staticmethod
+    def ones(rows: int, cols: int) -> "Matrix":
+        """Construct a matrix of ones."""
+        return Matrix.full(rows, cols, 1.0)
+
+    @staticmethod
+    def eye(n: int) -> "Matrix":
+        """Construct an identity matrix."""
+        return Matrix.identity(n)
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        """Return (rows, cols)."""
+        return self.rows, self.cols
+
+    @property
+    def T(self) -> "Matrix":
+        """Return the transpose."""
+        return self.transpose()
+
+    @staticmethod
     def identity(n: int) -> "Matrix":
         """Construct an n x n identity matrix."""
 
@@ -123,6 +162,22 @@ class Matrix:
                 m[i, j] = cols_list[j][i]
 
         return m
+
+    @staticmethod
+    def diag(values: list[float]) -> "Matrix":
+        """Construct a square matrix with the given diagonal values."""
+        return Matrix.from_vec(len(values), len(values), np.diag(values).ravel().tolist())
+
+    def block(self, row: int, col: int, rows: int, cols: int) -> "Matrix":
+        """Copy a rectangular block; indices are zero-based and sizes are counts."""
+        if min(row, col, rows, cols) < 0 or row > self.rows or col > self.cols or rows > self.rows - row or cols > self.cols - col:
+            raise ValueError("Matrix block is out of bounds")
+        values = self._array()[row:row + rows, col:col + cols]
+        return Matrix.from_vec(rows, cols, values.ravel().tolist())
+
+    def _array(self) -> np.ndarray:
+        """Copy the current row-major data into a numeric array."""
+        return np.asarray(self.data, dtype=float).reshape(self.rows, self.cols)
 
     def duplicate(self) -> "Matrix":
         """Copy with a new guid and the same data."""
@@ -241,21 +296,39 @@ class Matrix:
 
             return result
 
+        return self.matmul(other)
+
+    def __matmul__(self, other: "Matrix") -> "Matrix":
+        """Multiply by a dimension-compatible matrix, including column vectors."""
+        return self.matmul(other)
+
+    def matmul(self, other: "Matrix") -> "Matrix":
+        """Multiply by a dimension-compatible matrix, including column vectors."""
         if self.cols != other.rows:
             raise ValueError("Matrix dimensions are incompatible for multiplication")
+        values = self._array() @ other._array()
+        return Matrix.from_vec(self.rows, other.cols, values.ravel().tolist())
 
-        result = Matrix(self.rows, other.cols)
+    def hadamard(self, other: "Matrix") -> "Matrix":
+        """Multiply matching entries of equal-sized matrices."""
+        if self.rows != other.rows or self.cols != other.cols:
+            raise ValueError("Matrix dimensions must match for entrywise multiplication")
+        values = self._array() * other._array()
+        return Matrix.from_vec(self.rows, self.cols, values.ravel().tolist())
 
-        for i in range(self.rows):
-            for j in range(other.cols):
-                s = 0.0
+    def scale_rows(self, values: list[float]) -> "Matrix":
+        """Scale each row without constructing a diagonal matrix."""
+        if len(values) != self.rows:
+            raise ValueError("Matrix row scale count must match its rows")
+        scaled = self._array() * np.asarray(values, dtype=float).reshape(self.rows, 1)
+        return Matrix.from_vec(self.rows, self.cols, scaled.ravel().tolist())
 
-                for k in range(self.cols):
-                    s += self[i, k] * other[k, j]
-
-                result[i, j] = s
-
-        return result
+    def scale_cols(self, values: list[float]) -> "Matrix":
+        """Scale each column without constructing a diagonal matrix."""
+        if len(values) != self.cols:
+            raise ValueError("Matrix column scale count must match its columns")
+        scaled = self._array() * np.asarray(values, dtype=float).reshape(1, self.cols)
+        return Matrix.from_vec(self.rows, self.cols, scaled.ravel().tolist())
 
     def __eq__(self, other: object) -> bool:
         """Compare dimensions, values within the matrix comparison tolerance, colours and cell size."""
@@ -285,16 +358,14 @@ class Matrix:
     # ═══════════════════════════════════════════════════════════════════════════
     # Linear algebra
     # ═══════════════════════════════════════════════════════════════════════════
+    def row_norms(self) -> "Matrix":
+        """Return the Euclidean norm of each row as a column vector."""
+        values = np.hypot.reduce(self._array(), axis=1, initial=0.0)
+        return Matrix.from_vec(self.rows, 1, values.tolist())
+
     def transpose(self) -> "Matrix":
         """Return the transpose."""
-
-        result = Matrix(self.cols, self.rows)
-
-        for i in range(self.rows):
-            for j in range(self.cols):
-                result[j, i] = self[i, j]
-
-        return result
+        return Matrix.from_vec(self.cols, self.rows, self._array().T.ravel().tolist())
 
     def _lu_internal(self) -> tuple["Matrix", "Matrix", "Matrix", int]:
         """Return (L, U, P, swaps) by partial pivoting."""
@@ -418,48 +489,43 @@ class Matrix:
         return result
 
     def solve(self, b: "Matrix") -> "Matrix | None":
-        """Return x with A * x = b, or None when no compatible unique solution exists."""
-
-        if not self.is_square() or b.rows != self.rows or b.cols != 1:
+        """Solve A * X = B for one or more columns using partial pivoting; None on invalid or singular input."""
+        if not self.is_square() or b.rows != self.rows or b.cols == 0:
             return None
+        a, rhs = self._array(), b._array()
+        if not np.isfinite(a).all() or not np.isfinite(rhs).all():
+            return None
+        try:
+            x = np.linalg.solve(a, rhs)
+        except np.linalg.LinAlgError:
+            return None
+        if not np.isfinite(x).all():
+            return None
+        return Matrix.from_vec(self.rows, b.cols, x.ravel().tolist())
 
-        n = self.rows
-        lower, u, p, _swaps = self._lu_internal()
-
-        for i in range(n):
-            if abs(u[i, i]) < PIVOT_TOLERANCE:
-                return None
-
-        pb = [0.0] * n
-
-        for i in range(n):
-            for j in range(n):
-                pb[i] += p[i, j] * b[j, 0]
-
-        y = [0.0] * n
-
-        for i in range(n):
-            y[i] = pb[i]
-
-            for j in range(i):
-                y[i] -= lower[i, j] * y[j]
-
-        x = [0.0] * n
-
-        for i in range(n - 1, -1, -1):
-            x[i] = y[i]
-
-            for j in range(i + 1, n):
-                x[i] -= u[i, j] * x[j]
-
-            x[i] /= u[i, i]
-
-        result = Matrix(n, 1)
-
-        for i in range(n):
-            result[i, 0] = x[i]
-
-        return result
+    def solve_positive_definite(self, b: "Matrix") -> "Matrix | None":
+        """Solve a symmetric positive-definite system by Cholesky; None on invalid input."""
+        if not self.is_square() or b.rows != self.rows or b.cols == 0:
+            return None
+        a, x = self._array(), b._array().copy()
+        if not np.isfinite(a).all() or not np.isfinite(x).all():
+            return None
+        eps = 32.0 * np.finfo(float).eps
+        if not np.all(np.abs(a - a.T) <= eps * np.maximum(np.abs(a), np.abs(a.T))):
+            return None
+        try:
+            lower = np.linalg.cholesky(a)
+        except np.linalg.LinAlgError:
+            return None
+        if not np.isfinite(lower).all():
+            return None
+        for i in range(self.rows):
+            x[i] = (x[i] - lower[i, :i] @ x[:i]) / lower[i, i]
+        for i in range(self.rows - 1, -1, -1):
+            x[i] = (x[i] - lower[i + 1:, i] @ x[i + 1:]) / lower[i, i]
+        if not np.isfinite(x).all():
+            return None
+        return Matrix.from_vec(self.rows, b.cols, x.ravel().tolist())
 
     def qr_decompose(self) -> tuple["Matrix", "Matrix"]:
         """Return (Q, R) from Gram-Schmidt decomposition."""

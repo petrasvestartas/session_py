@@ -517,5 +517,140 @@ def test_matrix_shape_errors():
     MINI_CHECK(proto_data)
 
 
+@MINI_TEST("Matrix", "Tutorial Operations")
+def test_matrix_tutorial_operations():
+    from session_py import Matrix
+
+    a = Matrix.from_rows([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    diagonal = Matrix.diag([2.0, 3.0])
+    MINI_CHECK(diagonal == Matrix.from_rows([[2.0, 0.0], [0.0, 3.0]]))
+    MINI_CHECK(a.block(0, 1, 2, 2) == Matrix.from_rows([[2.0, 3.0], [5.0, 6.0]]))
+    MINI_CHECK(a.block(2, 3, 0, 0).data == [])
+    MINI_CHECK(a.scale_rows([2.0, 3.0]) == diagonal.matmul(a))
+    MINI_CHECK(a.scale_cols([2.0, 3.0, 4.0]) == a.matmul(Matrix.diag([2.0, 3.0, 4.0])))
+    MINI_CHECK(a.hadamard(a) == Matrix.from_rows([[1.0, 4.0, 9.0], [16.0, 25.0, 36.0]]))
+    MINI_CHECK(Matrix.from_rows([[3.0, 4.0], [0.0, 0.0]]).row_norms() == Matrix.from_cols([[5.0, 0.0]]))
+    MINI_CHECK(Matrix.zeros(2, 0).row_norms() == Matrix.zeros(2, 1))
+    MINI_CHECK(a.matmul(Matrix.from_cols([[1.0, 0.0, -1.0]])) == Matrix.from_cols([[-2.0, -2.0]]))
+    MINI_CHECK(a == a.transpose().transpose())
+    MINI_CHECK(Matrix.diag([]).rows == 0)
+
+
+@MINI_TEST("Matrix", "Solve Multiple")
+def test_matrix_solve_multiple():
+    from session_py import Matrix
+
+    a = Matrix.from_rows([[0.0, 2.0], [1.0, 3.0]])
+    b = Matrix.from_rows([[8.0, 10.0, 12.0], [13.0, 17.0, 21.0]])
+    expected = Matrix.from_rows([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    x = a.solve(b)
+    MINI_CHECK(x is not None)
+    MINI_CHECK((x - expected).norm_inf() < 1e-12)
+    MINI_CHECK((a.matmul(x) - b).norm_inf() < 1e-12)
+    small = (Matrix.identity(2) * 1e-200).solve(expected * 1e-200)
+    MINI_CHECK(small is not None)
+    MINI_CHECK((small - expected).norm_inf() < 1e-12)
+    MINI_CHECK(Matrix.zeros(0, 0).solve(Matrix.zeros(0, 3)).cols == 3)
+
+
+@MINI_TEST("Matrix", "Solve Positive Definite")
+def test_matrix_solve_positive_definite():
+    from session_py import Matrix
+
+    a = Matrix.from_rows([[4.0, 1.0], [1.0, 3.0]])
+    b = Matrix.from_rows([[8.0, 13.0, 18.0], [13.0, 17.0, 21.0]])
+    expected = Matrix.from_rows([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    x = a.solve_positive_definite(b)
+    MINI_CHECK(x is not None)
+    MINI_CHECK((x - expected).norm_inf() < 1e-12)
+    MINI_CHECK((a.matmul(x) - b).norm_inf() < 1e-12)
+    small = (Matrix.identity(2) * 1e-200).solve_positive_definite(expected * 1e-200)
+    MINI_CHECK(small is not None)
+    MINI_CHECK((small - expected).norm_inf() < 1e-12)
+    MINI_CHECK(Matrix.zeros(0, 0).solve_positive_definite(Matrix.zeros(0, 3)).cols == 3)
+
+
+@MINI_TEST("Matrix", "Solver Errors")
+def test_matrix_solver_errors():
+    from session_py import Matrix
+
+    rhs = Matrix.identity(2)
+    singular = Matrix.from_rows([[1.0, 2.0], [2.0, 4.0]])
+    indefinite = Matrix.from_rows([[1.0, 2.0], [2.0, 1.0]])
+    asymmetric = Matrix.from_rows([[4.0, 1.0], [0.0, 3.0]])
+    MINI_CHECK(singular.solve(rhs) is None)
+    MINI_CHECK(singular.solve_positive_definite(rhs) is None)
+    MINI_CHECK(indefinite.solve_positive_definite(rhs) is None)
+    MINI_CHECK(asymmetric.solve_positive_definite(rhs) is None)
+    MINI_CHECK(Matrix.zeros(2, 3).solve(rhs) is None)
+    MINI_CHECK(rhs.solve(Matrix.zeros(3, 1)) is None)
+    MINI_CHECK(rhs.solve(Matrix.zeros(2, 0)) is None)
+    MINI_CHECK(rhs.solve_positive_definite(Matrix.zeros(3, 1)) is None)
+    MINI_CHECK(rhs.solve_positive_definite(Matrix.zeros(2, 0)) is None)
+    bad = Matrix.from_rows([[float("nan"), 0.0], [0.0, 1.0]])
+    MINI_CHECK(bad.solve(rhs) is None)
+    MINI_CHECK(rhs.solve(bad) is None)
+    MINI_CHECK(bad.solve_positive_definite(rhs) is None)
+    MINI_CHECK(rhs.solve_positive_definite(bad) is None)
+
+
+@MINI_TEST("Matrix", "Force Density")
+def test_matrix_force_density():
+    from session_py import Matrix
+
+    c_s = Matrix.from_rows([[1.0, -1.0, 0.0, 0.0, 0.0], [1.0, 0.0, -1.0, 0.0, 0.0], [1.0, 0.0, 0.0, -1.0, 0.0], [1.0, 0.0, 0.0, 0.0, -1.0]])
+    c = c_s.block(0, 0, 4, 1)
+    cf = c_s.block(0, 1, 4, 4)
+    fixed = Matrix.from_rows([[-1.0, -1.0, 0.0], [1.0, -1.0, 0.0], [1.0, 1.0, 0.0], [-1.0, 1.0, 0.0]])
+    loads = Matrix.from_rows([[0.0, 0.0, -1.0]])
+    d = c.transpose().matmul(c.scale_rows([1.0, 1.0, 1.0, 1.0]))
+    df = c.transpose().matmul(cf.scale_rows([1.0, 1.0, 1.0, 1.0]))
+    rhs = loads - df.matmul(fixed)
+    xyz = d.solve_positive_definite(rhs)
+    MINI_CHECK(xyz is not None)
+    MINI_CHECK((xyz - Matrix.from_rows([[0.0, 0.0, -0.25]])).norm_inf() < 1e-12)
+    MINI_CHECK((d.solve(rhs) - xyz).norm_inf() < 1e-12)
+    uvw = c.matmul(xyz) + cf.matmul(fixed)
+    lengths = uvw.row_norms()
+    MINI_CHECK(abs(lengths[0, 0] - math.sqrt(2.0625)) < 1e-12)
+    MINI_CHECK((c.transpose().matmul(uvw) - loads).norm_inf() < 1e-12)
+    reactions = cf.transpose().matmul(uvw)
+    MINI_CHECK(abs(reactions[0, 2] + reactions[1, 2] + reactions[2, 2] + reactions[3, 2] - 1.0) < 1e-12)
+
+
+@MINI_TEST("Matrix", "Array Constructors")
+def test_matrix_array_constructors():
+    from session_py import Matrix
+
+    a = Matrix.array([[1.0, 2.0], [3.0, 4.0]])
+    MINI_CHECK(a == Matrix.from_rows([[1.0, 2.0], [3.0, 4.0]]))
+    MINI_CHECK(Matrix.column([2.0, 3.0]) == Matrix.from_cols([[2.0, 3.0]]))
+    MINI_CHECK(Matrix.ones(2, 3) == Matrix.full(2, 3, 1.0))
+    MINI_CHECK(Matrix.full(2, 2, -2.0).data == [-2.0, -2.0, -2.0, -2.0])
+    MINI_CHECK(Matrix.eye(3) == Matrix.identity(3))
+    MINI_CHECK(a.shape == (2, 2))
+    MINI_CHECK(Matrix.column([]).rows == 0 and Matrix.column([]).cols == 1)
+    MINI_CHECK(Matrix.full(0, 3, 2.0).data == [])
+
+
+@MINI_TEST("Matrix", "Operation Errors")
+def test_matrix_operation_errors():
+    from session_py import Matrix
+
+    a = Matrix.ones(2, 3)
+    invalid = [
+        lambda: a.block(3, 0, 0, 0), lambda: a.block(1, 1, 2, 2),
+        lambda: a.scale_rows([1.0]), lambda: a.scale_cols([1.0]),
+        lambda: a.hadamard(Matrix.eye(2)), lambda: a.matmul(Matrix.eye(2)),
+    ]
+    for operation in invalid:
+        rejected = False
+        try:
+            operation()
+        except ValueError:
+            rejected = True
+        MINI_CHECK(rejected)
+
+
 if __name__ == "__main__":
     run_all("python")
