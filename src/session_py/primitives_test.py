@@ -111,15 +111,21 @@ def test_nurbscurve_ellipse():
 def test_nurbscurve_arc():
     from session_py import Primitives
     from session_py import Point
+    import math
 
     start = Point(0.0, 0.0, 0.0)
     mid = Point(1.0, 1.0, 0.0)
     end = Point(2.0, 0.0, 0.0)
     curve = Primitives.arc(start, mid, end)
+    quarter_mid = Point(math.sqrt(0.5), math.sqrt(0.5), 0.0)
+    quarter = Primitives.arc(Point(1.0, 0.0, 0.0), quarter_mid, Point(0.0, 1.0, 0.0))
 
     MINI_CHECK(curve.cv_count() == 3)
     MINI_CHECK(curve.order() == 3)
     MINI_CHECK(curve.is_rational())
+    MINI_CHECK(TOLERANCE.is_point_close(curve.point_at(0.5), mid))
+    MINI_CHECK(TOLERANCE.is_point_close(quarter.point_at(0.5), quarter_mid))
+    MINI_CHECK(abs(quarter.point_at(0.25).distance(Point(0.0, 0.0, 0.0)) - 1.0) < 1e-9)
 
 
 @MINI_TEST("Primitives", "Nurbscurve Parabola")

@@ -75,6 +75,82 @@ def _build_quad_face(b) -> int:
     return b.add_face(si, [BRepRef(wi, BRepOrientation.Forward)])
 
 
+def _quarter_arc(radius: float, y: float):
+    """Quarter arc of the given radius in the xz plane at y, from (r, y, 0) to (0, y, r)"""
+
+    from session_py import Point
+    from session_py import Primitives
+    import math
+
+    c = radius * math.sqrt(0.5)
+
+    return Primitives.arc(Point(radius, y, 0.0), Point(c, y, c), Point(0.0, y, radius))
+
+
+def _build_ring_sector(ro: float, ri: float, width: float):
+    """Closed solid of six ruled patches between four quarter arcs of radii ro and ri at y = 0 and y = width"""
+
+    from session_py import BRep
+    from session_py import BRepOrientation
+    from session_py import BRepRef
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import Primitives
+
+    b = BRep()
+    arcs = [_quarter_arc(ro, 0.0), _quarter_arc(ro, width), _quarter_arc(ri, 0.0), _quarter_arc(ri, width)]
+    edges = {}
+
+    for k in range(4):
+        b.add_vertex(arcs[k].point_at(arcs[k].domain_start()))
+        b.add_vertex(arcs[k].point_at(arcs[k].domain_end()))
+        edges[(2 * k, 2 * k + 1)] = b.add_edge(b.add_curve_3d(arcs[k]), 2 * k, 2 * k + 1)
+
+    rulings = [(0, 2), (4, 6), (0, 4), (2, 6)]
+
+    for end in range(2):
+        for ruling in rulings:
+            start = ruling[0] + end
+            stop = ruling[1] + end
+            ends = [b.m_vertices[start].point, b.m_vertices[stop].point]
+            edges[(start, stop)] = b.add_edge(b.add_curve_3d(NurbsCurve.create(False, 1, ends)), start, stop)
+
+    patches = [
+        Primitives.create_ruled(arcs[0], arcs[1]),
+        Primitives.create_ruled(arcs[2], arcs[3]),
+        Primitives.create_ruled(arcs[0], arcs[2]),
+        Primitives.create_ruled(arcs[1], arcs[3]),
+        Primitives.create_ruled(b.m_curves_3d[edges[(0, 2)]], b.m_curves_3d[edges[(4, 6)]]),
+        Primitives.create_ruled(b.m_curves_3d[edges[(1, 3)]], b.m_curves_3d[edges[(5, 7)]]),
+    ]
+    corners = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]]
+    uv = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)]
+    shell = []
+
+    for i in range(6):
+        si = b.add_surface(patches[i])
+        wire = []
+
+        for k in range(4):
+            next = (k + 1) % 4
+            a = min(corners[i][k], corners[i][next])
+            z = max(corners[i][k], corners[i][next])
+            edge = edges[(a, z)]
+            forward = b.m_edges[edge].start_vertex == corners[i][k]
+            pcurve = [uv[k], uv[next]] if forward else [uv[next], uv[k]]
+            b.add_pcurve(edge, si, b.add_curve_2d(NurbsCurve.create(False, 1, pcurve)))
+            wire.append(BRepRef(edge, BRepOrientation.Forward if forward else BRepOrientation.Reversed))
+
+        fi = b.add_face(si, [BRepRef(b.add_wire(wire), BRepOrientation.Forward)])
+        away = patches[i].point_at(0.5, 0.5) - patches[i ^ 1].point_at(0.5, 0.5)
+        outward = patches[i].normal_at(0.5, 0.5).dot(away) > 0.0
+        shell.append(BRepRef(fi, BRepOrientation.Forward if outward else BRepOrientation.Reversed))
+
+    b.add_solid([BRepRef(b.add_shell(shell), BRepOrientation.Forward)])
+
+    return b
+
+
 @MINI_TEST("BRep", "Shared Grid Boundary")
 def test_brep_shared_grid_boundary():
     from session_py import BRep
@@ -1191,6 +1267,21 @@ def test_brep_volume_far_from_origin():
     box = BRep.create_box(2.0, 3.0, 4.0).transformed(far)
 
     MINI_CHECK(abs(box.volume() / 24.0 - 1.0) < 1e-9)
+
+
+@MINI_TEST("BRep", "Volume Planar Curved Boundary")
+def test_brep_volume_planar_curved_boundary():
+    from session_py.tolerance import PI
+
+    sector = _build_ring_sector(2000.0, 1880.0, 600.0)
+    fm = sector.face_meshes()
+    m = sector.mesh()
+    ref = PI / 4.0 * (2000.0 * 2000.0 - 1880.0 * 1880.0) * 600.0
+
+    MINI_CHECK(sector.is_solid() and len(fm) == 6)
+    MINI_CHECK(len(fm[2].face) > 2 and len(fm[3].face) > 2)
+    MINI_CHECK(m.is_closed())
+    MINI_CHECK(abs(sector.volume() - ref) / ref < 0.01)
 
 
 @MINI_TEST("BRep", "Face Polylines Box")

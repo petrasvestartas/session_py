@@ -1598,21 +1598,22 @@ class NurbsSurface:
 
             self.m_mesh = mesher.mesh()
 
-        return self.m_mesh if self.m_mesh is not None else Mesh()
+        return copy.deepcopy(self.m_mesh) if self.m_mesh is not None else Mesh()
 
     def mesh(self) -> Mesh:
-        """Return two triangles for a planar surface, else the span grid, cached in m_mesh."""
+        """Return two triangles for a planar bilinear patch, else the span grid, vertices tagged u and v, cached in m_mesh."""
 
         from .remesh_nurbssurface_grid import RemeshNurbsSurfaceGrid
 
         if self.m_mesh is None and self.is_valid():
+            bilinear = self.degree(0) == 1 and self.degree(1) == 1 and self.cv_count(0) == 2 and self.cv_count(1) == 2
             self.m_mesh = (
                 self._mesh_planar()
-                if self.is_planar(None, 1e-6)
+                if bilinear and self.is_planar(None, 1e-6)
                 else RemeshNurbsSurfaceGrid.from_u_v(self, 0, 0)
             )
 
-        return self.m_mesh if self.m_mesh is not None else Mesh()
+        return copy.deepcopy(self.m_mesh) if self.m_mesh is not None else Mesh()
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
@@ -2075,27 +2076,29 @@ class NurbsSurface:
         return (su.dot(su), su.dot(sv), sv.dot(sv), suu.dot(n), suv.dot(n), svv.dot(n))
 
     def _mesh_planar(self) -> Mesh:
-        """Return two triangles through the four corners with one shared normal."""
+        """Return two triangles through the corners tagged u and v, one when the u = 0 side is a point, one shared normal."""
 
         result = Mesh()
-        p00 = self.point_at_corner(0, 0)
-        p10 = self.point_at_corner(1, 0)
-        p11 = self.point_at_corner(1, 1)
-        p01 = self.point_at_corner(0, 1)
-        v0 = result.add_vertex(p00)
-        v1 = result.add_vertex(p10)
-        v2 = result.add_vertex(p11)
-        result.add_face([v0, v1, v2])
+        du = self.domain(0)
+        dv = self.domain(1)
+        us = [du[0], du[1], du[1], du[0]]
+        vs = [dv[0], dv[0], dv[1], dv[1]]
+        triangle = self.point_at_corner(0, 0).distance(self.point_at_corner(0, 1)) < 1e-10
+        count = 3 if triangle else 4
+        keys = []
 
-        if p00.distance(p01) < 1e-10:
-            e1 = p10 - p00
-            e2 = p11 - p00
-            normal = e1.cross(e2)
-        else:
-            v3 = result.add_vertex(p01)
-            result.add_face([v0, v2, v3])
-            derivs = self.evaluate(0.5, 0.5, 1)
-            normal = derivs[1].cross(derivs[2])
+        for k in range(count):
+            keys.append(result.add_vertex(self.point_at(us[k], vs[k])))
+            result.vertex[keys[k]].attributes["u"] = us[k]
+            result.vertex[keys[k]].attributes["v"] = vs[k]
+
+        result.add_face([keys[0], keys[1], keys[2]])
+
+        if not triangle:
+            result.add_face([keys[0], keys[2], keys[3]])
+
+        derivs = self.evaluate(0.5 * (du[0] + du[1]), 0.5 * (dv[0] + dv[1]), 1)
+        normal = derivs[1].cross(derivs[2])
 
         if normal.magnitude() > 1e-15:
             normal = normal.normalized()

@@ -886,6 +886,26 @@ def test_meshing():
     MINI_CHECK(mesh_planar_adaptive.is_valid())
 
 
+@MINI_TEST("NurbsSurface", "Mesh Planar Curved Boundary")
+def test_mesh_planar_curved_boundary():
+    from session_py import Point
+    from session_py import Primitives
+    from session_py.tolerance import PI
+    import math
+
+    c = math.sqrt(0.5)
+    outer = Primitives.arc(Point(2.0, 0.0, 0.0), Point(2.0 * c, 0.0, 2.0 * c), Point(0.0, 0.0, 2.0))
+    inner = Primitives.arc(Point(1.0, 0.0, 0.0), Point(c, 0.0, c), Point(0.0, 0.0, 1.0))
+    side = Primitives.create_ruled(outer, inner)
+    mesh = side.mesh()
+    ref = PI / 4.0 * (2.0 * 2.0 - 1.0 * 1.0)
+
+    MINI_CHECK(side.is_planar())
+    MINI_CHECK(len(mesh.vertex) > 4)
+    MINI_CHECK("u" in next(iter(mesh.vertex.values())).attributes)
+    MINI_CHECK(abs(mesh.area() - ref) / ref < 0.01)
+
+
 @MINI_TEST("NurbsSurface", "Split By Plane")
 def test_nurbssurface_split_by_plane():
     from session_py import Plane
