@@ -125,10 +125,19 @@ def _surface_mid_grid(
 # ═══════════════════════════════════════════════════════════════════════════
 # Curve compatibility
 # ═══════════════════════════════════════════════════════════════════════════
-def _merge_nurbsknot_vectors(a: list[float], b: list[float]) -> list[float]:
-    """Sorted union of two nurbsknot vectors, equal values kept once."""
+def _nurbsknot_tolerance(a: list[float], b: list[float]) -> float:
+    """Within this of each other two nurbsknots of the vectors are one knot: 1e-7 of the wider span, above what insert_nurbsknot treats as the same knot, so a knot nearly on another is never inserted beside it"""
 
-    tol = 1e-10
+    span_a = a[-1] - a[0] if a else 0.0
+    span_b = b[-1] - b[0] if b else 0.0
+
+    return 1e-7 * max(span_a, span_b)
+
+
+def _merge_nurbsknot_vectors(a: list[float], b: list[float]) -> list[float]:
+    """Sorted union of two nurbsknot vectors, values within _nurbsknot_tolerance kept once at the first vector's value."""
+
+    tol = _nurbsknot_tolerance(a, b)
     merged = []
     i = 0
     j = 0
@@ -157,9 +166,9 @@ def _merge_nurbsknot_vectors(a: list[float], b: list[float]) -> list[float]:
 
 
 def _nurbsknot_vectors_equal(a: list[float], b: list[float]) -> bool:
-    """True when both nurbsknot vectors match within 1e-10."""
+    """True when both nurbsknot vectors match within _nurbsknot_tolerance."""
 
-    tol = 1e-10
+    tol = _nurbsknot_tolerance(a, b)
 
     if len(a) != len(b):
         return False
@@ -211,19 +220,50 @@ def _unify_curves(curves: list[NurbsCurve]) -> bool:
     for i in range(1, len(curves)):
         unified = _merge_nurbsknot_vectors(unified, curves[i].get_nurbsknots())
 
-    tol = 1e-10
+    tol = _nurbsknot_tolerance(unified, unified)
 
     for c in curves:
         nurbsknots = c.get_nurbsknots()
         ci = 0
+        mult = 0
 
         for ui in range(len(unified)):
+            if ui == 0 or abs(unified[ui] - unified[ui - 1]) >= tol:
+                mult = 0
+
+            mult += 1
+
             if ci < len(nurbsknots) and abs(nurbsknots[ci] - unified[ui]) < tol:
+                if nurbsknots[ci] != unified[ui]:
+                    c.set_nurbsknot(ci, unified[ui])
+
                 ci += 1
-            else:
-                c.insert_nurbsknot(unified[ui], 1)
+            elif not c.insert_nurbsknot(unified[ui], mult):
+                return False
+
+    for c in curves:
+        if not _nurbsknot_vectors_equal(c.get_nurbsknots(), curves[0].get_nurbsknots()):
+            return False
 
     return True
+
+
+def _resample_curves(curves: list[NurbsCurve]) -> bool:
+    """Every curve interpolated anew through the same count of points at equal steps of its [0, 1] domain with uniform nurbsknots, so the nurbsknot vectors agree where unification could not make them; false when a curve cannot be interpolated."""
+
+    count = 4
+
+    for c in curves:
+        count = max(count, c.cv_count())
+
+    for i in range(len(curves)):
+        points = [curves[i].point_at(k / (count - 1)) for k in range(count)]
+        curves[i] = NurbsCurve.create_interpolated(points, CurveNurbsKnotStyle.Uniform)
+
+        if not curves[i].is_valid() or not curves[i].set_domain(0.0, 1.0):
+            return False
+
+    return _unify_curves(curves)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1208,11 +1248,10 @@ class Primitives:
 
         curves = [curve_a.duplicate(), curve_b.duplicate()]
 
-        if (
-            not curves[0].set_domain(0.0, 1.0)
-            or not curves[1].set_domain(0.0, 1.0)
-            or not _unify_curves(curves)
-        ):
+        if not curves[0].set_domain(0.0, 1.0) or not curves[1].set_domain(0.0, 1.0):
+            return NurbsSurface()
+
+        if not _unify_curves(curves) and not _resample_curves(curves):
             return NurbsSurface()
 
         cv_count_u = curves[0].cv_count()

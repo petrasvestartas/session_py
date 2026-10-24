@@ -349,6 +349,42 @@ def test_nurbssurface_quad_sphere():
 # ═══════════════════════════════════════════════════════════════════════════
 # NurbsSurface factory methods
 # ═══════════════════════════════════════════════════════════════════════════
+@MINI_TEST("Primitives", "Nurbssurface Ruled Nearby Knots")
+def test_nurbssurface_ruled_nearby_knots():
+    from session_py import Primitives
+    from session_py import NurbsCurve
+    from session_py import Point
+    from session_py import Xform
+
+    wave = [
+        Point(0.0, 0.0, 0.0),
+        Point(1.0, 0.0, 0.8),
+        Point(2.5, 0.0, -0.4),
+        Point(3.5, 0.0, 0.9),
+        Point(5.0, 0.0, 0.0),
+    ]
+    crv_a = NurbsCurve.create_interpolated(wave)
+    crv_b = crv_a.duplicate()
+    crv_a.set_domain(0.0, 1.0)
+    crv_b.set_domain(0.0, 1.0)
+    crv_b.transform(Xform.translation(0.0, 3.0, 0.0))
+
+    for k in range(crv_b.degree(), crv_b.cv_count() - 1):
+        crv_b.set_nurbsknot(k, crv_b.nurbsknot(k) + 1e-9)
+
+    srf = Primitives.create_ruled(crv_a, crv_b)
+    apart = 0.0
+
+    for k in range(11):
+        u = k / 10.0
+        apart = max(apart, srf.point_at(u, 0.0).distance(crv_a.point_at(u)))
+        apart = max(apart, srf.point_at(u, 1.0).distance(crv_b.point_at(u)))
+
+    MINI_CHECK(srf.is_valid())
+    MINI_CHECK(srf.cv_count(0) == crv_a.cv_count() and srf.cv_count(1) == 2)
+    MINI_CHECK(apart < 1e-6)
+
+
 @MINI_TEST("Primitives", "Nurbssurface Ruled")
 def test_nurbssurface_ruled():
     from session_py import Primitives

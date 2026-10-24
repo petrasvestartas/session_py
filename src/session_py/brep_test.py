@@ -87,8 +87,26 @@ def _quarter_arc(radius: float, y: float):
     return Primitives.arc(Point(radius, y, 0.0), Point(c, y, c), Point(0.0, y, radius))
 
 
-def _build_ring_sector(ro: float, ri: float, width: float):
-    """Closed solid of six ruled patches between four quarter arcs of radii ro and ri at y = 0 and y = width"""
+def _shell_orientation(b, fi: int, fj: int, oj) -> int:
+    """Orientation of face fi in a shell where face fj already has orientation oj: the shell runs their shared edge the opposite way on each; -1 when they share no edge"""
+
+    from session_py import BRepOrientation
+
+    for er in b.wire_edges(b.m_faces[fi].wires[0]):
+        for es in b.wire_edges(b.m_faces[fj].wires[0]):
+            if er.index != es.index:
+                continue
+
+            direction_j = (es.orientation == BRepOrientation.Forward) != (oj == BRepOrientation.Reversed)
+            reversed_i = (er.orientation == BRepOrientation.Forward) == direction_j
+
+            return 1 if reversed_i else 0
+
+    return -1
+
+
+def _build_six_patch(arcs):
+    """Closed solid of six ruled patches between four arcs (outer a, outer b, inner a, inner b) running the same way: the outer and inner faces, the two sides and the two caps, every face wound outwards, the outer face by its distance from the inner and every other by the shell's consistency with an oriented neighbour"""
 
     from session_py import BRep
     from session_py import BRepOrientation
@@ -98,7 +116,6 @@ def _build_ring_sector(ro: float, ri: float, width: float):
     from session_py import Primitives
 
     b = BRep()
-    arcs = [_quarter_arc(ro, 0.0), _quarter_arc(ro, width), _quarter_arc(ri, 0.0), _quarter_arc(ri, width)]
     edges = {}
 
     for k in range(4):
@@ -125,7 +142,6 @@ def _build_ring_sector(ro: float, ri: float, width: float):
     ]
     corners = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]]
     uv = [Point(0.0, 0.0, 0.0), Point(1.0, 0.0, 0.0), Point(1.0, 1.0, 0.0), Point(0.0, 1.0, 0.0)]
-    shell = []
 
     for i in range(6):
         si = b.add_surface(patches[i])
@@ -141,14 +157,31 @@ def _build_ring_sector(ro: float, ri: float, width: float):
             b.add_pcurve(edge, si, b.add_curve_2d(NurbsCurve.create(False, 1, pcurve)))
             wire.append(BRepRef(edge, BRepOrientation.Forward if forward else BRepOrientation.Reversed))
 
-        fi = b.add_face(si, [BRepRef(b.add_wire(wire), BRepOrientation.Forward)])
-        away = patches[i].point_at(0.5, 0.5) - patches[i ^ 1].point_at(0.5, 0.5)
-        outward = patches[i].normal_at(0.5, 0.5).dot(away) > 0.0
-        shell.append(BRepRef(fi, BRepOrientation.Forward if outward else BRepOrientation.Reversed))
+        b.add_face(si, [BRepRef(b.add_wire(wire), BRepOrientation.Forward)])
+
+    away = patches[0].point_at(0.5, 0.5) - patches[1].point_at(0.5, 0.5)
+    oriented = [0 if patches[0].normal_at(0.5, 0.5).dot(away) > 0.0 else 1, -1, -1, -1, -1, -1]
+
+    for _ in range(6):
+        for i in range(1, 6):
+            for j in range(6):
+                if oriented[i] < 0 and oriented[j] >= 0:
+                    oriented[i] = _shell_orientation(b, i, j, BRepOrientation.Reversed if oriented[j] == 1 else BRepOrientation.Forward)
+
+    shell = []
+
+    for i in range(6):
+        shell.append(BRepRef(i, BRepOrientation.Reversed if oriented[i] == 1 else BRepOrientation.Forward))
 
     b.add_solid([BRepRef(b.add_shell(shell), BRepOrientation.Forward)])
 
     return b
+
+
+def _build_ring_sector(ro: float, ri: float, width: float):
+    """Closed solid of six ruled patches between four quarter arcs of radii ro and ri at y = 0 and y = width"""
+
+    return _build_six_patch([_quarter_arc(ro, 0.0), _quarter_arc(ro, width), _quarter_arc(ri, 0.0), _quarter_arc(ri, width)])
 
 
 @MINI_TEST("BRep", "Shared Grid Boundary")
@@ -226,8 +259,8 @@ def test_brep_shared_grid_boundary():
     first = _boundary_points(meshes[0])
     second = _boundary_points(meshes[1])
 
-    MINI_CHECK(first == second and len(first) == 7)
-    MINI_CHECK(len(meshes[0].face) == len(original[0].face) and len(meshes[1].face) > 0)
+    MINI_CHECK(first == second and len(first) >= 7)
+    MINI_CHECK(len(meshes[0].face) == 2 * (len(first) - 1) and len(meshes[1].face) == len(meshes[0].face))
 
     maximum = 0.0
 
@@ -244,18 +277,10 @@ def test_brep_shared_grid_boundary():
 
     MINI_CHECK(maximum <= 0.005 * 1.5)
 
-    refined = RemeshNurbsSurfaceGrid.from_u_v_q(surfaces[0], 0, 0, 5.0, 0.001)
     meshes = b.face_meshes_q(True, 5.0, 0.001)
     first = _boundary_points(meshes[0])
 
-    MINI_CHECK(
-        first == _boundary_points(meshes[1])
-        and len(meshes[0].face) > 0
-        and len(meshes[1].face) > 0
-    )
-
-    for point in _boundary_points(refined):
-        MINI_CHECK(point in first)
+    MINI_CHECK(first == _boundary_points(meshes[1]) and len(meshes[0].face) == 2 * (len(first) - 1))
 
     cosine = math.cos(5.0 * PI / 180.0)
 
@@ -1198,6 +1223,84 @@ def test_brep_mesh_watertight():
     MINI_CHECK(empty == 0)
     MINI_CHECK(open_edges == 0)
     MINI_CHECK(missing == 0)
+
+
+@MINI_TEST("BRep", "Ruled Watertight")
+def test_brep_ruled_watertight():
+    from session_py import Mesh
+    from session_py import Point
+    from session_py import Primitives
+    from session_py.tolerance import PI
+    import math
+
+    at = lambda r, y, degrees: Point(r * math.cos(degrees * PI / 180.0), y, r * math.sin(degrees * PI / 180.0))
+    meridians = [
+        Primitives.arc(at(1000.0, 0.0, 165.0), at(1000.0, 0.0, 90.0), at(1000.0, 0.0, 15.0)),
+        Primitives.arc(at(1300.0, 300.0, 165.0), at(1300.0, 300.0, 90.0), at(1300.0, 300.0, 15.0)),
+        Primitives.arc(at(880.0, 0.0, 165.0), at(880.0, 0.0, 90.0), at(880.0, 0.0, 15.0)),
+        Primitives.arc(at(1180.0, 300.0, 165.0), at(1180.0, 300.0, 90.0), at(1180.0, 300.0, 15.0)),
+    ]
+    b = _build_six_patch(meridians)
+    fms = b.face_meshes()
+    key = lambda p: (p[0] + 0.0, p[1] + 0.0, p[2] + 0.0)
+    directed = {}
+    empty = 0
+    inward = 0
+    spanning = 0
+    open_edges = 0
+
+    for fi in range(len(fms)):
+        fm = fms[fi]
+
+        if not fm.face:
+            empty += 1
+
+        for verts in fm.face.values():
+            a = fm.vertex[verts[0]].position()
+            c = fm.vertex[verts[1]].position()
+            d = fm.vertex[verts[2]].position()
+            u = 0.0
+            v = 0.0
+            stations = []
+
+            for vk in verts:
+                attributes = fm.vertex[vk].attributes
+                u += attributes.get("u", 0.5) / 3.0
+                v += attributes.get("v", 0.5) / 3.0
+                stations.append(attributes.get("u", 0.5))
+
+            stations.sort()
+
+            if stations[1] - stations[0] > 1e-6 and stations[2] - stations[1] > 1e-6 and fi < 4:
+                spanning += 1
+
+            if (c - a).cross(d - a).dot(b.normal_at(fi, u, v)) <= 0.0:
+                inward += 1
+
+            for i in range(3):
+                edge = (key(fm.vertex[verts[i]].position()), key(fm.vertex[verts[(i + 1) % 3]].position()))
+                directed[edge] = directed.get(edge, 0) + 1
+
+    for (a, c), count in directed.items():
+        if count != 1 or directed.get((c, a), 0) != 1:
+            open_edges += 1
+
+    polygons = []
+
+    for fm in b.face_meshes_q(True, 2.0, 0.0005):
+        for verts in fm.face.values():
+            polygons.append([fm.vertex[verts[0]].position(), fm.vertex[verts[1]].position(), fm.vertex[verts[2]].position()])
+
+    volume = b.volume()
+    fine = Mesh.from_polylines(polygons, 1e-6).volume()
+    outer = float(len(fms[0].face))
+    inner = float(len(fms[1].face))
+
+    MINI_CHECK(b.is_solid() and empty == 0)
+    MINI_CHECK(open_edges == 0)
+    MINI_CHECK(inward == 0 and spanning == 0)
+    MINI_CHECK(abs(fine - 1.0273e8) / 1.0273e8 < 0.01 and abs(volume - fine) / fine < 0.05)
+    MINI_CHECK(outer / inner > 0.5 and outer / inner < 2.0)
 
 
 @MINI_TEST("BRep", "Mesh Orientation")

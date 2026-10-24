@@ -6,6 +6,7 @@ import math
 import sys
 import uuid
 
+from .closest import Closest
 from .color import Color
 from .mesh import Mesh
 from .nurbscurve import NurbsCurve
@@ -2045,6 +2046,366 @@ def _strip_mesh(
     return mesh
 
 
+def _ruled_side(srf: NurbsSurface, crv: NurbsCurve) -> int:
+    """Phase 1: the side of the surface domain a straight two-point pcurve runs along, corner to corner: 0 along v0, 1 along v1, 2 along u0, 3 along u1; -1 for any other pcurve"""
+
+    if crv.degree() != 1 or crv.is_rational() or crv.cv_count() != 2:
+        return -1
+
+    du = srf.domain(0)
+    dv = srf.domain(1)
+    tolerance_u = (du[1] - du[0]) * 1e-9
+    tolerance_v = (dv[1] - dv[0]) * 1e-9
+    c0 = crv.get_cv(0)
+    c1 = crv.get_cv(1)
+
+    for p in (c0, c1):
+        corner_u = min(abs(p[0] - du[0]), abs(p[0] - du[1])) <= tolerance_u
+        corner_v = min(abs(p[1] - dv[0]), abs(p[1] - dv[1])) <= tolerance_v
+
+        if not corner_u or not corner_v:
+            return -1
+
+    if abs(c0[1] - c1[1]) <= tolerance_v and abs(c0[0] - c1[0]) > tolerance_u:
+        return 0 if abs(c0[1] - dv[0]) <= tolerance_v else 1
+
+    if abs(c0[0] - c1[0]) <= tolerance_u and abs(c0[1] - c1[1]) > tolerance_v:
+        return 2 if abs(c0[0] - du[0]) <= tolerance_u else 3
+
+    return -1
+
+
+def _ruled_face(b: BRep, fi: int) -> int:
+    """Phase 1: a face on the whole domain of a curved surface straight across its rulings, its wire four distinct open edges each a straight pcurve along one domain side: the place in the wire of the edge along v0, so the wire turned there reads as the loop at v0, a ruling, the loop at v1 and a ruling; -1 for any other face"""
+
+    face = b.m_faces[fi]
+
+    if len(face.wires) != 1:
+        return -1
+
+    edges = b.wire_edges(face.wires[0])
+    srf = b.m_surfaces[face.surface_index]
+
+    if len(edges) != 4 or srf.degree(1) != 1 or srf.cv_count(1) != 2 or _is_planar_patch(srf):
+        return -1
+
+    for side in range(4):
+        if srf.is_singular(side):
+            return -1
+
+    sides = [-1, -1, -1, -1]
+
+    for k in range(4):
+        edge = b.m_edges[edges[k].index]
+        ci = b.pcurve_index(edges[k].index, fi, edges[k].orientation)
+
+        for j in range(k):
+            if edges[j].index == edges[k].index:
+                return -1
+
+        if edge.degenerated or edge.start_vertex == edge.end_vertex or ci < 0:
+            return -1
+
+        sides[k] = _ruled_side(srf, b.m_curves_2d[ci])
+
+    for side in range(4):
+        if sides.count(side) != 1:
+            return -1
+
+    shift = sides.index(0)
+
+    return shift if sides[(shift + 2) % 4] == 1 else -1
+
+
+def _ruled_edges(b: BRep, fi: int, shift: int) -> list[BRepRef]:
+    """Phase 1: the wire of a ruled face turned to start at its loop along v0"""
+
+    edges = b.wire_edges(b.m_faces[fi].wires[0])
+
+    return edges[shift:] + edges[:shift]
+
+
+def _ruled_spans(srf: NurbsSurface) -> list[float]:
+    """Phase 1: the distinct nurbsknots of a ruled face's surface across u from the start of its domain to its end: the spans within which its loops are smooth, so a kink between two spans never asks for steps"""
+
+    du = srf.domain(0)
+    tolerance = (du[1] - du[0]) * 1e-9
+    spans = [du[0]]
+
+    for k in range(srf.nurbsknot_count(0)):
+        knot = srf.nurbsknot(0, k)
+
+        if knot > spans[-1] + tolerance and knot < du[1] - tolerance:
+            spans.append(knot)
+
+    spans.append(du[1])
+
+    return spans
+
+
+def _ruled_steps(spans: list[float], counts: list[int]) -> list[float]:
+    """Phase 1: the stations across u of a ruled face: every span at its own count of equal steps"""
+
+    steps = []
+
+    for span in range(len(spans) - 1):
+        for k in range(counts[span]):
+            steps.append(spans[span] + (spans[span + 1] - spans[span]) * k / counts[span])
+
+    steps.append(spans[-1])
+
+    return steps
+
+
+def _ruled_excess(srf: NurbsSurface, u0: float, u1: float, count: int, cosine: float, tolerance: float) -> float:
+    """Phase 1: how far one span of a ruled face at count equal steps is from the quality asked, on whichever loop and step is worse: the sag of a chord over the tolerance or the turn of the normals over the angle, as a share of what is allowed; zero or below when the span passes, the normals taken just inside a step so a kink at a station is not a turn"""
+
+    dv = srf.domain(1)
+    excess = -1.0
+
+    for v in dv:
+        for k in range(count):
+            ua = u0 + (u1 - u0) * k / count
+            ub = u0 + (u1 - u0) * (k + 1) / count
+            inside = (ub - ua) * 1e-6
+            a = srf.point_at(ua, v)
+            z = srf.point_at(ub, v)
+            middle = srf.point_at((ua + ub) * 0.5, v)
+            sag = middle.distance(a + (z - a) * 0.5)
+            dot = srf.normal_at(ua + inside, v).dot(srf.normal_at(ub - inside, v))
+            excess = max(excess, sag / tolerance - 1.0 if tolerance > 0.0 else -1.0, (cosine - dot) / (1.0 - cosine))
+
+    return excess
+
+
+def _ruled_counts(srf: NurbsSurface, spans: list[float], scale: float, angle: float, chord: float) -> list[int]:
+    """Phase 1: the steps of every span of a ruled face: one, doubled while the span is coarser than the chord tolerance measured against the whole BRep or the angle allows and doubling still brings it closer, so a kink or a fold inside a span does not ask for ever more steps; 4096 stations at most over all spans"""
+
+    tolerance = scale * chord
+    cosine = math.cos(min(max(angle, 0.1), 179.0) * PI / 180.0)
+    counts = [1] * (len(spans) - 1)
+    total = len(counts)
+
+    for span in range(len(spans) - 1):
+        excess = _ruled_excess(srf, spans[span], spans[span + 1], counts[span], cosine, tolerance)
+
+        while excess > 0.0 and total + counts[span] <= 4096:
+            finer = _ruled_excess(srf, spans[span], spans[span + 1], 2 * counts[span], cosine, tolerance)
+
+            if finer > 0.75 * excess:
+                break
+
+            total += counts[span]
+            counts[span] *= 2
+            excess = finer
+
+    return counts
+
+
+def _ruled_lift(b: BRep, fi: int, er: BRepRef, boundary: _EdgeBoundary) -> list[tuple[float, Point, Point]]:
+    """Phase 1: the canonical points of a loop of a ruled face lifted onto the face along the loop's own iso curve, each the parameter of its closest point there searched between the neighbours of its nearest sample of the curve, in the loop's traversal order with equal parameters kept once; empty while nobody has sampled the edge"""
+
+    samples: list[tuple[float, Point, Point]] = []
+
+    if er.index not in boundary.points:
+        return samples
+
+    srf = b.m_surfaces[b.m_faces[fi].surface_index]
+    crv = b.m_curves_2d[b.pcurve_index(er.index, fi, er.orientation)]
+    c0 = crv.get_cv(0)
+    c1 = crv.get_cv(1)
+    iso = srf.iso_curve(0, c0[1])
+    domain = crv.domain()
+    du = srf.domain(0)
+    count = max(50, iso.cv_count() * 10)
+    table = [iso.point_at(du[0] + (du[1] - du[0]) * k / count) for k in range(count + 1)]
+
+    for p in boundary.points[er.index]:
+        nearest = 0
+
+        for k in range(1, count + 1):
+            if table[k].distance(p) < table[nearest].distance(p):
+                nearest = k
+
+        lo = du[0] + (du[1] - du[0]) * max(nearest - 1, 0) / count
+        hi = du[0] + (du[1] - du[0]) * min(nearest + 1, count) / count
+        u = Closest.curve_point(iso, p, lo, hi)[0]
+        t = domain[0] + (domain[1] - domain[0]) * (u - c0[0]) / (c1[0] - c0[0])
+        samples.append((t, Point(u, c0[1], 0.0), p))
+
+    samples.sort(key=lambda sample: sample[0])
+    kept: list[tuple[float, Point, Point]] = []
+
+    for sample in samples:
+        if not kept or kept[-1][0] != sample[0]:
+            kept.append(sample)
+
+    return kept
+
+
+def _ruled_stations(
+    spans: list[float],
+    counts: list[int],
+    first: list[tuple[float, Point, Point]],
+    second: list[tuple[float, Point, Point]],
+    tolerance: float,
+) -> list[float]:
+    """Phase 1: the stations across u where a ruled face runs its rulings: its own steps in every span and the u of every canonical point of either loop, sorted and merged within the tolerance"""
+
+    stations = _ruled_steps(spans, counts)
+
+    for lifted in (first, second):
+        for sample in lifted:
+            stations.append(sample[1][0])
+
+    stations.sort()
+    merged: list[float] = []
+
+    for u in stations:
+        if not merged or u - merged[-1] > tolerance:
+            merged.append(u)
+
+    return merged
+
+
+def _ruled_extend(
+    srf: NurbsSurface,
+    v: float,
+    stations: list[float],
+    lifted: list[tuple[float, Point, Point]],
+    tolerance: float,
+    ends: tuple[Point, Point],
+    points: list[Point],
+) -> bool:
+    """Phase 1: the stations a loop of a ruled face has no canonical point at yet, added to its edge at the loop's v up to 4096 points on the edge, the domain ends snapped onto the edge's vertices; true when any was added"""
+
+    du = srf.domain(0)
+    added = False
+
+    for u in stations:
+        present = False
+
+        for sample in lifted:
+            present = present or abs(sample[1][0] - u) <= tolerance
+
+        if present or len(points) >= 4096:
+            continue
+
+        p = srf.point_at(u, v)
+
+        if abs(u - du[0]) <= tolerance or abs(u - du[1]) <= tolerance:
+            p = ends[0] if p.distance(ends[0]) <= p.distance(ends[1]) else ends[1]
+
+        points.append(p)
+        added = True
+
+    return added
+
+
+def _ruled_boundaries(
+    b: BRep, face_ruled: list[int], boundary: _EdgeBoundary, scale: float, angle: float, chord: float
+) -> None:
+    """Phase 1: the rulings of every ruled face agreed with its neighbours: each pass every face asks its stations of both loops and adds the points a loop lacks, which the faces sharing that edge pick up on the next pass, until no face adds a point or sixteen passes are spent"""
+
+    spans: list[list[float]] = [[] for _ in face_ruled]
+    counts: list[list[int]] = [[] for _ in face_ruled]
+
+    for fi in range(len(face_ruled)):
+        if face_ruled[fi] >= 0:
+            spans[fi] = _ruled_spans(b.m_surfaces[b.m_faces[fi].surface_index])
+            counts[fi] = _ruled_counts(b.m_surfaces[b.m_faces[fi].surface_index], spans[fi], scale, angle, chord)
+
+    for _ in range(16):
+        changed = False
+
+        for fi in range(len(face_ruled)):
+            if face_ruled[fi] < 0:
+                continue
+
+            srf = b.m_surfaces[b.m_faces[fi].surface_index]
+            edges = _ruled_edges(b, fi, face_ruled[fi])
+            du = srf.domain(0)
+            dv = srf.domain(1)
+            tolerance = (du[1] - du[0]) * 1e-6
+            first = _ruled_lift(b, fi, edges[0], boundary)
+            second = _ruled_lift(b, fi, edges[2], boundary)
+            stations = _ruled_stations(spans[fi], counts[fi], first, second, tolerance)
+            changed = _ruled_extend(srf, dv[0], stations, first, tolerance, _edge_ends(b, edges[0].index), boundary.points.setdefault(edges[0].index, [])) or changed
+            changed = _ruled_extend(srf, dv[1], stations, second, tolerance, _edge_ends(b, edges[2].index), boundary.points.setdefault(edges[2].index, [])) or changed
+
+        if not changed:
+            return
+
+
+def _ruled_order(lifted: list[tuple[float, Point, Point]]) -> list[int]:
+    """Phase 1: the order of lifted samples by increasing u"""
+
+    return sorted(range(len(lifted)), key=lambda i: lifted[i][1][0])
+
+
+def _ruled_mesh(b: BRep, fi: int, shift: int, boundary: _EdgeBoundary) -> Mesh:
+    """Phase 1: the mesh of a ruled face: both loops at the agreed stations, paired ruling by ruling into two triangles per step so no triangle spans two rulings, degenerate triangles at a collapsed ruling skipped, the loop numbered as the CDT polygon (loop at v0, ruling, loop at v1, ruling) so the edge uses tag as there; empty when the loops disagree on their stations"""
+
+    srf = b.m_surfaces[b.m_faces[fi].surface_index]
+    edges = _ruled_edges(b, fi, shift)
+    first = _ruled_lift(b, fi, edges[0], boundary)
+    second = _ruled_lift(b, fi, edges[2], boundary)
+    n = len(first)
+    bottom_order = _ruled_order(first)
+    top_order = _ruled_order(second)
+    tolerance = (srf.domain(0)[1] - srf.domain(0)[0]) * 1e-6
+    mesh = Mesh()
+
+    if n < 2 or len(second) != n:
+        return mesh
+
+    for k in range(n):
+        if abs(first[bottom_order[k]][1][0] - second[top_order[k]][1][0]) > tolerance:
+            return mesh
+
+    for k in (1, 3):
+        if edges[k].index not in boundary.points:
+            ends = _edge_ends(b, edges[k].index)
+            boundary.points[edges[k].index] = [ends[0], ends[1]]
+
+    loops = TrimLoops()
+    loops.uv = [[Point(0.0, 0.0, 0.0)] * (2 * n)]
+    loops.xyz = [[Point(0.0, 0.0, 0.0)] * (2 * n)]
+    bottom = []
+    top = []
+
+    for k in range(n):
+        bottom.append(_strip_vertex(srf, mesh, first[k], k))
+        top.append(_strip_vertex(srf, mesh, second[k], n + k))
+        loops.uv[0][k] = first[k][1]
+        loops.xyz[0][k] = first[k][2]
+        loops.uv[0][n + k] = second[k][1]
+        loops.xyz[0][n + k] = second[k][2]
+
+    for k in range(n - 1):
+        quad = [bottom[bottom_order[k]], bottom[bottom_order[k + 1]], top[top_order[k + 1]], top[top_order[k]]]
+
+        for triangle in ([quad[0], quad[1], quad[2]], [quad[0], quad[2], quad[3]]):
+            a = mesh.vertex[triangle[0]].position()
+            c = mesh.vertex[triangle[1]].position()
+            d = mesh.vertex[triangle[2]].position()
+
+            if not _same_boundary_point(a, c) and not _same_boundary_point(c, d) and not _same_boundary_point(d, a):
+                mesh.add_face([triangle[0], triangle[1], triangle[2]])
+
+    start = first[bottom_order[0]][1]
+    _wind_to_normal(mesh, srf.normal_at(start[0], start[1]))
+    uses = [
+        (edges[0].index, 0, 0, n),
+        (edges[1].index, 0, n - 1, 2),
+        (edges[2].index, 0, n, n),
+        (edges[3].index, 0, 2 * n - 1, 2),
+    ]
+    _tag_edge_uses(mesh, loops, uses)
+
+    return mesh
+
+
 def _flip_reversed_faces(b: BRep, fmesh: list[Mesh]) -> None:
     """Flip every face mesh of a face Reversed in its shell, vertex normals included"""
 
@@ -3144,6 +3505,7 @@ class BRep:
         chord = chord_factor if has_quality else 0.005
         scale = _brep_diagonal(self)
         face_strip = [False] * nf
+        face_ruled = [-1] * nf
         face_direct = [False] * nf
         rebuild_grid = [False] * nf
         fmesh = []
@@ -3157,7 +3519,22 @@ class BRep:
                 fmesh[fi] = _strip_mesh(self, fi, boundary, scale, angle, chord)
 
         for fi in range(nf):
-            face_direct[fi] = not face_strip[fi] and _direct_face(self, fi)
+            if not face_strip[fi]:
+                face_ruled[fi] = _ruled_face(self, fi)
+
+        _ruled_boundaries(self, face_ruled, boundary, scale, angle, chord)
+
+        for fi in range(nf):
+            if face_ruled[fi] < 0:
+                continue
+
+            fmesh[fi] = _ruled_mesh(self, fi, face_ruled[fi], boundary)
+
+            if not fmesh[fi].face:
+                face_ruled[fi] = -1
+
+        for fi in range(nf):
+            face_direct[fi] = not face_strip[fi] and face_ruled[fi] < 0 and _direct_face(self, fi)
 
         for fi in range(nf):
             if not face_direct[fi]:
@@ -3183,7 +3560,7 @@ class BRep:
                 face_direct[fi] = False
 
         for fi in range(nf):
-            if face_strip[fi] or face_direct[fi]:
+            if face_strip[fi] or face_ruled[fi] >= 0 or face_direct[fi]:
                 continue
 
             srf = self.m_surfaces[self.m_faces[fi].surface_index]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import math
+import sys
 from .aabb import AABB
 from .line import Line
 from .nurbscurve import NurbsCurve
@@ -22,9 +23,10 @@ STACK_SIZE = 64
 # Curve helpers
 # ═══════════════════════════════════════════════════════════════════════════
 def _curve_seed(curve: NurbsCurve, test_point: Point, t0: float, t1: float) -> float:
-    """Parameter of the closest sample on a dense grid over [t0, t1]."""
+    """Parameter of the closest sample on a grid over [t0, t1], ten samples per control point of the window's share of the domain, never under fifty."""
 
-    num_samples = max(50, curve.cv_count() * 10)
+    share = (t1 - t0) / max(curve.domain_end() - curve.domain_start(), sys.float_info.min)
+    num_samples = max(50, math.ceil(curve.cv_count() * 10 * min(share, 1.0)))
     dt = (t1 - t0) / num_samples
     best_t = t0
     best_dist = curve.point_at(t0).distance(test_point)
