@@ -2351,6 +2351,11 @@ def _ruled_mesh(b: BRep, fi: int, shift: int, boundary: _EdgeBoundary) -> Mesh:
     first = _ruled_lift(b, fi, edges[0], boundary)
     second = _ruled_lift(b, fi, edges[2], boundary)
     n = len(first)
+
+    # the second loop numbered on round the loop, from the ruling where the first ends, so the rulings tag their own two ends
+    if n >= 2 and len(second) == n and abs(first[n - 1][1][0] - second[0][1][0]) > abs(first[n - 1][1][0] - second[n - 1][1][0]):
+        second.reverse()
+
     bottom_order = _ruled_order(first)
     top_order = _ruled_order(second)
     tolerance = (srf.domain(0)[1] - srf.domain(0)[0]) * 1e-6
