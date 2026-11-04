@@ -143,6 +143,19 @@ def test_closest_surface_point():
     MINI_CHECK(dist2 < 0.01)
 
 
+@MINI_TEST("Closest", "Surface Point Beside A Closed Seam")
+def test_closest_surface_point_beside_a_closed_seam():
+    from session_py import Closest
+    from session_py import Primitives
+
+    cylinder = Primitives.cylinder_surface(0.0, 0.0, -1.0, 0.5, 2.0)
+
+    for i in range(257):
+        point = cylinder.point_at(4.0 * i / 256.0, 0.5)
+
+        MINI_CHECK(Closest.surface_point(cylinder, point)[2] < 1e-9)
+
+
 @MINI_TEST("Closest", "Surface Curve")
 def test_closest_surface_curve():
     import math

@@ -1102,8 +1102,42 @@ class Closest:
 
         seed = _surface_seed(surface, test_point, u0, u1, v0, v1)
         u, v = _surface_newton(surface, test_point, u0, u1, v0, v1, seed)
+        gap = surface.point_at(u, v).distance(test_point)
 
-        return (u, v, surface.point_at(u, v).distance(test_point))
+        # On a closed surface a seed on the seam stands for both ends of the domain, and Newton from the wrong end stays clamped there.
+        def on_seam(dir: int, at: float, low: float, high: float) -> bool:
+            domain = surface.domain(dir)
+            return (
+                low == domain[0]
+                and high == domain[1]
+                and min(at - low, high - at) <= (high - low) * 1e-9
+                and surface.is_closed(dir)
+            )
+
+        seam_u = on_seam(0, seed[0], u0, u1)
+        seam_v = on_seam(1, seed[1], v0, v1)
+
+        for ends in range(1, 4):
+            if ((ends & 1) and not seam_u) or ((ends & 2) and not seam_v):
+                continue
+
+            other_u, other_v = _surface_newton(
+                surface,
+                test_point,
+                u0,
+                u1,
+                v0,
+                v1,
+                (u0 + u1 - seed[0] if ends & 1 else seed[0], v0 + v1 - seed[1] if ends & 2 else seed[1]),
+            )
+            other_gap = surface.point_at(other_u, other_v).distance(test_point)
+
+            if other_gap < gap:
+                u = other_u
+                v = other_v
+                gap = other_gap
+
+        return (u, v, gap)
 
     @staticmethod
     def surface_curve(
