@@ -2435,6 +2435,25 @@ def test_intersection_line_line_classified():
     MINI_CHECK(not type1)
 
 
+@MINI_TEST("Intersection", "Line Line Classified Skewed")
+def test_intersection_line_line_classified_skewed():
+    from session_py import Line
+    from session_py.intersection import line_line_classified
+
+    beam0 = Line(0.0, 0.0, 0.0, 3000.0, 0.0, 0.0)
+    beam1 = Line(3200.0, -1500.0, 100.0, 3600.0, 1500.0, 100.0)
+    result = line_line_classified(beam0, beam1, 1, 1, 0, 0, 0.5)
+
+    MINI_CHECK(result is not None)
+
+    p0, p1, v0, v1, normal, type0, type1, is_parallel = result
+
+    MINI_CHECK(not is_parallel)
+    MINI_CHECK(abs(p0[0] - 3000.0) < 1e-6)
+    MINI_CHECK(abs(p1[1] - (-1500.0 + 3000.0 * 221.0 / 458.0)) < 1e-6)
+    MINI_CHECK(abs(p0.distance(p1) - 408.9074) < 1e-3)
+
+
 @MINI_TEST("Intersection", "Plane Plane Optional")
 def test_intersection_plane_plane_optional():
     from session_py import intersection

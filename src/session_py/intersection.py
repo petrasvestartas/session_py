@@ -9321,14 +9321,12 @@ def line_line_classified(
 
         return (p0, p1, v0, v1, normal, 0, 0, is_parallel)
 
-    result = line_line_parameters(s0, s1, 0.0, False, True)
+    result = line_line_parameters(s0, s1, 0.0, True, True)
 
     if result is None:
         return None
 
-    t0_v, t1_v = result
-    t0c = max(0.0, min(1.0, t0_v))
-    t1c = max(0.0, min(1.0, t1_v))
+    t0c, t1c = result
     p0 = s0.point_at(t0c)
     p1 = s1.point_at(t1c)
     tt0 = (t0c + float(cur_seg_0)) / float(n_segs_0)
