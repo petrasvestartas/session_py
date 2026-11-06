@@ -233,6 +233,92 @@ def test_intersection_line_line_parameters_infinite():
     MINI_CHECK(TOLERANCE.is_close(t0, 2.0))
 
 
+@MINI_TEST("Intersection", "Line Line Parameters Skewed")
+def test_intersection_line_line_parameters_skewed():
+    from session_py import intersection
+    from session_py import Line
+
+    beam0 = Line(0.0, 0.0, 0.0, 3000.0, 0.0, 0.0)
+    beam1 = Line(3200.0, -1500.0, 100.0, 3600.0, 1500.0, 100.0)
+
+    result = intersection.line_line_parameters(beam0, beam1, 0.0, True, True)
+    t0, t1 = result
+    gap = beam0.point_at(t0).distance(beam1.point_at(t1))
+    clamped_gap = beam0.point_at(1.0).distance(beam1.point_at(0.5))
+    shift = (0.5 - t1) * beam1.length()
+
+    MINI_CHECK(result is not None)
+    MINI_CHECK(TOLERANCE.is_close(t0, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(t1, 221.0 / 458.0))
+    MINI_CHECK(abs(gap - 408.9074) < 1e-3)
+    MINI_CHECK(abs(clamped_gap - gap - 3.4032) < 1e-3)
+    MINI_CHECK(abs(shift - 52.8655) < 1e-3)
+
+
+@MINI_TEST("Intersection", "Line Line Parameters Parallel")
+def test_intersection_line_line_parameters_parallel():
+    from session_py import intersection
+    from session_py import Line
+
+    line0 = Line(0.0, 0.0, 0.0, 10.0, 0.0, 0.0)
+    line1 = Line(3.0, 1.0, 0.0, 8.0, 1.0, 0.0)
+
+    rejected = intersection.line_line_parameters(line0, line1, 0.0, True, False) is None
+
+    result = intersection.line_line_parameters(line0, line1, 0.0, True, True)
+    t0, t1 = result
+    gap = line0.point_at(t0).distance(line1.point_at(t1))
+
+    MINI_CHECK(rejected)
+    MINI_CHECK(result is not None)
+    MINI_CHECK(TOLERANCE.is_close(t0, 0.3))
+    MINI_CHECK(TOLERANCE.is_close(t1, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(gap, 1.0))
+
+
+@MINI_TEST("Intersection", "Line Line Parameters Collinear")
+def test_intersection_line_line_parameters_collinear():
+    from session_py import intersection
+    from session_py import Line
+
+    line0 = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    line1 = Line(2.0, 0.0, 0.0, 3.0, 0.0, 0.0)
+
+    result = intersection.line_line_parameters(line0, line1, 0.0, True, True)
+    t0, t1 = result
+    gap = line0.point_at(t0).distance(line1.point_at(t1))
+
+    MINI_CHECK(result is not None)
+    MINI_CHECK(TOLERANCE.is_close(t0, 1.0))
+    MINI_CHECK(TOLERANCE.is_close(t1, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(gap, 1.0))
+
+
+@MINI_TEST("Intersection", "Line Line Parameters Degenerate")
+def test_intersection_line_line_parameters_degenerate():
+    from session_py import intersection
+    from session_py import Line
+
+    point0 = Line(0.5, 2.0, 0.0, 0.5, 2.0, 0.0)
+    point1 = Line(2.0, 1.0, 1.0, 2.0, 1.0, 1.0)
+    line1 = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+
+    result = intersection.line_line_parameters(point0, line1, 0.0, True, True)
+    t0, t1 = result
+    gap = point0.point_at(t0).distance(line1.point_at(t1))
+
+    points = intersection.line_line_parameters(point0, point1, 0.0, True, True)
+    u0, u1 = points
+    points_gap = point0.point_at(u0).distance(point1.point_at(u1))
+
+    MINI_CHECK(result is not None)
+    MINI_CHECK(TOLERANCE.is_close(t0, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(t1, 0.5))
+    MINI_CHECK(TOLERANCE.is_close(gap, 2.0))
+    MINI_CHECK(points is not None)
+    MINI_CHECK(TOLERANCE.is_close(points_gap, math.sqrt(4.25)))
+
+
 @MINI_TEST("Intersection", "Plane Plane")
 def test_intersection_plane_plane():
     from session_py import intersection
