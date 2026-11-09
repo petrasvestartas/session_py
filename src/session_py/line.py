@@ -4,6 +4,7 @@ import copy
 import json
 import math
 import uuid
+from enum import IntEnum
 from .color import Color
 from .point import Point
 from .tolerance import Tolerance
@@ -14,6 +15,36 @@ if TYPE_CHECKING:
     from pathlib import Path
     from .proto import line_pb2
     from .xform import Xform
+
+
+class Arrowhead(IntEnum):
+    """Which ends of a curve carry an arrowhead."""
+
+    NONE = 0  # No arrowhead.
+    START = 1  # Arrowhead at the start.
+    END = 2  # Arrowhead at the end.
+    BOTH = 3  # Arrowheads at both ends.
+
+    def flipped(self) -> Arrowhead:
+        """Return the arrowhead with start and end swapped."""
+
+        if self is Arrowhead.START:
+            return Arrowhead.END
+
+        if self is Arrowhead.END:
+            return Arrowhead.START
+
+        return self
+
+    def joined(self, last: Arrowhead) -> Arrowhead:
+        """Return the start head of self combined with the end head of last."""
+        return Arrowhead((self.value & 1) | (last.value & 2))
+
+    def piece(self, first: bool, last: bool) -> Arrowhead:
+        """Return the heads a split piece keeps."""
+        return (self if first else Arrowhead.NONE).joined(
+            self if last else Arrowhead.NONE
+        )
 
 
 class Line:
@@ -33,6 +64,7 @@ class Line:
         "width",
         "dash",
         "linecolor",
+        "arrowhead",
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -62,6 +94,7 @@ class Line:
         self.width = 1.0  # Display width.
         self.dash = []  # Dash pattern lengths.
         self.linecolor = Color.black()  # Display color.
+        self.arrowhead = Arrowhead.NONE  # Arrowhead ends.
 
     def __deepcopy__(self, memo):
         """Copy with a new guid and the same data."""
@@ -73,6 +106,7 @@ class Line:
         result.width = self.width
         result.dash = list(self.dash)
         result.linecolor = copy.deepcopy(self.linecolor, memo)
+        result.arrowhead = self.arrowhead
         memo[id(self)] = result
 
         return result
@@ -281,7 +315,7 @@ class Line:
             raise IndexError("Index out of bounds")
 
     def __eq__(self, other) -> bool:
-        """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
+        """Compare name, coordinates to 1e-6, width, linecolor and arrowhead; guid ignored."""
 
         if not isinstance(other, Line):
             return False
@@ -298,10 +332,11 @@ class Line:
             and round(self._z1 * 1000000.0) == round(other._z1 * 1000000.0)
             and round(self.width * 1000000.0) == round(other.width * 1000000.0)
             and self.linecolor == other.linecolor
+            and self.arrowhead == other.arrowhead
         )
 
     def __ne__(self, other) -> bool:
-        """Compare name, coordinates to 1e-6, width and linecolor; guid ignored."""
+        """Compare name, coordinates to 1e-6, width, linecolor and arrowhead; guid ignored."""
         return not self == other
 
     def __iadd__(self, other: Vector) -> Line:
@@ -385,8 +420,18 @@ class Line:
         return result
 
     def __neg__(self) -> Line:
-        """Return a flipped copy (end to start)."""
-        return Line(self._x1, self._y1, self._z1, self._x0, self._y0, self._z0)
+        """Return a flipped copy (end to start, arrowhead ends swapped)."""
+
+        result = Line(self._x1, self._y1, self._z1, self._x0, self._y0, self._z0)
+        result.name = self.name
+        result.is_visible = self.is_visible
+        result.is_locked = self.is_locked
+        result.width = self.width
+        result.dash = list(self.dash)
+        result.linecolor = copy.deepcopy(self.linecolor)
+        result.arrowhead = self.arrowhead.flipped()
+
+        return result
 
     # ═══════════════════════════════════════════════════════════════════════════
     # Transformation
@@ -650,7 +695,7 @@ class Line:
     def __jsondump__(self) -> dict:
         """Serialize to a JSON object."""
 
-        return {
+        data = {
             "dash": list(self.dash),
             "guid": self.guid,
             "is_locked": self.is_locked,
@@ -666,6 +711,11 @@ class Line:
             "z0": self._z0,
             "z1": self._z1,
         }
+
+        if self.arrowhead != Arrowhead.NONE:
+            data["arrowhead"] = self.arrowhead.name.lower()
+
+        return dict(sorted(data.items()))
 
     @classmethod
     def __jsonload__(
@@ -691,6 +741,11 @@ class Line:
 
         if "width" in data:
             line.width = data["width"]
+
+        if "arrowhead" in data:
+            line.arrowhead = Arrowhead.__members__.get(
+                data["arrowhead"].upper(), Arrowhead.NONE
+            )
 
         return line
 
@@ -750,6 +805,7 @@ class Line:
         proto.linecolor_rgba.append(self.linecolor.b)
         proto.linecolor_rgba.append(self.linecolor.a)
         proto.linecolor_name = self.linecolor.name
+        proto.arrowhead = int(self.arrowhead)
 
         return proto
 
@@ -789,6 +845,9 @@ class Line:
 
             if proto.linecolor_name:
                 line.linecolor.name = proto.linecolor_name
+
+        if 0 < proto.arrowhead < 4:
+            line.arrowhead = Arrowhead(proto.arrowhead)
 
         return line
 

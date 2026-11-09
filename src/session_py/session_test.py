@@ -3685,5 +3685,31 @@ def test_session_set_node_color_descendants():
     MINI_CHECK(point.color == Color.red())
 
 
+@MINI_TEST("Session", "Animate Xform")
+def test_session_animate_xform():
+    from session_py import Point
+    from session_py import Session
+    from session_py import Xform
+
+    session = Session()
+    point = Point(1.0, 2.0, 3.0)
+    guid = point.guid
+    xform = Xform.translation(4.0, 5.0, 6.0)
+    session.add_point(point)
+    session.animate_xform(
+        guid,
+        xform,
+        900.0,
+        150.0,
+    )
+    restored = Session.pb_loads(session.pb_dumps())
+    duration = restored.graph.vertex_attribute(guid, "xform_ms")
+    delay = restored.graph.vertex_attribute(guid, "delay_ms")
+
+    MINI_CHECK(restored.xform(guid) == xform)
+    MINI_CHECK(duration == 900.0)
+    MINI_CHECK(delay == 150.0)
+
+
 if __name__ == "__main__":
     run_all(language="python")

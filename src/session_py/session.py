@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from .color import Color
     from .matrix import Matrix
+    from .text import Text
     from .proto import session_pb2
 
 
@@ -944,6 +945,12 @@ class Session:
         """Add a matrix as its component (type_name Matrix, the matrix's guid), placed by set_xform on that guid; a guid already live adds nothing and returns the node that guid has."""
         return self.add_component(matrix.to_component(), parent)
 
+    def add_text(
+        self, text: Text, parent: TreeNode | None = None
+    ) -> TreeNode:
+        """Add text as its component (type_name Text, the text's guid), placed by set_xform on that guid."""
+        return self.add_component(text.to_component(), parent)
+
     def add_definition(self, definition: Any) -> str:
         """Add a definition, geometry in its own frame that instances share; returns its guid, also when that guid is already defined, and "" for None or a guid an object, instance or component holds."""
 
@@ -1491,6 +1498,19 @@ class Session:
         self.xforms[guid] = xform
         self.bvh_cache_dirty = True
         self.revision += 1
+
+    def animate_xform(
+        self,
+        guid: str,
+        xform: Xform,
+        duration_ms: float = 650.0,
+        delay_ms: float = 0.0,
+    ) -> None:
+        """Set a local transform and record its presentation duration and delay."""
+
+        self.set_xform(guid, xform)
+        self.graph.set_vertex_attribute(guid, "xform_ms", duration_ms)
+        self.graph.set_vertex_attribute(guid, "delay_ms", delay_ms)
 
     def remove_xform(self, guid: str) -> bool:
         """Removes an object's local transform, returning whether one was present."""

@@ -15,6 +15,7 @@ from .point import Point
 from .vector import Vector
 from .plane import Plane
 from .line import Line
+from .line import Arrowhead
 from .instance_ref import InstanceRef
 from .interaction import Interaction
 from .interaction import InteractionUnknown
@@ -31,6 +32,8 @@ from .objects import Objects
 from .objects import Component
 from .history import History
 from .session import Session
+from .text import Text
+from .viewer import show
 from .mesh import Mesh
 from .mesh import NormalWeighting
 from .aabb import AABB
@@ -81,6 +84,7 @@ __all__ = [
     "Vector",
     "Plane",
     "Line",
+    "Arrowhead",
     "InstanceRef",
     "Interaction",
     "InteractionUnknown",
@@ -139,4 +143,6 @@ __all__ = [
     "ConvexHull",
     "SpatialKDTree",
     "SpatialOctree",
+    "Text",
+    "show",
 ]

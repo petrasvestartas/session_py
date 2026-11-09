@@ -7,6 +7,7 @@ from .tolerance import TOLERANCE
 
 @MINI_TEST("Line", "Constructor")
 def test_line_constructor():
+    from session_py import Arrowhead
     from session_py import Color
     from session_py import Line
     from session_py import Point
@@ -114,34 +115,51 @@ def test_line_constructor():
     MINI_CHECK(l_pdl[0] == 0.0 and l_pdl[3] == 5.0)
     MINI_CHECK(lc.linecolor[0] == 1.0 and lc.linecolor[1] == 0.0 and lc.width == 2.5)
     MINI_CHECK(lwn.name == "custom" and lwn[3] == 1.0)
+    la = Line()
+    la.arrowhead = Arrowhead.END
+    lacopy = la.duplicate()
+    laneg = -la
+    laother = Line()
+
+    MINI_CHECK(la.arrowhead == Arrowhead.END and lacopy == la and la != laother)
+    MINI_CHECK(laneg.arrowhead == Arrowhead.START)
+    MINI_CHECK(Arrowhead.BOTH.piece(True, False) == Arrowhead.START)
+    MINI_CHECK(Arrowhead.START.joined(Arrowhead.END) == Arrowhead.BOTH)
     MINI_CHECK(TOLERANCE.is_close(ms[1], 1.0) and TOLERANCE.is_close(me[1], 1.0))
 
 
 @MINI_TEST("Line", "Transformation")
 def test_line_transformation():
+    from session_py import Arrowhead
     from session_py import Line
     from session_py import Xform
 
     line = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    line.arrowhead = Arrowhead.BOTH
     xform = Xform.translation(10.0, 0.0, 0.0)
     moved = line.transformed(xform)
     line.transform(xform)
 
     MINI_CHECK(moved[0] == 10.0 and moved[3] == 11.0)
     MINI_CHECK(line[0] == 10.0 and line[3] == 11.0)
+    MINI_CHECK(moved.arrowhead == Arrowhead.BOTH and line.arrowhead == Arrowhead.BOTH)
 
 
 @MINI_TEST("Line", "Json Roundtrip")
 def test_line_json_roundtrip():
     from pathlib import Path
+    from session_py import Arrowhead
     from session_py import Line
 
     line = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     line.name = "test_line"
     line.dash = [3.0, 2.0]
+    line.arrowhead = Arrowhead.END
 
     j = line.__jsondump__()
     loaded_j = Line.__jsonload__(j)
+    unknown = dict(j)
+    unknown["arrowhead"] = "sideways"
 
     s = line.file_json_dumps()
     loaded_s = Line.file_json_loads(s)
@@ -162,16 +180,21 @@ def test_line_json_roundtrip():
     MINI_CHECK(TOLERANCE.is_close(loaded[4], 210.5))
     MINI_CHECK(TOLERANCE.is_close(loaded[5], 252.6))
     MINI_CHECK(loaded.dash == [3.0, 2.0])
+    MINI_CHECK(loaded.arrowhead == Arrowhead.END and loaded_j.arrowhead == Arrowhead.END)
+    MINI_CHECK("arrowhead" not in Line().__jsondump__())
+    MINI_CHECK(Line.__jsonload__(unknown).arrowhead == Arrowhead.NONE)
 
 
 @MINI_TEST("Line", "Protobuf Roundtrip")
 def test_line_protobuf_roundtrip():
     from pathlib import Path
+    from session_py import Arrowhead
     from session_py import Line
 
     line = Line(42.1, 84.2, 126.3, 168.4, 210.5, 252.6)
     line.name = "test_line"
     line.dash = [3.0, 2.0]
+    line.arrowhead = Arrowhead.END
 
     guid = line.guid
     s = line.pb_dumps()
@@ -181,6 +204,8 @@ def test_line_protobuf_roundtrip():
     line.pb_dump(fname)
     loaded = Line.pb_load(fname)
     converted = Line.from_proto(line.to_proto())
+    outside = line.to_proto()
+    outside.arrowhead = 9
 
     MINI_CHECK(loaded_s.name == "test_line")
     MINI_CHECK(TOLERANCE.is_close(loaded_s[0], 42.1))
@@ -196,6 +221,8 @@ def test_line_protobuf_roundtrip():
     MINI_CHECK(loaded.guid == guid)
     MINI_CHECK(converted == line)
     MINI_CHECK(converted.guid == guid)
+    MINI_CHECK(loaded.arrowhead == Arrowhead.END)
+    MINI_CHECK(Line.from_proto(outside).arrowhead == Arrowhead.NONE)
 
 
 @MINI_TEST("Line", "Length")
