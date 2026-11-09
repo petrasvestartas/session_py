@@ -1444,6 +1444,39 @@ class Polyline:
 
         return result
 
+    def resampled(self, count: int) -> Polyline:
+        """Return a copy with count points at equal arc-length spacing, first and last kept."""
+
+        if count < 2 or self.point_count() < 2:
+            return self.duplicate()
+
+        total = self.length()
+        result = self.duplicate()
+        result.coords = []
+        result.add_point(self.get_point(0))
+
+        for i in range(1, count - 1):
+            result.add_point(self._point_at_length(total * float(i) / float(count - 1)))
+
+        result.add_point(self.get_point(self.point_count() - 1))
+
+        return result
+
+    @staticmethod
+    def morph(a: Polyline, b: Polyline, t: float) -> Polyline:
+        """Return the pointwise blend at t, the polyline with fewer points resampled to the larger count."""
+
+        count = max(a.point_count(), b.point_count())
+        pa = a.resampled(count)
+        pb = b.resampled(count)
+        result = a.duplicate()
+        result.coords = []
+
+        for i in range(min(pa.point_count(), pb.point_count())):
+            result.add_point(Point.lerp(pa.get_point(i), pb.get_point(i), t))
+
+        return result
+
     @staticmethod
     def interpolate_points(
         from_pt: Point, to_pt: Point, steps: int, kind: int = 0

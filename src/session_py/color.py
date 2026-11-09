@@ -301,6 +301,18 @@ class Color:
         """Construct from [r, g, b, a]."""
         return cls(arr[0], arr[1], arr[2], arr[3])
 
+    @staticmethod
+    def lerp(a: Color, b: Color, t: float) -> Color:
+        """Return the color at parameter t in [0, 1] between a and b, named after a."""
+
+        return Color(
+            a.r + (b.r - a.r) * t,
+            a.g + (b.g - a.g) * t,
+            a.b + (b.b - a.b) * t,
+            a.a + (b.a - a.a) * t,
+            a.name,
+        )
+
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
     # ═══════════════════════════════════════════════════════════════════════════

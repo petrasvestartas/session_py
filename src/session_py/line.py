@@ -568,6 +568,22 @@ class Line:
         return (output_start, output_end)
 
     @staticmethod
+    def lerp(a: Line, b: Line, t: float) -> Line:
+        """Return a copy of a with each end at parameter t in [0, 1] between the ends of a and b."""
+
+        s = Point.lerp(a.start(), b.start(), t)
+        e = Point.lerp(a.end(), b.end(), t)
+        result = a.duplicate()
+        result._x0 = s[0]
+        result._y0 = s[1]
+        result._z0 = s[2]
+        result._x1 = e[0]
+        result._y1 = e[1]
+        result._z1 = e[2]
+
+        return result
+
+    @staticmethod
     def from_projected_points(line: Line, points: list[Point]) -> Line | None:
         """Compute the extreme sub-segment of line spanned by the projected points; None when empty."""
 

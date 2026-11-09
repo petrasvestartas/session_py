@@ -1,3 +1,4 @@
+import math
 from .mini_test import MINI_TEST
 from .mini_test import MINI_CHECK
 from .mini_test import run_all
@@ -693,6 +694,23 @@ def test_xform_uniform_scale():
     MINI_CHECK(
         TOLERANCE.is_close(Xform.translation(1.0, 2.0, 3.0).uniform_scale(), 1.0)
     )
+
+
+@MINI_TEST("Xform", "Interpolate")
+def test_xform_interpolate():
+    from session_py import Xform
+
+    a = Xform.identity()
+    b = Xform.translation(2.0, 4.0, 6.0) * Xform.rotation_z(PI / 2.0)
+    half = Xform.interpolate(a, b, 0.5)
+    scaled = Xform.interpolate(a, Xform.scale_xyz(3.0, 3.0, 3.0), 0.5)
+    c = math.cos(PI / 4.0)
+
+    MINI_CHECK(TOLERANCE.is_close(half.m[12], 1.0) and TOLERANCE.is_close(half.m[13], 2.0) and TOLERANCE.is_close(half.m[14], 3.0))
+    MINI_CHECK(TOLERANCE.is_close(half.m[0], c) and TOLERANCE.is_close(half.m[1], c) and TOLERANCE.is_close(half.m[2], 0.0))
+    MINI_CHECK(Xform.interpolate(a, b, 0.0) == a)
+    MINI_CHECK(Xform.interpolate(a, b, 1.0) == b)
+    MINI_CHECK(TOLERANCE.is_close(scaled.m[0], 2.0))
 
 
 @MINI_TEST("Xform", "Eye")

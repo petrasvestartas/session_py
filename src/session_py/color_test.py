@@ -113,6 +113,20 @@ def test_color_conversion():
     MINI_CHECK(back == c)
 
 
+@MINI_TEST("Color", "Lerp")
+def test_color_lerp():
+    from session_py import Color
+
+    a = Color(0.0, 0.0, 0.0, 1.0)
+    b = Color(1.0, 0.5, 0.0, 0.0)
+    c = Color.lerp(a, b, 0.5)
+
+    MINI_CHECK(TOLERANCE.is_close(c.r, 0.5))
+    MINI_CHECK(TOLERANCE.is_close(c.g, 0.25))
+    MINI_CHECK(TOLERANCE.is_close(c.b, 0.0))
+    MINI_CHECK(TOLERANCE.is_close(c.a, 0.5))
+
+
 @MINI_TEST("Color", "Presets")
 def test_color_presets():
     from session_py import Color

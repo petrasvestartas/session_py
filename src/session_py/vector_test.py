@@ -377,6 +377,21 @@ def test_vector_average():
     MINI_CHECK(zero[0] == 0.0 and zero[1] == 0.0 and zero[2] == 0.0)
 
 
+@MINI_TEST("Vector", "Lerp")
+def test_vector_lerp():
+    from session_py import Vector
+
+    a = Vector(0.0, 0.0, 0.0)
+    b = Vector(2.0, 4.0, 6.0)
+    half = Vector.lerp(a, b, 0.5)
+    start = Vector.lerp(a, b, 0.0)
+    end = Vector.lerp(a, b, 1.0)
+
+    MINI_CHECK(half[0] == 1.0 and half[1] == 2.0 and half[2] == 3.0)
+    MINI_CHECK(start == a)
+    MINI_CHECK(end == b)
+
+
 @MINI_TEST("Vector", "Is Zero")
 def test_vector_is_zero():
     from session_py import Vector

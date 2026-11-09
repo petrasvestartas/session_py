@@ -274,6 +274,21 @@ def test_line_point_at():
     MINI_CHECK(pe[0] == 10.0 and pe[1] == 10.0 and pe[2] == 10.0)
 
 
+@MINI_TEST("Line", "Lerp")
+def test_line_lerp():
+    from session_py import Line
+    from session_py import Point
+
+    a = Line(0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    a.width = 3.0
+    b = Line(0.0, 2.0, 0.0, 1.0, 4.0, 0.0)
+    half = Line.lerp(a, b, 0.5)
+
+    MINI_CHECK(TOLERANCE.is_point_close(half.start(), Point(0.0, 1.0, 0.0)))
+    MINI_CHECK(TOLERANCE.is_point_close(half.end(), Point(1.0, 2.0, 0.0)))
+    MINI_CHECK(half.width == 3.0)
+
+
 @MINI_TEST("Line", "Closest Point")
 def test_line_closest_point():
     from session_py import Line

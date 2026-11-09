@@ -529,6 +529,11 @@ class Vector:
 
         return Vector.sum_of_vectors(vectors) / float(len(vectors))
 
+    @staticmethod
+    def lerp(a: Vector, b: Vector, t: float) -> Vector:
+        """Return the vector at parameter t in [0, 1] between a and b."""
+        return a + (b - a) * t
+
     def scale_up(self) -> None:
         """Scale in place by SCALE."""
         self *= SCALE
