@@ -119,6 +119,46 @@ def test_vector_magnitude():
     MINI_CHECK(length_squared == 25.0)
 
 
+@MINI_TEST("Vector", "Magnitude Preserves Differential Scale")
+def test_vector_magnitude_preserves_differential_scale():
+    from session_py import Vector
+
+    for scale in [1e-300, 1e-19, 1e-13, 1.0, 1e150, 1e300]:
+        value = Vector(3 * scale, 4 * scale, 12 * scale)
+        length = value.magnitude()
+        MINI_CHECK(math.isfinite(length) and length > 0)
+        MINI_CHECK(abs(length / scale - 13) <= 1e-13)
+        MINI_CHECK(value.normalize_self())
+        MINI_CHECK(abs(value[0] - 3.0 / 13) <= 1e-15)
+        MINI_CHECK(abs(value[1] - 4.0 / 13) <= 1e-15)
+        MINI_CHECK(abs(value[2] - 12.0 / 13) <= 1e-15)
+    minimum = math.ulp(0.0)
+    subnormal = Vector(minimum, 0.0, 0.0)
+    MINI_CHECK(subnormal.magnitude() == minimum)
+    tangent = Vector(2.5e-19, 2.5e-19, 0.0)
+    MINI_CHECK(abs(tangent.magnitude() / 2.5e-19 - math.sqrt(2.0)) < 1e-15)
+
+
+@MINI_TEST("Vector", "Normalize Extreme And Invalid Vectors")
+def test_vector_normalize_extreme_and_invalid_vectors():
+    from session_py import Vector
+
+    for scale in [math.ulp(0.0), 1.7e308]:
+        value = Vector(scale, scale, scale)
+        MINI_CHECK(value.normalize_self())
+        for d in range(3):
+            MINI_CHECK(abs(value[d] - 1 / math.sqrt(3.0)) <= 1e-15)
+        MINI_CHECK(abs(value.magnitude_squared() - 1) <= 1e-15)
+    for invalid in [math.inf, -math.inf, math.nan]:
+        for d in range(3):
+            value = Vector(1.0, 2.0, 3.0)
+            value[d] = invalid
+            MINI_CHECK(not value.normalize_self())
+            MINI_CHECK(math.isnan(value[d]) if math.isnan(invalid) else value[d] == invalid)
+    zero = Vector()
+    MINI_CHECK(not zero.normalize_self())
+
+
 @MINI_TEST("Vector", "Normalize")
 def test_vector_normalize():
     from session_py import Vector

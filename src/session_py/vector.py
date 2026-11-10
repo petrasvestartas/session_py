@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 import copy
 import json
 import math
-import sys
 import uuid
 from .tolerance import Tolerance
 from .tolerance import TOLERANCE
@@ -247,40 +246,12 @@ class Vector:
     def _compute_magnitude(self) -> float:
         """Return the magnitude scaled to stay finite for large components."""
 
-        ax = abs(self._x)
-        ay = abs(self._y)
-        az = abs(self._z)
-        x_zero = ax < Tolerance.ZERO_TOLERANCE
-        y_zero = ay < Tolerance.ZERO_TOLERANCE
-        z_zero = az < Tolerance.ZERO_TOLERANCE
+        scale = max(abs(self._x), abs(self._y), abs(self._z))
 
-        if x_zero and y_zero and z_zero:
-            return 0.0
+        if scale > 0.0 and math.isfinite(scale):
+            return scale * math.hypot(self._x / scale, self._y / scale, self._z / scale)
 
-        if x_zero and y_zero:
-            return az
-
-        if x_zero and z_zero:
-            return ay
-
-        if y_zero and z_zero:
-            return ax
-
-        if ay >= ax and ay >= az:
-            ax, ay = ay, ax
-        elif az >= ax and az >= ay:
-            ax, az = az, ax
-
-        if ax > sys.float_info.min:
-            ay /= ax
-            az /= ax
-
-            return ax * math.sqrt(1.0 + ay * ay + az * az)
-
-        if ax > 0.0 and math.isfinite(ax):
-            return ax
-
-        return 0.0
+        return math.hypot(self._x, self._y, self._z)
 
     def magnitude(self) -> float:
         """Return the cached magnitude."""
@@ -298,14 +269,21 @@ class Vector:
     def normalize_self(self) -> bool:
         """Set unit length in place; false when the magnitude is zero."""
 
-        d = self._compute_magnitude()
-
-        if d <= 0.0:
+        if not math.isfinite(self._x) or not math.isfinite(self._y) or not math.isfinite(self._z):
             return False
 
-        self._x /= d
-        self._y /= d
-        self._z /= d
+        scale = max(abs(self._x), abs(self._y), abs(self._z))
+
+        if scale == 0.0:
+            return False
+
+        x = self._x / scale
+        y = self._y / scale
+        z = self._z / scale
+        length = math.hypot(x, y, z)
+        self._x = x / length
+        self._y = y / length
+        self._z = z / length
         self._magnitude = 1.0
         self._has_magnitude = True
 
