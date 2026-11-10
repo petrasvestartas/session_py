@@ -1499,19 +1499,6 @@ class Session:
         self.bvh_cache_dirty = True
         self.revision += 1
 
-    def animate_xform(
-        self,
-        guid: str,
-        xform: Xform,
-        duration_ms: float = 650.0,
-        delay_ms: float = 0.0,
-    ) -> None:
-        """Set a local transform and record its presentation duration and delay."""
-
-        self.set_xform(guid, xform)
-        self.graph.set_vertex_attribute(guid, "xform_ms", duration_ms)
-        self.graph.set_vertex_attribute(guid, "delay_ms", delay_ms)
-
     def remove_xform(self, guid: str) -> bool:
         """Removes an object's local transform, returning whether one was present."""
 
