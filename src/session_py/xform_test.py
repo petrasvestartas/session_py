@@ -706,8 +706,16 @@ def test_xform_interpolate():
     scaled = Xform.interpolate(a, Xform.scale_xyz(3.0, 3.0, 3.0), 0.5)
     c = math.cos(PI / 4.0)
 
-    MINI_CHECK(TOLERANCE.is_close(half.m[12], 1.0) and TOLERANCE.is_close(half.m[13], 2.0) and TOLERANCE.is_close(half.m[14], 3.0))
-    MINI_CHECK(TOLERANCE.is_close(half.m[0], c) and TOLERANCE.is_close(half.m[1], c) and TOLERANCE.is_close(half.m[2], 0.0))
+    MINI_CHECK(
+        TOLERANCE.is_close(half.m[12], 1.0)
+        and TOLERANCE.is_close(half.m[13], 2.0)
+        and TOLERANCE.is_close(half.m[14], 3.0)
+    )
+    MINI_CHECK(
+        TOLERANCE.is_close(half.m[0], c)
+        and TOLERANCE.is_close(half.m[1], c)
+        and TOLERANCE.is_close(half.m[2], 0.0)
+    )
     MINI_CHECK(Xform.interpolate(a, b, 0.0) == a)
     MINI_CHECK(Xform.interpolate(a, b, 1.0) == b)
     MINI_CHECK(TOLERANCE.is_close(scaled.m[0], 2.0))

@@ -1450,13 +1450,13 @@ class Polyline:
         if count < 2 or self.point_count() < 2:
             return self.duplicate()
 
-        total = self.length()
+        step = self.length() / float(count - 1)
         result = self.duplicate()
         result.coords = []
         result.add_point(self.get_point(0))
 
         for i in range(1, count - 1):
-            result.add_point(self._point_at_length(total * float(i) / float(count - 1)))
+            result.add_point(self._point_at_length(step * float(i)))
 
         result.add_point(self.get_point(self.point_count() - 1))
 
@@ -1469,10 +1469,11 @@ class Polyline:
         count = max(a.point_count(), b.point_count())
         pa = a.resampled(count)
         pb = b.resampled(count)
+        n = min(pa.point_count(), pb.point_count())
         result = a.duplicate()
         result.coords = []
 
-        for i in range(min(pa.point_count(), pb.point_count())):
+        for i in range(n):
             result.add_point(Point.lerp(pa.get_point(i), pb.get_point(i), t))
 
         return result

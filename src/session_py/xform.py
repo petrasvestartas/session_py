@@ -807,40 +807,14 @@ class Xform:
     def interpolate(a: Xform, b: Xform, t: float) -> Xform:
         """Return the blend at t in [0, 1]: translation and axis scales lerped, rotation slerped."""
 
-        xforms = [a, b]
-        q = [[0.0] * 4, [0.0] * 4]
-        s = [[0.0] * 3, [0.0] * 3]
-
-        for k in range(2):
-            n = xforms[k].m
-            r = [[0.0] * 3 for _ in range(3)]
-
-            for c in range(3):
-                s[k][c] = math.sqrt(n[c * 4] * n[c * 4] + n[c * 4 + 1] * n[c * 4 + 1] + n[c * 4 + 2] * n[c * 4 + 2])
-
-                for i in range(3):
-                    r[i][c] = n[c * 4 + i] / s[k][c] if s[k][c] > 0.0 else (1.0 if i == c else 0.0)
-
-            trace = r[0][0] + r[1][1] + r[2][2]
-
-            if trace > 0.0:
-                d = 2.0 * math.sqrt(1.0 + trace)
-                q[k] = [0.25 * d, (r[2][1] - r[1][2]) / d, (r[0][2] - r[2][0]) / d, (r[1][0] - r[0][1]) / d]
-            elif r[0][0] > r[1][1] and r[0][0] > r[2][2]:
-                d = 2.0 * math.sqrt(1.0 + r[0][0] - r[1][1] - r[2][2])
-                q[k] = [(r[2][1] - r[1][2]) / d, 0.25 * d, (r[0][1] + r[1][0]) / d, (r[0][2] + r[2][0]) / d]
-            elif r[1][1] > r[2][2]:
-                d = 2.0 * math.sqrt(1.0 + r[1][1] - r[0][0] - r[2][2])
-                q[k] = [(r[0][2] - r[2][0]) / d, (r[0][1] + r[1][0]) / d, 0.25 * d, (r[1][2] + r[2][1]) / d]
-            else:
-                d = 2.0 * math.sqrt(1.0 + r[2][2] - r[0][0] - r[1][1])
-                q[k] = [(r[1][0] - r[0][1]) / d, (r[0][2] + r[2][0]) / d, (r[1][2] + r[2][1]) / d, 0.25 * d]
-
-        dot = q[0][0] * q[1][0] + q[0][1] * q[1][1] + q[0][2] * q[1][2] + q[0][3] * q[1][3]
+        sa = a._axis_scales()
+        sb = b._axis_scales()
+        qa = a._rotation_quaternion()
+        qb = b._rotation_quaternion()
+        dot = qa[0] * qb[0] + qa[1] * qb[1] + qa[2] * qb[2] + qa[3] * qb[3]
 
         if dot < 0.0:
-            for i in range(4):
-                q[1][i] = -q[1][i]
+            qb = [-qb[0], -qb[1], -qb[2], -qb[3]]
             dot = -dot
 
         w0 = 1.0 - t
@@ -854,16 +828,16 @@ class Xform:
         p = [0.0] * 4
 
         for i in range(4):
-            p[i] = w0 * q[0][i] + w1 * q[1][i]
+            p[i] = w0 * qa[i] + w1 * qb[i]
 
         length = math.sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2] + p[3] * p[3])
         w = p[0] / length
         x = p[1] / length
         y = p[2] / length
         z = p[3] / length
-        sx = s[0][0] + (s[1][0] - s[0][0]) * t
-        sy = s[0][1] + (s[1][1] - s[0][1]) * t
-        sz = s[0][2] + (s[1][2] - s[0][2]) * t
+        sx = sa[0] + (sb[0] - sa[0]) * t
+        sy = sa[1] + (sb[1] - sa[1]) * t
+        sz = sa[2] + (sb[2] - sa[2]) * t
 
         result = Xform()
         result.m[0] = (1.0 - 2.0 * (y * y + z * z)) * sx
@@ -941,6 +915,68 @@ class Xform:
             - rows[0][1] * (rows[1][0] * rows[2][2] - rows[1][2] * rows[2][0])
             + rows[0][2] * (rows[1][0] * rows[2][1] - rows[1][1] * rows[2][0])
         )
+
+    def _axis_scales(self) -> list[float]:
+        """Return the lengths of the first three columns."""
+
+        m = self.m
+        s = [0.0] * 3
+
+        for c in range(3):
+            x = m[c * 4]
+            y = m[c * 4 + 1]
+            z = m[c * 4 + 2]
+            s[c] = math.sqrt(x * x + y * y + z * z)
+
+        return s
+
+    def _rotation_quaternion(self) -> list[float]:
+        """Return the rotation part as a unit quaternion [w, x, y, z]."""
+
+        m = self.m
+        s = self._axis_scales()
+        r = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+
+        for c in range(3):
+            for i in range(3):
+                r[i][c] = m[c * 4 + i] / s[c] if s[c] > 0.0 else (1.0 if i == c else 0.0)
+
+        trace = r[0][0] + r[1][1] + r[2][2]
+
+        if trace > 0.0:
+            d = 2.0 * math.sqrt(1.0 + trace)
+            return [
+                0.25 * d,
+                (r[2][1] - r[1][2]) / d,
+                (r[0][2] - r[2][0]) / d,
+                (r[1][0] - r[0][1]) / d,
+            ]
+
+        if r[0][0] > r[1][1] and r[0][0] > r[2][2]:
+            d = 2.0 * math.sqrt(1.0 + r[0][0] - r[1][1] - r[2][2])
+            return [
+                (r[2][1] - r[1][2]) / d,
+                0.25 * d,
+                (r[0][1] + r[1][0]) / d,
+                (r[0][2] + r[2][0]) / d,
+            ]
+
+        if r[1][1] > r[2][2]:
+            d = 2.0 * math.sqrt(1.0 + r[1][1] - r[0][0] - r[2][2])
+            return [
+                (r[0][2] - r[2][0]) / d,
+                (r[0][1] + r[1][0]) / d,
+                0.25 * d,
+                (r[1][2] + r[2][1]) / d,
+            ]
+
+        d = 2.0 * math.sqrt(1.0 + r[2][2] - r[0][0] - r[1][1])
+        return [
+            (r[1][0] - r[0][1]) / d,
+            (r[0][2] + r[2][0]) / d,
+            (r[1][2] + r[2][1]) / d,
+            0.25 * d,
+        ]
 
     # ═══════════════════════════════════════════════════════════════════════════
     # JSON
