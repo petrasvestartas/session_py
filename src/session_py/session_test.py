@@ -1058,6 +1058,32 @@ def test_session_add_matrix():
     MINI_CHECK(restored == m and restored.guid == m.guid)
 
 
+@MINI_TEST("Session", "Add Network")
+def test_session_add_network():
+    from session_py import Color
+    from session_py import Matrix
+    from session_py import Session
+
+    session = Session()
+    connectivity = Matrix.from_rows([[1.0, -1.0, 0.0], [1.0, 0.0, -1.0]])
+    coordinates = Matrix.from_rows([[0.0, 0.0, 1.0], [2.0, 0.0, 0.0], [0.0, 3.0, 0.0]])
+    colors = [Color(1.0, 0.0, 0.0, 1.0), Color(0.0, 0.0, 1.0, 1.0)]
+    widths = [2.0, 4.0]
+
+    group = session.add_network(connectivity, coordinates, colors, widths)
+    points = session.objects.points
+    lines = session.objects.lines
+    refused = session.add_network(connectivity, Matrix.zeros(2, 3))
+
+    MINI_CHECK(group is not None and group.name == "network")
+    MINI_CHECK(len(points) == 3 and len(lines) == 2)
+    MINI_CHECK(points[0].name == "n0" and points[2][1] == 3.0)
+    MINI_CHECK(lines[1].name == "e1" and lines[1].end()[1] == 3.0)
+    MINI_CHECK(lines[0].linecolor == colors[0] and lines[1].width == 4.0)
+    MINI_CHECK(session.graph.has_edge((points[0].guid, points[2].guid)))
+    MINI_CHECK(refused is None and len(session.objects.points) == 3)
+
+
 @MINI_TEST("Session", "Component Json Roundtrip")
 def test_session_component_json_roundtrip():
     from session_py import Session

@@ -951,6 +951,68 @@ class Session:
         """Add text as its component (type_name Text, the text's guid), placed by set_xform on that guid."""
         return self.add_component(text.to_component(), parent)
 
+    def add_network(
+        self,
+        connectivity: Matrix,
+        coordinates: Matrix,
+        colors: list[Color] | None = None,
+        widths: list[float] | None = None,
+        parent: TreeNode | None = None,
+    ) -> TreeNode | None:
+        """Add a net as the group "network": a point n<i> per row of coordinates (x, y, z), a line e<j> per row of connectivity (1 at its start node, -1 at its end node) and a graph edge between the two points of every line; colors and widths, when given, hold one per line. None, and nothing added, when the shapes do not fit or a row lacks its 1 or its -1."""
+
+        colors = colors if colors is not None else []
+        widths = widths if widths is not None else []
+        m = connectivity.rows
+        n = coordinates.rows
+
+        if coordinates.cols != 3 or connectivity.cols != n:
+            return None
+
+        if (colors and len(colors) != m) or (widths and len(widths) != m):
+            return None
+
+        ends = []
+
+        for j in range(m):
+            start = -1
+            end = -1
+
+            for i in range(n):
+                if connectivity[j, i] > 0.0 and start < 0:
+                    start = i
+                elif connectivity[j, i] < 0.0 and end < 0:
+                    end = i
+
+            if start < 0 or end < 0:
+                return None
+
+            ends.append((start, end))
+
+        group = self.add_group("network", parent)
+        points = []
+
+        for i in range(n):
+            point = Point(coordinates[i, 0], coordinates[i, 1], coordinates[i, 2])
+            point.name = f"n{i}"
+            self.add_point(point, group)
+            points.append(point)
+
+        for j, (start, end) in enumerate(ends):
+            line = Line.from_points(points[start], points[end])
+            line.name = f"e{j}"
+
+            if colors:
+                line.linecolor = colors[j]
+
+            if widths:
+                line.width = widths[j]
+
+            self.add_line(line, group)
+            self.add_edge(points[start].guid, points[end].guid, line.name)
+
+        return group
+
     def add_definition(self, definition: Any) -> str:
         """Add a definition, geometry in its own frame that instances share; returns its guid, also when that guid is already defined, and "" for None or a guid an object, instance or component holds."""
 
