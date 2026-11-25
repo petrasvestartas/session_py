@@ -580,7 +580,7 @@ class _Delaunay:
             spans = (
                 (pr[0] > pb[0] and pl[0] < pa[0])
                 if left
-                else (pr[0] < pb[0] and pl[0] > pa[0])
+                else (pl[0] < pb[0] and pr[0] > pa[0])
             )
 
             if (

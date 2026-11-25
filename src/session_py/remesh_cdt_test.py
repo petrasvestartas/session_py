@@ -570,6 +570,26 @@ def test_remesh_cdt_collinear_boundary_runs():
     MINI_CHECK(failures == 0)
 
 
+@MINI_TEST("RemeshCDT", "Hole Beside A Leaning Border")
+def test_remesh_cdt_hole_beside_a_leaning_border():
+    from session_py import Point
+
+    border = [
+        Point(-444.0, -599.0, 0.0),
+        Point(-324.0, -552.0, 0.0),
+        Point(323.0, -599.0, 0.0),
+        Point(-303.0, 875.0, 0.0),
+    ]
+    hole = [
+        Point(-331.0, -53.0, 0.0),
+        Point(-291.0, -56.0, 0.0),
+        Point(-297.0, -123.0, 0.0),
+        Point(-338.0, -120.0, 0.0),
+    ]
+
+    MINI_CHECK(_run_covers(border, [hole]))
+
+
 @MINI_TEST("RemeshCDT", "Plate Four Holes")
 def test_remesh_cdt_plate_four_holes():
     from session_py import RemeshCDT
